@@ -339,6 +339,38 @@ class XrpcServiceTest extends TestCase {
 		$this->assertSame(['$link' => Cid::forRaw('x')->toString()], $answer['value']['embed']['ref'], 'links are JSON links');
 	}
 
+	public function testGetRecordHonorsTheRequestedVersionCid(): void {
+		$bytes = DagCbor::encode(['$type' => 'com.example.notes.entry', 'text' => 'current']);
+		$record = new StoredRecord(self::DID, 'com.example.notes.entry', 'first', Cid::forDagCbor($bytes), $bytes, '', 0);
+		$this->repositories->method('getRecord')->willReturn($record);
+		$params = ['repo' => self::DID, 'collection' => $record->collection, 'rkey' => $record->rkey];
+		$answer = $this->xrpc->query('com.atproto.repo.getRecord', $params + ['cid' => $record->cid->toString()]);
+		$this->assertSame('current', $answer['value']['text']);
+		try {
+			$this->xrpc->query('com.atproto.repo.getRecord', $params + ['cid' => Cid::forDagCbor(DagCbor::encode(['text' => 'older']))->toString()]);
+			$this->fail('A different record version must not be returned for an explicit CID');
+		} catch (XrpcException $e) {
+			$this->assertSame(404, $e->status);
+			$this->assertSame('RecordNotFound', $e->error);
+		}
+	}
+
+	#[DataProvider('invalidRecordCids')]
+	public function testGetRecordRejectsAnInvalidExplicitCid(string $cid): void {
+		$this->repositories->expects($this->never())->method('getRecord');
+		try {
+			$this->xrpc->query('com.atproto.repo.getRecord', ['repo' => self::DID, 'collection' => 'com.example.notes.entry', 'rkey' => 'first', 'cid' => $cid]);
+			$this->fail('An explicit CID must be valid');
+		} catch (XrpcException $e) {
+			$this->assertSame(400, $e->status);
+			$this->assertSame('InvalidRequest', $e->error);
+		}
+	}
+
+	public static function invalidRecordCids(): array {
+		return ['empty' => [''], 'malformed' => ['not-a-cid']];
+	}
+
 	public function testListRecordsPages(): void {
 		$records = [];
 		foreach (['3kznmn7xqxl25', '3kznmn7xqxl24', '3kznmn7xqxl23'] as $rkey) {

@@ -120,7 +120,7 @@ test.describe('posting, and acting on a post', () => {
 		await openApp(page, `/@${OTHER_USER}/${parent.id}`)
 		await postWith(page, question).getByRole('button', { name: 'Reply', exact: true }).click()
 		// The common modal receives the reply context before its lazy editor loads.
-		const composer = page.locator('.new-post').filter({ hasText: `@${OTHER_USER}` }).first()
+		const composer = page.locator('.modal-composer .new-post').filter({ hasText: `@${OTHER_USER}` })
 		await expect(composer).toBeVisible()
 		// pressing Reply puts the caret in the box, after the mention
 		await expect(composer.locator('.message')).toBeFocused()
@@ -139,6 +139,8 @@ test.describe('posting, and acting on a post', () => {
 		const context = await (await other.get(`${APP}/api/v1/statuses/${parent.id}/context`)).json()
 		const reply = context.descendants.find((status) => status.content.includes(answer))
 		expect(reply, 'the server threads the reply under its parent').toBeTruthy()
+		const replyText = reply.content.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;|\u00a0/g, ' ')
+		expect(replyText).toContain(` ${answer}`)
 		expect(reply.in_reply_to_id).toBe(parent.id)
 		expect(reply.account.username).toBe(USER)
 	})

@@ -14,7 +14,13 @@
 			:aria-pressed="reaction.me ? 'true' : 'false'"
 			:aria-label="labelFor(reaction)"
 			@click.stop="toggle(reaction.name)">
-			<span class="reaction__emoji" aria-hidden="true">{{ reaction.name }}</span>
+			<img
+				v-if="reaction.url"
+				class="reaction__emoji-image"
+				:src="reaction.url"
+				alt=""
+				aria-hidden="true">
+			<span v-else class="reaction__emoji" aria-hidden="true">{{ reaction.name }}</span>
 			<span class="reaction__count" aria-hidden="true">{{ reaction.count }}</span>
 		</button>
 
@@ -63,9 +69,8 @@ import { showError } from '../services/toast.js'
  * refused — an emoji the server will not take, a suspended account — and a
  * count that jumped and then jumped back is worse than one that waits a moment.
  *
- * Unicode emoji only. The picker offers nothing else, and the server refuses
- * anything else, for the reason ReactionService gives: a custom `:shortcode:`
- * means drawing a picture from somebody else's server inside the bar.
+ * The picker offers Unicode emoji. Bounded remote `:shortcode:` labels can
+ * also appear, but their images are never fetched or drawn.
  */
 export default {
 	name: 'ReactionBar',
@@ -92,10 +97,11 @@ export default {
 		},
 
 		/**
-		 * The bar as the server sent it: `{name, count, me}` each.
+		 * The bar as the server sent it: `{name, count, me}`, with a local
+		 * emoji image URL when this instance owns that custom emoji.
 		 */
 		modelValue: {
-			type: /** @type {import('vue').PropType<Array<{name: string, count: number, me: boolean}>>} */ (Array),
+			type: /** @type {import('vue').PropType<Array<{name: string, count: number, me: boolean, url?: string}>>} */ (Array),
 			default: () => [],
 		},
 
@@ -125,7 +131,7 @@ export default {
 	},
 
 	computed: {
-		/** @return {Array<{name: string, count: number, me: boolean}>} */
+		/** @return {Array<{name: string, count: number, me: boolean, url?: string}>} */
 		reactions() {
 			return Array.isArray(this.modelValue) ? this.modelValue : []
 		},
@@ -141,7 +147,7 @@ export default {
 		 * here, and the useful part is how many people chose it and whether
 		 * pressing this takes the reader's own back.
 		 *
-		 * @param {{name: string, count: number, me: boolean}} reaction one entry
+		 * @param {{name: string, count: number, me: boolean, url?: string}} reaction one entry
 		 * @return {string} the label
 		 */
 		labelFor(reaction) {
@@ -261,6 +267,12 @@ export default {
 	   whatever it is sitting in */
 	font-style: normal;
 	font-weight: normal;
+}
+
+.reaction__emoji-image {
+	width: 16px;
+	height: 16px;
+	object-fit: contain;
 }
 
 .reaction__count {

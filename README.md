@@ -78,8 +78,23 @@ npm ci
 npm run build
 ```
 
-Enable the app in a development Nextcloud instance. Frontend watch mode is
-`npm run watch`. Useful checks are:
+Enable the app in a development Nextcloud instance. If that instance also
+runs apps such as Mail, keep Social's development Composer autoloader out of
+the live app runtime: Psalm's development dependencies include Amp 3, which
+can collide with the Amp version used by Mail and make all of Nextcloud return
+HTTP 500. After installing development dependencies, rebuild Social's runtime
+autoloader with:
+
+```sh
+composer dump-autoload --no-dev --no-scripts
+```
+
+That leaves the installed packages in place but excludes development packages
+from Nextcloud's autoload. Run PHP tests in a separate development checkout, or
+restore the development autoloader there with `composer dump-autoload --dev`;
+do not leave that autoloader active in the shared Nextcloud instance. See
+[Admin.md](docs/Admin.md#empty-application-after-installing-development-dependencies)
+for recovery steps. Frontend watch mode is `npm run watch`. Useful checks are:
 
 ```sh
 composer run test:unit
@@ -88,6 +103,10 @@ npm run lint
 npm run stylelint
 npm run typecheck
 ```
+
+`make check-pr` optionally runs the local PHP/JavaScript checks and rebuilds
+the shipped bundles, then checks that the generated `js/` files are committed.
+Database integration and real-peer interoperability remain separate CI checks.
 
 Integration and browser tests require a running Nextcloud instance; see
 [`tests/Integration/README.md`](tests/Integration/README.md) and

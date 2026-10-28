@@ -60,9 +60,9 @@ jobs:
 
     env:
       APP_NAME: social
-      # Pixelfed v0.14.4, the official image, pinned by digest: a moved tag
+      # Pixelfed v0.15.2, the official image, pinned by digest: a moved tag
       # would change what is being tested without a commit here saying so
-      PIXELFED_IMAGE: ghcr.io/pixelfed/pixelfed:v0.14.4@sha256:7d96925cb75c763878ab72a4e1a37c09fe64fffa8a0ad5ae68f90a3bacbab69e
+      PIXELFED_IMAGE: ghcr.io/pixelfed/pixelfed:v0.15.2@sha256:f1237913ef0d392a5afef1dab8e3dd01234435ea90314a3a7221a2ea00932132
       PIXELFED_HOST: pixelfed.test
       PIXELFED_BASE_URL: https://pixelfed.test
       PIXELFED_USER: interop
@@ -362,6 +362,11 @@ jobs:
           docker logs pixelfed-horizon 2>&1 | grep -v -E "^\s*$|Worker STOPPED" | cut -c1-500 | tail -60 || true
           echo '--- Pixelfed Horizon: stories, warnings and errors ---'
           docker logs pixelfed-horizon 2>&1 | grep -i -E "story|warning|error|exception|fail" | cut -c1-900 | tail -80 || true
+          echo '--- Pixelfed update jobs ---'
+          docker logs pixelfed-horizon 2>&1 | grep -E "StatusRemoteUpdatePipeline|HandleUpdateActivity" | cut -c1-700 | tail -80 || true
+          echo '--- Pixelfed remote status edits ---'
+          mysql -h 127.0.0.1 -u pixelfed -ppixelfed pixelfed -e \
+            "select id, profile_id, object_url, left(caption,300) as caption, left(rendered,300) as rendered, edited_at from statuses where object_url is not null order by id desc limit 20" 2>&1 || true
           echo '--- Pixelfed failed jobs ---'
           docker exec pixelfed php artisan queue:failed 2>&1 | tail -40 || true
           echo '--- Pixelfed log files ---'

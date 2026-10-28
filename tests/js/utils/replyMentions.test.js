@@ -56,6 +56,7 @@ describe('mentionPills', () => {
 		expect(bob.contentEditable).toBe('false')
 		expect(bob.textContent).toBe('@bob@remote.example')
 		expect(bob.querySelector('img')?.getAttribute('src')).toBe('https://remote.example/bob.png')
+		expect(bob.querySelector('img')?.getAttribute('alt')).toBe('')
 		expect(space.textContent).toBe('\u00a0')
 		expect(alice.textContent).toBe('@alice@cloud.example')
 		expect(alice.querySelector('img')).toBeNull()

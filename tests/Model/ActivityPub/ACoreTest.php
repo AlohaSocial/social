@@ -529,6 +529,23 @@ class ACoreTest extends TestCase {
 		$this->assertContains(ACore::CONTEXT_SECURITY, $export['@context']);
 	}
 
+	public function testClearingAnAlreadyExportedSignatureRemovesItFromEveryLaterExport(): void {
+		$item = new Like();
+		$item->setSignature((new LinkedDataSignature())->setSignatureValue('old-signature'));
+		$this->assertArrayHasKey('signature', $item->exportAsActivityPub());
+
+		$item->clearSignature();
+
+		$this->assertFalse($item->hasSignature());
+		$this->assertNull($item->getSignature());
+		$this->assertArrayNotHasKey('signature', $item->exportAsActivityPub());
+		$this->assertArrayNotHasKey('signature', json_decode(json_encode($item, JSON_THROW_ON_ERROR), true));
+		$this->assertNotContains(ACore::CONTEXT_SECURITY, $item->exportAsActivityPub()['@context']);
+		$replacement = (new LinkedDataSignature())->setSignatureValue('new-signature');
+		$item->setSignature($replacement);
+		$this->assertSame($replacement, $item->exportAsActivityPub()['signature']);
+	}
+
 	public function testExportAsActivityPubUsesEmbeddedActorAndObjectAndDropsEmptyEntries(): void {
 		$item = new Like();
 		$item->setId('https://a.example/l/1');

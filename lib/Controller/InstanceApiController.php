@@ -15,12 +15,14 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Instance;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\EmojiService;
+use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GifService;
@@ -66,6 +68,7 @@ class InstanceApiController extends MastodonApiController {
 		StreamService $streamService,
 		FollowService $followService,
 		private InstanceService $instanceService,
+		private ExternalSignupService $externalSignupService,
 		private ISession $session,
 		private ConfigService $configService,
 		private EmojiService $emojiService,
@@ -86,8 +89,17 @@ class InstanceApiController extends MastodonApiController {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/instance/')]
 	public function instance(): JSONResponse {
 		$local = $this->instanceService->getLocal(Stream::FORMAT_LOCAL);
+		$this->applySocialSignupState($local);
 
 		return Revalidation::byContent($this->request, new DataResponse($local, Http::STATUS_OK));
+	}
+
+	private function applySocialSignupState(Instance $instance): void {
+		// The web signup flow is advertised by NodeInfo. These flags describe
+		// registration through POST /api/v1/accounts, which is unsupported.
+		$instance->setRegistrations(false);
+		$instance->setApprovalRequired(false);
+		$instance->setInvitesEnabled(false);
 	}
 
 	/**
@@ -298,6 +310,7 @@ class InstanceApiController extends MastodonApiController {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v2/instance')]
 	public function instanceV2(): JSONResponse {
 		$local = $this->instanceService->getLocal(Stream::FORMAT_LOCAL);
+		$this->applySocialSignupState($local);
 
 		return Revalidation::byContent($this->request, new DataResponse($local->asV2(), Http::STATUS_OK));
 	}

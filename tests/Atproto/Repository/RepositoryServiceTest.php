@@ -88,6 +88,33 @@ class RepositoryServiceTest extends TestCase {
 		$this->assertTrue(array_key_first($car['blocks']) === $result->commitCid->toString(), 'the commit block comes first');
 	}
 
+	public function testNumericRecordKeysKeepLexicalPaginationInsideAndOutsideABatch(): void {
+		$collection = 'com.example.notes.entry';
+		$record = ['$type' => $collection, 'text' => 'numeric key'];
+		$this->service->write(self::DID, $this->key, [
+			RepoWrite::create($collection, $record, '', '2'),
+			RepoWrite::create($collection, $record, '', '10'),
+		]);
+		$keys = fn (string $cursor, bool $reverse): array => array_map(
+			static fn ($item): string => $item->rkey,
+			$this->service->listRecords(self::DID, $collection, 10, $cursor, $reverse),
+		);
+		$this->assertSame(['10'], $keys('2', false));
+		$this->assertSame(['2'], $keys('10', true));
+
+		$this->service->beginBatch(self::DID, $this->key);
+		try {
+			$this->service->write(self::DID, $this->key, [
+				RepoWrite::create($collection, $record, '', '1'),
+				RepoWrite::create($collection, $record, '', '20'),
+			]);
+			$this->assertSame(['10', '1'], $keys('2', false));
+			$this->assertSame(['2', '20'], $keys('10', true));
+		} finally {
+			$this->service->rollbackBatch();
+		}
+	}
+
 	public function testBatchStagesRecordsForReadsAndCommitsThemTogether(): void {
 		$this->service->beginBatch(self::DID, $this->key);
 		$first = RepoWrite::create('app.bsky.feed.post', self::post('one'), 'https://s.test/1', '3kznmn7xqxl22');

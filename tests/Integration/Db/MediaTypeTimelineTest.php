@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Integration\Db;
 
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\CoreRequestBuilder;
+use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -20,6 +22,7 @@ use OCA\Social\Service\ConfigService;
 use OCP\Server;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 /**
  * `media_type` against the real database.
@@ -39,12 +42,14 @@ class MediaTypeTimelineTest extends TestCase {
 
 	private StreamRequest $streamRequest;
 	private string $fastPathBefore = '';
+	private string $mediaKindBefore = '';
 	private CacheActorsRequest $cacheActorsRequest;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->streamRequest = Server::get(StreamRequest::class);
 		$this->fastPathBefore = Server::get(ConfigService::class)->getAppValue(ConfigService::SOCIAL_DEST_NID_FILLED);
+		$this->mediaKindBefore = Server::get(ConfigService::class)->getAppValue(ConfigService::SOCIAL_STREAM_MEDIA_KIND_FILLED);
 		$this->cacheActorsRequest = Server::get(CacheActorsRequest::class);
 		$this->cleanup();
 	}
@@ -52,6 +57,9 @@ class MediaTypeTimelineTest extends TestCase {
 	protected function tearDown(): void {
 		$this->removeMediaUnderText();
 		$this->useHomeFastPath($this->fastPathBefore === '1');
+		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_STREAM_MEDIA_KIND_FILLED, $this->mediaKindBefore);
+		$this->streamRequest->resetViewer();
+		(new ReflectionProperty(CoreRequestBuilder::class, 'mediaKindFilled'))->setValue($this->streamRequest, null);
 		$this->cleanup();
 		parent::tearDown();
 	}
@@ -60,6 +68,7 @@ class MediaTypeTimelineTest extends TestCase {
 		foreach (self::SUFFIXES as $suffix) {
 			$this->streamRequest->deleteById(self::BASE . '/notes/' . $suffix, Note::TYPE);
 		}
+		Server::get(FollowsRequest::class)->deleteRelatedId(self::AUTHOR);
 		$this->cacheActorsRequest->deleteCacheById(self::AUTHOR);
 	}
 
@@ -94,6 +103,7 @@ class MediaTypeTimelineTest extends TestCase {
 		$note->setId(self::BASE . '/notes/' . $suffix);
 		$note->setAttributedTo(self::AUTHOR);
 		$note->setTo(ACore::CONTEXT_PUBLIC);
+		$note->addCc(self::AUTHOR . '/followers');
 		$note->setContent('<p>' . ($content === '' ? $suffix : $content) . '</p>');
 		$note->setAttachments($attachments);
 		$note->setPublishedTime(time());
@@ -150,6 +160,24 @@ class MediaTypeTimelineTest extends TestCase {
 			[self::BASE . '/notes/picture', self::BASE . '/notes/film'],
 			$this->profile('visual')
 		);
+	}
+
+	#[DataProvider('homeFastPath')]
+	public function testVisualHomeAndPublicPagesUseTheSameKindsBeforeAndAfterBackfill(bool $filled): void {
+		$this->seed();
+		$this->useHomeFastPath($filled);
+		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_STREAM_MEDIA_KIND_FILLED, $filled ? '1' : '0');
+		(new ReflectionProperty(CoreRequestBuilder::class, 'mediaKindFilled'))->setValue($this->streamRequest, null);
+		$viewer = $this->cacheActorsRequest->getFromId(self::AUTHOR);
+		Server::get(FollowsRequest::class)->generateLoopbackAccount($viewer);
+		$this->streamRequest->setViewer($viewer);
+		foreach ([ProbeOptions::HOME, ProbeOptions::PUBLIC] as $probe) {
+			$options = (new ProbeOptions())->setFormat(ACore::FORMAT_ACTIVITYPUB)
+				->setProbe($probe)->setLimit(50)->setOnlyMedia(true)->setMediaType('visual');
+			$ids = array_map(static fn ($post): string => $post->getId(), $this->streamRequest->getTimeline($options));
+			$ours = array_values(array_filter($ids, static fn (string $id): bool => str_starts_with($id, self::BASE . '/notes/')));
+			$this->assertEqualsCanonicalizing([self::BASE . '/notes/picture', self::BASE . '/notes/film'], $ours, $probe);
+		}
 	}
 
 	public function testPhotosAreThePostsCarryingAPicture(): void {

@@ -1054,6 +1054,8 @@ export default {
 			onComposerQuote: null,
 			onComposerRedraft: null,
 			onComposerFocus: null,
+			onComposerPublished: null,
+			handedOffDraft: null,
 			onOutsideInteraction: null,
 			onBeforeUnload: null,
 			stopLeaveGuard: null,
@@ -1538,6 +1540,12 @@ export default {
 		// Keep the handler so unmounted() removes only this one and not the
 		// listeners other components registered for the same event.
 		this.onComposerReply = (data) => {
+			if (this.oneLine) {
+				if (this.draftContext === `reply.${data.id}`) {
+					this.handedOffDraft = JSON.stringify(this.draft)
+				}
+				return
+			}
 			this.replyTo = data
 			// everyone in the conversation, not only whoever wrote the post
 			// being answered: a reply that named one of three people reached
@@ -1554,7 +1562,7 @@ export default {
 			// button, the first words typed went nowhere
 			this.$nextTick(() => this.focusInput({ atEnd: true }))
 		}
-		if (this.listenForIntents) {
+		if (this.listenForIntents || this.oneLine) {
 			eventBus.on('composer-reply', this.onComposerReply)
 		}
 
@@ -1579,6 +1587,19 @@ export default {
 		if (this.listenForIntents) {
 			eventBus.on('shortcut:compose', this.onComposerFocus)
 		}
+
+		this.onComposerPublished = ({ context }) => {
+			if (this.oneLine && context === this.draftContext && this.handedOffDraft !== null) {
+				if (this.handedOffDraft === JSON.stringify(this.draft)) {
+					this.clearComposer()
+				} else {
+					// The modal's reset watcher clears the shared key in this tick.
+					this.$nextTick(() => this.rememberDraft())
+				}
+				this.handedOffDraft = null
+			}
+		}
+		eventBus.on('composer-published', this.onComposerPublished)
 
 		// before the mention prefill, which declines to overwrite a non-empty
 		// composer: whatever the last attempt left is what the reader wants back
@@ -1651,6 +1672,7 @@ export default {
 		eventBus.off('composer-quote', this.onComposerQuote)
 		eventBus.off('composer-redraft', this.onComposerRedraft)
 		eventBus.off('shortcut:compose', this.onComposerFocus)
+		eventBus.off('composer-published', this.onComposerPublished)
 	},
 
 	methods: {
@@ -1719,6 +1741,7 @@ export default {
 				return
 			}
 			this.rememberDraft()
+			this.handedOffDraft = JSON.stringify(this.draft)
 			eventBus.emit('composer-open', { reply: this.inReplyTo, files: Array.isArray(files) ? files : [], draft: this.draft })
 		},
 
@@ -1954,11 +1977,17 @@ export default {
 		 * @param {Array<{acct: string, url: string, avatar?: string}>} accounts who to address
 		 */
 		prefillMessageWithMentions(accounts) {
-			if (accounts.length === 0 || !this.statusIsEmpty || this.inputElement() === undefined) {
+			const input = this.inputElement()
+			if (accounts.length === 0 || input === undefined) {
+				return
+			}
+			const mentions = mentionPills(accounts, this.hostname)
+			const routingText = mentions.map((node) => node.textContent ?? '').join('').trim()
+			if (!this.statusIsEmpty && this.statusText !== routingText) {
 				return
 			}
 
-			this.inputElement().replaceChildren(...mentionPills(accounts, this.hostname))
+			input.replaceChildren(...mentions)
 			this.updateStatusContent()
 		},
 
@@ -2378,6 +2407,7 @@ export default {
 			}
 
 			const wasScheduled = statusData.scheduled_at !== undefined
+			const publishedContext = this.draftContext
 
 			this.replyTo = this.inReplyTo
 			this.quoteOf = null
@@ -2393,6 +2423,7 @@ export default {
 			// the sidebar's modal has no other way of knowing: it cleared the
 			// box and stayed open, which reads as if nothing had happened
 			this.$emit('posted')
+			eventBus.emit('composer-published', { context: publishedContext })
 
 			if (wasScheduled) {
 				// nothing is on any timeline yet, so there is nothing to

@@ -29,6 +29,7 @@ use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DeviceAuthorizationService;
+use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Controller;
@@ -71,6 +72,7 @@ class OAuthController extends Controller {
 		private DpopNonce $dpopNonce,
 		private VapidService $vapidService,
 		private DeviceAuthorizationService $deviceAuthorization,
+		private ExternalSignupService $externalSignupService,
 		private ?PermissionDescriber $permissionDescriber = null,
 		private ?IFactory $l10nFactory = null,
 	) {
@@ -127,13 +129,15 @@ class OAuthController extends Controller {
 	 * present (both required) and nothing else is added at the top level.
 	 */
 	private function nodeInfo(string $schema): array {
+		// This is Social's signup state, not Nextcloud's full-account signup
+		// switch. It does not depend on the instance metadata row being present.
+		$openReg = $this->externalSignupService->acceptsPublicRegistrations();
 		try {
 			$local = $this->instanceService->getLocal();
 			$name = $local->getTitle();
 			$description = $local->getShortDescription();
 			$version = $local->getVersion();
 			$usage = $local->getUsage();
-			$openReg = $local->isRegistrations();
 		} catch (InstanceDoesNotExistException $e) {
 			$name = 'Aloha Social';
 			$description = '';

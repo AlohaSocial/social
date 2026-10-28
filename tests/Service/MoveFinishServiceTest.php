@@ -117,6 +117,26 @@ class MoveFinishServiceTest extends TestCase {
 		$this->assertFalse($service->canFinish($mastodon), 'Mastodon has no API for a move; the person finishes there');
 	}
 
+	public function testBothCurrentAndLegacyAlohaSoftwareNamesAreRecognized(): void {
+		$softwareName = '';
+		$this->directoryService = $this->createMock(FediverseDirectoryService::class);
+		$this->directoryService->method('softwareName')->willReturnCallback(static function () use (&$softwareName): string {
+			return $softwareName;
+		});
+		$service = new MoveFinishService(
+			$this->migrationService, $this->directoryService, $this->curlService, $this->createStub(ConfigService::class),
+			$this->createStub(AccountService::class), $this->createStub(IConfig::class), $this->createStub(IURLGenerator::class),
+			$this->createStub(ISecureRandom::class), new NullLogger()
+		);
+		$old = new Person();
+		$old->setId('https://old.example/@alice');
+
+		foreach (['aloha-social', 'nextcloud-social'] as $name) {
+			$softwareName = $name;
+			self::assertTrue($service->canFinish($old), $name . ' should be recognized');
+		}
+	}
+
 	public function testStartRegistersThisInstanceThereAndSaysWhereToSendThePerson(): void {
 		$this->registered();
 

@@ -27,11 +27,13 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\TooManyRequestsException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\QuoteAuthorization;
+use OCA\Social\Model\ActivityPub\Object\ReplyAuthorization;
 use OCA\Social\Model\ActivityPub\Object\Story as ApStory;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\OrderedCollectionPage;
@@ -58,6 +60,7 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -123,6 +126,8 @@ class ActivityPubControllerTest extends TestCase {
 	private $inboxLimiter;
 	/** @var QuoteGrantRequest&MockObject */
 	private $quoteGrantRequest;
+	/** @var IConfig&Stub */
+	private $systemConfig;
 	/** @var LoggerInterface&MockObject */
 	private $logger;
 	private AsyncFreeActivityPubController $controller;
@@ -152,6 +157,8 @@ class ActivityPubControllerTest extends TestCase {
 
 		$this->storyService = $this->createMock(StoryService::class);
 		$this->quoteGrantRequest = $this->createMock(QuoteGrantRequest::class);
+		$this->systemConfig = $this->createStub(IConfig::class);
+		$this->systemConfig->method('getSystemValueString')->with('secret', '')->willReturn('test-secret');
 
 		$this->authorizedFetchService = $this->createStub(AuthorizedFetchService::class);
 		$this->authorizedFetchService->method('reader')->willReturnCallback(
@@ -184,6 +191,7 @@ class ActivityPubControllerTest extends TestCase {
 			$this->storyService,
 			$this->createStub(\OCA\Social\Service\FeedService::class),
 			$this->quoteGrantRequest,
+			$this->systemConfig,
 			$this->configService,
 			$this->logger
 		);
@@ -1583,6 +1591,36 @@ class ActivityPubControllerTest extends TestCase {
 			array_keys(end($exported['@context'])),
 			'the document names a type no reader can resolve without the FEP-044f terms'
 		);
+	}
+
+	// displayReplyAuthorization(): the URL accepted in a ReplyRequest must be
+	// fetchable by GoToSocial, and a private post must not disclose an approval.
+
+	public function testReplyAuthorizationUriAcceptedByTheHandlerIsDereferenceable(): void {
+		$target = $this->quotablePost();
+		$reply = 'https://remote.example/users/bob/statuses/reply-7';
+		$stamp = ReplyRequestInterface::authorizationStamp($reply, $target->getId(), 'test-secret');
+		$authorizationUrl = $target->getId() . '/reply_authorizations/' . $stamp;
+
+		$response = $this->controller->displayReplyAuthorization('alice', 'abc123', $stamp);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(self::LD_JSON, $response->getHeaders()['Content-Type']);
+		$this->assertInstanceOf(ReplyAuthorization::class, $response->getData());
+		$this->assertSame($authorizationUrl, $response->getData()->getId());
+		$this->assertSame($reply, $response->getData()->getInteractingObject());
+		$this->assertSame($target->getId(), $response->getData()->getInteractionTarget());
+	}
+
+	public function testReplyAuthorizationIsNotDereferenceableForRestrictedPosts(): void {
+		$post = $this->quotablePost();
+		$post->setVisibility(Stream::TYPE_FOLLOWERS);
+		$reply = 'https://remote.example/users/bob/statuses/reply-7';
+		$stamp = ReplyRequestInterface::authorizationStamp($reply, $post->getId(), 'test-secret');
+
+		$response = $this->controller->displayReplyAuthorization('alice', 'abc123', $stamp);
+
+		$this->assertFailure($response, ItemUnknownException::class, Http::STATUS_NOT_FOUND);
 	}
 
 	// authorized fetch, and secure mode

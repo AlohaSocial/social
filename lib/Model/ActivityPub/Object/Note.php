@@ -38,6 +38,8 @@ class Note extends Stream implements JsonSerializable {
 		return $extensions;
 	}
 	private string $name = '';
+	/** @var ?bool A per-recipient wire-format override; never persisted. */
+	private ?bool $videoRepresentationOverride = null;
 	public const TYPE = 'Note';
 
 	private array $hashtags = [];
@@ -181,6 +183,13 @@ class Note extends Stream implements JsonSerializable {
 		return $this;
 	}
 
+	/** Keep a post as a Note, or publish it as Video, for one recipient only. */
+	public function setVideoRepresentationOverride(?bool $useVideo): self {
+		$this->videoRepresentationOverride = $useVideo;
+
+		return $this;
+	}
+
 	#[\Override]
 	public function jsonSerialize(): array {
 		$result = parent::jsonSerialize();
@@ -272,24 +281,21 @@ class Note extends Stream implements JsonSerializable {
 	 * - only when the post *is* a video: one attachment, and it a video. See
 	 *   `PeerTubeService::soleVideo()`.
 	 *
-	 * The app value is last because it costs a container lookup, and it is
-	 * **off by default**. The question this comment used to leave open —
-	 * whether a Mastodon-family server renders a `Video` as well as it
-	 * rendered the `Note` — has an answer from Pixelfed's own source: its
-	 * inbox handles a `Create` only when the object is a `Note` with a parent
-	 * or an attachment, and drops everything else without a word
-	 * (`Inbox/HandlesCreates.php`). With this on, no video posted here ever
-	 * reached a Pixelfed follower. Mastodon draws both shapes; PeerTube draws
-	 * only this one; Pixelfed only the `Note`. `attachment` is published either
-	 * way, so a `Video` still carries its file for the servers that read it.
-	 * An instance whose audience is on PeerTube turns it on with
-	 * `occ config:app:set social publish_video_objects --value 1`.
+	 * The app value is the default for unknown peers. The outbound queue can
+	 * override it on a cloned post for a peer whose software is already known:
+	 * PeerTube receives `Video`, Pixelfed receives `Note`. No network lookup is
+	 * made while publishing. The override changes only the serialized copy; the
+	 * stored post remains a `Note`, and the caller signs each variant after the
+	 * object has been selected. `attachment` is present either way.
 	 */
 	private function asVideoIfItIsOne(array $result): array {
 		if ($this->getExportFormat() === self::FORMAT_LOCAL || !$this->isLocal()) {
 			return $result;
 		}
 		if ($this->getSubType() === 'Event') {
+			return $result;
+		}
+		if ($this->videoRepresentationOverride === false) {
 			return $result;
 		}
 
@@ -299,7 +305,8 @@ class Note extends Stream implements JsonSerializable {
 		}
 
 		try {
-			if (!Server::get(ConfigService::class)->getAppValueBool(ConfigService::SOCIAL_PUBLISH_VIDEO)) {
+			if ($this->videoRepresentationOverride !== true
+				&& !Server::get(ConfigService::class)->getAppValueBool(ConfigService::SOCIAL_PUBLISH_VIDEO)) {
 				return $result;
 			}
 

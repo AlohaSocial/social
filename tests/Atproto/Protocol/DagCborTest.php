@@ -35,6 +35,18 @@ class DagCborTest extends TestCase {
 		}
 	}
 
+	public function testNumericJsonObjectKeysKeepTheirMapIdentity(): void {
+		foreach (['{"0":"first"}', '{"1":"first"}', '{"0":{},"name":[]}'] as $json) {
+			$value = DagCbor::fromLexJson(json_decode($json, false, 512, JSON_THROW_ON_ERROR));
+			$this->assertInstanceOf(\stdClass::class, $value);
+			$bytes = DagCbor::encode($value);
+			$decoded = DagCbor::decode($bytes);
+			$this->assertInstanceOf(\stdClass::class, $decoded);
+			$this->assertSame($bytes, DagCbor::encode($decoded));
+			$this->assertEquals(json_decode($json), DagCbor::toLexJson($decoded));
+		}
+	}
+
 	public function testValidRecordsEncode(): void {
 		foreach (Fixtures::json('data-model-valid.json') as $vector) {
 			$value = DagCbor::fromLexJson(self::integral($vector['json']));

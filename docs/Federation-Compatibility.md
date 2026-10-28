@@ -26,7 +26,7 @@ profile reads serve the cache and do not start arbitrary remote imports.
 |---|---|
 | `Note`, including image posts | Text, warning, language, tags, mentions, reply/quote metadata and attachment metadata use the inbox parser. Image bytes are cached separately. |
 | `Question` | Poll choices, vote totals, multiple-choice mode and closing time are preserved. |
-| `Article`, `Page` | Titles and link attachments are rendered using the same mapping as inbox deliveries, including community link posts. |
+| `Article`, `Page` | Titles remain visible above non-empty bodies and are exposed separately as `article.title` with the original subtype; title edits replace or clear that field. Link attachments use the same mapping as inbox deliveries, including community link posts. |
 | `Audio`, `Video` | The supported object mapping is reused; PeerTube metadata and streamed sources remain available. |
 | `Event` | Event facts are retained for the event card and Calendar import. |
 | `Update` | Existing posts use the inbox handler's author and edit-time checks. An update of a post not cached yet can import its current object. |
@@ -39,10 +39,52 @@ Links, or embedded pages. Relative continuations use the embedded page's own ID
 when it has one. Page links cannot change the outbox origin, carry credentials,
 or point back to the current page indefinitely.
 
+For inbox delivery, a verified `Update` that arrives before its `Create` is held
+in the shared durable cache for up to six hours. When a matching `Create` from
+the same author arrives, Social applies the newest pending edit through the
+normal author and edit-time checks. If the Create never arrives, the pending
+update expires without creating a standalone post.
+
+### Outbound video representation
+
+A local post with exactly one video attachment is serialized as an ActivityPub
+`Video` for peers identified as PeerTube and as a `Note` with its video
+attachment for peers identified as Pixelfed. This selection uses only a fresh
+NodeInfo result already in the bounded directory cache; publishing does not
+make a discovery request. Unknown or stale peers use the administrator's
+`publish_video_objects` default. Each per-inbox representation is separately
+signed, while the stored post and its ActivityPub IDs remain the same. If a
+video is waiting for conversion, the queued representation is retained when
+the row is released after the cache entry expires.
+
 WebFinger advertises the existing remote-follow confirmation page using the
 FEP-3b86 `Follow` relation for both local users and the instance actor. Opening
 the intent does not follow an account automatically; the person confirms the
 action in Social.
+
+## Emoji reactions
+
+Misskey's `Like` activities carrying `_misskey_reaction` are mapped to the
+same reaction model as Akkoma/Pleroma `EmojiReact` activities, preserving the
+chosen Unicode emoji instead of counting it as a plain like. Unicode emoji
+and bounded local or domain-qualified custom labels (for example,
+`:blobcat@misskey.example:`) are stored and shown as text. Remote custom emoji
+image tags are ignored: opening a post never fetches an arbitrary reaction
+image or exposes each reader to that host. Outgoing reactions are limited to
+Unicode emoji until the composer can attach verified metadata for an
+instance-owned custom emoji; this avoids sending a shortcode without the
+`Emoji` tag other servers need to render it. Local reaction controls can undo
+either incoming form by the same label.
+
+## Emoji reactions
+
+Misskey `Like` activities carrying `_misskey_reaction` and Akkoma/Pleroma
+`EmojiReact` activities are stored as emoji reactions rather than plain likes.
+Unicode emoji and bounded custom labels are preserved. Remote custom-emoji
+images remain text-only: Aloha does not fetch a peer's image URL when a user
+opens a reaction bar. When reacting with a shortcode that this instance
+publishes, Aloha attaches its own locally served `Emoji` tag, so the receiving
+server can render it without a bare shortcode or a remote image request.
 
 ## Bluesky client writes
 
@@ -88,6 +130,17 @@ taken-down and unsafe destinations. Link icons are not fetched for this view.
 - General XRPC account activation/deactivation, deletion, email and password
   management are not all ordinary-session handlers. Migration has its own
   restricted activation/status flow; Nextcloud owns the account credentials.
+
+## GoToSocial conditional replies
+
+Incoming GoToSocial `ReplyRequest` activities are checked against the local
+target post and its current reply rules. A permitted request receives an
+`Accept` with a dereferenceable `ReplyAuthorization`; a refused request gets a
+`Reject`. The authorization binds the requesting reply URI to the local target
+using an instance-secret signature. This covers the request/authorization
+protocol path; verification against a live GoToSocial instance remains an
+interop check rather than a claim that every GoToSocial interaction policy is
+supported.
 
 These gaps are distinct from an implemented endpoint returning a remote-service
 error. PDS, AppView, Chat, ActivityPub delivery and background jobs require their

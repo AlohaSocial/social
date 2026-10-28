@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Atproto\Client;
 
 use OCA\Social\Atproto\Chat\ChatDeclaration;
+use OCA\Social\Atproto\Client\BlobUploadService;
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Crypto\Curve;
@@ -27,7 +28,6 @@ use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
-use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
@@ -99,8 +99,7 @@ class WriteServiceTest extends TestCase {
 	private AtprotoBlobRequest $blobs;
 	/** @var PictureService&MockObject */
 	private PictureService $pictures;
-	/** @var VideoBlobService&MockObject */
-	private VideoBlobService $videos;
+	private BlobUploadService $uploads;
 	/** @var DocumentService&MockObject */
 	private DocumentService $documents;
 	/** @var LocalRecordResolver&MockObject */
@@ -157,8 +156,8 @@ class WriteServiceTest extends TestCase {
 		$this->postStore = $this->createMock(PostStore::class);
 		$this->publisher = $this->createMock(Publisher::class);
 		$this->pictures = $this->createMock(PictureService::class);
+		$this->uploads = $this->createMock(BlobUploadService::class);
 		$this->blobs = $this->createMock(AtprotoBlobRequest::class);
-		$this->videos = $this->createMock(VideoBlobService::class);
 		$this->documents = $this->createMock(DocumentService::class);
 		$this->local = $this->createMock(LocalRecordResolver::class);
 		$this->local->method('postId')->willReturnCallback(static fn (string $uri): string => match ($uri) {
@@ -178,11 +177,11 @@ class WriteServiceTest extends TestCase {
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->createMock(FollowService::class),
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
-			$this->publisher, $this->pictures, $this->videos, $this->interactions, $this->repositories, $this->local, $this->postStore,
+			$this->publisher, $this->pictures, $this->interactions, $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
 			$this->relationships, $this->blocks, $this->declaration, $this->listImport,
 			$this->activities,
-			$this->streamActions, $this->recommendationSignals,
+			$this->streamActions, $this->recommendationSignals, new \OCA\Social\Atproto\Lexicon\Lexicon(), $this->uploads,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -315,6 +314,73 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame([], $this->records);
 	}
 
+	public function testAnUnknownLexiconRecordCanBeCreatedReplacedAndDeletedWithoutSocialProjection(): void {
+		$this->keepWrites();
+		$collection = 'com.example.notes.entry';
+		$record = ['$type' => $collection, 'title' => 'First', 'metadata' => new \stdClass()];
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => $collection, 'record' => $record]);
+		$rkey = substr($made['uri'], (int)strrpos($made['uri'], '/') + 1);
+		$this->assertSame($collection, $this->records[0]->collection);
+		$this->assertInstanceOf(\stdClass::class, DagCbor::decode($this->records[0]->bytes)['metadata']);
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => $collection, 'rkey' => $rkey, 'record' => [
+			'$type' => $collection, 'title' => 'Updated', 'metadata' => new \stdClass(),
+		]]);
+		$this->assertSame('Updated', DagCbor::decode($this->records[0]->bytes)['title']);
+
+		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => $collection, 'rkey' => $rkey]);
+		$this->assertSame([], $this->records);
+	}
+
+	public function testCreateRecordCannotOverwriteAnExistingOpaqueRecord(): void {
+		$collection = 'com.example.notes.entry';
+		$this->records[] = $this->record($collection, 'first', '');
+		$this->repositories->expects($this->never())->method('write');
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('A record already exists');
+		$this->writes->create($this->session, [
+			'repo' => self::DID, 'collection' => $collection, 'rkey' => 'first',
+			'record' => ['$type' => $collection, 'title' => 'Replacement'],
+		]);
+	}
+
+	public function testApplyWritesCanAtomicallyStoreCustomCollections(): void {
+		$collection = 'com.example.notes.entry';
+		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
+			$this->assertCount(2, $writes);
+			foreach ($writes as $write) {
+				$bytes = DagCbor::encode($write->record);
+				$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, $write->localId, 0);
+			}
+
+			return new CommitResult($did, Cid::forRaw('custom batch'), '3kcustom', 2, []);
+		});
+		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $collection, 'rkey' => 'first', 'value' => ['$type' => $collection, 'title' => 'One']],
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $collection, 'rkey' => 'second', 'value' => ['$type' => $collection, 'title' => 'Two']],
+		]]);
+
+		$this->assertCount(2, $answer['results']);
+		$this->assertSame('unknown', $answer['results'][1]['validationStatus']);
+		$this->assertSame(['cid' => Cid::forRaw('custom batch')->toString(), 'rev' => '3kcustom'], $answer['commit']);
+	}
+
+	public function testOpaqueRecordCreationChecksTheExpectedCommitAtomically(): void {
+		$expected = Cid::forRaw('previous commit')->toString();
+		$this->repositories->expects($this->once())->method('write')
+			->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => $writes[0]->action === RepoWrite::CREATE), $expected)
+			->willThrowException(new InvalidSwapException('The repository changed'));
+		try {
+			$this->writes->create($this->session, [
+				'repo' => self::DID, 'collection' => 'com.example.notes.entry', 'rkey' => 'first',
+				'record' => ['$type' => 'com.example.notes.entry', 'title' => 'Entry'], 'swapCommit' => $expected,
+			]);
+			$this->fail('A stale commit must refuse record creation');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
+	}
+
 	public function testAnAppCanCreateAProfileLinkAndSelectItInTheProfile(): void {
 		$this->keepWrites();
 		$link = ['$type' => 'app.bsky.actor.link', 'url' => 'https://alice.example', 'title' => 'My website', 'createdAt' => '2026-10-26T10:00:00Z'];
@@ -337,6 +403,9 @@ class WriteServiceTest extends TestCase {
 		$this->repositories->expects($this->once())->method('rollbackBatch');
 		$this->repositories->expects($this->once())->method('write')->willThrowException(new \RuntimeException('repository unavailable'));
 
+		$this->activities->expects($this->once())->method('beginDeferredDeliveries');
+		$this->activities->expects($this->once())->method('discardDeferredDeliveries');
+		$this->activities->expects($this->never())->method('releaseDeferredDeliveries');
 		$this->expectException(\RuntimeException::class);
 		$this->writes->put($this->session, [
 			'repo' => self::DID,
@@ -344,6 +413,33 @@ class WriteServiceTest extends TestCase {
 			'rkey' => '3kznmn7xqxl22',
 			'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'],
 		]);
+	}
+
+	public function testPutRecordStartsDeliveryOnlyAfterTheRepositoryCommit(): void {
+		$events = [];
+		$this->activities->method('beginDeferredDeliveries')->willReturnCallback(static function () use (&$events): void {
+			$events[] = 'defer';
+		});
+		$this->repositories->method('write')->willReturnCallback(function (string $did, $key, array $writes) use (&$events): ?CommitResult {
+			$events[] = 'write';
+			$write = $writes[0];
+			$bytes = DagCbor::encode($write->record);
+			$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, '', 0);
+			return null;
+		});
+		$this->repositories->expects($this->once())->method('commitBatch')->willReturnCallback(static function () use (&$events): ?CommitResult {
+			$events[] = 'commit';
+			return null;
+		});
+		$this->activities->expects($this->once())->method('releaseDeferredDeliveries')->willReturnCallback(static function () use (&$events): void {
+			$events[] = 'deliver';
+		});
+		$this->activities->expects($this->never())->method('discardDeferredDeliveries');
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => 'com.example.notes.entry', 'rkey' => 'first',
+			'record' => ['$type' => 'com.example.notes.entry', 'text' => 'Updated']]);
+
+		$this->assertSame(['defer', 'write', 'commit', 'deliver'], $events);
 	}
 
 	public function testCreateOnlyPermissionCannotReplaceAnExistingRecordWithPutRecord(): void {
@@ -429,6 +525,7 @@ class WriteServiceTest extends TestCase {
 	}
 
 	public function testMixedBatchRollsBackWhenALaterSocialWriteFails(): void {
+		$this->repositories->method('batchActive')->willReturn(true);
 		$this->repositories->expects($this->once())->method('beginBatch');
 		$this->repositories->expects($this->never())->method('commitBatch');
 		$this->repositories->expects($this->once())->method('rollbackBatch');
@@ -565,17 +662,16 @@ class WriteServiceTest extends TestCase {
 	/** Who may send direct messages, as an app sets it: the setting here, which writes the record the app gets back. */
 	public function testAnAppsChatDeclarationIsTheSettingHere(): void {
 		$record = ['$type' => ChatDeclaration::COLLECTION, 'allowIncoming' => 'none'];
-		$this->declaration->expects($this->exactly(2))->method('fromApp')->with($this->session, 'self', $record)->willReturnCallback(function () use ($record): void {
+		$this->declaration->expects($this->once())->method('fromApp')->with($this->session, 'self', $record)->willReturnCallback(function () use ($record): void {
 			$bytes = DagCbor::encode($record);
 			$this->records = [new StoredRecord(self::DID, ChatDeclaration::COLLECTION, 'self', Cid::forDagCbor($bytes), $bytes, '', 0)];
 		});
 		$this->repositories->expects($this->never())->method('write');
 
 		$put = $this->writes->put($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
-		$created = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
-
 		$this->assertSame('at://' . self::DID . '/' . ChatDeclaration::COLLECTION . '/self', $put['uri']);
-		$this->assertSame($put['uri'], $created['uri']);
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
 	}
 
 	public function testAListBlockIsABlockAndRefused(): void {
@@ -583,6 +679,48 @@ class WriteServiceTest extends TestCase {
 
 		$this->expectException(XrpcException::class);
 		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.listblock', 'record' => ['$type' => 'app.bsky.graph.listblock', 'subject' => 'at://x', 'createdAt' => '2026-10-09T10:00:00.000Z']]);
+	}
+
+	public function testProjectedPostCreationChecksSwapCommitBeforeCreatingSocialState(): void {
+		$expected = Cid::forDagCbor(DagCbor::encode(['head' => 'previous']))->toString();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), $expected)
+			->willThrowException(new InvalidSwapException('Stale repository head'));
+		$this->posts->expects($this->never())->method('createPost');
+		try {
+			$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+				'swapCommit' => $expected, 'record' => ['$type' => RecordMapper::POST, 'text' => 'New post']]);
+			$this->fail('A stale repository head must prevent Social-side changes');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
+	}
+
+	public function testProjectedPostCreationCannotReplaceAnExistingRequestedKey(): void {
+		$rkey = Tid::next();
+		$existing = $this->record(RecordMapper::POST, $rkey, 'https://social.test/@alice/original');
+		$this->records = [$existing];
+		$this->posts->expects($this->never())->method('createPost');
+		try {
+			$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+				'rkey' => $rkey, 'record' => ['$type' => RecordMapper::POST, 'text' => 'Replacement']]);
+			$this->fail('An existing key must not create a replacement Social post');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidRequest', $e->error);
+			$this->assertSame([$existing], $this->records);
+		}
+	}
+
+	public function testProjectedCreationRollsBackWhenCreatingTheSocialPostFails(): void {
+		$this->repositories->method('batchActive')->willReturnOnConsecutiveCalls(false, true);
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('commitBatch');
+		$this->posts->method('createPost')->willThrowException(new \RuntimeException('Temporary storage failure'));
+		$this->activities->expects($this->once())->method('discardDeferredDeliveries');
+		$this->activities->expects($this->never())->method('releaseDeferredDeliveries');
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'New post']]);
 	}
 
 	public function testAPostFromAnAppIsASocialPostAndTheAnswerIsItsRecord(): void {
@@ -765,40 +903,29 @@ class WriteServiceTest extends TestCase {
 		}
 	}
 
-	public function testAnUploadIsNamedByTheCidOfWhatWasStored(): void {
-		$stored = new Document();
-		$stored->setId('https://social.test/documents/local/1');
-		$this->documents->expects($this->once())->method('storeLocalAttachment')->with($this->alice)->willReturn($stored);
-		$cid = Cid::forRaw('the stored bytes, metadata removed');
-		$this->pictures->expects($this->once())->method('blobFor')->with($this->session->identity, $this->alice, $stored)
-			->willReturn(['blob' => new BlobRef(self::DID, $cid, $stored->getId(), 'image/jpeg', 34), 'width' => 10, 'height' => 10]);
-
-		$answer = $this->writes->upload($this->session, $this->file('the bytes the app sent, with GPS'), 'image/jpeg');
-
-		$this->assertSame(['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 34], $answer['blob']);
+	public function testAnUploadIsKeptByTheOriginalBlobStoragePath(): void {
+		$bytes = 'the original bytes, including metadata';
+		$cid = Cid::forRaw($bytes);
+		$this->uploads->expects($this->once())->method('store')->with($this->session->identity, $this->alice)
+			->willReturn(new BlobRef(self::DID, $cid, 'https://social.test/documents/1', 'image/jpeg', strlen($bytes)));
+		$this->pictures->expects($this->never())->method('blobFor');
+		$this->documents->expects($this->never())->method('storeLocalAttachment');
+		$answer = $this->writes->upload($this->session, $this->file($bytes), 'image/jpeg');
+		$this->assertSame(['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => strlen($bytes)], $answer['blob']);
 	}
 
-	public function testAnUploadBlueskyCannotShowIsRefused(): void {
-		$this->documents->method('storeLocalAttachment')->willReturn(new Document());
-		$this->pictures->method('blobFor')->willReturn(null);
-
+	public function testAnUploadRefusedByTheServerStoragePolicyIsAnXrpcError(): void {
+		$this->uploads->method('store')->willThrowException(new \RuntimeException('quota exhausted'));
 		$this->expectException(XrpcException::class);
-		$this->expectExceptionMessage('cannot be shown on Bluesky');
+		$this->expectExceptionMessage('not accepted by this server');
 		$this->writes->upload($this->session, $this->file('bytes'), 'application/pdf');
 	}
 
-	public function testAVideoUploadIsStoredAsItCame(): void {
-		$stored = new Document();
-		$stored->setId('https://social.test/documents/local/2');
-		$stored->setMimeType('video/mp4');
-		$this->documents->method('storeLocalAttachment')->willReturn($stored);
+	public function testAVideoUploadDoesNotUseTheBlueskyPublishingConversion(): void {
 		$cid = Cid::forRaw('a video');
-		$this->videos->expects($this->once())->method('blobFor')->with($this->session->identity, $stored)
-			->willReturn(new BlobRef(self::DID, $cid, $stored->getId(), 'video/mp4', 7));
+		$this->uploads->method('store')->willReturn(new BlobRef(self::DID, $cid, 'https://social.test/documents/2', 'video/mp4', 7));
 		$this->pictures->expects($this->never())->method('blobFor');
-
 		$answer = $this->writes->upload($this->session, $this->file('a video'), 'video/mp4');
-
 		$this->assertSame($cid->toString(), $answer['blob']['ref']['$link']);
 		$this->assertSame('video/mp4', $answer['blob']['mimeType']);
 	}
@@ -1238,7 +1365,7 @@ class WriteServiceTest extends TestCase {
 			[['repo' => self::BOB, 'collection' => RecordMapper::POST, 'record' => []], 'another repository'],
 			[['repo' => self::DID, 'collection' => 'app.bsky.graph.block', 'record' => ['subject' => self::BOB]], 'Blocks stay on this server'],
 			[['repo' => self::DID, 'collection' => 'app.bsky.graph.listblock', 'record' => []], 'does not write app.bsky.graph.listblock'],
-			[['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [], 'validate' => false], 'always validated'],
+			[['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [], 'validate' => 'invalid'], 'validate must be a boolean'],
 		] as [$body, $why]) {
 			try {
 				$this->writes->create($this->session, $body);

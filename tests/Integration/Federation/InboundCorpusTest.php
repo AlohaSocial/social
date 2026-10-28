@@ -21,7 +21,7 @@ use OCP\Server;
  * row that was stored and the Mastodon entity a client is served.
  *
  * What is pinned is today's behaviour, including what is dropped: a Misskey
- * reaction is stored as a plain Like with its emoji gone, an Akkoma custom
+ * reaction is stored as an EmojiReact, an Akkoma custom
  * emoji reaction is not stored at all, a WordPress excerpt becomes a content
  * warning, and a Lemmy community's boost of a post is queued for a fetch
  * rather than taken in. A Move is not here: its target is always fetched
@@ -67,14 +67,14 @@ class InboundCorpusTest extends InboxTestCase {
 		$this->assertSame(['LinkPreview'], $this->queued($id));
 	}
 
-	/** Misskey's reaction is a Like with the emoji in `content`: stored as a plain like, the emoji gone. */
-	public function testAMisskeyReactionIsStoredAsAPlainLike(): void {
+	/** Misskey's reaction is dispatched to the EmojiReact handler and stored with its emoji. */
+	public function testAMisskeyReactionIsStoredAsAnEmojiReaction(): void {
 		$this->receive('misskey-like-reaction', 'yuki');
 
-		$likes = $this->rows(CoreRequestBuilder::TABLE_ACTIONS, 'actor_id', 'https://misskey.example/');
-		$this->assertSame(['Like'], array_column($likes, 'type'));
-		$this->assertSame(1, $this->statusEntity($this->localPostId())['favourites_count']);
-		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://misskey.example/'));
+		$reactions = $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://misskey.example/');
+		$this->assertSame(['🍅'], array_column($reactions, 'emoji'));
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_ACTIONS, 'actor_id', 'https://misskey.example/'));
+		$this->assertSame(0, $this->statusEntity($this->localPostId())['favourites_count']);
 	}
 
 	public function testAGoToSocialReplyIsStoredUnderThePostItAnswers(): void {
@@ -86,10 +86,11 @@ class InboundCorpusTest extends InboxTestCase {
 		$this->assertSame(1, $this->statusEntity($this->localPostId())['replies_count']);
 	}
 
-	/** A custom emoji is nothing this app draws as a reaction, so it is not stored; a Unicode one is. */
-	public function testAnAkkomaReactionIsStoredOnlyWhenItIsAUnicodeEmoji(): void {
+	/** Custom shortcodes and Unicode values both remain distinct reactions. */
+	public function testAnAkkomaReactionKeepsBothCustomAndUnicodeEmoji(): void {
 		$this->receive('akkoma-emoji-react', 'frank');
-		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'));
+		$this->assertSame([':blobcat:'], array_column($this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'), 'emoji'));
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_ACTIONS, 'actor_id', 'https://akkoma.example/'));
 
 		$unicode = json_decode($this->fixture('akkoma-emoji-react'), true);
 		$unicode['id'] .= '-unicode';
@@ -97,7 +98,7 @@ class InboundCorpusTest extends InboxTestCase {
 		unset($unicode['tag']);
 		$this->assertTrue($this->deliver((string)json_encode($unicode)));
 
-		$this->assertSame(['🍅'], array_column(
+		$this->assertEqualsCanonicalizing([':blobcat:', '🍅'], array_column(
 			$this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'), 'emoji'
 		));
 	}
@@ -224,7 +225,7 @@ class InboundCorpusTest extends InboxTestCase {
 		$this->receive('wordpress-create-article', 'jules');
 
 		$status = $this->statusEntity('https://blog.example/?p=123');
-		$this->assertSame('<h2>Pots</h2><p>Use big ones.</p>', $status['content']);
+		$this->assertSame('<h2>How I grow tomatoes on a balcony</h2><h2>Pots</h2><p>Use big ones.</p>', $status['content']);
 		$this->assertSame('A short guide to […]', $status['spoiler_text']);
 		$this->assertSame('https://blog.example/2026/04/05/tomatoes/', $status['url']);
 		$this->assertCount(1, $status['media_attachments']);
@@ -234,7 +235,7 @@ class InboundCorpusTest extends InboxTestCase {
 		$this->receive('ghost-create-article', 'index');
 
 		$status = $this->statusEntity('https://ghost.example/.ghost/activitypub/article/0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c');
-		$this->assertSame('<p>It is finally warm enough.</p>', $status['content']);
+		$this->assertSame('<h2>Spring planting notes</h2><p>It is finally warm enough.</p>', $status['content']);
 		$this->assertSame('https://ghost.example/spring-planting-notes/', $status['url']);
 		$this->assertSame('', $status['spoiler_text']);
 	}

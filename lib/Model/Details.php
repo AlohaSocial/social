@@ -131,6 +131,9 @@ final class Details {
 	/** The public schedule and venue stated on an ActivityStreams Event. */
 	public const EVENT = 'event';
 
+	/** The original heading of an ActivityStreams Article or Page. */
+	public const ARTICLE_TITLE = 'article_title';
+
 	/**
 	 * How many levels up the climb to this post's ancestors already is.
 	 *

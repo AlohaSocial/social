@@ -228,7 +228,7 @@ the old one. One run takes about twenty minutes.
 beside the Mastodon one rather than after it, and it runs when that one
 does: nightly, on demand, and on a pull request that touches the federation
 code or carries the `interop` or the `full-ci` label. It stands up
-the official Pixelfed image (`ghcr.io/pixelfed/pixelfed`, pinned by tag and
+the official Pixelfed v0.15.2 image (`ghcr.io/pixelfed/pixelfed`, pinned by tag and
 digest) with MySQL, Redis and a second container running Horizon — every
 delivery, fetch and fan-out on Pixelfed is a queued job, so without Horizon
 nothing leaves it.
@@ -248,7 +248,9 @@ Two things are different from the Mastodon job:
 
 `PixelfedDeliveryTest` covers what we send: our `Follow` accepted, a photo
 with its description, an album whole and in order, caption hashtags, a
-content warning, a like counted and notified, a comment threaded, a story — what
+content warning, a video delivered in the Pixelfed-compatible `Note` form and
+then edited and deleted, a like counted and notified, a comment threaded, a
+story — what
 the web client calls a 24-hour short — on Pixelfed's story bar (fetched
 through the bearcap), a profile `Update`, a
 direct message landing in the conversation and not on a profile, a delete
@@ -258,7 +260,10 @@ album, hashtags, a content warning, a like counted and notified, a comment
 threaded under our post, a profile update, a direct message arriving as
 direct, a delete and an unfollow. Every test writes words and pictures of its
 own, polls with a bound instead of sleeping, and makes both follows again
-itself when an earlier test took one away.
+itself when an earlier test took one away. The separate PeerTube suite checks
+the `Video` object form, including its channel, duration, file, edit and
+delete. These are real-server CI scenarios, but do not prove that every
+Pixelfed or PeerTube version accepts every codec or playback URL.
 
 Skipped, with the reason in the test: **collections** (Pixelfed neither sends
 nor ingests them) and **a Pixelfed story arriving here** (Pixelfed fans a
@@ -345,13 +350,13 @@ stays direct, an edit, a delete, a favourite and a boost counted and notified,
 and a favourite of an open post of ours given without GoToSocial holding it as
 a request.
 
-Not covered, because this app does not do it yet: a reply from a GoToSocial
-follower to a post of ours whose reply rule names our followers. GoToSocial
-reads our `canReply` naming the followers collection as "approval is
-conditional", sends a polite `ReplyRequest` and holds the reply until an
-`Accept` with a `ReplyAuthorization` comes back; this app takes the request
-in and answers nothing, so the reply never leaves GoToSocial. GoToSocial
-renamed `approvedBy`/`LikeApproval`/`ReplyApproval` to
+Conditional replies from GoToSocial are answered through the ActivityPub
+`ReplyRequest` handshake. Social checks the requested reply against the local
+target post's reply rule, returns `Accept` with a dereferenceable
+`ReplyAuthorization` when permitted, and returns `Reject` when refused. The
+authorization document binds the remote reply URI to that exact local target.
+A live GoToSocial interop run is still needed to verify the flow against a
+running peer. GoToSocial renamed `approvedBy`/`LikeApproval`/`ReplyApproval` to
 `likeAuthorization`/`LikeAuthorization`/`ReplyAuthorization` in 0.20 and
 dropped the old names in 0.21; this job runs the new ones.
 
@@ -477,3 +482,13 @@ Run it by hand with PostgreSQL and Redis at `DB_POSTGRES_URL` and
 with `SOCIAL_URL` set to the instance and `NODE_EXTRA_CA_CERTS` to its CA when
 the certificate is private, then `ATPROTO_NETWORK_FILE=/tmp/atproto-network.json
 composer run test:interop -- --filter AtprotoVisibleTest`.
+
+### Pixelfed video-edit rendering regression
+
+Pixelfed v0.14.4 stored incoming caption edits but left its separate `rendered`
+HTML unchanged. The API could therefore acknowledge an edit and show its new
+`edited_at` while continuing to display the old post. The current official
+v0.15.2 image updates both fields. The delivery test still requires the new
+text in the client-visible `content`, followed by deletion; it is not replaced
+by a delivery-status or database-only assertion. Failed runs print both stored
+caption/rendered values and the remote update-worker jobs for diagnosis.

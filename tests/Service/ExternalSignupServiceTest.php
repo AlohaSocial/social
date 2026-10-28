@@ -478,6 +478,21 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->assertSame(['Be kind'], $state['rules']);
 	}
 
+	public function testPublicRegistrationStatusMatchesTheUnauthenticatedSignupPath(): void {
+		$this->mode = ExternalUserService::MODE_OPEN;
+		self::assertTrue($this->service()->acceptsPublicRegistrations());
+
+		$this->mode = ExternalUserService::MODE_APPROVAL;
+		self::assertTrue($this->service()->acceptsPublicRegistrations());
+
+		$this->mode = ExternalUserService::MODE_INVITE;
+		self::assertFalse($this->service()->acceptsPublicRegistrations());
+
+		$this->mode = ExternalUserService::MODE_OPEN;
+		$this->room = false;
+		self::assertFalse($this->service()->acceptsPublicRegistrations());
+	}
+
 	/**
 	 * Addresses end in the social address, which the administrator may have
 	 * set apart from the host the page is served on; the preview and the

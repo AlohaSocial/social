@@ -18,7 +18,7 @@ use OCA\Social\Model\Details;
 final class ActivityPubEvent {
 	private const MAX_TEXT = 500;
 
-	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string} */
+	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string, participation_url?: string} */
 	public static function metadata(array $data): array {
 		return self::facts(
 			$data['name'] ?? '',
@@ -26,10 +26,12 @@ final class ActivityPubEvent {
 			$data['endTime'] ?? null,
 			$data['location'] ?? null,
 			$data['ical:status'] ?? $data['http://www.w3.org/2002/12/cal/ical#status'] ?? $data['eventStatus'] ?? null,
+			$data['joinMode'] ?? null,
+			$data['externalParticipationUrl'] ?? null,
 		);
 	}
 
-	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string}|null */
+	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string, participation_url?: string}|null */
 	public static function fromStream(Stream $stream): ?array {
 		if ($stream->getSubType() !== 'Event') {
 			return null;
@@ -42,6 +44,8 @@ final class ActivityPubEvent {
 			$event['end_time'] ?? null,
 			$event['location'] ?? null,
 			$event['status'] ?? null,
+			'External',
+			$event['participation_url'] ?? null,
 		);
 	}
 
@@ -107,8 +111,8 @@ final class ActivityPubEvent {
 		return $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
 	}
 
-	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string} */
-	private static function facts(mixed $name, mixed $start, mixed $end, mixed $location, mixed $status = null): array {
+	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string, participation_url?: string} */
+	private static function facts(mixed $name, mixed $start, mixed $end, mixed $location, mixed $status = null, mixed $joinMode = null, mixed $participationUrl = null): array {
 		$start = self::date($start);
 		$end = self::date($end);
 		if ($start !== null && $end !== null && $end <= $start) {
@@ -134,8 +138,30 @@ final class ActivityPubEvent {
 		if ($normalized !== null) {
 			$result['status'] = $normalized;
 		}
+		if (is_string($joinMode) && strtolower(trim($joinMode)) === 'external') {
+			$url = self::httpUrl($participationUrl);
+			if ($url !== null) {
+				$result['participation_url'] = $url;
+			}
+		}
 
 		return $result;
+	}
+
+	private static function httpUrl(mixed $value): ?string {
+		if (!is_string($value) || strlen($value) > 2048 || preg_match('/[\x00-\x20\\\\]/', $value) === 1) {
+			return null;
+		}
+		$parts = parse_url($value);
+		if (!is_array($parts)
+			|| !isset($parts['scheme'], $parts['host'])
+			|| !in_array(strtolower($parts['scheme']), ['http', 'https'], true)
+			|| isset($parts['user'])
+			|| isset($parts['pass'])) {
+			return null;
+		}
+
+		return $value;
 	}
 
 	private static function location(mixed $value): string {

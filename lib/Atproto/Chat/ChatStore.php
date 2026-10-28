@@ -18,13 +18,18 @@ use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\FacetRenderer;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\AtprotoChatMessageRequest;
+use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\DurableCache;
+use OCA\Social\Service\ReactionService;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -50,6 +55,8 @@ class ChatStore {
 	private const CONVO = 'social.chat.convo';
 	/** a message sent from here: the message here, by its Bluesky id */
 	private const SENT = 'social.chat.sent';
+	/** a message here: its Bluesky conversation and remote message id */
+	private const LOCATION = 'social.chat.location';
 	/** a message on its way out: when it was first attempted */
 	private const ATTEMPT = 'social.chat.attempt';
 	/** how long an attempt is remembered, past the last retry of `Cron\AtprotoPublish` */
@@ -64,6 +71,8 @@ class ChatStore {
 		private StreamRequest $streams,
 		private CacheActorService $cacheActors,
 		private ConversationService $conversations,
+		private ReactionsRequest $reactions,
+		private AtprotoChatMessageRequest $messages,
 	) {
 	}
 
@@ -72,6 +81,10 @@ class ChatStore {
 	 */
 	public static function messageId(string $senderDid, string $convoId, string $messageId): string {
 		return BlueskyIds::actorId($senderDid) . '/convo/' . rawurlencode($convoId) . '/' . rawurlencode($messageId);
+	}
+
+	public static function messageLocationLooksLikeBluesky(string $noteId): bool {
+		return preg_match('#^https://bsky\.app/profile/did:[a-z]+:[A-Za-z0-9._:%-]+/convo/[^/]+/[^/]+$#', $noteId) === 1;
 	}
 
 	/**
@@ -87,7 +100,10 @@ class ChatStore {
 		$sender = (string)($message['sender']['did'] ?? '');
 		$id = (string)($message['id'] ?? '');
 		if ($sender === $identity->did) {
-			return $this->own($identity, $convoId, $message, $members);
+			$stored = $this->own($identity, $convoId, $message, $members);
+			$this->storeMessageReactions($identity, $convoId, $message);
+
+			return $stored;
 		}
 		if (!Syntax::isDid($sender) || $id === '' || $this->blocklist->isBlockedDid($sender)) {
 			return false;
@@ -96,8 +112,7 @@ class ChatStore {
 			$actor = $this->actors->resolve($sender);
 		} catch (Throwable $e) {
 			$this->logger->notice('Sender of a Bluesky direct message not resolved', ['did' => $sender, 'exception' => $e]);
-
-			return false;
+			throw $e;
 		}
 		if (BlueskyActorService::isLimited($actor) || $this->blocklist->isBlockedActor($actor)) {
 			return false;
@@ -115,9 +130,13 @@ class ChatStore {
 			'cc' => [],
 			'object' => $note,
 		]);
-		if ($stored) {
-			$this->remember($identity->did, $convoId, $noteId);
+		$known = $stored || $this->posts->isKnown($noteId);
+		if (!$known) {
+			throw new \RuntimeException('Bluesky direct message was not durably stored');
 		}
+		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
+		$this->storeMessageReactions($identity, $convoId, $message);
+		$this->remember($identity->did, $convoId, $noteId);
 
 		return $stored;
 	}
@@ -137,7 +156,13 @@ class ChatStore {
 		}
 		$noteId = self::messageId($identity->did, $convoId, $id);
 		if ($this->posts->isKnown($noteId)) {
+			$this->rememberLocation($identity->did, $convoId, $id, $noteId);
+			$this->remember($identity->did, $convoId, $noteId);
+
 			return false;
+		}
+		if ($members === []) {
+			throw new \RuntimeException('Bluesky conversation members are not available for an own message');
 		}
 		$to = [];
 		foreach ($members as $did) {
@@ -148,6 +173,7 @@ class ChatStore {
 				$to[] = $this->actors->resolve($did)->getId();
 			} catch (Throwable $e) {
 				$this->logger->notice('Member of a Bluesky conversation not resolved', ['did' => $did, 'exception' => $e]);
+				throw $e;
 			}
 		}
 		if ($to === []) {
@@ -164,12 +190,14 @@ class ChatStore {
 			$note->setPublished($data['published']);
 			$note->convertPublished();
 			$note->setVisibility(Stream::TYPE_DIRECT);
-			$this->streams->save($note);
+			if (!$this->streams->save($note)) {
+				throw new \RuntimeException('Own Bluesky direct message was not durably stored');
+			}
 		} catch (Throwable $e) {
 			$this->logger->warning('Own Bluesky direct message not stored', ['id' => $noteId, 'exception' => $e]);
-
-			return false;
+			throw $e;
 		}
+		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 		$this->remember($identity->did, $convoId, $noteId);
 
 		return true;
@@ -190,7 +218,13 @@ class ChatStore {
 		}
 		$noteId = self::messageId($sender, $convoId, $id);
 		if ($sender !== $identity->did) {
-			return $this->posts->delete($noteId);
+			$deleted = $this->posts->delete($noteId);
+			$this->durableCache->removeShared(self::LOCATION, $identity->did . "\0" . $noteId);
+			if (!$deleted && $this->posts->isKnown($noteId)) {
+				throw new \RuntimeException('Bluesky direct message deletion was not durably stored');
+			}
+
+			return $deleted;
 		}
 		try {
 			if ($this->streams->getStreamById($noteId)->getAttributedTo() !== $identity->actorId) {
@@ -200,8 +234,82 @@ class ChatStore {
 			return false;
 		}
 		$this->streams->deleteById($noteId, Note::TYPE);
+		$this->durableCache->removeShared(self::LOCATION, $identity->did . "\0" . $noteId);
 
 		return true;
+	}
+
+	/**
+	 * A reaction in a Bluesky chat log, or one attached to a backfilled message.
+	 * Reactions use the existing local EmojiReact table so direct conversations
+	 * expose the same summaries as other messages.
+	 *
+	 * An old message may not be present here (the initial import is deliberately
+	 * limited to unread messages). Such a reaction cannot be displayed and is
+	 * intentionally ignored; database failures still propagate so
+	 * the chat cursor can retry them.
+	 *
+	 * @param array $message a `messageView` or `deletedMessageView`
+	 * @param array $reaction a `reactionView`
+	 */
+	public function reaction(Identity $identity, string $convoId, array $message, array $reaction, bool $added, string $revision = ''): bool {
+		$sender = (string)($message['sender']['did'] ?? '');
+		$messageId = (string)($message['id'] ?? '');
+		$actorDid = (string)($reaction['sender']['did'] ?? '');
+		$emoji = trim((string)($reaction['value'] ?? ''));
+		if (!Syntax::isDid($sender) || $messageId === '' || !Syntax::isDid($actorDid)
+			|| !ReactionService::isUsableEmoji($emoji) || preg_match('/^\\X$/u', $emoji) !== 1) {
+			return false;
+		}
+		if ($added && $this->blocklist->isBlockedDid($actorDid)) {
+			return false;
+		}
+
+		$objectId = $this->sentHere($sender, $messageId);
+		$objectId = $objectId !== '' ? $objectId : self::messageId($sender, $convoId, $messageId);
+		$actorId = $actorDid === $identity->did ? $identity->actorId : BlueskyIds::actorId($actorDid);
+		if (!$added) {
+			$this->reactions->deleteReaction($actorId, $objectId, $emoji);
+
+			return true;
+		}
+
+		try {
+			$this->streams->getStreamById($objectId);
+		} catch (StreamNotFoundException) {
+			return false;
+		}
+		try {
+			$this->reactions->getReaction($actorId, $objectId, $emoji);
+			return false;
+		} catch (ActionDoesNotExistException) {
+			// Not yet in the local reaction summary.
+		}
+
+		$createdAt = (string)($reaction['createdAt'] ?? '');
+		$eventKey = $revision !== '' ? $revision : hash('sha256', $createdAt . '\\0' . $emoji);
+		$record = new EmojiReact();
+		$record->setId(
+			$actorId . '/convo/' . rawurlencode($convoId) . '/' . rawurlencode($messageId)
+			. '/reaction/' . rawurlencode($eventKey)
+		);
+		$record->setActorId($actorId);
+		$record->setObjectId($objectId);
+		$record->setContent($emoji);
+		if ($createdAt !== '') {
+			$record->setPublished($createdAt);
+		}
+
+		return $this->reactions->save($record);
+	}
+
+	/** Stores the reactions Bluesky includes in a message view. */
+	private function storeMessageReactions(Identity $identity, string $convoId, array $message): void {
+		foreach (is_array($message['reactions'] ?? null) ? $message['reactions'] : [] as $reaction) {
+			if (is_array($reaction)) {
+				$this->reaction($identity, $convoId, $message, $reaction, true);
+			}
+		}
 	}
 
 	/**
@@ -223,8 +331,7 @@ class ChatStore {
 			return $this->conversations->markReadUpTo($this->cacheActors->getFromId($identity->actorId), $noteId);
 		} catch (Throwable $e) {
 			$this->logger->info('Bluesky read state not taken over', ['did' => $identity->did, 'exception' => $e]);
-
-			return false;
+			throw $e;
 		}
 	}
 
@@ -239,6 +346,7 @@ class ChatStore {
 			$this->durableCache->setShared(self::SENT, $did . "\0" . $messageId, $noteId, self::KEPT);
 		}
 		// last: a message whose conversation is known is recorded in full (`ChatSender`)
+		$this->rememberLocation($did, $convoId, $messageId, $noteId);
 		$this->durableCache->setShared(self::CONVO, $noteId, $convoId, self::KEPT);
 		$this->durableCache->removeShared(self::ATTEMPT, $noteId);
 	}
@@ -284,6 +392,40 @@ class ChatStore {
 		$convo = $this->durableCache->getShared(self::CONVO, $noteId);
 
 		return is_string($convo) ? $convo : '';
+	}
+
+	/**
+	 * The remote message identifiers for a message stored in one account's
+	 * Bluesky chat, or null if this message has no durable Bluesky mapping.
+	 *
+	 * @return array{convoId: string, messageId: string}|null
+	 */
+	public function messageLocation(string $did, string $noteId): ?array {
+		$persisted = $this->messages->location($did, $noteId);
+		if ($persisted !== null) {
+			return $persisted;
+		}
+		$location = $this->durableCache->getShared(self::LOCATION, $did . "\0" . $noteId);
+		if (is_array($location) && is_string($location['convoId'] ?? null) && is_string($location['messageId'] ?? null)
+			&& $location['convoId'] !== '' && $location['messageId'] !== '') {
+			$this->messages->remember($did, $noteId, $location['convoId'], $location['messageId']);
+			return ['convoId' => $location['convoId'], 'messageId' => $location['messageId']];
+		}
+		if (preg_match('#^https://bsky\.app/profile/did:[a-z]+:[A-Za-z0-9._:%-]+/convo/([^/]+)/([^/]+)$#', $noteId, $match) === 1) {
+			return ['convoId' => rawurldecode($match[1]), 'messageId' => rawurldecode($match[2])];
+		}
+
+		return null;
+	}
+
+	private function rememberLocation(string $did, string $convoId, string $messageId, string $noteId): void {
+		if ($convoId !== '' && $messageId !== '' && $noteId !== '') {
+			$this->messages->remember($did, $noteId, $convoId, $messageId);
+			$this->durableCache->setShared(self::LOCATION, $did . "\0" . $noteId, [
+				'convoId' => $convoId,
+				'messageId' => $messageId,
+			], self::KEPT);
+		}
 	}
 
 	/**

@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Client;
 
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Atproto\Protocol\Cid;
@@ -24,7 +25,6 @@ use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
-use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
@@ -74,26 +74,38 @@ use Throwable;
  * follow, a profile record the profile — and the record the publisher then
  * writes for it is the answer. The app shows what it gets back; the text may
  * differ where Social's mapping does (a long post cut with a link, say).
- * Lists, starter packs, feed generators and gates are kept as written
- * (`KEPT_AS_WRITTEN`); a curate list and its members are the person's list
- * here as well (`BlueskyListImport`). Who may send the person direct
+ * Lists, starter packs, feed generators and gates, and collections without a
+ * local Social projection, are kept as written. A curate list and its members
+ * are the person's list here as well (`BlueskyListImport`). Who may send the person direct
  * messages (`chat.bsky.actor.declaration`) is the setting here, which
- * writes the record (`ChatDeclaration`). Anything else —
- * blocks and list blocks (D16) among it — is refused, and a post can only be
- * public: that is what goes to Bluesky (D8).
+ * writes the record (`ChatDeclaration`). Blocks are handled as account
+ * relationships, list blocks are refused, and a post can only be public:
+ * that is what goes to Bluesky (D8).
  */
 class WriteService {
 	/**
-	 * Records an app writes that are kept as the app wrote them, checked
-	 * against their lexicon — lists and their members, starter packs, feed
-	 * generators, reply and quote gates. A list block is a block, and
-	 * refused (D16).
+	 * Records an app writes that are kept as the app wrote them. Known Lexicons
+	 * are schema-checked; unknown ones are bounded DAG-CBOR data. A list block
+	 * is a block, and refused (D16).
 	 */
 	public const KEPT_AS_WRITTEN = [
 		ProfileLinks::COLLECTION,
 		'app.bsky.graph.list', 'app.bsky.graph.listitem', 'app.bsky.graph.starterpack',
 		'app.bsky.feed.generator', 'app.bsky.feed.threadgate', RecordMapper::POSTGATE,
 	];
+
+	/** Whether a collection is retained in the repository without a Social projection. */
+	public static function keepsAsWritten(string $collection): bool {
+		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+			return true;
+		}
+
+		return Syntax::isNsid($collection) && !in_array($collection, [
+			RecordMapper::POST, RecordMapper::LIKE, RecordMapper::REPOST, RecordMapper::FOLLOW,
+			RecordMapper::PROFILE, ChatDeclaration::COLLECTION, BlueskyBlocks::COLLECTION,
+			'app.bsky.graph.listblock',
+		], true);
+	}
 	/** the records whose key is the key of the post they gate */
 	private const GATES = ['app.bsky.feed.threadgate', RecordMapper::POSTGATE];
 
@@ -111,7 +123,6 @@ class WriteService {
 		private DocumentService $documents,
 		private Publisher $publisher,
 		private PictureService $pictures,
-		private VideoBlobService $videos,
 		private InteractionPublisher $interactions,
 		private RepositoryService $repositories,
 		private LocalRecordResolver $local,
@@ -129,6 +140,8 @@ class WriteService {
 		private ActivityService $activities,
 		private StreamActionService $streamActions,
 		private IRecommendationSignalRecorder $recommendationSignals,
+		private Lexicon $lexicon,
+		private BlobUploadService $uploads,
 	) {
 	}
 
@@ -140,7 +153,61 @@ class WriteService {
 	public function create(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
+		if (self::keepsAsWritten($collection)) {
+			return $this->createInBatch($session, $body);
+		}
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
+		$ownsBatch = !$this->repositories->batchActive();
+		if (!$ownsBatch && $swapCommit !== null) {
+			throw XrpcException::invalidRequest('Conditional createRecord checks cannot be nested inside another repository batch');
+		}
+		try {
+			if ($ownsBatch) {
+				$this->repositories->beginBatch($session->identity->did, $this->identities->signingKey($session->identity), $swapCommit);
+				$this->activities->beginDeferredDeliveries();
+			}
+			$rkey = $body['rkey'] ?? null;
+			if (is_string($rkey) && $rkey !== '' && $this->repositories->getRecord($session->identity->did, $collection, $rkey) !== null) {
+				throw XrpcException::invalidRequest('A record already exists at this record key');
+			}
+			unset($body['swapCommit']);
+			$result = $this->createInBatch($session, $body);
+			if ($ownsBatch) {
+				$this->repositories->commitBatch();
+				$result['commit'] = $this->commit($session);
+				$this->activities->releaseDeferredDeliveries();
+			}
+			return $result;
+		} catch (Throwable $e) {
+			if ($ownsBatch) {
+				$this->activities->discardDeferredDeliveries();
+			}
+			if ($ownsBatch && $this->repositories->batchActive()) {
+				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+					$this->repositories->commitBatch();
+				} else {
+					$this->repositories->rollbackBatch();
+				}
+			}
+			if ($e instanceof InvalidSwapException) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			throw $e;
+		}
+	}
+
+	/** The create after the projected Social action and repository have entered one write scope. */
+	private function createInBatch(ClientSession $session, array $body): array {
+		$this->assertOwnRepo($session, $body);
+		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
 		$postRkey = null;
 		if ($collection === RecordMapper::POST && array_key_exists('rkey', $body)) {
 			if (!is_string($body['rkey']) || !Tid::isValid($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
@@ -158,12 +225,12 @@ class WriteService {
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
 			BlueskyBlocks::COLLECTION => $this->block($session, $actor, $record),
-			default => in_array($collection, self::KEPT_AS_WRITTEN, true)
-				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record)
+			default => self::keepsAsWritten($collection)
+				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record, false, $swapCommit, $body['validate'] ?? null)
 				: throw $this->unsupported($collection),
 		};
 
-		return $this->created($session, $written);
+		return $this->created($session, $written, self::keepsAsWritten($collection) ? ($body['validate'] ?? null) : null);
 	}
 
 	/**
@@ -214,6 +281,7 @@ class WriteService {
 			} catch (InvalidSwapException $e) {
 				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
 			}
+			$this->activities->beginDeferredDeliveries();
 		}
 		try {
 			$current = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
@@ -225,11 +293,13 @@ class WriteService {
 			if ($ownsBatch) {
 				$this->repositories->commitBatch();
 				$result['commit'] = $this->commit($session);
+				$this->activities->releaseDeferredDeliveries();
 			}
 
 			return $result;
 		} catch (Throwable $e) {
 			if ($ownsBatch) {
+				$this->activities->discardDeferredDeliveries();
 				// A reviewed post is intentionally kept in the moderation queue
 				// before XRPC returns an error. Commit that queue entry even though
 				// no repository record is written.
@@ -256,10 +326,10 @@ class WriteService {
 		if ($collection === RecordMapper::POST) {
 			return $this->updatePostRecord($session, $body);
 		}
-		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+		if (self::keepsAsWritten($collection)) {
 			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 
-			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record));
+			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record, true, null, $body['validate'] ?? null), $body['validate'] ?? null);
 		}
 		if ($collection === ChatDeclaration::COLLECTION) {
 			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), is_array($body['record'] ?? null) ? $body['record'] : []));
@@ -700,7 +770,7 @@ class WriteService {
 			// already gone: what the app asked for is the case
 			return ['commit' => $this->commit($session)];
 		}
-		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+		if (self::keepsAsWritten($collection)) {
 			$this->writeRaw($session, RepoWrite::delete($collection, $rkey));
 			$this->listChanged($session, $record, true);
 
@@ -736,8 +806,8 @@ class WriteService {
 			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
 		}
 		if ($writes !== [] && count(array_filter($writes, static fn (mixed $write): bool => is_array($write)
-			&& in_array((string)($write['collection'] ?? ''), self::KEPT_AS_WRITTEN, true))) === count($writes)) {
-			return $this->applyKept($session, $writes, $swapCommit);
+			&& self::keepsAsWritten((string)($write['collection'] ?? '')))) === count($writes)) {
+			return $this->applyKept($session, $writes, $swapCommit, $body['validate'] ?? null);
 		}
 		foreach ($writes as $write) {
 			if (!is_array($write) || !in_array(($write['$type'] ?? null), [
@@ -754,7 +824,7 @@ class WriteService {
 			$this->activities->beginDeferredDeliveries();
 			foreach ($writes as $write) {
 				$type = $write['$type'];
-				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'rkey' => $write['rkey'] ?? '', 'record' => $write['value'] ?? []];
+				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'rkey' => $write['rkey'] ?? '', 'record' => $write['value'] ?? []] + array_intersect_key($body, ['validate' => true]);
 				if ($type === 'com.atproto.repo.applyWrites#create') {
 					$results[] = ['$type' => 'com.atproto.repo.applyWrites#createResult'] + array_intersect_key($this->create($session, $one), ['uri' => 1, 'cid' => 1, 'validationStatus' => 1]);
 				} elseif ($type === 'com.atproto.repo.applyWrites#delete') {
@@ -792,7 +862,7 @@ class WriteService {
 	 * @param array<array<string, mixed>> $writes
 	 * @throws XrpcException
 	 */
-	private function applyKept(ClientSession $session, array $writes, ?string $swapCommit): array {
+	private function applyKept(ClientSession $session, array $writes, ?string $swapCommit, ?bool $validate = null): array {
 		$repoWrites = [];
 		$results = [];
 		/** @var list<array{record: ?StoredRecord, collection: string, rkey: string, deleted: bool, resultIndex: ?int}> $sync */
@@ -853,7 +923,7 @@ class WriteService {
 		$committed = null;
 		if ($repoWrites !== []) {
 			try {
-				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), $repoWrites, $swapCommit);
+				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation($validate), $repoWrites), $swapCommit);
 				if ($commit !== null) {
 					$committed = ['cid' => $commit->commitCid->toString(), 'rev' => $commit->rev];
 				}
@@ -872,7 +942,7 @@ class WriteService {
 					$this->listChanged($session, $stored, true);
 				} elseif ($entry['resultIndex'] !== null) {
 					$results[$entry['resultIndex']]['cid'] = $stored->cid->toString();
-					$results[$entry['resultIndex']]['validationStatus'] = 'valid';
+					$results[$entry['resultIndex']]['validationStatus'] = $this->validationStatus($stored, $validate);
 					$this->listChanged($session, $stored, false);
 				}
 			}
@@ -883,11 +953,8 @@ class WriteService {
 
 	/**
 	 * `com.atproto.repo.uploadBlob`, from the file the body was copied to:
-	 * stored as any upload is, and named by the CID of what was stored.
-	 * Storing takes a picture's camera metadata off and may re-encode it to
-	 * fit Bluesky, so the bytes the app sent are not the bytes `getBlob`
-	 * serves, and the answer names the stored ones. A video is stored as it
-	 * came.
+	 * kept byte for byte and named by its original CID. Normal Social uploads
+	 * still use their own metadata removal and publishing conversions.
 	 *
 	 * @param string $mime what the app said it is; what is stored is sniffed
 	 * @throws XrpcException
@@ -898,19 +965,12 @@ class WriteService {
 		}
 		$actor = $this->actor($session);
 		try {
-			$document = $this->documents->storeLocalAttachment($actor, $path);
+			$blob = $this->uploads->store($session->identity, $actor, $path);
 		} catch (Throwable $e) {
 			$this->logger->notice('Blob from a Bluesky app refused', ['mime' => $mime, 'exception' => $e]);
 
-			throw XrpcException::invalidRequest('This file type is not accepted');
+			throw XrpcException::invalidRequest('This file is not accepted by this server');
 		}
-		$blob = str_starts_with($document->getMimeType(), 'video/')
-			? $this->videos->blobFor($session->identity, $document)
-			: ($this->pictures->blobFor($session->identity, $actor, $document)['blob'] ?? null);
-		if ($blob === null) {
-			throw XrpcException::invalidRequest('This file cannot be shown on Bluesky');
-		}
-
 		return ['blob' => [
 			'$type' => 'blob',
 			'ref' => ['$link' => $blob->cid->toString()],
@@ -1433,7 +1493,7 @@ class WriteService {
 	 *
 	 * @throws XrpcException
 	 */
-	private function keep(ClientSession $session, string $collection, string $rkey, array $record): StoredRecord {
+	private function keep(ClientSession $session, string $collection, string $rkey, array $record, bool $replace = true, ?string $swapCommit = null, ?bool $validate = null): StoredRecord {
 		// links, bytes and empty maps as the repository models them
 		$record = DagCbor::fromLexJson($record);
 		$did = $session->identity->did;
@@ -1445,6 +1505,9 @@ class WriteService {
 			$rkey = $gated['rkey'];
 		}
 		$rkey = $rkey !== '' ? $rkey : Tid::next();
+		if (!Mst::isValidKey($collection . '/' . $rkey)) {
+			throw XrpcException::invalidRequest('The record path is not valid');
+		}
 		if ($collection === ProfileLinks::COLLECTION && !Tid::isValid($rkey)) {
 			throw XrpcException::invalidRequest('A profile link record key must be a TID');
 		}
@@ -1453,10 +1516,14 @@ class WriteService {
 		}
 		$record['$type'] = $collection;
 		$was = $this->repositories->getRecord($did, $collection, $rkey);
+		if (!$replace && $was !== null) {
+			throw XrpcException::invalidRequest('A record already exists at ' . $collection . '/' . $rkey);
+		}
 		// a record replaced stands for what it stood for before
-		$this->writeRaw($session, $was === null
+		$write = !$replace || $was === null
 			? RepoWrite::create($collection, $record, '', $rkey)
-			: RepoWrite::update($collection, $rkey, $record, $was->localId));
+			: RepoWrite::update($collection, $rkey, $record, $was->localId);
+		$this->writeRaw($session, $write->withValidation($validate), $swapCommit);
 
 		$kept = $this->repositories->getRecord($did, $collection, $rkey)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
@@ -1502,16 +1569,25 @@ class WriteService {
 	/**
 	 * @throws XrpcException
 	 */
-	private function writeRaw(ClientSession $session, RepoWrite $write): void {
+	private function writeRaw(ClientSession $session, RepoWrite $write, ?string $swapCommit = null): void {
+		if ($swapCommit !== null && $this->repositories->batchActive()) {
+			throw XrpcException::invalidRequest('Conditional record creation cannot be nested inside another repository batch');
+		}
 		try {
-			$this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), [$write]);
+			$this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), [$write], $swapCommit);
+		} catch (InvalidSwapException $e) {
+			throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
 		} catch (AtprotoException $e) {
 			throw XrpcException::invalidRequest($e->getMessage());
 		}
 	}
 
-	private function created(ClientSession $session, StoredRecord $record): array {
-		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'commit' => $this->commit($session), 'validationStatus' => 'valid'];
+	private function created(ClientSession $session, StoredRecord $record, ?bool $validate = null): array {
+		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'commit' => $this->commit($session), 'validationStatus' => $this->validationStatus($record, $validate)];
+	}
+
+	private function validationStatus(StoredRecord $record, ?bool $validate): string {
+		return $validate !== false && $this->lexicon->hasRecordSchema($record->collection) ? 'valid' : 'unknown';
 	}
 
 	private function commit(ClientSession $session): array {
@@ -1528,8 +1604,8 @@ class WriteService {
 		if ($repo !== $session->identity->did && $repo !== $session->identity->handle) {
 			throw new XrpcException(403, 'InvalidRequest', 'You can only write to your own repository');
 		}
-		if (isset($body['validate']) && $body['validate'] === false) {
-			throw XrpcException::invalidRequest('Records are always validated here');
+		if (array_key_exists('validate', $body) && !is_bool($body['validate'])) {
+			throw XrpcException::invalidRequest('validate must be a boolean');
 		}
 	}
 

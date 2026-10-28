@@ -15,8 +15,11 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Publisher\TextMapper;
 use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Exceptions\ItemUnknownException;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ReactionService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
@@ -137,6 +140,44 @@ class ChatSender {
 		// so the log's copy of it is known to be this one
 		$this->store->sent($identity->did, $convo, $messageId, $post->getId());
 		// the answer is likely soon
+		$this->poller->wake($identity->did);
+
+		return true;
+	}
+
+	/**
+	 * Sends an Aloha reaction to a Bluesky chat message. Null means the post
+	 * is not a message in a conversation owned by this account.
+	 */
+	public function react(Person $actor, Stream $post, string $emoji, bool $added): ?bool {
+		if ($post->getVisibility() !== Stream::TYPE_DIRECT) {
+			return null;
+		}
+		$identity = $this->identities->forActor($actor, false);
+		if ($identity === null || !$identity->isActive()) {
+			return (ChatStore::messageLocationLooksLikeBluesky($post->getId()) || self::recipients($post) !== [])
+				? throw new ItemUnknownException('Link an active Bluesky identity before reacting to this message')
+				: null;
+		}
+		$location = $this->store->messageLocation($identity->did, $post->getId());
+		if ($location === null) {
+			if (self::recipients($post) !== []) {
+				throw new ItemUnknownException('The Bluesky message mapping is unavailable; this reaction cannot be delivered');
+			}
+			return null;
+		}
+		if (!ReactionService::isUsableOutboundEmoji($emoji) || preg_match('/^\\X$/u', $emoji) !== 1) {
+			throw new ItemUnknownException('Bluesky chat reactions must be one Unicode emoji');
+		}
+		if (!$this->poller->isOn()) {
+			throw new \RuntimeException('Bluesky chat is not enabled for this account');
+		}
+		$method = $added ? 'chat.bsky.convo.addReaction' : 'chat.bsky.convo.removeReaction';
+		$this->appView->chatAs($identity->did, $this->identities->signingKey($identity), $method, [], [
+			'convoId' => $location['convoId'],
+			'messageId' => $location['messageId'],
+			'value' => $emoji,
+		]);
 		$this->poller->wake($identity->did);
 
 		return true;

@@ -21,6 +21,7 @@ use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Publisher\TextMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -123,9 +124,18 @@ class ChatSenderTest extends TestCase {
 			$table->setShared($namespace, $key, $value, $ttl);
 		});
 
+		$storedMessages = [];
+		$messages = $this->createMock(\OCA\Social\Db\AtprotoChatMessageRequest::class);
+		$messages->method('remember')->willReturnCallback(static function (string $did, string $noteId, string $convoId, string $messageId) use (&$storedMessages): void {
+			$storedMessages[$did . $noteId] = ['convoId' => $convoId, 'messageId' => $messageId];
+		});
+		$messages->method('location')->willReturnCallback(static function (string $did, string $noteId) use (&$storedMessages): ?array {
+			return $storedMessages[$did . $noteId] ?? null;
+		});
+
 		return $this->store = new ChatStore(
 			$this->createMock(PostStore::class), $this->createMock(BlueskyActorService::class), $this->createMock(Blocklist::class),
-			$cache, new NullLogger(), $this->createMock(StreamRequest::class), $this->createMock(CacheActorService::class), $this->createMock(ConversationService::class),
+			$cache, new NullLogger(), $this->createMock(StreamRequest::class), $this->createMock(CacheActorService::class), $this->createMock(ConversationService::class), $this->createMock(ReactionsRequest::class), $messages,
 		);
 	}
 
@@ -195,6 +205,7 @@ class ChatSenderTest extends TestCase {
 			'the conversation\'s newest message' => ['social.chat'],
 			'the message by its Bluesky id' => ['social.chat.sent'],
 			'the conversation of the message' => ['social.chat.convo'],
+			'the remote location of the message' => ['social.chat.location'],
 		];
 	}
 
@@ -299,5 +310,44 @@ class ChatSenderTest extends TestCase {
 
 	public function testTheRecipientsAreThePeopleOnBluesky(): void {
 		$this->assertSame([self::BOB], ChatSender::recipients(self::message('')));
+	}
+
+	public function testAReactionOnALocallyKnownMessageIsSentToTheChatService(): void {
+		$this->store()->sent(self::ALICE, 'convo1', 'msg42', self::NOTE);
+		$this->now += 91 * 86400;
+		$actor = new Person();
+		$actor->setId('https://social.test/users/alice');
+
+		$this->assertTrue($this->sender()->react($actor, self::message('Hello'), '🔥', true));
+		$this->assertSame(['chat.bsky.convo.addReaction', [], [
+			'convoId' => 'convo1', 'messageId' => 'msg42', 'value' => '🔥',
+		]], $this->calls[0]);
+	}
+
+	public function testRemovingAReactionUsesTheChatServiceAndWakesThePoller(): void {
+		$this->store()->sent(self::ALICE, 'convo1', 'msg42', self::NOTE);
+		$actor = new Person();
+		$actor->setId('https://social.test/users/alice');
+
+		$this->assertTrue($this->sender()->react($actor, self::message('Hello'), '🔥', false));
+		$this->assertSame('chat.bsky.convo.removeReaction', $this->calls[0][0]);
+		$this->assertSame(['convoId' => 'convo1', 'messageId' => 'msg42', 'value' => '🔥'], $this->calls[0][2]);
+		$this->assertSame([self::ALICE], $this->woken);
+	}
+
+	public function testAnUnmappedPostIsNotSentAsAChatReaction(): void {
+		$actor = new Person();
+		$actor->setId('https://social.test/users/alice');
+
+		$post = self::message('Hello');
+		$post->setToArray(['https://mastodon.test/users/carol']);
+		$this->assertNull($this->sender()->react($actor, $post, '🔥', true));
+		$this->assertSame([], $this->calls);
+	}
+
+	public function testALostLegacyBlueskyMappingCannotFallBackToActivityPub(): void {
+		$actor = (new Person())->setId('https://social.test/users/alice');
+		$this->expectException(\OCA\Social\Exceptions\ItemUnknownException::class);
+		$this->sender()->react($actor, self::message('Hello'), '🔥', true);
 	}
 }

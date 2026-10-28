@@ -9,6 +9,7 @@ import { getFilePickerBuilder } from '@nextcloud/dialogs'
 import { setLanguage } from '@nextcloud/l10n'
 import { showError, showSuccess, showWarning } from '../../../src/services/toast.js'
 import Composer from '../../../src/components/Composer/Composer.vue'
+import { loadDraft } from '../../../src/services/draft.js'
 import ComposerPreview from '../../../src/components/Composer/ComposerPreview.vue'
 import LanguageSelect from '../../../src/components/Composer/LanguageSelect.vue'
 import PollEditor from '../../../src/components/Composer/PollEditor.vue'
@@ -1084,6 +1085,68 @@ describe('Composer', () => {
 			expect(typed(wrapper)).toBe('')
 		})
 
+		it('clears the unchanged compact draft after the full modal publishes it', async () => {
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
+			await setContent(wrapper, 'Move to the modal')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			eventBus.emit('composer-published', { context: '' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('')
+		})
+
+		it('clears an unchanged reply when the post button opens the modal directly', async () => {
+			const reply = replyTo()
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false, inReplyTo: reply })
+			await setContent(wrapper, 'A reply draft')
+			eventBus.emit('composer-reply', reply)
+			eventBus.emit('composer-published', { context: 'reply.42' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('')
+		})
+
+		it('retains newer compact reply text while the modal publishes its earlier draft', async () => {
+			const reply = replyTo()
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false, inReplyTo: reply })
+			await setContent(wrapper, 'Earlier reply')
+			eventBus.emit('composer-reply', reply)
+			await setContent(wrapper, 'A different reply')
+			eventBus.emit('composer-published', { context: 'reply.42' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('A different reply')
+		})
+
+		it.each([false, true])('persists a newer compact draft after the modal publishes (reply: %s)', async (isReply) => {
+			const props = isReply ? { inReplyTo: replyTo() } : {}
+			const context = isReply ? 'reply.42' : ''
+			const compact = mountComposer({ ...props, oneLine: true, listenForIntents: false }).wrapper
+			await setContent(compact, 'Earlier words for the modal')
+			await compact.find('.composer-line__expand').trigger('click')
+			const modal = mountComposer({ ...props, startExpanded: true, listenForIntents: false })
+			await flushPromises()
+			await setContent(compact, 'Keep this newer draft')
+			await modal.wrapper.vm.createPost()
+			await flushPromises()
+			expect(postedStatus(modal.store).status).toBe('Earlier words for the modal')
+			expect(typed(compact)).toBe('Keep this newer draft')
+			expect(loadDraft(context)?.text).toBe('Keep this newer draft')
+			const reloaded = mountComposer({ ...props, oneLine: true, listenForIntents: false }).wrapper
+			await flushPromises()
+			expect(typed(reloaded)).toBe('Keep this newer draft')
+		})
+
+		it('keeps newly typed words and other reply contexts when a modal publishes', async () => {
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
+			await setContent(wrapper, 'Move to the modal')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			eventBus.emit('composer-published', { context: 'reply.somewhere-else' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Move to the modal')
+			await setContent(wrapper, 'A new thought')
+			eventBus.emit('composer-published', { context: '' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('A new thought')
+		})
+
 		it('keeps a refused quick post and hands its draft to the full modal', async () => {
 			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
 			store.post.mockResolvedValueOnce(undefined)
@@ -1138,6 +1201,16 @@ describe('Composer', () => {
 			expect(typed(wrapper)).toContain('@bob@remote.example')
 			expect(wrapper.vm.replyTo.id).toBe('42')
 			expect(wrapper.vm.anchoredReply).toBe(false)
+		})
+
+		it('restores routing-only reply drafts as mention pills with a typing separator', async () => {
+			const compact = mountComposer({ inReplyTo: replyTo(bob), oneLine: true, listenForIntents: false }).wrapper
+			await flushPromises()
+			await compact.find('.composer-line__expand').trigger('click')
+			const modal = mountComposer({ inReplyTo: replyTo(bob), listenForIntents: false, startExpanded: true }).wrapper
+			await flushPromises()
+			expect(modal.findAll('.message .mention')).toHaveLength(1)
+			expect(typed(modal)).toBe('@bob@remote.example\u00a0')
 		})
 
 		it('restores a quote draft in its own context and ignores later global intents', async () => {

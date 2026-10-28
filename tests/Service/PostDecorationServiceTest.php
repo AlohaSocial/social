@@ -22,6 +22,7 @@ use OCA\Social\Model\Client\Place;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\PlaceService;
 use OCA\Social\Service\PostDecorationService;
@@ -61,7 +62,7 @@ class PostDecorationServiceTest extends TestCase {
 		$this->service = new PostDecorationService(
 			new LinkPreviewService($this->cards, $this->createStub(CurlService::class), new NullLogger()),
 			new PlaceService($this->places, $this->createStub(StreamRequest::class)),
-			new ReactionSummaryService($this->reactions),
+			new ReactionSummaryService($this->reactions, $this->createStub(EmojiService::class)),
 			$this->mediaTags,
 			$this->cacheActorService,
 			$this->queue,

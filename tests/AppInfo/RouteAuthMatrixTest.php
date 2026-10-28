@@ -62,6 +62,7 @@ class RouteAuthMatrixTest extends TestCase {
 		'ActivityPubController::followers' => 'follower collection, honours the hide-network setting',
 		'ActivityPubController::following' => 'following collection, honours the hide-network setting',
 		'ActivityPubController::displayQuoteAuthorization' => 'FEP-044f stamp a peer verifies',
+		'ActivityPubController::displayReplyAuthorization' => 'GoToSocial reply grant is an HMAC-bound public protocol document',
 		'ActivityPubController::instanceActor' => 'the instance actor, needed to verify its signed fetches',
 		'ActivityPubController::replies' => 'replies collection of a post, filtered to public',
 		'ActivityPubController::likes' => 'likes collection of a post, by protocol',

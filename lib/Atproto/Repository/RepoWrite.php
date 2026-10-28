@@ -33,6 +33,7 @@ final class RepoWrite {
 		public readonly ?array $record,
 		public readonly string $localId,
 		public readonly bool $once = false,
+		public readonly ?bool $validate = null,
 	) {
 		if (!Mst::isValidKey($collection . '/' . $rkey)) {
 			throw new InvalidArgumentException('Not a record path: ' . $collection . '/' . $rkey);
@@ -67,5 +68,9 @@ final class RepoWrite {
 
 	public function path(): string {
 		return $this->collection . '/' . $this->rkey;
+	}
+
+	public function withValidation(?bool $validate): self {
+		return new self($this->action, $this->collection, $this->rkey, $this->record, $this->localId, $this->once, $validate);
 	}
 }

@@ -77,8 +77,9 @@ class VideoBlobService {
 		}
 
 		$blob = new BlobRef($identity->did, $cid, $document->getId(), self::TYPE, (int)$size);
-		$this->blobRequest->put($blob);
-		$this->repoRequest->addBlobBytes($identity->did, $blob->size);
+		if ($this->blobRequest->put($blob)) {
+			$this->repoRequest->addBlobBytes($identity->did, $blob->size);
+		}
 
 		return $blob;
 	}

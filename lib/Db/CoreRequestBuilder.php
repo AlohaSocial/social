@@ -119,6 +119,7 @@ class CoreRequestBuilder {
 	public const TABLE_ATPROTO_WATCH = 'social_atproto_watch';
 	public const TABLE_ATPROTO_NOTIFY_CURSOR = 'social_atproto_notify_cursor';
 	public const TABLE_ATPROTO_CHAT_CURSOR = 'social_atproto_chat_cursor';
+	public const TABLE_ATPROTO_CHAT_MESSAGE = 'social_atp_chat_message';
 	public const TABLE_ATPROTO_BLOCKLIST = 'social_atproto_blocklist';
 	public const TABLE_ATPROTO_LABELER = 'social_atproto_labeler';
 	public const TABLE_ATPROTO_APP_PASSWORD = 'social_atproto_app_password';
@@ -131,6 +132,7 @@ class CoreRequestBuilder {
 	public const TABLE_VERIFICATIONS = 'social_verification';
 
 	public static array $tables = [
+		self::TABLE_ATPROTO_CHAT_MESSAGE => ['stream_id_prim', 'did', 'convo_id', 'message_id'],
 		self::TABLE_ATPROTO_IDENTITY => [
 			'id', 'actor_id', 'actor_id_prim', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public',
 			'state', 'moved_from_pds', 'creation', 'updated', 'custom_handle', 'custom_handle_checked', 'custom_handle_failures',

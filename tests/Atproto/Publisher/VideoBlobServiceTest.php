@@ -35,6 +35,8 @@ class VideoBlobServiceTest extends TestCase {
 	private Identity $alice;
 	private Document $video;
 	private VideoBlobService $videos;
+	private AtprotoRepoRequest $repoRequest;
+	private bool $blobInserted = true;
 
 	protected function setUp(): void {
 		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0);
@@ -43,6 +45,7 @@ class VideoBlobServiceTest extends TestCase {
 		$this->video->setMimeType('video/mp4');
 		$this->video->setLocalCopy('uuid-7');
 		$this->blobRequest = $this->createMock(AtprotoBlobRequest::class);
+		$this->blobRequest->method('put')->willReturnCallback(fn (): bool => $this->blobInserted);
 		$file = $this->createMock(ISimpleFile::class);
 		$file->method('getSize')->willReturnCallback(fn (): int => strlen($this->bytes));
 		$file->method('read')->willReturnCallback(function () {
@@ -56,10 +59,22 @@ class VideoBlobServiceTest extends TestCase {
 		$cache->method('getFromUuid')->with('uuid-7')->willReturn($file);
 		$documents = $this->createMock(DocumentService::class);
 		$documents->method('getDocumentById')->willReturn($this->video);
-		$this->videos = new VideoBlobService($this->blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, new NullLogger());
+		$this->repoRequest = $this->createMock(AtprotoRepoRequest::class);
+		$this->videos = new VideoBlobService($this->blobRequest, $this->repoRequest, $cache, $documents, new NullLogger());
+	}
+
+	public function testAConcurrentDuplicateRegistrationDoesNotCountBlobBytesAgain(): void {
+		$this->blobInserted = false;
+		$this->repoRequest->expects($this->never())->method('addBlobBytes');
+
+		$blob = $this->videos->blobFor($this->alice, $this->video);
+
+		$this->assertNotNull($blob);
+		$this->assertTrue(Cid::forRaw($this->bytes)->equals($blob->cid));
 	}
 
 	public function testAVideoIsHashedAsItIsReadAndKeptAsItIs(): void {
+		$this->repoRequest->expects($this->once())->method('addBlobBytes')->with(self::DID, strlen($this->bytes));
 		$this->blobRequest->expects($this->once())->method('put')->with($this->callback(fn (BlobRef $blob): bool => $blob->cid->equals(Cid::forRaw($this->bytes))
 			&& $blob->documentId === $this->video->getId() && $blob->mime === 'video/mp4' && $blob->size === strlen($this->bytes)));
 

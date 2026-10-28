@@ -62,6 +62,7 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\EmojiService;
+use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\FeedDisplayService;
 use OCA\Social\Service\FileCommentsService;
@@ -142,6 +143,7 @@ class ApiControllerTest extends TestCase {
 	private $userSession;
 	/** @var InstanceService&MockObject */
 	private $instanceService;
+	private ExternalSignupService $externalSignupService;
 	/** @var ClientService&MockObject */
 	private $clientService;
 	/** @var AccountService&MockObject */
@@ -259,6 +261,7 @@ class ApiControllerTest extends TestCase {
 	private string $pathParam = '';
 	/** the request headers the controller under construction will see */
 	private array $headers = [];
+	private bool $socialSignupsOpen = false;
 
 	protected function setUp(): void {
 		$this->blockedBy = $this->createMock(\OCA\Social\Service\BlockedBy\BlockedByService::class);
@@ -289,6 +292,10 @@ class ApiControllerTest extends TestCase {
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->userSession = $this->createStub(IUserSession::class);
 		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->externalSignupService = $this->createStub(ExternalSignupService::class);
+		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturnCallback(fn (): bool => $this->socialSignupsOpen);
+		$this->externalSignupService->method('requiresRegistrationApproval')->willReturn(false);
+		$this->externalSignupService->method('invitationsEnabled')->willReturn(false);
 		$this->clientService = $this->createMock(ClientService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		// what an account posts with when the client names no visibility
@@ -442,6 +449,7 @@ class ApiControllerTest extends TestCase {
 			'userSession' => $this->userSession,
 			'logger' => $logger ?? new NullLogger(),
 			'instanceService' => $this->instanceService,
+			'externalSignupService' => $this->externalSignupService,
 			'atprotoIdentities' => (function () {
 				$identities = $this->createStub(\OCA\Social\Atproto\Identity\IdentityService::class);
 				$identities->method('getByActorId')->willThrowException(new \OCA\Social\Exceptions\AtprotoIdentityNotFoundException());
@@ -3661,8 +3669,9 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->once())->method('syncTimeline')->with($actor);
-		$this->remoteFetchQueue->expects($this->once())->method('isTimelinePending')->with($actor->getId())->willReturn(true);
+		$this->remoteFetchQueue->expects($this->once())->method('refreshTimelineState')->with($actor)->willReturn('queued');
+		$this->remoteFetchQueue->expects($this->never())->method('isTimelinePending');
+		$this->remoteFetchQueue->expects($this->never())->method('timelineSyncFailed');
 		$this->captureTimelineOptions(['p']);
 
 		$response = $this->controller()->accountStatuses('bob@remote.example');
@@ -3677,7 +3686,7 @@ class ApiControllerTest extends TestCase {
 		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn(BlueskyIds::actorId('did:plc:z72i7hdynmk6r22z27h6tvur'));
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->blueskyFeeds->expects($this->once())
 			->method('authorPage')
 			->with($actor, '123456', 15, null)
@@ -3714,7 +3723,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->captureTimelineOptions([]);
 
 		$this->controller()->accountStatuses('bob@remote.example', 20, 40);
@@ -3851,7 +3860,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->streamService->expects($this->never())->method('getTimeline');
 		$this->pinService->expects($this->once())->method('getPinnedPosts')
 			->with('https://remote.example/users/bob')->willReturn(['pinned']);
@@ -4468,7 +4477,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->captureTimelineOptions([]);
 
 		$this->controller()->accountStatuses('bob@remote.example');
@@ -4760,6 +4769,18 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('cloud.example', $response->getData()['domain']);
+	}
+
+	public function testWebSignupsDoNotAdvertiseUnsupportedMastodonApiRegistration(): void {
+		$this->socialSignupsOpen = true;
+		$instance = (new Instance())->setUri('cloud.example')->setTitle('Ours');
+		$this->instanceService->method('getLocal')->willReturn($instance);
+
+		$v1 = $this->controller()->instance()->getData();
+		self::assertFalse($v1->isRegistrations());
+
+		$v2 = $this->controller()->instanceV2()->getData();
+		self::assertFalse($v2['registrations']->enabled);
 	}
 
 	// search

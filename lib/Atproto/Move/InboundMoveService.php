@@ -344,8 +344,9 @@ class InboundMoveService {
 				throw new XrpcException(500, 'InternalServerError', 'The blob could not be stored');
 			}
 			$stored = new BlobRef($move->did, $cid, $document->getId(), BlobRef::servableType($document->getMimeType()), $size);
-			$this->blobs->put($stored);
-			$this->repoRequest->addBlobBytes($move->did, $size);
+			if ($this->blobs->put($stored)) {
+				$this->repoRequest->addBlobBytes($move->did, $size);
+			}
 			MovedBlobs::spend($move, $size);
 			$move->progress = ['blobs' => (int)($move->progress['blobs'] ?? 0) + 1] + $move->progress;
 			$this->moves->update($move);

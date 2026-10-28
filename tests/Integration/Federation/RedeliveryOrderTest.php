@@ -12,8 +12,11 @@ namespace OCA\Social\Tests\Integration\Federation;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Interfaces\Activity\DeleteInterface;
+use OCA\Social\Interfaces\Object\LikeInterface;
+use OCA\Social\Interfaces\Object\NoteInterface;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\LinkedDataSignature;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\SignatureService;
@@ -42,18 +45,40 @@ class RedeliveryOrderTest extends InboxTestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		$this->forgetEarlyDelete();
+		$this->forgetEarlyUpdate();
+		$this->forgetEarlyUndo();
 		$this->localPost();
 		$this->remoteActor(self::CAROL, 'carol');
 	}
 
 	protected function tearDown(): void {
 		$this->forgetEarlyDelete();
+		$this->forgetEarlyUpdate();
+		$this->forgetEarlyUndo();
 		parent::tearDown();
 	}
 
 	/** An early Delete is remembered across requests, so across tests too. */
 	private function forgetEarlyDelete(): void {
 		Server::get(DurableCache::class)->removeShared(DeleteInterface::EARLY_DELETE_NAMESPACE, hash('sha256', self::POST));
+	}
+
+	private function forgetEarlyUpdate(): void {
+		Server::get(DurableCache::class)->removeShared(
+			NoteInterface::EARLY_UPDATE_NAMESPACE,
+			'update:' . hash('sha256', self::POST),
+		);
+	}
+
+	private function forgetEarlyUndo(): void {
+		Server::get(DurableCache::class)->removeShared(
+			LikeInterface::EARLY_UNDO_NAMESPACE,
+			hash('sha256', self::CAROL . '#likes/1'),
+		);
+		Server::get(DurableCache::class)->removeShared(
+			LikeInterface::EARLY_UNDO_NAMESPACE,
+			hash('sha256', 'https://akkoma.example/activities/0d1e2f3a-4b5c-4d6e-8f70-819293a4b5c6'),
+		);
 	}
 
 	private function note(string $content, string $updated = ''): array {
@@ -107,7 +132,7 @@ class RedeliveryOrderTest extends InboxTestCase {
 	public static function redeliveries(): iterable {
 		yield 'a post' => ['misskey-create-note', 'misskey.example', CoreRequestBuilder::TABLE_STREAM, 'id'];
 		yield 'a reply' => ['gotosocial-create-note', 'gts.example', CoreRequestBuilder::TABLE_STREAM, 'id'];
-		yield 'a like' => ['misskey-like-reaction', 'misskey.example', CoreRequestBuilder::TABLE_ACTIONS, 'actor_id'];
+		yield 'a like' => ['misskey-like-reaction', 'misskey.example', CoreRequestBuilder::TABLE_REACTIONS, 'actor_id'];
 		yield 'a dislike' => ['peertube-dislike', 'peertube.example', CoreRequestBuilder::TABLE_ACTIONS, 'actor_id'];
 		yield 'a block' => ['mastodon-block', 'mastodon.example', CoreRequestBuilder::TABLE_ACTOR_RELATION, 'object_id'];
 		yield 'a quote request' => ['mastodon-quote-request', 'mastodon.example', CoreRequestBuilder::TABLE_QUOTE_GRANTS, 'actor_id'];
@@ -142,14 +167,75 @@ class RedeliveryOrderTest extends InboxTestCase {
 		$this->assertConnectionUsable();
 	}
 
-	/** An edit of a post never received has nothing to rewrite; the Create that follows stores the post. */
-	public function testAnUpdateBeforeItsCreateIsDroppedAndTheCreateStillLands(): void {
+	/** An edit that overtakes its Create is applied as soon as that post is stored. */
+	public function testAnUpdateBeforeItsCreateIsAppliedWhenTheCreateArrives(): void {
 		$this->assertTrue($this->deliver($this->update('<p>edited</p>', '2026-05-01T11:00:00Z')));
 		$this->assertNull($this->stored(self::POST));
 
 		$this->assertTrue($this->deliver($this->create()));
 
-		$this->assertSame('<p>first</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('<p>edited</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('2026-05-01T11:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	public function testAnEarlyEventUpdatePreservesDatesVenueAndCancellationAfterCreate(): void {
+		$original = array_replace($this->note('<p>Original event</p>'), [
+			'type' => 'Event', 'name' => 'Original name',
+			'startTime' => '2026-11-01T10:00:00Z',
+			'location' => ['type' => 'Place', 'name' => 'Original venue'],
+		]);
+		$edited = array_replace($original, [
+			'name' => 'Changed name', 'content' => '<p>Cancelled event</p>',
+			'startTime' => '2026-11-02T10:00:00Z', 'endTime' => '2026-11-02T12:00:00Z',
+			'location' => ['type' => 'Place', 'name' => 'Changed venue'],
+			'ical:status' => 'CANCELLED', 'updated' => '2026-05-01T11:00:00Z',
+		]);
+		$this->assertTrue($this->deliver($this->activity('Update', self::POST . '#updates/event', $edited)));
+		$this->assertNull($this->stored(self::POST));
+		$this->assertTrue($this->deliver($this->activity('Create', self::POST . '/activity', $original)));
+
+		$post = $this->stored(self::POST);
+		$this->assertNotNull($post);
+		$this->assertSame('Event', $post->getSubType());
+		$this->assertSame('<p>Cancelled event</p>', $post->getContent());
+		$event = $post->getDetailsAll()[Details::EVENT];
+		$this->assertSame('Changed name', $event['name']);
+		$this->assertSame('2026-11-02T10:00:00Z', $event['start_time']);
+		$this->assertSame('2026-11-02T12:00:00Z', $event['end_time']);
+		$this->assertSame('Changed venue', $event['location']);
+		$this->assertSame('cancelled', $event['status']);
+	}
+
+	/** Only the newest pre-Create edit is retained, even if an older delivery arrives last. */
+	public function testTheNewestUpdateBeforeItsCreateWins(): void {
+		$this->assertTrue($this->deliver($this->update('<p>newest edit</p>', '2026-05-01T12:00:00Z')));
+		$this->assertTrue($this->deliver($this->update('<p>older edit</p>', '2026-05-01T11:00:00Z')));
+
+		$this->assertTrue($this->deliver($this->create()));
+
+		$this->assertSame('<p>newest edit</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('2026-05-01T12:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	/** An undated poll refresh must not replace a dated edit waiting for its Create. */
+	public function testUndatedUpdateDoesNotReplaceDatedUpdateBeforeCreate(): void {
+		$this->assertTrue($this->deliver($this->update('<p>newest edit</p>', '2026-05-01T12:00:00Z')));
+		$this->assertTrue($this->deliver($this->update('<p>poll snapshot</p>', '')));
+
+		$this->assertTrue($this->deliver($this->create()));
+
+		$this->assertSame('<p>newest edit</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('2026-05-01T12:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	/** An early Delete must discard an edit so a later Create cannot resurrect either. */
+	public function testDeleteBeforeCreateDiscardsPendingUpdate(): void {
+		$this->assertTrue($this->deliver($this->update('<p>edited</p>', '2026-05-01T11:00:00Z')));
+		$this->assertTrue($this->deliver($this->delete()));
+
+		$this->assertTrue($this->deliver($this->create()));
+
+		$this->assertNull($this->stored(self::POST));
 	}
 
 	/**
@@ -190,11 +276,10 @@ class RedeliveryOrderTest extends InboxTestCase {
 	}
 
 	/**
-	 * An Undo of a like that has not arrived yet finds nothing to undo; the
-	 * like that arrives after it is then counted. Mastodon does the same: it
-	 * remembers early Deletes, not early Undos.
+	 * An Undo of a like that has not arrived yet is remembered, so a late Like
+	 * redelivery cannot restore an interaction its actor already removed.
 	 */
-	public function testAnUndoOfALikeBeforeTheLikeLeavesTheLikeCounted(): void {
+	public function testAnUndoOfALikeBeforeTheLikeKeepsTheLateLikeUndone(): void {
 		$like = [
 			'id' => self::CAROL . '#likes/1', 'type' => 'Like', 'actor' => self::CAROL, 'object' => $this->localPostId(),
 		];
@@ -203,7 +288,29 @@ class RedeliveryOrderTest extends InboxTestCase {
 
 		$this->assertTrue($this->deliver((string)json_encode(['@context' => 'https://www.w3.org/ns/activitystreams'] + $like)));
 
-		$this->assertSame(1, $this->statusEntity($this->localPostId())['favourites_count']);
+		$this->assertSame(0, $this->statusEntity($this->localPostId())['favourites_count']);
+		$this->assertConnectionUsable();
+	}
+
+	/** A reaction Undo delivered first must also suppress the late reaction. */
+	public function testAnUndoOfAnEmojiReactionBeforeTheReactionKeepsItUndone(): void {
+		$reaction = json_decode($this->fixture('akkoma-emoji-react'), true);
+		$reaction['content'] = '🍅';
+		unset($reaction['tag']);
+		$this->remoteActor($reaction['actor'], 'frank');
+
+		$this->assertTrue($this->deliver((string)json_encode([
+			'@context' => 'https://www.w3.org/ns/activitystreams',
+			'id' => $reaction['id'] . '/undo',
+			'type' => 'Undo',
+			'actor' => $reaction['actor'],
+			'object' => $reaction['id'],
+		])));
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'));
+
+		$this->assertTrue($this->deliver((string)json_encode($reaction)));
+
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'));
 		$this->assertConnectionUsable();
 	}
 

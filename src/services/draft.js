@@ -329,7 +329,7 @@ export function listDrafts() {
 }
 
 /**
- * Forgets the draft, which is what a post that actually went out means.
+ * Removes a draft after publication or when the reader explicitly deletes it.
  *
  * @param {string} [context] what the draft belongs to — see `key()`
  * @return {boolean} whether the store could be reached

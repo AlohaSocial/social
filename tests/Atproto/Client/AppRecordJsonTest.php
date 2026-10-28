@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoEventRequest;
@@ -95,6 +96,76 @@ class AppRecordJsonTest extends TestCase {
 		$this->assertSame(bin2hex(self::listBytes()), bin2hex((string)$stored?->bytes));
 		$this->assertSame(Cid::forDagCbor(self::listBytes())->toString(), $answer['cid']);
 		$this->assertSame($answer['cid'], $stored?->cid->toString());
+	}
+
+	public function testAnOpaqueApplicationRecordKeepsItsExactJsonShape(): void {
+		$recordJson = '{"$type":"com.example.notes.entry","extra":{},"tags":[]}';
+		$expected = "\xa3\x64tags\x80\x65\$type\x77com.example.notes.entry\x65extra\xa0";
+		$answer = $this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"first","record":' . $recordJson . '}');
+
+		$stored = $this->store->getRecord(self::DID, 'com.example.notes.entry', 'first');
+		$this->assertSame(bin2hex($expected), bin2hex((string)$stored?->bytes));
+		$this->assertSame(Cid::forDagCbor($expected)->toString(), $answer['cid']);
+		$this->assertSame('unknown', $answer['validationStatus']);
+	}
+
+	public function testNumericKeyObjectsRemainMapsAcrossEveryWriteOperation(): void {
+		$record = '{"$type":"com.example.notes.entry","metadata":{"0":"first"},"list":["first"]}';
+		$body = '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"numeric","record":' . $record . '}';
+		$created = $this->call('com.atproto.repo.createRecord', $body);
+		$updated = $this->call('com.atproto.repo.putRecord', $body);
+		$this->assertSame($created['cid'], $updated['cid']);
+		$batch = $this->call('com.atproto.repo.applyWrites', '{"repo":"' . self::DID . '","writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"com.example.notes.entry","rkey":"numeric-batch","value":' . $record . '}]}');
+		$this->assertSame($created['cid'], $batch['results'][0]['cid']);
+
+		foreach (['numeric', 'numeric-batch'] as $key) {
+			$stored = $this->store->getRecord(self::DID, 'com.example.notes.entry', $key);
+			$this->assertNotNull($stored);
+			$this->assertStringContainsString("\xa1\x610\x65first", $stored->bytes);
+			$decoded = $stored->value();
+			$this->assertInstanceOf(\stdClass::class, $decoded['metadata']);
+			$this->assertSame(['first'], $decoded['list']);
+			$this->assertSame($stored->bytes, DagCbor::encode($decoded));
+			$this->assertEquals(json_decode($record, true), json_decode(json_encode(DagCbor::toLexJson($decoded), JSON_THROW_ON_ERROR), true));
+			$this->assertStringContainsString('"metadata":{"0":"first"}', json_encode(DagCbor::toLexJson($decoded), JSON_THROW_ON_ERROR));
+		}
+	}
+
+	public function testExplicitValidationRejectsAnUnknownLexicon(): void {
+		$this->expectException(\OCA\Social\Atproto\Xrpc\XrpcException::class);
+		$this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"first","validate":true,"record":{"$type":"com.example.notes.entry"}}');
+	}
+
+	public function testDuplicateOpaqueCreationKeepsTheOriginalCidAndContent(): void {
+		$body = '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"first","record":{"$type":"com.example.notes.entry","text":"original"}}';
+		$created = $this->call('com.atproto.repo.createRecord', $body);
+		try {
+			$this->call('com.atproto.repo.createRecord', str_replace('original', 'replacement', $body));
+			$this->fail('createRecord must not replace an existing record');
+		} catch (\OCA\Social\Atproto\Xrpc\XrpcException) {
+			$stored = $this->store->getRecord(self::DID, 'com.example.notes.entry', 'first');
+			$this->assertSame($created['cid'], $stored?->cid->toString());
+			$this->assertSame('original', $stored?->value()['text']);
+		}
+	}
+
+	public function testStrictBatchValidationRejectsUnknownSchemasWithoutWriting(): void {
+		try {
+			$this->call('com.atproto.repo.applyWrites', '{"repo":"' . self::DID . '","validate":true,"writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"com.example.notes.entry","rkey":"first","value":{"$type":"com.example.notes.entry"}}]}');
+			$this->fail('strict validation requires a known Lexicon');
+		} catch (\OCA\Social\Atproto\Xrpc\XrpcException) {
+			$this->assertNull($this->store->getRecord(self::DID, 'com.example.notes.entry', 'first'));
+		}
+	}
+
+	public function testDisabledSchemaValidationStillStoresKnownRecordsAndReportsUnknown(): void {
+		$record = '{"$type":"app.bsky.graph.list","extra":{}}';
+		$created = $this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"app.bsky.graph.list","rkey":"first","validate":false,"record":' . $record . '}');
+		$this->assertSame('unknown', $created['validationStatus']);
+		$updated = $this->call('com.atproto.repo.putRecord', '{"repo":"' . self::DID . '","collection":"app.bsky.graph.list","rkey":"first","validate":false,"record":' . $record . '}');
+		$this->assertSame('unknown', $updated['validationStatus']);
+		$batch = $this->call('com.atproto.repo.applyWrites', '{"repo":"' . self::DID . '","validate":false,"writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"app.bsky.graph.list","rkey":"second","value":' . $record . '}]}');
+		$this->assertSame('unknown', $batch['results'][0]['validationStatus']);
 	}
 
 	public function testPutRecordAndApplyWritesKeepItToo(): void {

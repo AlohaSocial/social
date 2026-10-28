@@ -306,6 +306,14 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		return $this;
 	}
 
+	/** Remove a signature before signing a changed wire representation. */
+	public function clearSignature(): self {
+		$this->signature = null;
+		unset($this->entries['signature']);
+
+		return $this;
+	}
+
 	/**
 	 * @param string $base
 	 * @param bool $root
@@ -1058,7 +1066,12 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	 * @return array<string, mixed>
 	 */
 	protected function activityPubContextExtensions(): array {
-		return self::CONTEXT_EXTENSIONS;
+		$extensions = self::CONTEXT_EXTENSIONS;
+		if ($this->getObject() instanceof \OCA\Social\Model\ActivityPub\Activity\ReplyRequest) {
+			$extensions['ReplyRequest'] = 'gts:ReplyRequest';
+		}
+
+		return $extensions;
 	}
 
 	/**

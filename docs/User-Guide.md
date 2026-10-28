@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.279** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.280** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -360,6 +360,9 @@ detects an event that is already in a calendar and avoids adding it twice. If
 the Calendar app is unavailable or no writable calendar exists, the card offers
 an `.ics` download instead. Public status pages offer the `.ics` download;
 direct import requires a signed-in Nextcloud session and a writable calendar.
+For a Mobilizon event that uses an external participation flow, the card also
+offers **Respond on the event website**. This opens Mobilizon's participation
+page; adding the event to Calendar does not RSVP.
 The calendar entry is a copy, not a live subscription. If Gancio later changes
 an event, Social updates the event in its timeline when it receives the
 ActivityPub update or reads the changed event from the followed account's

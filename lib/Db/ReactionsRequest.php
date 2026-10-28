@@ -13,7 +13,6 @@ use DateTime;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Tools\Traits\TArrayTools;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -23,42 +22,22 @@ class ReactionsRequest extends ReactionsRequestBuilder {
 	use TArrayTools;
 
 	/**
-	 * Records a reaction.
-	 *
-	 * A redelivery of one already stored is the ordinary case rather than an
-	 * error — the Fediverse delivers the same activity more than once often
-	 * enough — so the unique violation the database raises is swallowed and
-	 * reported as `false`. It is caught around `executeStatement()` alone: a
-	 * swallowed constraint violation aborts the surrounding transaction on
-	 * PostgreSQL, so nothing else may be inside the `try`.
-	 *
-	 * @return bool whether this was new
+	 * Inserts a reaction unless its identity or actor/post/emoji already exists.
+	 * Skipping conflicts keeps redelivery harmless inside PostgreSQL transactions.
 	 */
 	public function save(EmojiReact $reaction): bool {
-		$qb = $this->getReactionsInsertSql();
-		$qb->setValue('id', $qb->createNamedParameter($reaction->getId()))
-			->setValue('id_prim', $qb->createNamedParameter($qb->prim($reaction->getId())))
-			->setValue('actor_id', $qb->createNamedParameter($reaction->getActorId()))
-			->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($reaction->getActorId())))
-			->setValue('object_id', $qb->createNamedParameter($reaction->getObjectId()))
-			->setValue('object_id_prim', $qb->createNamedParameter($qb->prim($reaction->getObjectId())))
-			->setValue('emoji', $qb->createNamedParameter($reaction->getContent()))
-			->setValue(
-				'creation',
-				$qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE)
-			);
+		$qb = $this->getQueryBuilder();
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				return false;
-			}
-
-			throw $e;
-		}
-
-		return true;
+		return $this->dbConnection->insertIgnoreConflict(self::TABLE_REACTIONS, [
+			'id' => $reaction->getId(),
+			'id_prim' => $qb->prim($reaction->getId()),
+			'actor_id' => $reaction->getActorId(),
+			'actor_id_prim' => $qb->prim($reaction->getActorId()),
+			'object_id' => $reaction->getObjectId(),
+			'object_id_prim' => $qb->prim($reaction->getObjectId()),
+			'emoji' => $reaction->getContent(),
+			'creation' => (new DateTime('now'))->format('Y-m-d H:i:s'),
+		]) > 0;
 	}
 
 	/**
@@ -150,20 +129,23 @@ class ReactionsRequest extends ReactionsRequestBuilder {
 		return $byPost;
 	}
 
-	/** Removes one reaction. */
+	/** Removes only the named reaction, leaving a newer use of the same emoji intact. */
 	public function delete(EmojiReact $reaction): void {
 		$this->deleteReaction(
-			$reaction->getActorId(), $reaction->getObjectId(), $reaction->getContent()
+			$reaction->getActorId(), $reaction->getObjectId(), $reaction->getContent(), $reaction->getId()
 		);
 	}
 
-	public function deleteReaction(string $actorId, string $objectId, string $emoji): void {
+	public function deleteReaction(string $actorId, string $objectId, string $emoji, ?string $reactionId = null): void {
 		$qb = $this->getReactionsDeleteSql();
 		$expr = $qb->expr();
 
 		$qb->where($expr->eq('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
 		$qb->andWhere($expr->eq('object_id_prim', $qb->createNamedParameter($qb->prim($objectId))));
 		$qb->andWhere($expr->eq('emoji', $qb->createNamedParameter($emoji)));
+		if ($reactionId !== null) {
+			$qb->andWhere($expr->eq('id_prim', $qb->createNamedParameter($qb->prim($reactionId))));
+		}
 
 		$qb->executeStatement();
 	}

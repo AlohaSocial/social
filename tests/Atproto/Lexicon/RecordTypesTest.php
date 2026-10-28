@@ -183,7 +183,6 @@ class RecordTypesTest extends TestCase {
 			'a datetime without a zone' => [['$type' => 'app.bsky.graph.follow', 'subject' => self::BOB, 'createdAt' => '2026-10-09T12:00:00']],
 			'a null where nothing is nullable' => [['$type' => 'app.bsky.feed.post', 'text' => 'x', 'createdAt' => self::NOW, 'langs' => null]],
 			'a type that is not a record' => [['$type' => 'app.bsky.feed.defs', 'text' => 'x']],
-			'a record type the app does not ship' => [['$type' => 'com.example.thing', 'createdAt' => self::NOW]],
 		];
 	}
 

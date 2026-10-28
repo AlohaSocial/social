@@ -452,9 +452,9 @@ class ClientXrpc {
 
 	/**
 	 * The body of a write, as json() reads it, except that in a record kept
-	 * as the app wrote it (WriteService::KEPT_AS_WRITTEN) an empty JSON
-	 * object stays the empty map (an empty `stdClass`, see DagCbor) rather
-	 * than becoming `[]`, the empty list: that record goes into the
+	 * as the app wrote it (WriteService::KEPT_AS_WRITTEN) empty or numeric-key JSON
+	 * objects stay maps (represented by `stdClass`, see DagCbor) rather
+	 * than becoming lists: that record goes into the
 	 * repository as it is, and its CID has to be the one the app computed.
 	 * Records Social maps are rebuilt, and read as arrays as before.
 	 *
@@ -463,7 +463,7 @@ class ClientXrpc {
 	private static function writeBody(string $raw): array {
 		$body = self::json($raw);
 		$objects = json_decode($raw);
-		$kept = static fn (mixed $collection): bool => in_array($collection, WriteService::KEPT_AS_WRITTEN, true);
+		$kept = static fn (mixed $collection): bool => is_string($collection) && WriteService::keepsAsWritten($collection);
 		if (isset($body['record']) && $kept($body['collection'] ?? null) && $objects instanceof \stdClass) {
 			$body['record'] = self::keepingEmptyMaps($objects->record);
 		}
@@ -481,8 +481,8 @@ class ClientXrpc {
 	private static function keepingEmptyMaps(mixed $value): mixed {
 		if ($value instanceof \stdClass) {
 			$value = get_object_vars($value);
-			if ($value === []) {
-				return new \stdClass();
+			if ($value === [] || array_filter(array_keys($value), 'is_int') !== []) {
+				return (object)array_map(self::keepingEmptyMaps(...), $value);
 			}
 		}
 

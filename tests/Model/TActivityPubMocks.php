@@ -19,6 +19,7 @@ use OCA\Social\Interfaces\Activity\MoveInterface;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
 use OCA\Social\Interfaces\Activity\RejectInterface;
 use OCA\Social\Interfaces\Activity\RemoveInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Interfaces\Activity\StoryAnswerInterface;
 use OCA\Social\Interfaces\Activity\UndoInterface;
 use OCA\Social\Interfaces\Activity\UpdateInterface;
@@ -44,7 +45,7 @@ use PHPUnit\Framework\MockObject\Stub;
 use Psr\Log\LoggerInterface;
 
 /**
- * Builds an AP dispatcher whose 23 interfaces are mocks, so model code that
+ * Builds an AP dispatcher whose interfaces are mocks, so model code that
  * reaches the AP registry can run without a server. Tests using it must clear
  * that registry with AP::set(null) in tearDown().
  */
@@ -91,6 +92,7 @@ trait TActivityPubMocks {
 			UndoInterface::class,
 			UpdateInterface::class,
 			QuoteRequestInterface::class,
+			ReplyRequestInterface::class,
 		];
 	}
 
@@ -143,7 +145,7 @@ trait TActivityPubMocks {
 	}
 
 	/**
-	 * @param class-string $class one of the 27 interface classes; a mock when
+	 * @param class-string $class one of the registered interface classes; a mock when
 	 *                            it was named in `$mocked`, a stub otherwise
 	 */
 	protected function apInterface(string $class): Stub {

@@ -23,13 +23,25 @@
 		</transition>
 		<div
 			v-if="profileSyncNotice && error === null"
-			class="profile-sync-notice"
+			class="profile-sync-notice timeline-state-card"
 			:class="{ 'profile-sync-notice--warning': profileSyncState !== 'pending' }"
 			role="status"
 			:aria-busy="profileSyncChecking"
 			aria-live="polite">
-			<Refresh :size="18" aria-hidden="true" />
-			<p>{{ profileSyncNotice }}</p>
+			<Refresh
+				v-if="profileSyncState === 'pending'"
+				class="timeline-state-card__icon"
+				:size="24"
+				aria-hidden="true" />
+			<AlertCircleOutline
+				v-else
+				class="timeline-state-card__icon"
+				:size="24"
+				aria-hidden="true" />
+			<div class="timeline-state-card__content">
+				<h2>{{ profileSyncState === 'pending' ? t('social', 'Updating this profile') : t('social', 'Profile update incomplete') }}</h2>
+				<p>{{ profileSyncNotice }}</p>
+			</div>
 			<NcButton
 				v-if="profileSyncState !== 'pending'"
 				variant="tertiary"
@@ -107,10 +119,14 @@
 		  a server error, and the observer never fired again: paging was dead
 		  until a full reload. An error is now its own state, with a retry.
 		-->
-		<div v-if="error !== null" class="timeline-error" role="alert">
-			<p class="timeline-error__message">
-				{{ error }}
-			</p>
+		<div v-if="error !== null" class="timeline-error timeline-state-card" role="alert">
+			<AlertCircleOutline class="timeline-state-card__icon" :size="24" aria-hidden="true" />
+			<div class="timeline-state-card__content">
+				<h2>{{ timeline.length > 0 ? t('social', 'Could not load more posts') : t('social', 'Could not load posts') }}</h2>
+				<p class="timeline-error__message">
+					{{ error }}
+				</p>
+			</div>
 			<NcButton variant="primary" :disabled="loading" @click="retry">
 				<template #icon>
 					<Refresh :size="20" />
@@ -138,6 +154,7 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { fullDate, timeOfDay } from '../utils/relativeTime.js'
 import ArrowUp from 'vue-material-design-icons/ArrowUp.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ProfileMediaGrid from './ProfileMediaGrid.vue'
 import TimelineEntry from './TimelineEntry.vue'
@@ -259,6 +276,7 @@ export default {
 		ProfileMediaGrid,
 		ArrowUp,
 		Refresh,
+		AlertCircleOutline,
 		NcButton,
 		TimelineEntry,
 		TimelineSkeleton,

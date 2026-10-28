@@ -14,9 +14,12 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
@@ -43,11 +46,18 @@ class ChatStoreTest extends TestCase {
 	private array $streams = [];
 	/** @var list<string> the messages a conversation here was read up to */
 	private array $readUpTo = [];
+	/** @var list<EmojiReact> */
+	private array $savedReactions = [];
+	/** @var list<array{string, string, string}> */
+	private array $deletedReactions = [];
 
-	private function store(): ChatStore {
+	private function store(bool $failActorResolution = false): ChatStore {
 		$posts = $this->createMock(PostStore::class);
 		$posts->method('storeMessage')->willReturnCallback(function (array $create): bool {
 			$this->stored[] = $create;
+			$note = new Note();
+			$note->setId((string)$create['object']['id']);
+			$this->streams[$note->getId()] = $note;
 
 			return true;
 		});
@@ -76,8 +86,24 @@ class ChatStoreTest extends TestCase {
 
 			return true;
 		});
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->method('getReaction')->willThrowException(new ActionDoesNotExistException());
+		$reactions->method('save')->willReturnCallback(function (EmojiReact $reaction): bool {
+			$this->savedReactions[] = $reaction;
+
+			return true;
+		});
+		$reactions->method('deleteReaction')->willReturnCallback(function (string $actorId, string $objectId, string $emoji): void {
+			$this->deletedReactions[] = [$actorId, $objectId, $emoji];
+		});
 		$actors = $this->createMock(BlueskyActorService::class);
-		$actors->method('resolve')->willReturnCallback(static fn (string $did): Person => (new Person())->setId('https://bsky.app/profile/' . $did));
+		$actors->method('resolve')->willReturnCallback(static function (string $did) use ($failActorResolution): Person {
+			if ($failActorResolution) {
+				throw new \RuntimeException('temporary DID resolution failure');
+			}
+
+			return (new Person())->setId('https://bsky.app/profile/' . $did);
+		});
 		$blocklist = $this->createMock(Blocklist::class);
 		$blocklist->method('isBlockedDid')->willReturnCallback(fn (): bool => $this->blocked);
 		$factory = $this->createStub(ICacheFactory::class);
@@ -85,7 +111,7 @@ class ChatStoreTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 
-		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations);
+		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions, $this->createMock(\OCA\Social\Db\AtprotoChatMessageRequest::class));
 	}
 
 	private function alice(): Identity {
@@ -129,6 +155,13 @@ class ChatStoreTest extends TestCase {
 		$this->blocked = true;
 		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m2', 'blocked')));
 		$this->assertSame([], $this->stored);
+	}
+
+	public function testATemporarySenderResolutionFailureIsRetryable(): void {
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('temporary DID resolution failure');
+
+		$this->store(true)->received($this->alice(), 'convo1', self::message('m2', 'retry me'));
 	}
 
 	public function testWhatTheAccountWroteInABlueskyAppIsItsOwnDirectMessageAndIsNeverDelivered(): void {
@@ -187,6 +220,44 @@ class ChatStoreTest extends TestCase {
 			'https://social.test/users/alice https://bsky.app/profile/' . self::BOB . '/convo/convo1/m1',
 			'https://social.test/users/alice https://social.test/users/alice/statuses/7',
 		], $this->readUpTo);
+	}
+
+	public function testChatEmojiReactionsAreSavedAndRemoved(): void {
+		$store = $this->store();
+		$message = self::message('m1', 'hello');
+		$store->received($this->alice(), 'convo1', $message);
+		$reaction = ['value' => '❤️', 'sender' => ['did' => self::ALICE], 'createdAt' => '2026-10-09T10:01:00.000Z'];
+
+		$this->assertTrue($store->reaction($this->alice(), 'convo1', $message, $reaction, true, '3k006'));
+		$this->assertCount(1, $this->savedReactions);
+		$this->assertSame('https://social.test/users/alice', $this->savedReactions[0]->getActorId());
+		$this->assertSame(ChatStore::messageId(self::BOB, 'convo1', 'm1'), $this->savedReactions[0]->getObjectId());
+		$this->assertSame('❤️', $this->savedReactions[0]->getContent());
+
+		$this->assertTrue($store->reaction($this->alice(), 'convo1', $message, $reaction, false, '3k007'));
+		$this->assertSame([[
+			'https://social.test/users/alice',
+			ChatStore::messageId(self::BOB, 'convo1', 'm1'),
+			'❤️',
+		]], $this->deletedReactions);
+	}
+
+	public function testMessageViewsBackfillTheirCurrentReactions(): void {
+		$message = self::message('m1', 'hello') + ['reactions' => [
+			['value' => '🔥', 'sender' => ['did' => self::ALICE], 'createdAt' => '2026-10-09T10:01:00.000Z'],
+		]];
+
+		$this->assertTrue($this->store()->received($this->alice(), 'convo1', $message));
+		$this->assertCount(1, $this->savedReactions);
+		$this->assertSame('🔥', $this->savedReactions[0]->getContent());
+	}
+
+	public function testReactionForAnUnknownMessageIsSkipped(): void {
+		$this->assertFalse($this->store()->reaction(
+			$this->alice(), 'convo1', self::message('missing', 'hello'),
+			['value' => '❤️', 'sender' => ['did' => self::ALICE]], true, '3k006',
+		));
+		$this->assertSame([], $this->savedReactions);
 	}
 
 	public function testASharedPostIsALinkToIt(): void {

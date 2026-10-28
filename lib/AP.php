@@ -21,6 +21,7 @@ use OCA\Social\Interfaces\Activity\MoveInterface;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
 use OCA\Social\Interfaces\Activity\RejectInterface;
 use OCA\Social\Interfaces\Activity\RemoveInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Interfaces\Activity\StoryAnswerInterface;
 use OCA\Social\Interfaces\Activity\UndoInterface;
 use OCA\Social\Interfaces\Activity\UpdateInterface;
@@ -53,6 +54,7 @@ use OCA\Social\Model\ActivityPub\Activity\Move;
 use OCA\Social\Model\ActivityPub\Activity\QuoteRequest;
 use OCA\Social\Model\ActivityPub\Activity\Reject;
 use OCA\Social\Model\ActivityPub\Activity\Remove;
+use OCA\Social\Model\ActivityPub\Activity\ReplyRequest;
 use OCA\Social\Model\ActivityPub\Activity\StoryReaction;
 use OCA\Social\Model\ActivityPub\Activity\StoryReply;
 use OCA\Social\Model\ActivityPub\Activity\Undo;
@@ -75,12 +77,15 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Playlist;
 use OCA\Social\Model\ActivityPub\Object\Question;
+use OCA\Social\Model\ActivityPub\Object\ReplyAuthorization;
 use OCA\Social\Model\ActivityPub\Object\Story;
 use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PeerTubeService;
+use OCA\Social\Service\ReactionService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\Server;
 
@@ -107,8 +112,8 @@ class AP {
 	 *
 	 * They are therefore modelled as a `Note`, which is the shape everything
 	 * downstream (storage, the client API, the timeline queries) understands;
-	 * the type as it arrived on the wire is kept in `subtype` so nothing is
-	 * lost.
+	 * the type as it arrived on the wire is kept in `subtype`. Article and Page
+	 * titles are rendered as an escaped heading before a non-empty body.
 	 */
 	public const NOTE_LIKE_TYPES = ['Video', 'Article', 'Page', 'Event', 'Audio'];
 
@@ -151,6 +156,7 @@ class AP {
 		public UndoInterface $undoInterface,
 		public UpdateInterface $updateInterface,
 		public QuoteRequestInterface $quoteRequestInterface,
+		public ReplyRequestInterface $replyRequestInterface,
 		public ConfigService $configService,
 		public ApproveReplyInterface $approveReplyInterface,
 		public DislikeInterface $dislikeInterface,
@@ -237,6 +243,19 @@ class AP {
 
 	public function getSimpleItemFromData(array $data, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false): Acore {
 		$type = $this->get('type', $data, '');
+		// Misskey represents an emoji reaction as an ordinary Like plus its
+		// `_misskey_reaction` extension. Keep ordinary Likes unchanged, but
+		// preserve actual reactions in the shared EmojiReact model.
+		$misskeyReaction = $data['_misskey_reaction']
+			?? $data['misskey:_misskey_reaction']
+			?? $data['https://misskey-hub.net/ns#_misskey_reaction']
+			?? null;
+		if ($type === Like::TYPE && is_string($misskeyReaction)
+			&& ReactionService::isUsableEmoji($misskeyReaction)) {
+			$type = EmojiReact::TYPE;
+			$data['type'] = $type;
+			$data['content'] = $misskeyReaction;
+		}
 		$item = $this->getItemFromType($type);
 		if ($item instanceof Stream) {
 			$item->setDeferAttachmentDownloads($deferAttachmentDownloads);
@@ -285,12 +304,23 @@ class AP {
 	}
 
 	private function fillTitle(Note $item, array $data): void {
-		if ($item->getContent() !== '') {
-			return;
-		}
-
 		$name = trim($this->get('name', $data, ''));
 		if ($name === '') {
+			return;
+		}
+		$type = $this->get('type', $data, '');
+		if (in_array($type, ['Article', 'Page'], true)) {
+			$title = self::articleTitle($name);
+			if ($title !== '') {
+				$item->setDetail(Details::ARTICLE_TITLE, $title);
+			}
+		}
+		$content = $item->getContent();
+		if ($content !== '') {
+			if (in_array($type, ['Article', 'Page'], true)) {
+				$this->prependArticleTitle($item, $name, $content);
+			}
+
 			return;
 		}
 
@@ -303,6 +333,24 @@ class AP {
 		}
 
 		$item->setContent($content);
+	}
+
+	private function prependArticleTitle(Note $item, string $title, string $content): void {
+		if (preg_match('/^\s*<(h[1-6]|p)\b[^>]*>(.*?)<\/\1>/is', $content, $matches) === 1) {
+			$firstBlock = html_entity_decode(strip_tags($matches[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			if (trim($firstBlock) === $title) {
+				return;
+			}
+		}
+
+		$escapedTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+		$item->setContent('<h2>' . $escapedTitle . '</h2>' . $content);
+	}
+
+	private static function articleTitle(string $title): string {
+		$title = trim(preg_replace('/\\s+/u', ' ', $title) ?? '');
+
+		return mb_substr($title, 0, 500, 'UTF-8');
 	}
 
 	/**
@@ -493,6 +541,13 @@ class AP {
 				$item = new QuoteRequest();
 				break;
 
+			case ReplyRequest::TYPE:
+				$item = new ReplyRequest();
+				break;
+			case ReplyAuthorization::TYPE:
+				$item = new ReplyAuthorization();
+				break;
+
 			case OrderedCollection::TYPE:
 				$item = new OrderedCollection();
 				break;
@@ -636,6 +691,8 @@ class AP {
 				return $this->updateInterface;
 			case QuoteRequest::TYPE:
 				return $this->quoteRequestInterface;
+			case ReplyRequest::TYPE:
+				return $this->replyRequestInterface;
 			default:
 				// an item built elsewhere than getSimpleItemFromData() can still
 				// carry the wire type; it is handled as the Note it was modelled as

@@ -4,11 +4,11 @@
 -->
 # Performance and scalability
 
-**Reviewed against:** Aloha Social **0.26.279** on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.280** on **2026-10-27**; source
 branch `main` at `33935993`. The latest successful repeatable benchmark
 available that day is the [Nightly performance run 40426921866](https://github.com/AlohaSocial/social/actions/runs/40426921866).
 It ran the benchmark from `main` commit `2ab03f1` (app **0.26.278**), so it is
-one patch behind this checkout. No benchmark of 0.26.279 itself was available
+one patch behind this checkout. No benchmark of 0.26.280 itself was available
 at review time.
 
 ## Latest CI query snapshot

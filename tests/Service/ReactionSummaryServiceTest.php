@@ -9,7 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCA\Social\Model\CustomEmoji;
+use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\ReactionSummaryService;
 use PHPUnit\Framework\TestCase;
 
@@ -103,5 +106,23 @@ class ReactionSummaryServiceTest extends TestCase {
 
 	public function testNoReactionsIsAnEmptyBarRatherThanAnError(): void {
 		$this->assertSame([], $this->summarise([]));
+	}
+
+	public function testOnlyAnInstanceOwnedCustomEmojiGetsAnImageUrl(): void {
+		$emoji = $this->createMock(EmojiService::class);
+		$emoji->expects($this->once())->method('byShortcode')->with('blobcat')->willReturn(
+			(new CustomEmoji('blobcat', 'blobcat.png', 'image/png'))->setUrl('https://social.example/emoji/blobcat')
+		);
+		$reactions = $this->createStub(ReactionsRequest::class);
+		$reactions->method('getByObjectId')->willReturn([
+			$this->reaction('https://remote.example/users/bob', ':blobcat:'),
+			$this->reaction('https://remote.example/users/carol', ':cat@remote.example:'),
+		]);
+		$summary = (new ReactionSummaryService($reactions, $emoji))->summaryOf('https://cloud.example/post/1');
+
+		$this->assertSame([
+			['name' => ':blobcat:', 'count' => 1, 'me' => false, 'url' => 'https://social.example/emoji/blobcat'],
+			['name' => ':cat@remote.example:', 'count' => 1, 'me' => false],
+		], $summary);
 	}
 }

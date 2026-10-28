@@ -1137,6 +1137,8 @@ class DocumentService {
 	/**
 	 * Stores a file of an account's byte for byte, as a blob that moved here
 	 * with its repository is kept (see `CacheDocumentService::saveAsIsFromTemp()`).
+	 * `$public` controls the ordinary Social media route; XRPC applies its own
+	 * repository availability checks.
 	 *
 	 * @throws CacheContentMimeTypeException
 	 * @throws CacheContentSizeException
@@ -1145,13 +1147,13 @@ class DocumentService {
 	 * @throws SocialAppConfigException
 	 * @throws UrlCloudException
 	 */
-	public function storeAsIs(Person $actor, string $tmpPath): Document {
+	public function storeAsIs(Person $actor, string $tmpPath, bool $public = true): Document {
 		$document = new Document();
 		$document->setLocal(true);
 		$document->setAccount($actor->getPreferredUsername());
 		$document->setUrlCloud($this->configService->getCloudUrl());
 		$document->generateUniqueId('/documents/local');
-		$document->setPublic(true);
+		$document->setPublic($public);
 
 		$this->cacheService->saveAsIsFromTemp($document, $tmpPath);
 		$this->cacheDocumentsRequest->save($document);

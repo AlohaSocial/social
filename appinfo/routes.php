@@ -35,8 +35,9 @@ namespace OCA\Social\AppInfo;
  * "public visitors cannot see a portfolio", and it appeared or not depending
  * on the order a filesystem returns two files in.
  *
- * `ActivityPubController::displayPost()` also has `/@{username}/{token}/replies`
- * and `/@{username}/{token}/quote_authorizations/{stamp}` on its siblings;
+ * `ActivityPubController::displayPost()` also has `/@{username}/{token}/replies`,
+ * `/@{username}/{token}/quote_authorizations/{stamp}` and
+ * `/@{username}/{token}/reply_authorizations/{stamp}` on its siblings;
  * those carry more segments and cannot match a one-segment path, so they stay
  * as attributes.
  *

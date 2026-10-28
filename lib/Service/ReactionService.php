@@ -11,9 +11,10 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
-use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -21,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\CustomEmoji;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
@@ -33,14 +35,10 @@ use Psr\Log\LoggerInterface;
  * for it. What is different is that the emoji has to survive the round trip,
  * and that not every emoji a peer might send is one this app will show.
  *
- * **Unicode only, outbound and in.** The Misskey family also sends custom
- * emoji, as a `:shortcode:` in `content` with the image in a `tag` entry.
- * Accepting those would mean drawing a picture from somebody else's server
- * inside a reaction bar — a per-post, per-reaction request to an arbitrary
- * host, which is a tracking pixel in everything but name, and an image this
- * instance neither moderates nor caches. A shortcode from a peer is therefore
- * dropped rather than shown as a word nobody can read: `:blobcat:` in a
- * reaction bar means nothing to somebody who has never seen the picture.
+ * Unicode emoji and bounded custom shortcode labels are accepted on input.
+ * A remote custom reaction's image is deliberately never fetched or rendered:
+ * it could track each reader. Outbound custom reactions are allowed only for
+ * emoji this instance owns, whose locally served Emoji tag is verifiable.
  */
 class ReactionService {
 	use TStringTools;
@@ -64,23 +62,32 @@ class ReactionService {
 		private CacheActorService $cacheActorService,
 		private ModerationService $moderationService,
 		private LoggerInterface $logger,
+		private EmojiService $emojiService,
+		private ChatSender $chatSender,
 	) {
 	}
 
 	/**
-	 * Whether this is something the app will store and draw.
+	 * Whether an inbound reaction is something the app will store and draw.
 	 *
-	 * The test is "does this string consist of emoji", not "is this in a list
-	 * of emoji": a list would be a list to maintain, and would be wrong again
-	 * with every Unicode release. Anything carrying a letter, a digit or
-	 * punctuation is text — which is what a `:shortcode:` is, and what an
-	 * attempt to put a sentence in a reaction bar is.
+	 * Unicode emoji are accepted without a fixed list, so new Unicode releases
+	 * do not need code changes. A custom shortcode is accepted only in a bounded
+	 * ASCII label form, optionally qualified by its origin domain as Misskey
+	 * does. The label stays plain text; its remote image is never fetched.
 	 */
 	public static function isUsableEmoji(string $emoji): bool {
 		$emoji = trim($emoji);
 
 		if ($emoji === '' || strlen($emoji) > self::MAX_LENGTH) {
 			return false;
+		}
+		if (preg_match('/^:[A-Za-z0-9_+-]{1,48}(?:@([A-Za-z0-9.-]+))?:$/D', $emoji, $match) === 1) {
+			if (isset($match[1]) && $match[1] !== ''
+				&& filter_var($match[1], FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
+				return false;
+			}
+
+			return true;
 		}
 
 		// no letters, digits, punctuation or whitespace anywhere in it
@@ -94,6 +101,21 @@ class ReactionService {
 		// Regional indicators are the second half of this and not a detail: a
 		// flag is two of them and they are *not* Extended_Pictographic, so
 		// that property alone refuses every flag there is.
+		return self::isUnicodeEmoji($emoji);
+	}
+
+	/** The metadata-free outbound path accepts Unicode only, never a bare shortcode. */
+	public static function isUsableOutboundEmoji(string $emoji): bool {
+		$emoji = trim($emoji);
+		if ($emoji === '' || strlen($emoji) > self::MAX_LENGTH
+			|| preg_match('/[\p{L}\p{N}\p{P}\s]/u', $emoji) === 1) {
+			return false;
+		}
+
+		return self::isUnicodeEmoji($emoji);
+	}
+
+	private static function isUnicodeEmoji(string $emoji): bool {
 		return preg_match('/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u', $emoji) === 1;
 	}
 
@@ -107,11 +129,25 @@ class ReactionService {
 		$this->moderationService->assertNotSuspended($actor->getId());
 
 		$emoji = trim($emoji);
-		if (!self::isUsableEmoji($emoji)) {
+		$customEmoji = null;
+		if (!self::isUsableOutboundEmoji($emoji)) {
+			if (preg_match('/^:([a-z0-9_]{2,64}):$/iD', $emoji, $match) === 1) {
+				$customEmoji = $this->emojiService->byShortcode($match[1]);
+			}
+		}
+		if (!self::isUsableOutboundEmoji($emoji) && !($customEmoji instanceof CustomEmoji)) {
 			throw new ItemUnknownException('not an emoji this app can draw');
 		}
 
 		$post = $this->streamRequest->getStreamById($postId, true);
+		if ($this->chatSender->react($actor, $post, $emoji, true) === true) {
+			$reaction = $this->localReaction($actor, $post, $emoji);
+			if (!$this->reactionsRequest->save($reaction)) {
+				return $this->reactionsRequest->getReaction($actor->getId(), $post->getId(), $emoji);
+			}
+
+			return $reaction;
+		}
 
 		/** @var EmojiReact $reaction */
 		$reaction = AP::instance()->getItemFromType(EmojiReact::TYPE);
@@ -119,6 +155,12 @@ class ReactionService {
 		$reaction->setActor($actor);
 		$reaction->setObjectId($post->getId());
 		$reaction->setContent($emoji);
+		if ($customEmoji instanceof CustomEmoji) {
+			// Only publish a custom shortcode this instance owns. Its verified,
+			// locally served Emoji tag is what lets peers render it without us
+			// fetching or trusting a remote tracking image.
+			$reaction->addTag($customEmoji->asTag());
+		}
 		$reaction->setTo($post->getAttributedTo());
 		$this->assignInstance($reaction, $post);
 
@@ -146,6 +188,23 @@ class ReactionService {
 	public function delete(Person $actor, string $postId, string $emoji, string &$token = ''): ACore {
 		$emoji = trim($emoji);
 		$post = $this->streamRequest->getStreamById($postId, true);
+		if ($this->chatSender->react($actor, $post, $emoji, false) === true) {
+			try {
+				$reaction = $this->reactionsRequest->getReaction($actor->getId(), $post->getId(), $emoji);
+				$this->reactionsRequest->delete($reaction);
+			} catch (ActionDoesNotExistException) {
+				$reaction = null;
+			}
+			$undo = new Undo();
+			$undo->setActor($actor);
+			if ($reaction instanceof EmojiReact) {
+				$undo->setId($reaction->getId() . '/undo');
+				$undo->setObject($reaction);
+			}
+			$undo->setPublished(date('c'));
+
+			return $undo;
+		}
 
 		$undo = new Undo();
 		$undo->setActor($actor);
@@ -161,7 +220,7 @@ class ReactionService {
 
 			$this->reactionsRequest->delete($reaction);
 			$token = $this->activityService->request($undo);
-		} catch (ItemNotFoundException $e) {
+		} catch (ActionDoesNotExistException $e) {
 		} catch (Exception $e) {
 			$this->logger->warning('could not undo a reaction', [
 				'postId' => $postId, 'exception' => $e,
@@ -187,5 +246,17 @@ class ReactionService {
 				)
 			);
 		}
+	}
+
+	private function localReaction(Person $actor, Stream $post, string $emoji): EmojiReact {
+		$reaction = new EmojiReact();
+		$reaction->setId($actor->getId() . '#emojireact/' . $this->uuid(8));
+		$reaction->setActor($actor);
+		$reaction->setObjectId($post->getId());
+		$reaction->setContent($emoji);
+		$reaction->setTo($post->getAttributedTo());
+		$reaction->setPublished(date('c'));
+
+		return $reaction;
 	}
 }

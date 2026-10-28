@@ -24,6 +24,7 @@ use OCA\Social\Interfaces\Activity\MoveInterface;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
 use OCA\Social\Interfaces\Activity\RejectInterface;
 use OCA\Social\Interfaces\Activity\RemoveInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Interfaces\Activity\StoryAnswerInterface;
 use OCA\Social\Interfaces\Activity\UndoInterface;
 use OCA\Social\Interfaces\Activity\UpdateInterface;
@@ -121,6 +122,7 @@ class ImportServiceTest extends TestCase {
 			$this->createStub(UndoInterface::class),
 			$this->createStub(UpdateInterface::class),
 			$this->createStub(QuoteRequestInterface::class),
+			$this->createStub(ReplyRequestInterface::class),
 			$configService,
 			$this->createStub(\OCA\Social\Interfaces\Activity\ApproveReplyInterface::class),
 			$this->createStub(\OCA\Social\Interfaces\Object\DislikeInterface::class),

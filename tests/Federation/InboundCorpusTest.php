@@ -82,7 +82,7 @@ class InboundCorpusTest extends TestCase {
 	public static function activities(): iterable {
 		$ms = 'https://mastodon.example/users/carol';
 		yield 'Misskey Note' => ['misskey-create-note', 'Create', 'https://misskey.example/users/9fq0a1b2c3', 'https://misskey.example/notes/9fq0z1y2x3', 'Note', ''];
-		yield 'Misskey reaction' => ['misskey-like-reaction', 'Like', 'https://misskey.example/users/9fq0a1b2c3', self::LOCAL_POST, '', ''];
+		yield 'Misskey reaction' => ['misskey-like-reaction', 'EmojiReact', 'https://misskey.example/users/9fq0a1b2c3', self::LOCAL_POST, '', ''];
 		yield 'GoToSocial reply' => ['gotosocial-create-note', 'Create', 'https://gts.example/users/erin', 'https://gts.example/users/erin/statuses/01J0GTS0000000000000000001', 'Note', ''];
 		yield 'Akkoma reaction' => ['akkoma-emoji-react', 'EmojiReact', 'https://akkoma.example/users/frank', self::LOCAL_POST, '', ''];
 		yield 'Friendica Note' => ['friendica-create-note', 'Create', 'https://friendica.example/profile/gina', 'https://friendica.example/objects/a1b2c3d4-0001-4567-89ab-cdef01234567', 'Note', ''];
@@ -166,16 +166,15 @@ class InboundCorpusTest extends TestCase {
 	}
 
 	/**
-	 * A Misskey reaction is a `Like` with the emoji in `content` and
-	 * `_misskey_reaction`. The Like model has nowhere to keep either: it is
-	 * read as a plain like, the emoji is dropped.
+	 * Misskey sends its emoji as an ordinary `Like` plus `_misskey_reaction`;
+	 * the parser maps it into the shared reaction model.
 	 */
-	public function testAMisskeyReactionIsReadAsAPlainLike(): void {
-		$like = $this->read('misskey-like-reaction');
+	public function testAMisskeyReactionKeepsItsEmoji(): void {
+		$reaction = $this->read('misskey-like-reaction');
 
-		$this->assertSame('Like', $like->getType());
-		$this->assertNotInstanceOf(EmojiReact::class, $like);
-		$this->assertStringNotContainsString('🍅', (string)json_encode($like->exportAsActivityPub(), JSON_UNESCAPED_UNICODE));
+		$this->assertInstanceOf(EmojiReact::class, $reaction);
+		$this->assertSame('🍅', $reaction->getContent());
+		$this->assertInstanceOf(\OCA\Social\Interfaces\Object\EmojiReactInterface::class, AP::instance()->getInterfaceForItem($reaction));
 	}
 
 	/** Akkoma's custom-emoji reaction keeps the shortcode as its content. */
@@ -201,27 +200,35 @@ class InboundCorpusTest extends TestCase {
 	}
 
 	/**
-	 * A Lemmy link post: the title becomes the content only when there is
-	 * none, and the `Link` attachment is appended as a link.
+	 * A Lemmy link post keeps its title, body and `Link` attachment.
 	 */
 	public function testALemmyPageKeepsItsLinkAndBody(): void {
 		/** @var Note $note */
 		$note = $this->read('lemmy-create-page')->getObject();
 
-		$this->assertStringStartsWith('<p>Looking for suggestions.</p>', $note->getContent());
+		$this->assertStringStartsWith('<h2>Best tomato varieties for a cold summer?</h2><p>Looking for suggestions.</p>', $note->getContent());
 		$this->assertStringContainsString('<a href="https://seeds.example/tomatoes">', $note->getContent());
-		$this->assertStringNotContainsString('Best tomato varieties', $note->getContent(), 'the title is dropped when there is a body');
 	}
 
-	/** Same for an Article with a body: the title is not shown, the body is. */
-	public function testAnArticleWithABodyLosesItsTitle(): void {
+	/** An Article with a body keeps its title above the body. */
+	public function testAnArticleWithABodyKeepsItsTitle(): void {
 		/** @var Note $note */
 		$note = $this->read('wordpress-create-article')->getObject();
 
-		$this->assertSame('<h2>Pots</h2><p>Use big ones.</p>', $note->getContent());
+		$this->assertSame('<h2>How I grow tomatoes on a balcony</h2><h2>Pots</h2><p>Use big ones.</p>', $note->getContent());
 		$this->assertSame('https://blog.example/2026/04/05/tomatoes/', $note->getUrl());
 		$this->assertCount(1, $note->getAttachments());
 		$this->assertSame(['gardening'], $note->getHashtags());
+	}
+
+	public function testAnArticleTitleAlreadyAtTheTopIsNotDuplicated(): void {
+		$data = self::fixture('wordpress-create-article');
+		$data['object']['name'] = 'Tomatoes';
+		$data['object']['content'] = '<h2>Tomatoes</h2><p>Use big ones.</p>';
+		/** @var Note $note */
+		$note = AP::instance()->getItemFromData($data)->getObject();
+
+		$this->assertSame('<h2>Tomatoes</h2><p>Use big ones.</p>', $note->getContent());
 	}
 
 	public function testAMastodonPollAndItsUpdateCarryTheCounts(): void {

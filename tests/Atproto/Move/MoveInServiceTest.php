@@ -195,8 +195,9 @@ class MoveInServiceTest extends TestCase {
 			new StoredRecord(self::DID, 'app.bsky.graph.follow', '3kfollow', Cid::forRaw('f'), DagCbor::encode(['$type' => 'app.bsky.graph.follow', 'subject' => self::FOLLOWED, 'createdAt' => '2026-01-01T00:00:00.000Z']), '', 0),
 		]);
 		$this->blobs = $this->createMock(AtprotoBlobRequest::class);
-		$this->blobs->method('put')->willReturnCallback(function (BlobRef $blob): void {
+		$this->blobs->method('put')->willReturnCallback(function (BlobRef $blob): bool {
 			$this->stored[$blob->cid->toString()] = $blob;
+			return true;
 		});
 		$this->blobs->method('get')->willReturnCallback(fn (string $did, string $cid): ?BlobRef => $this->stored[$cid] ?? null);
 		$this->identityRequest = $this->createMock(AtprotoIdentityRequest::class);

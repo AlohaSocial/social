@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.279
+**App version:** 0.26.280
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -227,7 +227,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_announce_react` | The emoji accounts have put on an announcement, unique on (announcement, account, emoji) |
 | `social_emoji` | The custom emoji this instance publishes: `shortcode` (unique), the appdata file behind it, its media type, its picker category and whether a picker offers it |
 | `social_stream_card` | The link-preview card of a status (url, title, description, image, provider), one row per stream |
-| `social_reaction` | Who reacted to which post with which emoji; unique on (actor, post, emoji), so a redelivered `EmojiReact` is refused rather than counted twice |
+| `social_atp_chat_message` | Persistent local-to-Bluesky chat message identifiers, removed with their local message |
+| `social_reaction` | Who reacted to which post with which emoji; unique on (actor, post, emoji), so a redelivered `EmojiReact` is refused rather than counted twice. Inserts skip uniqueness conflicts at the database level, preserving an enclosing PostgreSQL transaction. Object-based removal also matches the activity ID, so a delayed Undo or post-insert cleanup cannot delete a newer reaction with the same emoji |
 | `social_gif` | The instance's shared picture library the composer offers, unique on the slug; the bytes live in appdata beside the custom emoji |
 | `social_followed_tag` | The hashtags an account follows: one row per (actor, lowercased tag), unique on the pair; `filled` is when the tag's posts were last read from beyond this server (`FollowedTagsFill`, Unix time, 0 for never), indexed with the tag (`Version1000Date20261009000710`) |
 | `social_interest` | For you: one row per (reader, lowercased tag), unique on the pair — the score reading earned it, when (`scored_at`, unix time, so decay is worked out on read), whether the reader added it (`manual`), the rank they pinned it to (`position`, null to float) and the score as the current week began (`score_week`, for the trend arrow) |
@@ -364,7 +365,7 @@ strictly later than the previous edit, so peers can order rapid successive
 - **FollowService** — Follow/unfollow flows, follower/following collections, and relationship lookups
 - **LikeService** — Creates and undoes Like activities
 - **StreamPruneService** — Retention: deletes remote statuses older than `retention_days` (default 0 = disabled) that no local user interacted with, whose author nobody follows, that no local status replies to or boosts, and that are not DMs — together with their dest/action/tag rows and cached attachments. Runs bounded in the Cache cron and unbounded via `occ social:stream:prune`. The old remote statuses are walked in (`creation`, `id_prim`) order, a chunk of 500 candidates at a time off the `creation` index, and only the candidates are asked the protection rules; where the walk got to is kept as `retention_checked` (`day|creation|id_prim`) after every chunk, so the next chunk and the next run carry on from there and a kept post — most of the old table on a real instance — is judged once a day rather than on every chunk of every run. The first run of a new day starts again from the oldest row, so a post that lost its protection goes a day later at most. A cron pass with its ceiling of 5,000 deletions judges at most `MAX_CHUNKS` (40) chunks. Whatever `retention_days` says, every pass also purges the queue rows nothing will act on again and the `SocialAppNotification` rows older than `notification_retention_days` (default 90): local rows about a local user's post, read once from the bell and never federated
-- **RemoteFetchQueue** — The remote fetches a page would like done and must not wait for. A page shows what is cached here and hands what is missing to this, which queues one background job per piece (`IJobList::has()` first, so a page asked for a hundred times before cron runs is still one job per argument, and at most `MAX_PER_CALL`, 20, per call); the next look at the page has it. `resolveActors()` queues a `Cron\ResolveActor` per uncached actor, and `resolveAccounts()` one per `user@host` handle (an opened starter pack's members not held here) — used for the people named in a page's pictures (`PostDecorationService::attachTaggedPeople()`, which reads them from the cache in one query and used to fetch each miss over HTTP while the timeline was being built) and for the accounts a remote account's followers/following collection names (`ActivityPubFollowListSource`, read in the background; the list used to resolve up to 80 entries one after another at the federation timeout each while the reader waited). `fillFollowList()` queues that read, a `Cron\FillFollowLists`, at most once per `FOLLOW_LISTS_INTERVAL` (ten minutes) per account and direction (`social.followfill`). `syncTimeline()` queues a `Cron\SyncRemoteTimeline` for a remote account whose profile's first page a signed-in reader opened, at most once per `TIMELINE_SYNC_INTERVAL` (15 minutes) per account, stamped in `DurableCache` (`social.outboxsync`) when queued; the profile route used to read the outbox and import up to 20 posts before answering, on every page including each scroll
+- **RemoteFetchQueue** — The remote fetches a page would like done and must not wait for. A page shows what is cached here and hands what is missing to this, which queues one background job per piece (`IJobList::has()` first, so a page asked for a hundred times before cron runs is still one job per argument, and at most `MAX_PER_CALL`, 20, per call); the next look at the page has it. `resolveActors()` queues a `Cron\ResolveActor` per uncached actor, and `resolveAccounts()` one per `user@host` handle (an opened starter pack's members not held here) — used for the people named in a page's pictures (`PostDecorationService::attachTaggedPeople()`, which reads them from the cache in one query and used to fetch each miss over HTTP while the timeline was being built) and for the accounts a remote account's followers/following collection names (`ActivityPubFollowListSource`, read in the background; the list used to resolve up to 80 entries one after another at the federation timeout each while the reader waited). `fillFollowList()` queues that read, a `Cron\FillFollowLists`, at most once per `FOLLOW_LISTS_INTERVAL` (ten minutes) per account and direction (`social.followfill`). `refreshTimelineState()` queues a `Cron\SyncRemoteTimeline` for a remote account whose profile's first page a signed-in reader opened, at most once per `TIMELINE_SYNC_INTERVAL` (15 minutes) per account, stamped in `DurableCache` (`social.outboxsync`) when queued; the profile route reuses its returned queued/pending/failed/idle state instead of rereading the same pending and failure markers for response headers. `syncTimeline()` retains the boolean queued/not-queued contract for other callers. The profile route used to read the outbox and import up to 20 posts before answering, on every page including each scroll
 - **CacheActorSweepService** — The other half of retention, for accounts rather than posts: evicts the cached remote actors nothing here refers to any more, with their avatars and headers. A row is written the first time this instance meets an account — a like on a local post, a boost seen in a timeline, a reply in a thread — and until this existed nothing removed one but the account's own instance sending a `Delete` (`PersonInterface`) or a moderator purging its domain (`ModerationService`), so a year of federating left tens of thousands of rows and a picture each for accounts nobody here has anything to do with. An actor goes when nobody here follows it, it follows nobody here, no post of its is stored, no follow request or block/mute/endorsement names it either way, and it has been neither seen nor tried for `cache_actor_days` (default 180; 0 disables). Paged like `StreamPruneService` and bounded per cron pass (`Cron\Cache::SWEEP_BATCH`, 500). What is swept is fetched again the moment it is needed, so what is lost is a request and never a relationship or a post. A like or a boost of a local post is deliberately not one of the conditions — the same line `tootctl accounts prune` draws: the `social_action` row stays and names the actor, and the profile is fetched again when the list of who liked the post is opened
 - **BoostService** — Creates and undoes Announce (boost/reblog) activities. One Announce stream row per (post, booster), looked up with `StreamRequest::getAnnounceBy()`: a second booster gets a row of their own rather than being folded into the first one's, so the row names who boosted and an Undo names an Announce its signer made; a boost is counted from the per-booster `social_action` rows. Rows stored before boosts had one row each — attributed to one booster, carrying the others' followers in `cc` — are left as they are. Two followers boosting the same post are two cards in the home timeline, each naming its booster; `filterDuplicate()` only hides the viewer's own boosts
 - **ActionService** — Dispatcher for the Mastodon-style status actions. favourite/unfavourite create and delete a Like, reblog/unreblog an Announce, and bookmark/unbookmark toggle the viewer's local `bookmarked` flag (never federated, served by `/api/v1/bookmarks`), and pin/unpin hand off to `PinService`; `mute`/`unmute` mute the conversation. `translate` is deliberately **not** one of these: it used to be, returning the status unchanged, which a client cannot tell from a translation — it is `StatusApiController::statusTranslate()` now, answering a Translation entity from a real provider
@@ -578,7 +579,75 @@ profile lexicon's grapheme and byte limits before writing the shared field
 row. `RecordMapper` uses that same pronoun limit when publishing the local
 profile back to Bluesky.
 
+Blob registration uses a conflict-skipping insert per DID and CID. Concurrent
+registrations keep the first document mapping and report whether a new mapping
+was inserted; image/video publishers and both migration paths increment
+repository blob-byte accounting only for that winning insert.
+
+Repository writes for social collections are projected through their native
+Social services. Projected `createRecord` operations lock the repository and
+check `swapCommit` before changing Social state, reject an occupied requested
+key, and commit the projection and repository together. Their queued
+federation delivery starts only after commit and is discarded on rollback.
+`putRecord` uses the same delivery deferral around its transaction, including
+when it creates a missing post, so a rolled-back edit cannot escape over
+ActivityPub before the repository accepts it.
+Other valid NSID collections are stored as protocol-native
+records by `WriteService`; the signed repository, CAR export and firehose carry
+them without converting them into ActivityPub objects. Vendored Lexicons are
+schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
+size validation, but their application-specific schema and semantics are not
+known to Aloha Social. OAuth collection scopes and own-repository checks still
+apply to each write. Empty objects and objects with numeric string keys retain
+their map identity through XRPC JSON parsing, DAG-CBOR storage and readback;
+JSON arrays remain lists, so decoding and re-encoding preserve record CIDs.
+Record reads with an explicit `cid` return only that version of the named
+record, or `RecordNotFound` when it is not retained. Omitting `cid` reads the
+current version; an invalid CID is rejected before the record lookup.
+`BlobUploadService` hashes and stores XRPC uploads without changing their bytes,
+using `DocumentService::storeAsIs(..., false)` with the existing type, size,
+quota and moderation checks. Duplicate CIDs reuse their registered document.
+Registration and repository-byte accounting share a database transaction.
+Social's ordinary upload and publisher conversion paths remain separate, so
+native ATProto uploads retain metadata that Social uploads normally remove.
+The ordinary Social media route is not made public by this storage call;
+XRPC's temporary/unreferenced availability remains a documented lifecycle gap.
+`validate: true` requires a known schema; `false` keeps protocol structural
+checks but skips schema validation; omission validates known schemas and
+retains unknown ones structurally. The mode travels with each `RepoWrite` into
+the repository transaction. Responses report `valid` only for schema-checked
+records and `unknown` for opaque or explicitly unvalidated records.
+
+`social_atp_chat_message` retains each account's local-to-Bluesky message
+identifiers without expiry. `StreamDeletion` removes these rows when their
+local messages are deleted, including author and batch deletion. Existing
+unexpired cache mappings are promoted on lookup. Unrecoverable old mappings
+fail closed rather than falling back to ActivityPub reaction delivery.
+An interrupted initial chat backfill retains its original unread window and
+log revision while new messages arrive; subsequent log synchronization picks
+up activity beyond that revision.
+For records retained as written, `createRecord` always uses a repository create
+operation and refuses an existing key, including under concurrent writes.
+Its optional `swapCommit` is checked under the repository lock; `putRecord`
+continues to create or replace records with its existing conditional guards.
+
 ### Resuming Bluesky synchronization
+
+`ChatBackfillPages` keeps small staged history pages in the existing format and
+splits larger pages into base64 blocks whose JSON representation stays below
+the MySQL TEXT limit. A manifest is published after all blocks are written;
+its SHA-256 is checked before any message on that page is imported. Missing or
+corrupt blocks leave the import checkpoint untouched, and cleanup removes the
+manifest and its blocks.
+
+`ChatPoller` coordinates account snapshots and incremental logs. `ChatBackfill`
+handles the bounded durable history pages and imports them oldest-first;
+its checkpoint namespace remains compatible with in-progress imports.
+Malformed conversation, message or participant pages are retried before the
+account cursor is committed. Complete participant pages are authoritative;
+summary members are not merged back in after a member has left. Importing
+own messages fetches that participant list directly once per conversation,
+without an additional `getConvo` request.
 
 `Cron\AtprotoSync` runs once a minute and spends its 45-second budget on
 notifications before feeds and direct messages, so a slow feed cannot keep
@@ -638,7 +707,7 @@ Every local note carries a `replies` collection at `<post id>/replies`, served p
 ### Outgoing Flow
 
 1. A user action (post, edit, delete, follow, unfollow, like, boost) has a service build the activity
-2. `SignatureService::signObject()` adds a Linked Data Signature — for Create, Update, Delete, Like, Announce and their Undos. Follow, Accept, Reject, Block and `Undo{Block}` are **not** LD-signed; they travel with the HTTP signature only
+2. `ACore::clearSignature()` removes both the signature property and any previously exported signature entry before a changed representation is re-signed. `SignatureService::signObject()` adds a Linked Data Signature — for Create, Update, Delete, Like, Announce and their Undos. Follow, Accept, Reject, Block and `Undo{Block}` are **not** LD-signed; they travel with the HTTP signature only
 3. `ActivityService::request()` expands the activity's instance paths into concrete target inboxes. An activity addressed to everybody — an account deletion — goes to one shared inbox per server heard from in the last `ALL_SEEN_DAYS` (90: a refresh of one of its accounts worked, or one of them was made, inside the window; `CacheActorsRequest::getSharedInboxesSeenSince()`, grouped on the indexed `host`), less the servers whose breaker is open, rather than to every shared inbox ever cached
 4. Targets on this instance are dropped: everyone here already has the item, because recipients are written into `social_stream_dest` when it is saved, which is what puts it in a local timeline. Posting to our own inbox would only hand us back what we wrote, and it is a request the server has to be able to make to its own public address — behind a reverse proxy, split-horizon DNS or an SSRF guard it often cannot, and the delivery then fails its way to being abandoned while remote instances queue up behind it. This holds only for activities whose effect is already applied when the item is saved. A **Follow** has no such path, so `FollowService::followAccount()` detects a local target and runs `FollowInterface::processIncomingRequest()` in process instead — setting the activity's origin to this host first, because that handler is the inbox's and checks it. Without that the row stayed `accepted = 0` for ever and no local follow ever completed
 5. `RequestQueueService::generateRequestQueue()` writes one `social_req_queue` row per remaining target — for a post waiting on its video, held until a given time and not delivered by steps 6 and 7 before then (see **Held for a video** below)
@@ -768,6 +837,7 @@ An activity that is understood but has no handler is still answered 200 (see bel
 | `Undo` (Follow, Like, Announce, EmojiReact, Block) | The wrapped relation or action is deleted. An `Undo` naming its object by id alone is resolved against what is stored (`ActivityObjectResolver`): a follow, a post, an action, an emoji reaction (by its id), a block (by the id of the `Block`, kept in `social_actor_relation.activity_id_prim`), a cached actor. A block stored before that column existed has no id to be found by, and is lifted only by an `Undo` that embeds the `Block` |
 | `Like` | Stored as an action, notification generated |
 | `Announce` | Stored as a boost, notification generated — unless the announced object is one this instance holds and is not public, in which case the activity is dropped. A boost carries the *booster's* audience, so storing it would republish a followers-only post to everyone the booster reaches; the local boost path has always refused to create one |
+| `ReplyRequest` | GoToSocial's conditional reply request is checked against the local target post's reply rule. Public and unlisted targets can receive `Accept` with a signed `ReplyAuthorization` URI when permitted; private/followers-only targets receive `Reject`, so the public verification URL never grants a permission the anonymous endpoint cannot retrieve. A refused reply also receives `Reject`. The URI serves only the reply and target identifiers. |
 | `QuoteRequest` | Somebody asks to quote a local post. Answered with an `Accept` carrying the approval, or a `Reject`, according to the post's own policy — see **Quote posts** below |
 | `Accept` / `Reject` (QuoteRequest) | The answer to a request of ours: the approval is written onto the quoting post, or the quote is marked rejected |
 | `Move` | The moving actor's relationships are repointed to the target actor — its followers, the accounts it follows, and the recipient rows of posts addressed to it or its collections — but only after the target actor (refreshed from its server) lists the moving actor in its `alsoKnownAs`; a Move whose target does not acknowledge the actor is refused. What the old account did stays its own, as on Mastodon: its posts, likes, boosts, reactions and documents keep their author, so its server can still edit and delete them, and an actor `Delete` of it removes them. The usual migration has the new account follow and be followed before the Move arrives, so a repointed row can meet one already there: a follow between the two accounts is dropped; for a follower of both, the follow of the new account stays (it is the id that account's server knows) and is accepted if either was; a follow the new account already made stays as it is, pending included, because its server waits for the Accept only the followed account here sends; a post addressed to both keeps one recipient row. All of it, with the moving actor's cached document marked `movedTo` the target (`CacheActorsRequest::markMoved()`), is one transaction, so a Move that fails leaves nothing half done and a retried one finds nothing left to move. `movedTo` is what the old profile here shows the redirect from — written from the Move, as Mastodon does, not fetched: the old server keeps serving the pre-move document for minutes (Mastodon caches the rendering for three). Local followers of the old account are then followed over to the new one, unless they already follow it or asked to |
@@ -885,9 +955,11 @@ The exports, the imports and moving in are **client-API routes** (`ClientApiCont
 
 **Inbox forwarding (ActivityPub §7.1.2).** A reply to a local post arrives from the replier's instance and from nowhere else, so the followers of the local post would never see it: everyone would read a different, shorter thread. `ForwardService::forwardReply()` therefore passes such a reply on to the followers of the post it replies to, and `NoteInterface::activity()` offers it every newly stored note (a re-delivery finds the note already stored and is not offered again, so nobody is sent the same reply twice).
 
-**Edits out of order.** Edits are delivered out of order as readily as anything else, so `NoteInterface` drops an `Update` whose `updated` is earlier than the one already stored, as Mastodon does; an edit without a date, or of a post never edited, is applied as before.
+**Edits out of order.** Authenticated Updates buffered before their Create retain their original ActivityPub source when available, including remote Event dates, location and cancellation status. Rebuilding these buffered inputs from a local presentation model would lose fields before replay. Edits are delivered out of order as readily as anything else, so `NoteInterface` drops an `Update` whose `updated` is earlier than the one already stored, as Mastodon does; an edit without a date, or of a post never edited, is applied as before.
 
 **A Delete that overtakes its Create.** A `Delete` that finds nothing to delete is remembered for six hours in `DurableCache` (`DeleteInterface::EARLY_DELETE_NAMESPACE`), keyed by the object and holding the deleting actor; a `Create` of that object by that same actor in that time is dropped (`DeleteInterface::deletedBeforeArrival()`), as Mastodon drops one, so a late Create cannot put back a post its author already took down.
+
+**An Undo that overtakes its Like.** If an `Undo{Like}` arrives before the Like row, its actor, target and Like id are remembered for six hours. A later delivery of that same Like is ignored, so a network retry cannot restore an interaction its actor already removed. For URI-only `Undo` activities, the origin-checked Like id and actor are remembered until the Like reveals its target.
 
 A reply is forwarded only when all of this holds: it arrived with a **valid linked-data signature** (`SignatureService::ORIGIN_SIGNATURE`), because the recipients must be able to check the author's own signature rather than take our word for it; the post it replies to is **local**, since only the instance holding a post owes its followers the thread; and both the reply and the post are **public or unlisted**, so a private audience is never widened. The body sent is `getSource()` — the document exactly as it arrived, since re-encoding our model of it would drop the signature and change what was signed. Delivery goes through the normal request queue at `PRIORITY_LOW` via `RequestQueueService::generateRequestQueueFromSource()`, so nothing about it holds up the inbox response. The sender's instance and this one are left out of the recipient list.
 
@@ -1778,12 +1850,15 @@ Three things about it worth knowing:
   rather than one file per resolution. A shorter list than PeerTube publishes,
   the same shape, and a reader takes the best playable link it finds.
 
-It is on by default and an admin can turn it off with
-`occ config:app:set social publish_video_objects --value 0`. The switch exists
-because the one thing that cannot be proven from here is whether a
-Mastodon-family server renders a `Video` as well as it rendered the `Note`; what
-*is* proven is the round trip — everything published goes back through the
-reader in the same class, in `PeerTubePublishTest`.
+The default is `Note` and an admin can choose `Video` for unknown peers with
+`occ config:app:set social publish_video_objects --value 1`. Where a fresh
+NodeInfo result is already cached, outbound delivery selects `Video` for
+PeerTube and `Note` for Pixelfed per inbox; it does not make a network lookup in
+the post request. Unknown or stale peers use the configured default. Both
+variants retain the same post and activity IDs, and each changed activity is
+signed again before it enters the delivery queue. The round trip — a published
+`Video` returning through the reader in the same class — is covered by
+`PeerTubePublishTest`.
 
 What is **not** done: `Audio` (Funkwhale), `Article`, `Page` and `Event` are
 still read by `fillNoteLikeContent()` alone — title and link, no media. The
@@ -2291,6 +2366,18 @@ among the conversation's 100 newest (`getMessages`) before sending it
 again, as its first attempt may have sent it without recording it. Opening
 Messages wakes the account's next read (`ConversationService::getPage()`).
 
+On the first sync, the poller follows the cursors from `listConvos` and
+`getMessages` until it has found the conversation's reported `unreadCount`
+of incoming messages. Messages sent by the account in that range are retained
+too; deleted-message views count toward the unread boundary but are not
+recreated as content. An incomplete page, failed local write, or unavailable
+sender/member leaves the initial cursor uncommitted so the idempotent backfill
+can retry. Incremental `getLog` is a revision-based batch, not a paged API:
+each returned event is processed before its revision is committed, and an
+unknown or incomplete event prevents advancement. The Chat lexicon does not
+expose a read cursor per conversation, so the initial boundary is derived from
+sender identities and the reported unread count.
+
 What the account writes in a Bluesky app arrives in the same log and is
 stored as its own direct message to the conversation's other members, saved
 with `StreamRequest::save()` alone — the stream row and its recipient rows,
@@ -2362,7 +2449,9 @@ repository records, and firehose event; ActivityPub deliveries begin after
 commit. On failure, the database transaction and deferred delivery starts are
 rolled back. Profile and media files use Nextcloud storage and are outside that
 database rollback. A mixed batch checks `swapCommit` against the locked
-repository head before committing.
+repository head before committing. Record-list cursors compare keys
+lexicographically in either direction, including numeric-looking keys such as
+`10` and `2`; the staged batch view uses the same ordering as stored records.
 
 ### Switching off Bluesky
 
@@ -4414,6 +4503,16 @@ approval state. `StreamRequest::update()` writes local parent columns alongside
 the source snapshot; both parent counts are refreshed before the repository
 batch commits. This uses the same conditional-write lock as other post changes.
 
+### Inbox updates that overtake creates
+
+`NoteInterface` keeps a verified `Update` for six hours in the shared durable
+cache when its post has not arrived yet. The cache is keyed by the object URI,
+and the saved actor and author must match the later `Create`. The newest pending
+`updated` timestamp is replayed through the ordinary update path after the post
+has been stored, so author checks, stale-edit checks, revisions and edit
+notifications stay consistent. A matching early Delete discards the pending
+update; if no Create arrives, the cache entry expires without making a post.
+
 ### Public profile navigation preferences
 
 `Model\ProfileLayout` validates the public default and visible tabs. `AccountService`
@@ -4428,3 +4527,32 @@ tab links remain authoritative. Public page state carries the configured cloud
 address without running signed-in setup, and local public lookups use bare
 usernames rather than generated remote handles. Guest views do not use private
 read-marker endpoints.
+
+
+### Compact composer and visual-feed consistency
+
+The compact composer records the draft it hands to the full modal. A successful
+publication emits `composer-published` with the draft context; the compact editor
+clears only when it still holds that unchanged draft. Another reply context or
+newly typed words remain intact. The post page hides its compact reply with
+`v-show` while the modal is open, preserving the draft snapshot and event
+listener; opening a reply directly from the post also records that snapshot.
+Failed submissions and closing the modal do not acknowledge publication.
+When the compact draft changed after handoff, its saved copy is restored after
+the modal's reset watchers finish, so publishing an older modal draft cannot
+remove newer words from browser storage. Automatically inserted mention avatars are
+decorative beside the visible handle and carry an empty alternative text. Routing-only reply drafts are restored to mention pills with a trailing
+separator before typing, so reopening the modal cannot join the first reply
+word to its recipient's handle. Drafts with an existing answer remain intact.
+
+Feed notices keep their outer card margin, border and background; only nested
+notice content has its inner box reset. Text in stacked notices keeps its
+natural height instead of a row-layout flex basis. Profile synchronization and
+feed failures share the same responsive state-card layout, with a heading,
+explanatory text and the existing retry action. Cached profile posts remain
+visible during synchronization, and failure is not presented as an empty feed.
+
+The indexed visual-feed candidate window expands `visual` into the stored
+`image`, `video`, `gifv` and `mixed` kinds. The ordinary viewer-aware query still
+filters those candidates, so the optimized Home and public Photos paths match
+the attachment-based path used before media-index backfill completes.

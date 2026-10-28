@@ -71,6 +71,7 @@ export function mentionPills(accounts, hostname) {
 		if (account.avatar) {
 			const avatar = document.createElement('img')
 			avatar.src = account.avatar
+			avatar.alt = ''
 			link.append(avatar)
 		}
 		link.append(document.createTextNode(`@${fullHandle(account, hostname)}`))

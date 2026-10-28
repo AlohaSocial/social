@@ -33,6 +33,7 @@ use OCA\Social\Model\ActivityPub\Activity\Create;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
 use OCA\Social\Model\ActivityPub\Activity\Update;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\InstancePath;
@@ -44,6 +45,7 @@ use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\AppFramework\Http;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -89,8 +91,11 @@ class ActivityService {
 		private HostBreakerRequest $hostBreakerRequest,
 		private LoggerInterface $logger,
 		private StreamRequest $streamRequest,
+		private ?ContainerInterface $container = null,
 	) {
 	}
+
+	private ?FediverseDirectoryService $fediverseDirectoryService = null;
 
 	/**
 	 * @param Person $actor
@@ -229,7 +234,16 @@ class ActivityService {
 	private function rebuiltBody(RequestQueue $queue, Stream $post, array &$built): string {
 		$decoded = json_decode($queue->getActivity(), true);
 		$type = is_array($decoded) ? (string)($decoded['type'] ?? '') : '';
-		$key = $type . ' ' . $queue->getAuthor();
+		$video = $this->videoRepresentationForHost($queue->getInstance()?->getAddress() ?? '');
+		if ($video === null && is_array($decoded['object'] ?? null)) {
+			$queuedType = (string)($decoded['object']['type'] ?? '');
+			if (in_array($queuedType, ['Note', 'Video'], true)) {
+				// Keep the representation selected when this held row was queued,
+				// even if the bounded NodeInfo cache has since expired.
+				$video = $queuedType === 'Video';
+			}
+		}
+		$key = $type . ' ' . $queue->getAuthor() . ' ' . (string)$video;
 		if (array_key_exists($key, $built)) {
 			return $built[$key];
 		}
@@ -238,9 +252,13 @@ class ActivityService {
 		try {
 			if ($type === Create::TYPE || $type === Update::TYPE) {
 				$actor = $this->actorsRequest->getFromId($queue->getAuthor());
+				$copy = clone $post;
+				if ($copy instanceof Note && $video !== null) {
+					$copy->setVideoRepresentationOverride($video);
+				}
 				$activity = ($type === Create::TYPE)
-					? $this->buildCreate($actor, clone $post)
-					: $this->buildUpdate($actor, clone $post);
+					? $this->buildCreate($actor, $copy)
+					: $this->buildUpdate($actor, $copy);
 			}
 		} catch (Exception $e) {
 			// sent as it was queued rather than not at all: the video in it
@@ -435,7 +453,29 @@ class ActivityService {
 				),
 			]);
 		}
-		$token = $this->requestQueueService->generateRequestQueue($instancePaths, $activity, $author, $holdUntil);
+		$variants = [];
+		if ($this->isVideoActivity($activity)) {
+			$videoByHost = [];
+			foreach ($instancePaths as $instancePath) {
+				$host = $instancePath->getAddress();
+				if (!array_key_exists($host, $videoByHost)) {
+					$videoByHost[$host] = $this->videoRepresentationForHost($host);
+				}
+				$video = $videoByHost[$host];
+				if ($video === null) {
+					continue;
+				}
+				$variant = $this->videoActivityVariant($activity, $video);
+				if ($variant !== null) {
+					$variants[$instancePath->getUri()] = $variant;
+				}
+			}
+		}
+		$token = $variants === []
+			? $this->requestQueueService->generateRequestQueue($instancePaths, $activity, $author, $holdUntil)
+			: $this->requestQueueService->generateRequestQueueWithVariants(
+				$instancePaths, (string)json_encode($activity, JSON_UNESCAPED_SLASHES), $variants, $author, $holdUntil
+			);
 
 		if ($token === '') {
 			return '<request token not needed>';
@@ -453,6 +493,61 @@ class ActivityService {
 		$this->deliverToken($token);
 
 		return $token;
+	}
+
+	/** A cached peer classification; unknown peers keep the configured default. */
+	private function videoRepresentationForHost(string $host): ?bool {
+		if ($this->fediverseDirectoryService === null && $this->container !== null) {
+			try {
+				$service = $this->container->get(FediverseDirectoryService::class);
+				$this->fediverseDirectoryService = $service instanceof FediverseDirectoryService ? $service : null;
+			} catch (\Throwable) {
+				// A missing optional directory cache must not prevent video delivery.
+			}
+		}
+		$software = $this->fediverseDirectoryService?->knownSoftware($host) ?? '';
+
+		return match ($software) {
+			'peertube' => true,
+			'pixelfed' => false,
+			default => null,
+		};
+	}
+
+	private function isVideoActivity(ACore $activity): bool {
+		if (!$activity instanceof Create && !$activity instanceof Update) {
+			return false;
+		}
+		$object = $activity->getObject();
+
+		return $object instanceof Note && $object->isLocal()
+			&& PeerTubeService::soleVideo($object->getAttachments()) !== null;
+	}
+
+	/** Build a signed, inbox-specific wire representation without mutating the post. */
+	private function videoActivityVariant(ACore $activity, bool $asVideo): ?string {
+		if (!$activity instanceof Create && !$activity instanceof Update) {
+			return null;
+		}
+		$object = $activity->getObject();
+		if (!$object instanceof Note || !$object->isLocal()
+			|| PeerTubeService::soleVideo($object->getAttachments()) === null
+			|| !$activity->hasActor()) {
+			return null;
+		}
+
+		$variant = clone $activity;
+		$variantObject = clone $object;
+		$variantObject->setVideoRepresentationOverride($asVideo);
+		$variant->setObject($variantObject);
+		$variant->clearSignature();
+		$actor = $variant->getActor();
+		if ($actor === null) {
+			return null;
+		}
+		$this->signatureService->signObject($actor, $variant);
+
+		return json_encode($variant, JSON_UNESCAPED_SLASHES) ?: null;
 	}
 
 	/** Hold inline and asynchronous delivery until the surrounding write commits. */

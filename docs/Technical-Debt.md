@@ -4,7 +4,7 @@
 -->
 # Technical debt and current maintenance status
 
-**Reviewed against:** Aloha Social **0.26.279** (`appinfo/info.xml`) on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.280** (`appinfo/info.xml`) on **2026-10-27**; source
 branch `main` at `33935993`. Counts below were measured from
 that checkout. They describe code size and maintenance boundaries; they are not
 a quality score, a claim that every test is green, or a production audit.
@@ -40,6 +40,31 @@ requires Node 24 and npm 11. Local CLI versions are not a substitute for the
 CI compatibility matrix.
 
 ## Maintenance items with ongoing cost
+
+### PDS blob lifecycle (feature-branch review, 2026-10-28)
+
+Concurrent blob registration and repository-byte accounting are deduplicated.
+ATProto uploads now preserve their original bytes through the shared storage
+policy instead of using Social's image conversion pipeline. A protocol-native
+temporary blob state, reference-aware availability and last-reference cleanup remain
+unimplemented. Completing these requires coordinated write, read, migration
+and cleanup behavior; see [ATProto compatibility](Atproto-Compatibility.md#blob-lifecycle-boundary).
+
+### Pixelfed remote edit rendering (feature-branch review, 2026-10-28)
+
+The interop run against Pixelfed v0.14.4 accepts the video Update and stores its
+new caption and `edited_at`, but its API continues to render the original HTML.
+The upstream [update pipeline](https://github.com/pixelfed/pixelfed/blob/v0.14.4/app/Jobs/StatusPipeline/StatusRemoteUpdatePipeline.php)
+changes `caption` without updating `rendered`, which the
+[remote-status transformer](https://github.com/pixelfed/pixelfed/blob/v0.14.4/app/Transformer/Api/StatusStatelessTransformer.php)
+prefers over the caption. The real-peer edit assertion remains enforced;
+successful delivery or an updated database caption is not counted as successful
+user-visible editing. Failure diagnostics include the peer's worker jobs and
+stored caption/edit state. CI now pins official Pixelfed v0.15.2, whose
+[update pipeline](https://github.com/pixelfed/pixelfed/blob/v0.15.2/app/Jobs/StatusPipeline/StatusRemoteUpdatePipeline.php)
+updates `rendered` as well. The unchanged visible-edit assertion must pass on
+that image before this compatibility path is considered verified. Older
+Pixelfed installations can still exhibit the rendering defect.
 
 ### Compatibility surfaces must be maintained deliberately
 
@@ -83,7 +108,7 @@ A nightly benchmark now seeds 100,000 posts and times timeline/search queries
 on MySQL and PostgreSQL. The most recent successful run available during this
 review is dated 2026-10-27 and is documented in
 [Performance.md](Performance.md). It uses app version 0.26.278, one patch before
-this checkout's 0.26.279. The benchmark does not measure remote delivery,
+this checkout's 0.26.280. The benchmark does not measure remote delivery,
 AppView indexing, background queue delay, real user profiles, populated direct
 messages or browser rendering. Treat the figures as a repeatable query baseline,
 not a production service-level objective.

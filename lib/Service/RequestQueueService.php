@@ -104,6 +104,43 @@ class RequestQueueService {
 	}
 
 	/**
+	 * Queue an already serialised default activity with selected inbox-specific
+	 * variants. The map is keyed by the exact inbox URI; all variants share one
+	 * token so the caller's delivery and hold semantics stay unchanged.
+	 *
+	 * @param InstancePath[] $instancePaths
+	 * @param array<string, string> $activityByInbox
+	 */
+	public function generateRequestQueueWithVariants(
+		array $instancePaths,
+		string $defaultActivity,
+		array $activityByInbox,
+		string $author,
+		int $holdUntil = 0,
+	): string {
+		$token = '';
+		$requests = [];
+		foreach ($this->uniqueInboxes($instancePaths) as $instancePath) {
+			$activity = $activityByInbox[$instancePath->getUri()] ?? $defaultActivity;
+			$request = new RequestQueue($activity, $instancePath, $author);
+			$request->setObjectIdPrim(self::objectIdPrimOf($activity));
+			if ($holdUntil > time()) {
+				$request->setLast($holdUntil);
+			}
+			if ($token === '') {
+				$token = $request->getToken();
+			} else {
+				$request->setToken($token);
+			}
+			$requests[] = $request;
+		}
+
+		$this->requestQueueRequest->multiple($requests);
+
+		return $token;
+	}
+
+	/**
 	 * Queues a document that is already serialised, byte for byte.
 	 *
 	 * Forwarding has to send on what arrived: the sender's linked-data

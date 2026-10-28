@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Integration\Db;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCP\IDBConnection;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -62,6 +63,24 @@ class ReactionsRequestTest extends TestCase {
 		$this->assertSame("\u{1F525}", $this->reactions->getReaction(self::ALICE, self::POST, "\u{1F525}")->getContent());
 	}
 
+	public function testDuplicateReactionsDoNotAbortTheSurroundingTransaction(): void {
+		$connection = Server::get(IDBConnection::class);
+		$connection->beginTransaction();
+		try {
+			$this->assertTrue($this->react(self::ALICE, self::POST, '👍'));
+			$this->assertFalse($this->react(self::ALICE, self::POST, '👍'));
+			$first = $this->reactions->getReaction(self::ALICE, self::POST, '👍');
+			$duplicate = clone $first;
+			$duplicate->setId(self::ALICE . '#overlapping-copy');
+			$this->assertFalse($this->reactions->save($duplicate));
+			$this->assertSame($first->getId(), $this->reactions->getReaction(self::ALICE, self::POST, '👍')->getId());
+			$this->assertTrue($this->react(self::ALICE, self::POST, '🔥'));
+			$this->assertCount(2, $this->reactions->getByObjectId(self::POST));
+		} finally {
+			$connection->rollBack();
+		}
+	}
+
 	public function testManyPostsAreReadAtOnceKeyedByTheirHash(): void {
 		$this->react(self::ALICE, self::POST, "\u{1F525}");
 		$this->react(self::BOB, self::OTHER, "\u{1F44D}");
@@ -71,6 +90,36 @@ class ReactionsRequestTest extends TestCase {
 		$this->assertCount(1, $byPost[md5(self::POST)] ?? []);
 		$this->assertCount(1, $byPost[md5(self::OTHER)] ?? []);
 		$this->assertSame([], $this->reactions->getByObjectIds([]));
+	}
+
+	public function testALateUndoOfAnOldReactionKeepsItsNewerReplacement(): void {
+		$this->assertTrue($this->react(self::ALICE, self::POST, '👍'));
+		$old = $this->reactions->getReaction(self::ALICE, self::POST, '👍');
+		$this->reactions->delete($old);
+		$new = clone $old;
+		$new->setId(self::ALICE . '#new-reaction');
+		$this->assertTrue($this->reactions->save($new));
+
+		$this->reactions->delete($old);
+
+		$this->assertSame($new->getId(), $this->reactions->getReaction(self::ALICE, self::POST, '👍')->getId());
+		$this->reactions->delete($new);
+		$this->assertSame([], $this->reactions->getByObjectId(self::POST));
+	}
+
+	public function testAReactionIdMustAlsoMatchTheActorPostAndEmojiBeingRemoved(): void {
+		$this->assertTrue($this->react(self::ALICE, self::POST, '👍'));
+		$stored = $this->reactions->getReaction(self::ALICE, self::POST, '👍');
+		foreach (['actor', 'post', 'emoji'] as $mismatch) {
+			$wrong = clone $stored;
+			match ($mismatch) {
+				'actor' => $wrong->setActorId(self::BOB),
+				'post' => $wrong->setObjectId(self::OTHER),
+				'emoji' => $wrong->setContent('🔥'),
+			};
+			$this->reactions->delete($wrong);
+			$this->assertSame($stored->getId(), $this->reactions->getReaction(self::ALICE, self::POST, '👍')->getId());
+		}
 	}
 
 	public function testTakingOneReactionBackLeavesTheOthers(): void {

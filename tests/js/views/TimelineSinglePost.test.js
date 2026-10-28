@@ -388,6 +388,20 @@ describe('TimelineSinglePost', () => {
 			expect(composer.props('inReplyTo').id).toBe('123')
 		})
 
+		it('keeps the same compact reply instance while the full modal is open', async () => {
+			const wrapper = mountView()
+			const composer = wrapper.findComponent(ComposerStub)
+			const instance = composer.vm
+			store.composerDisplayStatus = true
+			await flushPromises()
+			expect(wrapper.findComponent(ComposerStub).vm).toBe(instance)
+			expect(composer.isVisible()).toBe(false)
+			store.composerDisplayStatus = false
+			await flushPromises()
+			expect(wrapper.findComponent(ComposerStub).vm).toBe(instance)
+			expect(composer.isVisible()).toBe(true)
+		})
+
 		it('is not offered to a reader who is not logged in', () => {
 			makeStore({ public: true })
 			const wrapper = mountView()

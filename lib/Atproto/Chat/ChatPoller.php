@@ -14,11 +14,13 @@ use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\Watch;
+use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\AppViewNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -27,8 +29,8 @@ use Throwable;
  * The direct messages local accounts receive on Bluesky's chat service,
  * read into their messages here (`ChatStore`): a Bluesky conversation is a
  * conversation here like any other. The chat log (`getLog`) is read as each
- * account, from where it was read up to; an account's first read starts at
- * the newest message of each conversation that has unread ones. The log
+ * account, from where it was read up to; an account's first read backfills
+ * all unread conversations and messages before establishing the log cursor. The log
  * also brings what the account wrote in a Bluesky app, and how far it read
  * a conversation there, which is read here too.
  */
@@ -37,16 +39,45 @@ class ChatPoller {
 	/** an account nobody messages on Bluesky is still asked every half hour */
 	public const MAX_BACKOFF = 1800;
 	public const BATCH = 50;
-	/** how many conversations an account's first read looks at */
-	public const FIRST_CONVOS = 20;
-	/** the most unread messages of one conversation an account's first read takes */
-	public const FIRST_MESSAGES = 20;
+	/** the upstream maximum page size for both chat conversation and message queries */
+	public const PAGE = ChatBackfill::PAGE;
 	private const TABLE = CoreRequestBuilder::TABLE_ATPROTO_CHAT_CURSOR;
 	private const CREATE = 'chat.bsky.convo.defs#logCreateMessage';
 	private const DELETE = 'chat.bsky.convo.defs#logDeleteMessage';
 	private const READ = 'chat.bsky.convo.defs#logReadConvo';
 	/** the older name of `logReadConvo`, which a chat service may still send */
 	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
+	private const FIRST_IMPORT_CACHE = ChatBackfill::CACHE;
+	private const FIRST_IMPORT_TTL = ChatBackfill::TTL;
+	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
+	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
+	/** Log records which affect chat state Aloha does not currently model. */
+	private const IGNORED_LOGS = [
+		'chat.bsky.convo.defs#logBeginConvo',
+		'chat.bsky.convo.defs#logAcceptConvo',
+		'chat.bsky.convo.defs#logLeaveConvo',
+		'chat.bsky.convo.defs#logMuteConvo',
+		'chat.bsky.convo.defs#logUnmuteConvo',
+		'chat.bsky.convo.defs#logReadJoinRequests',
+		'chat.bsky.convo.defs#logAddMember',
+		'chat.bsky.convo.defs#logRemoveMember',
+		'chat.bsky.convo.defs#logMemberJoin',
+		'chat.bsky.convo.defs#logMemberLeave',
+		'chat.bsky.convo.defs#logLockConvo',
+		'chat.bsky.convo.defs#logUnlockConvo',
+		'chat.bsky.convo.defs#logLockConvoPermanently',
+		'chat.bsky.convo.defs#logEditGroup',
+		'chat.bsky.convo.defs#logCreateJoinLink',
+		'chat.bsky.convo.defs#logEditJoinLink',
+		'chat.bsky.convo.defs#logEnableJoinLink',
+		'chat.bsky.convo.defs#logDisableJoinLink',
+		'chat.bsky.convo.defs#logIncomingJoinRequest',
+		'chat.bsky.convo.defs#logApproveJoinRequest',
+		'chat.bsky.convo.defs#logRejectJoinRequest',
+		'chat.bsky.convo.defs#logOutgoingJoinRequest',
+		'chat.bsky.convo.defs#logWithdrawIncomingJoinRequest',
+		'chat.bsky.convo.defs#logWithdrawOutgoingJoinRequest',
+	];
 
 	/** @var array<string, list<string>> the members of the conversations this run asked about, by convo */
 	private array $members = [];
@@ -60,6 +91,8 @@ class ChatPoller {
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 		private ChatDeclaration $declaration,
+		private DurableCache $durableCache,
+		private ChatBackfill $backfill,
 	) {
 	}
 
@@ -148,8 +181,9 @@ class ChatPoller {
 	}
 
 	/**
-	 * The first read: the unread messages of the newest conversations, and
-	 * the newest `rev` among them, which the log is read from next time.
+	 * The first read imports unread messages from every conversation, following
+	 * upstream pages. If any page or durable local write fails, the caller leaves
+	 * the log cursor empty and retries the complete idempotent backfill.
 	 * Who may write to the account is told to Bluesky first, where its
 	 * repository does not say it yet.
 	 *
@@ -158,29 +192,110 @@ class ChatPoller {
 	private function first(Identity $identity): array {
 		$this->declaration->ensure($identity);
 		$key = $this->identities->signingKey($identity);
-		$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.listConvos', ['limit' => self::FIRST_CONVOS]);
 		$handled = 0;
-		$rev = '';
-		foreach (is_array($answer['convos'] ?? null) ? $answer['convos'] : [] as $convo) {
-			if (!is_array($convo)) {
-				continue;
+		$snapshotKey = 'revision:' . $identity->did;
+		$snapshotRevision = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $snapshotKey);
+		$rev = is_string($snapshotRevision) ? $snapshotRevision : '';
+		$convoCursor = '';
+		$seenConvoCursors = [];
+		do {
+			$params = ['limit' => self::PAGE];
+			if ($convoCursor !== '') {
+				$params['cursor'] = $convoCursor;
 			}
-			$rev = max($rev, (string)($convo['rev'] ?? ''));
-			$unread = (int)($convo['unreadCount'] ?? 0);
-			$id = (string)($convo['id'] ?? '');
-			if ($unread <= 0 || $id === '') {
-				continue;
+			$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.listConvos', $params);
+			if (!is_array($answer['convos'] ?? null) || !array_is_list($answer['convos'])) {
+				throw new \RuntimeException('Bluesky chat conversation response is missing its conversation list');
 			}
-			$messages = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', ['convoId' => $id, 'limit' => min($unread, self::FIRST_MESSAGES)]);
-			// newest first on the wire; stored oldest first, so each answers the one before
-			$list = is_array($messages['messages'] ?? null) ? array_reverse($messages['messages']) : [];
-			$members = self::dids($convo['members'] ?? null);
-			foreach ($list as $message) {
-				$handled += is_array($message) && $this->store->received($identity, $id, $message, $members) ? 1 : 0;
+			if (isset($answer['cursor']) && !is_string($answer['cursor'])) {
+				throw new \RuntimeException('Bluesky chat conversation response has an invalid cursor');
 			}
-		}
+			foreach ($answer['convos'] as $convo) {
+				if (!is_array($convo) || !is_string($convo['id'] ?? null) || $convo['id'] === ''
+					|| !is_string($convo['rev'] ?? null) || $convo['rev'] === ''
+					|| !is_int($convo['unreadCount'] ?? null) || $convo['unreadCount'] < 0) {
+					throw new \RuntimeException('Bluesky chat response contains an incomplete conversation');
+				}
+			}
+			if (!is_string($snapshotRevision)) {
+				foreach ($answer['convos'] as $convo) {
+					if (is_array($convo)) {
+						$rev = max($rev, (string)($convo['rev'] ?? ''));
+					}
+				}
+				$snapshotRevision = $rev;
+				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $snapshotKey, $rev, self::FIRST_IMPORT_TTL);
+			}
+			foreach ($answer['convos'] as $convo) {
+				$unread = max(0, (int)($convo['unreadCount'] ?? 0));
+				$id = (string)($convo['id'] ?? '');
+				if ($unread === 0 || $id === '') {
+					continue;
+				}
+				$completeKey = 'complete:' . hash('sha256', $identity->did . "\0" . $id);
+				if ($this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $completeKey) === $snapshotRevision) {
+					continue;
+				}
+				$members = $this->allMembers($identity, $key, $id);
+				$this->members[$id] = $members;
+				$imported = $this->backfill->import($identity, $key, $id, $unread, $members);
+				$handled += $imported['handled'];
+				if (!$imported['complete']) {
+					// Do not advance the account cursor until every unread window has
+					// been durably imported. The conversation checkpoint resumes it.
+					return [$handled, ''];
+				}
+				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $completeKey, $snapshotRevision, self::FIRST_IMPORT_TTL);
+
+			}
+			$nextConvoCursor = $answer['cursor'] ?? '';
+			if ($nextConvoCursor === '') {
+				break;
+			}
+			if ($nextConvoCursor === $convoCursor || isset($seenConvoCursors[$nextConvoCursor])) {
+				throw new \RuntimeException('Bluesky chat conversation pagination did not advance');
+			}
+			$seenConvoCursors[$nextConvoCursor] = true;
+			$convoCursor = $nextConvoCursor;
+		} while (true);
+
+		$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $snapshotKey);
 
 		return [$handled, $rev];
+	}
+
+	/** Fetch the authoritative participant list, including paginated group members. */
+	private function allMembers(Identity $identity, PrivateKey $key, string $convo): array {
+		$members = [];
+		$cursor = '';
+		$seen = [];
+		do {
+			$params = ['convoId' => $convo, 'limit' => self::PAGE];
+			if ($cursor !== '') {
+				$params['cursor'] = $cursor;
+			}
+			$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvoMembers', $params);
+			if (!is_array($page['members'] ?? null) || !array_is_list($page['members'])) {
+				throw new \RuntimeException('Bluesky chat member response is missing its member list');
+			}
+			if (isset($page['cursor']) && !is_string($page['cursor'])) {
+				throw new \RuntimeException('Bluesky chat member response has an invalid cursor');
+			}
+			foreach ($page['members'] as $member) {
+				if (!is_array($member) || !is_string($member['did'] ?? null) || !Syntax::isDid($member['did'])) {
+					throw new \RuntimeException('Bluesky chat member response contains an invalid member');
+				}
+			}
+			$members = [...$members, ...self::dids($page['members'])];
+			$next = $page['cursor'] ?? '';
+			if ($next !== '' && ($next === $cursor || isset($seen[$next]))) {
+				throw new \RuntimeException('Bluesky chat member pagination did not advance');
+			}
+			$seen[$next] = true;
+			$cursor = $next;
+		} while ($cursor !== '');
+
+		return array_values(array_unique($members));
 	}
 
 	/**
@@ -191,28 +306,53 @@ class ChatPoller {
 	private function since(Identity $identity, string $rev): array {
 		$key = $this->identities->signingKey($identity);
 		$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getLog', ['cursor' => $rev]);
+		if (!is_array($answer['logs'] ?? null)) {
+			throw new \RuntimeException('Bluesky chat log response is missing its log list');
+		}
+		if (isset($answer['cursor']) && !is_string($answer['cursor'])) {
+			throw new \RuntimeException('Bluesky chat log response has an invalid cursor');
+		}
 		$handled = 0;
 		$newest = $rev;
-		foreach (is_array($answer['logs'] ?? null) ? $answer['logs'] : [] as $log) {
-			if (!is_array($log)) {
-				continue;
+		foreach ($answer['logs'] as $log) {
+			if (!is_array($log) || !is_string($log['$type'] ?? null) || !is_string($log['rev'] ?? null) || $log['rev'] === '') {
+				throw new \RuntimeException('Bluesky chat log contains an incomplete event');
 			}
-			$newest = max($newest, (string)($log['rev'] ?? ''));
 			$convo = (string)($log['convoId'] ?? '');
+			$type = (string)($log['$type'] ?? '');
 			$message = is_array($log['message'] ?? null) ? $log['message'] : null;
-			if ($convo === '' || $message === null) {
-				continue;
+			if (in_array($type, [self::CREATE, self::DELETE, self::READ, self::READ_MESSAGE, self::ADD_REACTION, self::REMOVE_REACTION], true)) {
+				if ($convo === '' || $message === null) {
+					throw new \RuntimeException('Bluesky chat log event is missing its conversation or message');
+				}
+				$handled += match ($type) {
+					self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
+					self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
+					self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
+					self::ADD_REACTION => $this->store->reaction(
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, $log['rev']
+					) ? 1 : 0,
+					self::REMOVE_REACTION => $this->store->reaction(
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, $log['rev']
+					) ? 1 : 0,
+				};
+			} elseif (!in_array($type, self::IGNORED_LOGS, true)) {
+				// An unknown future event must not be acknowledged as though this
+				// reader understood it. Known non-message events above are deliberate
+				// no-ops; newer lexicon variants are retried after an update.
+				throw new \RuntimeException('Unsupported Bluesky chat log event: ' . $type);
 			}
-			$handled += match ((string)($log['$type'] ?? '')) {
-				self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
-				self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
-				self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
-				default => 0,
-			};
+			// The getLog lexicon is revision based, not limit/cursor paginated.
+			// Advance only through events whose processing completed (or whose
+			// known type is deliberately ignored), never to a response cursor that
+			// could be ahead of a truncated or malformed event list.
+			$newest = max($newest, $log['rev']);
 		}
-		$cursor = (string)($answer['cursor'] ?? '');
+		if ($answer['logs'] === []) {
+			$newest = max($newest, $answer['cursor'] ?? '');
+		}
 
-		return [$handled, max($newest, $cursor)];
+		return [$handled, $newest];
 	}
 
 	/**
@@ -225,12 +365,12 @@ class ChatPoller {
 			&& $this->store->sentHere($identity->did, (string)($message['id'] ?? '')) === '';
 		if ($own && !isset($this->members[$convo])) {
 			try {
-				$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvo', ['convoId' => $convo]);
-				$this->members[$convo] = self::dids($answer['convo']['members'] ?? null);
+				$this->members[$convo] = $this->allMembers($identity, $key, $convo);
 			} catch (Throwable $e) {
-				// a conversation that cannot be asked about holds up nothing else in the log
 				$this->logger->notice('Members of a Bluesky conversation not read', ['convo' => $convo, 'exception' => $e]);
-				$this->members[$convo] = [];
+				// Leave the log cursor before this event. The next poll retries the
+				// lookup instead of permanently treating the conversation as empty.
+				throw $e;
 			}
 		}
 

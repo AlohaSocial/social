@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\ChannelsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -111,7 +112,7 @@ class PeerTubeApiService {
 			'serverVersion' => self::PEERTUBE_VERSION,
 			'serverCommit' => '',
 			'software' => [
-				'name' => 'nextcloud-social',
+				'name' => Application::SOFTWARE_NAME,
 				'version' => $this->appConfig->getValueString('social', 'installed_version', ''),
 			],
 			// an account here is a Nextcloud account; there is no signing up

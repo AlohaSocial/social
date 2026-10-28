@@ -12,27 +12,23 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Protocol\Cid;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
  * The blobs each repository holds: a CID naming one of the app's stored
  * documents.
  */
 class AtprotoBlobRequest extends CoreRequestBuilder {
-	public function put(BlobRef $blob): void {
-		if ($this->get($blob->did, $blob->cid->toString()) !== null) {
-			return;
-		}
-		$qb = $this->getQueryBuilder();
-		$qb->insert(self::TABLE_ATPROTO_BLOB)
-			->setValue('did', $qb->createNamedParameter($blob->did))
-			->setValue('cid', $qb->createNamedParameter($blob->cid->toString()))
-			->setValue('document_id', $qb->createNamedParameter($blob->documentId))
-			->setValue('document_id_prim', $qb->createNamedParameter(md5($blob->documentId)))
-			->setValue('mime', $qb->createNamedParameter($blob->mime))
-			->setValue('size', $qb->createNamedParameter($blob->size, IQueryBuilder::PARAM_INT))
-			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
-		$qb->executeStatement();
+	/** @return bool whether this call first registered the account's CID */
+	public function put(BlobRef $blob): bool {
+		return $this->dbConnection->insertIgnoreConflict(self::TABLE_ATPROTO_BLOB, [
+			'did' => $blob->did,
+			'cid' => $blob->cid->toString(),
+			'document_id' => $blob->documentId,
+			'document_id_prim' => md5($blob->documentId),
+			'mime' => $blob->mime,
+			'size' => $blob->size,
+			'creation' => (new DateTime('now'))->format('Y-m-d H:i:s'),
+		]) > 0;
 	}
 
 	public function get(string $did, string $cid): ?BlobRef {

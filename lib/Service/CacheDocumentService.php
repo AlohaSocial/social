@@ -305,8 +305,8 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * Stores a file byte for byte: the blob of a Bluesky repository that
-	 * moved here, which its records name by the hash of exactly these bytes.
+	 * Stores a file byte for byte for ATProto uploads and repository moves,
+	 * whose records name the hash of exactly these bytes.
 	 * The type, size and quota checks of any upload apply; nothing is
 	 * stripped or converted.
 	 *

@@ -3399,6 +3399,11 @@ OC.L10N.register(
     "Re-draft" : "Erneuter Entwurf",
     "Media draft" : "Medienentwurf",
     "This draft is no longer available." : "Dieser Entwurf ist nicht mehr verfügbar.",
-    "The original post could not be loaded. Your draft has been kept. Try again later." : "Der ursprüngliche Beitrag konnte nicht geladen werden. Dein Entwurf bleibt erhalten. Versuche es später erneut."
+    "The original post could not be loaded. Your draft has been kept. Try again later." : "Der ursprüngliche Beitrag konnte nicht geladen werden. Dein Entwurf bleibt erhalten. Versuche es später erneut.",
+    "Delete draft: {draft}" : "Entwurf löschen: {draft}",
+    "Delete draft" : "Entwurf löschen",
+    "Delete this draft?" : "Diesen Entwurf löschen?",
+    "This draft will be permanently removed from this browser." : "Dieser Entwurf wird dauerhaft aus diesem Browser entfernt.",
+    "Could not delete this draft. Please try again." : "Der Entwurf konnte nicht gelöscht werden. Bitte versuche es erneut."
 },
 "nplurals=2; plural=(n != 1);");

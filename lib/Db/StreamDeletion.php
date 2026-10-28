@@ -232,6 +232,7 @@ trait StreamDeletion {
 		$documents = $this->deleteDocumentsOf($prims);
 
 		foreach ([
+			[self::TABLE_ATPROTO_CHAT_MESSAGE, 'stream_id_prim'],
 			// dest and tag rows hold the prim in a column that is not named for it
 			[self::TABLE_STREAM_DEST, 'stream_id'],
 			[self::TABLE_STREAM_TAGS, 'stream_id'],

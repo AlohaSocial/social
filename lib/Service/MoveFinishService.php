@@ -69,7 +69,7 @@ class MoveFinishService {
 			return false;
 		}
 
-		return $this->directoryService->softwareName($host, $scheme) === Application::SOFTWARE_NAME;
+		return Application::isSocialSoftwareName($this->directoryService->softwareName($host, $scheme));
 	}
 
 	/**
