@@ -139,6 +139,8 @@ test.describe('posting, and acting on a post', () => {
 		const context = await (await other.get(`${APP}/api/v1/statuses/${parent.id}/context`)).json()
 		const reply = context.descendants.find((status) => status.content.includes(answer))
 		expect(reply, 'the server threads the reply under its parent').toBeTruthy()
+		const replyText = reply.content.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;|\u00a0/g, ' ')
+		expect(replyText).toContain(` ${answer}`)
 		expect(reply.in_reply_to_id).toBe(parent.id)
 		expect(reply.account.username).toBe(USER)
 	})

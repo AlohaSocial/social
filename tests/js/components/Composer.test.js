@@ -1203,6 +1203,16 @@ describe('Composer', () => {
 			expect(wrapper.vm.anchoredReply).toBe(false)
 		})
 
+		it('restores routing-only reply drafts as mention pills with a typing separator', async () => {
+			const compact = mountComposer({ inReplyTo: replyTo(bob), oneLine: true, listenForIntents: false }).wrapper
+			await flushPromises()
+			await compact.find('.composer-line__expand').trigger('click')
+			const modal = mountComposer({ inReplyTo: replyTo(bob), listenForIntents: false, startExpanded: true }).wrapper
+			await flushPromises()
+			expect(modal.findAll('.message .mention')).toHaveLength(1)
+			expect(typed(modal)).toBe('@bob@remote.example\u00a0')
+		})
+
 		it('restores a quote draft in its own context and ignores later global intents', async () => {
 			localStorage.setItem('social.composer.draft.quote.77::alice', JSON.stringify({ text: 'My saved commentary', savedAt: Date.now() }))
 			const quoted = { id: '77', content: '<p>Quoted</p>', account: bob }

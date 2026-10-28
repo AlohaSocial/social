@@ -1977,11 +1977,17 @@ export default {
 		 * @param {Array<{acct: string, url: string, avatar?: string}>} accounts who to address
 		 */
 		prefillMessageWithMentions(accounts) {
-			if (accounts.length === 0 || !this.statusIsEmpty || this.inputElement() === undefined) {
+			const input = this.inputElement()
+			if (accounts.length === 0 || input === undefined) {
+				return
+			}
+			const mentions = mentionPills(accounts, this.hostname)
+			const routingText = mentions.map((node) => node.textContent ?? '').join('').trim()
+			if (!this.statusIsEmpty && this.statusText !== routingText) {
 				return
 			}
 
-			this.inputElement().replaceChildren(...mentionPills(accounts, this.hostname))
+			input.replaceChildren(...mentions)
 			this.updateStatusContent()
 		},
 

@@ -4541,7 +4541,9 @@ Failed submissions and closing the modal do not acknowledge publication.
 When the compact draft changed after handoff, its saved copy is restored after
 the modal's reset watchers finish, so publishing an older modal draft cannot
 remove newer words from browser storage. Automatically inserted mention avatars are
-decorative beside the visible handle and carry an empty alternative text.
+decorative beside the visible handle and carry an empty alternative text. Routing-only reply drafts are restored to mention pills with a trailing
+separator before typing, so reopening the modal cannot join the first reply
+word to its recipient's handle. Drafts with an existing answer remain intact.
 
 Feed notices keep their outer card margin, border and background; only nested
 notice content has its inner box reset. Text in stacked notices keeps its
