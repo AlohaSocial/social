@@ -1093,6 +1093,27 @@ describe('Composer', () => {
 			expect(typed(wrapper)).toBe('')
 		})
 
+		it('clears an unchanged reply when the post button opens the modal directly', async () => {
+			const reply = replyTo()
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false, inReplyTo: reply })
+			await setContent(wrapper, 'A reply draft')
+			eventBus.emit('composer-reply', reply)
+			eventBus.emit('composer-published', { context: 'reply.42' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('')
+		})
+
+		it('retains newer compact reply text while the modal publishes its earlier draft', async () => {
+			const reply = replyTo()
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false, inReplyTo: reply })
+			await setContent(wrapper, 'Earlier reply')
+			eventBus.emit('composer-reply', reply)
+			await setContent(wrapper, 'A different reply')
+			eventBus.emit('composer-published', { context: 'reply.42' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('A different reply')
+		})
+
 		it('keeps newly typed words and other reply contexts when a modal publishes', async () => {
 			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
 			await setContent(wrapper, 'Move to the modal')

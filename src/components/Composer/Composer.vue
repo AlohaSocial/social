@@ -1540,6 +1540,12 @@ export default {
 		// Keep the handler so unmounted() removes only this one and not the
 		// listeners other components registered for the same event.
 		this.onComposerReply = (data) => {
+			if (this.oneLine) {
+				if (this.draftContext === `reply.${data.id}`) {
+					this.handedOffDraft = JSON.stringify(this.draft)
+				}
+				return
+			}
 			this.replyTo = data
 			// everyone in the conversation, not only whoever wrote the post
 			// being answered: a reply that named one of three people reached
@@ -1556,7 +1562,7 @@ export default {
 			// button, the first words typed went nowhere
 			this.$nextTick(() => this.focusInput({ atEnd: true }))
 		}
-		if (this.listenForIntents) {
+		if (this.listenForIntents || this.oneLine) {
 			eventBus.on('composer-reply', this.onComposerReply)
 		}
 

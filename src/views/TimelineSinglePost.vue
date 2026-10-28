@@ -40,7 +40,8 @@
 				<PostDetails :status="singlePost" />
 				<PostReactedBy :status="singlePost" />
 				<Composer
-					v-if="canReply && !timelineStore.composerDisplayStatus"
+					v-if="canReply"
+					v-show="!timelineStore.composerDisplayStatus"
 					oneLine
 					:listenForIntents="false"
 					:inReplyTo="singlePost" />

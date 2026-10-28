@@ -2438,7 +2438,9 @@ repository records, and firehose event; ActivityPub deliveries begin after
 commit. On failure, the database transaction and deferred delivery starts are
 rolled back. Profile and media files use Nextcloud storage and are outside that
 database rollback. A mixed batch checks `swapCommit` against the locked
-repository head before committing.
+repository head before committing. Record-list cursors compare keys
+lexicographically in either direction, including numeric-looking keys such as
+`10` and `2`; the staged batch view uses the same ordering as stored records.
 
 ### Switching off Bluesky
 
@@ -4521,8 +4523,10 @@ read-marker endpoints.
 The compact composer records the draft it hands to the full modal. A successful
 publication emits `composer-published` with the draft context; the compact editor
 clears only when it still holds that unchanged draft. Another reply context or
-newly typed words remain intact. Failed submissions and closing the modal do
-not acknowledge publication. Automatically inserted mention avatars are
+newly typed words remain intact. The post page hides its compact reply with
+`v-show` while the modal is open, preserving the draft snapshot and event
+listener; opening a reply directly from the post also records that snapshot.
+Failed submissions and closing the modal do not acknowledge publication. Automatically inserted mention avatars are
 decorative beside the visible handle and carry an empty alternative text.
 
 The indexed visual-feed candidate window expands `visual` into the stored
