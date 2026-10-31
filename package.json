@@ -61,7 +61,7 @@
 		"npm": "^11.3.0"
 	},
 	"devDependencies": {
-		"@axe-core/playwright": "^4.13.0",
+		"@axe-core/playwright": "^4.14.0",
 		"@babel/core": "^8.0.6",
 		"@discordapp/twemoji": "16.0.1",
 		"@nextcloud/babel-config": "^2.0.0",
