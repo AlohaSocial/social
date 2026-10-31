@@ -36,7 +36,7 @@
 		"@nextcloud/logger": "^3.0.3",
 		"@nextcloud/notify_push": "^1.4.0",
 		"@nextcloud/router": "^3.2.0",
-		"@nextcloud/vue": "^9.14.0",
+		"@nextcloud/vue": "^9.14.1",
 		"@noble/hashes": "2.4.0",
 		"@noble/secp256k1": "3.2.0",
 		"blurhash": "^2.0.5",
