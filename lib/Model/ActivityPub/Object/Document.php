@@ -116,6 +116,18 @@ class Document extends ACore implements JsonSerializable {
 	}
 
 	/**
+	 * Whether a `local_copy` or `resized_copy` value names a file in appdata.
+	 *
+	 * Not '', and not one of the three sentinels: `avatar` and `header` are
+	 * served from Nextcloud's own avatar store, and a streamed document is a
+	 * pointer at bytes on another server (`COPY_STREAMED`).
+	 */
+	public static function isStoredName(string $name): bool {
+		return $name !== '' && $name !== self::COPY_LOCAL_AVATAR && $name !== 'header'
+			&& $name !== self::COPY_STREAMED;
+	}
+
+	/**
 	 * Whether the file was uploaded here by a local account rather than cached
 	 * from another server. `account` is written by the upload paths only, so
 	 * it is the one thing on a row that says which of the two it is.

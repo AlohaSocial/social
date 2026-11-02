@@ -1376,6 +1376,7 @@ Backing routes of the Aloha Social section in the administration settings. All o
 | GET | `/.well-known/did.json` | public, no-csrf | — | The instance's own `did:web:<host>` document: its service key and the PDS endpoint. |
 | DELETE | `/admin/relays/{id}` | **administrator**, csrf | `id` | Unsubscribes and forgets it. The `Undo{Follow}` is sent first and its failure does not stop the row going — an administrator who pressed this wants to stop taking that relay's posts, and nothing further is taken from it either way, because taking one in needs a row. An unknown id is a **404**. |
 | POST | `/moderation/retention` | moderator, csrf | `days` (required, 0–3650) | Sets the `retention_days` app setting: remote statuses older than this that no local user cares about are pruned (0 disables). Returns `{"retentionDays": n}`. |
+| POST | `/moderation/media-cache` | moderator, csrf | `days` (required, 0–3650), `sizeMb` (required, 0–104857600) | Sets the two limits of the cache of other servers' media, `media_cache_days` and `media_cache_mb`, which `Cron\MediaSweep` applies once a day (0 disables a limit). Both are written or, when either is out of range, neither (422). Returns `{"days": n, "sizeMb": n}`. |
 
 
 ### External users

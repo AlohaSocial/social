@@ -60,6 +60,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		} catch (Exception $e) {
 		}
 
+		if (Document::isStoredName($document->getLocalCopy())) {
+			$qb->setValue('cached', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
+		}
+
 		$qb->executeStatement();
 		$document->setNid($qb->getLastInsertId());
 	}
@@ -217,6 +221,11 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		// read off the downloaded bytes, like the mime, and stripped from them
 		// a moment later: this write is the only record of it
 		$qb->set('ai_source', $qb->createNamedParameter($document->getAiSource(), IQueryBuilder::PARAM_INT));
+		// when the copy now on disk was written: the age the media cache
+		// purge goes by, and null where nothing was stored
+		$qb->set('cached', Document::isStoredName($document->getLocalCopy())
+			? $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE)
+			: $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL));
 
 		$qb->executeStatement();
 	}
@@ -1013,6 +1022,83 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$cursor->closeCursor();
 
 		return $documents;
+	}
+
+	/**
+	 * One page of the cached copies of other servers' media, oldest copy
+	 * first, for the media cache purge (`MediaPurgeService::purgeCache()`).
+	 *
+	 * A row is in it while it holds a copy that can be fetched again: `cached`
+	 * is set (a copy was written and not purged since), nobody here uploaded
+	 * it (`account` is empty), it names the file at its origin, and it is not
+	 * marked as refused. Keyset on (`cached`, `nid`), so a dry run, which
+	 * changes nothing, still moves forward.
+	 *
+	 * `actor` is the parent's key when the parent is a cached actor, which is
+	 * what makes the row that actor's avatar or header.
+	 *
+	 * @param string $afterCached the `cached` of the last row of the previous
+	 *                            page, '' for the first page
+	 *
+	 * @return list<array{nid: string, id: string, local_copy: string, resized_copy: string, cached: string, actor: bool}>
+	 */
+	public function getCachedRemotePage(int $limit, string $afterCached = '', int|string $afterNid = 0): array {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('cd.nid', 'cd.id', 'cd.local_copy', 'cd.resized_copy', 'cd.cached')
+			->selectAlias('ca.id_prim', 'actor_prim')
+			->from(self::TABLE_CACHE_DOCUMENTS, 'cd')
+			->leftJoin('cd', self::TABLE_CACHE_ACTORS, 'ca', $expr->eq('ca.id_prim', 'cd.parent_id_prim'))
+			->where($expr->isNotNull('cd.cached'))
+			->andWhere($expr->eq('cd.account', $qb->createNamedParameter('')))
+			->andWhere($expr->neq('cd.url', $qb->createNamedParameter('')))
+			->andWhere($expr->orX(
+				$expr->isNull('cd.error'),
+				$expr->eq('cd.error', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+			));
+
+		if ($afterCached !== '') {
+			$qb->andWhere($expr->orX(
+				$expr->gt('cd.cached', $qb->createNamedParameter($afterCached)),
+				$expr->andX(
+					$expr->eq('cd.cached', $qb->createNamedParameter($afterCached)),
+					$expr->gt('cd.nid', $qb->createNamedParameter((int)$afterNid, IQueryBuilder::PARAM_INT))
+				)
+			));
+		}
+
+		$qb->orderBy('cd.cached', 'asc')
+			->addOrderBy('cd.nid', 'asc')
+			->setMaxResults($limit);
+
+		$rows = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$rows[] = [
+				'nid' => (string)$data['nid'],
+				'id' => (string)($data['id'] ?? ''),
+				'local_copy' => (string)($data['local_copy'] ?? ''),
+				'resized_copy' => (string)($data['resized_copy'] ?? ''),
+				'cached' => (string)($data['cached'] ?? ''),
+				'actor' => ($data['actor_prim'] ?? null) !== null,
+			];
+		}
+		$cursor->closeCursor();
+
+		return $rows;
+	}
+
+	/**
+	 * Records that a row's copies were purged. The names stay: they are in
+	 * every link this instance has served, and `DocumentService` fetches the
+	 * file again under them when one is next asked for.
+	 */
+	public function markEvicted(int|string $nid): void {
+		$qb = $this->getCacheDocumentsUpdateSql();
+		$qb->set('cached', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL));
+		$qb->limitToNid($nid);
+
+		$qb->executeStatement();
 	}
 
 	public function deleteByParent(string $parentId): void {

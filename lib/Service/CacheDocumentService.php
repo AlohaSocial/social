@@ -58,6 +58,15 @@ class CacheDocumentService {
 	/** How much of a stored file `sniffStored()` reads to recognise it. */
 	private const SNIFF_BYTES = 4096;
 
+	/**
+	 * The names the copies being written take, by role (`local`, `resized`),
+	 * while `restoreRemoteCopy()` runs; empty otherwise, and a fresh uuid is
+	 * drawn for each copy.
+	 *
+	 * @var array<string, string>
+	 */
+	private array $restoring = [];
+
 	public function __construct(
 		private IAppData $appData,
 		private CurlService $curlService,
@@ -256,6 +265,42 @@ class CacheDocumentService {
 	}
 
 	/**
+	 * Fetches a cached remote file again, into the names its row already has.
+	 *
+	 * For a copy the media cache purge took away (`MediaPurgeService::purgeCache()`)
+	 * or that went missing by other means. The names are kept because they
+	 * are what clients hold: `/media/{uuid}` links in every post and account
+	 * this instance has already served. A copy the new fetch does not produce
+	 * (a video poster on a server without ffmpeg) stays missing; one it
+	 * produces where the row had none gets a fresh name.
+	 *
+	 * @throws CacheContentDecodeException
+	 * @throws CacheContentMimeTypeException
+	 * @throws CacheContentSizeException
+	 * @throws MalformedArrayException
+	 * @throws NotFoundException
+	 * @throws NotPermittedException
+	 * @throws RequestContentException
+	 * @throws RequestNetworkException
+	 * @throws RequestResultSizeException
+	 * @throws RequestServerException
+	 * @throws SocialAppConfigException
+	 * @throws UnauthorizedFediverseException
+	 */
+	public function restoreRemoteCopy(Document $document): void {
+		$this->restoring = array_filter(
+			['local' => $document->getLocalCopy(), 'resized' => $document->getResizedCopy()],
+			static fn (string $name): bool => Document::isStoredName($name)
+		);
+
+		try {
+			$this->saveRemoteFileToCache($document);
+		} finally {
+			$this->restoring = [];
+		}
+	}
+
+	/**
 	 * The remote file, on disk, a chunk at a time.
 	 *
 	 * Read as a stream with a ceiling rather than into a string: a video is
@@ -325,7 +370,7 @@ class CacheDocumentService {
 
 		$document->setMediaType($mime);
 		$document->setMimeType($mime);
-		$document->setLocalCopy($this->generateFileFromPath($tmpPath));
+		$document->setLocalCopy($this->generateFileFromPath($tmpPath, $this->restoring['local'] ?? ''));
 		$document->setSizeBytes($size);
 		$this->recordDomainQuota($document, $size);
 	}
@@ -379,7 +424,7 @@ class CacheDocumentService {
 		$document->setMediaType($mime);
 		$document->setMimeType($mime);
 
-		$filename = $this->generateFileFromContent($content);
+		$filename = $this->generateFileFromContent($content, $this->restoring['local'] ?? '');
 		$document->setLocalCopy($filename);
 		// what the stored file weighs, recorded once here rather than measured
 		// on every serialisation: PeerTube drops a video link that carries no
@@ -387,7 +432,7 @@ class CacheDocumentService {
 		$document->setSizeBytes(strlen($content));
 
 		$this->resizeImage($document, $content);
-		$resized = $this->generateFileFromContent($content);
+		$resized = $this->generateFileFromContent($content, $this->restoring['resized'] ?? '');
 		$document->setResizedCopy($resized);
 		$this->recordDomainQuota($document, $size);
 	}
@@ -597,7 +642,7 @@ class CacheDocumentService {
 		$document->setMediaType($mime);
 		$document->setMimeType($mime);
 
-		$document->setLocalCopy($this->generateFileFromPath($tmpPath));
+		$document->setLocalCopy($this->generateFileFromPath($tmpPath, $this->restoring['local'] ?? ''));
 		$document->setSizeBytes((int)filesize($tmpPath));
 
 		if (!str_starts_with($mime, 'video/')) {
@@ -621,7 +666,9 @@ class CacheDocumentService {
 			return;
 		}
 
-		$document->setResizedCopy($this->generateFileFromContent($poster['content']));
+		$document->setResizedCopy(
+			$this->generateFileFromContent($poster['content'], $this->restoring['resized'] ?? '')
+		);
 
 		if ($poster['duration'] > 0) {
 			// what the scrub bar shows before a frame has loaded, and what a
@@ -665,14 +712,14 @@ class CacheDocumentService {
 		return $this->generateFileFromPath($path);
 	}
 
-	private function generateFileFromPath(string $path): string {
+	private function generateFileFromPath(string $path, string $name = ''): string {
 		$source = fopen($path, 'rb');
 		if ($source === false) {
 			throw new NotFoundException('could not read the uploaded file');
 		}
 
 		try {
-			return $this->generateFileFromStream($source);
+			return $this->generateFileFromStream($source, $name);
 		} finally {
 			fclose($source);
 		}
@@ -680,13 +727,14 @@ class CacheDocumentService {
 
 	/**
 	 * @param resource $source
+	 * @param string $name the name to store under; a fresh uuid when ''
 	 *
 	 * @throws NotFoundException
 	 * @throws NotPermittedException
 	 */
-	private function generateFileFromStream($source): string {
-		$filename = $this->uuid();
-		$cache = $this->newCacheFile($filename);
+	private function generateFileFromStream($source, string $name = ''): string {
+		$filename = ($name !== '') ? $name : $this->uuid();
+		$cache = $this->newCacheFile($filename, $name !== '');
 
 		$target = $cache->write();
 		if (!is_resource($target)) {
@@ -713,9 +761,9 @@ class CacheDocumentService {
 	 * @throws NotPermittedException
 	 * @throws NotFoundException
 	 */
-	private function generateFileFromContent(string $content): string {
-		$filename = $this->uuid();
-		$this->newCacheFile($filename)->putContent($content);
+	private function generateFileFromContent(string $content, string $name = ''): string {
+		$filename = ($name !== '') ? $name : $this->uuid();
+		$this->newCacheFile($filename, $name !== '')->putContent($content);
 
 		return $filename;
 	}
@@ -724,13 +772,19 @@ class CacheDocumentService {
 	 * @throws NotFoundException
 	 * @throws NotPermittedException
 	 */
-	private function newCacheFile(string $filename): ISimpleFile {
+	private function newCacheFile(string $filename, bool $reused = false): ISimpleFile {
 		$path = $this->generatePath($filename);
 
 		try {
 			$folder = $this->appData->getFolder($path);
 		} catch (NotFoundException $e) {
 			$folder = $this->appData->newFolder($path);
+		}
+
+		// a restored copy reuses its name, and may find the file it replaces
+		// still there when only the other copy of the pair had gone
+		if ($reused && $folder->fileExists($filename)) {
+			$folder->getFile($filename)->delete();
 		}
 
 		return $folder->newFile($filename);
@@ -916,21 +970,32 @@ class CacheDocumentService {
 	 * Removes a cached copy from appdata; a missing or empty filename is a
 	 * no-op — retention must never abort on a file that is already gone.
 	 *
-	 * The three sentinels are not filenames and never were: `avatar` and
-	 * `header` are served from Nextcloud's own avatar, and a streamed document
-	 * is a pointer at bytes on another server (`Document::COPY_STREAMED`).
-	 * Same list `cachedFileSize()` keeps, for the same reason.
+	 * A name that is not a stored file (`Document::isStoredName()`) is never looked up.
 	 */
 	public function removeFromCache(string $filename): void {
-		if ($filename === '' || $filename === Document::COPY_LOCAL_AVATAR || $filename === 'header'
-			|| $filename === Document::COPY_STREAMED) {
+		if (!Document::isStoredName($filename)) {
 			return;
 		}
 
 		try {
-			$this->appData->getFolder($this->generatePath($filename))
-				->getFile($filename)
-				->delete();
+			$folder = $this->appData->getFolder($this->generatePath($filename));
+		} catch (Exception $e) {
+			return;
+		}
+
+		try {
+			$folder->getFile($filename)->delete();
+		} catch (Exception $e) {
+		}
+
+		// The innermost `aa/bb/cc/dd` folder is named after this one file and
+		// holds nothing else, so left behind it is a filecache row per purged
+		// copy. The levels above it are kept: a listing here shows files only,
+		// so it cannot tell an empty folder above from one with folders in it.
+		try {
+			if ($folder->getDirectoryListing() === []) {
+				$folder->delete();
+			}
 		} catch (Exception $e) {
 		}
 	}
@@ -944,8 +1009,7 @@ class CacheDocumentService {
 	 * which is the case `occ social:media:usage` reports.
 	 */
 	public function cachedFileSize(string $filename): ?int {
-		if ($filename === '' || $filename === Document::COPY_LOCAL_AVATAR || $filename === 'header'
-			|| $filename === Document::COPY_STREAMED) {
+		if (!Document::isStoredName($filename)) {
 			return null;
 		}
 
@@ -968,8 +1032,7 @@ class CacheDocumentService {
 	 * @return string '' when there is no file, or nothing could be made of it
 	 */
 	public function sniffStored(string $uuid): string {
-		if ($uuid === '' || $uuid === Document::COPY_LOCAL_AVATAR || $uuid === 'header'
-			|| $uuid === Document::COPY_STREAMED) {
+		if (!Document::isStoredName($uuid)) {
 			return '';
 		}
 

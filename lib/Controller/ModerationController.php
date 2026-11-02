@@ -63,6 +63,9 @@ class ModerationController extends Controller {
 	/** What one page of the review queue holds. */
 	private const REVIEW_PER_PAGE = 50;
 
+	/** The largest media cache limit the page accepts: 100 TiB, in megabytes. */
+	private const MAX_MEDIA_CACHE_MB = 100 * 1024 * 1024;
+
 	public function __construct(
 		IRequest $request,
 		private ReportService $reportService,
@@ -691,6 +694,24 @@ class ModerationController extends Controller {
 		$this->configService->setAppValue(ConfigService::SOCIAL_RETENTION_DAYS, (string)$days);
 
 		return new DataResponse(['retentionDays' => $days]);
+	}
+
+	/**
+	 * The two limits of the cache of other servers' media: days a copy is
+	 * kept, and megabytes the copies may take up in all. 0 turns either off.
+	 * `Cron\MediaSweep` applies them once a day.
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	#[FrontpageRoute(verb: 'POST', url: '/moderation/media-cache')]
+	public function mediaCache(int $days, int $sizeMb): DataResponse {
+		if ($days < 0 || $days > 3650 || $sizeMb < 0 || $sizeMb > self::MAX_MEDIA_CACHE_MB) {
+			return new DataResponse(['error' => 'invalid media cache limit'], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		$this->configService->setAppValue(ConfigService::SOCIAL_MEDIA_CACHE_DAYS, (string)$days);
+		$this->configService->setAppValue(ConfigService::SOCIAL_MEDIA_CACHE_MB, (string)$sizeMb);
+
+		return new DataResponse(['days' => $days, 'sizeMb' => $sizeMb]);
 	}
 
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]

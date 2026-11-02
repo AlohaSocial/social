@@ -119,6 +119,7 @@ Aloha Social implements ActivityPub, a large part of the Mastodon client API and
 		<command>OCA\Social\Command\Worker</command>
 		<command>OCA\Social\Command\TeamAccount</command>
 		<command>OCA\Social\Command\MediaUsage</command>
+		<command>OCA\Social\Command\MediaPurge</command>
 		<command>OCA\Social\Command\RetryMedia</command>
 		<command>OCA\Social\Command\NoteLike</command>
 		<command>OCA\Social\Command\NoteCreate</command>

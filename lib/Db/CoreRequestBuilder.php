@@ -268,7 +268,8 @@ class CoreRequestBuilder {
 			'laddered',
 			'ai_source',
 			'creation',
-			'caching'
+			'caching',
+			'cached'
 		],
 		self::TABLE_CLIENT => [
 			'id',

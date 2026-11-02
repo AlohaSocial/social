@@ -70,6 +70,7 @@ class MediaUsageService {
 			'rows' => 0,
 			'streamed' => 0,
 			'missing' => 0,
+			'evicted' => 0,
 			'elsewhere' => 0,
 			'files' => 0,
 			'bytes' => 0,
@@ -86,8 +87,7 @@ class MediaUsageService {
 				$after = \OCA\Social\Tools\Nid::compare($after, $row['nid']) > 0 ? $after : $row['nid'];
 				$usage['rows']++;
 
-				$side = str_starts_with($row['id'], $cloudUrl) && $this->looksLocal($row['id'])
-					? 'local' : 'remote';
+				$side = self::isLocalDocumentId($row['id'], $cloudUrl) ? 'local' : 'remote';
 				// the parent being a cached actor is what makes a document that
 				// actor's picture; a local avatar has no parent at all, and is
 				// recognised by the id this app gave it
@@ -204,7 +204,10 @@ class MediaUsageService {
 
 		$size = $this->cacheDocumentService->cachedFileSize($copy);
 		if ($size === null) {
-			$usage['missing']++;
+			// a cached remote copy that is not on disk is fetched again when
+			// it is next asked for, and the purge removes them on purpose; an
+			// upload from here that is not there is lost
+			$usage[($side === 'remote') ? 'evicted' : 'missing']++;
 
 			return;
 		}
@@ -219,7 +222,16 @@ class MediaUsageService {
 		}
 	}
 
-	private function looksLocal(string $id): bool {
+	/**
+	 * Whether a document id is one this instance gave its own upload, avatar
+	 * or banner. The cloud url decides it: another Social instance's
+	 * documents carry the same path shape.
+	 */
+	public static function isLocalDocumentId(string $id, string $cloudUrl): bool {
+		if (!str_starts_with($id, $cloudUrl)) {
+			return false;
+		}
+
 		foreach (self::LOCAL_MARKERS as $marker) {
 			if (str_contains($id, $marker)) {
 				return true;
