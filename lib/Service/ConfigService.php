@@ -787,6 +787,36 @@ class ConfigService {
 	}
 
 	/**
+	 * A value Nextcloud loads only when it is asked for, rather than on
+	 * every request: for bookkeeping too large to be worth that, such as the
+	 * JSON of a measurement (`SOCIAL_MEDIA_USAGE`). Nextcloud warns about any
+	 * value over 128 bytes that is not stored this way.
+	 *
+	 * A value an earlier version stored the other way is not returned by a
+	 * lazy read, so it is moved over first; after that, the check reads only
+	 * what every request has loaded already.
+	 */
+	public function getLazyAppValue(string $key): string {
+		$this->moveToLazy($key);
+
+		return $this->appConfig->getValueString(
+			Application::APP_ID, $key, (string)($this->defaults[$key] ?? ''), lazy: true
+		);
+	}
+
+	/** Stores a value the way `getLazyAppValue()` reads it. */
+	public function setLazyAppValue(string $key, string $value): void {
+		$this->moveToLazy($key);
+		$this->appConfig->setValueString(Application::APP_ID, $key, $value, lazy: true);
+	}
+
+	private function moveToLazy(string $key): void {
+		if ($this->appConfig->hasKey(Application::APP_ID, $key, false)) {
+			$this->appConfig->updateLazy(Application::APP_ID, $key, true);
+		}
+	}
+
+	/**
 	 * remove a key
 	 *
 	 * @param string $key

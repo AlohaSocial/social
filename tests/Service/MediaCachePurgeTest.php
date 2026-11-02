@@ -71,8 +71,8 @@ class MediaCachePurgeTest extends TestCase {
 		$config = $this->createStub(ConfigService::class);
 		$config->method('getCloudUrl')->willReturn(self::CLOUD);
 		$config->method('getAppValueInt')->willReturnCallback(fn (string $key): int => (int)($this->settings[$key] ?? 0));
-		$config->method('getAppValue')->willReturnCallback(fn (string $key): string => $this->written[$key] ?? '');
-		$config->method('setAppValue')->willReturnCallback(function (string $key, string $value): void {
+		$config->method('getLazyAppValue')->willReturnCallback(fn (string $key): string => $this->written[$key] ?? '');
+		$config->method('setLazyAppValue')->willReturnCallback(function (string $key, string $value): void {
 			$this->written[$key] = $value;
 		});
 

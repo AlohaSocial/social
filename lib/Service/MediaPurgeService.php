@@ -57,7 +57,7 @@ class MediaPurgeService {
 	 * @return array<string, mixed>|null
 	 */
 	public function lastCachePurge(): ?array {
-		$stored = (string)$this->configService->getAppValue(ConfigService::SOCIAL_MEDIA_CACHE_PURGED);
+		$stored = $this->configService->getLazyAppValue(ConfigService::SOCIAL_MEDIA_CACHE_PURGED);
 		$purge = ($stored === '') ? null : json_decode($stored, true);
 
 		return is_array($purge) ? $purge : null;
@@ -131,7 +131,7 @@ class MediaPurgeService {
 		}
 
 		if (!$dryRun) {
-			$this->configService->setAppValue(
+			$this->configService->setLazyAppValue(
 				ConfigService::SOCIAL_MEDIA_CACHE_PURGED,
 				(string)json_encode(['purged' => time()] + $result)
 			);

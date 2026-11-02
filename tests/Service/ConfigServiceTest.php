@@ -619,4 +619,60 @@ class ConfigServiceTest extends TestCase {
 
 		$this->assertSame(0, $this->service->getUserValueInt('version', '', 'avatar'));
 	}
+
+	/**
+	 * A measurement's JSON is stored lazily: Nextcloud loads every other
+	 * value on every request, and warns about one over 128 bytes.
+	 */
+	public function testALazyValueIsWrittenAndReadLazily(): void {
+		$this->appConfig->method('hasKey')->willReturn(false);
+		$this->appConfig->expects($this->never())->method('updateLazy');
+		$this->appConfig->expects($this->once())->method('setValueString')
+			->with('social', ConfigService::SOCIAL_MEDIA_USAGE, '{"bytes":1}', true);
+		$this->appConfig->expects($this->once())->method('getValueString')
+			->with('social', ConfigService::SOCIAL_MEDIA_CACHE_PURGED, '', true)
+			->willReturn('{"bytes":2}');
+
+		$this->service->setLazyAppValue(ConfigService::SOCIAL_MEDIA_USAGE, '{"bytes":1}');
+		$this->assertSame('{"bytes":2}', $this->service->getLazyAppValue(ConfigService::SOCIAL_MEDIA_CACHE_PURGED));
+	}
+
+	/**
+	 * An earlier version stored the value the other way, and a lazy read
+	 * does not return such a value: it is moved over first, and then read.
+	 */
+	public function testAValueStoredByAnEarlierVersionIsMovedOverBeforeItIsRead(): void {
+		$lazy = false;
+		$this->appConfig->method('hasKey')->willReturnCallback(
+			static function (string $app, string $key, ?bool $asLazy) use (&$lazy): bool {
+				return $app === 'social' && $key === ConfigService::SOCIAL_MEDIA_USAGE && $asLazy === false && !$lazy;
+			}
+		);
+		$this->appConfig->expects($this->once())->method('updateLazy')
+			->with('social', ConfigService::SOCIAL_MEDIA_USAGE, true)
+			->willReturnCallback(static function () use (&$lazy): bool {
+				$lazy = true;
+
+				return true;
+			});
+		$this->appConfig->method('getValueString')->willReturnCallback(
+			static function (string $app, string $key, string $default, bool $asLazy) use (&$lazy): string {
+				return ($asLazy && $lazy) ? '{"old":true}' : $default;
+			}
+		);
+
+		$this->assertSame('{"old":true}', $this->service->getLazyAppValue(ConfigService::SOCIAL_MEDIA_USAGE));
+		// the second read finds nothing left to move
+		$this->assertSame('{"old":true}', $this->service->getLazyAppValue(ConfigService::SOCIAL_MEDIA_USAGE));
+	}
+
+	public function testAWriteOverAValueStoredByAnEarlierVersionMovesItToo(): void {
+		$this->appConfig->method('hasKey')->willReturn(true);
+		$this->appConfig->expects($this->once())->method('updateLazy')
+			->with('social', ConfigService::SOCIAL_MEDIA_CACHE_PURGED, true);
+		$this->appConfig->expects($this->once())->method('setValueString')
+			->with('social', ConfigService::SOCIAL_MEDIA_CACHE_PURGED, '{}', true);
+
+		$this->service->setLazyAppValue(ConfigService::SOCIAL_MEDIA_CACHE_PURGED, '{}');
+	}
 }
