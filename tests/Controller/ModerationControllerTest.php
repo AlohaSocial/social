@@ -254,6 +254,38 @@ class ModerationControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->retention(99999)->getStatus());
 	}
 
+	public function testTheMediaCacheLimitsAreStoredTogether(): void {
+		$written = [];
+		$this->configService->method('setAppValue')->willReturnCallback(
+			static function (string $key, string $value) use (&$written): void {
+				$written[$key] = $value;
+			}
+		);
+
+		$response = $this->controller->mediaCache(30, 5120);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['days' => 30, 'sizeMb' => 5120], $response->getData());
+		$this->assertSame([
+			ConfigService::SOCIAL_MEDIA_CACHE_DAYS => '30',
+			ConfigService::SOCIAL_MEDIA_CACHE_MB => '5120',
+		], $written);
+	}
+
+	public function testZeroTurnsAMediaCacheLimitOff(): void {
+		$this->assertSame(Http::STATUS_OK, $this->controller->mediaCache(0, 0)->getStatus());
+	}
+
+	public function testTheMediaCacheLimitsRefuseWhatIsOutOfRangeAndWriteNothing(): void {
+		$this->configService->expects($this->never())->method('setAppValue');
+
+		foreach ([[-1, 10], [3651, 10], [30, -1], [30, 200 * 1024 * 1024]] as [$days, $mb]) {
+			$this->assertSame(
+				Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->mediaCache($days, $mb)->getStatus()
+			);
+		}
+	}
+
 	public function testFediverseAccessRejectsAnUnknownType(): void {
 		$this->fediverseService->method('setAccessType')
 			->willThrowException(new \Exception('invalid type'));

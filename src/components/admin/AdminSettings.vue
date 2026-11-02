@@ -213,6 +213,8 @@ const NOTHING = {
 	accessList: [],
 	retentionDays: 0,
 	storage: null,
+	/** @type {?{days: number, sizeMb: number, lastPurge: ?object}} the media cache limits */
+	mediaCache: null,
 	/** @type {?object} what each section is switched to; administrators only */
 	sections: null,
 	/** @type {?Array<{id: string, name: string}>} the groups a list may follow; administrators only */
@@ -672,10 +674,10 @@ export default {
 					group: 'server',
 					icon: 'IconStorage',
 					component: 'StorageSection',
-					props: { storage: state.storage, videoStorage: state.videoStorage },
+					props: { storage: state.storage, videoStorage: state.videoStorage, mediaCache: state.mediaCache },
 					title: t('social', 'Storage'),
-					lede: t('social', 'What Aloha Social keeps on disk, measured once a day.'),
-					keywords: t('social', 'disk space media cache'),
+					lede: t('social', 'What Aloha Social keeps on disk, measured once a day, and how much media from other servers it keeps.'),
+					keywords: t('social', 'disk space media cache purge limit'),
 				},
 				{
 					id: 'background',

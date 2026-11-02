@@ -105,20 +105,20 @@ class MediaUsage extends SocialCommand {
 			$files = $usage[$side]['attachments']['files'] + $usage[$side]['avatars']['files'];
 			$bytes = $usage[$side]['attachments']['bytes'] + $usage[$side]['avatars']['bytes'];
 
-			$output->writeln(sprintf('<info>%-28s</info> %6d files  %10s', $title, $files, $this->human($bytes)));
+			$output->writeln(sprintf('<info>%-28s</info> %6d files  %10s', $title, $files, self::human($bytes)));
 			$output->writeln(sprintf(
 				'  %-26s %6d files  %10s', 'attachments',
-				$usage[$side]['attachments']['files'], $this->human($usage[$side]['attachments']['bytes'])
+				$usage[$side]['attachments']['files'], self::human($usage[$side]['attachments']['bytes'])
 			));
 			$output->writeln(sprintf(
 				'  %-26s %6d files  %10s', 'avatars and headers',
-				$usage[$side]['avatars']['files'], $this->human($usage[$side]['avatars']['bytes'])
+				$usage[$side]['avatars']['files'], self::human($usage[$side]['avatars']['bytes'])
 			));
 		}
 
 		$output->writeln('');
 		$output->writeln(sprintf(
-			'<info>%-28s</info> %6d files  %10s', 'Total on disk', $usage['files'], $this->human($usage['bytes'])
+			'<info>%-28s</info> %6d files  %10s', 'Total on disk', $usage['files'], self::human($usage['bytes'])
 		));
 
 		if ($usage['streamed'] > 0) {
@@ -131,10 +131,16 @@ class MediaUsage extends SocialCommand {
 				$usage['elsewhere'] . ' copy/copies are served from Nextcloud\'s own avatar store rather than from this app'
 			);
 		}
+		if (($usage['evicted'] ?? 0) > 0) {
+			$output->writeln(
+				$usage['evicted'] . ' cached remote copy/copies are not on disk (purged, or gone); each is'
+				. ' fetched again when it is next viewed'
+			);
+		}
 		if ($usage['missing'] > 0) {
 			$output->writeln(
-				'<comment>' . $usage['missing'] . ' copy/copies are named by a row but are not in appdata'
-				. '; a cached remote one is fetched again when it is next asked for</comment>'
+				'<comment>' . $usage['missing'] . ' copy/copies of uploads from here are named by a row but are'
+				. ' not in appdata</comment>'
 			);
 		}
 	}
@@ -143,7 +149,7 @@ class MediaUsage extends SocialCommand {
 	 * Bytes as an administrator reads them. Powers of two, because that is
 	 * what `du` and the Files app report.
 	 */
-	private function human(int $bytes): string {
+	public static function human(int $bytes): string {
 		$units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
 		$value = (float)$bytes;
 		$unit = 0;

@@ -382,6 +382,35 @@ to, or anything by an account somebody here follows. The cron pass removes up to
 5,000 posts a run; `occ social:stream:prune` removes all of them at once. Their
 cached media goes with them, and the orphaned-media sweep takes what is left.
 
+### The media cache fills the disk
+
+Every picture and video in a post from another server, and every remote
+account's avatar and header, is copied into appdata
+(`appdata_<instanceid>/social/<2-hex>/…`) so it loads quickly. Retention and the
+orphaned-media sweep only reach the copies whose post or account goes; the
+copies on posts that are kept — everything by an account somebody here follows
+— are bounded by the two media cache limits alone. `Cron\MediaSweep` applies
+them once a day: copies older than `media_cache_days` (default 30) go, and then
+the oldest go until the rest fit in `media_cache_mb` (default 5120, i.e. 5 GiB).
+`0` turns either off. Both are on the Storage card, which also shows what the
+last run removed.
+
+A deleted copy is fetched again from its origin the next time somebody looks at
+it, under the same name, so links already handed out keep working; one whose
+origin has since deleted it stays missing. Uploads from here are never touched.
+
+```bash
+occ social:media:usage                        # what is on disk, uploads and cache apart
+occ social:media:purge --dry-run              # what the configured limits would remove now
+occ social:media:purge --max-size=2G          # trim to 2 GiB now, oldest first
+occ social:media:purge --all                  # empty the cache
+```
+
+Do not delete the hash folders by hand: Nextcloud's file cache keeps listing
+the files, and nothing marks the rows to be fetched again. Should it have
+happened, the next purge marks the rows whose files are gone (it says how many)
+and those copies come back on demand.
+
 ### No memory cache
 
 Without `memcache.local` or `memcache.distributed` in `config.php`, every cache
@@ -757,10 +786,13 @@ Federation health widget to `#federation`.
   instances had neither.
 - **Retention** — how long remote statuses nobody here cares about are kept.
 - **Storage** — what is on disk, split into what was posted here (somebody's
-  own work, not going anywhere) and what is cached from other servers (what
-  Retention removes). Added up by the background job once a day, because
-  counting it is one file lookup per stored file; the page says when it was
-  measured. `occ social:media:usage` measures it on demand.
+  own work, not going anywhere) and what is cached from other servers. Added up
+  by the background job once a day, because counting it is one file lookup per
+  stored file; the page says when it was measured. `occ social:media:usage`
+  measures it on demand. Below the figures, the two limits of the cache of
+  other servers' media — days a copy is kept (default 30) and the most it may
+  take up (default 5 GiB) — and what the daily purge last removed. See
+  [The media cache fills the disk](#the-media-cache-fills-the-disk).
 
   Not a card, but the thing to know beside this one: a **rejected remote
   attachment** — after changing this instance's media limits or fixing a
@@ -1085,6 +1117,7 @@ the moderation routes accept.
 | `social_address` | *(empty)* | The hostname accounts are federated under, when it is not the host of `cloud_url`. Only set this if the fediverse address genuinely differs from the Nextcloud host, and only before the first account exists. |
 | `service` | `1` | Unused; a leftover of the original installer. |
 | `installed_version` | | Written by the upgrade machinery. |
+| `media_cache_purged` | *(written by the purge)* | What the last purge of the media cache removed, as JSON with the moment it ran: files and bytes, per kind, and the rows whose files were already gone. Written by `Cron\MediaSweep` and by `occ social:media:purge` (not by a dry run); the Storage card shows it. Bookkeeping, not a setting. |
 | `media_usage` | *(written by the job)* | The last measurement of what is on disk, as JSON with the moment it was taken. Bookkeeping, not a setting: the walk is a `stat` per stored file and belongs in the cron, so the administration page reads this rather than counting on page load. |
 | `directory_known` | *(written by the job)* | What `Cron\Cache` last found out about the servers the Discover page may ask: the `fediverse.info` server list and each federated peer's NodeInfo software, as JSON with when each was read. Bookkeeping, not a setting: the page reads this rather than asking those servers while somebody waits. |
 | `polls_swept` | `0` | How far the closed-poll sweep has got, as a timestamp. |
@@ -1160,6 +1193,8 @@ settings page, which validates the ranges given here; every one can be set with
 | `interests_cap` | `30` | Legacy limit for the number of listed hashtag interests. |
 | `interests_window` | `7` | Legacy compatibility timeline lookback window, in days. |
 | `cache_actor_days` | `180` | Days to keep a cached remote account nobody here refers to any more — not followed, not following, no post stored, no relation pending — before `Cron\Cache` evicts it with its avatar. `0` disables the sweep. |
+| `media_cache_days` | `30` | Days to keep a cached copy of another server's media — an attachment, or a remote account's avatar or header — before `Cron\MediaSweep` deletes it; it is fetched again when somebody next looks at it. `0` disables the age limit. Set from the Storage card. See [The media cache fills the disk](#the-media-cache-fills-the-disk). |
+| `media_cache_mb` | `5120` | Megabytes the cached copies of other servers' media may take up in all; `Cron\MediaSweep` deletes the oldest until they fit. `0` disables the size limit. Set from the Storage card. |
 | `atproto_oauth_trusted` | `[]` | The Bluesky apps an administrator vouches for, by OAuth client id, as a JSON array: the Bluesky sign-in consent page shows those apps' own name and logo, which it never takes from an app on its own word. Set from the Bluesky card. |
 
 ### Moderation and federation
@@ -1342,6 +1377,7 @@ administrator's choice.
 
 ```bash
 occ social:stream:prune             # apply retention, purge finished queue rows and old notifications
+occ social:media:purge              # apply the media cache limits now (see --help for one-off limits)
 occ social:cache:refresh            # re-fetch cached remote accounts
 occ social:domain:purge <instance>  # remove what a now-blocked instance sent
 ```
@@ -1435,9 +1471,10 @@ releases allowed — keeping the accepted one, and gives `social_stream_dest` an
 Those releases run on Nextcloud up to 34, and that is the path the upgrade is
 tested on: upgrade the app on Nextcloud 34 first, then Nextcloud.
 
-Two settings exist for size and are listed above: `search_window_days` bounds
-what a content search scans when it cannot use its word index, and `retention_days` bounds what cached remote
-media costs. Both trade completeness for a bounded cost, and the default of each
+Settings exist for size and are listed above: `search_window_days` bounds
+what a content search scans when it cannot use its word index, `retention_days` bounds the remote posts kept,
+and `media_cache_days` and `media_cache_mb` bound what cached remote media
+costs. Both trade completeness for a bounded cost, and the default of each
 is the one a medium instance wants.
 
 `occ social:benchmark` seeds a realistic amount of content and times the
@@ -1453,9 +1490,9 @@ of this costs on the hardware in front of you.
 - **`social.log` / the Nextcloud log.** Signature verification failures on
   inbound requests, and `could not federate` warnings on outbound ones.
 - **Disk.** Cached remote attachments are the largest thing this app stores.
-  `retention_days` is what bounds them; on an instance that federates widely,
-  leaving it at `0` means keeping every picture anybody here ever scrolled
-  past.
+  `media_cache_days` and `media_cache_mb` are what bound them (30 days and
+  5 GiB by default); turning both to `0` means keeping every picture anybody
+  here ever scrolled past.
 - **The audit log**, if `admin_audit` is enabled: every moderation decision,
   with the moderator who took it.
 # Ranked For You recommendations switch

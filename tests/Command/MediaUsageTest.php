@@ -138,13 +138,29 @@ class MediaUsageTest extends TestCase {
 	 */
 	public function testACopyThatIsNotInAppdataIsReportedRatherThanCountedAsNothing(): void {
 		$this->documentsAre([
-			['id' => 'https://remote.example/media/fff', 'local_copy' => 'vanished'],
+			['id' => self::CLOUD . '/documents/local/fff', 'local_copy' => 'vanished'],
 		], []);
 
 		$usage = $this->json();
 
 		$this->assertSame(1, $usage['missing']);
 		$this->assertSame(0, $usage['files']);
+		$this->assertSame(0, $usage['bytes']);
+	}
+
+	/**
+	 * A cached remote copy that is not on disk was purged, or is fetched
+	 * again anyway when it is next viewed: not a lost file.
+	 */
+	public function testACachedRemoteCopyThatIsNotOnDiskIsCountedAsEvicted(): void {
+		$this->documentsAre([
+			['id' => 'https://remote.example/media/fff', 'local_copy' => 'purged'],
+		], []);
+
+		$usage = $this->json();
+
+		$this->assertSame(1, $usage['evicted']);
+		$this->assertSame(0, $usage['missing']);
 		$this->assertSame(0, $usage['bytes']);
 	}
 

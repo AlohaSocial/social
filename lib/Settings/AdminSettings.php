@@ -18,6 +18,7 @@ use OCA\Social\Service\ExternalAdminState;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\MediaPurgeService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\NotificationPolicyService;
@@ -73,6 +74,7 @@ class AdminSettings implements IDelegatedSettings {
 		private PostReviewService $postReviewService,
 		private StreamRequest $streamRequest,
 		private MediaUsageService $mediaUsageService,
+		private MediaPurgeService $mediaPurgeService,
 		private VideoQuotaService $videoQuotaService,
 		private SensitiveMediaService $sensitiveMediaService,
 		private FederationHealthService $federationHealthService,
@@ -147,6 +149,13 @@ class AdminSettings implements IDelegatedSettings {
 			// what is on disk, as the cron last measured it: adding it up is a
 			// `stat` per stored file and has no business in a page load
 			'storage' => $this->mediaUsageService->lastMeasured(),
+			// the two limits the daily purge of other servers' media applies,
+			// and what it last removed
+			'mediaCache' => [
+				'days' => $this->mediaPurgeService->cacheDays(),
+				'sizeMb' => intdiv($this->mediaPurgeService->cacheBytes(), 1024 * 1024),
+				'lastPurge' => $this->mediaPurgeService->lastCachePurge(),
+			],
 			// who is holding the video, which is the one question a full disk
 			// actually raises and the one the storage figures could not answer.
 			// Live rather than from the last measurement: it is one grouped

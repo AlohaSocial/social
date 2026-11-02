@@ -43,7 +43,8 @@ class MediaPurgeServiceTest extends TestCase {
 		);
 
 		$this->service = new MediaPurgeService(
-			$this->cacheDocumentsRequest, $this->cacheDocumentService, new NullLogger()
+			$this->cacheDocumentsRequest, $this->cacheDocumentService,
+			$this->createStub(\OCA\Social\Service\ConfigService::class), new NullLogger()
 		);
 	}
 

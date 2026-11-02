@@ -24,7 +24,7 @@ What it does:
 - 🎬 A Videos timeline, including the videos from PeerTube channels anyone here follows: streamed from the instance that holds them rather than copied here, and proxied so no viewer's address reaches a server they never chose
 - 📡 Videos posted here federate as ActivityPub Video objects filed under a channel, which is what PeerTube needs before it will take one at all, with a poster frame, byte-range seeking and a 2 GB ceiling of their own
 - ▶️ A video opens on a watch page: its title, the channel with a Subscribe button, its chapters as links that seek, and where you stopped offered back as continue watching. Every channel and account has an RSS feed with an enclosure per video
-- 🪜 An administrator can have each stored video written at a ladder of smaller sizes as HLS, so a player picks what the connection carries; and can set a per-account video quota, see who is holding the disk, choose what happens to media marked sensitive, and hold every post with a video for a moderator
+- 🪜 An administrator can have each stored video written at a ladder of smaller sizes as HLS, so a player picks what the connection carries; and can set a per-account video quota, see who is holding the disk, keep the copies of other servers' media within an age and a size (30 days and 5 GiB by default; a deleted copy is fetched again when somebody looks at it), choose what happens to media marked sensitive, and hold every post with a video for a moderator
 - 📥 A channel can be brought over from PeerTube's own export, or a single video by its address
 - 🎨 Filters in the composer and a profile that draws as a grid
 - 🗂️ Collections, 24-hour shorts and places
@@ -154,6 +154,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<command>OCA\Social\Command\Worker</command>
 		<command>OCA\Social\Command\TeamAccount</command>
 		<command>OCA\Social\Command\MediaUsage</command>
+		<command>OCA\Social\Command\MediaPurge</command>
 		<command>OCA\Social\Command\RetryMedia</command>
 		<command>OCA\Social\Command\NoteLike</command>
 		<command>OCA\Social\Command\NoteCreate</command>

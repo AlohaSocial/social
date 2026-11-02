@@ -59,7 +59,8 @@ class CacheActorSweepServiceTest extends TestCase {
 			// the real one: the read-then-remove-then-delete sequence it holds
 			// is what this test is about, and every other caller uses the same
 			new MediaPurgeService(
-				$this->cacheDocumentsRequest, $this->cacheDocumentService, new NullLogger()
+				$this->cacheDocumentsRequest, $this->cacheDocumentService,
+				$this->createStub(\OCA\Social\Service\ConfigService::class), new NullLogger()
 			),
 			new NullLogger(),
 			$time
