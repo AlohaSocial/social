@@ -74,9 +74,11 @@ class MediaUsageServiceTest extends TestCase {
 
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getCloudUrl')->willReturn(self::CLOUD);
-		$this->configService->method('getAppValue')
+		// stored lazily: the JSON is far over the 128 bytes Nextcloud loads on
+		// every request without complaint
+		$this->configService->method('getLazyAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
-		$this->configService->method('setAppValue')
+		$this->configService->method('setLazyAppValue')
 			->willReturnCallback(function (string $key, string $value): void {
 				$this->appValues[$key] = $value;
 			});

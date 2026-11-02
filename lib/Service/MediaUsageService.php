@@ -115,7 +115,7 @@ class MediaUsageService {
 	public function measureAndStore(): array {
 		$usage = $this->measure();
 		$usage['measured'] = time();
-		$this->configService->setAppValue(
+		$this->configService->setLazyAppValue(
 			ConfigService::SOCIAL_MEDIA_USAGE, (string)json_encode($usage)
 		);
 
@@ -138,7 +138,7 @@ class MediaUsageService {
 	 * @return array<string, mixed>|null
 	 */
 	public function lastMeasured(): ?array {
-		$stored = (string)$this->configService->getAppValue(ConfigService::SOCIAL_MEDIA_USAGE);
+		$stored = $this->configService->getLazyAppValue(ConfigService::SOCIAL_MEDIA_USAGE);
 		if ($stored === '') {
 			return null;
 		}
