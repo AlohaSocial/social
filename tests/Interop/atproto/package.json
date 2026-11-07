@@ -7,8 +7,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@atproto/bsky": "0.3.8",
-    "@atproto/dev-env": "0.6.30",
+    "@atproto/bsky": "0.5.4",
+    "@atproto/dev-env": "0.7.5",
     "@atproto/lex-password-session": "0.3.0",
     "@atproto/oauth-client-node": "0.5.12"
   },
