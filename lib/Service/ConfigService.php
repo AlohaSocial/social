@@ -952,6 +952,14 @@ class ConfigService {
 	}
 
 	/**
+	 * Whether this server may reach the internet at all: Nextcloud's own
+	 * `has_internet_connection`, true unless an administrator says otherwise.
+	 */
+	public function hasInternetConnection(): bool {
+		return $this->config->getSystemValueBool('has_internet_connection', true);
+	}
+
+	/**
 	 * Whether outbound requests may reach the instance's own network.
 	 *
 	 * The standard Nextcloud setting, off by default; the single switch every

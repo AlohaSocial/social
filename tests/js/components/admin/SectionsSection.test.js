@@ -56,16 +56,18 @@ describe('the sections card', () => {
 			'24-hour shorts': true,
 			Photos: true,
 			Videos: true,
+			'Animated emoji in the GIF picker': true,
 		})
 	})
 
 	it('shows what was turned off as off', () => {
-		const settings = { stories: false, section_photos: false, section_videos: true }
+		const settings = { stories: false, section_photos: false, section_videos: true, gif_pack: false }
 
 		expect(state(mountCard(settings))).toEqual({
 			'24-hour shorts': false,
 			Photos: false,
 			Videos: true,
+			'Animated emoji in the GIF picker': false,
 		})
 	})
 
@@ -103,8 +105,20 @@ describe('the sections card', () => {
 			photos: true,
 			videos: false,
 			groupLists: [],
+			gifPack: true,
 		})
 		expect(showSuccess).toHaveBeenCalledWith('Saved')
+	})
+
+	it('names where the animated emoji are fetched from', () => {
+		const wrapper = mountCard({ gif_pack_source: 'fonts.gstatic.com' })
+
+		expect(wrapper.text()).toContain('fetches each picture once from fonts.gstatic.com (Google)')
+		expect(wrapper.text()).not.toContain('has_internet_connection is false')
+	})
+
+	it('says nothing is fetched on a server without internet', () => {
+		expect(mountCard({ has_internet_connection: false }).text()).toContain('has_internet_connection is false in config.php')
 	})
 
 	it('does not write anything until Save is pressed', async () => {

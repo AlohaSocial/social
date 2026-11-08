@@ -34,6 +34,7 @@ class SectionsService {
 		ConfigService::SOCIAL_SECTION_PHOTOS,
 		ConfigService::SOCIAL_SECTION_VIDEOS,
 		ConfigService::SOCIAL_GROUP_LISTS,
+		ConfigService::SOCIAL_GIF_PACK,
 	];
 
 	/**
@@ -51,8 +52,13 @@ class SectionsService {
 	/**
 	 * What stands now, typed the way the page and the endpoint hand it back.
 	 *
+	 * `gif_pack_source` and `has_internet_connection` are not settings of the
+	 * card: they tell the administrator where the pack comes from, and that
+	 * Nextcloud's own setting keeps it from being fetched.
+	 *
 	 * @return array{stories: bool, section_photos: bool, section_videos: bool,
-	 *     group_lists: string[]}
+	 *     group_lists: string[], gif_pack: bool, gif_pack_source: string,
+	 *     has_internet_connection: bool}
 	 */
 	public function current(): array {
 		return [
@@ -62,6 +68,9 @@ class SectionsService {
 			ConfigService::SOCIAL_SECTION_VIDEOS
 				=> $this->configService->getAppValueBool(ConfigService::SOCIAL_SECTION_VIDEOS),
 			ConfigService::SOCIAL_GROUP_LISTS => $this->groupLists(),
+			ConfigService::SOCIAL_GIF_PACK => $this->configService->getAppValueBool(ConfigService::SOCIAL_GIF_PACK),
+			'gif_pack_source' => GifPackService::sourceHost(),
+			'has_internet_connection' => $this->configService->hasInternetConnection(),
 		];
 	}
 
@@ -116,11 +125,12 @@ class SectionsService {
 	 * @param bool $photos whether the Photos timeline is offered
 	 * @param bool $videos whether the Videos timeline is offered
 	 * @param string[] $groupLists the Nextcloud groups that become lists
+	 * @param bool|null $gifPack whether the composer offers the animated emoji pack; null leaves it
 	 *
 	 * @return array what current() answers afterwards
 	 * @throws InvalidArgumentException naming the field that was refused; SettingRefusedException with its code
 	 */
-	public function save(bool $stories, bool $photos, bool $videos, array $groupLists): array {
+	public function save(bool $stories, bool $photos, bool $videos, array $groupLists, ?bool $gifPack = null): array {
 		$groups = [];
 		foreach ($groupLists as $groupId) {
 			if (!is_string($groupId)) {
@@ -150,6 +160,9 @@ class SectionsService {
 		$this->configService->setAppValue(ConfigService::SOCIAL_SECTION_PHOTOS, $photos ? '1' : '0');
 		$this->configService->setAppValue(ConfigService::SOCIAL_SECTION_VIDEOS, $videos ? '1' : '0');
 		$this->configService->setAppValue(ConfigService::SOCIAL_GROUP_LISTS, json_encode($groups));
+		if ($gifPack !== null) {
+			$this->configService->setAppValue(ConfigService::SOCIAL_GIF_PACK, $gifPack ? '1' : '0');
+		}
 
 		return $this->current();
 	}

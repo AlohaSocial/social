@@ -53,6 +53,7 @@ class GifPackServiceTest extends TestCase {
 
 		$this->config = $this->createStub(ConfigService::class);
 		$this->config->method('getAppValueBool')->willReturn(true);
+		$this->config->method('hasInternetConnection')->willReturn(true);
 
 		$this->service = new GifPackService(
 			$appData, $this->curl, $urlGenerator, $this->config, new NullLogger()
@@ -246,6 +247,29 @@ class GifPackServiceTest extends TestCase {
 
 			return $body;
 		};
+	}
+
+	/**
+	 * Nextcloud's `has_internet_connection => false`: nothing is fetched, and
+	 * no picker of pictures that could never arrive is offered.
+	 */
+	public function testAServerWithoutInternetOffersNoPackAndFetchesNothing(): void {
+		$appData = $this->createStub(IAppData::class);
+		$appData->method('getFolder')->willReturn($this->folder);
+		$config = $this->createStub(ConfigService::class);
+		$config->method('getAppValueBool')->willReturn(true);
+		$config->method('hasInternetConnection')->willReturn(false);
+		$service = new GifPackService($appData, $this->curl, $this->createStub(IURLGenerator::class), $config, new NullLogger());
+		$this->curl->expects($this->never())->method('doRequest');
+
+		$this->assertFalse($service->enabled());
+		$this->assertSame([], $service->all());
+		$this->expectException(NotFoundException::class);
+		$service->file('noto-1f600');
+	}
+
+	public function testTheSourceIsNamedForTheAdministrator(): void {
+		$this->assertSame('fonts.gstatic.com', GifPackService::sourceHost());
 	}
 
 	private function serviceWithPackOff(): GifPackService {

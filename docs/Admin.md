@@ -773,6 +773,9 @@ Federation health widget to `#federation`.
   federates, but a group list does tell everybody in the group who else is in
   it -- which is why no group becomes one until an administrator chooses.
   Deselecting a group takes its lists away on the next cron reconcile.
+  The last switch is the *animated emoji* in the GIF picker (`gif_pack`, on by
+  default), and the card says where they come from: the server fetches each
+  picture once from Google's `fonts.gstatic.com`.
   Administrators only, not delegates.
 - **Accounts** — every account this instance knows, whether or not anybody has
   complained. Search by username, by handle or by instance, filter by origin
@@ -1234,7 +1237,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `allow_self_signed` | `0` | Accept peers whose certificates do not check out. **Development only**: on a server anybody else uses, this hands every federated request to whoever can answer for the address. |
 | `hide_instance_counts` | `0` | Keep the number of accounts and posts out of the public instance metadata, which anybody can read without logging in and fediverse crawlers collect: `/api/v1/instance` and `/api/v2/instance` then report `0`, NodeInfo leaves `usage.users.total` and `usage.localPosts` out, and `/api/v1/instance/activity` reports `0` posts a week. Either way the account count is the accounts of this app — local accounts that are not deleted or suspended — never every Nextcloud user. Set from the Server card. |
 | `stories` | `1` | Whether this instance offers Shorts — a picture or a video that is gone in a day. Off, the bar goes from the timeline and nothing new is taken; what was posted expires as it would have. Set from the Sections card. |
-| `gif_pack` | `1` | Whether the composer offers the animated emoji pack. What ships is the list, not the pictures: `Cron\GifPack` fetches the first screenful into appdata ahead of time and the rest are fetched as somebody picks them. `0` fetches nothing and leaves the picker with what `occ social:gif add` added. |
+| `gif_pack` | `1` | Whether the composer offers the animated emoji pack (Google's Noto Animated Emoji). What ships is the list, not the pictures: the server fetches each picture once from `fonts.gstatic.com` and keeps it in appdata — `Cron\GifPack` the first screenful ahead of time, the rest as somebody picks them. Readers' browsers only ever ask this server. `0` fetches nothing and leaves the picker with what `occ social:gif add` added. On a server whose `config.php` sets `has_internet_connection` to `false` the pack is not offered and nothing is fetched, whatever this says. Set from the Features card. |
 | `section_photos` | `1` | Whether the Photos section is offered in the sidebar: the same posts read through one filter. Turning it off hides the section and stops it being offered; the posts are not touched, and turning it back on shows them again. Set from the Sections card. |
 | `section_videos` | `1` | The same for the Videos section. |
 | `group_lists` | `[]` | Which Nextcloud groups become lists for their members, as a JSON array of group ids; at most 100. Empty is no groups, which is the default: every group a person was in used to become a list, which tells everybody in a group who else is in it. A group that no longer exists is dropped when the setting is read, not written back. Set from the Sections card. |
@@ -1311,9 +1314,10 @@ Two `config.php` values, neither documented anywhere else:
 | `social.checkssl` | `true` | Whether the WebFinger setup check verifies the certificate it is offered. Set it to `false` on an instance using a certificate the server itself does not trust. It affects the probe only — federation still verifies. |
 | `social.tests` | *(unset)* | Enables `GET /apps/social/test/{account}/`, a WebFinger self-test. Leave it unset outside development. |
 
-And one of Nextcloud's own that matters here: `allow_local_remote_servers`,
+And two of Nextcloud's own that matter here: `allow_local_remote_servers`,
 which must be on for an instance to federate with anything on a private
-address. That is a development arrangement.
+address — a development arrangement — and `has_internet_connection`, which,
+set to `false`, stops the animated emoji pack being offered or fetched.
 
 ---
 
