@@ -1037,6 +1037,7 @@ describe('Navigation', () => {
 			'Statistics',
 			'Blocking',
 			'Migration',
+			'About this server',
 			'Settings',
 		])
 	})
@@ -1056,6 +1057,7 @@ describe('Navigation', () => {
 			'Statistics',
 			'Blocking',
 			'Migration',
+			'About this server',
 			'Settings',
 		])
 
@@ -1215,6 +1217,7 @@ describe('Navigation', () => {
 		['Statistics', { name: 'statistics' }],
 		['Follow requests', { name: 'follow-requests' }],
 		['Bookmarks', { name: 'timeline', params: { type: 'bookmarks' } }],
+		['About this server', { name: 'about' }],
 		['Settings', { name: 'settings' }],
 	])('points the %s entry at its route', async (name, to) => {
 		// an href so it is a real link, and a click that stays in the app: with

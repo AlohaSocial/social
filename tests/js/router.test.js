@@ -419,6 +419,7 @@ describe('the reader\'s own pages', () => {
 	const ownPages = [
 		'/settings',
 		'/statistics',
+		'/about',
 		'/migration',
 		'/switch',
 		'/follow_requests',

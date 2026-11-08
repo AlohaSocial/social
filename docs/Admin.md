@@ -753,6 +753,10 @@ Federation health widget to `#federation`.
   what is refused here is exactly what the command refuses.
 - **Server rules** — one per line. Every client shows them to
   somebody deciding whether to join, and `/api/v1/instance/rules` serves them.
+  People signed in here read them on the **About this server** page in the
+  account menu, together with the contact address and account (`contact_email`,
+  `contact_account`) and Theming's *Privacy policy link* and *Legal notice
+  link*; a report for a rules violation names them.
   Both this and the emoji were `occ`-only until now, which is why most
   instances had neither.
 - **Retention** — how long remote statuses nobody here cares about are kept.

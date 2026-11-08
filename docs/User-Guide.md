@@ -956,6 +956,11 @@ see its settings, or type into **Find a setting** to search all of them at once.
 Every change is saved as you make it; there is no Save button to forget, except
 in a form you fill in, such as the portfolio.
 
+**About this server.** The account menu also has **About this server**: the
+server's rules, who to contact about it (an address, an account or both), and
+links to its privacy policy and legal notice, where the administrators have set
+them.
+
 **Pronouns and a support link.** Two of the four profile fields on **Edit
 profile** have boxes of their own, because this app draws them differently: the
 pronouns appear beside your name rather than in the table at the bottom, and a

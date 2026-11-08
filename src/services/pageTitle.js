@@ -36,6 +36,7 @@ const ROUTE_TITLES = {
 	settings: () => t('social', 'Settings'),
 	discover: () => t('social', 'Discover'),
 	statistics: () => t('social', 'Statistics'),
+	about: () => t('social', 'About this server'),
 	'blocked-accounts': () => t('social', 'Blocking'),
 	'follow-requests': () => t('social', 'Follow requests'),
 	migration: () => t('social', 'Migration'),

@@ -34,6 +34,7 @@ const Migration = () => import(/* webpackChunkName: "migration" */'./views/Migra
 const SwitchWizard = () => import(/* webpackChunkName: "switch" */'./views/SwitchWizard.vue')
 const Settings = () => import(/* webpackChunkName: "settings" */'./views/Settings.vue')
 const Statistics = () => import(/* webpackChunkName: "statistics" */'./views/Statistics.vue')
+const About = () => import(/* webpackChunkName: "about" */'./views/About.vue')
 const Search = () => import('./components/Search.vue')
 const VideoShorts = () => import(/* webpackChunkName: "shorts" */'./views/VideoShorts.vue')
 const NotFound = () => import(/* webpackChunkName: "not-found" */'./views/NotFound.vue')
@@ -451,6 +452,15 @@ const router = createRouter({
 				default: Statistics,
 			},
 			name: 'statistics',
+			meta: { signedIn: true },
+		},
+		{
+			// the server's rules, contact and legal links, for the people on it
+			path: '/about',
+			components: {
+				default: About,
+			},
+			name: 'about',
 			meta: { signedIn: true },
 		},
 		{
