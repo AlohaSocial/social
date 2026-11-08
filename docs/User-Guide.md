@@ -179,7 +179,15 @@ short message says so. An attachment that is still uploading cannot be kept
 yet, so leaving the page while one is on its way asks you first. A draft is
 kept for a week, for your account only. A reply keeps its own draft, under the
 post it answers, and so does a quote, so starting one does not take the place
-of a post you were still writing.
+of a post you were still writing. A resumed reply keeps the audience you chose
+for it. Opening a post is not a draft: a reply that holds only the names it is
+addressed to is not kept. **Drafts (N)** under the compact post field on your
+home feed and your own profile (and beside **Share photos or a video** on
+Photos) lists every kept draft — new posts, replies, quotes and re-drafts —
+newest first; pick one to continue it, or delete it there. A re-draft of a
+deleted reply or quote is still that reply or quote: the post it answered and
+the post it quoted come back with it, shown above the box. If the post it
+answered is gone, none is shown and the re-draft goes out on its own.
 **Ctrl+Enter** (**⌘+Enter** on a Mac) sends from the full composer. Closing the
 popup preserves the draft; unsaved edits and unfinished uploads ask before
 discarding. **Escape** closes the popup subject to that protection.

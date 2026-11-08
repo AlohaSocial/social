@@ -371,6 +371,17 @@ describe('Timeline', () => {
 		expect(composer.props('listenForIntents')).toBe(false)
 	})
 
+	it('offers the saved drafts beside the compact composer, and keeps them while the popup is open', async () => {
+		const wrapper = mountTimeline({ params: { type: 'home' } })
+		const drafts = wrapper.findComponent({ name: 'DraftsButton' })
+		expect(drafts.exists()).toBe(true)
+		expect(drafts.props('disabled')).toBe(false)
+		timelineStore.setComposerDisplayStatus(true)
+		await nextTick()
+		expect(wrapper.findComponent({ name: 'DraftsButton' }).props('disabled')).toBe(true)
+		expect(mountTimeline({ params: { type: 'notifications' } }).findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
+	})
+
 	it('uses the conversation interface instead of the ordinary timeline composer for direct messages', () => {
 		const wrapper = mountTimeline({ params: { type: 'direct' } })
 		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)

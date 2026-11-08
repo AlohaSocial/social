@@ -213,6 +213,16 @@ describe('Profile', () => {
 			expect(composer.props('listenForIntents')).toBe(false)
 		})
 
+		it('comes with the saved drafts on the own profile only', async () => {
+			const own = mountProfile({ name: 'profile', params: { account: 'alice' } })
+			await flushPromises()
+			expect(own.findComponent({ name: 'DraftsButton' }).exists()).toBe(true)
+
+			const other = mountProfile({ name: 'profile', params: { account: 'bob@remote.example' } })
+			await flushPromises()
+			expect(other.findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
+		})
+
 		it('is not offered on somebody else\'s profile', async () => {
 			// every profile used to carry one, pre-filled with a mention of
 			// whoever it belonged to and set to a direct message, which put a

@@ -1056,6 +1056,14 @@ export default {
 			onComposerFocus: null,
 			onComposerPublished: null,
 			handedOffDraft: null,
+			/** whether the draft handed to the full composer reached browser storage */
+			handedOffStored: false,
+			/** the mentions this box put in by itself, which alone are no draft */
+			routingText: '',
+			/** the draft context whose saved audience was restored, '' for none */
+			resumedAudienceFor: '',
+			/** whether sending was tried while the event was incomplete */
+			eventAttempted: false,
 			onOutsideInteraction: null,
 			onBeforeUnload: null,
 			stopLeaveGuard: null,
@@ -1169,6 +1177,11 @@ export default {
 		draftContext() {
 			if (this.initialRedraft !== null) {
 				return `redraft.${this.initialRedraft.id}`
+			}
+			// a re-draft opened from the Drafts list stays that draft when the
+			// post it answers or quotes is put back beside it
+			if (this.initialDraftContext.startsWith('redraft.')) {
+				return this.initialDraftContext
 			}
 			if (this.replyTo !== null) {
 				return `reply.${this.replyTo.id}`
@@ -1440,6 +1453,10 @@ export default {
 				place: this.placing ? this.place : null,
 				video: Object.values(video).some((value) => value !== '') ? video : null,
 				card: this.asCard ? this.cardGradientId : '',
+				// a re-draft is the one draft whose context does not say what
+				// it answers or quotes
+				inReplyToId: this.draftContext.startsWith('redraft.') ? String(this.replyTo?.id ?? '') : '',
+				quoteId: this.draftContext.startsWith('redraft.') ? String(this.quoteOf?.id ?? '') : '',
 			}
 		},
 
@@ -1520,6 +1537,20 @@ export default {
 				this.visibility = visibility
 			}
 		},
+
+		/**
+		 * The full composer this box handed its draft to has closed without
+		 * publishing it. What was written there is newer than what this box
+		 * still shows, and pressing Expand or typing here would otherwise
+		 * write the older words over it.
+		 *
+		 * @param {boolean} open whether the full composer is open
+		 */
+		'timelineStore.composerDisplayStatus': function(open) {
+			if (!open && this.oneLine && this.handedOffDraft !== null) {
+				this.reloadDraft()
+			}
+		},
 	},
 
 	mounted() {
@@ -1551,8 +1582,11 @@ export default {
 			// being answered: a reply that named one of three people reached
 			// one of three people
 			this.prefillMessageWithMentions(participantsOf(data, this.username, this.hostname))
-			this.visibility = data.visibility
-			this.visibilityChosen = true
+			// a resumed draft of this reply keeps the audience it was given
+			if (this.resumedAudienceFor !== `reply.${data.id}`) {
+				this.visibility = data.visibility
+				this.visibilityChosen = true
+			}
 			// somebody pressed reply, which is a request to write one — including
 			// on the post this box is anchored under, where the target does not
 			// change and the box opening is the whole of the answer. Through
@@ -1740,7 +1774,7 @@ export default {
 			if (this.loading) {
 				return
 			}
-			this.rememberDraft()
+			this.handedOffStored = this.rememberDraft()
 			this.handedOffDraft = JSON.stringify(this.draft)
 			eventBus.emit('composer-open', { reply: this.inReplyTo, files: Array.isArray(files) ? files : [], draft: this.draft })
 		},
@@ -1983,6 +2017,7 @@ export default {
 			}
 			const mentions = mentionPills(accounts, this.hostname)
 			const routingText = mentions.map((node) => node.textContent ?? '').join('').trim()
+			this.routingText = routingText
 			if (!this.statusIsEmpty && this.statusText !== routingText) {
 				return
 			}
@@ -2032,19 +2067,53 @@ export default {
 			}
 		},
 
-		/** Keeps what is in the box, so a failed post or a reload cannot eat it. */
+		/**
+		 * Keeps what is in the box, so a failed post or a reload cannot eat it.
+		 *
+		 * @return {boolean} whether browser storage took it
+		 */
 		rememberDraft() {
-			if (!this.editItem) {
-				saveDraft(this.draft, this.draftContext)
+			if (this.editItem) {
+				return false
+			}
+			// hidden behind the full composer it handed its draft to, this box
+			// holds the older copy of that draft
+			if (this.oneLine && this.handedOffDraft !== null && this.timelineStore.composerDisplayStatus) {
+				return false
+			}
+			return saveDraft(this.draft, this.draftContext, this.routingText)
+		},
+
+		/**
+		 * Shows the saved draft again after the full composer it was handed to
+		 * closed, in place of the copy handed over.
+		 */
+		reloadDraft() {
+			const stored = this.handedOffStored
+			this.handedOffDraft = null
+			const draft = loadDraft(this.draftContext)
+			// without browser storage the full composer kept nothing, and the
+			// words handed to it are the only copy left
+			if (draft === null && !stored) {
+				return
+			}
+			this.clearComposer()
+			if (draft !== null) {
+				this.restoreDraft(draft)
+			} else if (this.inReplyTo !== null) {
+				this.prefillMessageWithMentions(participantsOf(this.inReplyTo, this.username, this.hostname))
 			}
 		},
 
 		/**
 		 * Puts back whatever the last attempt or the last session left, unless
 		 * something else has already filled the composer (a reply mention).
+		 *
+		 * @param {import('../../services/draft.js').ComposerDraft|null} [draft] the draft, the
+		 *   one handed over or kept for this context when not given
+		 * @return {boolean} whether there was one
 		 */
-		restoreDraft() {
-			const draft = this.initialDraft ?? loadDraft(this.draftContext)
+		restoreDraft(draft = this.initialDraft ?? loadDraft(this.draftContext)) {
 			if (draft === null || this.inputElement() === undefined) {
 				return false
 			}
@@ -2071,6 +2140,7 @@ export default {
 			if (isKnownVisibility(draft.visibility) && this.defaultVisibility === undefined) {
 				this.visibility = draft.visibility
 				this.visibilityChosen = true
+				this.resumedAudienceFor = this.draftContext
 			}
 			// checked against the teams once they are known (loadTeams): a
 			// draft can outlive leaving one, and a handle the server would
@@ -2118,9 +2188,47 @@ export default {
 			if (draft.media.length > 0) {
 				this.restoreDraftMedia(draft.media)
 			}
+			if (this.draftContext.startsWith('redraft.')) {
+				this.restoreRedraftTargets(draft.inReplyToId ?? '', draft.quoteId ?? '')
+			}
 			this.updateStatusContent()
 
 			return true
+		},
+
+		/**
+		 * Points a re-draft at the post it answered and the post it quoted, so
+		 * it goes out as the reply or the quote it was rather than as a post
+		 * of its own. A post not in hand is asked for; when it is gone or
+		 * cannot be asked for, the composer shows no reply or quote and the
+		 * re-draft goes out on its own.
+		 *
+		 * @param {string} inReplyToId the post it answered, '' for none
+		 * @param {string} quoteId the post it quoted, '' for none
+		 * @param {?object} [quote] the quoted post, when it is already in hand
+		 * @return {Promise<void>}
+		 */
+		async restoreRedraftTargets(inReplyToId, quoteId, quote = null) {
+			if (quote !== null && this.quoteOf === null) {
+				this.quoteOf = quote
+			}
+			const wanted = [['replyTo', String(inReplyToId ?? '')], ['quoteOf', quote === null ? String(quoteId ?? '') : '']]
+			for (const [field, id] of wanted) {
+				if (id === '' || this[field] !== null) {
+					continue
+				}
+				let status = this.timelineStore.getStatus(id) ?? null
+				if (status === null) {
+					try {
+						status = await this.timelineStore.fetchStatus(id)
+					} catch (error) {
+						logger.debug('the post a re-draft answers or quotes could not be loaded', { error, id })
+					}
+				}
+				if (status && this[field] === null) {
+					this[field] = status
+				}
+			}
 		},
 
 		/**
@@ -2215,6 +2323,7 @@ export default {
 			}
 
 			this.restoreMedia(post.media_attachments ?? [])
+			this.restoreRedraftTargets(post.in_reply_to_id ?? '', '', post.quote?.quoted_status ?? null)
 
 			this.focusInput()
 		},

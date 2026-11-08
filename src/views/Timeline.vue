@@ -63,9 +63,14 @@
 				@changed="onHashtagFollowChanged" />
 		</div>
 		<Composer
-			v-if="!settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos', 'photos'].includes(type) && !timelineStore.composerDisplayStatus"
+			v-if="hasCompactComposer && !timelineStore.composerDisplayStatus"
 			oneLine
 			:listenForIntents="false" />
+		<!-- the drafts are kept per post; this is where they are found again -->
+		<DraftsButton
+			v-if="hasCompactComposer"
+			class="compose-drafts"
+			:disabled="timelineStore.composerDisplayStatus" />
 
 		<div v-if="type === 'photos' && !settingsStore.getServerData.public" class="photo-compose-actions">
 			<MediaUploadButton
@@ -291,6 +296,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {boolean} whether this feed has the one-line composer */
+		hasCompactComposer() {
+			return !this.settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos', 'photos'].includes(this.type)
+		},
+
 		...mapStores(useAccountStore, useNotificationsStore, useSettingsStore, useTimelineStore),
 
 		/** @return {number} how many senders the policy is holding back */
@@ -1081,6 +1091,12 @@ export default {
 	:deep(.feed-notice .policy-notice) {
 		padding-inline: 24px;
 	}
+}
+
+.compose-drafts {
+	display: flex;
+	justify-content: flex-end;
+	padding-inline: var(--social-column-gutter, 12px);
 }
 
 .photo-compose-actions {

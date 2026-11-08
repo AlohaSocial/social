@@ -4636,6 +4636,20 @@ remove newer words from browser storage. Automatically inserted mention avatars 
 decorative beside the visible handle and carry an empty alternative text. Routing-only reply drafts are restored to mention pills with a trailing
 separator before typing, so reopening the modal cannot join the first reply
 word to its recipient's handle. Drafts with an existing answer remain intact.
+When the modal closes without publishing, the compact box that handed it the
+draft (`handedOffDraft`) reloads the saved draft (`reloadDraft()`), and while
+the modal is open the hidden box writes nothing, so neither Expand nor typing
+can put the older copy over the modal's words. When the browser could not
+store the handed-off draft, the box keeps its words. The post page keys its compact reply on
+the post id, so a post opened from the thread gets its own recipients,
+audience and draft. The handles a reply is addressed to are `routingText`:
+`saveDraft()` keeps no draft whose words are only those, and `listDrafts()`
+leaves out a reply draft that is only handles. A restored reply draft keeps its
+audience (`resumedAudienceFor`) instead of taking the parent's. A re-draft
+stores `inReplyToId` and `quoteId` with its `redraft.*` draft and
+`restoreRedraftTargets()` puts the reply target and quote back, fetching a post
+not in the store; when one cannot be found, the re-draft goes out on its own. `DraftsButton` sits under the compact composer on Home-type feeds and the
+own profile, and on Photos.
 
 Feed notices keep their outer card margin, border and background; only nested
 notice content has its inner box reset. Text in stacked notices keeps its

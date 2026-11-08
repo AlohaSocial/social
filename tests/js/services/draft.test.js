@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCurrentUser } from '@nextcloud/auth'
-import { clearDraft, listDrafts, loadDraft, saveDraft } from '../../../src/services/draft.js'
+import { clearDraft, isOnlyMentions, listDrafts, loadDraft, saveDraft } from '../../../src/services/draft.js'
 
 vi.mock('@nextcloud/auth', () => ({ getCurrentUser: vi.fn(() => null) }))
 
@@ -341,6 +341,50 @@ describe('the composer draft', () => {
 			saveDraft({ text: 'Unknown' }, 'reply.https://example.org')
 			expect(listDrafts()).toHaveLength(1)
 			expect(listDrafts()[0].draft.savedAt).toBe(0)
+		})
+
+		it('leaves out a reply holding only the handles it was addressed to', () => {
+			signedInAs('alice')
+			localStorage.setItem('social.composer.draft.reply.5::alice', JSON.stringify({ text: '@bob@remote.example\u00a0@carol ', savedAt: Date.now() }))
+			saveDraft({ text: '@bob@remote.example thanks' }, 'reply.6')
+			saveDraft({ text: '@bob' })
+			expect(listDrafts().map(({ context }) => context).sort()).toEqual(['', 'reply.6'])
+		})
+	})
+
+	describe('the mentions a reply was addressed to', () => {
+		it('are not a draft on their own', () => {
+			saveDraft({ text: 'earlier words' }, 'reply.42')
+			expect(saveDraft({ text: '@bob@remote.example\u00a0' }, 'reply.42', '@bob@remote.example')).toBe(true)
+			expect(loadDraft('reply.42')).toBeNull()
+		})
+
+		it('are kept with anything written after them', () => {
+			saveDraft({ text: '@bob@remote.example yes' }, 'reply.42', '@bob@remote.example')
+			expect(loadDraft('reply.42')?.text).toBe('@bob@remote.example yes')
+		})
+
+		it('are kept with a warning or an attachment', () => {
+			saveDraft({ text: '@bob', spoilerText: 'cw' }, 'reply.42', '@bob')
+			expect(loadDraft('reply.42')?.spoilerText).toBe('cw')
+		})
+
+		it('are recognised as only handles', () => {
+			expect(isOnlyMentions('@bob@remote.example\u00a0@alice.bsky.social ')).toBe(true)
+			expect(isOnlyMentions('@bob hello')).toBe(false)
+			expect(isOnlyMentions('')).toBe(false)
+		})
+	})
+
+	describe('what a re-draft answers and quotes', () => {
+		it('is kept and given back', () => {
+			saveDraft({ text: 'again', inReplyToId: '90', quoteId: '77' }, 'redraft.101')
+			expect(loadDraft('redraft.101')).toMatchObject({ inReplyToId: '90', quoteId: '77' })
+		})
+
+		it('is dropped when it is not a status id', () => {
+			localStorage.setItem('social.composer.draft.redraft.101', JSON.stringify({ text: 'again', inReplyToId: 'https://evil.example', quoteId: 5, savedAt: Date.now() }))
+			expect(loadDraft('redraft.101')).toMatchObject({ inReplyToId: '', quoteId: '5' })
 		})
 	})
 })
