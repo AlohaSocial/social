@@ -37,6 +37,13 @@ class ClientXrpc {
 	public const UPLOAD = 'com.atproto.repo.uploadBlob';
 	public const IMPORT = 'com.atproto.repo.importRepo';
 	private const WRITES = ['com.atproto.repo.createRecord', 'com.atproto.repo.putRecord', 'com.atproto.repo.deleteRecord', 'com.atproto.repo.applyWrites'];
+	/**
+	 * Refused to every app: an OAuth app's password would outlive its
+	 * sign-in, and a leaked app password could make or revoke the others.
+	 * Bluesky's PDS takes `createAppPassword` only from a sign-in with the
+	 * account password, which no app has here.
+	 */
+	private const APP_PASSWORD_MANAGEMENT = ['com.atproto.server.createAppPassword', 'com.atproto.server.revokeAppPassword'];
 	/** what the session of an account moving here asks, beside what any session may */
 	private const MOVE_QUERIES = [
 		'com.atproto.server.checkAccountStatus', 'com.atproto.identity.getRecommendedDidCredentials', 'com.atproto.repo.listMissingBlobs',
@@ -94,6 +101,9 @@ class ClientXrpc {
 		$allowed = match ($method) {
 			'com.atproto.server.getSession' => true,
 			'com.atproto.server.getServiceAuth' => $permissions->mayCall(self::param($params, 'lxm'), self::param($params, 'aud')),
+			// as on Bluesky's PDS, an app signed in with OAuth does not see the
+			// app passwords, whatever it was granted
+			'com.atproto.server.listAppPasswords' => $session->appPassword,
 			default => $permissions->mayCall($method, $audience),
 		};
 		self::assertAllowed($allowed, 'call ' . $method);
@@ -150,8 +160,10 @@ class ClientXrpc {
 			return null;
 		}
 		$session = $this->signedIn($headers, $method, 'POST');
-		$body = in_array($method, ['com.atproto.server.createAppPassword', 'com.atproto.server.revokeAppPassword', 'com.atproto.identity.updateHandle'], true)
-			? self::json($rawBody) : [];
+		if (in_array($method, self::APP_PASSWORD_MANAGEMENT, true)) {
+			throw new XrpcException(403, 'InsufficientScope', 'App passwords are made and revoked in the account\'s settings on this server, not by an app');
+		}
+		$body = $method === 'com.atproto.identity.updateHandle' ? self::json($rawBody) : [];
 		$writes = in_array($method, self::WRITES, true) ? self::writesOf($method, self::json($rawBody)) : null;
 		if ($writes !== null) {
 			foreach ($writes as [$collection, $actions]) {
@@ -161,18 +173,12 @@ class ClientXrpc {
 		} else {
 			$audience = str_starts_with($method, 'com.atproto.server.') ? $this->config->serviceDid() : $this->audience($headers);
 			$allowed = $method === 'com.atproto.identity.updateHandle'
-				? $session->permissions()->mayUpdateHandle()
+				? $session->appPassword || $session->permissions()->mayUpdateHandle()
 				: $session->permissions()->mayCall($method, $audience);
 			self::assertAllowed($allowed, 'call ' . $method);
 		}
 
 		return match ($method) {
-			'com.atproto.server.createAppPassword' => $this->sessions->createAppPassword(
-				$session,
-				self::requiredString($body, 'name'),
-				self::optionalBoolean($body, 'privileged'),
-			),
-			'com.atproto.server.revokeAppPassword' => $this->revokeAppPassword($session, self::requiredString($body, 'name')),
 			'com.atproto.identity.updateHandle' => $this->updateHandle($session, self::requiredString($body, 'handle')),
 			'app.bsky.actor.putPreferences' => $this->preferences->put($session, self::json($rawBody)),
 			'com.atproto.repo.createRecord' => $this->writes->create($session, self::writeBody($rawBody)),
@@ -271,28 +277,12 @@ class ClientXrpc {
 	}
 
 	/** @throws XrpcException */
-	private function revokeAppPassword(ClientSession $session, string $name): array {
-		$this->sessions->revokeAppPassword($session, $name);
-
-		return [];
-	}
-
-	/** @throws XrpcException */
 	private static function requiredString(array $body, string $name): string {
 		if (!is_string($body[$name] ?? null) || trim($body[$name]) === '') {
 			throw XrpcException::invalidRequest('A non-empty ' . $name . ' is required');
 		}
 
 		return $body[$name];
-	}
-
-	/** @throws XrpcException */
-	private static function optionalBoolean(array $body, string $name): bool {
-		if (array_key_exists($name, $body) && !is_bool($body[$name])) {
-			throw XrpcException::invalidRequest($name . ' must be a boolean');
-		}
-
-		return $body[$name] ?? false;
 	}
 
 	/**

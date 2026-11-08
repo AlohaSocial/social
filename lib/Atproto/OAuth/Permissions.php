@@ -206,11 +206,11 @@ final class Permissions {
 		return false;
 	}
 
-	/** Whether this session may change its handle (`identity:handle`). */
+	/**
+	 * Whether this session may change its handle (`identity:handle`), which
+	 * `transition:generic` does not grant.
+	 */
 	public function mayUpdateHandle(): bool {
-		if ($this->isGeneric()) {
-			return true;
-		}
 		foreach ($this->rules as $rule) {
 			if ($rule['resource'] === 'identity' && in_array($rule['attr'] ?? '', ['handle', '*'], true)) {
 				return true;

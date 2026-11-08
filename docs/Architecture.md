@@ -567,12 +567,18 @@ enforced by `ClientXrpc` (100,000,000 bytes, the video ceiling). Open registrati
 Bluesky identities are Nextcloud accounts; the app page is not advertised as
 a privacy policy.
 
-Signed-in PDS clients manage the same account-scoped records through
-`com.atproto.server.createAppPassword`, `listAppPasswords` and
-`revokeAppPassword`. The password secret is returned only at creation;
-listing exposes names and creation times without database ids. Creating a
-password that grants Bluesky chat access requires a session that already
-holds `transition:chat.bsky`.
+App passwords are made and revoked in the account's Bluesky settings
+(`AtprotoAccountController`), never by an app: `ClientXrpc` refuses
+`com.atproto.server.createAppPassword` and `revokeAppPassword` (**403**
+`InsufficientScope`) to every session. An OAuth app's password would outlive
+its sign-in, and a leaked app password could make or revoke the others.
+Bluesky's PDS takes `createAppPassword` only from a sign-in with the account
+password, which no app has here. `listAppPasswords` answers a session an app
+password opened (`ClientSession::$appPassword`) and refuses an OAuth app
+whatever it was granted, as Bluesky's PDS does; it exposes names, creation
+times and `privileged`, without database ids. `com.atproto.identity.updateHandle`
+takes an app-password session, or an OAuth grant of `identity:handle` or
+`identity:*`; `transition:generic` does not include it.
 
 An app's `app.bsky.actor.profile` writes update the same local profile the
 Fediverse reads. `WriteService` validates a non-empty website before it

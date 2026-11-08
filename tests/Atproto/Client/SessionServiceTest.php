@@ -141,38 +141,24 @@ class SessionServiceTest extends TestCase {
 		$this->assertSame('alice.social.test', $session['handle']);
 	}
 
-	public function testPdsAppPasswordMethodsExposeOnlyLexiconFieldsAndRevokeSessions(): void {
+	public function testListingAppPasswordsExposesOnlyLexiconFields(): void {
+		$this->appPasswords->create('alice', 'chat-app', true);
+		$this->appPasswords->create('alice', 'reader');
 		$session = new ClientSession('alice', $this->identity, 'owner');
-		try {
-			$this->sessions->createAppPassword($session, 'chat-app', true);
-			$this->fail('created a privileged password without chat permission');
-		} catch (XrpcException $e) {
-			$this->assertSame(403, $e->status);
-			$this->assertSame('InsufficientScope', $e->error);
-		}
 
-		$created = $this->sessions->createAppPassword(new ClientSession('alice', $this->identity, 'owner', ['atproto', ClientSession::GENERIC, ClientSession::CHAT]), 'chat-app', true);
-		$this->assertSame([
-			'name' => 'chat-app',
-			'password' => $created['password'],
-			'createdAt' => '1970-01-01T00:00:01Z',
-			'privileged' => true,
-		], $created);
-		$this->assertSame(['passwords' => [[
-			'name' => 'chat-app',
-			'createdAt' => '1970-01-01T00:00:01Z',
-			'privileged' => true,
-		]]], $this->sessions->listAppPasswords($session));
+		$this->assertSame(['passwords' => [
+			['name' => 'chat-app', 'createdAt' => '1970-01-01T00:00:01Z', 'privileged' => true],
+			['name' => 'reader', 'createdAt' => '1970-01-01T00:00:01Z'],
+		]], $this->sessions->listAppPasswords($session));
+	}
 
-		$tokens = $this->sessions->create('alice.social.test', $created['password'], '203.0.113.5');
-		$this->sessions->revokeAppPassword($session, 'chat-app');
-		$this->assertSame(['passwords' => []], $this->sessions->listAppPasswords($session));
-		try {
-			$this->sessions->authenticate('Bearer ' . $tokens['accessJwt']);
-			$this->fail('revoked app password session stayed active');
-		} catch (XrpcException $e) {
-			$this->assertSame('ExpiredToken', $e->error);
-		}
+	public function testASessionSaysAnAppPasswordOpenedIt(): void {
+		$password = $this->appPasswords->create('alice', 'phone')['password'];
+		$session = $this->sessions->authenticate('Bearer ' . $this->sessions->create('alice.social.test', $password, '203.0.113.5')['accessJwt']);
+
+		$this->assertNotNull($session);
+		$this->assertTrue($session->appPassword);
+		$this->assertFalse((new ClientSession('alice', $this->identity, 'sid'))->appPassword, 'nothing else is one');
 	}
 
 	public function testAnAppPasswordIsShownOnceAndStoredAsAHash(): void {
