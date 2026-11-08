@@ -297,6 +297,7 @@ class OAuthController extends Controller {
 	#[NoAdminRequired]
 	#[AnonRateLimit(limit: 30, period: 300)]
 	#[UserRateLimit(limit: 30, period: 300)]
+	#[BruteForceProtection(action: 'socialOauthDeviceCode')]
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/device')]
 	public function device(string $user_code = ''): Response {
 		$user = $this->userSession->getUser();
@@ -328,6 +329,9 @@ class OAuthController extends Controller {
 		}
 		$response = new TemplateResponse(Application::APP_ID, 'oauth2', [], TemplateResponse::RENDER_AS_GUEST);
 		$response->setContentSecurityPolicy($this->consentPolicy($this->configService->getSocialUrl()));
+		if ($user_code !== '' && $pending === null) {
+			$response->throttle(['action' => 'socialOauthDeviceCode']);
+		}
 		return $response;
 	}
 
@@ -355,7 +359,12 @@ class OAuthController extends Controller {
 		$this->initialState->provideInitialState('deviceAppWebsite', '');
 		$this->initialState->provideInitialState('deviceScopes', []);
 		$this->initialState->provideInitialState('deviceDecisionUrl', $this->urlGenerator->linkToRoute('social.OAuth.deviceDecision'));
-		return new TemplateResponse(Application::APP_ID, 'oauth2', [], TemplateResponse::RENDER_AS_GUEST);
+		$response = new TemplateResponse(Application::APP_ID, 'oauth2', [], TemplateResponse::RENDER_AS_GUEST);
+		if ($canAuthorize && $validDecision && !$saved) {
+			// a user code that is unknown, expired or already decided is a guess
+			$response->throttle(['action' => 'socialOauthDeviceCode']);
+		}
+		return $response;
 	}
 
 	private function deviceAccountState(): ?array {

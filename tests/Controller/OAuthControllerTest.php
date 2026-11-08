@@ -1449,6 +1449,30 @@ class OAuthControllerTest extends TestCase {
 		self::assertNotContains(null, iterator_to_array($states));
 	}
 
+	public function testAWrongDeviceCodeIsThrottled(): void {
+		$this->loggedIn('alice');
+		$devices = $this->createStub(DeviceAuthorizationService::class);
+		$devices->method('decide')->willReturnCallback(static fn (string $code): bool => $code === 'GOOD-CODE');
+		$controller = $this->controllerWith($this->clientService, $devices);
+
+		$this->assertTrue($controller->deviceDecision('WRONG-CODE', 'allow')->isThrottled());
+		$this->assertTrue($controller->deviceDecision('WRONG-CODE', 'deny')->isThrottled());
+		$this->assertFalse($controller->deviceDecision('GOOD-CODE', 'allow')->isThrottled());
+		$this->assertFalse($controller->deviceDecision('WRONG-CODE', 'maybe')->isThrottled(), 'no code was tried');
+	}
+
+	public function testLookingUpAnUnknownDeviceCodeIsThrottled(): void {
+		$this->loggedIn('alice');
+		$this->knownClient();
+		$devices = $this->createStub(DeviceAuthorizationService::class);
+		$devices->method('inspect')->willReturnCallback(static fn (string $code): ?array => $code === 'GOOD-CODE' ? ['client_id' => 'client-1', 'scopes' => 'read'] : null);
+		$controller = $this->controllerWith($this->clientService, $devices);
+
+		$this->assertTrue($controller->device('WRONG-CODE')->isThrottled());
+		$this->assertFalse($controller->device('GOOD-CODE')->isThrottled());
+		$this->assertFalse($controller->device('')->isThrottled(), 'opening the page tries no code');
+	}
+
 	public function testAuthorizeShowsTheScopesAndWhereTheCodeIsGoing(): void {
 		$this->loggedIn();
 		$this->knownClient('client-1', 'Tusky', ['https://app.example/cb']);
