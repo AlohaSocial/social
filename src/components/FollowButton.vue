@@ -46,12 +46,22 @@
 				{{ unfollowIntent ? words.unfollow : words.following }}
 			</span>
 		</NcButton>
+		<!-- a pending request is taken back the way a follow is undone -->
 		<NcButton
 			v-else-if="relationship.requested"
-			:disabled="true"
-			variant="secondary"
-			class="follow-button">
-			<span key="requested" class="follow-button__label">{{ t('social', 'Requested') }}</span>
+			:disabled="loading"
+			class="follow-button follow-button--requested"
+			:class="{ 'follow-button--refused': refused }"
+			:variant="unfollowIntent ? 'error' : 'secondary'"
+			:aria-label="t('social', 'Withdraw follow request to {account}', { account: uid })"
+			@mouseenter="unfollowIntent = true"
+			@mouseleave="unfollowIntent = false"
+			@focus="unfollowIntent = true"
+			@blur="unfollowIntent = false"
+			@click="askToUnfollow">
+			<span :key="unfollowIntent ? 'withdraw' : 'requested'" class="follow-button__label">
+				{{ unfollowIntent ? t('social', 'Withdraw request') : t('social', 'Requested') }}
+			</span>
 		</NcButton>
 		<NcButton
 			v-else
@@ -76,9 +86,12 @@
 		     account following again means asking again -->
 		<NcDialog
 			v-model:open="confirmUnfollow"
-			:name="t('social', 'Unfollow {account}?', { account: uid })"
+			:name="withdrawing ? t('social', 'Withdraw your follow request to {account}?', { account: uid }) : t('social', 'Unfollow {account}?', { account: uid })"
 			:buttons="unfollowButtons">
-			<p class="unfollow-hint">
+			<p v-if="withdrawing" class="unfollow-hint">
+				{{ t('social', 'They will no longer see your request. You can ask to follow them again later.') }}
+			</p>
+			<p v-else class="unfollow-hint">
 				{{ t('social', 'Their posts stop appearing in your home timeline. If their account is locked you will have to ask again to follow them.') }}
 			</p>
 		</NcDialog>
@@ -184,6 +197,11 @@ export default {
 			return this.accountStore.currentAccount
 		},
 
+		/** @return {boolean} whether the confirmation is about a request not yet answered */
+		withdrawing() {
+			return this.relationship?.following !== true && this.relationship?.requested === true
+		},
+
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		unfollowButtons() {
 			return [
@@ -194,7 +212,7 @@ export default {
 					},
 				},
 				{
-					label: this.words.unfollow,
+					label: this.withdrawing ? t('social', 'Withdraw request') : this.words.unfollow,
 					variant: 'error',
 					callback: () => this.unfollow(),
 				},
@@ -246,7 +264,7 @@ export default {
 			try {
 				this.loading = true
 				await this.accountStore.unfollowAccount({ accountToUnfollow: this.profileAccount })
-				if (this.relationship?.following) {
+				if (this.relationship?.following || this.relationship?.requested) {
 					this.refuse()
 				}
 			} catch (error) {

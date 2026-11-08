@@ -609,7 +609,8 @@ export const useAccountStore = defineStore('account', {
 				return null
 			}
 
-			this.addRelationship({ actorId: id, data: { ...known, following } })
+			// undoing a follow also takes back a request still waiting for an answer
+			this.addRelationship({ actorId: id, data: { ...known, following, ...(following ? {} : { requested: false }) } })
 
 			return { id, data: known }
 		},

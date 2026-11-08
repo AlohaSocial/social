@@ -147,9 +147,10 @@ people** makes an invitation link: it works once and for a week.
   administrator has blocked or limited are never offered.
 - **Follow** on a profile, in search results or on a Discover card sends a
   follow request. On an open account it is accepted at once; on a locked
-  account the button reads **Requested** until the owner answers. **Unfollow**
-  asks you to confirm, because on a locked account you would have to ask
-  again.
+  account the button reads **Requested** until the owner answers. Pointing at
+  it or tabbing to it turns it into **Withdraw request**: press it and confirm
+  to take the request back. **Unfollow** asks you to confirm, because on a
+  locked account you would have to ask again.
 - **Followed hashtags.** A hashtag timeline (`#tag` in a post, or a trending
   tag) has a follow button; following a tag puts the *public* posts carrying
   it into your home feed. It is not a relationship with anybody, and the tags
