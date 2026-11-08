@@ -1560,7 +1560,7 @@ export const useTimelineStore = defineStore('timeline', {
 				// a reply to or quote of an account that has blocked the author
 				showError(isBlockedBy(error)
 					? t('social', 'This account has blocked you')
-					: t('social', 'Could not send the post'))
+					: errorOf(error, t('social', 'Could not send the post')))
 				logger.error('Failed to create a status', { error })
 			}
 		},
@@ -1582,7 +1582,8 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.info('Post edited', response.data.id)
 				return response
 			} catch (error) {
-				showError(t('social', 'Could not save the changes to the post'))
+				// the server says why it refused, e.g. a post that became too long
+				showError(errorOf(error, t('social', 'Could not save the changes to the post')))
 				logger.error('Failed to edit the status', { error })
 			}
 		},
