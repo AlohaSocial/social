@@ -995,8 +995,7 @@ export default {
 :deep(.feed-notice .info-card__body),
 :deep(.feed-notice .interests-notice__text),
 :deep(.feed-notice .interests-banner__text),
-:deep(.feed-notice .policy-notice__text),
-:deep(.feed-notice .announcement__text) {
+:deep(.feed-notice .policy-notice__text) {
 	max-width: 68ch;
 	flex: 0 1 auto;
 	margin-inline: auto;
@@ -1042,14 +1041,14 @@ export default {
 }
 
 :deep(.feed-notice .interests-notice__actions),
-:deep(.feed-notice .announcement__actions),
 :deep(.feed-notice .held-requests__row) {
 	justify-content: center;
 	margin-inline: auto;
 }
 
-:deep(.feed-notice .announcement__meta) {
-	justify-content: center;
+/* an announcement is read as text: only its heading is centred */
+:deep(.feed-notice .announcement) {
+	text-align: start;
 }
 
 :deep(.feed-notice .announcements__header) {

@@ -4652,7 +4652,7 @@ not in the store; when one cannot be found, the re-draft goes out on its own. `D
 own profile, and on Photos.
 
 Feed notices keep their outer card margin, border and background; only nested
-notice content has its inner box reset. Text in stacked notices keeps its
+notice content has its inner box reset. Notices are centred, except that an administrator announcement centres only its header: its text, date line and reactions are start-aligned, because they are read as prose. Text in stacked notices keeps its
 natural height instead of a row-layout flex basis. Profile synchronization and
 feed failures share the same responsive state-card layout, with a heading,
 explanatory text and the existing retry action. Cached profile posts remain

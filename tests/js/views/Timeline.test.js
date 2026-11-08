@@ -2,6 +2,8 @@
  * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, reactive } from 'vue'
@@ -1154,5 +1156,22 @@ describe('Timeline', () => {
 
 			expect(wrapper.find('h1').text()).toBe('Link')
 		})
+	})
+})
+
+describe('administrator announcements', () => {
+	const styles = () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/views/Timeline.vue'), 'utf8')
+		return source.slice(source.indexOf('<style'))
+	}
+	const rulesNaming = (css, selector) => css.split('}').filter((rule) => rule.includes(selector))
+
+	it('centre their heading and leave their text left-aligned', () => {
+		const css = styles()
+		expect(rulesNaming(css, '.feed-notice .announcement)').join('}')).toMatch(/text-align:\s*start/)
+		expect(rulesNaming(css, '.feed-notice .announcements__header').join('}')).toMatch(/justify-content:\s*center/)
+		for (const part of ['.announcement__text', '.announcement__meta', '.announcement__actions']) {
+			expect(rulesNaming(css, part).join('}')).not.toMatch(/center/)
+		}
 	})
 })
