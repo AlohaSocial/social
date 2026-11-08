@@ -263,6 +263,7 @@ import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
 import { hasInterestsFeed } from '../services/interests.js'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
 import { originOf } from '../utils/instanceIdentity.js'
+import { embedCode } from '../utils/embedCode.js'
 
 /**
  * Everything a post can be told to do that is not one of the four buttons
@@ -533,7 +534,7 @@ export default {
 				embedUrl.pathname = `${embedUrl.pathname.replace(/\/$/, '')}/embed`
 				embedUrl.search = ''
 				embedUrl.hash = ''
-				await navigator.clipboard.writeText(`<iframe src="${embedUrl.href}" width="550" height="480" loading="lazy" frameborder="0" style="max-width:100%;border:0;border-radius:12px" title="Aloha Social post"></iframe>`)
+				await navigator.clipboard.writeText(embedCode(embedUrl.href, t('social', 'Aloha Social post')))
 				await showSuccess(t('social', 'Copied'))
 			} catch {
 				await showError(t('social', 'Could not copy — select the address and copy it yourself'))

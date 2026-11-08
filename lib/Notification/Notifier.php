@@ -71,7 +71,7 @@ class Notifier implements INotifier {
 	 */
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Aloha Social');
+		return Application::APP_NAME_DISPLAY;
 	}
 
 	/**
@@ -353,7 +353,7 @@ class Notifier implements INotifier {
 				['app' => [
 					'type' => 'highlight',
 					'id' => Application::APP_ID,
-					'name' => $l10n->t('Aloha Social'),
+					'name' => Application::APP_NAME_DISPLAY,
 					'link' => $link,
 				]]
 			);

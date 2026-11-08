@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Activity;
 
+use OCA\Social\AppInfo\Application;
 use OCP\Activity\ActivitySettings;
 use OCP\IL10N;
 
@@ -43,7 +44,7 @@ class Setting extends ActivitySettings {
 
 	#[\Override]
 	public function getGroupName(): string {
-		return $this->l10n->t('Aloha Social');
+		return Application::APP_NAME_DISPLAY;
 	}
 
 	#[\Override]

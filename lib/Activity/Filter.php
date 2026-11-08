@@ -11,7 +11,6 @@ namespace OCA\Social\Activity;
 
 use OCA\Social\AppInfo\Application;
 use OCP\Activity\IFilter;
-use OCP\IL10N;
 use OCP\IURLGenerator;
 
 /**
@@ -19,7 +18,6 @@ use OCP\IURLGenerator;
  */
 class Filter implements IFilter {
 	public function __construct(
-		private IL10N $l10n,
 		private IURLGenerator $urlGenerator,
 	) {
 	}
@@ -31,7 +29,7 @@ class Filter implements IFilter {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Aloha Social');
+		return Application::APP_NAME_DISPLAY;
 	}
 
 	#[\Override]

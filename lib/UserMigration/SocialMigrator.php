@@ -214,7 +214,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	 */
 	#[\Override]
 	public function getDisplayName(): string {
-		return $this->l10n->t('Aloha Social');
+		return Application::APP_NAME_DISPLAY;
 	}
 
 	/**

@@ -60,12 +60,6 @@ SPDX-FileCopyrightText = "2022-2026 Bluesky Social PBC, and Contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = "img/nextcloud.png"
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2016 Nextcloud GmbH"
-SPDX-License-Identifier = "LicenseRef-NextcloudTrademarks"
-
-[[annotations]]
 path = ["context/*.json", "tests/phpunit.xml"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2019 Nextcloud GmbH and Nextcloud contributors"
@@ -151,7 +145,7 @@ SPDX-FileCopyrightText = "2018-2024 Google LLC"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = ["img/social.svg", "img/social-dark.svg", "img/social_dark.svg"]
+path = ["img/social.svg", "img/social-dark.svg", "img/social_dark.svg", "img/social-dark.png"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"

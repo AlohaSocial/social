@@ -100,7 +100,7 @@ class ProviderTest extends TestCase {
 
 		$this->provider->parse('de', $this->event('favourite', ['account' => 'Bob', 'user' => '']));
 
-		$this->assertSame('https://cloud.example/apps/social/img/nextcloud.png', $this->told['icon']);
+		$this->assertSame('https://cloud.example/apps/social/img/social-dark.png', $this->told['icon']);
 	}
 
 	public function testEverySubjectTheBellKnowsIsWorded(): void {

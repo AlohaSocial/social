@@ -111,8 +111,8 @@ class Provider implements IProvider {
 
 	private function iconFor(string $subject): string {
 		if ($this->activityManager->getRequirePNG()) {
-			// the mail wants a bitmap, and the one bitmap this app ships is its icon
-			return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath(Application::APP_ID, 'nextcloud.png'));
+			// the mail wants a bitmap: the app icon, dark for a light mail
+			return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath(Application::APP_ID, 'social-dark.png'));
 		}
 
 		$icon = match ($subject) {

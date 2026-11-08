@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Search;
 
 use Exception;
+use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -64,7 +65,7 @@ class UnifiedSearchProvider implements IProvider {
 	 */
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Aloha Social');
+		return Application::APP_NAME_DISPLAY;
 	}
 
 	/**
@@ -110,10 +111,10 @@ class UnifiedSearchProvider implements IProvider {
 
 		$page = array_slice($result, $offset, $limit);
 		if (count($result) > $offset + $limit) {
-			return SearchResult::paginated($this->l10n->t('Aloha Social'), $page, $offset + $limit);
+			return SearchResult::paginated(Application::APP_NAME_DISPLAY, $page, $offset + $limit);
 		}
 
-		return SearchResult::complete($this->l10n->t('Aloha Social'), $page);
+		return SearchResult::complete(Application::APP_NAME_DISPLAY, $page);
 	}
 
 	/**

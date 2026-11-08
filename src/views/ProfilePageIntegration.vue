@@ -15,7 +15,7 @@
 			:src="bannerUrl"
 			:alt="t('social', 'Aloha Social profile banner')">
 		<h2 class="social-profile__title">
-			{{ t('social', 'Aloha Social') }}
+			{{ appName }}
 		</h2>
 		<TimelineSwitcher
 			class="social-profile__feeds"
@@ -91,6 +91,7 @@ import ProfileStatusCard from './../components/ProfileStatusCard.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
 import logger from './../services/logger.js'
 import { bannerOf } from '../utils/banner.js'
+import { APP_NAME } from '../utils/appName.js'
 
 const PAGE_SIZE = 20
 
@@ -111,6 +112,7 @@ export default {
 
 	data() {
 		return {
+			appName: APP_NAME,
 			/**
 			 * The username of the account the profile's user has here, from
 			 * the page: the profile knows them by their user id, which the

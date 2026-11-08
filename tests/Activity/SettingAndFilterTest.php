@@ -18,7 +18,8 @@ use PHPUnit\Framework\TestCase;
 class SettingAndFilterTest extends TestCase {
 	public function testTheSettingIsInTheStreamByDefaultAndNeverASecondBell(): void {
 		$l10n = $this->createStub(IL10N::class);
-		$l10n->method('t')->willReturnArgument(0);
+		// a catalogue that translates the brand into a generic word, as 22 did
+		$l10n->method('t')->willReturnCallback(static fn (string $text): string => $text === 'Aloha Social' ? 'Socialt' : $text);
 		$setting = new Setting($l10n);
 
 		$this->assertSame('social', $setting->getIdentifier());
@@ -34,12 +35,10 @@ class SettingAndFilterTest extends TestCase {
 	}
 
 	public function testTheFilterNarrowsTheStreamToThisApp(): void {
-		$l10n = $this->createStub(IL10N::class);
-		$l10n->method('t')->willReturnArgument(0);
 		$urlGenerator = $this->createMock(IURLGenerator::class);
 		$urlGenerator->method('imagePath')->with('social', 'social-dark.svg')->willReturn('/apps/social/img/social-dark.svg');
 		$urlGenerator->method('getAbsoluteURL')->willReturnCallback(static fn (string $path): string => 'https://cloud.example' . $path);
-		$filter = new Filter($l10n, $urlGenerator);
+		$filter = new Filter($urlGenerator);
 
 		$this->assertSame('social', $filter->getIdentifier());
 		$this->assertSame('Aloha Social', $filter->getName());
