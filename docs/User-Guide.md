@@ -189,6 +189,10 @@ newest first; pick one to continue it, or delete it there. A re-draft of a
 deleted reply or quote is still that reply or quote: the post it answered and
 the post it quoted come back with it, shown above the box. If the post it
 answered is gone, none is shown and the re-draft goes out on its own.
+An event needs a title and a start time, and an end after the start; the
+composer says so once you leave the event fields incomplete or try to post, not
+while you are still filling them in. Some apps show only the post text of an
+event, without its dates or location.
 **Ctrl+Enter** (**⌘+Enter** on a Mac) sends from the full composer. Closing the
 popup preserves the draft; unsaved edits and unfinished uploads ask before
 discarding. **Escape** closes the popup subject to that protection.

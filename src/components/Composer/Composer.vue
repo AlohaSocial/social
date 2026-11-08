@@ -270,6 +270,7 @@
 					v-model:location="eventLocation"
 					:editing="Boolean(editItem)"
 					:valid="eventIsValid"
+					:attempted="eventAttempted"
 					:reachesBluesky="reachesBluesky" />
 
 				<!-- When the post goes out, if not now. The picker is most of a
@@ -1824,6 +1825,7 @@ export default {
 			this.asCard = false
 			this.replyPolicy = 'everyone'
 			this.moreOptionsOpen = false
+			this.eventAttempted = false
 			clearDraft(this.draftContext)
 			this.updateStatusContent()
 		},
@@ -2417,6 +2419,9 @@ export default {
 
 		n,
 		async createPost() {
+			if (!this.eventIsValid) {
+				this.eventAttempted = true
+			}
 			if (this.editItem) {
 				if (this.canPost) {
 					this.$emit('save', this.editPayload)

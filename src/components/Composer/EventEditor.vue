@@ -3,7 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section class="event-editor" :aria-label="editing ? t('social', 'Edit event') : t('social', 'Create an event')">
+	<section
+		ref="editor"
+		class="event-editor"
+		:aria-label="editing ? t('social', 'Edit event') : t('social', 'Create an event')"
+		@focusout="onFocusOut">
 		<h3>{{ editing ? t('social', 'Edit event') : t('social', 'Create an event') }}</h3>
 		<label>
 			{{ t('social', 'Event title') }}
@@ -45,9 +49,9 @@
 			{{ t('social', 'Your event is shared with the audience selected below. Times use your local timezone.') }}
 		</p>
 		<p v-if="reachesBluesky" class="event-editor__hint">
-			{{ t('social', 'The event details are shared with the Fediverse. Bluesky receives the post text, without the event dates or location.') }}
+			{{ t('social', 'Some apps and networks show only the post text, without the event dates or location.') }}
 		</p>
-		<p v-if="!valid" class="event-editor__error" role="status">
+		<p v-if="!valid && (attempted || touched)" class="event-editor__error" role="status">
 			{{ t('social', 'Add a title and start time; the end must be after the start.') }}
 		</p>
 	</section>
@@ -68,6 +72,8 @@ export default {
 		end: { type: String, default: '' },
 		location: { type: String, default: '' },
 		valid: { type: Boolean, default: true },
+		/** whether sending was tried with the event incomplete */
+		attempted: { type: Boolean, default: false },
 		reachesBluesky: { type: Boolean, default: false },
 	},
 
@@ -75,6 +81,28 @@ export default {
 
 	setup() {
 		return { t, valueOf }
+	},
+
+	data() {
+		return {
+			/** whether the focus has left the editor after being in it */
+			touched: false,
+		}
+	},
+
+	methods: {
+		/**
+		 * The fields are judged once the reader moves on from them, not while
+		 * they are still filling them in.
+		 *
+		 * @param {FocusEvent} event the focus leaving one of the fields
+		 */
+		onFocusOut(event) {
+			const editor = /** @type {HTMLElement|undefined} */ (this.$refs.editor)
+			if (!(event.relatedTarget instanceof Node) || !editor?.contains(event.relatedTarget)) {
+				this.touched = true
+			}
+		},
 	},
 }
 </script>

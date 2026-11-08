@@ -1243,6 +1243,24 @@ describe('Composer', () => {
 		})
 	})
 
+	describe('an incomplete event', () => {
+		it('is pointed out once sending was tried, and forgotten with the box', async () => {
+			const { wrapper, store } = mountComposer({ startExpanded: true })
+			await flushPromises()
+			wrapper.vm.showEvent = true
+			await flushPromises()
+			expect(wrapper.find('.event-editor__error').exists()).toBe(false)
+
+			await wrapper.vm.createPost()
+			await flushPromises()
+			expect(store.post).not.toHaveBeenCalled()
+			expect(wrapper.find('.event-editor__error').exists()).toBe(true)
+
+			wrapper.vm.clearComposer()
+			expect(wrapper.vm.eventAttempted).toBe(false)
+		})
+	})
+
 	describe('reply drafts', () => {
 		const replyKey = 'social.composer.draft.reply.42::alice'
 		const storedReply = () => JSON.parse(localStorage.getItem(replyKey) ?? 'null')
@@ -2475,7 +2493,7 @@ describe('Composer', () => {
 			const { wrapper, store } = mountComposer({ defaultVisibility: 'public' })
 			enableBluesky()
 			await wrapper.find('button[aria-label="Create an event"]').trigger('click')
-			expect(wrapper.text()).toContain('The event details are shared with the Fediverse. Bluesky receives the post text, without the event dates or location.')
+			expect(wrapper.text()).toContain('Some apps and networks show only the post text, without the event dates or location.')
 			expect(canPost(wrapper)).toBe(false)
 
 			const fields = wrapper.findAll('.event-editor input')
