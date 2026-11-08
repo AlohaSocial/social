@@ -115,6 +115,29 @@ tables have grown past the size where that starts to cost: more than a million
 posts, or about thirty million words in the search index. See
 [The post tables keep growing](#the-post-tables-keep-growing).
 
+**Aloha Social: ready to be public.** Whether a server that faces the public
+says who runs it and on what terms. See [Ready to be public](#ready-to-be-public).
+
+### Ready to be public
+
+A server that people can sign up to, or whose posts reach other servers, should
+say who to contact, what its rules are, and link a privacy policy and a legal
+notice: people deciding whether to join look for them, the **About this
+server** page and every Mastodon client show them, and a moderator points at
+the rules. The check names whichever of the four is missing:
+
+- **a contact** — a contact address or a contact account (either is enough),
+  under **Administration → Aloha Social → Server settings**, or
+  `occ config:app:set social contact_email --value …`;
+- **server rules** — **Administration → Aloha Social → Server rules**;
+- **a privacy policy link** and **a legal notice link** — Nextcloud's own,
+  under **Administration → Theming**.
+
+It is a **warning** while people without a Nextcloud account may sign up
+(`external_enabled`), **information** while the server only federates (on
+Bluesky, or on the fediverse unless the allow list is empty), and quiet on a
+server that does neither, or once all four are set.
+
 ### Mastodon apps cannot connect
 
 A Mastodon app is given a domain and builds `https://<domain>/api/v1/...` from
