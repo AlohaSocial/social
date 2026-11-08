@@ -10,8 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use DateTime;
+use DateTimeZone;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCA\Social\Model\ActorRelation;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -69,64 +71,147 @@ class ReactionsRequest extends ReactionsRequestBuilder {
 	}
 
 	/**
-	 * Every reaction on a post, newest last.
+	 * How many accounts reacted to each of these posts with each emoji,
+	 * counted by the database rather than read row by row, so a post with
+	 * thousands of reactions is counted in full.
 	 *
-	 * @return EmojiReact[]
-	 */
-	public function getByObjectId(string $objectId, int $limit = 500): array {
-		$qb = $this->getReactionsSelectSql();
-		$qb->andWhere(
-			$qb->expr()->eq('r.object_id_prim', $qb->createNamedParameter($qb->prim($objectId)))
-		);
-		$qb->orderBy('r.creation', 'asc');
-		$qb->setMaxResults($limit);
-
-		return $this->getReactionsFromRequest($qb);
-	}
-
-	/**
-	 * The reactions on several posts at once, keyed by the post they are on.
-	 *
-	 * A timeline page draws a reaction bar per card, and one query for the
-	 * page rather than one per card is the difference between a constant and
-	 * a multiple of the page size.
+	 * Left out: reactions by the accounts in `$hiddenActorIds`, by accounts on
+	 * the instances in `$hiddenHosts` (subdomains included) and, for a viewer,
+	 * by accounts the viewer blocks, is blocked by or mutes. Each of those is
+	 * an anti-join probe on the relation's unique index, not a list in the
+	 * statement, so a viewer with a long block list costs no more.
 	 *
 	 * @param string[] $objectIds
-	 * @return array<string, EmojiReact[]> keyed by the *prim* of the post
+	 * @param string $viewerId the reader's actor id, or '' for anonymous
+	 * @param string[] $hiddenActorIds
+	 * @param string[] $hiddenHosts lower-case hostnames
+	 * @return array<string, array<string, int>> keyed by the *prim* of the post, then by emoji in
+	 *                                           the order each was first used
 	 */
-	public function getByObjectIds(array $objectIds, int $limit = 2000): array {
-		if ($objectIds === []) {
-			return [];
-		}
-
-		$qb = $this->getReactionsSelectSql();
-		$qb->addSelect('r.object_id_prim');
-
-		$prims = array_values(array_unique(array_map(
-			static fn (string $id): string => md5($id),
-			array_filter($objectIds, static fn (string $id): bool => $id !== '')
-		)));
+	public function countByObjectIds(array $objectIds, string $viewerId = '', array $hiddenActorIds = [], array $hiddenHosts = [], ?int $now = null): array {
+		$prims = self::prims($objectIds);
 		if ($prims === []) {
 			return [];
 		}
 
-		$qb->andWhere($qb->expr()->in(
-			'r.object_id_prim',
-			$qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
-		));
-		$qb->orderBy('r.creation', 'asc');
-		$qb->setMaxResults($limit);
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('r.object_id_prim', 'r.emoji')
+			->selectAlias($qb->func()->count('*'), 'reactions')
+			->selectAlias($qb->func()->min('r.creation'), 'first_at')
+			->from(self::TABLE_REACTIONS, 'r')
+			->where($expr->in('r.object_id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)))
+			->andWhere($expr->neq('r.emoji', $qb->createNamedParameter('')))
+			->groupBy('r.object_id_prim', 'r.emoji')
+			->orderBy($qb->func()->min('r.creation'), 'ASC');
 
-		$byPost = [];
+		$hiddenPrims = self::prims($hiddenActorIds);
+		if ($hiddenPrims !== []) {
+			$qb->andWhere($expr->notIn('r.actor_id_prim', $qb->createNamedParameter($hiddenPrims, IQueryBuilder::PARAM_STR_ARRAY)));
+		}
+		foreach (array_unique($hiddenHosts) as $host) {
+			if ($host === '') {
+				continue;
+			}
+			$escaped = $this->dbConnection->escapeLikeParameter($host);
+			$qb->andWhere($expr->notLike($qb->func()->lower('r.actor_id'), $qb->createNamedParameter('%://' . $escaped . '/%')));
+			$qb->andWhere($expr->notLike($qb->func()->lower('r.actor_id'), $qb->createNamedParameter('%.' . $escaped . '/%')));
+		}
+		if ($viewerId !== '') {
+			$this->hideRelatedTo($qb, $viewerId, $now ?? time());
+		}
+
+		$rows = [];
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {
-			$reaction = new EmojiReact();
-			$reaction->importFromDatabase($data);
-			$byPost[(string)$data['object_id_prim']][] = $reaction;
+			$rows[] = [(string)$data['object_id_prim'], (string)$data['emoji'], (int)$data['reactions'], (string)$data['first_at']];
 		}
 		$cursor->closeCursor();
 
-		return $byPost;
+		// first reacted first; emoji used first in the same second are ordered
+		// by their bytes here, since collations disagree about emoji (MySQL's
+		// general ones weigh them all alike)
+		usort($rows, static fn (array $a, array $b): int => strcmp($a[3], $b[3]) ?: strcmp($a[1], $b[1]));
+		$counts = [];
+		foreach ($rows as [$prim, $emoji, $count]) {
+			$counts[$prim][$emoji] = $count;
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * The emoji one account reacted with to each of these posts.
+	 *
+	 * @param string[] $objectIds
+	 * @return array<string, array<string, true>> keyed by the *prim* of the post, then by emoji
+	 */
+	public function emojisOf(string $actorId, array $objectIds): array {
+		$prims = self::prims($objectIds);
+		if ($actorId === '' || $prims === []) {
+			return [];
+		}
+
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('r.object_id_prim', 'r.emoji')
+			->from(self::TABLE_REACTIONS, 'r')
+			->where($expr->eq('r.actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))))
+			->andWhere($expr->in('r.object_id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)));
+
+		$emojis = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$emojis[(string)$data['object_id_prim']][(string)$data['emoji']] = true;
+		}
+		$cursor->closeCursor();
+
+		return $emojis;
+	}
+
+	/**
+	 * Leaves out the reactions of accounts the viewer blocks, is blocked by,
+	 * or mutes with a mute that has not run out.
+	 */
+	private function hideRelatedTo(SocialQueryBuilder $qb, string $viewerId, int $now): void {
+		$expired = $this->getQueryBuilder();
+		$expired->select($expired->createFunction('1'))
+			->from(self::TABLE_MUTE_EXPIRY, 'rx')
+			->where($expired->expr()->eq('rx.actor_id_prim', $qb->createNamedParameter($qb->prim($viewerId))))
+			->andWhere($expired->expr()->eq('rx.object_id_prim', 'r.actor_id_prim'))
+			->andWhere($expired->expr()->lte('rx.expires_at', $qb->createNamedParameter(
+				(new DateTime('@' . $now))->setTimezone(new DateTimeZone(date_default_timezone_get())),
+				IQueryBuilder::PARAM_DATE
+			)));
+
+		$relation = $this->getQueryBuilder();
+		$expr = $relation->expr();
+		$relation->select($relation->createFunction('1'))
+			->from(self::TABLE_ACTOR_RELATION, 'rr')
+			->where($expr->eq('rr.actor_id_prim', $qb->createNamedParameter($qb->prim($viewerId))))
+			->andWhere($expr->eq('rr.object_id_prim', 'r.actor_id_prim'))
+			->andWhere($expr->orX(
+				$expr->in('rr.type', $qb->createNamedParameter(
+					[ActorRelation::TYPE_BLOCK, ActorRelation::TYPE_BLOCKED_BY], IQueryBuilder::PARAM_STR_ARRAY
+				)),
+				$expr->andX(
+					$expr->eq('rr.type', $qb->createNamedParameter(ActorRelation::TYPE_MUTE)),
+					'NOT EXISTS (' . $expired->getSQL() . ')'
+				)
+			));
+
+		$qb->andWhere('NOT EXISTS (' . $relation->getSQL() . ')');
+	}
+
+	/**
+	 * @param string[] $ids
+	 * @return list<string>
+	 */
+	private static function prims(array $ids): array {
+		return array_values(array_unique(array_map(
+			static fn (string $id): string => md5($id),
+			array_filter($ids, static fn (string $id): bool => $id !== '')
+		)));
 	}
 
 	/** Removes only the named reaction, leaving a newer use of the same emoji intact. */

@@ -9,9 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Db\ReactionsRequest;
-use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Moderation;
 
 /**
  * Counting the reactions on a post, which is a read and nothing else.
@@ -27,6 +28,8 @@ class ReactionSummaryService {
 	public function __construct(
 		private ReactionsRequest $reactionsRequest,
 		private EmojiService $emojiService,
+		private ?ModerationRequest $moderationRequest = null,
+		private ?FediverseService $fediverseService = null,
 	) {
 	}
 
@@ -42,7 +45,7 @@ class ReactionSummaryService {
 	 * @return list<array{name: string, count: int, me: bool, url?: string}>
 	 */
 	public function summaryOf(string $postId, string $viewerId = ''): array {
-		return $this->addLocalEmojiUrls(self::summarise($this->reactionsRequest->getByObjectId($postId), $viewerId));
+		return $this->summaryOfMany([$postId], $viewerId)[$postId] ?? [];
 	}
 
 	/**
@@ -80,24 +83,70 @@ class ReactionSummaryService {
 	}
 
 	/**
-	 * The same, for a page of posts at once.
+	 * The same, for a page of posts at once: one counting query for the page
+	 * and, for a signed-in reader, one for their own reactions.
+	 *
+	 * The reactions of suspended and silenced accounts, of accounts on a
+	 * blocked or silenced instance, and of accounts the reader blocks, is
+	 * blocked by or mutes are not counted. The reader's own always are.
 	 *
 	 * @param string[] $postIds
 	 * @param string $viewerId the reader's actor id, or '' for anonymous
 	 * @return array<string, list<array{name: string, count: int, me: bool, url?: string}>> keyed by post id
 	 */
 	public function summaryOfMany(array $postIds, string $viewerId = ''): array {
-		$byPrim = $this->reactionsRequest->getByObjectIds($postIds);
+		$postIds = array_values(array_unique(array_filter($postIds, static fn (string $id): bool => $id !== '')));
+		if ($postIds === []) {
+			return [];
+		}
+
+		$counts = $this->reactionsRequest->countByObjectIds(
+			$postIds, $viewerId, $this->hiddenActors($viewerId), $this->hiddenHosts()
+		);
+		if ($counts === []) {
+			return [];
+		}
+		$mine = $viewerId === '' ? [] : $this->reactionsRequest->emojisOf($viewerId, $postIds);
 
 		$summaries = [];
 		foreach ($postIds as $postId) {
-			$reactions = $byPrim[md5($postId)] ?? [];
-			if ($reactions !== []) {
-				$summaries[$postId] = $this->addLocalEmojiUrls(self::summarise($reactions, $viewerId));
+			$prim = md5($postId);
+			if (isset($counts[$prim])) {
+				$summaries[$postId] = $this->addLocalEmojiUrls(self::summarise($counts[$prim], $mine[$prim] ?? []));
 			}
 		}
 
 		return $summaries;
+	}
+
+	/**
+	 * The accounts a moderator suspended or silenced, other than the reader.
+	 *
+	 * @return list<string>
+	 */
+	private function hiddenActors(string $viewerId): array {
+		if ($this->moderationRequest === null) {
+			return [];
+		}
+		$hidden = array_merge(
+			$this->moderationRequest->getActorIdsAt(Moderation::SUSPEND),
+			$this->moderationRequest->getActorIdsAt(Moderation::SILENCE),
+		);
+
+		return array_values(array_diff($hidden, [$viewerId]));
+	}
+
+	/**
+	 * The instances this one blocks or silences.
+	 *
+	 * @return list<string>
+	 */
+	private function hiddenHosts(): array {
+		if ($this->fediverseService === null) {
+			return [];
+		}
+
+		return array_keys($this->fediverseService->blockedHosts() + $this->fediverseService->silencedHosts());
 	}
 
 	/**
@@ -123,29 +172,17 @@ class ReactionSummaryService {
 	}
 
 	/**
-	 * @param EmojiReact[] $reactions
+	 * @param array<string, int> $counts emoji => how many
+	 * @param array<string, true> $mine the reader's own emoji
 	 * @return list<array{name: string, count: int, me: bool}>
 	 */
-	private static function summarise(array $reactions, string $viewerId): array {
-		$counts = [];
-		$mine = [];
-
-		foreach ($reactions as $reaction) {
-			$emoji = $reaction->getContent();
-			if ($emoji === '') {
-				continue;
-			}
-
-			$counts[$emoji] = ($counts[$emoji] ?? 0) + 1;
-			if ($viewerId !== '' && $reaction->getActorId() === $viewerId) {
-				$mine[$emoji] = true;
-			}
-		}
-
+	private static function summarise(array $counts, array $mine): array {
 		$summary = [];
 		foreach ($counts as $emoji => $count) {
-			// the key is a string, not an int: isUsableEmoji() refuses digits,
-			// so no emoji can be the numeric string PHP would have converted
+			$emoji = (string)$emoji;
+			if ($emoji === '' || $count < 1) {
+				continue;
+			}
 			$summary[] = ['name' => $emoji, 'count' => $count, 'me' => isset($mine[$emoji])];
 		}
 
@@ -155,5 +192,4 @@ class ReactionSummaryService {
 
 		return $summary;
 	}
-
 }

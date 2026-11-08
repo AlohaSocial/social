@@ -234,6 +234,17 @@ class FediverseService {
 	}
 
 	/**
+	 * The instances this one refuses, normalised, as a set: the access list
+	 * when it is a block list, nothing when it names the only instances this
+	 * one talks to.
+	 *
+	 * @return array<string, true>
+	 */
+	public function blockedHosts(): array {
+		return $this->isBlockList() ? $this->exactlyListedHosts() : [];
+	}
+
+	/**
 	 * The access list's own entries, normalised, as a set — what
 	 * `isExactlyListed()` asks about, for a caller with many hosts to ask.
 	 *

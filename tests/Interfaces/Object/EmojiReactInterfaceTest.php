@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interfaces\Object;
 
+use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
@@ -22,6 +23,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\ActorRelation;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
@@ -146,6 +148,28 @@ class EmojiReactInterfaceTest extends ActivityPubTestCase {
 		$this->reactionsRequest->expects($this->never())->method('save');
 
 		$this->handler->processIncomingRequest($this->aReaction());
+	}
+
+	public function testAReactionFromAnAccountTheAuthorBlockedIsDropped(): void {
+		$this->thePostExists();
+		$relations = $this->createMock(ActorRelationRequest::class);
+		$relations->expects($this->once())->method('exists')
+			->with($this->alice->getId(), $this->bob->getId(), ActorRelation::TYPE_BLOCK)
+			->willReturn(true);
+		$this->reactionsRequest->expects($this->never())->method('save');
+		$handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest, null, $relations);
+
+		$handler->processIncomingRequest($this->aReaction());
+	}
+
+	public function testAReactionFromAnAccountTheAuthorDidNotBlockIsStored(): void {
+		$this->thePostExists();
+		$relations = $this->createStub(ActorRelationRequest::class);
+		$relations->method('exists')->willReturn(false);
+		$this->reactionsRequest->expects($this->once())->method('save')->willReturn(true);
+		$handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest, null, $relations);
+
+		$handler->processIncomingRequest($this->aReaction());
 	}
 
 	/**

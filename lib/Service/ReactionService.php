@@ -15,6 +15,7 @@ use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -24,6 +25,7 @@ use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\CustomEmoji;
 use OCA\Social\Model\InstancePath;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
 
@@ -64,6 +66,7 @@ class ReactionService {
 		private LoggerInterface $logger,
 		private EmojiService $emojiService,
 		private ChatSender $chatSender,
+		private ?BlockedByService $blockedBy = null,
 	) {
 	}
 
@@ -124,6 +127,7 @@ class ReactionService {
 	 *
 	 * @throws StreamNotFoundException when there is no such post
 	 * @throws ItemUnknownException when the emoji is not one this app will draw
+	 * @throws BlockedByException when the post's author blocked the reader
 	 */
 	public function create(Person $actor, string $postId, string $emoji, string &$token = ''): ACore {
 		$this->moderationService->assertNotSuspended($actor->getId());
@@ -140,6 +144,9 @@ class ReactionService {
 		}
 
 		$post = $this->streamRequest->getStreamById($postId, true);
+		// a reaction is for the author to see, and an author who blocked the
+		// reader asked not to
+		$this->blockedBy?->assertNotBlocked($actor, [$post->getAttributedTo()]);
 		if ($this->chatSender->react($actor, $post, $emoji, true) === true) {
 			$reaction = $this->localReaction($actor, $post, $emoji);
 			if (!$this->reactionsRequest->save($reaction)) {

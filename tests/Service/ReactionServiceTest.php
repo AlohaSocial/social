@@ -14,12 +14,14 @@ use OCA\Social\AP;
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\CustomEmoji;
 use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\EmojiService;
@@ -177,6 +179,39 @@ class ReactionServiceTest extends TestCase {
 
 		$this->assertInstanceOf(EmojiReact::class, $result);
 		$this->assertSame('🔥', $result->getContent());
+	}
+
+	public function testAReactionToTheAuthorWhoBlockedTheReaderIsRefusedBeforeAnythingIsStoredOrSent(): void {
+		$actor = new Person();
+		$actor->setId('https://social.example/users/alice');
+		$post = new Stream();
+		$post->setId('https://remote.example/notes/1');
+		$post->setAttributedTo('https://remote.example/users/bob');
+		$streams = $this->createStub(StreamRequest::class);
+		$streams->method('getStreamById')->willReturn($post);
+		$blockedBy = $this->createMock(BlockedByService::class);
+		$blockedBy->expects($this->once())->method('assertNotBlocked')
+			->with($actor, ['https://remote.example/users/bob'])
+			->willThrowException(new BlockedByException('blocked'));
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->expects($this->never())->method('save');
+		$activity = $this->createMock(ActivityService::class);
+		$activity->expects($this->never())->method('request');
+		$service = new ReactionService(
+			$reactions,
+			$streams,
+			$this->createStub(SignatureService::class),
+			$activity,
+			$this->createStub(CacheActorService::class),
+			$this->createStub(ModerationService::class),
+			new NullLogger(),
+			$this->createStub(EmojiService::class),
+			$this->createStub(ChatSender::class),
+			$blockedBy,
+		);
+
+		$this->expectException(BlockedByException::class);
+		$service->create($actor, $post->getId(), '🔥');
 	}
 
 	#[DataProvider('refusedProvider')]
