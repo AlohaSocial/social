@@ -543,6 +543,8 @@ class ConfigService {
 	public const ATPROTO_DELETE_CURSOR = 'atproto_delete_cursor';
 	/** upper NID captured when one deletion-sweep cycle starts */
 	public const ATPROTO_DELETE_MAX_NID = 'atproto_delete_max_nid';
+	/** where the deletion sweep's fast pass over the last week's Bluesky posts got to */
+	public const ATPROTO_DELETE_RECENT_CURSOR = 'atproto_delete_recent_cursor';
 	public const ATPROTO_DETACH_CURSOR = 'atproto_detach_cursor';
 	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
 	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
@@ -576,6 +578,7 @@ class ConfigService {
 		self::ATPROTO_CRAWL_RESULTS => '[]',
 		self::ATPROTO_DELETE_CURSOR => '0',
 		self::ATPROTO_DELETE_MAX_NID => '0',
+		self::ATPROTO_DELETE_RECENT_CURSOR => '0',
 		self::ATPROTO_DETACH_CURSOR => '0',
 		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
