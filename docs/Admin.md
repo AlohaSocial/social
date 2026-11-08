@@ -885,6 +885,27 @@ sent. A delegate cannot act on a Nextcloud administrator's account, and
 nobody — administrator or delegate — can silence, suspend, lift or purge their
 own.
 
+### Ranked For You recommendations switch
+
+**Administration → Aloha Social → For you** includes an independent **Ranked For You
+recommendations** switch. It is off by default. Enabling it makes the ranked
+timeline available; it does not automatically opt readers into behavioral
+learning. The feed can draw on learned signals, post content, freshness, follows
+and discovery, so it does not require readers to choose topics. Readers cannot
+currently add topics manually or request a topic-specific feed. That is a
+separate product capability and should not be implied by the ranking switch.
+Turn the switch off to disable the ranked timeline. See
+[For-You.md](For-You.md) for the data and consent model.
+
+Hashtag-interest learning, the part of For You that learns from what a user
+opens, likes, boosts, replies to, saves and watches, is **opt-in** as well:
+each user turns on **Learn from my browsing** in their own For You settings.
+The card's **Learn hashtag interests for users who have not chosen** switch
+(`interests_default`) is off by default; turning it on makes learning the
+default for every user who has not made a choice, which may need their consent
+where profiling from reading requires it. Learned interests are kept while
+learning is off.
+
 ---
 
 ## External users
@@ -1533,6 +1554,42 @@ is the one a medium instance wants.
 timeline queries against it, which is the only honest way to find out what any
 of this costs on the hardware in front of you.
 
+## Backup and restore
+
+Aloha Social keeps its state in three places, and a backup needs all three,
+taken together:
+
+- **The database**: every post, follow, account, list, notification and
+  queued delivery, in the `social_*` tables (with Nextcloud's table prefix).
+  Back up the whole Nextcloud database, as the Nextcloud documentation
+  describes; a dump of only these tables is not a consistent backup, because
+  accounts are Nextcloud users.
+- **`config.php`, and in it `secret`.** Every account's ActivityPub signing key,
+  and every Bluesky key (see [Keys and backups](#bluesky)), is stored sealed with
+  that secret. A database restored next to another secret has accounts that can
+  no longer sign anything: other servers then refuse everything they send.
+- **The data directory**: the app's files are in
+  `appdata_<instanceid>/social/` — the pictures and videos posted here, custom
+  emoji, the instance's own GIFs and the animated emoji it fetched, imports in
+  progress, and the cached copies of media from other servers.
+
+Restore all three from the same moment, with the app at the version it had
+when the backup was taken, then run `occ social:check:install`.
+
+**What cannot be recovered without the secret.** The ActivityPub keys cannot be
+opened again: the accounts keep their posts and followers, but other servers
+only accept what is signed with the key they already know, so the accounts can
+no longer federate, and nothing in this app can mint a replacement other servers
+would trust. The Bluesky keys can be re-sealed under a new secret only while the
+old one is known (`occ social:atproto:keys:reseal`). Keep a copy of `secret`
+with the database backups, and as safe as they are.
+
+**What a smaller backup gives up.** The cached copies of other servers' media
+are the largest part of the data directory and the least valuable: the
+originals are on the servers that posted them. Leaving them out keeps a backup
+small, at the price of those pictures being missing here after a restore. The
+files posted here exist nowhere else.
+
 ## What to watch
 
 - **Administration → Overview.** The setup checks above are there precisely so
@@ -1547,47 +1604,3 @@ of this costs on the hardware in front of you.
   past.
 - **The audit log**, if `admin_audit` is enabled: every moderation decision,
   with the moderator who took it.
-# Ranked For You recommendations switch
-
-Administration → Social → For You includes an independent **Ranked For You
-recommendations** switch. It is off by default. Enabling it makes the ranked
-timeline available; it does not automatically opt readers into behavioral
-learning. The feed can draw on learned signals, post content, freshness, follows
-and discovery, so it does not require readers to choose topics. Readers cannot
-currently add topics manually or request a topic-specific feed. That is a
-separate product capability and should not be implied by the ranking switch.
-Turn the switch off to disable the ranked timeline. See
-[For-You.md](For-You.md) for the data and consent model.
-
-Hashtag-interest learning, the part of For You that learns from what a user
-opens, likes, boosts, replies to, saves and watches, is **opt-in** as well:
-each user turns on **Learn from my browsing** in their own For You settings.
-The card's **Learn hashtag interests for users who have not chosen** switch
-(`interests_default`) is off by default; turning it on makes learning the
-default for every user who has not made a choice, which may need their consent
-where profiling from reading requires it. Learned interests are kept while
-learning is off.
-
-## Empty application after installing development dependencies
-
-A running Nextcloud should use Social's production Composer autoloader. Development
-packages such as Psalm pull in Amp versions that may collide with the Mail app's
-Amp functions during Nextcloud startup. A typical fatal error is
-`Cannot redeclare function Amp\delay()`. This can affect even `status.php`.
-
-From the Social app directory, regenerate the runtime autoloader without
-development packages:
-
-```sh
-composer dump-autoload --no-dev --no-scripts
-```
-
-For a production installation, install the production dependencies directly with
-`composer install --no-dev --prefer-dist --no-interaction`. The dump command repairs
-the local autoloader when the packages are already installed; it does not update
-the lock file or remove packages. Run development checks in a development checkout
-or restore the development autoloader there with `composer dump-autoload --dev`.
-Do not leave that development autoloader active in a shared running Nextcloud.
-
-Afterward verify `/status.php`, `occ status`, and the Social page in a browser.
-A successful Webpack build alone does not exercise Nextcloud bootstrap.
