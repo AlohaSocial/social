@@ -108,6 +108,8 @@ class WriteService {
 	}
 	/** the records whose key is the key of the post they gate */
 	private const GATES = ['app.bsky.feed.threadgate', RecordMapper::POSTGATE];
+	/** the start of the error a post kept for a moderator answers with (`holdForReview()`) */
+	private const HELD = 'This post is waiting for a moderator';
 
 	public function __construct(
 		private AccountService $accounts,
@@ -186,7 +188,7 @@ class WriteService {
 				$this->activities->discardDeferredDeliveries();
 			}
 			if ($ownsBatch && $this->repositories->batchActive()) {
-				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+				if (self::isHeld($e)) {
 					$this->repositories->commitBatch();
 				} else {
 					$this->repositories->rollbackBatch();
@@ -303,7 +305,7 @@ class WriteService {
 				// A reviewed post is intentionally kept in the moderation queue
 				// before XRPC returns an error. Commit that queue entry even though
 				// no repository record is written.
-				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+				if (self::isHeld($e)) {
 					$this->repositories->commitBatch();
 				} else {
 					$this->repositories->rollbackBatch();
@@ -793,6 +795,12 @@ class WriteService {
 	 * `com.atproto.repo.applyWrites`: Social actions and their repository
 	 * records share one transaction and one repository commit.
 	 *
+	 * A post the review rules hold ends the batch where it stands: the writes
+	 * before it are committed with the queue entry, so a thread keeps the
+	 * posts above the held one and their gates, and the held post and every
+	 * write after it (its gates, the replies below it) are not applied. The
+	 * app is told so in the error.
+	 *
 	 * @throws XrpcException
 	 */
 	public function apply(ClientSession $session, array $body): array {
@@ -819,12 +827,14 @@ class WriteService {
 			}
 		}
 		$results = [];
+		$position = 0;
 		try {
 			$this->repositories->beginBatch($session->identity->did, $this->identities->signingKey($session->identity), $swapCommit);
 			$this->activities->beginDeferredDeliveries();
-			foreach ($writes as $write) {
+			foreach ($writes as $position => $write) {
 				$type = $write['$type'];
-				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'rkey' => $write['rkey'] ?? '', 'record' => $write['value'] ?? []] + array_intersect_key($body, ['validate' => true]);
+				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'record' => $write['value'] ?? []]
+					+ array_intersect_key($write, ['rkey' => true]) + array_intersect_key($body, ['validate' => true]);
 				if ($type === 'com.atproto.repo.applyWrites#create') {
 					$results[] = ['$type' => 'com.atproto.repo.applyWrites#createResult'] + array_intersect_key($this->create($session, $one), ['uri' => 1, 'cid' => 1, 'validationStatus' => 1]);
 				} elseif ($type === 'com.atproto.repo.applyWrites#delete') {
@@ -836,6 +846,9 @@ class WriteService {
 			}
 			$commit = $this->repositories->commitBatch();
 		} catch (Throwable $e) {
+			if ($e instanceof XrpcException && self::isHeld($e) && $this->repositories->batchActive()) {
+				$this->keepHeld($e, count($writes) - $position - 1);
+			}
 			$this->activities->discardDeferredDeliveries();
 			$this->repositories->rollbackBatch();
 			if ($e instanceof XrpcException) {
@@ -852,6 +865,33 @@ class WriteService {
 		$this->activities->releaseDeferredDeliveries();
 
 		return ['commit' => $commit === null ? $this->commit($session) : ['cid' => $commit->commitCid->toString(), 'rev' => $commit->rev], 'results' => $results];
+	}
+
+	/**
+	 * Commits what a batch did before the post the review rules held, with
+	 * the queue entry, and answers with the moderator error.
+	 *
+	 * @param int $skipped the writes after the held post, not applied
+	 * @throws XrpcException
+	 */
+	private function keepHeld(XrpcException $held, int $skipped): never {
+		try {
+			$this->repositories->commitBatch();
+		} catch (InvalidSwapException $e) {
+			$this->activities->discardDeferredDeliveries();
+			throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+		} catch (Throwable $e) {
+			$this->activities->discardDeferredDeliveries();
+			throw XrpcException::invalidRequest($e->getMessage());
+		}
+		$this->activities->releaseDeferredDeliveries();
+		if ($skipped === 0) {
+			throw $held;
+		}
+
+		throw XrpcException::invalidRequest($held->getMessage() . ($skipped === 1
+			? ' The write after it in this request was not applied.'
+			: ' The ' . $skipped . ' writes after it in this request were not applied.'));
 	}
 
 	/**
@@ -1325,7 +1365,12 @@ class WriteService {
 			throw XrpcException::invalidRequest($e->getMessage());
 		}
 
-		throw XrpcException::invalidRequest('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.');
+		throw XrpcException::invalidRequest(self::HELD . ' to look at it. It has been kept, there is no need to write it again.');
+	}
+
+	/** Whether a write failed because its post was kept for a moderator. */
+	private static function isHeld(Throwable $e): bool {
+		return $e instanceof XrpcException && str_starts_with($e->getMessage(), self::HELD);
 	}
 
 	/** @return list<string> */

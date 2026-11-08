@@ -903,6 +903,84 @@ class WriteServiceTest extends TestCase {
 		}
 	}
 
+	/** A thread an app posts in one applyWrites: its first post, the reply the rules hold, and that reply's gate. */
+	private function applyThreadWithAHeldReply(): XrpcException {
+		$this->repositories->method('batchActive')->willReturn(true);
+		$this->review->method('assess')->willReturnCallback(static fn (Person $actor, string $text): string => str_contains($text, 'held') ? 'links' : '');
+		$made = new Note();
+		$made->setId('https://social.test/@alice/7');
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3kroot', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$post = static fn (string $text): array => ['$type' => RecordMapper::POST, 'text' => $text, 'createdAt' => '2026-11-08T10:00:00.000Z'];
+		$root = Tid::next();
+		$reply = Tid::next();
+
+		try {
+			$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POST, 'rkey' => $root, 'value' => $post('The start of a thread')],
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POST, 'rkey' => $reply, 'value' => $post('The held reply')],
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POSTGATE, 'rkey' => $reply, 'value' => [
+					'$type' => RecordMapper::POSTGATE, 'post' => 'at://' . self::DID . '/app.bsky.feed.post/' . $reply, 'createdAt' => '2026-11-08T10:00:00.000Z',
+				]],
+			]]);
+		} catch (XrpcException $e) {
+			return $e;
+		}
+
+		$this->fail('a held post is not made');
+	}
+
+	public function testAPostHeldInApplyWritesIsKeptWithTheWritesBeforeIt(): void {
+		$this->review->expects($this->once())->method('hold')->with($this->alice, $this->callback(static fn (array $params): bool => $params['text'] === 'The held reply'), 'links');
+		$this->publisher->expects($this->once())->method('publishPost');
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('commitBatch');
+		$this->repositories->expects($this->never())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('write');
+		$this->activities->expects($this->once())->method('releaseDeferredDeliveries');
+		$this->activities->expects($this->never())->method('discardDeferredDeliveries');
+
+		$e = $this->applyThreadWithAHeldReply();
+
+		$this->assertSame(400, $e->status);
+		$this->assertStringStartsWith('This post is waiting for a moderator to look at it. It has been kept', $e->getMessage());
+		$this->assertStringEndsWith('The write after it in this request was not applied.', $e->getMessage(), 'the reply\'s gate is not kept');
+	}
+
+	public function testAHeldPostThatFailsToCommitKeepsNothingAndSaysWhy(): void {
+		$this->repositories->method('commitBatch')->willThrowException(new InvalidSwapException('stale repository head'));
+		$this->activities->expects($this->never())->method('releaseDeferredDeliveries');
+		$this->activities->expects($this->atLeastOnce())->method('discardDeferredDeliveries');
+
+		$e = $this->applyThreadWithAHeldReply();
+
+		$this->assertSame('InvalidSwap', $e->error);
+	}
+
+	public function testTheOnlyPostOfAnApplyWritesHeldIsKeptWithTheModeratorAnswer(): void {
+		$this->repositories->method('batchActive')->willReturn(true);
+		$this->review->method('assess')->willReturn('first_post');
+		$this->review->expects($this->once())->method('hold');
+		$this->posts->expects($this->never())->method('createPost');
+		$this->repositories->expects($this->once())->method('commitBatch');
+		$this->repositories->expects($this->never())->method('rollbackBatch');
+
+		try {
+			$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POST, 'value' => ['$type' => RecordMapper::POST, 'text' => 'Hello from the official app', 'createdAt' => '2026-11-08T10:00:00.000Z']],
+			]]);
+			$this->fail('a held post is not made');
+		} catch (XrpcException $e) {
+			$this->assertSame('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.', $e->getMessage());
+		}
+	}
+
 	public function testAnUploadIsKeptByTheOriginalBlobStoragePath(): void {
 		$bytes = 'the original bytes, including metadata';
 		$cid = Cid::forRaw($bytes);

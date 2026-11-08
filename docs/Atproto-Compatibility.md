@@ -83,6 +83,17 @@ explicitly. The collection mapping is defined in
 `lib/Atproto/Client/WriteService.php` and
 `lib/Atproto/Publisher/RecordMapper.php`.
 
+A post that the review rules hold for a moderator is kept in the review queue
+and answered with an `InvalidRequest` error saying so, whether it came through
+`createRecord`, `putRecord` or `applyWrites`. In `applyWrites` the held post
+ends the batch where it stands: the writes before it are committed together
+with the queue entry, and the held post and every write after it in the same
+call are not applied. For a thread posted in one call, the posts above the held
+reply and their gates are published; the held reply's own gates and the replies
+below it are not, and the error names how many writes were left out. An
+approved post is published as a new post with the text, media and reply target
+it was held with; gates written for it in the held call are not kept.
+
 The AT Protocol does not make an uploaded post instantly visible in every
 Bluesky surface. The sequence is: PDS commit, relay crawl, AppView indexing,
 then client refresh. A relay's acceptance or a local XRPC success only proves

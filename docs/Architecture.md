@@ -2449,8 +2449,11 @@ stages their Bluesky records and exposes them to later actions in the same
 batch. One database transaction commits the database-backed Social changes,
 repository records, and firehose event; ActivityPub deliveries begin after
 commit. On failure, the database transaction and deferred delivery starts are
-rolled back. Profile and media files use Nextcloud storage and are outside that
-database rollback. A mixed batch checks `swapCommit` against the locked
+rolled back. A post the review rules hold is the exception: the writes before
+it are committed with its review-queue entry, the held post and the writes after
+it are not applied, and the app gets the moderator error naming how many writes
+were left out (`WriteService::keepHeld()`). Profile and media files use
+Nextcloud storage and are outside that database rollback. A mixed batch checks `swapCommit` against the locked
 repository head before committing. Record-list cursors compare keys
 lexicographically in either direction, including numeric-looking keys such as
 `10` and `2`; the staged batch view uses the same ordering as stored records.
