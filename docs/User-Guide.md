@@ -550,12 +550,14 @@ live; without it the page checks every 30 seconds.
 
 ### For you
 
-**For You** is an optional ranked feed beside My Feed and the local and global
-timelines. The administrator can enable it. It combines relevant posts already
-known to this server with bounded discovery; available candidates can include
-ActivityPub and Bluesky posts. Photos, Videos and Shorts can use the same ranking
-with the relevant media filter. A sparse candidate pool may include fallback
-discovery, so this feed is not a complete or guaranteed index of either network.
+**For You** is a personalised feed beside My Feed and the local and global
+timelines. The administrator decides whether it is offered, and whether its
+newer ranked recommendations are switched on (they are off until then). It
+combines relevant posts already known to this server with bounded discovery;
+available candidates can include posts from other servers and networks. Photos,
+Videos and Shorts can use the same ranking with the relevant media filter. A
+sparse candidate pool may include fallback discovery, so this feed is not a
+complete or guaranteed index of anything.
 
 Post menus offer feedback such as hiding a post, seeing more from an author, or
 seeing less like similar content. These actions influence recommendations; they
@@ -563,12 +565,35 @@ do not follow, mute or block anyone. The feed may show a short explanation for a
 post while it is in For You. The explanation is tied to that feed and does not
 appear in ordinary timelines.
 
-Behavioral learning is a separate setting and is not required for the feed to
-work. If enabled, supported reading and video actions can refine future feed
-sessions. Learned data is private to the account and is not federated. The
-current interface does not provide manual topic selection or topic editing.
-For details about signals, consent, data export and operational limits, see
-[For-You.md](For-You.md).
+#### Learning from your browsing
+
+**Learning is off until you turn it on**, under **Settings → For You → Learn
+from my browsing** (an administrator can make it the default for everyone who
+has not chosen). Without it, For You ranks posts by the hashtags you follow,
+the people you follow, freshness and local discovery.
+
+With it on, For You learns which **hashtags** interest you from:
+
+- posts you open, pictures you open and links you follow;
+- posts you like, boost, reply to or save, from the web or from any app;
+- in Shorts, how much of a video you watched;
+- a little *against* a post's hashtags when you scroll quickly past it, or
+  mute its author.
+
+Simply leaving a post on screen does not count. It learns only from posts you
+are allowed to see, and what it learns stays on this server: it is not
+federated and nobody else sees it. You cannot choose its topics. **Pause
+learning** stops it for a while; turning learning off stops it until you turn
+it on again and **keeps** what was already learned, which For You goes on
+using; **Reset automatic interests** forgets it.
+
+When learning is on, a one-time note above the timeline says what it learns
+from, with a way to turn it off.
+
+The ranked recommendations have a second, separate **activity learning** switch
+(likes, saves, replies, qualified views, video watching and profile visits),
+which is also off until you turn it on. For details about signals, consent, data
+export and operational limits, see [For-You.md](For-You.md).
 
 ### Announcements from your administrators
 

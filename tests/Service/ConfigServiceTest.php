@@ -77,6 +77,18 @@ class ConfigServiceTest extends TestCase {
 		$this->assertSame('90', $this->service->defaults[ConfigService::SOCIAL_NOTIFICATION_RETENTION_DAYS]);
 	}
 
+	/**
+	 * Learning hashtag interests from reading is opted into: a reader who
+	 * never chose learns nothing, while the For you feature itself stays on.
+	 */
+	public function testHashtagLearningIsOffForAReaderWhoNeverChose(): void {
+		$this->withAppValues([]);
+
+		$this->assertSame('0', $this->service->defaults[ConfigService::SOCIAL_INTERESTS_DEFAULT]);
+		$this->assertFalse($this->service->getAppValueBool(ConfigService::SOCIAL_INTERESTS_DEFAULT));
+		$this->assertTrue($this->service->getAppValueBool(ConfigService::SOCIAL_INTERESTS));
+	}
+
 	public function testVideosGoOutAsNotesUnlessAnAdministratorDecidesOtherwise(): void {
 		$this->assertSame('0', $this->service->defaults[ConfigService::SOCIAL_PUBLISH_VIDEO]);
 	}

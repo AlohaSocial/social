@@ -1164,7 +1164,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `section_videos` | `1` | The same for the Videos section. |
 | `group_lists` | `[]` | Which Nextcloud groups become lists for their members, as a JSON array of group ids; at most 100. Empty is no groups, which is the default: every group a person was in used to become a list, which tells everybody in a group who else is in it. A group that no longer exists is dropped when the setting is read, not written back. Set from the Sections card. |
 | `interests` | `1` | Legacy hashtag-interest timeline switch and fallback configuration. The ranked web For You feed is controlled separately by `rec_v4_enabled`; see [For-You.md](For-You.md). |
-| `interests_default` | `1` | Legacy learning default used by the compatibility interest endpoints. It does not grant consent to the separate ranked-feed behavioral learning system. |
+| `interests_default` | `0` | Whether hashtag-interest learning is on for a user who never set **Learn from my browsing** themselves. **Off by default, so learning is opt-in**: each user turns it on under Settings → For You. `1` makes it the default for everyone who has not chosen; a user's own choice always wins. Switching it off does not delete anything learned, and For You keeps using it; learning resumes when it is on again. An upgrade removes a stored `1` once (`Version1000Date20261108400000`), because the For You card used to save it with every other value. It does not grant consent to the separate ranked-feed activity learning. |
 | `interests_half_life` | `30` | Legacy hashtag score decay, in days. Used only by the compatibility interest system. |
 | `interests_threshold` | `3` | Legacy threshold for listing learned hashtag interests. |
 | `interests_cap` | `30` | Legacy limit for the number of listed hashtag interests. |
@@ -1479,6 +1479,15 @@ currently add topics manually or request a topic-specific feed. That is a
 separate product capability and should not be implied by the ranking switch.
 Turn the switch off to disable the ranked timeline. See
 [For-You.md](For-You.md) for the data and consent model.
+
+Hashtag-interest learning, the part of For You that learns from what a user
+opens, likes, boosts, replies to, saves and watches, is **opt-in** as well:
+each user turns on **Learn from my browsing** in their own For You settings.
+The card's **Learn hashtag interests for users who have not chosen** switch
+(`interests_default`) is off by default; turning it on makes learning the
+default for every user who has not made a choice, which may need their consent
+where profiling from reading requires it. Learned interests are kept while
+learning is off.
 
 ## Empty application after installing development dependencies
 

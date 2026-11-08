@@ -59,6 +59,11 @@ screen is neutral; a dwell timer is not treated as evidence of interest.
 Existing legacy aggregates may still contain older dwell-based signals and
 decay over time.
 
+Hashtag-interest learning (Settings → For You → **Learn from my browsing**) is
+off until the reader turns it on, unless the administrator made it the default
+for readers who have not chosen (`interests_default`). Turning it off keeps the
+learned hashtags, which the feed goes on using, until the reader resets them.
+
 Behavioral learning has its own user consent and can be paused or reset. The
 administrator's Ranked For You switch is separate: it controls availability of
 the ranked endpoint and does not silently opt a person into behavioral

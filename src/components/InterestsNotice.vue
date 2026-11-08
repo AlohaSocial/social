@@ -3,13 +3,13 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- learning is on unless somebody turns it off, so the reader is told it
-	     is happening before anything else is: once per account, and the
-	     answer is kept on the server so another browser does not ask again -->
+	<!-- learning is opted into, and the reader is told once what it learns
+	     from: once per account, and the answer is kept on the server so
+	     another browser does not ask again -->
 	<section class="interests-notice" :aria-label="t('social', 'About For you')">
 		<TagHeart class="interests-notice__icon" :size="20" />
 		<p class="interests-notice__text">
-			{{ t('social', 'For You learns from posts you open and actions such as liking, boosting or saving. Watching a substantial part of a video can count too; simply leaving a post on screen does not increase your interests. This activity profile stays on this server and is not shared with other users.') }}
+			{{ t('social', 'For You learns from the hashtags of posts you open and of posts you like, boost, reply to or save. Watching a substantial part of a video can count too, and scrolling quickly past a post counts a little against its hashtags; simply leaving a post on screen does not increase your interests. This activity profile stays on this server and is not shared with other users.') }}
 		</p>
 		<div class="interests-notice__actions">
 			<NcButton variant="tertiary" :to="{ name: 'settings', hash: '#interests' }">

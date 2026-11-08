@@ -18,7 +18,7 @@
 					{{ t('social', 'Learn from my browsing') }}
 				</NcCheckboxRadioSwitch>
 				<p class="interests-settings__hint">
-					{{ t('social', 'For You learns automatically from the posts you read and interact with. You cannot choose its topics.') }}
+					{{ t('social', 'Off until you turn it on. For You then learns from the hashtags of posts you open, like, boost, reply to or save, and of videos you watch most of. You cannot choose its topics.') }}
 				</p>
 
 				<NcCheckboxRadioSwitch
@@ -34,7 +34,7 @@
 			</div>
 
 			<NcNoteCard v-if="!settings.learning" type="info" class="interests-settings__note">
-				{{ t('social', 'Automatic interest learning is off. No new reading signals are used until you turn it on again.') }}
+				{{ t('social', 'Learning from your browsing is off, so nothing new is learned. For You still uses the hashtags you follow, the people you follow, local discovery and anything learned earlier, until you reset it.') }}
 			</NcNoteCard>
 			<NcNoteCard v-else-if="thin" type="info" class="interests-settings__note">
 				{{ t('social', 'Still learning what you like. Until it knows more, For You also shows posts from people you follow and local discovery.') }}

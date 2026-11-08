@@ -41,10 +41,10 @@
 			</p>
 
 			<NcCheckboxRadioSwitch v-model="form.learningDefault" type="switch" :disabled="!form.enabled">
-				{{ t('social', 'Learn from browsing unless a user turns it off') }}
+				{{ t('social', 'Learn hashtag interests for users who have not chosen') }}
 			</NcCheckboxRadioSwitch>
 			<p class="interests-admin__hint">
-				{{ t('social', 'Controls the default for hashtag learning in the compatibility feed. Readers can change their own learning choice at any time.') }}
+				{{ t('social', 'Off by default: hashtag learning is opt-in, and each user turns it on in their own For You settings. Turned on here, it also learns for every user who has not made a choice. Users can change their own choice at any time, and turning learning off keeps what was already learned.') }}
 			</p>
 
 			<div class="interests-admin__numbers">
@@ -161,7 +161,7 @@ function formOf(settings) {
 		remoteDiscoveryPaused: settings?.remoteDiscoveryPaused === true,
 		learningPaused: settings?.learningPaused === true,
 		forceLegacyFeed: settings?.forceLegacyFeed === true,
-		learningDefault: settings?.learningDefault !== false,
+		learningDefault: settings?.learningDefault === true,
 		...Object.fromEntries(FIELDS.map((field) => [field.key, String(settings?.[field.key] ?? field.fallback)])),
 	}
 }

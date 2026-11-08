@@ -61,10 +61,13 @@ describe('the For you card', () => {
 		expect(fields(wrapper).map((field) => field.props('modelValue'))).toEqual(['30', '2.5', '30', '7'])
 	})
 
-	it('explains the learning default for the compatibility feed', () => {
+	it('says hashtag learning is opt-in and that switching it off keeps what was learned', () => {
 		const wrapper = mountCard()
 
-		expect(wrapper.text()).toContain('Controls the default for hashtag learning in the compatibility feed')
+		expect(wrapper.text()).toContain('Learn hashtag interests for users who have not chosen')
+		expect(wrapper.text()).toContain('Off by default: hashtag learning is opt-in')
+		expect(wrapper.text()).toContain('turning learning off keeps what was already learned')
+		expect(wrapper.text()).not.toContain('unless a user turns it off')
 	})
 
 	it('describes automatic ranking, separate learning consent and bounded discovery accurately', () => {
@@ -82,7 +85,8 @@ describe('the For you card', () => {
 	it('fills in the defaults for an instance that never saved the card', () => {
 		const wrapper = mountCard({})
 
-		expect(switches(wrapper).map((box) => box.props('modelValue'))).toEqual([false, false, false, false, true, true])
+		// learning from browsing is opt-in: off for an instance that never chose
+		expect(switches(wrapper).map((box) => box.props('modelValue'))).toEqual([false, false, false, false, true, false])
 		expect(fields(wrapper).map((field) => field.props('modelValue'))).toEqual(['30', '3', '30', '7'])
 	})
 
