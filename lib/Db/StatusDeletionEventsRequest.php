@@ -18,6 +18,21 @@ use Throwable;
 /** The bounded cursor of status deletions for connected Mastodon clients. */
 class StatusDeletionEventsRequest extends CoreRequestBuilder {
 	private const RETAIN = 10000;
+	/** The log is trimmed on every this-many-th insert, so it holds at most `RETAIN + TRIM_EVERY` rows. */
+	public const TRIM_EVERY = 100;
+
+	/**
+	 * The id at and below which events go after inserting this one, or 0 for
+	 * none: only every `TRIM_EVERY`-th insert trims, and only once more than
+	 * `RETAIN` events were ever recorded.
+	 */
+	public static function trimBelow(int $insertedId): int {
+		if ($insertedId <= self::RETAIN || $insertedId % self::TRIM_EVERY !== 0) {
+			return 0;
+		}
+
+		return $insertedId - self::RETAIN;
+	}
 
 	/** The newest event id, used to avoid replaying deletions to a new connection. */
 	public function newestId(): int {
@@ -94,11 +109,12 @@ class StatusDeletionEventsRequest extends CoreRequestBuilder {
 				->setValue('audience_prim', $qb->createNamedParameter($audiencePrim))
 				->executeStatement();
 
-			$maxId = $this->newestId();
-			if ($maxId > self::RETAIN) {
+			$id = $qb->getLastInsertId();
+			$below = self::trimBelow($id);
+			if ($below > 0) {
 				$trim = $this->getQueryBuilder();
 				$trim->delete(self::TABLE_STATUS_DELETIONS)
-					->where($trim->expr()->lte('id', $trim->createNamedParameter($maxId - self::RETAIN)))
+					->where($trim->expr()->lte('id', $trim->createNamedParameter($below, IQueryBuilder::PARAM_INT)))
 					->executeStatement();
 			}
 		} catch (Throwable $e) {
