@@ -502,6 +502,15 @@ class FollowService {
 		}
 	}
 
+	/** The follow of one actor by another, or null when there is none. */
+	public function getFollow(Person $actor, Person $target): ?Follow {
+		try {
+			return $this->followsRequest->getByPersons($actor->getId(), $target->getId());
+		} catch (FollowNotFoundException) {
+			return null;
+		}
+	}
+
 	/**
 	 * @param Person $local
 	 * @param Person $actor

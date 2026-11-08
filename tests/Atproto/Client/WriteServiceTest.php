@@ -42,6 +42,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Post;
@@ -81,6 +82,8 @@ class WriteServiceTest extends TestCase {
 	private LikeService $likes;
 	/** @var BoostService&MockObject */
 	private BoostService $boosts;
+	/** @var FollowService&MockObject */
+	private FollowService $follows;
 	/** @var StreamActionService&MockObject */
 	private StreamActionService $streamActions;
 	/** @var IRecommendationSignalRecorder&MockObject */
@@ -146,6 +149,7 @@ class WriteServiceTest extends TestCase {
 		$this->review = $this->createMock(PostReviewService::class);
 		$this->likes = $this->createMock(LikeService::class);
 		$this->boosts = $this->createMock(BoostService::class);
+		$this->follows = $this->createMock(FollowService::class);
 		$this->streamActions = $this->createMock(StreamActionService::class);
 		$this->recommendationSignals = $this->createMock(IRecommendationSignalRecorder::class);
 		$this->interactions = $this->createMock(InteractionPublisher::class);
@@ -175,7 +179,7 @@ class WriteServiceTest extends TestCase {
 		$this->listImport = $this->createMock(BlueskyListImport::class);
 		$this->activities = $this->createMock(ActivityService::class);
 		$this->writes = new WriteService(
-			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->createMock(FollowService::class),
+			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->follows,
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->interactions, $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
@@ -901,6 +905,31 @@ class WriteServiceTest extends TestCase {
 			$this->assertSame(400, $e->status);
 			$this->assertStringContainsString('waiting for a moderator', $e->getMessage());
 		}
+	}
+
+	public function testFollowingAgainAnswersWithTheFollowsRecordHoweverOldItIs(): void {
+		$follow = new Follow();
+		$follow->setId('https://social.test/@alice#follows/old');
+		$this->follows->expects($this->once())->method('followActor')->willReturn(false);
+		$this->follows->method('getFollow')->willReturn($follow);
+		$this->records[] = $this->record(RecordMapper::FOLLOW, '3kold', $follow->getId());
+		$this->repositories->expects($this->never())->method('listRecords');
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::FOLLOW, 'record' => [
+			'$type' => RecordMapper::FOLLOW, 'subject' => self::BOB, 'createdAt' => '2026-11-08T10:00:00.000Z',
+		]]);
+
+		$this->assertSame('at://' . self::DID . '/' . RecordMapper::FOLLOW . '/3kold', $made['uri']);
+	}
+
+	public function testAFollowWithoutARecordIsRefused(): void {
+		$this->follows->method('getFollow')->willReturn(null);
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('writes no Bluesky record');
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::FOLLOW, 'record' => [
+			'$type' => RecordMapper::FOLLOW, 'subject' => self::BOB, 'createdAt' => '2026-11-08T10:00:00.000Z',
+		]]);
 	}
 
 	/** A thread an app posts in one applyWrites: its first post, the reply the rules hold, and that reply's gate. */

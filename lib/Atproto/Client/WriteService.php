@@ -1205,11 +1205,13 @@ class WriteService {
 			$localId = $this->local->actorId($did);
 			$target = $this->cacheActors->getFromId($localId !== '' ? $localId : BlueskyIds::actorId($did));
 			$this->follows->followActor($actor, $target);
+			$follow = $this->follows->getFollow($actor, $target);
 		} catch (Throwable $e) {
 			throw XrpcException::invalidRequest('Could not follow: ' . $e->getMessage());
 		}
-		foreach ($this->repositories->listRecords($session->identity->did, RecordMapper::FOLLOW, 100) as $stored) {
-			if (($stored->value()['subject'] ?? '') === $did) {
+		// the record stands for the follow, made now or long ago
+		foreach ($follow === null ? [] : $this->repositories->getRecordsByLocalId($follow->getId()) as $stored) {
+			if ($stored->collection === RecordMapper::FOLLOW && $stored->did === $session->identity->did) {
 				return $stored;
 			}
 		}
