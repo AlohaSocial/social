@@ -73,12 +73,12 @@ class PollingBacklogTest extends TestCase {
 			return $pages[$cursor];
 		});
 
-		foreach ([50, 0, 50, 26] as $count) {
+		foreach ([50, 0, 50, 26] as $i => $count) {
 			$result = $poller->poll(1);
-			$this->assertSame(1, $result['requests']);
+			$this->assertSame($notifications || $i === 0 ? 1 : 2, $result['requests'], 'a feed walk reads its newest page too');
 			$this->assertSame($count, $result[$notifications ? 'handled' : 'stored']);
 		}
-		$this->assertSame(['', 'second', 'third', 'last'], $asked);
+		$this->assertSame($notifications ? ['', 'second', 'third', 'last'] : ['', '', 'second', '', 'third', '', 'last'], $asked);
 		$this->assertSame(array_map(self::uri(...), range(225, 100)), $this->stored);
 		$this->assertSame(self::stamp(225), $this->checkpoint);
 		$this->assertSame(array_fill(0, 4, $notifications ? 60 : 120), $this->scheduled);
@@ -94,15 +94,15 @@ class PollingBacklogTest extends TestCase {
 	#[DataProvider('readers')]
 	public function testAFailedContinuationRetriesTheSamePageBeforeCommittingTheWatermark(bool $notifications): void {
 		$poller = $this->poller($notifications);
-		$calls = 0;
-		$this->appView->method($notifications ? 'queryAs' : 'query')->willReturnCallback(function (...$args) use ($notifications, &$calls): array {
-			$calls++;
+		$failedOnce = false;
+		$this->appView->method($notifications ? 'queryAs' : 'query')->willReturnCallback(function (...$args) use ($notifications, &$failedOnce): array {
 			$params = $args[$notifications ? 3 : 1];
-			if ($calls === 1) {
+			if (!isset($params['cursor'])) {
 				return $this->page($notifications, [102], 'second');
 			}
-			$this->assertSame('second', $params['cursor'] ?? null);
-			if ($calls === 2) {
+			$this->assertSame('second', $params['cursor']);
+			if (!$failedOnce) {
+				$failedOnce = true;
 				throw new AtprotoException('Temporary AppView failure');
 			}
 
@@ -156,15 +156,23 @@ class PollingBacklogTest extends TestCase {
 		$this->assertSame([self::uri(102), self::uri(101), self::uri(100), self::uri(99)], $this->stored);
 	}
 
+	/** An AppView that hands back the cursor it was given has no older page: the walk ends instead of sticking. */
 	#[DataProvider('readers')]
-	public function testARepeatedRemoteCursorDoesNotSkipTheUnfinishedBacklog(bool $notifications): void {
+	public function testARepeatedRemoteCursorEndsTheWalk(bool $notifications): void {
 		$poller = $this->poller($notifications);
-		$this->appView->method($notifications ? 'queryAs' : 'query')->willReturnOnConsecutiveCalls($this->page($notifications, [103], 'second'), $this->page($notifications, [102], 'second'));
+		$this->appView->method($notifications ? 'queryAs' : 'query')->willReturnCallback(function (...$args) use ($notifications): array {
+			$params = $args[$notifications ? 3 : 1];
+
+			return isset($params['cursor'])
+				? $this->page($notifications, [102], 'second')
+				: $this->page($notifications, [103], 'second');
+		});
 		$poller->poll(1);
-		$pending = $this->checkpoint;
+		$this->assertStringContainsString('"page":"second"', $this->checkpoint);
 		$poller->poll(1);
-		$this->assertSame($pending, $this->checkpoint);
-		$this->assertSame(1, $this->failures);
+		$this->assertSame(self::stamp(103), $this->checkpoint);
+		$this->assertSame(0, $this->failures);
+		$this->assertContains(self::uri(102), $this->stored);
 	}
 
 	#[DataProvider('readers')]
@@ -194,9 +202,96 @@ class PollingBacklogTest extends TestCase {
 		$this->assertStringContainsString('same-time', $this->checkpoint, 'the first page must retain its continuation cursor');
 		$poller->poll(1);
 
-		$this->assertSame(['', 'same-time'], $asked);
+		$this->assertSame($notifications ? ['', 'same-time'] : ['', '', 'same-time'], $asked);
 		$this->assertSame([self::uri(101), self::uri(100), self::uri(102)], $this->stored);
 		$this->assertSame(self::stamp(101), $this->checkpoint);
+	}
+
+	/** A new watch reads back no further than BACKFILL_AGE. */
+	public function testAFirstFeedReadStopsAtTheAgeLimit(): void {
+		$this->checkpoint = '';
+		$poller = $this->poller(false);
+		$floor = -FeedPoller::BACKFILL_AGE;
+		$this->appView->method('query')->willReturnCallback(function (string $method, array $params) use ($floor): array {
+			return isset($params['cursor'])
+				? $this->page(false, [$floor + 10, $floor - 10, $floor - 20], 'older-still')
+				: $this->page(false, [100, 50], 'older');
+		});
+		$poller->poll(1);
+		$poller->poll(1);
+
+		$this->assertSame(self::stamp(100), $this->checkpoint, 'committed at the age limit');
+		$this->assertSame([self::uri(100), self::uri(50), self::uri($floor + 10)], $this->stored);
+	}
+
+	/** Nor more than WALK_PAGES pages, however much history is within the age limit. */
+	public function testAFeedWalkCommitsAfterItsPageLimit(): void {
+		$this->checkpoint = '';
+		$poller = $this->poller(false);
+		$asked = [];
+		$this->appView->method('query')->willReturnCallback(function (string $method, array $params) use (&$asked): array {
+			$cursor = $params['cursor'] ?? '';
+			$asked[] = $cursor;
+			$page = $cursor === '' ? 0 : (int)substr($cursor, 1);
+
+			return $this->page(false, [100 - $page], 'p' . ($page + 1));
+		});
+		for ($run = 0; $run < FeedPoller::WALK_PAGES + 2; $run++) {
+			$poller->poll(1);
+		}
+
+		$this->assertSame(self::stamp(100), $this->checkpoint);
+		$walk = [''];
+		for ($page = 1; $page < FeedPoller::WALK_PAGES; $page++) {
+			array_push($walk, '', 'p' . $page);
+		}
+		$this->assertSame($walk, array_slice($asked, 0, count($walk)), 'the first page, then each older one beside the newest');
+		$this->assertNotContains('p' . FeedPoller::WALK_PAGES, $asked, 'no page past the limit');
+	}
+
+	/** Posts written while a walk is unfinished are stored on the next pass, not after it. */
+	public function testNewPostsArriveWhileAWalkIsUnfinished(): void {
+		$poller = $this->poller(false);
+		$head = $this->page(false, [150, 149], 'older');
+		$this->appView->method('query')->willReturnCallback(function (string $method, array $params) use (&$head): array {
+			return match ($params['cursor'] ?? '') {
+				'' => $head,
+				'older' => $this->page(false, [148], 'oldest'),
+				'oldest' => $this->page(false, [101, 99], ''),
+			};
+		});
+		$poller->poll(1);
+		$this->assertStringContainsString('"page":"older"', $this->checkpoint);
+
+		$head = $this->page(false, [152, 151, 150], 'older');
+		$poller->poll(1);
+		$this->assertSame([self::uri(150), self::uri(149), self::uri(152), self::uri(151), self::uri(148)], $this->stored, 'the new posts before the next older page');
+		$poller->poll(1);
+		$this->assertSame(self::stamp(152), $this->checkpoint, 'the newest page reached the walk, so its newest post is committed');
+	}
+
+	/** A newest page that does not reach the walk leaves a gap, read by the walk after. */
+	public function testANewestPageThatDoesNotReachTheWalkIsNotCommitted(): void {
+		$poller = $this->poller(false);
+		$head = $this->page(false, [150], 'older');
+		$this->appView->method('query')->willReturnCallback(function (string $method, array $params) use (&$head): array {
+			return match ($params['cursor'] ?? '') {
+				'' => $head,
+				'older' => $this->page(false, [99], 'oldest'),
+				'gap' => $this->page(false, [151], ''),
+			};
+		});
+		$poller->poll(1);
+
+		$head = $this->page(false, [170, 169], 'gap');
+		$poller->poll(1);
+		$this->assertSame(self::stamp(150), $this->checkpoint, 'the walk commits only what it covered');
+		$this->assertContains(self::uri(170), $this->stored);
+		$poller->poll(1);
+		$this->assertStringContainsString('"page":"gap"', $this->checkpoint, 'the next walk reads the gap');
+		$poller->poll(1);
+		$this->assertContains(self::uri(151), $this->stored);
+		$this->assertSame(self::stamp(170), $this->checkpoint);
 	}
 
 	private function poller(bool $notifications): FeedPoller|NotificationPoller {

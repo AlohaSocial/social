@@ -22,11 +22,12 @@ use Throwable;
 
 /**
  * What happens here when Bluesky stops serving an account, as Jetstream's
- * `account` event or the AppView's refusal says it (§9.5). A deactivated or
- * suspended account comes back, so its mirror is hidden and kept: the actor
- * is marked and its posts lose their recipient rows, which takes them out of
- * every timeline and viewer-limited read until the account is active again
- * and the rows are written back. A deleted or taken-down account is gone,
+ * `account` event or the AppView's refusal says it (§9.5). A deactivated,
+ * suspended or taken-down account can come back (takedowns are often
+ * reversed), so its mirror is hidden and kept: the actor is marked and its
+ * posts lose their recipient rows, which takes them out of every timeline
+ * and viewer-limited read until the account is active again and the rows
+ * are written back; the follows of it stay. Only a deleted account is gone,
  * so the actor and everything it put here go through the cascade a remote
  * `Delete` of the actor goes through.
  */
@@ -61,7 +62,7 @@ class AccountStatus {
 	 * Whether the account is gone for good rather than switched off.
 	 */
 	public static function isGone(string $status): bool {
-		return in_array($status, [self::DELETED, self::TAKENDOWN], true);
+		return $status === self::DELETED;
 	}
 
 	/**

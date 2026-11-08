@@ -27,10 +27,13 @@ use UnexpectedValueException;
  * post newer than the last read stored, and the next read set by backoff —
  * soon after a page with posts, doubling up to six hours after empty ones,
  * reset by the next post. One pass is bounded twice: by how many watches
- * it visits and by the instance-wide ceiling on AppView requests. An
- * account the AppView refuses as deactivated, taken down or gone, three
- * reads in a row, is hidden or purged here (`AccountStatus`); one it
- * serves again is restored.
+ * it visits and by the instance-wide ceiling on AppView requests. A walk
+ * to older posts goes back at most BACKFILL_AGE and WALK_PAGES pages, and
+ * while it is unfinished the newest page is read too. An account the
+ * AppView refuses as deactivated, suspended, taken down or gone, three
+ * times with no successful read between (network errors do not count),
+ * is hidden here, or purged when its repository is gone (`AccountStatus`);
+ * one it serves again is restored.
  */
 class FeedPoller {
 	private ?string $acceptLabelers = null;
@@ -44,6 +47,10 @@ class FeedPoller {
 	public const PAGE = 50;
 	/** consecutive refusals naming an account's status before it is acted on */
 	public const STATUS_AFTER = 3;
+	/** how far back a walk reads: a new watch's history, or a long gap */
+	public const BACKFILL_AGE = 30 * 86400;
+	/** pages one walk reads at most before it commits what it has */
+	public const WALK_PAGES = 10;
 
 	public function __construct(
 		private AtprotoConfig $config,
@@ -74,7 +81,8 @@ class FeedPoller {
 				break;
 			}
 			$result['watches']++;
-			$result['requests']++;
+			// a watch in the middle of a walk reads its newest page as well
+			$result['requests'] += str_starts_with($watch->cursor, '{') ? 2 : 1;
 			$result['stored'] += $this->pollWatch($watch);
 		}
 
@@ -103,6 +111,15 @@ class FeedPoller {
 		}
 		try {
 			$checkpoint = new PollCursor($watch->cursor);
+			$floor = gmdate('Y-m-d\\TH:i:s.000\\Z', $now - self::BACKFILL_AGE);
+			$stored = 0;
+			$headNewest = '';
+			$handle = '';
+			if ($checkpoint->walking()) {
+				// the newest posts first, so they do not wait for the walk
+				[$headStored, $headNewest, $handle] = $this->readHead($watch, $checkpoint->newest);
+				$stored += $headStored;
+			}
 			$feed = $this->appView->query('app.bsky.feed.getAuthorFeed', ['actor' => $watch->did, 'filter' => 'posts_with_replies', 'limit' => self::PAGE] + $checkpoint->parameters(), $this->labelHeaders());
 			if (!is_array($feed['feed'] ?? null)) {
 				throw new UnexpectedValueException('Bluesky author feed has no feed array');
@@ -111,46 +128,49 @@ class FeedPoller {
 				$this->status?->restore($watch->did);
 			}
 
-			$stored = 0;
-			$newest = $checkpoint->newest;
-			$handle = '';
+			$newest = max($checkpoint->newest, $headNewest);
+			// a walk goes no further back than the committed timestamp, nor
+			// than BACKFILL_AGE
+			$lower = max($checkpoint->since, $floor);
 			$reached = false;
 			foreach ($feed['feed'] as $item) {
 				if (!is_array($item) || ($item['reason']['$type'] ?? '') === 'app.bsky.feed.defs#reasonPin') {
 					continue;
 				}
 				$seen = self::timeOf($item);
-				if ($checkpoint->since !== '' && $seen !== '' && $seen < $checkpoint->since) {
+				$newest = max($newest, $seen);
+				if ($seen !== '' && $seen < $lower) {
 					$reached = true;
 					break;
 				}
-				$newest = max($newest, $seen);
 				if ($handle === '' && ($item['post']['author']['did'] ?? '') === $watch->did) {
 					$handle = strtolower((string)($item['post']['author']['handle'] ?? ''));
 				}
 				$stored += $this->store->storeFeedItem($item);
 			}
-			$next = $checkpoint->after($newest, $feed['cursor'] ?? '', $reached, true);
+			$next = $checkpoint->after($newest, $feed['cursor'] ?? '', $reached, true, self::WALK_PAGES);
 		} catch (AppViewNotFoundException $e) {
 			$status = AccountStatus::ERRORS[$e->error] ?? '';
 			if ($status === '') {
 				// an account that is gone, deactivated or blocking: the watch
 				// stays, tried again later, in case it comes back
-				$this->watches->failed($watch->did, $e->getMessage(), $now + self::MAX_BACKOFF);
+				$this->watches->failed($watch->did, self::withStatusAnswers(self::statusAnswers($watch), $e->getMessage()), $now + self::MAX_BACKOFF);
 
 				return 0;
 			}
 			// the AppView names the status: acted on once it has said so a
-			// few reads in a row, with the ordinary backoff between them
-			$this->watches->failed($watch->did, $e->getMessage(), $now + $this->failureBackoff($watch));
-			if ($watch->failures + 1 >= self::STATUS_AFTER) {
+			// few times with no successful read between, with the ordinary
+			// backoff between them; other failures in between do not count
+			$answers = self::statusAnswers($watch) + 1;
+			$this->watches->failed($watch->did, self::withStatusAnswers($answers, $e->getMessage()), $now + $this->failureBackoff($watch));
+			if ($answers >= self::STATUS_AFTER) {
 				$this->status?->apply($watch->did, false, $status);
 			}
 
 			return 0;
 		} catch (Throwable $e) {
 			$this->logger->notice('Bluesky feed not read', ['did' => $watch->did, 'exception' => $e]);
-			$this->watches->failed($watch->did, $e->getMessage(), $now + $this->failureBackoff($watch));
+			$this->watches->failed($watch->did, self::withStatusAnswers(self::statusAnswers($watch), $e->getMessage()), $now + $this->failureBackoff($watch));
 
 			return 0;
 		}
@@ -160,6 +180,42 @@ class FeedPoller {
 		$this->watches->synced($watch->did, $next, $now, $now + $this->nextInterval($watch, $stored > 0 || $next !== $newest));
 
 		return $stored;
+	}
+
+	/**
+	 * The newest page, read while a walk to older posts is unfinished: every
+	 * post down to the walk's own newest one is stored. Only when the page
+	 * reaches that far does its newest timestamp count for the walk; a page
+	 * that does not leaves a gap the next walk reads.
+	 *
+	 * @return array{0: int, 1: string, 2: string} rows stored, the newest timestamp to commit ('' for none), the author's handle
+	 */
+	private function readHead(Watch $watch, string $walkNewest): array {
+		$feed = $this->appView->query('app.bsky.feed.getAuthorFeed', ['actor' => $watch->did, 'filter' => 'posts_with_replies', 'limit' => self::PAGE], $this->labelHeaders());
+		if (!is_array($feed['feed'] ?? null)) {
+			throw new UnexpectedValueException('Bluesky author feed has no feed array');
+		}
+		$stored = 0;
+		$newest = '';
+		$handle = '';
+		$overlaps = !is_string($feed['cursor'] ?? null) || $feed['cursor'] === '';
+		foreach ($feed['feed'] as $item) {
+			if (!is_array($item) || ($item['reason']['$type'] ?? '') === 'app.bsky.feed.defs#reasonPin') {
+				continue;
+			}
+			$seen = self::timeOf($item);
+			if ($seen !== '' && $seen <= $walkNewest) {
+				$overlaps = true;
+				break;
+			}
+			$newest = max($newest, $seen);
+			if ($handle === '' && ($item['post']['author']['did'] ?? '') === $watch->did) {
+				$handle = strtolower((string)($item['post']['author']['handle'] ?? ''));
+			}
+			$stored += $this->store->storeFeedItem($item);
+		}
+
+		return [$stored, $overlaps ? $newest : '', $handle];
 	}
 
 	/**
@@ -173,6 +229,18 @@ class FeedPoller {
 		}
 
 		return (string)($item['post']['indexedAt'] ?? '');
+	}
+
+	/**
+	 * How many refusals naming the account's status the watch has had since
+	 * its last successful read, kept as a prefix of its last error.
+	 */
+	public static function statusAnswers(Watch $watch): int {
+		return preg_match('/^\[status (\d+)\] /', $watch->lastError, $m) === 1 ? (int)$m[1] : 0;
+	}
+
+	private static function withStatusAnswers(int $answers, string $error): string {
+		return $answers > 0 ? '[status ' . $answers . '] ' . $error : $error;
 	}
 
 	/** How long after a failed read the next is: doubling with the failures, up to the maximum. */

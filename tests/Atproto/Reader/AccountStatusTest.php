@@ -139,18 +139,43 @@ class AccountStatusTest extends TestCase {
 		$this->status->apply(self::DID, true, '');
 	}
 
-	public function testADeletedOrTakenDownAccountGoesThroughTheActorDeletion(): void {
+	public function testADeletedAccountGoesThroughTheActorDeletion(): void {
 		$this->actor(['limited' => false]);
 		$interface = $this->createMock(PersonInterface::class);
-		$interface->expects($this->exactly(2))->method('delete')->with($this->identicalTo($this->actor));
+		$interface->expects($this->once())->method('delete')->with($this->identicalTo($this->actor));
 		$ap = $this->createMock(AP::class);
 		$ap->method('getInterfaceFromType')->with(Person::TYPE)->willReturn($interface);
 		AP::set($ap);
-		$this->watches->expects($this->exactly(2))->method('remove')->with(self::DID);
+		$this->watches->expects($this->once())->method('remove')->with(self::DID);
 		$this->dests->expects($this->never())->method('deleteByStreamIds');
 
 		$this->status->apply(self::DID, false, 'deleted');
+	}
+
+	/**
+	 * Bluesky takedowns are often reversed: the account is hidden with its
+	 * posts and the follows of it kept, and a later restore finds them.
+	 */
+	public function testATakenDownAccountIsHiddenAndKeptSoARestoreFindsIt(): void {
+		$this->actor(['limited' => false]);
+		$this->posts(2);
+		$interface = $this->createMock(PersonInterface::class);
+		$interface->expects($this->never())->method('delete');
+		$ap = $this->createMock(AP::class);
+		$ap->method('getInterfaceFromType')->willReturn($interface);
+		AP::set($ap);
+		$this->watches->expects($this->never())->method('remove');
+		$this->dests->expects($this->once())->method('deleteByStreamIds')->with([self::ACTOR . '/post/2', self::ACTOR . '/post/1']);
+		$this->dests->expects($this->exactly(2))->method('generateStreamDest');
+		$this->watches->expects($this->once())->method('wake')->with(self::DID, self::NOW);
+
 		$this->status->apply(self::DID, false, 'takendown');
+		$this->assertSame('takendown', $this->actor->getDetails(ActorMapper::DETAIL)['status']);
+		$this->assertTrue($this->actor->getDetails(ActorMapper::DETAIL)['limited']);
+		$this->assertFalse(AccountStatus::isGone('takendown'));
+
+		$this->status->apply(self::DID, true, '');
+		$this->assertArrayNotHasKey('status', $this->actor->getDetails(ActorMapper::DETAIL));
 	}
 
 	public function testAnAccountNeverSeenHereIsNothingToActOn(): void {

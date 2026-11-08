@@ -90,6 +90,25 @@ class JetstreamEventsTest extends TestCase {
 		$this->assertFalse($this->events->hasPending());
 	}
 
+	/** One database error must not end the listener: the other feeds are still read. */
+	public function testAFailedWatchLookupIsLoggedAndTheOtherFeedsAreStillRead(): void {
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
+		$watches = $this->createMock(AtprotoWatchRequest::class);
+		$watches->method('getByDid')->willReturnCallback(static fn (string $did): Watch => $did === self::BOB
+			? throw new \RuntimeException('database went away')
+			: new Watch($did, 'carol.test', '', 0, 0, 0, '', 0));
+		$poller = $this->createMock(FeedPoller::class);
+		$poller->expects($this->once())->method('pollWatch')->willReturn(0);
+		$events = new JetstreamEvents($watches, $poller, $this->store, $this->streams, $this->actors, $time, new NullLogger());
+		$events->setWatched([self::BOB, 'did:plc:carol']);
+		$events->handle(self::commit('create', 'app.bsky.feed.post', '3kpost'));
+		$events->handle(self::commit('create', 'app.bsky.feed.post', '3kcarol', [], 'did:plc:carol'));
+		$this->now += JetstreamEvents::DELAYS[0];
+
+		$this->assertSame(0, $events->due());
+	}
+
 	public function testAPostTheAppViewDoesNotHaveYetIsAskedForAgainThenLeftToThePoller(): void {
 		$this->events->handle(self::commit('create', 'app.bsky.feed.post', '3kpost'));
 		$this->watches->expects($this->once())->method('wake')->with(self::BOB, $this->anything());

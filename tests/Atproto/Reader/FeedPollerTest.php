@@ -130,8 +130,8 @@ class FeedPollerTest extends TestCase {
 	/**
 	 * The AppView names why it refuses an account; the watch backs off as
 	 * after any failure, and the status is acted on once it has been said
-	 * three reads in a row. A plain not-found says nothing of the account
-	 * and waits longest, as before.
+	 * three times with no successful read between. A plain not-found says
+	 * nothing of the account and waits longest, as before.
 	 */
 	public function testAnAccountTheAppViewNoLongerServesIsActedOnAfterThreeRefusals(): void {
 		$status = $this->createMock(AccountStatus::class);
@@ -150,20 +150,47 @@ class FeedPollerTest extends TestCase {
 			$this->throwException(new AppViewNotFoundException('getAuthorFeed: Profile not found')),
 		);
 		$nexts = [];
-		$this->watches->method('failed')->willReturnCallback(static function (string $did, string $error, int $next) use (&$nexts): void {
+		$errors = [];
+		$this->watches->method('failed')->willReturnCallback(static function (string $did, string $error, int $next) use (&$nexts, &$errors): void {
 			$nexts[] = $next - self::NOW;
+			$errors[] = $error;
 		});
 
 		$poller->pollWatch($this->watch(failures: 0));
-		$poller->pollWatch($this->watch(failures: 1));
+		$poller->pollWatch($this->watch(failures: 1, lastError: $errors[0]));
 		$this->assertSame([], $applied, 'twice is not yet persistent');
-		$poller->pollWatch($this->watch(failures: 2));
+		$poller->pollWatch($this->watch(failures: 2, lastError: $errors[1]));
 		$this->assertSame([[self::DID, false, 'deactivated']], $applied);
-		$poller->pollWatch($this->watch(failures: 5));
+		$poller->pollWatch($this->watch(failures: 5, lastError: '[status 2] getAuthorFeed: Could not find repo'));
 		$this->assertSame([self::DID, false, 'deleted'], $applied[1], 'a repository that is gone');
-		$poller->pollWatch($this->watch(failures: 7));
+		$poller->pollWatch($this->watch(failures: 7, lastError: '[status 3] getAuthorFeed: Could not find repo'));
 		$this->assertCount(2, $applied, 'a plain not-found names no status');
+		$this->assertSame('[status 1] getAuthorFeed: Account is deactivated', $errors[0]);
+		$this->assertSame('[status 3] getAuthorFeed: Profile not found', $errors[4], 'and leaves the count as it was');
 		$this->assertSame([2 * FeedPoller::INTERVAL, 4 * FeedPoller::INTERVAL, 8 * FeedPoller::INTERVAL, 64 * FeedPoller::INTERVAL, FeedPoller::MAX_BACKOFF], $nexts, 'the ordinary backoff, and the longest wait for a plain not-found');
+	}
+
+	/** Timeouts before a status refusal are not refusals: only what the AppView said counts. */
+	public function testNetworkErrorsDoNotCountTowardsActingOnAStatus(): void {
+		$status = $this->createMock(AccountStatus::class);
+		$status->expects($this->never())->method('apply');
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$poller = new FeedPoller($this->config, $this->watches, $this->appView, $this->store, $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $time, new NullLogger(), $status);
+		$this->appView->method('query')->willReturnOnConsecutiveCalls(
+			$this->throwException(new AppViewNotFoundException('getAuthorFeed: Account has been taken down', 'AccountTakedown')),
+			$this->throwException(new AtprotoException('timeout')),
+		);
+		$errors = [];
+		$this->watches->method('failed')->willReturnCallback(static function (string $did, string $error) use (&$errors): void {
+			$errors[] = $error;
+		});
+
+		$poller->pollWatch($this->watch(failures: 6));
+		$this->assertSame('[status 1] getAuthorFeed: Account has been taken down', $errors[0], 'six earlier timeouts are not counted');
+		$poller->pollWatch($this->watch(failures: 7, lastError: $errors[0]));
+		$this->assertSame('[status 1] timeout', $errors[1], 'a timeout keeps the count without adding to it');
+		$this->assertSame(1, FeedPoller::statusAnswers($this->watch(lastError: $errors[1])));
 	}
 
 	/** An account Bluesky switched off is still asked about, and restored when its feed answers again. */
@@ -264,8 +291,8 @@ class FeedPollerTest extends TestCase {
 		$this->assertSame(1, $this->poller->pollWatch($this->watch(cursor: '2026-10-08T10:00:00.000Z')));
 	}
 
-	private function watch(string $did = self::DID, string $cursor = '', int $lastSync = self::NOW - 1000, int $nextSync = self::NOW, int $failures = 0): Watch {
-		return new Watch($did, 'alice.bsky.social', $cursor, $lastSync, $nextSync, $failures, '', self::NOW - 86400);
+	private function watch(string $did = self::DID, string $cursor = '', int $lastSync = self::NOW - 1000, int $nextSync = self::NOW, int $failures = 0, string $lastError = ''): Watch {
+		return new Watch($did, 'alice.bsky.social', $cursor, $lastSync, $nextSync, $failures, $lastError, self::NOW - 86400);
 	}
 
 	private function item(string $indexedAt, string $text, string $handle = 'alice.bsky.social'): array {

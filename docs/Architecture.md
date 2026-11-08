@@ -714,10 +714,16 @@ cursors stay on that one-minute cadence even when an inbox is empty; the
 empty result is not evidence that the next event will arrive soon. The
 effective delay still depends on how often Nextcloud runs background jobs and
 how quickly the Bluesky AppView indexes an event. `FeedPoller` and
-`NotificationPoller` read at most one AppView page per due account and pass.
-A feed's first read walks pages to the end, so its cursor
+`NotificationPoller` read at most one older AppView page per due account and
+pass; while a feed's walk is unfinished it reads its newest page as well, so
+posts written meanwhile are stored on the next pass rather than after the
+walk, and the newest of them count for the walk once that page reaches it.
+A feed's first read walks back from the newest page, so its cursor
 starts without a committed timestamp and advances only when the walk finishes;
-notification polling starts with a snapshot of its newest page. `Reader\PollCursor` keeps their committed timestamp separate
+a feed walk goes back at most 30 days (`FeedPoller::BACKFILL_AGE`) and at most
+ten pages of 50 (`WALK_PAGES`), and then commits what it read, so following
+an account imports its recent posts rather than its whole history.
+Notification polling starts with a snapshot of its newest page. `Reader\PollCursor` keeps their committed timestamp separate
 from the AppView's opaque pagination cursor. While walking a backlog, the
 existing cursor column holds JSON with `since` (the previous committed
 timestamp), `newest` (the newest timestamp seen in this walk) and `page` (the
@@ -727,11 +733,24 @@ unique: an event exactly at the committed timestamp is still read, and only
 a strictly older event ends the walk. If equal-time events span pages, the
 opaque page cursor carries the walk across them. Re-reading an event at the
 boundary is safe because imports are idempotent. No schema change is needed.
-Empty intermediate pages still continue, while malformed responses, repeated
-cursors and failed reads retain the existing checkpoint and use failure
-backoff. A pending walk stays on the ordinary two-minute interval even when
+Empty intermediate pages still continue, while malformed responses and
+failed reads retain the existing checkpoint and use failure backoff. A cursor
+the AppView hands back unchanged means it has no older page, and ends the
+walk. A pending walk stays on the ordinary two-minute interval even when
 its current page stores no new rows. The initial feed read is bounded to one
-page per pass and continues until the AppView has no older page.
+older page per pass and continues until the AppView has no older page or the
+age or page limit is reached.
+
+An account the AppView refuses with a status (`AccountDeactivated`,
+`RepoSuspended`, `AccountTakedown`, `RepoNotFound` …) is acted on by
+`Reader\AccountStatus` once it has said so three times with no successful
+read between; network errors and plain not-founds in between neither count
+nor reset the count (kept as a `[status n]` prefix of the watch's
+`last_error`). Jetstream's `#account` event is acted on at once. A
+deactivated, suspended or taken-down account is hidden and kept: its posts
+leave the timelines, the follows of it stay, and when Bluesky serves it again
+everything is restored. Only a deleted account (`RepoNotFound`, or
+`status: deleted`) is purged with its posts and follows.
 Pinned feed entries do not participate in chronological synchronization:
 `BlueskyPins` handles them separately, and an old pin must not end the walk.
 
