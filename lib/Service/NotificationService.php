@@ -168,10 +168,19 @@ class NotificationService {
 		return $push instanceof PushService ? $push : null;
 	}
 
+	/**
+	 * Queues the Web Push of a notification, for an account that has a push
+	 * subscription at all: most have none, and a job for each of their
+	 * notifications would only find that out.
+	 */
 	private function queueMastodonPush(SocialAppNotification $notification): void {
 		try {
 			$userId = $this->actorsRequest->getFromId($notification->getTo())->getUserId();
 			if ($userId !== '' && $notification->getNid() !== '' && $notification->getNid() !== '0') {
+				$subscriptions = $this->container?->get(PushSubscriptionService::class);
+				if ($subscriptions instanceof PushSubscriptionService && !$subscriptions->hasAny($userId)) {
+					return;
+				}
 				$jobList = $this->container?->get(IJobList::class);
 				if ($jobList instanceof IJobList) {
 					$jobList->add(\OCA\Social\Cron\MastodonPushNotification::class, [

@@ -81,6 +81,7 @@ class MastodonPushNotificationTest extends TestCase {
 		$actors = $this->createStub(ActorsRequest::class);
 		$actors->method('getFromId')->willReturn($recipient);
 		$subscriptions = $this->createMock(PushSubscriptionService::class);
+		$subscriptions->method('hasAny')->willReturn(true);
 		$subscriptions->method('forUser')->with('alice')->willReturn([$endpoint]);
 		$subscriptions->expects(self::once())->method('deleteById')->with('alice', $endpoint['id'])->willReturn(true);
 
@@ -112,6 +113,7 @@ class MastodonPushNotificationTest extends TestCase {
 		$actors = $this->createStub(ActorsRequest::class);
 		$actors->method('getFromId')->willReturn($recipient);
 		$subscriptions = $this->createStub(PushSubscriptionService::class);
+		$subscriptions->method('hasAny')->willReturn(true);
 		$subscriptions->method('forUser')->willReturn([$endpoint]);
 		$request = null;
 		$client = $this->createMock(SafeWebPushClient::class);
@@ -139,6 +141,7 @@ class MastodonPushNotificationTest extends TestCase {
 		$actors = $this->createStub(ActorsRequest::class);
 		$actors->method('getFromId')->willReturn($recipient);
 		$subscriptions = $this->createMock(PushSubscriptionService::class);
+		$subscriptions->method('hasAny')->willReturn(true);
 		$subscriptions->method('forUser')->willReturn([$endpoint]);
 		$subscriptions->expects(self::once())->method('deleteById')->with('alice', $endpoint['id'])->willReturn(true);
 		$client = $this->createMock(SafeWebPushClient::class);
@@ -155,12 +158,25 @@ class MastodonPushNotificationTest extends TestCase {
 		$actors = $this->createStub(ActorsRequest::class);
 		$actors->method('getFromId')->willReturn($recipient);
 		$subscriptions = $this->createMock(PushSubscriptionService::class);
+		$subscriptions->method('hasAny')->willReturn(true);
 		$subscriptions->method('forUser')->willReturn([$this->subscription(true)]);
 		$subscriptions->expects(self::never())->method('deleteById');
 		$client = $this->createMock(SafeWebPushClient::class);
 		$client->expects(self::never())->method('sendRequest');
 
 		$this->runJob($streams, $actors, $subscriptions, $client, false);
+	}
+
+	public function testAnAccountWithoutSubscriptionsCostsNoQueries(): void {
+		$streams = $this->createMock(StreamRequest::class);
+		$streams->expects(self::never())->method('getStreamByNid');
+		$subscriptions = $this->createMock(PushSubscriptionService::class);
+		$subscriptions->method('hasAny')->with('alice')->willReturn(false);
+		$subscriptions->expects(self::never())->method('forUser');
+		$client = $this->createMock(SafeWebPushClient::class);
+		$client->expects(self::never())->method('sendRequest');
+
+		$this->runJob($streams, $this->createStub(ActorsRequest::class), $subscriptions, $client);
 	}
 
 	private function runJob(StreamRequest $streams, ActorsRequest $actors, PushSubscriptionService $subscriptions, SafeWebPushClient $client, bool $enabled = true): void {

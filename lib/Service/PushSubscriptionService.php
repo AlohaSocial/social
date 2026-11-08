@@ -38,6 +38,15 @@ class PushSubscriptionService {
 		return array_values($this->read($userId));
 	}
 
+	/**
+	 * Whether the account may have a subscription, without decrypting the
+	 * store: an account that never subscribed, or removed every subscription,
+	 * has no stored value.
+	 */
+	public function hasAny(string $userId): bool {
+		return $userId !== '' && $this->configService->getUserValue(self::CONFIG_KEY, $userId) !== '';
+	}
+
 	/** @return array{id: string, token: string, accessToken?: string, endpoint: string, p256dh: string, auth: string, standard: bool, alerts: array<string, bool>, policy: string, created: int}|null */
 	public function forToken(string $userId, string $token): ?array {
 		foreach ($this->read($userId) as $subscription) {
@@ -240,6 +249,11 @@ class PushSubscriptionService {
 
 	/** @param array<string, array{id: string, token: string, accessToken?: string, endpoint: string, p256dh: string, auth: string, standard: bool, alerts: array<string, bool>, policy: string, created: int}> $subscriptions */
 	private function write(string $userId, array $subscriptions): void {
+		if ($subscriptions === []) {
+			$this->configService->setValueForUser($userId, self::CONFIG_KEY, '');
+
+			return;
+		}
 		try {
 			$plain = json_encode($subscriptions, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 			$encrypted = $this->crypto->encrypt($plain);
