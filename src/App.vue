@@ -84,32 +84,16 @@
 	</NcContent>
 	<NcContent v-else appName="social">
 		<NcAppContent v-if="serverData.isAdmin" class="setup">
-			<h2>{{ t('social', 'Aloha Social app setup') }}</h2>
-			<p>{{ t('social', 'ActivityPub requires a fixed URL to make entries unique. Note that this cannot be changed later without resetting the Aloha Social app.') }}</p>
-			<form @submit.prevent="setCloudAddress">
-				<p>
-					<label class="hidden" for="setup-cloud-address">
-						{{ t('social', 'ActivityPub URL base') }}
-					</label>
-					<input
-						id="setup-cloud-address"
-						v-model="cloudAddress"
-						:placeholder="serverData.cliUrl"
-						type="url"
-						class="setup-input"
-						required>
-					<NcButton
-						variant="primary"
-						type="submit">
-						{{ t('social', 'Finish setup') }}
-					</NcButton>
-				</p>
+			<CloudAddressSetup
+				:proposed="serverData.proposedCloudAddress || serverData.cliUrl || ''"
+				:proposedFrom="serverData.proposedFrom || 'request'"
+				@saved="onCloudAddressSaved">
 				<SetupChecks
 					v-if="checksFailed"
 					:checks="serverData.checks.checks"
 					:addresses="serverData.checks.addresses"
 					:clientApi="serverData.checks.clientApi || []" />
-			</form>
+			</CloudAddressSetup>
 		</NcAppContent>
 		<NcAppContent v-else class="setup">
 			<p>{{ t('social', 'The Aloha Social app needs to be set up by the server administrator.') }}</p>
@@ -127,6 +111,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import Navigation from './components/Navigation.vue'
 import ShortcutHelp from './components/ShortcutHelp.vue'
 import SetupChecks from './components/SetupChecks.vue'
+import CloudAddressSetup from './components/CloudAddressSetup.vue'
 import { listenForShortcuts } from './services/shortcuts.js'
 import TimelineSkeleton from './components/TimelineSkeleton.vue'
 import { isSamePage, pageDirection } from './services/pageOrder.js'
@@ -134,7 +119,6 @@ import { canViewTransition, markDirection, startPageTransition } from './service
 import eventBus, { REACTION_PICK } from './services/eventBus.js'
 import { miniPlayer } from './services/miniPlayer.js'
 
-import axios from '@nextcloud/axios'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import { mapStores } from 'pinia'
@@ -163,6 +147,7 @@ export default {
 	name: 'App',
 	components: {
 		AccountSetup,
+		CloudAddressSetup,
 		NcContent,
 		NcAppContent,
 		NcButton,
@@ -185,7 +170,6 @@ export default {
 		return {
 			infoHidden: false,
 			state: [],
-			cloudAddress: '',
 			shortcutHelpOpen: false,
 			stopShortcuts: null,
 			/**
@@ -406,11 +390,12 @@ export default {
 			this.infoHidden = true
 		},
 
-		setCloudAddress() {
-			axios.post(generateUrl('apps/social/api/v1/config/cloudAddress'), { cloudAddress: this.cloudAddress }).then(() => {
-				this.settingsStore.setServerDataEntry({ key: 'setup', value: false })
-				this.settingsStore.setServerDataEntry({ key: 'cloudAddress', value: this.cloudAddress })
-			})
+		/**
+		 * The address is stored. The page reloads, so the server hands it
+		 * everything that is built from the address.
+		 */
+		onCloudAddressSaved() {
+			this.reloadTo(generateUrl('/apps/social/'))
 		},
 
 		/**

@@ -12,6 +12,7 @@ namespace OCA\Social\Notification;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Model\Moderation;
 use OCA\Social\Model\Strike;
+use OCA\Social\Service\SetupNotificationService;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
@@ -184,6 +185,14 @@ class Notifier implements INotifier {
 
 			case 'digest':
 				$this->digest($notification, $params, $l10n);
+				break;
+
+			case SetupNotificationService::SUBJECT:
+				$notification->setParsedSubject($l10n->t('Aloha Social is waiting to be set up'));
+				$notification->setParsedMessage(
+					$l10n->t('Somebody tried to open it. Nobody can use it until an administrator confirms the address of this server on its setup screen.')
+				);
+				$notification->setLink($this->url->linkToRouteAbsolute('social.Navigation.navigate'));
 				break;
 
 			case 'moderation_warning':

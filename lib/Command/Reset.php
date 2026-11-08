@@ -13,6 +13,7 @@ use Exception;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\ExternalUsersRequest;
 use OCA\Social\Service\CheckService;
+use OCA\Social\Service\CloudAddressRules;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use Symfony\Component\Console\Input\InputInterface;
@@ -52,6 +53,10 @@ class Reset extends SocialCommand {
 				''
 			)
 			->addOption(
+				'allow-unsafe-uri', '', InputOption::VALUE_NONE,
+				'accept an http, localhost, bare IP or /index.php address, which only a test instance should use'
+			)
+			->addOption(
 				'force', 'f', InputOption::VALUE_NONE,
 				'skip the confirmation prompts (required with --no-interaction)'
 			)
@@ -79,6 +84,12 @@ class Reset extends SocialCommand {
 				. ' there is nobody here to confirm.</error>'
 			);
 
+			return 1;
+		}
+
+		// refused before anything is deleted, not after
+		$uri = (string)$input->getOption('uri');
+		if ($uri !== '' && !$input->getOption('uninstall') && !$this->acceptable($uri, $input, $output)) {
 			return 1;
 		}
 
@@ -196,12 +207,37 @@ class Reset extends SocialCommand {
 			return 0;
 		}
 
+		if (!$this->acceptable($newCloudAddress, $input, $output)) {
+			$output->writeln('Address left at <info>' . $cloudAddress . '</info>.');
+
+			return 1;
+		}
+
 		$this->configService->setCloudUrl($newCloudAddress);
 
 		$output->writeln('');
 		$output->writeln('New address: <info>' . $newCloudAddress . '</info>');
 
 		return 0;
+	}
+
+	/**
+	 * Whether an address may become the one every id is built from: the
+	 * setup screen's rules, with the same override for a test instance.
+	 */
+	private function acceptable(string $address, InputInterface $input, OutputInterface $output): bool {
+		$problems = CloudAddressRules::problems($address);
+		$invalid = in_array(CloudAddressRules::INVALID, $problems, true);
+		if ($problems === [] || (!$invalid && $input->getOption('allow-unsafe-uri'))) {
+			return true;
+		}
+
+		$output->writeln('<error>' . $address . ' cannot be used as the address: ' . implode(', ', $problems) . '.</error>');
+		if (!$invalid) {
+			$output->writeln('Other servers cannot reach or will not trust it. Add --allow-unsafe-uri on a test instance.');
+		}
+
+		return false;
 	}
 
 	/**

@@ -13,14 +13,35 @@ Aloha Social is a fediverse server that happens to live inside Nextcloud, so the
 things it needs are the things any fediverse server needs: a stable public
 address, a `.well-known` answer, and a cron that runs.
 
-**A stable address.** Aloha Social copies `overwrite.cli.url` into its own
-`cloud_url` the first time somebody opens the app, derives `social_url` (that
-address followed by `/apps/social/`) from it, and builds every account id,
-post id and WebFinger answer from those copies. It never reads the system value
-again. Set `overwrite.cli.url` — and get it right — before anyone opens Aloha Social;
-changing the server's address afterwards is the single most expensive mistake
-available here, because the old address is inside every id already federated.
-See [*the address Aloha Social is set up for*](#the-address-aloha-social-is-set-up-for).
+**A stable address.** The first time an administrator opens Aloha Social, it
+shows the address it would build every id from and stores nothing until they
+confirm it: `overwrite.cli.url`, followed by `/index.php` unless pretty URLs
+are on, or the address of the page itself when `overwrite.cli.url` is not set.
+The confirmed address becomes `cloud_url`, `social_url` (that address followed
+by `/apps/social/`) is derived from it, and every account id, post id and
+WebFinger answer is built from those copies. Set `overwrite.cli.url` — and get
+it right — before anyone opens Aloha Social; changing the server's address
+afterwards is the single most expensive mistake available here, because the old
+address is inside every id already federated. See
+[*the address Aloha Social is set up for*](#the-address-aloha-social-is-set-up-for).
+
+The setup screen refuses an address other servers cannot reach or will not
+trust: `http://`, `localhost` and other loopback names, a bare IP address, and
+anything with `/index.php` in it. A test instance that needs one of those ticks
+**Use this address anyway**; `occ social:reset --uri=… --allow-unsafe-uri` is
+the same override on the command line. Something that is not an absolute
+`http(s)` address with a host is refused either way. Once an address is stored,
+the setup screen's endpoint refuses to change it (409): only
+`occ social:reset --uri=…` can, because it deletes everything built from the
+old one. A scripted test install can set
+`occ config:app:set social cloud_url --value=…` before anybody opens the app,
+which skips these checks.
+
+Somebody who is not an administrator and opens the app before it is set up is
+told to ask an administrator. Every administrator then gets one Nextcloud
+notification saying the app is waiting to be set up (once, not once per
+visitor; `setup_admins_notified` records it), and it is taken down when the
+address is confirmed.
 
 **`.well-known` redirects.** Another server looking for `@alice@example.com`
 asks `https://example.com/.well-known/webfinger`. Nextcloud serves that from
@@ -30,11 +51,13 @@ something the web server has to do; Nextcloud's
 are exactly the ones needed. Without them nobody outside can find an account
 here, however well everything inside works.
 
-**Pretty URLs are not required**, but an instance reachable only at
+**Pretty URLs.** An instance reachable only at
 `https://example.com/index.php/apps/social/...` federates under ids with
-`index.php` in them, which some peers handle poorly. If `.htaccess`-based URL
-rewriting is available, turn it on before the first account is created rather
-than after.
+`index.php` in them, which some peers handle poorly, so the setup screen asks
+for an address without it. Turn `.htaccess`-based URL rewriting on before
+opening Aloha Social for the first time. An instance set up with `/index.php`
+before that can turn pretty URLs on later: its ids keep resolving, and the
+address check treats the two forms as the same address.
 
 **Behind a reverse proxy**, set `trusted_proxies` and `overwritehost`,
 `overwriteprotocol` and `overwrite.cli.url` as the Nextcloud documentation
@@ -327,6 +350,11 @@ is inside every id already written. Either point `overwrite.cli.url` back at
 the address Aloha Social knows, or accept the rename and run `occ social:reset
 --uri=<new address>`, **which deletes everything Aloha Social holds** — every post,
 follow and cached account, local and remote alike.
+
+An address with and without `/index.php` is the same address here. An instance
+set up as `https://example.com/index.php` that turns pretty URLs on later is
+not reported: Nextcloud still answers every id that has `/index.php` in it, so
+there is nothing to reset.
 
 ### The delivery job has not run
 
@@ -1130,7 +1158,8 @@ the moderation routes accept.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `cloud_url` | *(empty)* | The base address every id is built from, copied from `overwrite.cli.url` the first time the app is opened. Changing it by hand does not rewrite the ids already issued. |
+| `cloud_url` | *(empty)* | The base address every id is built from, confirmed by an administrator on the setup screen (see [Before it federates](#before-it-federates)). Changing it by hand does not rewrite the ids already issued. |
+| `setup_admins_notified` | *(empty)* | When the administrators were told, as a Unix timestamp, that somebody opened the app before it was set up. Written once so they are told once. Bookkeeping, not a setting. |
 | `social_url` | *(empty)* | The app's own base URL (`…/apps/social/`), which every id is minted from and which profile links, WebFinger and NodeInfo use. Derived from `cloud_url` — never from the request — the first time the app is opened with `cloud_url` set, and again by `occ social:reset`. |
 | `social_address` | *(empty)* | The hostname accounts are federated under, when it is not the host of `cloud_url`. Only set this if the fediverse address genuinely differs from the Nextcloud host, and only before the first account exists. |
 | `service` | `1` | Unused; a leftover of the original installer. |

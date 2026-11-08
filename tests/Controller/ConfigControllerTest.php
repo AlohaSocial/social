@@ -13,6 +13,7 @@ use OCA\Social\Controller\ConfigController;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
+use OCA\Social\Service\SetupNotificationService;
 use OCA\Social\Service\TestService;
 use OCA\Social\Tools\Model\SimpleDataStore;
 use OCP\AppFramework\Http;
@@ -27,18 +28,22 @@ class ConfigControllerTest extends TestCase {
 	private $testService;
 	/** @var ConfigService&MockObject */
 	private $configService;
+	/** @var SetupNotificationService&MockObject */
+	private $setupNotifications;
 	private ConfigController $controller;
 
 	protected function setUp(): void {
 		$this->testService = $this->createMock(TestService::class);
 		$this->configService = $this->createMock(ConfigService::class);
+		$this->setupNotifications = $this->createMock(SetupNotificationService::class);
 
 		$this->controller = new ConfigController(
 			'social',
 			$this->createStub(IRequest::class),
 			$this->testService,
 			$this->configService,
-			$this->createStub(MiscService::class)
+			$this->createStub(MiscService::class),
+			$this->setupNotifications,
 		);
 	}
 
@@ -46,13 +51,72 @@ class ConfigControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
-	public function testSetCloudAddressStoresTheAddress(): void {
-		$this->configService->expects($this->once())->method('setCloudUrl')->with('https://cloud.example');
+	/** An instance not set up yet, which stores what it is given. */
+	private function notSetUp(): void {
+		$stored = '';
+		$this->configService->method('getCloudUrl')->willReturnCallback(static function () use (&$stored): string {
+			if ($stored === '') {
+				throw new SocialAppConfigException();
+			}
 
-		$response = $this->controller->setCloudAddress('https://cloud.example');
+			return $stored;
+		});
+		$this->configService->method('setCloudUrl')->willReturnCallback(static function (string $address) use (&$stored): void {
+			$stored = $address;
+		});
+	}
+
+	public function testSetCloudAddressStoresTheAddressOnTheFirstSetup(): void {
+		$this->notSetUp();
+		$this->setupNotifications->expects($this->once())->method('withdraw');
+
+		$response = $this->controller->setCloudAddress(' https://cloud.example/ ');
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame([], $response->getData());
+		$this->assertSame(['cloudAddress' => 'https://cloud.example'], $response->getData());
+	}
+
+	/**
+	 * Every federated id is built from the stored address, so the endpoint
+	 * that sets it cannot be used to move it afterwards.
+	 */
+	public function testSetCloudAddressRefusesToOverwriteAStoredAddress(): void {
+		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example');
+		$this->configService->expects($this->never())->method('setCloudUrl');
+
+		$response = $this->controller->setCloudAddress('https://other.example', true);
+
+		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		$this->assertSame('already-set', $response->getData()['code']);
+	}
+
+	public function testSetCloudAddressRefusesAnAddressOtherServersCannotUse(): void {
+		$this->notSetUp();
+		$this->configService->expects($this->never())->method('setCloudUrl');
+
+		$response = $this->controller->setCloudAddress('http://localhost/index.php');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(['http', 'loopback', 'index_php'], $response->getData()['problems']);
+	}
+
+	public function testATestInstanceMayOverrideTheRefusal(): void {
+		$this->notSetUp();
+
+		$response = $this->controller->setCloudAddress('http://localhost:8080', true);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['cloudAddress' => 'http://localhost:8080'], $response->getData());
+	}
+
+	public function testSomethingThatIsNotAnAddressIsRefusedEvenWithTheOverride(): void {
+		$this->notSetUp();
+		$this->configService->expects($this->never())->method('setCloudUrl');
+
+		$response = $this->controller->setCloudAddress('cloud.example', true);
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(['invalid'], $response->getData()['problems']);
 	}
 
 	public function testLocalReportsVersionAndCompletedSetup(): void {

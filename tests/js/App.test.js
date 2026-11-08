@@ -599,46 +599,40 @@ describe('App', () => {
 			sections: { stories: true, section_photos: true, section_videos: true, section_news: true },
 		}
 
-		it('draws the setup form from the payload the server sends', async () => {
-			setInitialState('social', 'serverData', setupPayload)
+		it('draws the setup form from the payload the server sends', () => {
+			setInitialState('social', 'serverData', {
+				...setupPayload,
+				proposedCloudAddress: 'https://cloud.example.org',
+				proposedFrom: 'overwrite.cli.url',
+				proposedProblems: [],
+			})
 			window._nc_initial_state?.clear()
-			vi.spyOn(axios, 'post').mockResolvedValue({ data: {} })
 			const wrapper = mountApp()
 
-			expect(wrapper.find('.setup h2').text()).toBe('Aloha Social app setup')
-
-			await wrapper.find('input.setup-input').setValue('https://social.example.org')
-			await wrapper.find('form').trigger('submit')
-			await flushPromises()
-
-			expect(wrapper.find('.router-view-stub').exists()).toBe(true)
-			expect(wrapper.find('.setup').exists()).toBe(false)
-		})
-
-		it('lets administrators enter the ActivityPub base URL and finish the setup', async () => {
-			setServerData({ setup: true, isAdmin: true })
-			const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: {} })
-			const wrapper = mountApp()
-
+			expect(wrapper.find('.setup h2').text()).toBe('Confirm the address of this server')
+			expect(wrapper.find('input.setup-input').element.value).toBe('https://cloud.example.org')
 			expect(wrapper.find('.navigation-stub').exists()).toBe(false)
 			expect(wrapper.find('.router-view-stub').exists()).toBe(false)
-			expect(wrapper.find('.setup h2').text()).toBe('Aloha Social app setup')
-			const input = wrapper.find('input.setup-input')
-			expect(input.attributes('placeholder')).toBe('https://cloud.example.org')
-			expect(input.attributes('required')).toBeDefined()
-			expect(wrapper.find('.setup h3').exists()).toBe(false)
+		})
 
-			await input.setValue('https://social.example.org')
+		it('proposes the address of the page when the server has nothing better', () => {
+			setServerData({ setup: true, isAdmin: true })
+			const wrapper = mountApp()
+
+			expect(wrapper.find('input.setup-input').element.value).toBe('https://cloud.example.org')
+		})
+
+		it('reloads the app once the address is stored', async () => {
+			setServerData({ setup: true, isAdmin: true, proposedCloudAddress: 'https://social.example.org' })
+			const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { cloudAddress: 'https://social.example.org' } })
+			const wrapper = mountApp()
+			const reload = vi.spyOn(wrapper.vm, 'reloadTo').mockImplementation(() => {})
+
 			await wrapper.find('form').trigger('submit')
-			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/config/cloudAddress', { cloudAddress: 'https://social.example.org' })
-
 			await flushPromises()
-			// the mutation takes an object payload, so both the flag and the
-			// address are actually stored (the address was dropped by the old bug)
-			expect(settingsStore.serverData.setup).toBe(false)
-			expect(settingsStore.serverData.cloudAddress).toBe('https://social.example.org')
-			expect(wrapper.find('.setup h2').exists()).toBe(false)
-			expect(wrapper.find('.router-view-stub').exists()).toBe(true)
+
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/config/cloudAddress', { cloudAddress: 'https://social.example.org', allowUnsafe: false })
+			expect(reload).toHaveBeenCalledWith('/index.php/apps/social/')
 		})
 
 		it('also shows the .well-known warning on the setup form', () => {

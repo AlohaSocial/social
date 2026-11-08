@@ -88,6 +88,22 @@ class NotifierTest extends TestCase {
 		$this->assertSame('Sozial', $this->notifier->getName());
 	}
 
+	public function testTheAdministratorsAreToldTheAppWaitsToBeSetUp(): void {
+		$this->translationsFor('de');
+		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social_dark.svg');
+		$this->urlGenerator->method('getAbsoluteURL')->willReturnArgument(0);
+		$this->urlGenerator->method('linkToRouteAbsolute')->with('social.Navigation.navigate')
+			->willReturn('https://cloud.example/apps/social/');
+		$notification = $this->notification('social', 'setup_required');
+		$notification->expects($this->once())->method('setParsedSubject')
+			->with('[de] Aloha Social is waiting to be set up');
+		$notification->expects($this->once())->method('setParsedMessage')
+			->with($this->stringStartsWith('[de] Somebody tried to open it.'));
+		$notification->expects($this->once())->method('setLink')->with('https://cloud.example/apps/social/');
+
+		$this->notifier->prepare($notification, 'de');
+	}
+
 	public function testNotificationsOfOtherAppsAreRejected(): void {
 		$notification = $this->notification('spreed', 'report_new');
 		$this->factory->expects($this->never())->method('get');

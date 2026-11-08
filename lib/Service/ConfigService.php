@@ -466,6 +466,9 @@ class ConfigService {
 	public const CONTACT_EMAIL = 'contact_email';
 	public const SOCIAL_CONTACT_ACCOUNT = 'contact_account';
 
+	/** When the administrators were told the app is waiting to be set up. */
+	public const SETUP_ADMINS_NOTIFIED = 'setup_admins_notified';
+
 	/**
 	 * For you: the feed built from the hashtags a reader lingers on.
 	 *
@@ -638,6 +641,7 @@ class ConfigService {
 		self::SOCIAL_REVIEW_VIDEOS => '0',
 		self::SOCIAL_EXTENDED_DESCRIPTION => '',
 		self::CONTACT_EMAIL => '',
+		self::SETUP_ADMINS_NOTIFIED => '',
 		self::SOCIAL_CONTACT_ACCOUNT => '',
 		self::SOCIAL_POLLS_SWEPT => '0',
 		self::SOCIAL_INTERESTS => '1',
@@ -1030,11 +1034,14 @@ class ConfigService {
 	}
 
 	/**
-	 * @param string $cloudAddress
+	 * Stores the address every id is built from. Callers check it against
+	 * `CloudAddressRules` first; an address given without a scheme is taken
+	 * as https.
 	 */
 	public function setCloudUrl(string $cloudAddress) {
+		$cloudAddress = CloudAddressRules::normalize($cloudAddress);
 		if (parse_url($cloudAddress, PHP_URL_SCHEME) === null) {
-			$cloudAddress = 'http://' . $cloudAddress;
+			$cloudAddress = 'https://' . $cloudAddress;
 		}
 
 		$this->setAppValue(self::CLOUD_URL, $cloudAddress);
