@@ -23,12 +23,15 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoOAuthRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Service\EnabledUserService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class ServiceAuthGrantTest extends TestCase {
+	/** @var string[] the Nextcloud accounts an administrator disabled */
+	private array $disabled = [];
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 	private const HERE = 'did:web:social.test';
 	private const VIDEO = 'did:web:video.bsky.app';
@@ -56,7 +59,10 @@ class ServiceAuthGrantTest extends TestCase {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 		$this->serviceAuth = new ServiceAuth($time, $this->replay());
-		$this->grants = new ServiceAuthGrant($config, $identities, $this->serviceAuth, $actors, $time);
+		$this->disabled = [];
+		$enabledUsers = $this->createStub(EnabledUserService::class);
+		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => !in_array($userId, $this->disabled, true));
+		$this->grants = new ServiceAuthGrant($config, $identities, $this->serviceAuth, $actors, $time, $enabledUsers);
 		$this->session = new ClientSession('alice', $this->alice, 'sid');
 	}
 
@@ -117,6 +123,19 @@ class ServiceAuthGrantTest extends TestCase {
 		$this->assertSame(self::DID, $session->identity->did);
 	}
 
+	public function testAnUploadForADisabledNextcloudAccountIsRefused(): void {
+		$this->disabled = ['alice'];
+		$token = $this->serviceAuth->token($this->key, self::DID, self::HERE, ServiceAuthGrant::UPLOAD, 1800);
+
+		try {
+			$this->grants->uploader('Bearer ' . $token);
+			$this->fail('a disabled account uploaded');
+		} catch (XrpcException $e) {
+			$this->assertSame(401, $e->status);
+			$this->assertSame('AccountDeactivated', $e->error);
+		}
+	}
+
 	public function testAnAudienceWithAnUnencodedPortIsThisServerToo(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('serviceDid')->willReturn('did:web:social.test%3A8443');
@@ -129,7 +148,9 @@ class ServiceAuthGrantTest extends TestCase {
 		$actors->method('getFromId')->willReturn($alice);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn($this->now);
-		$grants = new ServiceAuthGrant($config, $identities, $this->serviceAuth, $actors, $time);
+		$enabledUsers = $this->createStub(EnabledUserService::class);
+		$enabledUsers->method('isEnabled')->willReturn(true);
+		$grants = new ServiceAuthGrant($config, $identities, $this->serviceAuth, $actors, $time, $enabledUsers);
 
 		$this->assertNotNull($grants->uploader('Bearer ' . $this->serviceAuth->token($this->key, self::DID, 'did:web:social.test:8443', ServiceAuthGrant::UPLOAD)));
 	}

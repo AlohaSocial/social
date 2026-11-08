@@ -37,6 +37,7 @@ use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\MoveErrorException;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\EnabledUserService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Security\Bruteforce\IThrottler;
@@ -98,6 +99,7 @@ class InboundMoveService {
 		private AtprotoIdentityRequest $identityRequest,
 		private MovedBlobs $movedBlobs,
 		private PostRepublisher $republisher,
+		private EnabledUserService $enabledUsers,
 	) {
 	}
 
@@ -234,6 +236,9 @@ class InboundMoveService {
 			$this->throttler->registerAttempt(self::THROTTLE, $ip, ['did' => $did]);
 
 			throw new XrpcException(401, 'AuthenticationRequired', 'A token the account signed for this server is required');
+		}
+		if (!$this->enabledUsers->isEnabled($move->userId)) {
+			throw new XrpcException(401, 'AccountDeactivated', 'This account is disabled');
 		}
 
 		try {
@@ -677,6 +682,7 @@ class InboundMoveService {
 	private function isCurrent(Move $move, array $sealed, string $did, string $sid): bool {
 		return $move->direction === Move::INBOUND
 			&& !in_array($move->state, [Move::FAILED, Move::CANCELLED], true)
+			&& $this->enabledUsers->isEnabled($move->userId)
 			&& $move->did === $did
 			&& $sid !== ''
 			&& hash_equals((string)($sealed['sid'] ?? ''), $sid)

@@ -1305,6 +1305,7 @@ class OAuthControllerTest extends TestCase {
 			$this->createStub(\OCA\Social\Service\PushSubscriptionService::class),
 			$this->createStub(\OCA\Social\Db\DeviceAuthorizationRequest::class),
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Service\EnabledUserService::class),
 		);
 
 		// exactly the columns saveApp() writes, read back the way

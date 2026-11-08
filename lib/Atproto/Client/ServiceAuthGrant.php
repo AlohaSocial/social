@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\ActorsRequest;
+use OCA\Social\Service\EnabledUserService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Throwable;
 
@@ -49,6 +50,7 @@ class ServiceAuthGrant {
 		private ServiceAuth $serviceAuth,
 		private ActorsRequest $actors,
 		private ITimeFactory $time,
+		private EnabledUserService $enabledUsers,
 	) {
 	}
 
@@ -112,6 +114,9 @@ class ServiceAuthGrant {
 		}
 		if (!$identity->isActive()) {
 			throw new XrpcException(400, 'AccountDeactivated', 'This account is deactivated');
+		}
+		if (!$this->enabledUsers->isEnabled($userId)) {
+			throw new XrpcException(401, 'AccountDeactivated', 'This account is disabled');
 		}
 
 		return new ClientSession($userId, $identity, '');

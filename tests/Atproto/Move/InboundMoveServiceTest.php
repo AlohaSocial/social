@@ -49,6 +49,7 @@ use OCA\Social\Exceptions\MoveErrorException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\EnabledUserService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\IUserManager;
@@ -63,6 +64,8 @@ use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
 class InboundMoveServiceTest extends TestCase {
+	/** @var string[] the Nextcloud accounts an administrator disabled */
+	private array $disabled = [];
 	private const DID = 'did:plc:z72i7hdynmk6r22z27h6tvur';
 	private const HERE = 'https://social.test';
 	private const SERVICE = 'did:web:social.test';
@@ -116,7 +119,7 @@ class InboundMoveServiceTest extends TestCase {
 		$sessions = new SessionService(
 			$config, $this->createMock(IdentityService::class), $keys, $this->createMock(AppPasswordService::class),
 			$this->createMock(AtprotoClientRequest::class), $this->createMock(ActorsRequest::class), $this->createMock(\OCP\Accounts\IAccountManager::class), $this->createMock(IUserManager::class),
-			$this->createMock(IThrottler::class), $time,
+			$this->createMock(IThrottler::class), $time, $this->createStub(EnabledUserService::class),
 		);
 		$this->serviceAuth = new ServiceAuth($time, $this->replay());
 		$plc = $this->createMock(PlcClient::class);
@@ -200,11 +203,14 @@ class InboundMoveServiceTest extends TestCase {
 			$this->queued[] = [$job, $argument];
 		});
 
+		$this->disabled = [];
+		$enabledUsers = $this->createStub(EnabledUserService::class);
+		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => !in_array($userId, $this->disabled, true));
 		$this->moves = new InboundMoveService(
 			$config, $sessions, $this->serviceAuth, $plc, $this->identities, $keys, $this->repositories, $repoRequest, $blobs,
 			$documents, $this->createMock(Preferences::class), $this->moveIn, $bridgy, $actors, $request, $crypto, $random,
 			$this->createMock(IThrottler::class), $jobs, $time, new NullLogger(), $this->identityRequest,
-			new MovedBlobs($oldPds, $repoRequest, $blobs, $documents, $actors, new NullLogger()), $this->republisher,
+			new MovedBlobs($oldPds, $repoRequest, $blobs, $documents, $actors, new NullLogger()), $this->republisher, $enabledUsers,
 		);
 	}
 
@@ -514,6 +520,24 @@ class InboundMoveServiceTest extends TestCase {
 		$this->assertSame('ExpiredToken', $this->refused(fn () => $this->moves->query('com.atproto.server.getSession', [], 'Bearer ' . $made['accessJwt']))->error);
 		$this->assertSame('ExpiredToken', $this->refused(fn () => $this->moves->procedure('com.atproto.server.refreshSession', [], 'Bearer ' . $made['refreshJwt']))->error);
 		$this->assertSame(self::DID, $this->moves->query('com.atproto.server.getSession', [], 'Bearer ' . $refreshed['accessJwt'])['did']);
+	}
+
+	public function testADisabledNextcloudAccountNeitherMakesNorUsesTheMovesSession(): void {
+		$this->moves->invite('alice', 'alice.bsky.social');
+		$good = $this->serviceAuth->token($this->oldKey, self::DID, self::SERVICE, 'com.atproto.server.createAccount');
+		$body = ['did' => self::DID, 'handle' => 'x.test', 'email' => 'a@b.c', 'password' => self::CODE];
+		$this->disabled = ['alice'];
+		$this->assertSame('AccountDeactivated', $this->refused(fn () => $this->moves->createAccount('Bearer ' . $good, $body, 'ip'))->error);
+
+		$this->disabled = [];
+		$again = $this->serviceAuth->token($this->oldKey, self::DID, self::SERVICE, 'com.atproto.server.createAccount');
+		$made = $this->moves->createAccount('Bearer ' . $again, $body, 'ip');
+		$this->disabled = ['alice'];
+
+		$this->assertSame('ExpiredToken', $this->refused(fn () => $this->moves->query('com.atproto.server.getSession', [], 'Bearer ' . $made['accessJwt']))->error);
+		$this->assertSame('ExpiredToken', $this->refused(fn () => $this->moves->procedure('com.atproto.server.refreshSession', [], 'Bearer ' . $made['refreshJwt']))->error);
+		$this->disabled = [];
+		$this->assertSame(self::DID, $this->moves->query('com.atproto.server.getSession', [], 'Bearer ' . $made['accessJwt'])['did']);
 	}
 
 	public function testACalledOffMoveLeavesNothingAndItsSessionEnds(): void {

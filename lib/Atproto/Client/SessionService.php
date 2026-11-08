@@ -21,6 +21,7 @@ use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\MoveErrorException;
+use OCA\Social\Service\EnabledUserService;
 use OCP\Accounts\IAccountManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IUserManager;
@@ -55,6 +56,7 @@ class SessionService {
 		private IUserManager $userManager,
 		private IThrottler $throttler,
 		private ITimeFactory $time,
+		private EnabledUserService $enabledUsers,
 	) {
 	}
 
@@ -96,6 +98,7 @@ class SessionService {
 		if ($session === null || $session['expires'] < $this->time->getTime()) {
 			throw new XrpcException(400, 'ExpiredToken', 'Token has been revoked');
 		}
+		$this->assertEnabled($session['user_id'], 400);
 		if (!$this->request->removeSession($session['jti'])) {
 			throw new XrpcException(400, 'ExpiredToken', 'Token has already been used');
 		}
@@ -137,6 +140,7 @@ class SessionService {
 			$this->request->removeSession($session['jti']);
 			throw new XrpcException(401, 'ExpiredToken', 'Token has been revoked');
 		}
+		$this->assertEnabled($session['user_id'], 401);
 		$identity = $this->identityByDid($session['did']);
 		self::assertActive($identity);
 
@@ -269,6 +273,18 @@ class SessionService {
 	}
 
 	/**
+	 * Refuses the sessions of a Nextcloud account that is disabled; they
+	 * are kept, and work again once it is enabled.
+	 *
+	 * @throws XrpcException
+	 */
+	private function assertEnabled(string $userId, int $status): void {
+		if (!$this->enabledUsers->isEnabled($userId)) {
+			throw new XrpcException($status, 'AccountDeactivated', 'This account is disabled');
+		}
+	}
+
+	/**
 	 * A token of this server's, addressed to itself.
 	 */
 	public function sign(array $claims): string {
@@ -340,7 +356,7 @@ class SessionService {
 
 		foreach ($identities as $identity) {
 			$userId = $this->userIdOf($identity);
-			if ($userId === '') {
+			if (!$this->enabledUsers->isEnabled($userId)) {
 				continue;
 			}
 			$appPasswordId = $this->appPasswords->verify($userId, $password);
