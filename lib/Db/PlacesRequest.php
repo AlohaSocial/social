@@ -13,7 +13,6 @@ use DateTime;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\Client\Place;
 use OCA\Social\Tools\Traits\TArrayTools;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -79,18 +78,12 @@ class PlacesRequest extends CoreRequestBuilder {
 			->setValue('lon', $qb->createNamedParameter($place->getLon()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-
+		if ($this->insertUnlessDuplicate($qb)) {
 			return $place->setId($qb->getLastInsertId());
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
-			// somebody else created it between the read and the insert
-			return $this->getByNameAndCountry($place->getName(), $place->getCountry());
 		}
+
+		// somebody else created it between the read and the insert
+		return $this->getByNameAndCountry($place->getName(), $place->getCountry());
 	}
 
 	/** @throws ItemNotFoundException */

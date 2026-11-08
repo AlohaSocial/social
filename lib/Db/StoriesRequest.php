@@ -16,7 +16,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
@@ -351,13 +350,7 @@ class StoriesRequest extends CoreRequestBuilder {
 			->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($viewerId)))
 			->setValue('creation', $qb->createNamedParameter($this->now(), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	/**

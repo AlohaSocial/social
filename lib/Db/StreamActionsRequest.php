@@ -11,7 +11,7 @@ namespace OCA\Social\Db;
 
 use OCA\Social\Exceptions\StreamActionDoesNotExistException;
 use OCA\Social\Model\StreamAction;
-use OCP\DB\Exception as DBException;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
  * Class StreamActionsRequest
@@ -27,17 +27,14 @@ class StreamActionsRequest extends StreamActionsRequestBuilder {
 	 * itself. Two concurrent likes of the same post both update nothing and
 	 * both insert, and the loser gets an uncaught constraint violation — and on
 	 * MySQL, where rowCount() counts *changed* rows, setting a flag to the
-	 * value it already holds takes that same path even on its own.
+	 * value it already holds takes that same path even on its own. The insert
+	 * a unique index refuses leaves an enclosing transaction usable
+	 * (`insertUnlessDuplicate()`), so a like inside a repository batch can
+	 * meet a row that is already there.
 	 */
 	public function save(StreamAction $action): void {
-		try {
-			$this->create($action);
-
+		if ($this->insertUnlessDuplicate($this->insertSql($action))) {
 			return;
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
 		}
 
 		$this->update($action);
@@ -47,6 +44,10 @@ class StreamActionsRequest extends StreamActionsRequestBuilder {
 	 * Create a new Queue in the database.
 	 */
 	public function create(StreamAction $action): void {
+		$this->insertSql($action)->executeStatement();
+	}
+
+	private function insertSql(StreamAction $action): IQueryBuilder {
 		$qb = $this->getStreamActionInsertSql();
 
 		$values = $action->getValues();
@@ -71,7 +72,7 @@ class StreamActionsRequest extends StreamActionsRequestBuilder {
 			->setValue('bookmarked_nid', $qb->createNamedParameter($bookmarkedNid))
 			->setValue('values', $qb->createNamedParameter(json_encode($this->nonFlagValues($action))));
 
-		$qb->executeStatement();
+		return $qb;
 	}
 
 	public function update(StreamAction $action): int {

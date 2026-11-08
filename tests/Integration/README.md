@@ -383,6 +383,12 @@ to stop.
   Bluesky figures: the posts written here in a window, counted from its first
   id (a moved-in record and another collection left out), the repository
   totals summed from the heads, and the newest event's time.
+- `Atproto/RepositoryBatchActionsTest` — the Social actions a Bluesky app's
+  writes perform, each inside the repository batch `WriteService` opens: like,
+  unlike, like again and un-repost each commit their batch, and a mute, a mute
+  expiry and an IP block saved over rows that are already there leave the
+  transaction usable. Worth running on PostgreSQL, which aborts a transaction
+  at a refused INSERT.
 - `Atproto/CommitBenchmarkTest` — skipped unless `SOCIAL_BENCHMARK` is set:
   seeds a repository of twenty thousand records and prints what one commit
   costs against reading every record and rebuilding the tree, asserting the

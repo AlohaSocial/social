@@ -332,6 +332,8 @@ There is no downgrade path, and none is possible: `Version1000Date20260611000001
 
 `Version1000Date20260925000002` adds that `account_lower` column and fills it in for the rows already cached, paged on the primary key. The account search behind the mention picker, `/api/v2/search`, `/api/v1/accounts/search` and the unified search used to match a prefix of `account` under `COLLATE utf8mb4_general_ci` on MySQL, and the lookup by handle compared `LOWER(account)`: an unindexed column either way, so every keystroke read every cached actor. They compare the lowercased copy as it stands now (`CacheActorsRequest::searchAccounts()`), which MySQL and MariaDB answer as an index range; PostgreSQL and SQLite plan a prefix `LIKE` as a range only under a C collation or `case_sensitive_like`, so there the search is still a scan, of one short column, while the lookup by handle is an index lookup everywhere.
 
+A row a unique index may refuse — an idempotent save, or an insert that falls back to an update when the row is already there — is written through `CoreRequestBuilder::insertUnlessDuplicate()`. Inside an open transaction it runs the INSERT in a savepoint and rolls back to it when the index refuses the row: PostgreSQL aborts the whole transaction at a failed statement, so a bare insert-then-catch inside the repository batch of a Bluesky app's write, or inside any other transaction, would fail everything after it. Outside a transaction the INSERT runs on its own.
+
 There is no notifications table: in-app notifications are stored in `social_stream` as `SocialAppNotification` items. (A `TABLE_NOTIFICATION` constant naming a `social_notif` table that no migration ever created used to be declared here; it has been removed.)
 
 ---

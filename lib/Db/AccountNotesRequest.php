@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use DateTime;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -36,13 +35,7 @@ class AccountNotesRequest extends AccountNotesRequestBuilder {
 			->setValue('note', $qb->createNamedParameter($note))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertUnlessDuplicate($qb)) {
 			$update = $this->getAccountNotesUpdateSql();
 			$update->set('note', $update->createNamedParameter($note));
 			$update->where(

@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Model\Client\StoryInteraction;
 use OCA\Social\Tools\Traits\TArrayTools;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -86,13 +85,7 @@ class StoryInteractionsRequest extends CoreRequestBuilder {
 			->setValue('source_id_prim', $qb->createNamedParameter(md5($interaction->getSourceId())))
 			->setValue('creation', $qb->createNamedParameter($now, IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertUnlessDuplicate($qb)) {
 			return false;
 		}
 

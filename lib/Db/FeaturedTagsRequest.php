@@ -14,7 +14,6 @@ use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\FeaturedTag;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -63,16 +62,10 @@ class FeaturedTagsRequest extends FeaturedTagsRequestBuilder {
 			->setValue('hashtag', $qb->createNamedParameter($tag->getHashtag()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-			$tag->setId($qb->getLastInsertId());
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertUnlessDuplicate($qb)) {
 			return $this->getOwnedByHashtag($tag->getOwnerId(), $tag->getHashtag());
 		}
+		$tag->setId($qb->getLastInsertId());
 
 		return $tag;
 	}

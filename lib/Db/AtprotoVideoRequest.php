@@ -11,7 +11,6 @@ namespace OCA\Social\Db;
 
 use DateTime;
 use OCA\Social\Atproto\Model\VideoUpload;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -33,16 +32,8 @@ class AtprotoVideoRequest extends CoreRequestBuilder {
 			->setValue('state', $qb->createNamedParameter(VideoUpload::QUEUED))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
 			->setValue('updated', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				return false;
-			}
-			throw $e;
-		}
 
-		return true;
+		return $this->insertUnlessDuplicate($qb);
 	}
 
 	/** Whether a document has been handed to Bluesky's video service, in any state. */

@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use DateTime;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -46,14 +45,8 @@ class TrendReviewRequest extends CoreRequestBuilder {
 			->setValue('moderator', $qb->createNamedParameter($moderator))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-
+		if ($this->insertUnlessDuplicate($qb)) {
 			return;
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
 		}
 
 		$qb = $this->getQueryBuilder();

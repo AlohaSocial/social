@@ -11,7 +11,6 @@ namespace OCA\Social\Db;
 
 use OCA\Social\Model\Files\FileComment;
 use OCA\Social\Model\Files\FilePost;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -172,13 +171,7 @@ class FileCommentsRequest extends CoreRequestBuilder {
 			->setValue('outbound', $qb->createNamedParameter($outbound ? 1 : 0, IQueryBuilder::PARAM_INT))
 			->setValue('creation', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	/**

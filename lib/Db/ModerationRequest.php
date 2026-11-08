@@ -65,16 +65,16 @@ class ModerationRequest extends CoreRequestBuilder {
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
 		try {
-			$qb->executeStatement();
+			$inserted = $this->insertUnlessDuplicate($qb);
+		} catch (DBException $e) {
+			$this->logger->error('could not record a moderation decision', ['exception' => $e]);
+
+			throw $e;
+		}
+		if ($inserted) {
 			$this->forgetLevels();
 
 			return;
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				$this->logger->error('could not record a moderation decision', ['exception' => $e]);
-
-				throw $e;
-			}
 		}
 
 		$update = $this->getQueryBuilder();

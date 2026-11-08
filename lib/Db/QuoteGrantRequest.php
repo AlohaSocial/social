@@ -11,7 +11,6 @@ namespace OCA\Social\Db;
 
 use DateTime;
 use OCA\Social\Model\QuoteGrant;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -47,14 +46,8 @@ class QuoteGrantRequest extends CoreRequestBuilder {
 			->setValue('authorization', $qb->createNamedParameter($grant->getAuthorization()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-
+		if ($this->insertUnlessDuplicate($qb)) {
 			return;
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
 		}
 
 		$qb = $this->getQueryBuilder();

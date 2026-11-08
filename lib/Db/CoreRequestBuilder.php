@@ -18,6 +18,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\IExtendedQueryBuilder;
 use OCP\DB\Exception;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
@@ -1143,6 +1144,40 @@ class CoreRequestBuilder {
 	 */
 	public function getConnection(): IDBConnection {
 		return $this->dbConnection;
+	}
+
+	/**
+	 * Runs an INSERT that a unique index may refuse.
+	 *
+	 * Inside an open transaction the INSERT runs in a savepoint: PostgreSQL
+	 * aborts the whole transaction at a failed statement, and rolling back to
+	 * the savepoint keeps it usable for what follows a refused row. Outside a
+	 * transaction the statement runs on its own.
+	 *
+	 * @return bool whether the row was inserted; false when the unique index refused it
+	 * @throws Exception any other database error
+	 */
+	protected function insertUnlessDuplicate(IQueryBuilder $insert): bool {
+		$savepoint = $this->dbConnection->inTransaction();
+		if ($savepoint) {
+			$this->dbConnection->beginTransaction();
+		}
+		try {
+			$insert->executeStatement();
+		} catch (\Throwable $e) {
+			if ($savepoint) {
+				$this->dbConnection->rollBack();
+			}
+			if ($e instanceof Exception && $e->getReason() === Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+				return false;
+			}
+			throw $e;
+		}
+		if ($savepoint) {
+			$this->dbConnection->commit();
+		}
+
+		return true;
 	}
 
 	/**

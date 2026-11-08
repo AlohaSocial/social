@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use InvalidArgumentException;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /** Owner-scoped activity-learning consent and reset generation storage. */
@@ -176,19 +175,13 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 		}
 
 		$qb = $this->getQueryBuilder();
-		try {
-			$qb->insert(self::TABLE_PROFILE)
-				->setValue('actor_key', $qb->createNamedParameter($actorKey))
-				->setValue('profile_ver', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
-				->setValue('generation', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
-				->setValue('learning_mode', $qb->createNamedParameter('off'))
-				->setValue('updated_at', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
-				->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$qb->insert(self::TABLE_PROFILE)
+			->setValue('actor_key', $qb->createNamedParameter($actorKey))
+			->setValue('profile_ver', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+			->setValue('generation', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+			->setValue('learning_mode', $qb->createNamedParameter('off'))
+			->setValue('updated_at', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT));
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	private function globalEpoch(): int {
@@ -204,16 +197,10 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 		}
 
 		$insert = $this->getQueryBuilder();
-		try {
-			$insert->insert(self::TABLE_EPOCH)
-				->setValue('id', $insert->createNamedParameter(1, IQueryBuilder::PARAM_INT))
-				->setValue('epoch', $insert->createNamedParameter(0, IQueryBuilder::PARAM_INT))
-				->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$insert->insert(self::TABLE_EPOCH)
+			->setValue('id', $insert->createNamedParameter(1, IQueryBuilder::PARAM_INT))
+			->setValue('epoch', $insert->createNamedParameter(0, IQueryBuilder::PARAM_INT));
+		$this->insertUnlessDuplicate($insert);
 
 		return $this->globalEpoch();
 	}

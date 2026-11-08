@@ -453,21 +453,15 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 			return;
 		}
 
-		try {
-			$qb = $this->getConversationStateInsertSql();
-			$qb->setValue('actor_id', $qb->createNamedParameter($actorId))
-				->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId)))
-				->setValue('root_id', $qb->createNamedParameter($rootId))
-				->setValue('root_id_prim', $qb->createNamedParameter($qb->prim($rootId)))
-				->setValue('muted', $qb->createNamedParameter($muted, IQueryBuilder::PARAM_BOOL))
-				->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
+		$qb = $this->getConversationStateInsertSql();
+		$qb->setValue('actor_id', $qb->createNamedParameter($actorId))
+			->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId)))
+			->setValue('root_id', $qb->createNamedParameter($rootId))
+			->setValue('root_id_prim', $qb->createNamedParameter($qb->prim($rootId)))
+			->setValue('muted', $qb->createNamedParameter($muted, IQueryBuilder::PARAM_BOOL))
+			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertUnlessDuplicate($qb)) {
 			// the row was written between the read above and the insert
 			$this->updateMuted($actorId, $rootId, $muted);
 		}
@@ -571,13 +565,7 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 			return;
 		}
 
-		try {
-			$this->insertMarker($column, $actorId, $rootId, $nid);
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertMarker($column, $actorId, $rootId, $nid)) {
 			// the row was written between the read above and the insert
 			$this->updateMarker($column, $actorId, $rootId, $nid);
 		}
@@ -596,9 +584,10 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
+	 * @return bool whether the row was inserted; false when it is there already
 	 * @throws DBException
 	 */
-	private function insertMarker(string $column, string $actorId, string $rootId, int|string $nid): void {
+	private function insertMarker(string $column, string $actorId, string $rootId, int|string $nid): bool {
 		$qb = $this->getConversationStateInsertSql();
 		$qb->setValue('actor_id', $qb->createNamedParameter($actorId))
 			->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId)))
@@ -607,7 +596,7 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 			->setValue($column, $qb->createNamedParameter($nid))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		$qb->executeStatement();
+		return $this->insertUnlessDuplicate($qb);
 	}
 
 	/**

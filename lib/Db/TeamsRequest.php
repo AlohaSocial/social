@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Tools\Traits\TArrayTools;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -41,17 +40,7 @@ class TeamsRequest extends CoreRequestBuilder {
 			->setValue('group_id', $qb->createNamedParameter($groupId))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
-			return false;
-		}
-
-		return true;
+		return $this->insertUnlessDuplicate($qb);
 	}
 
 	/**
@@ -136,14 +125,8 @@ class TeamsRequest extends CoreRequestBuilder {
 			->setValue('author_id_prim', $qb->createNamedParameter($qb->prim($authorId)))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-			// already recorded, which is what a retried write looks like
-		}
+		// already recorded, which is what a retried write looks like
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	/**
