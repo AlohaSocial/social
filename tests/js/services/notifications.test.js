@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { FILTER_KEY, NOTIFICATION_TYPES, excludeTypesFor, groupNotifications, isDirectMessage, newestIdOf, notificationSummary, rememberFilter, rememberedFilter } from '../../../src/services/notifications.js'
@@ -78,9 +80,9 @@ describe('the notifications filter', () => {
 	})
 
 	it('excludes every type but the one a filter keeps', () => {
-		const excluded = excludeTypesFor('mentions')
+		const excluded = excludeTypesFor('polls')
 
-		expect(excluded).not.toContain('mention')
+		expect(excluded).not.toContain('poll')
 		expect(excluded).toHaveLength(NOTIFICATION_TYPES.length - 1)
 	})
 
@@ -308,5 +310,34 @@ describe('what only Bluesky tells', () => {
 
 	it('leaves them out of a filter that keeps something else', () => {
 		expect(excludeTypesFor('mentions')).toEqual(expect.arrayContaining(['bluesky:repost_liked', 'bluesky:verified']))
+	})
+})
+
+describe('the types the server sends', () => {
+	it('are every type the server maps a notification to', () => {
+		const source = readFileSync(resolve(__dirname, '../../../lib/Model/ActivityPub/Stream.php'), 'utf8')
+		const map = source.slice(source.indexOf('private const NOTIFICATION_TYPES = ['), source.indexOf('];', source.indexOf('private const NOTIFICATION_TYPES = [')))
+		const served = [...map.matchAll(/=> '([^']+)'/g)].map(([, type]) => type)
+
+		expect(served.length).toBeGreaterThan(10)
+		expect([...NOTIFICATION_TYPES].sort()).toEqual([...served].sort())
+	})
+
+	it('say what a story answer, a photo tag and a moderator did', () => {
+		const said = (type) => notificationSummary({ type, account: { acct: 'bob.test' } })
+
+		expect(said('story:react')).toBe('bob.test reacted to your story')
+		expect(said('story:comment')).toBe('bob.test replied to your story')
+		expect(said('tagged')).toBe('bob.test tagged you in a photo')
+		expect(said('moderation_warning')).toBe('A moderator of this server has acted on your account')
+		expect(said('severed_relationships')).toBe('Some of your follows were removed because a server was blocked')
+	})
+
+	it('keep a story answer and a photo tag under the filter they belong to', () => {
+		expect(excludeTypesFor('mentions')).not.toContain('story:comment')
+		expect(excludeTypesFor('mentions')).not.toContain('tagged')
+		expect(excludeTypesFor('favourites')).not.toContain('story:react')
+		expect(excludeTypesFor('mentions')).toContain('story:react')
+		expect(excludeTypesFor('polls')).toEqual(expect.arrayContaining(['story:react', 'story:comment', 'tagged']))
 	})
 })

@@ -475,7 +475,10 @@ The sidebar is the map:
     lasts, since the browser plays it through once), uploading, posting.
     Closing the dialog with a video in it asks before throwing it away.
 - **Activities** — your notifications: mentions, favourites, boosts, new
-  followers and follow requests, poll results, edits of posts you boosted.
+  followers and follow requests, poll results, edits of posts you boosted,
+  reactions and replies to your stories, photos you were tagged in, and what a
+  moderator decided about your account. The **Mentions** filter also keeps
+  story replies and photo tags, and **Favourites** keeps story reactions.
   It is in the sidebar, between Shorts and Direct messages. The badge
   beside it counts what arrived since you last looked, plus the people
   [waiting for your review](#who-may-reach-you-and-requests); the same
