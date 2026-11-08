@@ -20,6 +20,7 @@ use OCA\Social\Db\StatusRevisionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\ClientNotFoundException;
+use OCA\Social\Exceptions\NoUserException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -35,9 +36,15 @@ use Throwable;
 /** Serves the Mastodon user, direct-message, and public WebSocket and SSE streams. */
 class MastodonStreamingDaemon {
 	public const DEFAULT_BIND = '127.0.0.1:8788';
+	/** How long one connection may stay open; clients reconnect. */
+	public const DEFAULT_MAX_CONNECTION_SECONDS = 86400;
 	private const PATH = '/api/v1/streaming';
 	private const POLL_IDLE = 0.25;
 	private const POLL_INTERVAL = 1;
+	/** How often every timeline is read whether or not its newest row moved. */
+	private const SWEEP_INTERVAL = 30;
+	/** How often a connection's access token and account are checked again. */
+	private const TOKEN_RECHECK_INTERVAL = 60;
 	private const PING_INTERVAL = 20;
 	private const FILTER_POLL_INTERVAL = 5;
 	private const ANNOUNCEMENT_POLL_INTERVAL = 5;
@@ -48,6 +55,9 @@ class MastodonStreamingDaemon {
 	private const MAX_BATCHES_PER_POLL = 10;
 	private const PUBLIC_STREAMS = ['public', 'public:media', 'public:local', 'public:local:media', 'public:remote', 'public:remote:media'];
 	private bool $stopping = false;
+	private int $maxConnectionSeconds = self::DEFAULT_MAX_CONNECTION_SECONDS;
+	/** @var array<string, mixed> values read once per loop pass and shared by every subscriber */
+	private array $tick = [];
 
 	public function __construct(
 		private ClientService $clientService,
@@ -66,6 +76,7 @@ class MastodonStreamingDaemon {
 		private FeedDisplayService $feedDisplayService,
 		private NotificationPolicyService $notificationPolicyService,
 		private TimelineRevisionService $timelineRevisionService,
+		private ModerationService $moderationService,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 	) {
@@ -73,8 +84,10 @@ class MastodonStreamingDaemon {
 
 	/**
 	 * @param callable(string): void $say
+	 * @param int $maxConnectionSeconds how long one connection may stay open; 0 for no limit
 	 */
-	public function run(string $bind, int $maxSeconds, callable $say): int {
+	public function run(string $bind, int $maxSeconds, callable $say, int $maxConnectionSeconds = self::DEFAULT_MAX_CONNECTION_SECONDS): int {
+		$this->maxConnectionSeconds = max(0, $maxConnectionSeconds);
 		$server = new WebSocketServer(
 			$bind,
 			path: self::PATH,
@@ -95,6 +108,7 @@ class MastodonStreamingDaemon {
 			foreach ($server->serve(self::POLL_IDLE) as $subscriber) {
 				$this->initialize($subscriber);
 			}
+			$this->tick = [];
 			foreach ($server->subscribers() as $subscriber) {
 				try {
 					$this->poll($server, $subscriber);
@@ -170,11 +184,20 @@ class MastodonStreamingDaemon {
 				return false;
 			}
 			$viewer = $this->accountService->getActorFromUserId($client->getAuthUserId());
+			if ($this->moderationService->isSuspended($viewer->getId())) {
+				return false;
+			}
 			$viewer->setUserId($client->getAuthUserId())->setExportFormat(ACore::FORMAT_LOCAL);
 			if ($subprotocol !== '') {
 				$subscriber->responseSubprotocol = $subprotocol;
 			}
+			$now = $this->time->getTime();
 			$subscriber->context = [
+				'token' => $token,
+				'authId' => $client->getAuthId(),
+				'connectedAt' => $now,
+				'tokenCheckedAt' => $now,
+				'sweptAt' => $now,
 				'userId' => $client->getAuthUserId(),
 				'scopes' => $client->getAuthScopes(),
 				'subscriptions' => $stream === '' ? [] : [$stream => true],
@@ -193,7 +216,7 @@ class MastodonStreamingDaemon {
 					: null,
 				'announcementCheckedAt' => $this->time->getTime(),
 				'notificationsMergedRevision' => in_array($stream, ['user', 'user:notification'], true)
-					? $this->timelineRevisionService->of($client->getAuthUserId(), TimelineRevisionService::NOTIFICATIONS_MERGED)
+					? $this->timelineRevisionService->current($client->getAuthUserId(), TimelineRevisionService::NOTIFICATIONS_MERGED)
 					: 0,
 				'notificationsMergedCheckedAt' => $this->time->getTime(),
 				'lastPoll' => 0,
@@ -265,7 +288,7 @@ class MastodonStreamingDaemon {
 			}
 			$subscriber->context['subscriptions'][$stream] = true;
 			if (in_array($stream, ['user', 'user:notification'], true)) {
-				$subscriber->context['notificationsMergedRevision'] = $this->timelineRevisionService->of(
+				$subscriber->context['notificationsMergedRevision'] = $this->timelineRevisionService->current(
 					(string)($subscriber->context['userId'] ?? ''), TimelineRevisionService::NOTIFICATIONS_MERGED
 				);
 				$subscriber->context['notificationsMergedCheckedAt'] = 0;
@@ -397,18 +420,50 @@ class MastodonStreamingDaemon {
 			$server->close($subscriber, 'invalid stream state');
 			return;
 		}
+		if (!$this->connectionMayContinue($server, $subscriber, $viewer, $now)) {
+			return;
+		}
 		$this->streamService->setViewer($viewer);
 		$subscriptions = $subscriber->context['subscriptions'] ?? [];
 		$this->sendFilterChanges($server, $subscriber, $viewer, $subscriptions, $now);
 		$this->sendAnnouncementChanges($server, $subscriber, $viewer, $subscriptions, $now);
 		$this->sendNotificationsMerged($server, $subscriber, $viewer, $subscriptions, $now);
+
+		$sweep = $now - (int)($subscriber->context['sweptAt'] ?? 0) >= self::SWEEP_INTERVAL;
+		if ($sweep) {
+			$subscriber->context['sweptAt'] = $now;
+		}
+		$newest = $this->tickValue('newestNid', fn (): string => $this->streamRequest->newestNid());
+		if ($this->gateOpens($subscriber, 'stream', $newest, $sweep)) {
+			$this->pollTimelines($server, $subscriber, $viewer, $subscriptions, $sweep);
+		}
+
+		$newestDeletion = $this->tickValue('newestDeletion', fn (): int => $this->statusDeletionEventsRequest->newestId());
+		if ($newestDeletion > (int)($subscriber->context['deleteSince'] ?? 0)) {
+			$this->sendDeletedStatuses($server, $subscriber);
+		}
+		$newestRevision = $this->tickValue('newestRevision', fn (): int => $this->statusRevisionsRequest->newestId());
+		if ($newestRevision > (int)($subscriber->context['revisionSince'] ?? 0)) {
+			$this->sendEditedPublicStatuses($server, $subscriber, $viewer);
+		}
+	}
+
+	/**
+	 * Reads the subscribed timelines past their cursors. Each probe with an
+	 * index-only "newest row" of its own is skipped while that has not moved
+	 * since the probe last ran; the sweep reads them all regardless, which
+	 * bounds the delay of a row stored below a newest id already seen.
+	 */
+	private function pollTimelines(WebSocketServer $server, Subscriber $subscriber, Person $viewer, array $subscriptions, bool $sweep): void {
 		if (isset($subscriptions['user'])) {
 			$this->sendStatuses($server, $subscriber, $viewer);
 		}
-		if (isset($subscriptions['user']) || isset($subscriptions['user:notification'])) {
+		if ((isset($subscriptions['user']) || isset($subscriptions['user:notification']))
+			&& $this->gateOpens($subscriber, 'notification', $this->streamRequest->newestNidFor([md5($viewer->getId())], 'notif'), $sweep)) {
 			$this->sendNotifications($server, $subscriber, $viewer);
 		}
-		if (isset($subscriptions['direct'])) {
+		if (isset($subscriptions['direct'])
+			&& $this->gateOpens($subscriber, 'direct', $this->streamRequest->newestNidFor([md5($viewer->getId())], 'dm'), $sweep)) {
 			$this->sendDirectConversations($server, $subscriber, $viewer);
 		}
 		if (isset($subscriptions['list'])) {
@@ -418,16 +473,99 @@ class MastodonStreamingDaemon {
 				}
 			}
 		}
+		$hashtagSubscriptions = $subscriber->context['hashtagSubscriptions'] ?? [];
+		if ($hashtagSubscriptions === [] && array_intersect(array_keys($subscriptions), self::PUBLIC_STREAMS) === []) {
+			return;
+		}
+		// the public and hashtag timelines show only posts addressed to the public collection
+		$newestPublic = $this->tickValue(
+			'newestPublic', fn (): string => $this->streamRequest->newestNidFor([md5(ACore::CONTEXT_PUBLIC)])
+		);
 		foreach (self::PUBLIC_STREAMS as $stream) {
-			if (isset($subscriptions[$stream])) {
+			if (isset($subscriptions[$stream]) && $this->gateOpens($subscriber, $stream, $newestPublic, $sweep)) {
 				$this->sendPublicStatuses($server, $subscriber, $viewer, $stream);
 			}
 		}
-		foreach ($subscriber->context['hashtagSubscriptions'] ?? [] as $key => $subscription) {
-			$this->sendHashtagStatuses($server, $subscriber, $viewer, $key, $subscription);
+		foreach ($hashtagSubscriptions as $key => $subscription) {
+			if ($this->gateOpens($subscriber, 'hashtag:' . $key, $newestPublic, $sweep)) {
+				$this->sendHashtagStatuses($server, $subscriber, $viewer, $key, $subscription);
+			}
 		}
-		$this->sendDeletedStatuses($server, $subscriber);
-		$this->sendEditedPublicStatuses($server, $subscriber, $viewer);
+	}
+
+	/**
+	 * Whether a probe has anything new to read: its newest id moved past the
+	 * one recorded when it last ran, or the sweep is due. Records `$newest`
+	 * when it opens, before the probe reads, so a row stored meanwhile opens
+	 * it again on the next pass.
+	 */
+	private function gateOpens(Subscriber $subscriber, string $name, string $newest, bool $sweep): bool {
+		$seen = $subscriber->context['gate:' . $name] ?? null;
+		if (!$sweep && is_string($seen) && Nid::compare($newest, $seen) <= 0) {
+			return false;
+		}
+		$subscriber->context['gate:' . $name] = $newest;
+
+		return true;
+	}
+
+	/**
+	 * A value read once per pass over the subscribers rather than once per
+	 * subscriber.
+	 *
+	 * @template T
+	 * @param callable(): T $read
+	 * @return T
+	 */
+	private function tickValue(string $name, callable $read): mixed {
+		if (!array_key_exists($name, $this->tick)) {
+			$this->tick[$name] = $read();
+		}
+
+		/** @var T */
+		return $this->tick[$name];
+	}
+
+	/**
+	 * Closes a connection that outlived its maximum lifetime, and, at most
+	 * once per `TOKEN_RECHECK_INTERVAL`, one whose access token no longer
+	 * authorizes it — revoked, expired or idle past its lifetime, which
+	 * `ClientService::getFromToken()` decides as it does for a REST request —
+	 * or whose account is gone or suspended.
+	 */
+	private function connectionMayContinue(WebSocketServer $server, Subscriber $subscriber, Person $viewer, int $now): bool {
+		$connectedAt = (int)($subscriber->context['connectedAt'] ?? $now);
+		if ($this->maxConnectionSeconds > 0 && $now - $connectedAt >= $this->maxConnectionSeconds) {
+			$server->close($subscriber, 'connection lifetime reached');
+			return false;
+		}
+		if ($now - (int)($subscriber->context['tokenCheckedAt'] ?? 0) < self::TOKEN_RECHECK_INTERVAL) {
+			return true;
+		}
+		$subscriber->context['tokenCheckedAt'] = $now;
+
+		$token = (string)($subscriber->context['token'] ?? '');
+		$userId = (string)($subscriber->context['userId'] ?? '');
+		try {
+			$client = $this->clientService->getFromToken($token);
+			$valid = $token !== ''
+				&& $client->getAuthId() === (int)($subscriber->context['authId'] ?? 0)
+				&& $client->getAuthUserId() === $userId
+				&& $this->accountService->getActorFromUserId($userId)->getId() === $viewer->getId()
+				&& !$this->moderationService->isSuspended($viewer->getId());
+		} catch (ClientNotFoundException|ActorDoesNotExistException|NoUserException) {
+			$valid = false;
+		} catch (Throwable $e) {
+			// a failing database is not a revoked token: the next check decides
+			$this->logger->warning('Mastodon streaming token check failed', ['exception' => $e]);
+
+			return true;
+		}
+		if (!$valid) {
+			$server->close($subscriber, 'access token no longer valid');
+		}
+
+		return $valid;
 	}
 
 	/** Emits Mastodon's `filters_changed` event when this account's filters change. */
@@ -522,7 +660,7 @@ class MastodonStreamingDaemon {
 		}
 
 		$subscriber->context['notificationsMergedCheckedAt'] = $now;
-		$revision = $this->timelineRevisionService->of(
+		$revision = $this->timelineRevisionService->current(
 			$viewer->getUserId(), TimelineRevisionService::NOTIFICATIONS_MERGED
 		);
 		$previous = (int)($subscriber->context['notificationsMergedRevision'] ?? $revision);
@@ -663,17 +801,34 @@ class MastodonStreamingDaemon {
 			&& (!str_contains($stream, ':media') || $event['media']);
 	}
 
-	/** Sends edits to public and hashtag subscribers without replaying existing revisions. */
+	/**
+	 * Sends edits without replaying existing revisions: `status.update` to the
+	 * public, hashtag, home and list streams whose timeline holds the post,
+	 * and the current `conversation` to the direct stream.
+	 *
+	 * The edited posts are read once per pass for every subscriber, and only
+	 * for what decides which streams could hold them; whether this viewer's
+	 * home timeline, or the public timeline as this viewer sees it, holds
+	 * them is one batched membership query each. The post is then read as
+	 * this viewer for each stream it is sent to.
+	 */
 	private function sendEditedPublicStatuses(WebSocketServer $server, Subscriber $subscriber, Person $viewer): void {
 		$subscriptions = $subscriber->context['subscriptions'] ?? [];
 		$activeStreams = array_values(array_filter(
-			[...self::PUBLIC_STREAMS, 'hashtag', 'hashtag:local'],
+			self::PUBLIC_STREAMS,
 			static fn (string $name): bool => isset($subscriptions[$name])
 		));
-		if ($activeStreams === []
+		$hashtagSubscriptions = [];
+		foreach ($subscriber->context['hashtagSubscriptions'] ?? [] as $key => $subscription) {
+			if (is_array($subscription)) {
+				$hashtagSubscriptions[$key] = $subscription;
+			}
+		}
+		$listSubscriptions = $subscriber->context['listSubscriptions'] ?? [];
+		if ($activeStreams === [] && $hashtagSubscriptions === []
 			&& !isset($subscriptions['user'])
 			&& !isset($subscriptions['direct'])
-			&& ($subscriber->context['listSubscriptions'] ?? []) === []) {
+			&& $listSubscriptions === []) {
 			return;
 		}
 
@@ -684,63 +839,75 @@ class MastodonStreamingDaemon {
 		}
 		$subscriber->context['revisionSince'] = $revisions[array_key_last($revisions)]['id'];
 
-		$latestByStatus = [];
+		$edited = [];
 		foreach ($revisions as $revision) {
-			$latestByStatus[$revision['stream_id_prim']] = true;
-		}
-		foreach (array_keys($latestByStatus) as $streamIdPrim) {
-			try {
-				$status = $this->streamService->getStreamByIdPrim($streamIdPrim, true);
-			} catch (Throwable) {
-				continue;
+			$status = $this->editedStatus($revision['stream_id_prim']);
+			if ($status !== null) {
+				$edited[$revision['stream_id_prim']] = $status;
 			}
-			$isPublic = ($status->getVisibility() ?: $this->streamService->visibilityOf($status)) === Stream::TYPE_PUBLIC;
+		}
+		if ($edited === []) {
+			return;
+		}
+		$nids = array_values(array_map(static fn (Stream $status): string => (string)$status->getNid(), $edited));
 
+		$this->streamRequest->setViewer($viewer);
+		$public = ($activeStreams !== [] || $hashtagSubscriptions !== [])
+			? array_flip($this->streamRequest->publicNidsAmong($nids))
+			: [];
+		$home = isset($subscriptions['user']) ? array_flip($this->streamRequest->homeNidsAmong($nids)) : [];
+		$hidesReplies = $this->feedDisplayService->hidesReplies($viewer->getUserId());
+
+		foreach ($edited as $streamIdPrim => $status) {
+			$nid = (string)$status->getNid();
+			$visibility = $status->getVisibility() ?: $this->streamService->visibilityOf($status);
 			$matching = [];
-			if ($isPublic) {
+			if ($visibility === Stream::TYPE_PUBLIC && isset($public[$nid])) {
 				foreach ($activeStreams as $stream) {
 					if ($this->editedStatusMatchesStream($status, $stream)) {
 						$matching[] = $stream;
 					}
 				}
-				foreach ($subscriber->context['hashtagSubscriptions'] ?? [] as $subscription) {
-					if (is_array($subscription)
-						&& in_array(
-							(string)($subscription['tag'] ?? ''),
-							array_map(static fn (string $tag): string => strtolower(ltrim($tag, '#')), $status->getHashtags()),
-							true
-						)
+				$tags = array_map(static fn (string $tag): string => strtolower(ltrim($tag, '#')), $status->getHashtags());
+				foreach ($hashtagSubscriptions as $subscription) {
+					if (in_array((string)($subscription['tag'] ?? ''), $tags, true)
 						&& (!($subscription['local'] ?? false) || $status->isLocal())) {
 						$matching[] = (string)($subscription['stream'] ?? 'hashtag');
 					}
 				}
 			}
-			if (isset($subscriptions['user']) && $this->editedStatusIsInTimeline($status, ProbeOptions::HOME, viewer: $viewer)) {
+			$skipsReply = $hidesReplies && $status->getInReplyTo() !== '';
+			if (isset($home[$nid]) && !$skipsReply) {
 				$matching[] = 'user';
 			}
-			if (isset($subscriptions['direct'])
-				&& ($status->getVisibility() ?: $this->streamService->visibilityOf($status)) === Stream::TYPE_DIRECT) {
+			if (isset($subscriptions['direct']) && $visibility === Stream::TYPE_DIRECT) {
 				$conversation = $this->conversationService->updatedByStatus($viewer, $status->getNid());
 				if ($conversation !== null) {
 					$this->send($server, $subscriber, ['direct'], 'conversation', $conversation->jsonSerialize());
 				}
 			}
-			foreach ($subscriber->context['listSubscriptions'] ?? [] as $subscription) {
+			foreach ($skipsReply ? [] : $listSubscriptions as $subscription) {
 				if (is_array($subscription)
 					&& ($subscription['list'] ?? null) instanceof MastodonList
-					&& $this->editedStatusIsInTimeline($status, '', $subscription['list'], $viewer)) {
+					&& $this->editedStatusIsInList($status, $subscription['list'], $viewer)) {
 					$matching[] = 'list';
+					break;
 				}
 			}
 			if ($matching === []) {
 				continue;
 			}
 
+			try {
+				$asViewer = $this->streamService->getStreamByIdPrim($streamIdPrim, true);
+			} catch (Throwable) {
+				continue;
+			}
 			foreach (array_unique($matching) as $stream) {
 				$context = in_array($stream, [...self::PUBLIC_STREAMS, 'hashtag', 'hashtag:local'], true)
 					? Filter::CONTEXT_PUBLIC
 					: Filter::CONTEXT_HOME;
-				$filtered = $this->filterService->apply([$status], $context, $viewer);
+				$filtered = $this->filterService->apply([$asViewer], $context, $viewer);
 				if ($filtered !== []) {
 					$this->send($server, $subscriber, [$stream], 'status.update', $filtered[0]);
 				}
@@ -748,30 +915,32 @@ class MastodonStreamingDaemon {
 		}
 	}
 
-	private function editedStatusIsInTimeline(Stream $status, string $probe, ?MastodonList $list = null, ?Person $viewer = null): bool {
-		if ($this->feedDisplayService->hidesReplies($viewer?->getUserId() ?? '') && $status->getInReplyTo() !== '') {
-			return false;
-		}
+	/**
+	 * An edited post as stored, read once per pass and shared by every
+	 * subscriber: only what is the same for every reader — its nid, origin,
+	 * visibility, tags, attachments and reply — is read from it.
+	 */
+	private function editedStatus(string $streamIdPrim): ?Stream {
+		return $this->tickValue('edited:' . $streamIdPrim, function () use ($streamIdPrim): ?Stream {
+			try {
+				return $this->streamService->getStreamByIdPrim($streamIdPrim);
+			} catch (Throwable) {
+				return null;
+			}
+		});
+	}
+
+	private function editedStatusIsInList(Stream $status, MastodonList $list, Person $viewer): bool {
 		$nid = (string)$status->getNid();
 		$options = (new ProbeOptions())
 			->setFormat(ACore::FORMAT_LOCAL)
-			->setProbe($probe)
 			->setMinId(Nid::decrement($nid))
 			->setMaxId(Nid::increment($nid))
 			->setLimit(self::BATCH)
 			->setInverted(true);
+		$this->listsRequest->setViewer($viewer);
 
-		if ($list !== null) {
-			if ($viewer === null) {
-				return false;
-			}
-			$this->listsRequest->setViewer($viewer);
-			$statuses = $this->listsRequest->getTimeline($list, $options);
-		} else {
-			$statuses = $this->streamService->getTimeline($options);
-		}
-
-		foreach ($statuses as $candidate) {
+		foreach ($this->listsRequest->getTimeline($list, $options) as $candidate) {
 			if (Nid::compare((string)$candidate->getNid(), $nid) === 0) {
 				return true;
 			}

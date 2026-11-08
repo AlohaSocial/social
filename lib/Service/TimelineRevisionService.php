@@ -79,6 +79,19 @@ class TimelineRevisionService {
 	}
 
 	/**
+	 * The same number read from the database rather than from what this
+	 * process loaded before: for the streaming daemon, which outlives the
+	 * requests that bump it.
+	 *
+	 * @param string $key `KEY`, or one of the badges' numbers
+	 */
+	public function current(string $userId, string $key = self::KEY): int {
+		$this->configService->forgetUserValues($userId);
+
+		return $this->of($userId, $key);
+	}
+
+	/**
 	 * Something this account decided has changed what its timelines show.
 	 *
 	 * @param string $key `KEY`, or one of the badges' numbers

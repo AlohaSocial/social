@@ -81,6 +81,15 @@ without reviewing its guardrail effect.
 - **Large multi-protocol reads have external dependencies.** Bluesky AppView,
   Chat, PLC and relay calls and ActivityPub remote imports must be timed and
   reported separately from local DB response time.
+- **The Mastodon streaming daemon is one process polling for every
+  connection.** Once per second it reads the newest stored post id once for
+  all subscribers and reads a subscriber's timelines only when that moved; the
+  notification, direct, public and hashtag probes are further gated by their
+  own index-only newest id, edits by one batched membership query per
+  subscriber, and everything is read regardless every 30 seconds. On a busy
+  instance the newest id moves every second, so each subscribed home timeline
+  is still read about once per second; up to 256 connections share one loop.
+  Measure the pass time at that size before raising the connection limit.
 - **The benchmark does not yet populate direct messages.** Add representative
   conversations before making claims about inbox scalability.
 

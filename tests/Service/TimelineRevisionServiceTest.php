@@ -108,4 +108,28 @@ class TimelineRevisionServiceTest extends TestCase {
 
 		$this->assertSame([], $this->stored);
 	}
+
+	/**
+	 * The streaming daemon outlives the requests that bump the number, and
+	 * `IUserConfig` keeps what it loaded: the process's copy is dropped before
+	 * the read.
+	 */
+	public function testCurrentDropsTheProcessCopyBeforeReading(): void {
+		$calls = [];
+		$configService = $this->createMock(ConfigService::class);
+		$configService->expects(self::once())->method('forgetUserValues')->with('alice')
+			->willReturnCallback(function () use (&$calls): void {
+				$calls[] = 'forget';
+			});
+		$configService->expects(self::once())->method('getValueForUser')
+			->with('alice', TimelineRevisionService::NOTIFICATIONS_MERGED)
+			->willReturnCallback(function () use (&$calls): string {
+				$calls[] = 'read';
+				return '7';
+			});
+		$service = new TimelineRevisionService($this->actorsRequest, $configService);
+
+		self::assertSame(7, $service->current('alice', TimelineRevisionService::NOTIFICATIONS_MERGED));
+		self::assertSame(['forget', 'read'], $calls);
+	}
 }

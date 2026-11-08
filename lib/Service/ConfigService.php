@@ -873,6 +873,17 @@ class ConfigService {
 	}
 
 	/**
+	 * Drops what this process holds of a user's settings, so the next read
+	 * comes from the database. A long-running process needs it to see a
+	 * value another process wrote: `IUserConfig` keeps every value it loaded.
+	 */
+	public function forgetUserValues(string $userId): void {
+		if ($userId !== '') {
+			$this->userConfig->clearCache($userId);
+		}
+	}
+
+	/**
 	 * Set a user value by key
 	 *
 	 * @param string $userId

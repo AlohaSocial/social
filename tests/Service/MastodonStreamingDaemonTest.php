@@ -17,7 +17,9 @@ use OCA\Social\Db\ListsRequest;
 use OCA\Social\Db\StatusDeletionEventsRequest;
 use OCA\Social\Db\StatusRevisionsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Announcement;
 use OCA\Social\Model\Client\Conversation;
@@ -32,6 +34,7 @@ use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\FeedDisplayService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\MastodonStreamingDaemon;
+use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\PostDecorationService;
 use OCA\Social\Service\StreamService;
@@ -59,7 +62,10 @@ class MastodonStreamingDaemonTest extends TestCase {
 	private FilterService&MockObject $filters;
 	private ITimeFactory&MockObject $time;
 	private TimelineRevisionService&MockObject $timelineRevisions;
+	private ModerationService&MockObject $moderation;
+	private FeedDisplayService&MockObject $feedDisplay;
 	private MastodonStreamingDaemon $daemon;
+	private int $now = 1_800_000_000;
 
 	#[\Override]
 	protected function setUp(): void {
@@ -79,8 +85,14 @@ class MastodonStreamingDaemonTest extends TestCase {
 		$this->postDecoration = $this->createMock(PostDecorationService::class);
 		$this->filters = $this->createMock(FilterService::class);
 		$this->time = $this->createMock(ITimeFactory::class);
-		$this->time->method('getTime')->willReturn(1_800_000_000);
+		$this->time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 		$this->timelineRevisions = $this->createMock(TimelineRevisionService::class);
+		$this->moderation = $this->createMock(ModerationService::class);
+		$this->feedDisplay = $this->createMock(FeedDisplayService::class);
+		$notificationPolicy = $this->createMock(NotificationPolicyService::class);
+		$notificationPolicy->method('partition')->willReturnCallback(
+			static fn (Person $viewer, array $page): array => ['shown' => $page, 'held' => []]
+		);
 		$this->requests->method('newestHomeNid')->willReturn('10');
 		$this->requests->method('newestNidFor')->willReturn('20');
 		$this->accounts->method('getActorFromUserId')->willReturn(
@@ -100,9 +112,10 @@ class MastodonStreamingDaemonTest extends TestCase {
 			$this->lists,
 			$this->postDecoration,
 			$this->filters,
-			$this->createMock(FeedDisplayService::class),
-			$this->createMock(NotificationPolicyService::class),
+			$this->feedDisplay,
+			$notificationPolicy,
 			$this->timelineRevisions,
+			$this->moderation,
 			$this->time,
 			new NullLogger(),
 		);
@@ -336,6 +349,8 @@ class MastodonStreamingDaemonTest extends TestCase {
 		$subscriber = $this->subscriber();
 		$subscriber->context = [
 			'lastPoll' => 0,
+			'tokenCheckedAt' => $this->now,
+			'connectedAt' => $this->now,
 			'viewer' => $alice,
 			'subscriptions' => ['list' => true],
 			'listSubscriptions' => [
@@ -387,13 +402,21 @@ class MastodonStreamingDaemonTest extends TestCase {
 		$statusId = 'https://social.example/users/alice/statuses/75';
 		$status = (new Stream())
 			->setId($statusId)
+			->setNid('75')
 			->setVisibility(Stream::TYPE_PUBLIC)
 			->setLocal(true);
 		$this->statusRevisions->expects(self::once())->method('getAfterId')->with(50, 50)->willReturn([
 			['id' => 51, 'stream_id_prim' => md5($statusId)],
 			['id' => 52, 'stream_id_prim' => md5($statusId)],
 		]);
-		$this->streams->expects(self::once())->method('getStreamByIdPrim')->with(md5($statusId), true)->willReturn($status);
+		$asViewer = [];
+		$this->streams->expects(self::exactly(2))->method('getStreamByIdPrim')->willReturnCallback(
+			static function (string $prim, bool $viewer = false) use ($status, &$asViewer): Stream {
+				$asViewer[] = [$prim, $viewer];
+				return $status;
+			}
+		);
+		$this->requests->expects(self::once())->method('publicNidsAmong')->with(['75'])->willReturn(['75']);
 		$this->filters->expects(self::once())->method('apply')->willReturn([['id' => '75']]);
 
 		$subscriber = $this->subscriber();
@@ -407,6 +430,7 @@ class MastodonStreamingDaemonTest extends TestCase {
 		}
 
 		self::assertSame(52, $subscriber->context['revisionSince']);
+		self::assertSame([[md5($statusId), false], [md5($statusId), true]], $asViewer);
 		rewind($subscriber->socket);
 		$payload = stream_get_contents($subscriber->socket);
 		self::assertIsString($payload);
@@ -420,12 +444,10 @@ class MastodonStreamingDaemonTest extends TestCase {
 		$this->statusRevisions->expects(self::once())->method('getAfterId')->willReturn([
 			['id' => 51, 'stream_id_prim' => md5($statusId)],
 		]);
-		$this->streams->expects(self::once())->method('getStreamByIdPrim')->with(md5($statusId), true)->willReturn($status);
-		$this->streams->expects(self::once())->method('getTimeline')->with(self::callback(
-			static fn (ProbeOptions $options): bool => $options->getProbe() === ProbeOptions::HOME
-				&& $options->getMinId() === 74
-				&& $options->getMaxId() === 76
-		))->willReturn([$status]);
+		$this->streams->expects(self::exactly(2))->method('getStreamByIdPrim')->willReturn($status);
+		$this->streams->expects(self::never())->method('getTimeline');
+		$this->requests->expects(self::once())->method('homeNidsAmong')->with(['75'])->willReturn(['75']);
+		$this->requests->expects(self::never())->method('publicNidsAmong');
 		$this->filters->expects(self::once())->method('apply')->with([$status], Filter::CONTEXT_HOME, self::isInstanceOf(Person::class))
 			->willReturn([['id' => '75']]);
 
@@ -452,7 +474,7 @@ class MastodonStreamingDaemonTest extends TestCase {
 		$this->statusRevisions->expects(self::once())->method('getAfterId')->willReturn([
 			['id' => 51, 'stream_id_prim' => md5($statusId)],
 		]);
-		$this->streams->expects(self::once())->method('getStreamByIdPrim')->with(md5($statusId), true)->willReturn($status);
+		$this->streams->expects(self::once())->method('getStreamByIdPrim')->with(md5($statusId))->willReturn($status);
 		$this->conversations->expects(self::once())->method('updatedByStatus')->with(
 			self::isInstanceOf(Person::class), 75
 		)->willReturn($conversation);
@@ -783,7 +805,7 @@ class MastodonStreamingDaemonTest extends TestCase {
 
 	public function testAcceptedNotificationRequestsEmitWebSocketMergeEvent(): void {
 		$this->timelineRevisions->expects(self::once())
-			->method('of')
+			->method('current')
 			->with('alice', TimelineRevisionService::NOTIFICATIONS_MERGED)
 			->willReturn(4);
 		$subscriber = $this->subscriber();
@@ -805,7 +827,7 @@ class MastodonStreamingDaemonTest extends TestCase {
 
 	public function testNotificationMergeEventUsesEmptySsePayloadAndIgnoresUnchangedRevision(): void {
 		$this->timelineRevisions->expects(self::exactly(2))
-			->method('of')
+			->method('current')
 			->willReturn(4);
 		$subscriber = $this->subscriber();
 		$subscriber->eventStream = true;
@@ -892,6 +914,298 @@ class MastodonStreamingDaemonTest extends TestCase {
 		]));
 
 		$this->invoke('send', $server, $subscriber, ['public'], 'delete', '75');
+	}
+
+	/** Nothing stored since the last pass: no timeline, deletion or edit is read. */
+	public function testPollSkipsEveryProbeWhileNothingNewWasStored(): void {
+		$this->requests->expects(self::once())->method('newestNid')->willReturn('100');
+		$this->streams->expects(self::never())->method('getTimeline');
+		$this->conversations->expects(self::never())->method('getPage');
+		$this->statusRevisions->expects(self::never())->method('getAfterId');
+		$this->statusDeletionEvents->expects(self::never())->method('getAfterId');
+		$subscriber = $this->pollingSubscriber(['user' => true, 'direct' => true, 'public' => true]);
+		$subscriber->context['gate:stream'] = '100';
+
+		$this->poll($subscriber);
+	}
+
+	/** A new post anywhere opens the gate, and the probes read past their cursors. */
+	public function testPollReadsTheTimelinesOnceTheNewestIdMoved(): void {
+		$this->requests->method('newestNid')->willReturn('101');
+		$probes = [];
+		$this->streams->method('getTimeline')->willReturnCallback(
+			static function (ProbeOptions $options) use (&$probes): array {
+				$probes[] = $options->getProbe();
+				return [];
+			}
+		);
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['gate:stream'] = '100';
+
+		$this->poll($subscriber);
+
+		self::assertSame([ProbeOptions::HOME, ProbeOptions::NOTIFICATIONS], $probes);
+		self::assertSame('101', $subscriber->context['gate:stream']);
+	}
+
+	/** The sweep reads everything every 30 seconds, for a row stored below an id already seen. */
+	public function testTheSweepReadsTheTimelinesEvenWhenTheNewestIdStayed(): void {
+		$this->requests->method('newestNid')->willReturn('100');
+		$this->streams->expects(self::exactly(2))->method('getTimeline')->willReturn([]);
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['gate:stream'] = '100';
+		$subscriber->context['gate:notification'] = '20';
+		$subscriber->context['sweptAt'] = $this->now - 30;
+
+		$this->poll($subscriber);
+
+		self::assertSame($this->now, $subscriber->context['sweptAt']);
+	}
+
+	/** Another account's post moves the newest id; this account's notifications did not move. */
+	public function testNotificationsAreReadOnlyWhenTheAccountsNewestNotificationMoved(): void {
+		$this->requests->method('newestNid')->willReturn('101');
+		$probes = [];
+		$this->streams->method('getTimeline')->willReturnCallback(
+			static function (ProbeOptions $options) use (&$probes): array {
+				$probes[] = $options->getProbe();
+				return [];
+			}
+		);
+		$subscriber = $this->pollingSubscriber(['user:notification' => true]);
+		$subscriber->context['gate:stream'] = '100';
+		$subscriber->context['gate:notification'] = '20';
+
+		$this->poll($subscriber);
+		self::assertSame([], $probes);
+
+		$subscriber->context['gate:stream'] = '100';
+		$subscriber->context['gate:notification'] = '19';
+		$subscriber->context['lastPoll'] = 0;
+		$this->poll($subscriber);
+		self::assertSame([ProbeOptions::NOTIFICATIONS], $probes);
+	}
+
+	/** The newest id and the edited posts are read once per pass, not once per subscriber. */
+	public function testSharedReadsHappenOncePerPassForEverySubscriber(): void {
+		$statusId = 'https://social.example/users/alice/statuses/75';
+		$status = (new Stream())->setId($statusId)->setNid('75')->setVisibility(Stream::TYPE_PUBLIC)->setLocal(true);
+		$this->requests->expects(self::once())->method('newestNid')->willReturn('100');
+		// the newest revision is 50: one edit past these cursors
+		$this->statusRevisions->method('getAfterId')->willReturn([['id' => 50, 'stream_id_prim' => md5($statusId)]]);
+		$this->requests->method('publicNidsAmong')->willReturn(['75']);
+		$reads = [];
+		$this->streams->method('getStreamByIdPrim')->willReturnCallback(
+			static function (string $prim, bool $asViewer = false) use ($status, &$reads): Stream {
+				$reads[] = $asViewer;
+				return $status;
+			}
+		);
+		$this->filters->method('apply')->willReturn([['id' => '75']]);
+		$first = $this->pollingSubscriber(['public:local' => true]);
+		$second = $this->pollingSubscriber(['public:local' => true]);
+		foreach ([$first, $second] as $subscriber) {
+			$subscriber->context['gate:stream'] = '100';
+			$subscriber->context['revisionSince'] = 49;
+		}
+
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::exactly(2))->method('send');
+		$this->invoke('poll', $server, $first);
+		$this->invoke('poll', $server, $second);
+
+		self::assertSame([false, true, true], $reads, 'one shared read, then one as each viewer');
+	}
+
+	/** An edit the public timeline would not show this reader (a block, a mute, a silence) is not streamed. */
+	public function testEditsHiddenFromThePublicTimelineAreNotStreamed(): void {
+		$statusId = 'https://social.example/users/blocked/statuses/75';
+		$status = (new Note())->setHashtags(['nextcloud']);
+		$status->setId($statusId)->setNid('75')->setVisibility(Stream::TYPE_PUBLIC)->setLocal(true);
+		$this->statusRevisions->method('getAfterId')->willReturn([['id' => 51, 'stream_id_prim' => md5($statusId)]]);
+		$this->streams->expects(self::once())->method('getStreamByIdPrim')->with(md5($statusId))->willReturn($status);
+		$viewer = (new Person())->setId('https://social.example/users/alice');
+		$this->requests->expects(self::once())->method('setViewer')->with($viewer);
+		$this->requests->expects(self::once())->method('publicNidsAmong')->with(['75'])->willReturn([]);
+		$this->filters->expects(self::never())->method('apply');
+		$subscriber = $this->subscriber();
+		$subscriber->context = [
+			'revisionSince' => 50,
+			'subscriptions' => ['public' => true, 'hashtag' => true],
+			'hashtagSubscriptions' => ['k' => ['stream' => 'hashtag', 'tag' => 'nextcloud', 'local' => false, 'since' => '0']],
+		];
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::never())->method('send');
+
+		$this->invoke('sendEditedPublicStatuses', $server, $subscriber, $viewer);
+		self::assertSame(51, $subscriber->context['revisionSince']);
+	}
+
+	/** A home stream asks one membership query for every edit of the pass, and nothing of a post not on it. */
+	public function testHomeEditsAreCheckedWithOneBatchedMembershipQuery(): void {
+		$one = 'https://social.example/users/bob/statuses/75';
+		$two = 'https://social.example/users/carol/statuses/76';
+		$statuses = [
+			md5($one) => (new Stream())->setId($one)->setNid('75')->setVisibility(Stream::TYPE_FOLLOWERS),
+			md5($two) => (new Stream())->setId($two)->setNid('76')->setVisibility(Stream::TYPE_FOLLOWERS),
+		];
+		$this->statusRevisions->method('getAfterId')->willReturn([
+			['id' => 51, 'stream_id_prim' => md5($one)],
+			['id' => 52, 'stream_id_prim' => md5($two)],
+		]);
+		$this->streams->method('getStreamByIdPrim')->willReturnCallback(
+			static fn (string $prim): Stream => $statuses[$prim]
+		);
+		$this->requests->expects(self::once())->method('homeNidsAmong')->with(['75', '76'])->willReturn(['76']);
+		$this->filters->expects(self::once())->method('apply')->with([$statuses[md5($two)]], Filter::CONTEXT_HOME)
+			->willReturn([['id' => '76']]);
+		$subscriber = $this->subscriber();
+		$subscriber->context = ['revisionSince' => 50, 'subscriptions' => ['user' => true]];
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::once())->method('send');
+
+		$this->invoke('sendEditedPublicStatuses', $server, $subscriber, new Person());
+	}
+
+	/** The token is checked again only once a minute has passed. */
+	public function testTheTokenIsNotCheckedAgainWithinAMinute(): void {
+		$this->clients->expects(self::never())->method('getFromToken');
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['tokenCheckedAt'] = $this->now - 59;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::never())->method('close');
+
+		self::assertTrue($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	/** Re-checked through the path REST requests take, so the same rules apply. */
+	public function testAValidTokenIsRecheckedThroughGetFromTokenAndKeepsTheConnection(): void {
+		$this->clients->expects(self::once())->method('getFromToken')->with('token')->willReturn($this->client(['read']));
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['tokenCheckedAt'] = $this->now - 60;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::never())->method('close');
+
+		self::assertTrue($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+		self::assertSame($this->now, $subscriber->context['tokenCheckedAt']);
+	}
+
+	/** Revoked, expired or idle past its lifetime: `getFromToken()` refuses it, and the stream ends. */
+	public function testARevokedTokenClosesTheConnection(): void {
+		$this->clients->method('getFromToken')->willThrowException(new ClientNotFoundException('the access_token has expired'));
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['tokenCheckedAt'] = $this->now - 60;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::once())->method('close')->with($subscriber, 'access token no longer valid');
+
+		self::assertFalse($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	public function testATokenNowNamingAnotherAuthorizationClosesTheConnection(): void {
+		$this->clients->method('getFromToken')->willReturn($this->client(['read'])->setAuthId(2));
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['tokenCheckedAt'] = $this->now - 60;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::once())->method('close');
+
+		self::assertFalse($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	public function testASuspendedAccountClosesTheConnection(): void {
+		$this->clients->method('getFromToken')->willReturn($this->client(['read']));
+		$this->moderation->expects(self::once())->method('isSuspended')->with('https://social.example/users/alice')->willReturn(true);
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['tokenCheckedAt'] = $this->now - 60;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::once())->method('close')->with($subscriber, 'access token no longer valid');
+
+		self::assertFalse($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	/** A failing database is not a revoked token; the next check decides. */
+	public function testAFailedCheckKeepsTheConnection(): void {
+		$this->clients->method('getFromToken')->willThrowException(new \RuntimeException('database gone'));
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['tokenCheckedAt'] = $this->now - 60;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::never())->method('close');
+
+		self::assertTrue($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	public function testAConnectionIsClosedAtItsMaximumLifetime(): void {
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['connectedAt'] = $this->now - MastodonStreamingDaemon::DEFAULT_MAX_CONNECTION_SECONDS;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::once())->method('close')->with($subscriber, 'connection lifetime reached');
+
+		self::assertFalse($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	public function testAZeroLifetimeKeepsConnectionsOpen(): void {
+		(new \ReflectionProperty($this->daemon, 'maxConnectionSeconds'))->setValue($this->daemon, 0);
+		$subscriber = $this->pollingSubscriber(['user' => true]);
+		$subscriber->context['connectedAt'] = $this->now - 10 * MastodonStreamingDaemon::DEFAULT_MAX_CONNECTION_SECONDS;
+		$server = $this->createMock(WebSocketServer::class);
+		$server->expects(self::never())->method('close');
+
+		self::assertTrue($this->invoke('connectionMayContinue', $server, $subscriber, $this->alice(), $this->now));
+	}
+
+	public function testTheHandshakeRefusesASuspendedAccount(): void {
+		$this->clients->method('getFromToken')->willReturn($this->client(['read']));
+		$this->moderation->method('isSuspended')->willReturn(true);
+
+		self::assertFalse($this->invoke('authorize', $this->subscriber(['stream' => 'user'], ['authorization' => 'Bearer token'])));
+	}
+
+	public function testTheHandshakeKeepsWhatTheTokenRecheckNeeds(): void {
+		$this->clients->method('getFromToken')->willReturn($this->client(['read']));
+		$subscriber = $this->subscriber(['stream' => 'user'], ['authorization' => 'Bearer token']);
+
+		self::assertTrue($this->invoke('authorize', $subscriber));
+		self::assertSame('token', $subscriber->context['token']);
+		self::assertSame(1, $subscriber->context['authId']);
+		self::assertSame($this->now, $subscriber->context['connectedAt']);
+		self::assertSame($this->now, $subscriber->context['tokenCheckedAt']);
+	}
+
+	private function alice(): Person {
+		return (new Person())->setId('https://social.example/users/alice')->setUserId('alice');
+	}
+
+	/** A subscriber whose token was just checked, ready for `poll()`. */
+	private function pollingSubscriber(array $subscriptions): Subscriber {
+		$subscriber = $this->subscriber();
+		$subscriber->context = [
+			'token' => 'token',
+			'authId' => 1,
+			'userId' => 'alice',
+			'viewer' => $this->alice(),
+			'subscriptions' => $subscriptions,
+			'connectedAt' => $this->now,
+			'tokenCheckedAt' => $this->now,
+			'sweptAt' => $this->now,
+			'filterCheckedAt' => $this->now,
+			'announcementCheckedAt' => $this->now,
+			'notificationsMergedCheckedAt' => $this->now,
+			'homeSince' => '10',
+			'notificationSince' => '20',
+			'directSince' => '20',
+			'publicSince:public' => '20',
+			'publicSince:public:local' => '20',
+			'revisionSince' => 50,
+			'deleteSince' => 12,
+			'lastPoll' => 0,
+			'lastPing' => $this->now,
+		];
+
+		return $subscriber;
+	}
+
+	private function poll(Subscriber $subscriber): void {
+		$server = $this->createMock(WebSocketServer::class);
+		$this->invoke('poll', $server, $subscriber);
 	}
 
 	private function client(array $scopes): SocialClient {

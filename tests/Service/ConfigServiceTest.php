@@ -619,4 +619,17 @@ class ConfigServiceTest extends TestCase {
 
 		$this->assertSame(0, $this->service->getUserValueInt('version', '', 'avatar'));
 	}
+
+	/** A long-running process reads another process's writes only after dropping its copy. */
+	public function testForgettingUserValuesClearsTheUserConfigCache(): void {
+		$this->userConfig->expects($this->once())->method('clearCache')->with('alice');
+
+		$this->service->forgetUserValues('alice');
+	}
+
+	public function testForgettingTheValuesOfNoUserDoesNothing(): void {
+		$this->userConfig->expects($this->never())->method('clearCache');
+
+		$this->service->forgetUserValues('');
+	}
 }

@@ -41,6 +41,16 @@ Streaming](API.md). If the daemon or proxy is unavailable, clients
 should use REST polling; a successful REST request does not prove that the
 stream is connected.
 
+The daemon checks each connection's access token again every minute and closes
+the connection when the token was revoked or has expired, or the account was
+suspended; it also closes every connection after 24 hours by default
+(`--max-connection-seconds`). Clients are expected to reconnect, as they do
+with Mastodon. New posts and notifications arrive within about a second;
+a post stored out of order (a second post in the same second can sort below
+the first) can take up to 30 seconds. Edits reach public and hashtag streams
+only when the public timeline would show the post to that reader, after its
+blocks, mutes and the instance's silences.
+
 Mastodon Web Push subscription endpoints are part of the API, but delivery also
 depends on client subscription, VAPID configuration, outbound connectivity and
 the push provider. Nextcloud's own notification channel is a separate feature.

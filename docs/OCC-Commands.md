@@ -509,18 +509,23 @@ costs latency and nothing else. Run it under systemd beside the firehose daemon
 Serve Mastodon's authenticated user and public WebSocket and SSE streams.
 
 ```
-php occ social:mastodon:stream [--bind ADDRESS:PORT] [--max-seconds SECONDS]
+php occ social:mastodon:stream [--bind ADDRESS:PORT] [--max-seconds SECONDS] [--max-connection-seconds SECONDS]
 ```
 
 | Option | Value | Description |
 |--------|-------|-------------|
 | `--bind` | string (127.0.0.1:8788) | Where to listen; the shipped root proxy rules send `/api/v1/streaming`, `/api/v1/streaming/user`, `/api/v1/streaming/user/notification`, `/api/v1/streaming/direct`, `/api/v1/streaming/list`, `/api/v1/streaming/public`, `/api/v1/streaming/public/local`, `/api/v1/streaming/public/remote`, `/api/v1/streaming/hashtag`, `/api/v1/streaming/hashtag/local` and `/api/v1/streaming/health` here |
 | `--max-seconds` | int (0) | Stop after this long, so a supervisor can restart it; `0` runs until stopped |
+| `--max-connection-seconds` | int (86400) | Close each connection after this long; clients reconnect. `0` keeps connections open until the client leaves |
 
 The daemon requires a user access token with `read` or both `read:statuses` and
 `read:notifications` for user streams. Direct and list streams require
 `read:statuses`; a list stream also requires a list owned by that account. It
-polls the same filtered timelines used by the REST API once per second. Run it under a process supervisor; the
+checks each connection's token again every minute and closes the connection
+once the token is revoked or expired or the account is suspended or gone.
+Once per second it asks whether anything new was stored and reads the same
+filtered timelines used by the REST API only when something was, and every 30
+seconds regardless. Run it under a process supervisor; the
 streaming health path returns `OK` while the process is accepting requests.
 
 ### `social:atproto:identities`
