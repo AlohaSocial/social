@@ -137,7 +137,10 @@ class AdminReport implements JsonSerializable {
 			'assigned_account' => $this->getAssignedAccount(),
 			'action_taken_by_account' => $this->getActionTakenByAccount(),
 			'statuses' => $this->getStatuses(),
-			'rules' => [],
+			'rules' => array_map(
+				static fn (array $rule): array => ['id' => $rule['id'], 'text' => $rule['text'], 'hint' => ''],
+				$this->report->getRules()
+			),
 		];
 	}
 

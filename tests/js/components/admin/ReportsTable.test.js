@@ -55,6 +55,13 @@ describe('the reports table', () => {
 	})
 
 	describe('what a row says', () => {
+		it('lists the rules a reporter said were broken under the category', () => {
+			const wrapper = mountTable([report({ category: 'violation', rules: ['Be kind', 'No spam'] })])
+
+			expect(wrapper.findAll('.reports-table__rules li').map((item) => item.text())).toEqual(['Be kind', 'No spam'])
+			expect(mountTable().find('.reports-table__rules').exists()).toBe(false)
+		})
+
 		it('names who was reported, by whom, and why', () => {
 			const cells = mountTable().findAll('td')
 

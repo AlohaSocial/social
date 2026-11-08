@@ -151,7 +151,9 @@ class ApiController extends MastodonApiController {
 				// that hosts the account, which is the only one that can act
 				// on it. Ignored for a local account -- ReportForwardService
 				// decides, so no entry point can forward what must not be
-				$this->formBool($input['forward'] ?? false)
+				$this->formBool($input['forward'] ?? false),
+				// Mastodon's `rule_ids`, kept for a `violation` only
+				is_array($input['rule_ids'] ?? null) ? $input['rule_ids'] : []
 			);
 			$target->setExportFormat(ACore::FORMAT_LOCAL);
 

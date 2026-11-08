@@ -246,6 +246,12 @@
 							? t('social', 'Remove verification')
 							: t('social', 'Verify account') }}
 					</NcActionButton>
+					<NcActionButton closeAfterClick @click="showReportDialog = true">
+						<template #icon>
+							<Flag :size="20" />
+						</template>
+						{{ t('social', 'Report') }}
+					</NcActionButton>
 				</NcActions>
 			</div>
 			<!-- A private note, for the reader alone: it never leaves this
@@ -540,6 +546,10 @@
 				v-if="showListDialog"
 				v-model:open="showListDialog"
 				:account="accountInfo" />
+			<ReportDialog
+				v-if="showReportDialog"
+				v-model:open="showReportDialog"
+				:account="accountInfo" />
 		</div>
 	</div>
 </template>
@@ -553,6 +563,7 @@ import CheckDecagram from 'vue-material-design-icons/CheckDecagram.vue'
 import CheckDecagramOutline from 'vue-material-design-icons/CheckDecagramOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import ContentCopy from 'vue-material-design-icons/ContentCopy.vue'
+import Flag from 'vue-material-design-icons/Flag.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import ImagePlus from 'vue-material-design-icons/ImagePlus.vue'
@@ -599,6 +610,7 @@ import { bannerOf } from '../utils/banner.js'
 // menu fetches its copy of the mute dialog from.
 const ListMembershipDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ListMembershipDialog.vue'))
 const MuteDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./MuteDialog.vue'))
+const ReportDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ReportDialog.vue'))
 
 /** Mirrors `AccountService::SUMMARY_MAX_LENGTH`, which truncates beyond it. */
 const BIO_MAX_LENGTH = 500
@@ -634,11 +646,13 @@ export default {
 		CheckDecagramOutline,
 		Close,
 		ContentCopy,
+		Flag,
 		BlueskyBadge,
 		FollowButton,
 		IconFormatListBulleted,
 		ListMembershipDialog,
 		MuteDialog,
+		ReportDialog,
 		NcActionButton,
 		NcActions,
 		NcAvatar,
@@ -708,6 +722,7 @@ export default {
 			bioStored: '',
 			showMuteDialog: false,
 			showListDialog: false,
+			showReportDialog: false,
 			/** the private note as it is being edited */
 			noteDraft: '',
 			/** who the reader follows that also follows this account */

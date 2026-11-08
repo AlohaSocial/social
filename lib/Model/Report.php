@@ -36,6 +36,8 @@ class Report implements JsonSerializable {
 	private array $statusIds = [];
 	private string $comment = '';
 	private string $category = self::CATEGORY_OTHER;
+	/** @var list<array{id: string, text: string}> */
+	private array $rules = [];
 	private bool $local = true;
 	private bool $resolved = false;
 	private bool $forwarded = false;
@@ -106,6 +108,46 @@ class Report implements JsonSerializable {
 
 	public function getCategory(): string {
 		return $this->category;
+	}
+
+	/**
+	 * The instance rules the reporter says were broken, as they read when the
+	 * report was filed: a rule's id is its line number, which an edit of the
+	 * rules shifts, so the text is kept beside it.
+	 *
+	 * @param array<array-key, mixed> $rules
+	 */
+	public function setRules(array $rules): self {
+		$this->rules = [];
+		foreach ($rules as $rule) {
+			if (!is_array($rule) || !isset($rule['id'], $rule['text'])) {
+				continue;
+			}
+			$this->rules[] = ['id' => (string)$rule['id'], 'text' => (string)$rule['text']];
+		}
+
+		return $this;
+	}
+
+	/**
+	 * The stored `rules` column: a JSON list, or nothing.
+	 *
+	 * @return array<array-key, mixed>
+	 */
+	public static function decodeRules(?string $stored): array {
+		$rules = json_decode((string)$stored, true);
+
+		return is_array($rules) ? $rules : [];
+	}
+
+	/** @return list<array{id: string, text: string}> */
+	public function getRules(): array {
+		return $this->rules;
+	}
+
+	/** @return list<string> */
+	public function getRuleIds(): array {
+		return array_column($this->rules, 'id');
 	}
 
 	public function setLocal(bool $local): self {
@@ -194,6 +236,7 @@ class Report implements JsonSerializable {
 			'category' => $this->getCategory(),
 			'comment' => $this->getComment(),
 			'status_ids' => $this->getStatusIds(),
+			'rules' => array_column($this->getRules(), 'text'),
 			'creation' => $this->getCreation(),
 			'resolved' => $this->isResolved(),
 			'level' => $decisions[$targetId] ?? '',
@@ -214,7 +257,7 @@ class Report implements JsonSerializable {
 			'forwarded' => $this->isForwarded(),
 			'created_at' => gmdate('Y-m-d\TH:i:s', $this->getCreation()) . '.000Z',
 			'status_ids' => $this->getStatusIds(),
-			'rule_ids' => null,
+			'rule_ids' => $this->getRules() === [] ? null : $this->getRuleIds(),
 			'target_account' => $this->getTargetAccount(),
 		];
 	}

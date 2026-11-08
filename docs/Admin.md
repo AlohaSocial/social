@@ -933,7 +933,12 @@ are rows of this app.
 Reports arrive from two directions: a local user reporting somebody through a
 client, and a peer instance sending `POST /api/v1/reports` about one of its
 own users' complaints. Both land in the same table, and the administrators (and
-the delegated group) are notified.
+the delegated group) are notified. In the web interface a user reports a post
+from its menu or an account from its profile, choosing a category (spam,
+breaking the server rules, illegal, other); for a rules violation they pick the
+rules involved, which the Reports table lists under the category with the text
+each rule had when the report was filed. A report about an account on another
+server can also be forwarded there, in this server's name.
 
 There are five things a moderator can do to an account, in order of weight:
 

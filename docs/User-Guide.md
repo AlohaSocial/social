@@ -1047,9 +1047,15 @@ hand, it is picked up as one.
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
   **Approve who follows you** switch under **Settings → Profile and privacy**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.
-- **Reporting.** **Report** in a post's menu sends the post, with an optional
-  note, to the moderators of this instance. From the web client it is never
-  sent to the reported account or their server.
+- **Reporting.** **Report** in a post's menu reports that post; **Report** in
+  the menu on a profile reports the account itself. You say what is wrong —
+  spam, breaking this server's rules (and which ones; offered when the server
+  has rules), illegal, or something else — and can add a note for the
+  moderators. The account is not told who reported it. For an account on
+  another server, on the fediverse or on Bluesky alike, **Also send to the
+  moderators of their server** (ticked by default) passes the report on, since
+  only that server can act on the account everywhere: this server sends it in
+  its own name, never yours, with your note as you wrote it.
 - **Your year.** `GET /api/v1/annual_reports` serves what Mastodon calls
   `#Wrapstodon`: one report per year you wrote anything in, with twelve months
   of what you posted and who arrived, the hashtags you used most, your three
@@ -1263,8 +1269,9 @@ labels always apply here: a post it hides never arrives, and adult or
 upsetting pictures come with a warning. Under *Settings → Blocking → Bluesky
 labelers* you can add other labelers by their handle and choose, label by
 label, whether it does nothing, shows a warning, or hides the post. When you
-report a Bluesky account or post, *Also report to Bluesky's moderation
-service* passes the report on — sent by this server, not in your name.
+report a Bluesky account or post, *Also send to the moderators of their server*
+passes the report on to Bluesky's moderation service — sent by this server, not
+in your name.
 
 **Bluesky apps.** You can use the Bluesky app, or any other Bluesky client,
 with this account. In *Settings → Apps and account → Bluesky* make an

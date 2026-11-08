@@ -501,7 +501,7 @@ describe('ProfileInfo', () => {
 		it('offers Block and Mute for an account that is neither blocked nor muted', () => {
 			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
 			const wrapper = mountProfile('bob@remote.example')
-			expect(menuItems(wrapper)).toEqual(['Block', 'Mute', 'Add to list'])
+			expect(menuItems(wrapper)).toEqual(['Block', 'Mute', 'Add to list', 'Report'])
 			expect(wrapper.findComponent(FollowButtonStub).exists()).toBe(true)
 			expect(wrapper.find('.user-profile__blocked-hint').exists()).toBe(false)
 		})
@@ -509,14 +509,14 @@ describe('ProfileInfo', () => {
 		it('flips to Unblock, shows the Blocked hint and hides the follow button for a blocked account', () => {
 			accountStore.addRelationship({ actorId: bob.id, data: relationship({ blocking: true }) })
 			const wrapper = mountProfile('bob@remote.example')
-			expect(menuItems(wrapper)).toEqual(['Unblock', 'Mute', 'Add to list'])
+			expect(menuItems(wrapper)).toEqual(['Unblock', 'Mute', 'Add to list', 'Report'])
 			expect(wrapper.find('.user-profile__blocked-hint').text()).toBe('Blocked')
 			expect(wrapper.findComponent(FollowButtonStub).exists()).toBe(false)
 		})
 
 		it('flips to Unmute for a muted account', () => {
 			accountStore.addRelationship({ actorId: bob.id, data: relationship({ muting: true, muting_notifications: true }) })
-			expect(menuItems(mountProfile('bob@remote.example'))).toEqual(['Block', 'Unmute', 'Add to list'])
+			expect(menuItems(mountProfile('bob@remote.example'))).toEqual(['Block', 'Unmute', 'Add to list', 'Report'])
 		})
 
 		// Mute is missing on purpose: it opens a dialog with questions of its
@@ -552,6 +552,21 @@ describe('ProfileInfo', () => {
 				.toBe('Muted')
 		})
 
+		it('reports the account itself, with no post attached', async () => {
+			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
+			vi.spyOn(axios, 'get').mockResolvedValue({ data: [] })
+			const wrapper = mountProfile('bob@remote.example')
+
+			await menuItem(wrapper, 'Report').trigger('click')
+			// the dialog is fetched before it is mounted: a real `import()`
+			await vi.waitUntil(() => wrapper.findComponent({ name: 'ReportDialog' }).exists(), { timeout: 15000 })
+
+			const dialog = wrapper.findComponent({ name: 'ReportDialog' })
+			expect(dialog.props('account').acct).toBe('bob@remote.example')
+			expect(dialog.props('status')).toBeNull()
+			expect(dialog.props('open')).toBe(true)
+		})
+
 		it('shows no menu on the own profile', () => {
 			accountStore.addRelationship({ actorId: alice.id, data: relationship() })
 			expect(menuItems(mountProfile('alice'))).toEqual([])
@@ -570,7 +585,7 @@ describe('ProfileInfo', () => {
 
 			makeStore({ canVerify: true })
 			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
-			expect(menuItems(mountProfile('bob@remote.example'))).toEqual(['Block', 'Mute', 'Add to list', 'Verify account'])
+			expect(menuItems(mountProfile('bob@remote.example'))).toEqual(['Block', 'Mute', 'Add to list', 'Verify account', 'Report'])
 		})
 
 		it('verifies the account, and the check is beside its name at once', async () => {

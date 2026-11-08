@@ -185,10 +185,23 @@ class AdminEntitiesTest extends TestCase {
 		$this->assertNull($entity['action_taken_by_account']);
 		$this->assertNull($entity['action_taken_at']);
 		$this->assertFalse($entity['action_taken']);
-		// a report carries a category rather than a rule id
 		$this->assertFalse($entity['forwarded'], 'a report nobody asked to forward was not forwarded');
 		$this->assertSame([], $entity['rules']);
 		$this->assertSame($entity['created_at'], $entity['updated_at']);
+	}
+
+	public function testTheRulesAReporterNamedAreMastodonRules(): void {
+		$report = new Report();
+		$report->setId(3)->setCreation(1757548800)->setCategory(Report::CATEGORY_VIOLATION)
+			->setRules(Report::decodeRules('[{"id":"2","text":"No spam"},{"id":"x"},"junk"]'));
+
+		$this->assertSame(
+			[['id' => '2', 'text' => 'No spam', 'hint' => '']],
+			(new AdminReport($report))->jsonSerialize()['rules']
+		);
+		$this->assertSame(['No spam'], $report->moderationRow([])['rules']);
+		$this->assertSame([], Report::decodeRules(null));
+		$this->assertSame([], Report::decodeRules('not json'));
 	}
 
 	public function testAForwardedReportSaysSo(): void {

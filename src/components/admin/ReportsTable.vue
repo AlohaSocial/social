@@ -40,7 +40,14 @@
 						<span class="reports-table__actor" :title="report.reporter">{{ report.reporter }}</span>
 						<em v-if="!report.local">({{ t('social', 'remote') }})</em>
 					</td>
-					<td>{{ report.category }}</td>
+					<td>
+						{{ report.category }}
+						<ul v-if="report.rules?.length" class="reports-table__rules">
+							<li v-for="(rule, index) in report.rules" :key="index">
+								{{ rule }}
+							</li>
+						</ul>
+					</td>
 					<td>
 						<span class="reports-table__comment">{{ report.comment }}</span>
 					</td>
@@ -211,6 +218,14 @@ export default {
 	&__comment {
 		display: inline-block;
 		max-width: 28ch;
+		overflow-wrap: anywhere;
+	}
+
+	&__rules {
+		max-width: 28ch;
+		margin: 0;
+		padding-inline-start: calc(var(--default-grid-baseline) * 4);
+		list-style: disc;
 		overflow-wrap: anywhere;
 	}
 

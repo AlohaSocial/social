@@ -33,6 +33,7 @@ class ReportService {
 		private INotificationManager $notificationManager,
 		private ReportForwardService $reportForwardService,
 		private StreamRequest $streamRequest,
+		private InstanceService $instanceService,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -44,10 +45,13 @@ class ReportService {
 	 * @param bool $forward Mastodon's `forward`: also tell the instance the
 	 *                      reported account is on. Ignored for a local
 	 *                      account, which has no other instance to tell.
+	 * @param array<array-key, mixed> $ruleIds Mastodon's `rule_ids`: which of
+	 *                                         the instance rules were broken,
+	 *                                         kept for a `violation` only
 	 */
 	public function reportFromLocal(
 		Person $reporter, Person $target, array $statusIds, string $comment, string $category,
-		bool $forward = false,
+		bool $forward = false, array $ruleIds = [],
 	): Report {
 		$report = new Report();
 		$report->setActorId($reporter->getId())
@@ -57,6 +61,9 @@ class ReportService {
 			->setCategory($category)
 			->setLocal(true)
 			->setTargetAccount($target);
+		if ($report->getCategory() === Report::CATEGORY_VIOLATION) {
+			$report->setRules($this->rulesNamed($ruleIds));
+		}
 
 		$this->reportsRequest->save($report);
 		$this->notifyAdmins($report);
@@ -66,6 +73,24 @@ class ReportService {
 		}
 
 		return $report;
+	}
+
+	/**
+	 * The instance rules among these ids, in the order the rules are listed.
+	 * An id that names no rule is dropped rather than refused: rules can be
+	 * edited between a client reading them and the report being sent.
+	 *
+	 * @param array<array-key, mixed> $ruleIds
+	 *
+	 * @return list<array{id: string, text: string}>
+	 */
+	private function rulesNamed(array $ruleIds): array {
+		$wanted = array_map(static fn ($id): string => is_scalar($id) ? (string)$id : '', $ruleIds);
+
+		return array_values(array_filter(
+			$this->instanceService->rules(),
+			static fn (array $rule): bool => in_array($rule['id'], $wanted, true)
+		));
 	}
 
 	/**

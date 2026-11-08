@@ -18,6 +18,7 @@ use OCA\Social\Model\ActivityPub\Object\Flag;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\ModeratorService;
 use OCA\Social\Service\ReportForwardService;
 use OCA\Social\Service\ReportService;
@@ -41,6 +42,7 @@ class ReportServiceTest extends TestCase {
 	private INotificationManager|MockObject $notificationManager;
 	private ReportForwardService|MockObject $reportForwardService;
 	private StreamRequest|MockObject $streamRequest;
+	private InstanceService|Stub $instanceService;
 	private ReportService $service;
 
 	protected function setUp(): void {
@@ -51,14 +53,25 @@ class ReportServiceTest extends TestCase {
 		$this->reportForwardService = $this->createMock(ReportForwardService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->instanceService = $this->createStub(InstanceService::class);
+		$this->instanceService->method('rules')->willReturn([
+			['id' => '1', 'text' => 'Be kind'],
+			['id' => '2', 'text' => 'No spam'],
+			['id' => '3', 'text' => 'Mark sensitive media'],
+		]);
 
-		$this->service = new ReportService(
+		$this->service = $this->makeService();
+	}
+
+	private function makeService(): ReportService {
+		return new ReportService(
 			$this->reportsRequest,
 			$this->cacheActorService,
 			$this->moderatorService,
 			$this->notificationManager,
 			$this->reportForwardService,
 			$this->streamRequest,
+			$this->instanceService,
 			new NullLogger()
 		);
 	}
@@ -134,6 +147,38 @@ class ReportServiceTest extends TestCase {
 		);
 
 		$this->assertSame(Report::CATEGORY_OTHER, $report->getCategory());
+	}
+
+	public function testAViolationKeepsTheRulesItNamesWithTheirText(): void {
+		$this->withAdmin();
+		$saved = null;
+		$this->reportsRequest->method('save')->willReturnCallback(function (Report $report) use (&$saved): int {
+			$saved = $report;
+
+			return 1;
+		});
+
+		$report = $this->service->reportFromLocal(
+			$this->person(self::ALICE), $this->person(self::BOB), [], '', 'violation', false, ['3', 1, '99', ['x']]
+		);
+
+		// in the order the rules are listed; an id that names no rule is dropped
+		$expected = [['id' => '1', 'text' => 'Be kind'], ['id' => '3', 'text' => 'Mark sensitive media']];
+		$this->assertSame($expected, $report->getRules());
+		$this->assertSame($expected, $saved?->getRules(), 'stored with the report');
+		$this->assertSame(['1', '3'], $report->jsonSerialize()['rule_ids']);
+	}
+
+	public function testRulesAreKeptWithAViolationOnly(): void {
+		$this->withAdmin();
+		$this->reportsRequest->method('save')->willReturn(1);
+
+		$report = $this->service->reportFromLocal(
+			$this->person(self::ALICE), $this->person(self::BOB), [], '', 'spam', false, ['1']
+		);
+
+		$this->assertSame([], $report->getRules());
+		$this->assertNull($report->jsonSerialize()['rule_ids']);
 	}
 
 	public function testForwardIsNotAttemptedUnlessTheReporterAskedForIt(): void {
@@ -269,10 +314,7 @@ class ReportServiceTest extends TestCase {
 
 				throw new StreamNotFoundException();
 			});
-		$this->service = new ReportService(
-			$this->reportsRequest, $this->cacheActorService, $this->moderatorService,
-			$this->notificationManager, $this->reportForwardService, $this->streamRequest, new NullLogger()
-		);
+		$this->service = $this->makeService();
 		$this->reportsRequest->expects($this->once())->method('save')->willReturn(7);
 
 		$flag = new Flag();
@@ -297,10 +339,7 @@ class ReportServiceTest extends TestCase {
 		$post->setLocal(false);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
-		$this->service = new ReportService(
-			$this->reportsRequest, $this->cacheActorService, $this->moderatorService,
-			$this->notificationManager, $this->reportForwardService, $this->streamRequest, new NullLogger()
-		);
+		$this->service = $this->makeService();
 		$this->reportsRequest->expects($this->never())->method('save');
 
 		$flag = new Flag();

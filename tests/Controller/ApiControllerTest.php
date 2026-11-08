@@ -3778,6 +3778,38 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller()->reportNew()->getStatus());
 	}
 
+	/**
+	 * The rules a reporter says were broken travel to the service, which
+	 * keeps them for a violation; anything that is not a list is no rules.
+	 */
+	public function testReportNewCarriesTheRulesItNames(): void {
+		$viewer = $this->loggedInAs();
+		$target = $this->knownTarget();
+		$this->request->method('getParams')->willReturn([
+			'account_id' => '42', 'category' => 'violation', 'rule_ids' => ['2', '3'],
+		]);
+		$this->reportService->expects($this->once())
+			->method('reportFromLocal')
+			->with($this->identicalTo($viewer), $this->identicalTo($target), [], '', 'violation', false, ['2', '3'])
+			->willReturn(new Report());
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->reportNew()->getStatus());
+	}
+
+	public function testReportNewIgnoresRulesThatAreNotAList(): void {
+		$this->loggedInAs();
+		$this->knownTarget();
+		$this->request->method('getParams')->willReturn([
+			'account_id' => '42', 'category' => 'violation', 'rule_ids' => '2',
+		]);
+		$this->reportService->expects($this->once())
+			->method('reportFromLocal')
+			->with($this->anything(), $this->anything(), [], '', 'violation', false, [])
+			->willReturn(new Report());
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->reportNew()->getStatus());
+	}
+
 	public function testReportNewRequiresAnAccountId(): void {
 		$this->loggedInAs();
 		$this->request->method('getParams')->willReturn(['comment' => 'no target']);
