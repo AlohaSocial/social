@@ -744,7 +744,7 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$activity->setOrigin(self::REMOTE_HOST, SignatureService::ORIGIN_HEADER, time());
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$cache = $this->createMock(DurableCache::class);
-		$cache->expects($this->once())->method('setShared')->willReturnCallback(function (string $namespace, string $key, array $pending, int $ttl) use ($data): void {
+		$cache->expects($this->once())->method('setBuffer')->willReturnCallback(function (string $namespace, string $key, array $pending, int $ttl) use ($data): void {
 			$this->assertSame($data, $pending['activity']);
 			$replayed = AP::instance()->getItemFromData($pending['activity']);
 			$this->assertSame('Event', $replayed->getObject()->getSubType());

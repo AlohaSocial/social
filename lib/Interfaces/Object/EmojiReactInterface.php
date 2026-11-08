@@ -62,12 +62,8 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		$reaction = $item;
 		$reaction->checkOrigin($reaction->getId());
 		$reaction->checkOrigin($reaction->getActorId());
-		if (LikeInterface::undoneBeforeArrival(
-			$this->durableCache, $reaction->getId(), $reaction->getActorId(), $reaction->getObjectId()
-		)) {
-			return;
-		}
 
+		// save() refuses a reaction undone before it arrived
 		try {
 			$this->save($reaction);
 		} catch (ItemAlreadyExistsException $e) {

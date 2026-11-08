@@ -97,7 +97,7 @@ class EmojiReactInterfaceTest extends ActivityPubTestCase {
 		$reaction = $this->aReaction();
 		$pending = null;
 		$cache = $this->createMock(DurableCache::class);
-		$cache->method('getShared')->willReturnCallback(static function () use (&$pending): mixed {
+		$cache->method('getBuffer')->willReturnCallback(static function () use (&$pending): mixed {
 			return $pending;
 		});
 		$handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest, $cache);
@@ -113,7 +113,7 @@ class EmojiReactInterfaceTest extends ActivityPubTestCase {
 	public function testDirectSaveAlsoRejectsAnAlreadyUndoneReaction(): void {
 		$reaction = $this->aReaction();
 		$cache = $this->createMock(DurableCache::class);
-		$cache->method('getShared')->willReturn(['actor' => $reaction->getActorId(), 'object' => $reaction->getObjectId()]);
+		$cache->method('getBuffer')->willReturn(['actor' => $reaction->getActorId(), 'object' => $reaction->getObjectId()]);
 		$handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest, $cache);
 		$this->reactionsRequest->expects($this->never())->method('save');
 		$this->expectException(ItemAlreadyExistsException::class);
