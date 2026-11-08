@@ -60,12 +60,14 @@ class ResetUriTest extends TestCase {
 	public function testSomethingThatIsNoAddressIsRefusedEvenThen(): void {
 		$tester = $this->tester();
 		$this->builder->expects($this->never())->method('emptyAll');
+		$this->configService->expects($this->never())->method('setCloudUrl');
 
 		$this->assertSame(1, $tester->execute(['--force' => true, '--uri' => 'old.example', '--allow-unsafe-uri' => true]));
 	}
 
 	public function testAPublicHttpsUriIsTaken(): void {
 		$tester = $this->tester();
+		$this->builder->expects($this->once())->method('emptyAll');
 		$this->configService->expects($this->once())->method('setCloudUrl')->with('https://new.example');
 
 		$this->assertSame(0, $tester->execute(['--force' => true, '--uri' => 'https://new.example']));
