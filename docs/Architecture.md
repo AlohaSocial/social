@@ -227,7 +227,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_announce_react` | The emoji accounts have put on an announcement, unique on (announcement, account, emoji) |
 | `social_emoji` | The custom emoji this instance publishes: `shortcode` (unique), the appdata file behind it, its media type, its picker category and whether a picker offers it |
 | `social_stream_card` | The link-preview card of a status (url, title, description, image, provider), one row per stream |
-| `social_atp_chat_message` | Persistent local-to-Bluesky chat message identifiers, removed with their local message |
+| `social_atp_chat_message` | Persistent local-to-Bluesky chat message identifiers, removed with their local message; `message_prim` (md5 of the Bluesky id, indexed with `did`) finds the local message of a Bluesky id |
 | `social_reaction` | Who reacted to which post with which emoji; unique on (actor, post, emoji), so a redelivered `EmojiReact` is refused rather than counted twice. Inserts skip uniqueness conflicts at the database level, preserving an enclosing PostgreSQL transaction. Object-based removal also matches the activity ID, so a delayed Undo or post-insert cleanup cannot delete a newer reaction with the same emoji. A reaction bar is counted by the database (`ReactionsRequest::countByObjectIds()`, `GROUP BY object_id_prim, emoji`, one query for a page) with the reader's own emoji read by a second (`emojisOf()`), so a post is counted in full however many reacted. Not counted: suspended and silenced accounts, accounts on a blocked or silenced instance, and, for the reader, accounts they block, are blocked by or mute (`NOT EXISTS` probes on `social_actor_relation`'s unique index and `social_mute_expiry`). An inbound `EmojiReact` from an account the local author blocked is dropped (`EmojiReactInterface::save()`), and a local reaction to an author who blocked the reader is refused (`ReactionService::create()`, `BlockedByService`) |
 | `social_gif` | The instance's shared picture library the composer offers, unique on the slug; the bytes live in appdata beside the custom emoji |
 | `social_followed_tag` | The hashtags an account follows: one row per (actor, lowercased tag), unique on the pair; `filled` is when the tag's posts were last read from beyond this server (`FollowedTagsFill`, Unix time, 0 for never), indexed with the tag (`Version1000Date20261009000710`) |
@@ -670,13 +670,20 @@ the repository transaction. Responses report `valid` only for schema-checked
 records and `unknown` for opaque or explicitly unvalidated records.
 
 `social_atp_chat_message` retains each account's local-to-Bluesky message
-identifiers without expiry. `StreamDeletion` removes these rows when their
+identifiers without expiry, readable both ways: the Bluesky message of a local
+one, and (by `message_prim`, the md5 of the Bluesky id, indexed with the DID)
+the local message sent from here as a Bluesky message, which is how the log's
+copy of it, and Bluesky reactions and read markers on it, are recognised
+(`ChatStore::sentHere()`, `convoOf()`). `Version1000Date20261108500000` adds
+the column and computes it for the rows already there. `StreamDeletion` removes these rows when their
 local messages are deleted, including author and batch deletion. Existing
 unexpired cache mappings are promoted on lookup. Unrecoverable old mappings
 fail closed rather than falling back to ActivityPub reaction delivery.
 An interrupted initial chat backfill retains its original unread window and
 log revision while new messages arrive; subsequent log synchronization picks
-up activity beyond that revision.
+up activity beyond that revision. A history that ends before the unread count
+is reached (messages deleted since Bluesky counted them) is imported as found
+and the conversation counts as complete.
 For records retained as written, `createRecord` always uses a repository create
 operation and refuses an existing key, including under concurrent writes.
 Its optional `swapCommit` is checked under the repository lock; `putRecord`
@@ -2457,13 +2464,23 @@ Messages wakes the account's next read (`ConversationService::getPage()`).
 
 On the first sync, the poller follows the cursors from `listConvos` and
 `getMessages` until it has found the conversation's reported `unreadCount`
-of incoming messages. Messages sent by the account in that range are retained
-too; deleted-message views count toward the unread boundary but are not
-recreated as content. An incomplete page, failed local write, or unavailable
-sender/member leaves the initial cursor uncommitted so the idempotent backfill
-can retry. Incremental `getLog` is a revision-based batch, not a paged API:
-each returned event is processed before its revision is committed, and an
-unknown or incomplete event prevents advancement. The Chat lexicon does not
+of incoming messages, or the history ends, in which case what was found is
+imported and the conversation is complete. Messages sent by the account in
+that range are retained too; deleted-message views count toward the unread
+boundary but are not recreated as content. An incomplete page or a failed
+local write leaves the initial cursor uncommitted so the idempotent backfill
+can retry; a message whose sender Bluesky no longer knows is passed over.
+Incremental `getLog` is a revision-based batch, not a paged API: each
+returned event is handled before its revision counts. An event that can
+never be handled — an unknown or incomplete record, a sender Bluesky no
+longer knows — is logged and passed over. Any other failure saves the
+revision of the last event handled (`AtprotoWatchRequest::checkpoint()`), so
+the events before it are not replayed, and retries the failing event with
+the ordinary backoff, at most `ChatPoller::EVENT_ATTEMPTS` (5) times before
+it is passed over too. A message the account wrote in a group goes to the
+members that can be resolved; one Bluesky no longer knows is left out.
+Every active identity gets a cursor row; the identities are walked for that
+only when their count or newest id changes, and at least hourly. The Chat lexicon does not
 expose a read cursor per conversation, so the initial boundary is derived from
 sender identities and the reported unread count.
 
@@ -2472,10 +2489,10 @@ stored as its own direct message to the conversation's other members, saved
 with `StreamRequest::save()` alone — the stream row and its recipient rows,
 no `PostService`, no `PostPublishedEvent`, not `local` — so nothing
 delivers it again. `ChatSender` remembers the Bluesky id `sendMessage`
-answered with (`ChatStore::sent()`), so the log's copy of a message sent
-from here is recognised, and which Bluesky conversation a message here is
-in (`ChatStore::convoOf()`: in the id of one from Bluesky, remembered for
-one sent from here). With that, `ConversationService::markRead()`,
+answered with (`ChatStore::sent()`, in `social_atp_chat_message`), so the
+log's copy of a message sent from here is recognised, and which Bluesky
+conversation a message here is in (`ChatStore::convoOf()`: in the id of one
+from Bluesky, from that table for one sent from here). With that, `ConversationService::markRead()`,
 `markAllRead()` and `remove()` tell `Chat\ChatState` (resolved from the
 container), which queues an `AtprotoPublish` `chat` job: `updateRead`,
 `updateAllRead`, or `leaveConvo` for a conversation that is still a
