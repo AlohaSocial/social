@@ -68,6 +68,7 @@ class ServerSettingsService {
 		ConfigService::SOCIAL_SECURE_MODE,
 		ConfigService::SOCIAL_PUBLISH_BLOCKS,
 		ConfigService::SOCIAL_SELF_SIGNED,
+		ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS,
 	];
 
 	/** 480p is the floor worth converting to; 4K is the ceiling worth storing. */
@@ -100,7 +101,8 @@ class ServerSettingsService {
 	 *     inbox_throttle: int,
 	 *     secure_mode: bool,
 	 *     publish_blocks: bool,
-	 *     allow_self_signed: bool
+	 *     allow_self_signed: bool,
+	 *     hide_instance_counts: bool
 	 * }
 	 */
 	public function current(): array {
@@ -150,6 +152,8 @@ class ServerSettingsService {
 			ConfigService::SOCIAL_PUBLISH_BLOCKS
 				=> $this->configService->getAppValueBool(ConfigService::SOCIAL_PUBLISH_BLOCKS),
 			ConfigService::SOCIAL_SELF_SIGNED => $this->configService->getAppValueBool(ConfigService::SOCIAL_SELF_SIGNED),
+			ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS
+				=> $this->configService->getAppValueBool(ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS),
 		];
 	}
 
@@ -165,6 +169,7 @@ class ServerSettingsService {
 	 * @param int $videoQuota megabytes of video one account may keep; 0 is no quota
 	 * @param string $nsfwPolicy what to do with sensitive media for readers who have not chosen
 	 * @param int $inboxThrottle requests per host per minute, 0 to MAX_INBOX_THROTTLE
+	 * @param bool $hideCounts leave the account and post counts out of the public instance metadata
 	 *
 	 * @return array what current() answers afterwards
 	 * @throws SettingRefusedException naming the field that was refused, with its code
@@ -187,6 +192,7 @@ class ServerSettingsService {
 		bool $publishBlocks,
 		bool $allowSelfSigned,
 		string $contactAccount = '',
+		bool $hideCounts = false,
 	): array {
 		$contactEmail = trim($contactEmail);
 		if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL) === false) {
@@ -328,6 +334,7 @@ class ServerSettingsService {
 		$this->configService->setAppValue(ConfigService::SOCIAL_SECURE_MODE, $secureMode ? '1' : '0');
 		$this->configService->setAppValue(ConfigService::SOCIAL_PUBLISH_BLOCKS, $publishBlocks ? '1' : '0');
 		$this->configService->setAppValue(ConfigService::SOCIAL_SELF_SIGNED, $allowSelfSigned ? '1' : '0');
+		$this->configService->setAppValue(ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS, $hideCounts ? '1' : '0');
 
 		return $this->current();
 	}

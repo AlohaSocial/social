@@ -850,7 +850,9 @@ Federation health widget to `#federation`.
   [*following a published list*](#commands-by-task) under Moderation below.
 - **Announcements** — a notice every account here is shown once.
 - **Server settings** — the instance-wide settings below, which had no interface at all
-  before and could only be set with `occ config:app:set`.
+  before and could only be set with `occ config:app:set`. Among them is whether
+  the public instance metadata shows how many accounts and posts this server
+  has (`hide_instance_counts`).
 - **Relays** — the relays this server subscribes to. A new server sees only
   what the people on it follow, so its federated timeline is empty on the first
   day and thin for months, and nobody out there has heard of it either. A relay
@@ -1230,6 +1232,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `secure_mode` | `0` | Refuse ActivityPub fetches that are not signed. Mastodon's secure mode. Turning it on makes this instance invisible to every peer that does not sign what it asks for, and to every anonymous reader; it is a decision about who to federate with, not a hardening step to apply by default. |
 | `publish_blocks` | `0` | Publish the deny list on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
 | `allow_self_signed` | `0` | Accept peers whose certificates do not check out. **Development only**: on a server anybody else uses, this hands every federated request to whoever can answer for the address. |
+| `hide_instance_counts` | `0` | Keep the number of accounts and posts out of the public instance metadata, which anybody can read without logging in and fediverse crawlers collect: `/api/v1/instance` and `/api/v2/instance` then report `0`, NodeInfo leaves `usage.users.total` and `usage.localPosts` out, and `/api/v1/instance/activity` reports `0` posts a week. Either way the account count is the accounts of this app — local accounts that are not deleted or suspended — never every Nextcloud user. Set from the Server card. |
 | `stories` | `1` | Whether this instance offers Shorts — a picture or a video that is gone in a day. Off, the bar goes from the timeline and nothing new is taken; what was posted expires as it would have. Set from the Sections card. |
 | `gif_pack` | `1` | Whether the composer offers the animated emoji pack. What ships is the list, not the pictures: `Cron\GifPack` fetches the first screenful into appdata ahead of time and the rest are fetched as somebody picks them. `0` fetches nothing and leaves the picker with what `occ social:gif add` added. |
 | `section_photos` | `1` | Whether the Photos section is offered in the sidebar: the same posts read through one filter. Turning it off hides the section and stops it being offered; the posts are not touched, and turning it back on shows them again. Set from the Sections card. |

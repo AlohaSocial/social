@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use DateTime;
+use OCA\Social\Model\Moderation;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -33,6 +34,32 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 		$qb->setDefaultSelectAlias('s');
 		$qb->limitToLocal(true);
 		$qb->limitToStatusTypes();
+
+		$cursor = $qb->executeQuery();
+		$data = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return $this->getInt('count', $data, 0);
+	}
+
+	/**
+	 * Accounts on this instance: local actors that are not deleted and not
+	 * suspended. Nextcloud users without an account, and the users of every
+	 * other backend, are not accounts and are not counted.
+	 */
+	public function countLocalAccounts(): int {
+		$qb = $this->getQueryBuilder();
+		$qb->selectAlias($qb->createFunction('COUNT(*)'), 'count')
+			->from(self::TABLE_ACTORS, 'a')
+			->leftJoin(
+				'a', self::TABLE_MODERATION, 'm',
+				$qb->expr()->andX(
+					$qb->expr()->eq('m.actor_id_prim', 'a.id_prim'),
+					$qb->expr()->eq('m.level', $qb->createNamedParameter(Moderation::SUSPEND))
+				)
+			)
+			->where($qb->expr()->isNull('a.deleted'))
+			->andWhere($qb->expr()->isNull('m.actor_id_prim'));
 
 		$cursor = $qb->executeQuery();
 		$data = $cursor->fetch();

@@ -19,6 +19,8 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Instance;
+use OCA\Social\Model\Moderation;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -36,6 +38,7 @@ class InstanceStatsRequestTest extends TestCase {
 		'https://itest-stats-b.example/users/one',
 	];
 	private const INSTANCE_URI = 'itest-instance-stats.example';
+	private const ACCOUNTS = ['itest-stats-live', 'itest-stats-gone', 'itest-stats-suspended', 'itest-stats-silenced'];
 
 	private InstanceStatsRequest $stats;
 	private StreamRequest $streamRequest;
@@ -65,6 +68,58 @@ class InstanceStatsRequestTest extends TestCase {
 		$qb->delete(CoreRequestBuilder::TABLE_INSTANCE)
 			->where($qb->expr()->eq('uri', $qb->createNamedParameter(self::INSTANCE_URI)));
 		$qb->executeStatement();
+		foreach (self::ACCOUNTS as $username) {
+			$prim = md5(self::BASE . '/@' . $username);
+			$qb = Server::get(IDBConnection::class)->getQueryBuilder();
+			$qb->delete(CoreRequestBuilder::TABLE_ACTORS)->where($qb->expr()->eq('id_prim', $qb->createNamedParameter($prim)));
+			$qb->executeStatement();
+			$qb = Server::get(IDBConnection::class)->getQueryBuilder();
+			$qb->delete(CoreRequestBuilder::TABLE_MODERATION)->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter($prim)));
+			$qb->executeStatement();
+		}
+	}
+
+	/** A local account row, and a moderation decision about it when one is given. */
+	private function account(string $username, bool $deleted = false, string $level = ''): void {
+		$id = self::BASE . '/@' . $username;
+		$db = Server::get(IDBConnection::class);
+		$qb = $db->getQueryBuilder();
+		$qb->insert(CoreRequestBuilder::TABLE_ACTORS)
+			->setValue('id', $qb->createNamedParameter($id))
+			->setValue('id_prim', $qb->createNamedParameter(md5($id)))
+			->setValue('user_id', $qb->createNamedParameter($username))
+			->setValue('preferred_username', $qb->createNamedParameter($username))
+			->setValue('creation', $qb->createNamedParameter(new \DateTime('now'), IQueryBuilder::PARAM_DATE))
+			->setValue('deleted', $qb->createNamedParameter($deleted ? new \DateTime('now') : null, $deleted ? IQueryBuilder::PARAM_DATE : IQueryBuilder::PARAM_NULL));
+		$qb->executeStatement();
+
+		if ($level !== '') {
+			$qb = $db->getQueryBuilder();
+			$qb->insert(CoreRequestBuilder::TABLE_MODERATION)
+				->setValue('actor_id_prim', $qb->createNamedParameter(md5($id)))
+				->setValue('actor_id', $qb->createNamedParameter($id))
+				->setValue('level', $qb->createNamedParameter($level))
+				->setValue('comment', $qb->createNamedParameter(''))
+				->setValue('creation', $qb->createNamedParameter(new \DateTime('now'), IQueryBuilder::PARAM_DATE));
+			$qb->executeStatement();
+		}
+	}
+
+	/**
+	 * `user_count` on the public instance metadata: accounts here, not the
+	 * Nextcloud users of every backend. A deleted or suspended account is not
+	 * one; a silenced account still is. Counted as a difference, so accounts
+	 * the instance already has do not change the answer.
+	 */
+	public function testOnlyLiveAccountsAreCounted(): void {
+		$before = $this->stats->countLocalAccounts();
+
+		$this->account('itest-stats-live');
+		$this->account('itest-stats-gone', true);
+		$this->account('itest-stats-suspended', false, Moderation::SUSPEND);
+		$this->account('itest-stats-silenced', false, Moderation::SILENCE);
+
+		$this->assertSame($before + 2, $this->stats->countLocalAccounts());
 	}
 
 	private function note(string $suffix, bool $local, int $publishedTime): void {

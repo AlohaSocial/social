@@ -62,6 +62,7 @@ class ServerSettingsController extends Controller {
 	 * @param bool $secureMode refuse ActivityPub fetches that are not signed
 	 * @param bool $publishBlocks publish the domain deny list on the instance API
 	 * @param bool $allowSelfSigned accept peers with certificates that do not check out
+	 * @param bool $hideCounts leave the account and post counts out of the public instance metadata
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/admin/server')]
 	public function save(
@@ -82,6 +83,7 @@ class ServerSettingsController extends Controller {
 		bool $publishBlocks = false,
 		bool $allowSelfSigned = false,
 		string $contactAccount = '',
+		bool $hideCounts = false,
 	): DataResponse {
 		try {
 			return new DataResponse($this->serverSettingsService->save(
@@ -102,6 +104,7 @@ class ServerSettingsController extends Controller {
 				$publishBlocks,
 				$allowSelfSigned,
 				$contactAccount,
+				$hideCounts,
 			));
 		} catch (InvalidArgumentException $e) {
 			return new DataResponse(

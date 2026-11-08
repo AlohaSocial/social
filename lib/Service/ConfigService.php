@@ -466,6 +466,12 @@ class ConfigService {
 	public const CONTACT_EMAIL = 'contact_email';
 	public const SOCIAL_CONTACT_ACCOUNT = 'contact_account';
 
+	/**
+	 * Whether the public instance metadata leaves out how many accounts and
+	 * posts this instance has (`/api/v1/instance` stats, NodeInfo usage).
+	 */
+	public const SOCIAL_HIDE_INSTANCE_COUNTS = 'hide_instance_counts';
+
 	/** When the administrators were told the app is waiting to be set up. */
 	public const SETUP_ADMINS_NOTIFIED = 'setup_admins_notified';
 
@@ -641,6 +647,7 @@ class ConfigService {
 		self::SOCIAL_REVIEW_VIDEOS => '0',
 		self::SOCIAL_EXTENDED_DESCRIPTION => '',
 		self::CONTACT_EMAIL => '',
+		self::SOCIAL_HIDE_INSTANCE_COUNTS => '0',
 		self::SETUP_ADMINS_NOTIFIED => '',
 		self::SOCIAL_CONTACT_ACCOUNT => '',
 		self::SOCIAL_POLLS_SWEPT => '0',
