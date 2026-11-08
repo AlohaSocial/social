@@ -440,13 +440,13 @@ abstract class MastodonApiController extends Controller {
 	 * @throws InsufficientScopeException
 	 */
 	private function checkTokenScope(): void {
-		$route = (string)$this->request->getParam('_route', '');
+		$route = $this->routeParam('_route');
 		$name = substr($route, strrpos($route, '.') + 1);
 
 		$accepted = $this->scopesForRoute(
 			$name,
 			strtoupper($this->request->getMethod()),
-			(string)$this->request->getParam('act', '')
+			$this->statusAct((string)$this->request->getParam('act', ''))
 		);
 
 		foreach ($accepted as $scope) {
@@ -469,6 +469,26 @@ abstract class MastodonApiController extends Controller {
 				'token scope does not allow this request (needs ' . implode(' or ', $accepted) . ')'
 			);
 		}
+	}
+
+	/**
+	 * A parameter as the router took it from the path. `getParam()` merges a
+	 * JSON or form body over the route's own values, so a body could name a
+	 * `_route` or an `act` the request was not dispatched to.
+	 */
+	protected function routeParam(string $key): string {
+		/** @psalm-suppress NoInterfaceProperties IRequest documents urlParams as a magic property */
+		return (string)(($this->request->urlParams ?? [])[$key] ?? '');
+	}
+
+	/**
+	 * The `act` of the catch-all status route: the path's, which is the one
+	 * the scope is checked for, else what the dispatcher passed.
+	 */
+	protected function statusAct(string $passed): string {
+		$act = $this->routeParam('act');
+
+		return ($act === '') ? $passed : $act;
 	}
 
 	/**
@@ -590,7 +610,7 @@ abstract class MastodonApiController extends Controller {
 
 		$this->logger->error('[' . static::class . '] unexpected failure answering the client API', [
 			'exception' => $e,
-			'route' => (string)$this->request->getParam('_route', ''),
+			'route' => $this->routeParam('_route'),
 		]);
 
 		return new DataResponse(
