@@ -114,7 +114,7 @@ class RecommendationSignalServiceTest extends TestCase {
 	public function testOffPausedAndStaleGenerationEventsAreDiscardedBeforeReadingPosts(): void {
 		$this->mode = 'off';
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 		$event = ['event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7, 'kind' => 'like', 'status_id' => '123'];
 		$this->assertSame(1, $this->service->recordEvents($this->viewer(), [$event])['discarded']);
 
@@ -129,6 +129,7 @@ class RecommendationSignalServiceTest extends TestCase {
 	public function testInstanceWideLearningPauseBlocksBrowserAndNativeActionSignals(): void {
 		$this->preferences->method('learningPaused')->willReturn(true);
 		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$this->signals->expects($this->never())->method('recordMany');
 		$this->signals->expects($this->never())->method('record');
 		$event = ['event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7, 'kind' => 'like', 'status_id' => '123'];
 
@@ -138,7 +139,7 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testSignalBatchesAreBoundedBeforeValidationAndPostLookup(): void {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 		$events = array_fill(0, RecommendationSignalService::MAX_EVENTS + 1, null);
 
 		$result = $this->service->recordEvents($this->viewer(), $events);
@@ -150,7 +151,7 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testNonStringPostAndProfileIdsAreDiscardedWithoutLookup(): void {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 		$events = [
 			[
 				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
@@ -181,10 +182,12 @@ class RecommendationSignalServiceTest extends TestCase {
 		$topicKey = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
 		$this->assertNotNull($topicKey);
 		$storyKeys[] = $topicKey;
-		$this->signals->expects($this->once())->method('record')->with(
-			'alice', '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 7, 'impression', [],
-			['post_keys' => $storyKeys, 'session_key' => 'f7f454f1-d33d-4fb5-a132-335837049d23'], 2_000_000_000
-		)->willReturn(['accepted' => true, 'duplicate' => false, 'profile_version' => 9]);
+		$this->signals->expects($this->once())->method('recordMany')->with(
+			'alice', 7, [[
+				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'kind' => 'impression', 'signals' => [],
+				'impression' => ['post_keys' => $storyKeys, 'session_key' => 'f7f454f1-d33d-4fb5-a132-335837049d23'],
+			]], 2_000_000_000
+		)->willReturn([['accepted' => true, 'duplicate' => false, 'profile_version' => 9]]);
 
 		$result = $this->service->recordEvents($this->viewer(), [[
 			'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
@@ -197,7 +200,7 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testMalformedImpressionNumbersAreDiscardedBeforeReadingPosts(): void {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 
 		$result = $this->service->recordEvents($this->viewer(), [
 			[
@@ -225,10 +228,12 @@ class RecommendationSignalServiceTest extends TestCase {
 		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $post]);
 		$exactKey = RecommendationStoryFingerprint::exactPostKey('123', 'test-server-secret', 'alice');
 		$this->assertNotNull($exactKey);
-		$this->signals->expects($this->once())->method('record')->with(
-			'alice', '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 7, 'impression', [],
-			['post_keys' => [$exactKey], 'session_key' => 'f7f454f1-d33d-4fb5-a132-335837049d23'], 2_000_000_000
-		)->willReturn(['accepted' => true, 'duplicate' => false, 'profile_version' => 9]);
+		$this->signals->expects($this->once())->method('recordMany')->with(
+			'alice', 7, [[
+				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'kind' => 'impression', 'signals' => [],
+				'impression' => ['post_keys' => [$exactKey], 'session_key' => 'f7f454f1-d33d-4fb5-a132-335837049d23'],
+			]], 2_000_000_000
+		)->willReturn([['accepted' => true, 'duplicate' => false, 'profile_version' => 9]]);
 
 		$this->service->recordEvents($this->viewer(), [[
 			'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
@@ -297,7 +302,7 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testVisiblePostDetailEventsCanTeachWhenConsentIsOn(): void {
 		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $this->parentPost()]);
-		$this->signals->expects($this->once())->method('record')->willReturn(['accepted' => true, 'duplicate' => false, 'profile_version' => 9]);
+		$this->signals->expects($this->once())->method('recordMany')->willReturn([['accepted' => true, 'duplicate' => false, 'profile_version' => 9]]);
 
 		$result = $this->service->recordEvents($this->viewer(), [[
 			'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
@@ -309,8 +314,9 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testAllDocumentedTimelineContextsAreAcceptedWhenConsentIsOn(): void {
 		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $this->parentPost()]);
-		$this->signals->expects($this->exactly(count(InterestService::CONTEXTS)))->method('record')
-			->willReturn(['accepted' => true, 'duplicate' => false, 'profile_version' => 9]);
+		$this->signals->expects($this->once())->method('recordMany')->willReturnCallback(
+			static fn (string $actor, int $generation, array $events): array => array_fill(0, count($events), ['accepted' => true, 'duplicate' => false, 'profile_version' => 9])
+		);
 
 		$events = [];
 		foreach (InterestService::CONTEXTS as $index => $context) {
@@ -329,9 +335,32 @@ class RecommendationSignalServiceTest extends TestCase {
 		$this->assertSame(0, $result['discarded']);
 	}
 
+	/** A request's events are recorded together: one transaction, one consent and epoch check. */
+	public function testARequestsEventsAreRecordedInOneBatch(): void {
+		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $this->parentPost()]);
+		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->once())->method('recordMany')->willReturnCallback(
+			function (string $actor, int $generation, array $events): array {
+				$this->assertSame('alice', $actor);
+				$this->assertSame(7, $generation);
+				$this->assertSame(['open', 'skip'], array_column($events, 'kind'));
+
+				return [['accepted' => true, 'duplicate' => false, 'profile_version' => 9], ['accepted' => true, 'duplicate' => true, 'profile_version' => 9]];
+			}
+		);
+
+		$result = $this->service->recordEvents($this->viewer(), [
+			['event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7, 'kind' => 'open', 'context' => 'interests', 'status_id' => '123'],
+			['event_id' => '2d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7, 'kind' => 'skip', 'context' => 'interests', 'status_id' => '123'],
+		]);
+
+		$this->assertSame(1, $result['accepted']);
+		$this->assertSame(1, $result['duplicates']);
+	}
+
 	public function testPassiveDwellIsDiscardedBeforeReadingThePost(): void {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 
 		$events = [];
 		foreach ([1200, 30000] as $index => $milliseconds) {
@@ -353,7 +382,7 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testSignalGenerationMustBeAnInteger(): void {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 
 		$result = $this->service->recordEvents($this->viewer(), [
 			[
@@ -373,10 +402,10 @@ class RecommendationSignalServiceTest extends TestCase {
 	public function testQuickSkipRemainsANegativeTopicSignal(): void {
 		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $this->parentPost()]);
 		$projected = [];
-		$this->signals->expects($this->once())->method('record')->willReturnCallback(
-			static function (string $actor, string $eventId, int $generation, string $kind, array $signals) use (&$projected): array {
-				$projected = $signals;
-				return ['accepted' => true, 'duplicate' => false, 'profile_version' => 9];
+		$this->signals->expects($this->once())->method('recordMany')->willReturnCallback(
+			static function (string $actor, int $generation, array $events) use (&$projected): array {
+				$projected = $events[0]['signals'];
+				return [['accepted' => true, 'duplicate' => false, 'profile_version' => 9]];
 			}
 		);
 
@@ -397,10 +426,10 @@ class RecommendationSignalServiceTest extends TestCase {
 		$video = $this->parentPost()->setAttachments([(new MediaAttachment())->setType('video')]);
 		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $video]);
 		$projected = [];
-		$this->signals->expects($this->once())->method('record')->willReturnCallback(
-			static function (string $actor, string $eventId, int $generation, string $kind, array $signals) use (&$projected): array {
-				$projected = $signals;
-				return ['accepted' => true, 'duplicate' => false, 'profile_version' => 9];
+		$this->signals->expects($this->once())->method('recordMany')->willReturnCallback(
+			static function (string $actor, int $generation, array $events) use (&$projected): array {
+				$projected = $events[0]['signals'];
+				return [['accepted' => true, 'duplicate' => false, 'profile_version' => 9]];
 			}
 		);
 
@@ -417,7 +446,7 @@ class RecommendationSignalServiceTest extends TestCase {
 
 	public function testVideoWatchRatioRejectsInvalidFractionsAndNonVideoPosts(): void {
 		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $this->parentPost()]);
-		$this->signals->expects($this->never())->method('record');
+		$this->signals->expects($this->never())->method('recordMany');
 		$result = $this->service->recordEvents($this->viewer(), [
 			[
 				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,

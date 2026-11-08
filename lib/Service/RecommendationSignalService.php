@@ -121,6 +121,7 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 		}
 
 		$counts = ['accepted' => 0, 'duplicates' => 0, 'discarded' => $discarded, 'profile_version' => $state['revision']];
+		$records = [];
 		foreach ($batch as $entry) {
 			$event = $entry['event'];
 			$kind = $entry['kind'];
@@ -206,10 +207,12 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				}
 			}
 
-			$result = $this->signals->record(
-				$viewer->getUserId(), (string)$event['event_id'], $state['generation'], $kind,
-				$signals, $impression, $this->timeFactory->getTime()
-			);
+			$records[] = ['event_id' => (string)$event['event_id'], 'kind' => $kind, 'signals' => $signals, 'impression' => $impression];
+		}
+
+		// one transaction and one consent and epoch check for the request
+		$results = $records === [] ? [] : $this->signals->recordMany($viewer->getUserId(), $state['generation'], $records, $this->timeFactory->getTime());
+		foreach ($results as $result) {
 			$counts['accepted'] += $result['accepted'] && !$result['duplicate'] ? 1 : 0;
 			$counts['duplicates'] += $result['duplicate'] ? 1 : 0;
 			$counts['discarded'] += $result['accepted'] ? 0 : 1;

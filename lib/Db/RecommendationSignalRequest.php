@@ -107,27 +107,47 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 		?array $impression,
 		int $now,
 	): array {
-		return $this->recordAttempt($actorKey, $eventId, $generation, $kind, $signals, $impression, $now, 0);
+		return $this->recordMany($actorKey, $generation, [[
+			'event_id' => $eventId, 'kind' => $kind, 'signals' => $signals, 'impression' => $impression,
+		]], $now)[0];
 	}
 
-	/** @param list<array{dimension: string, entity_key: string, delta: float}> $signals @param array{post_keys: list<string>, session_key: string}|null $impression */
-	private function recordAttempt(
-		string $actorKey,
-		string $eventId,
-		int $generation,
-		string $kind,
-		array $signals,
-		?array $impression,
-		int $now,
-		int $attempt,
-	): array {
+	/**
+	 * Records a request's events in one transaction: consent, the reset
+	 * generation and the global epoch are checked once for the batch, and the
+	 * epoch row is locked once, just before the commit. An event already
+	 * recorded, or named twice in the batch, is a duplicate and changes
+	 * nothing. When the checks fail no event of the batch is accepted.
+	 *
+	 * @param list<array{event_id: string, kind: string, signals: list<array{dimension: string, entity_key: string, delta: float}>, impression: array{post_keys: list<string>, session_key: string}|null}> $events
+	 * @return list<array{accepted: bool, duplicate: bool, profile_version: int}> one per event, in order
+	 */
+	public function recordMany(string $actorKey, int $generation, array $events, int $now): array {
+		if ($events === []) {
+			return [];
+		}
+
+		return $this->recordAttempt($actorKey, $generation, $events, $now, 0);
+	}
+
+	/**
+	 * @param list<array{event_id: string, kind: string, signals: list<array{dimension: string, entity_key: string, delta: float}>, impression: array{post_keys: list<string>, session_key: string}|null}> $events
+	 * @return list<array{accepted: bool, duplicate: bool, profile_version: int}>
+	 */
+	private function recordAttempt(string $actorKey, int $generation, array $events, int $now, int $attempt): array {
+		/** @var array<int, bool> $duplicates event index => whether it was a duplicate */
+		$duplicates = [];
 		$connection = $this->getConnection();
 		$connection->beginTransaction();
 		try {
-			$existing = $this->event($actorKey, $eventId);
-			if ($existing !== null) {
+			$fresh = [];
+			foreach ($events as $index => $event) {
+				$duplicates[$index] = isset($fresh[$event['event_id']]) || $this->event($actorKey, $event['event_id']) !== null;
+				$fresh[$event['event_id']] = true;
+			}
+			if (!in_array(false, $duplicates, true)) {
 				$connection->commit();
-				return ['accepted' => true, 'duplicate' => true, 'profile_version' => $this->profileVersion($actorKey)];
+				return $this->results($actorKey, $duplicates, true);
 			}
 
 			// Read the epoch in this transaction to validate the generation the
@@ -143,7 +163,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			$epochResult->closeCursor();
 			if ($epochRow === false) {
 				$connection->rollBack();
-				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+				return $this->results($actorKey, $duplicates, false);
 			}
 
 			$profileState = $this->getQueryBuilder();
@@ -157,13 +177,13 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			$profileResult->closeCursor();
 			if ($profileRow === false) {
 				$connection->rollBack();
-				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+				return $this->results($actorKey, $duplicates, false);
 			}
 			$localGeneration = (int)$profileRow['generation'];
 			$effectiveGeneration = RecommendationPreferenceRequest::effectiveGeneration((int)$epochRow['epoch'], $localGeneration);
 			if ($effectiveGeneration !== $generation || (string)$profileRow['learning_mode'] !== 'on') {
 				$connection->rollBack();
-				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+				return $this->results($actorKey, $duplicates, false);
 			}
 
 			$profile = $this->getQueryBuilder();
@@ -177,25 +197,31 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 				->andWhere($profile->expr()->eq('learning_mode', $profile->createNamedParameter('on')));
 			if ($profile->executeStatement() !== 1) {
 				$connection->rollBack();
-				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+				return $this->results($actorKey, $duplicates, false);
 			}
 
-			$event = $this->getQueryBuilder();
-			$event->insert(self::TABLE_EVENT)
-				->setValue('actor_key', $event->createNamedParameter($actorKey))
-				->setValue('event_id', $event->createNamedParameter($eventId))
-				->setValue('generation', $event->createNamedParameter($generation, IQueryBuilder::PARAM_INT))
-				->setValue('kind', $event->createNamedParameter($kind))
-				->setValue('created_at', $event->createNamedParameter($now, IQueryBuilder::PARAM_INT))
-				->executeStatement();
+			foreach ($events as $index => $entry) {
+				if ($duplicates[$index]) {
+					continue;
+				}
+				$event = $this->getQueryBuilder();
+				$event->insert(self::TABLE_EVENT)
+					->setValue('actor_key', $event->createNamedParameter($actorKey))
+					->setValue('event_id', $event->createNamedParameter($entry['event_id']))
+					->setValue('generation', $event->createNamedParameter($generation, IQueryBuilder::PARAM_INT))
+					->setValue('kind', $event->createNamedParameter($entry['kind']))
+					->setValue('created_at', $event->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+					->executeStatement();
 
-			foreach ($signals as $signal) {
-				$this->fold($actorKey, $signal['dimension'], $signal['entity_key'], $signal['delta'], $now);
-			}
-			if ($impression !== null) {
-				foreach (array_values(array_unique($impression['post_keys'])) as $postKey) {
-					if (preg_match('/^[a-f0-9]{64}$/', $postKey) === 1) {
-						$this->recordImpression($actorKey, $postKey, $impression['session_key'], $generation, $now);
+				foreach ($entry['signals'] as $signal) {
+					$this->fold($actorKey, $signal['dimension'], $signal['entity_key'], $signal['delta'], $now);
+				}
+				$impression = $entry['impression'];
+				if ($impression !== null) {
+					foreach (array_values(array_unique($impression['post_keys'])) as $postKey) {
+						if (preg_match('/^[a-f0-9]{64}$/', $postKey) === 1) {
+							$this->recordImpression($actorKey, $postKey, $impression['session_key'], $generation, $now);
+						}
 					}
 				}
 			}
@@ -215,18 +241,15 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			$commitEpochResult->closeCursor();
 			if ($commitEpochRow === false || (int)$commitEpochRow['epoch'] !== (int)$epochRow['epoch']) {
 				$connection->rollBack();
-				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+				return $this->results($actorKey, $duplicates, false);
 			}
 			$connection->commit();
 		} catch (DBException $e) {
 			$connection->rollBack();
-			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				if ($this->event($actorKey, $eventId) !== null) {
-					return ['accepted' => true, 'duplicate' => true, 'profile_version' => $this->profileVersion($actorKey)];
-				}
-				if ($attempt < self::MAX_UNIQUE_CONFLICT_RETRIES) {
-					return $this->recordAttempt($actorKey, $eventId, $generation, $kind, $signals, $impression, $now, $attempt + 1);
-				}
+			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION && $attempt < self::MAX_UNIQUE_CONFLICT_RETRIES) {
+				// a concurrent request stored one of these events or aggregates;
+				// the next attempt reads it as a duplicate or folds onto it
+				return $this->recordAttempt($actorKey, $generation, $events, $now, $attempt + 1);
 			}
 			throw $e;
 		} catch (\Throwable $e) {
@@ -234,8 +257,23 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			throw $e;
 		}
 
-		$this->purgeExpired($actorKey, $now);
-		return ['accepted' => true, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+		return $this->results($actorKey, $duplicates, true);
+	}
+
+	/**
+	 * @param array<int, bool> $duplicates
+	 * @return list<array{accepted: bool, duplicate: bool, profile_version: int}>
+	 */
+	private function results(string $actorKey, array $duplicates, bool $accepted): array {
+		$version = $this->profileVersion($actorKey);
+		$results = [];
+		foreach ($duplicates as $duplicate) {
+			$results[] = $duplicate
+				? ['accepted' => true, 'duplicate' => true, 'profile_version' => $version]
+				: ['accepted' => $accepted, 'duplicate' => false, 'profile_version' => $version];
+		}
+
+		return $results;
 	}
 
 	/** Remove learned aggregates and exposures while preserving the consent profile. */
@@ -350,35 +388,57 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			->executeStatement();
 	}
 
-	private function purgeExpired(string $actorKey, int $now): void {
+	/**
+	 * Trims the event and exposure logs, for every reader at once (the
+	 * `Cron\InterestHides` job): events older than their week, exposures
+	 * older than their month, and of a reader with more than `MAX_EVENTS`
+	 * events the oldest beyond that, each by a time threshold on an index.
+	 *
+	 * @return int rows deleted
+	 */
+	public function trim(int $now): int {
 		$events = $this->getQueryBuilder();
 		$events->delete(self::TABLE_EVENT)
-			->where($events->expr()->eq('actor_key', $events->createNamedParameter($actorKey)))
-			->andWhere($events->expr()->lt('created_at', $events->createNamedParameter($now - self::EVENT_TTL, IQueryBuilder::PARAM_INT)))
-			->executeStatement();
+			->where($events->expr()->lt('created_at', $events->createNamedParameter($now - self::EVENT_TTL, IQueryBuilder::PARAM_INT)));
+		$deleted = $events->executeStatement();
+
 		$seen = $this->getQueryBuilder();
 		$seen->delete(self::TABLE_SEEN)
-			->where($seen->expr()->eq('actor_key', $seen->createNamedParameter($actorKey)))
-			->andWhere($seen->expr()->lt('updated_at', $seen->createNamedParameter($now - self::SEEN_TTL, IQueryBuilder::PARAM_INT)))
-			->executeStatement();
+			->where($seen->expr()->lt('updated_at', $seen->createNamedParameter($now - self::SEEN_TTL, IQueryBuilder::PARAM_INT)));
+		$deleted += $seen->executeStatement();
 
-		$qb = $this->getQueryBuilder();
-		$qb->select('event_id')->from(self::TABLE_EVENT)
-			->where($qb->expr()->eq('actor_key', $qb->createNamedParameter($actorKey)))
-			->orderBy('created_at', 'DESC')->setMaxResults(self::MAX_EVENTS);
-		$result = $qb->executeQuery();
-		$keep = [];
+		$crowded = $this->getQueryBuilder();
+		$crowded->select('actor_key')->from(self::TABLE_EVENT)
+			->groupBy('actor_key')
+			->having($crowded->expr()->gt($crowded->func()->count('*'), $crowded->createNamedParameter(self::MAX_EVENTS, IQueryBuilder::PARAM_INT)));
+		$result = $crowded->executeQuery();
+		$actors = [];
 		while ($row = $result->fetch()) {
-			$keep[] = (string)$row['event_id'];
+			$actors[] = (string)$row['actor_key'];
 		}
 		$result->closeCursor();
-		if (count($keep) === self::MAX_EVENTS) {
+
+		foreach ($actors as $actorKey) {
+			$oldestKept = $this->getQueryBuilder();
+			$oldestKept->select('created_at')->from(self::TABLE_EVENT)
+				->where($oldestKept->expr()->eq('actor_key', $oldestKept->createNamedParameter($actorKey)))
+				->orderBy('created_at', 'DESC')
+				->setFirstResult(self::MAX_EVENTS - 1)
+				->setMaxResults(1);
+			$cursor = $oldestKept->executeQuery();
+			$row = $cursor->fetch();
+			$cursor->closeCursor();
+			if ($row === false) {
+				continue;
+			}
 			$delete = $this->getQueryBuilder();
 			$delete->delete(self::TABLE_EVENT)
 				->where($delete->expr()->eq('actor_key', $delete->createNamedParameter($actorKey)))
-				->andWhere($delete->expr()->notIn('event_id', $delete->createNamedParameter($keep, IQueryBuilder::PARAM_STR_ARRAY)))
-				->executeStatement();
+				->andWhere($delete->expr()->lt('created_at', $delete->createNamedParameter((int)$row['created_at'], IQueryBuilder::PARAM_INT)));
+			$deleted += $delete->executeStatement();
 		}
+
+		return $deleted;
 	}
 
 	private function dimensionCount(string $actorKey, string $dimension): int {
