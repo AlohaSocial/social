@@ -50,6 +50,19 @@ temporary blob state, reference-aware availability and last-reference cleanup re
 unimplemented. Completing these requires coordinated write, read, migration
 and cleanup behavior; see [ATProto compatibility](Atproto-Compatibility.md#blob-lifecycle-boundary).
 
+### Text of Bluesky records kept as written (launch review, 2026-11-08)
+
+List names and descriptions (`app.bsky.graph.list`), starter packs and feed
+generator descriptions that a Bluesky app writes are kept as written and
+published without passing the review rules posts go through. There is no clean
+hook for them: `PostReviewService` holds a post request and publishes it
+through `PostService::createPost()` on approval, and has no state for a held
+repository record. Covering them needs a review path for records (hold,
+approve into the repository, refuse) rather than a call from `WriteService`.
+Records in collections Aloha Social has no role for at all are capped per
+account (`atproto_opaque_records`, `atproto_opaque_mb`) but are not reviewed
+either.
+
 ### Pixelfed remote edit rendering (feature-branch review, 2026-10-28)
 
 The interop run against Pixelfed v0.14.4 accepts the video Update and stores its

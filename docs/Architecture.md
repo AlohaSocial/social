@@ -592,7 +592,10 @@ first commit's head row starts `blob_bytes` at the sum of the account's
 registered blobs (`AtprotoRepoRequest::setHead()`).
 
 Repository writes for social collections are projected through their native
-Social services. Projected `createRecord` operations lock the repository and
+Social services. The Bluesky posts a write replies to, quotes, likes or reposts
+and that are not stored here yet are fetched from the AppView before the
+repository lock is taken (`WriteService::fetchNamedPosts()`), so the batch does
+not hold the head row `FOR UPDATE` across those requests. Projected `createRecord` operations lock the repository and
 check `swapCommit` before changing Social state, reject an occupied requested
 key, and commit the projection and repository together. Their queued
 federation delivery starts only after commit and is discarded on rollback.
@@ -605,7 +608,13 @@ them without converting them into ActivityPub objects. Vendored Lexicons are
 schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
 size validation, but their application-specific schema and semantics are not
 known to Aloha Social. OAuth collection scopes and own-repository checks still
-apply to each write. Empty objects and objects with numeric string keys retain
+apply to each write. Records outside the collections Social has a role for
+(`WriteService::isOpaque()`) are capped per account by `OpaqueRecordQuota`:
+before a write, the account's count and byte total of such records
+(`AtprotoRepoRequest::usageOutside()`) plus what the write adds, less what it
+removes, must stay within `atproto_opaque_records` and `atproto_opaque_mb`.
+The check reads committed rows, so the writes of one mixed `applyWrites`
+batch are each checked against the usage before the batch. Empty objects and objects with numeric string keys retain
 their map identity through XRPC JSON parsing, DAG-CBOR storage and readback;
 JSON arrays remain lists, so decoding and re-encoding preserve record CIDs.
 Record reads with an explicit `cid` return only that version of the named

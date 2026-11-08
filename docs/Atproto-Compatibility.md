@@ -73,7 +73,14 @@ refuses unknown schemas, `false` skips schema checks, and omission validates
 known schemas. Single and batch responses distinguish `valid` from `unknown`.
 Social adapters still enforce their action, ownership and representation
 constraints regardless of schema validation. The explicit list
-block collection remains unsupported.
+block collection remains unsupported. Records in collections Aloha Social has
+no role for count against a per-account cap, by default 10,000 records and
+50 MB (`atproto_opaque_records`, `atproto_opaque_mb`, see
+[Admin.md](Admin.md#server-settings)); a write past it is refused with an
+`InvalidRequest` error, and deleting such records is always possible. Lists,
+starter packs, feed generators and the other known Bluesky collections kept as
+written are not capped, and their text does not pass through the review rules
+posts do.
 `com.atproto.repo.getRecord` honors an optional `cid`: a matching current
 version is returned, while a different version answers `RecordNotFound` rather
 than silently returning the latest bytes. Older record revisions are not

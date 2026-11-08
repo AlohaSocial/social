@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Integration\Atproto;
 
+use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Event;
 use OCA\Social\Atproto\Protocol\Cid;
@@ -91,6 +92,16 @@ class AtprotoFiguresStorageTest extends TestCase {
 		$this->repositories->addBlobBytes($this->did, 100);
 		$this->repositories->setHead($this->did, Cid::forRaw($this->did . '2'), '3kznmn7xqxl23', 2);
 		$this->assertSame(4196, $this->repositories->getHead($this->did)?->blobBytes, 'later commits keep the count');
+	}
+
+	public function testTheRecordsOutsideTheCollectionsSocialHasARoleForAreCountedWithTheirBytes(): void {
+		$this->record(RecordMapper::POST, '3kuse1', 'https://social.test/@alice/1');
+		$this->record('app.bsky.graph.list', '3kuse2', '');
+		$this->repositories->putRecord($this->did, 'com.example.notes.entry', '3kuse3', Cid::forRaw('a'), str_repeat('x', 300), '');
+		$this->repositories->putRecord($this->did, 'com.example.notes.entry', '3kuse4', Cid::forRaw('b'), str_repeat('y', 200), '');
+
+		$this->assertSame(['records' => 2, 'bytes' => 500], $this->repositories->usageOutside($this->did, WriteService::roleCollections()));
+		$this->assertSame(['records' => 0, 'bytes' => 0], $this->repositories->usageOutside('did:plc:nobodyhereatall2345678901', WriteService::roleCollections()));
 	}
 
 	public function testTheNewestEventsTimeIsTheTimeOfTheHighestSequence(): void {

@@ -164,6 +164,27 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
+	 * How many records an account keeps outside the given collections, and
+	 * how many bytes they take.
+	 *
+	 * @param non-empty-list<string> $collections
+	 * @return array{records: int, bytes: int}
+	 */
+	public function usageOutside(string $did, array $collections): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select($qb->func()->count('id', 'records'))
+			->selectAlias($qb->func()->sum($qb->func()->octetLength('bytes')), 'bytes')
+			->from(self::TABLE_ATPROTO_RECORD)
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->notIn('collection', $qb->createNamedParameter($collections, IQueryBuilder::PARAM_STR_ARRAY)));
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return ['records' => (int)($row['records'] ?? 0), 'bytes' => (int)($row['bytes'] ?? 0)];
+	}
+
+	/**
 	 * Counts newly registered blob bytes against the repository. Before the
 	 * first commit there is no row and nothing changes; that commit counts
 	 * every blob registered by then (`setHead()`).

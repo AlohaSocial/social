@@ -549,6 +549,10 @@ class ConfigService {
 	public const ATPROTO_VIDEO_SERVICE_DID = 'atproto_video_service_did';
 	/** the Bluesky apps (client IDs) whose own name and logo the consent page shows */
 	public const ATPROTO_OAUTH_TRUSTED = 'atproto_oauth_trusted';
+	/** the most records one account keeps in collections Social has no role for; 0 is no limit */
+	public const ATPROTO_OPAQUE_RECORDS = 'atproto_opaque_records';
+	/** the most megabytes those records take; 0 is no limit */
+	public const ATPROTO_OPAQUE_MB = 'atproto_opaque_mb';
 
 	/**
 	 * The local account this instance verifies people in the name of
@@ -577,6 +581,8 @@ class ConfigService {
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
 		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
 		self::ATPROTO_OAUTH_TRUSTED => '[]',
+		self::ATPROTO_OPAQUE_RECORDS => '10000',
+		self::ATPROTO_OPAQUE_MB => '50',
 		self::VERIFICATION_ACCOUNT => '',
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
