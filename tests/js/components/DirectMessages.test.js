@@ -65,6 +65,7 @@ describe('DirectMessages', () => {
 	let remove
 
 	beforeEach(() => {
+		localStorage.clear()
 		setActivePinia(createPinia())
 		useSettingsStore().setServerData({ viewer: { username: 'alice', address: `alice@${window.location.hostname}` } })
 		onTimelinePush.mockClear()
@@ -116,6 +117,60 @@ describe('DirectMessages', () => {
 		expect(box.attributes('aria-label')).toBe('Write a message…')
 		expect(box.attributes('placeholder')).toBe('Write a message…')
 		expect(wrapper.find('.direct-messages__message-form label').exists()).toBe(false)
+	})
+
+	describe('what is being written', () => {
+		const box = (wrapper) => wrapper.find('.direct-messages__message-form textarea')
+
+		it('is kept per conversation when switching between them, and when leaving', async () => {
+			const wrapper = mountMessages('10')
+			await flushPromises()
+			await box(wrapper).setValue('Half a message to Bob')
+
+			await wrapper.setProps({ selectedConversationId: '20' })
+			await flushPromises()
+			expect(wrapper.vm.messageText).toBe('')
+			wrapper.vm.newMessageOpen = true
+			await flushPromises()
+			wrapper.vm.newMessageOpen = false
+			await wrapper.setProps({ selectedConversationId: '10' })
+			await flushPromises()
+			expect(box(wrapper).element.value).toBe('Half a message to Bob')
+
+			wrapper.unmount()
+			const again = mountMessages('10')
+			await flushPromises()
+			expect(box(again).element.value).toBe('Half a message to Bob')
+		})
+
+		it('keeps a new chat apart from the conversations', async () => {
+			const wrapper = mountMessages('10')
+			await flushPromises()
+			wrapper.vm.newMessageOpen = true
+			await flushPromises()
+			expect(wrapper.vm.messageText).toBe('')
+			wrapper.vm.onMessageInput({ target: { value: 'For somebody new' } })
+
+			wrapper.vm.newMessageOpen = false
+			await flushPromises()
+			expect(wrapper.vm.messageText).toBe('')
+			wrapper.vm.newMessageOpen = true
+			await flushPromises()
+			expect(wrapper.vm.messageText).toBe('For somebody new')
+		})
+
+		it('is forgotten once it is sent', async () => {
+			const wrapper = mountMessages('10')
+			await flushPromises()
+			await box(wrapper).setValue('Sent soon')
+			await box(wrapper).trigger('keydown.enter', { ctrlKey: true })
+			await flushPromises()
+
+			wrapper.unmount()
+			const again = mountMessages('10')
+			await flushPromises()
+			expect(box(again).element.value).toBe('')
+		})
 	})
 
 	it('offers Send only once something is written, and sends with Ctrl+Enter or Cmd+Enter', async () => {

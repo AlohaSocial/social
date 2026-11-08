@@ -515,7 +515,9 @@ The sidebar is the map:
   The new chat uses the same person header and message field as an existing
   conversation. Messages are sent privately to that person, so there is no
   public, follower-only or other audience to choose and no repeated mention to
-  type. The inbox lists conversations the way the feed lists posts — the
+  type. A message you have started is kept per chat, and one for a new chat,
+  in this browser for a week: switch to another chat or leave the page, and it
+  is back when you return; sending it clears it. The inbox lists conversations the way the feed lists posts — the
   person's face and name, a line of the last message and how long ago it was
   (*3h*, *2w*) — with **All** and **Unread** in the same switcher as My Feed
   and Local. A search box joins them once there are more than a handful of

@@ -270,7 +270,7 @@
 							:aria-label="t('social', 'Write a message…')"
 							:disabled="sendingMessage"
 							:placeholder="t('social', 'Write a message…')"
-							@input="fitMessageInput"
+							@input="onMessageInput"
 							@keydown.enter="onMessageEnter" />
 						<NcButton
 							v-show="messageText.trim()"
@@ -379,7 +379,7 @@
 						:aria-label="t('social', 'Write a message…')"
 						:disabled="sendingMessage"
 						:placeholder="t('social', 'Write a message…')"
-						@input="fitMessageInput"
+						@input="onMessageInput"
 						@keydown.enter="onMessageEnter" />
 					<NcButton
 						v-show="messageText.trim()"
@@ -436,6 +436,7 @@ import { nextCursor } from '../utils/linkHeader.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import { addressFoundIn, completeAddress, isLocalAccount } from '../utils/accountLocality.js'
 import logger from '../services/logger.js'
+import { clearDraft, loadDraft, saveDraft } from '../services/draft.js'
 import { offTimelinePush, onTimelinePush, PUSH_DIRECT } from '../services/timelinePush.js'
 
 /** How many conversations one request asks for. */
@@ -572,6 +573,20 @@ export default {
 	},
 
 	computed: {
+		/**
+		 * Where the message being written is kept: one draft per
+		 * conversation and one for a new chat, '' when no field is open.
+		 *
+		 * @return {string}
+		 */
+		messageDraftContext() {
+			if (this.newMessageOpen) {
+				return 'dm.new'
+			}
+
+			return this.selectedConversationId === '' ? '' : `dm.${this.selectedConversationId}`
+		},
+
 		/**
 		 * The inbox as the reader sees it: one chat per set of people.
 		 *
@@ -850,6 +865,14 @@ export default {
 				this.loadingThread = false
 				this.threadError = false
 			}
+		},
+
+		messageDraftContext: {
+			immediate: true,
+			handler(context) {
+				this.messageText = context === '' ? '' : (loadDraft(context)?.text ?? '')
+				this.$nextTick(() => this.fitMessageInput())
+			},
 		},
 
 		messageText(text) {
@@ -1186,7 +1209,6 @@ export default {
 				return
 			}
 			this.newRecipient = account
-			this.messageText = ''
 			this.sendError = false
 			this.accountResults = []
 			this.followedResults = []
@@ -1200,6 +1222,7 @@ export default {
 			if (!recipient?.acct || !text || this.sendingMessage) {
 				return
 			}
+			const draftContext = this.messageDraftContext
 			this.sendingMessage = true
 			this.sendError = false
 			try {
@@ -1211,7 +1234,10 @@ export default {
 					visibility: 'direct',
 					...(replyTo ? { in_reply_to_id: replyTo } : {}),
 				})
-				this.messageText = ''
+				clearDraft(draftContext)
+				if (this.messageDraftContext === draftContext) {
+					this.messageText = ''
+				}
 				await this.refreshConversations()
 				if (newRecipient) {
 					const conversation = this.chats.find((item) => (item.accounts ?? []).some((candidate) => candidate.acct === recipient.acct || (candidate.id && recipient.id && String(candidate.id) === String(recipient.id))))
@@ -1308,7 +1334,6 @@ export default {
 		selectConversation(id, event) {
 			event?.preventDefault?.()
 			this.newMessageOpen = false
-			this.messageText = ''
 			this.sendError = false
 			this.$emit('select', id)
 		},
@@ -1540,6 +1565,20 @@ export default {
 		 * The box grows with what is typed, up to a few lines, and shrinks
 		 * back once the message is sent.
 		 */
+		/**
+		 * Keeps what is typed under the conversation it is written in, so
+		 * switching to another one or leaving the page does not lose it.
+		 *
+		 * @param {Event} event the input event of the message field
+		 */
+		onMessageInput(event) {
+			this.fitMessageInput()
+			const context = this.messageDraftContext
+			if (context !== '') {
+				saveDraft({ text: /** @type {HTMLTextAreaElement} */ (event.target).value }, context)
+			}
+		},
+
 		fitMessageInput() {
 			const box = /** @type {HTMLTextAreaElement|undefined} */ (this.$refs.messageInput)
 			if (!box) {
