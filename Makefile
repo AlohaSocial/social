@@ -109,43 +109,55 @@ changelog_since=v0.24.1
 changelog:
 	git cliff $(changelog_since).. --tag $(version) -o CHANGELOG.md
 
+# What the App Store package holds: the files the app reads at runtime, and
+# nothing else. An allowlist, so a new file at the top level (an agent guide, a
+# tool config, a screenshot folder) stays out until somebody adds it here.
+# contrib/webserver is in it because the setup checks name its rules; docs/
+# is not, because the app links to the guides on GitHub.
+appstore_files = \
+	appinfo \
+	context \
+	contrib \
+	css \
+	data \
+	img \
+	js \
+	l10n \
+	lib \
+	resources \
+	templates \
+	vendor \
+	AUTHORS.md \
+	CHANGELOG.md \
+	COPYING \
+	LICENSES
+
+# Left out of the folders above: source maps, the README screenshots (the App
+# Store and the README load them from GitHub), a development probe, the
+# pseudo-locale the browser tests write, and version-control and OS clutter.
+appstore_excludes = \
+	/js/*.map \
+	/img/readme \
+	/contrib/atproto-live-probe.sh \
+	/l10n/en_XA.* \
+	.git* \
+	.DS_Store
+
+appstore_rsync = rsync -a \
+	$(foreach pattern,$(appstore_excludes),--exclude='$(pattern)') \
+	$(foreach file,$(appstore_files),--include='/$(file)') \
+	--exclude='/*'
+
+# List what `make appstore` would package, without building or copying
+# anything. vendor/ is listed as it is in this checkout; the release build
+# installs it with --no-dev first.
+appstore-list:
+	@$(appstore_rsync) --dry-run --out-format='%n' $(project_dir)/ $(sign_dir)/$(app_name) | sort
+
 # Create the Nextcloud App Store package.
 # App signing is handled separately by the release workflow.
 appstore: release-setup lint build-js-production composer
 	mkdir -p $(sign_dir)
-	rsync -a \
-		--exclude=.git \
-		--exclude=/.github \
-		--exclude=/.gitignore \
-		--exclude=/.l10nignore \
-		--exclude=/.tx \
-		--exclude=/.idea \
-		--exclude=/.eslintrc.js \
-		--exclude=/.php-cs-fixer.cache \
-		--exclude=/.php-cs-fixer.dist.php \
-		--exclude=/build \
-		--exclude=/babel.config.js \
-		--exclude=/build-package.sh \
-		--exclude=/cliff.toml \
-		--exclude=/composer.json \
-		--exclude=/composer.lock \
-		--exclude=/deploy.sh \
-		--exclude=/docs \
-		--exclude=/node_modules \
-		--exclude=/package.json \
-		--exclude=/package-lock.json \
-		--exclude=/psalm.xml \
-		--exclude=/REUSE.toml \
-		--exclude=/README.md \
-		--exclude=/src \
-		--exclude=/stylelint.config.js \
-		--exclude=/tests \
-		--exclude=/tools \
-		--exclude=/translationfiles \
-		--exclude=/vitest.config.js \
-		--exclude=/webpack.*.js \
-		--exclude=/Makefile \
-		--exclude=js/*.map \
-		$(project_dir)/ $(sign_dir)/$(app_name)
+	$(appstore_rsync) $(project_dir)/ $(sign_dir)/$(app_name)
 	tar -czf $(build_dir)/$(app_name).tar.gz \
 		-C $(sign_dir) $(app_name)

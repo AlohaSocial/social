@@ -55,6 +55,10 @@ number without the `v`.
    certificate, and leaves the signed archive as a three-day Actions
    artifact. Nothing is published. A red dry run is fixed on `main` and
    dispatched again; do not tag over it.
+   The tarball holds only what the app reads at runtime: the Makefile's
+   `appstore_files` allowlist, minus `appstore_excludes`. `make appstore-list`
+   prints what it would package from the checkout, without building anything;
+   a new top-level file stays out of the package until it is added there.
 4. **The tag and the GitHub release.** On the dry-run commit:
 
    ```bash

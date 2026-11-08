@@ -6,12 +6,6 @@
 
 ## Unreleased
 
-- Add a reproducible synthetic offline evaluation harness for For You ranking baselines, coverage, safety constraints, diversity, and runtime.
-
-### Fixes
-
-- **recommendations:** Batch Fediverse tag-provider requests, honour the shared host circuit breaker and `Retry-After`, and cap individual post hydration plus the total discovery pass.
-- **recommendations:** Remove reader topic controls and their feedback operations; similarity feedback is derived from post content, and legacy topic feedback is inert. Remove the unused topic-specific candidate service so the For You pipeline has one automatic entry point.
 ### Features
 
 - **recommendations:** Remove required For You setup and combine automatically learned hashtag relevance, content signals, follows, freshness, and separately consented activity signals in one shared ranking path. Readers do not choose topics.
@@ -22,9 +16,14 @@
 - **recommendations:** Add account-local behavioural learning for For You, with explicit off/on/paused consent, generation-safe resets, bounded fast/slow topic, author and format affinities, idempotent events, impressions and video-watch ratios. Learning defaults off and never infers topic or stance from reply text.
 - **recommendations:** Use consented signals and accepted-follow relationships in new ranked sessions; apply bounded exposure-aware novelty and preserve an explanation for constrained exploration placements. Existing chronological feeds and delivered snapshot order remain stable.
 - **recommendations:** Limit topic concentration to three placements in a rolling 20-post window and increase the penalty for additional repeats, so high-scoring topic clusters make room for varied posts when alternatives are available.
-
 - **recommendations:** Add the disabled-by-default For You foundation: a bilingual internal classification catalog, revisioned activity-learning consent and reset/export controls, and an administrator kill switch. The existing hashtag feed remains available as a fallback.
 - **recommendations:** Add bounded, ACL-filtered automatic candidate retrieval from indexed or capped recent posts, deterministic content features, and throttled background ActivityPub/Bluesky coverage fills.
+- **recommendations:** Add a reproducible synthetic offline evaluation harness for For You ranking baselines, coverage, safety constraints, diversity, and runtime.
+
+### Bug fixes
+
+- **recommendations:** Batch Fediverse tag-provider requests, honour the shared host circuit breaker and `Retry-After`, and cap individual post hydration plus the total discovery pass.
+- **recommendations:** Remove reader topic controls and their feedback operations; similarity feedback is derived from post content, and legacy topic feedback is inert. Remove the unused topic-specific candidate service so the For You pipeline has one automatic entry point.
 
 ## 0.26.239 (2026-10-13)
 
