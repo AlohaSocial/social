@@ -21,9 +21,11 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\StoryService;
+use OCA\Social\Tests\Integration\Helper\CreatesUsers;
 use OCP\AppFramework\Http;
 use OCP\IDBConnection;
 use OCP\IRequest;
+use OCP\IUserManager;
 use OCP\IUserSession;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -41,6 +43,8 @@ use Psr\Log\NullLogger;
  * than set on a test double.
  */
 class TokenLifecycleTest extends TestCase {
+	use CreatesUsers;
+
 	private const APP = 'token-lifecycle-test';
 	private const OTHER_APP = 'token-lifecycle-other';
 
@@ -53,12 +57,14 @@ class TokenLifecycleTest extends TestCase {
 		$this->clientService = Server::get(ClientService::class);
 		$this->clientRequest = Server::get(ClientRequest::class);
 		$this->cleanup();
+		$this->ensureUsers('tl-alice', 'tl-bob');
 
 		$this->app = $this->register(self::APP);
 	}
 
 	protected function tearDown(): void {
 		$this->cleanup();
+		$this->removeCreatedUsers();
 		parent::tearDown();
 	}
 
@@ -112,6 +118,24 @@ class TokenLifecycleTest extends TestCase {
 
 		$this->expectException(ClientNotFoundException::class);
 		$this->clientService->getFromToken($alice);
+	}
+
+	/** Disabling the Nextcloud user stops the token; enabling it again brings it back. */
+	public function testATokenOfADisabledUserIsRefusedUntilTheUserIsEnabledAgain(): void {
+		$alice = $this->signIn('tl-alice');
+		$user = Server::get(IUserManager::class)->get('tl-alice');
+		$this->assertNotNull($user);
+
+		$user->setEnabled(false);
+		try {
+			$this->clientService->getFromToken($alice);
+			$this->fail('the token of a disabled user worked');
+		} catch (ClientNotFoundException) {
+		}
+		$this->assertCount(1, $this->clientService->getAuthorizationsOf('tl-alice'), 'the authorization is kept');
+
+		$user->setEnabled(true);
+		$this->assertSame('tl-alice', $this->clientService->getFromToken($alice)->getAuthUserId());
 	}
 
 	/** One device signing out signs out nobody else who uses the same app. */

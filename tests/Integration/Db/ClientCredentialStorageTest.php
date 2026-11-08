@@ -15,6 +15,7 @@ use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Migration\Version1000Date20261008000100;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Tests\Integration\Helper\CreatesUsers;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Server;
@@ -29,6 +30,8 @@ use PHPUnit\Framework\TestCase;
  * there.
  */
 class ClientCredentialStorageTest extends TestCase {
+	use CreatesUsers;
+
 	private const APP_NAME = 'credstore-itest';
 
 	private ClientRequest $clientRequest;
@@ -42,10 +45,12 @@ class ClientCredentialStorageTest extends TestCase {
 		$this->clientService = Server::get(ClientService::class);
 		$this->connection = Server::get(IDBConnection::class);
 		$this->cleanup();
+		$this->ensureUsers('alice', 'legacy-user');
 	}
 
 	protected function tearDown(): void {
 		$this->cleanup();
+		$this->removeCreatedUsers();
 		parent::tearDown();
 	}
 
