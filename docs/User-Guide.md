@@ -1055,7 +1055,10 @@ hand, it is picked up as one.
   another server, on the fediverse or on Bluesky alike, **Also send to the
   moderators of their server** (ticked by default) passes the report on, since
   only that server can act on the account everywhere: this server sends it in
-  its own name, never yours, with your note as you wrote it.
+  its own name, never yours, with your note as you wrote it. When the
+  moderators have dealt with your report, a Nextcloud notification tells you
+  whether they took action or decided none was needed — not which moderator
+  decided.
 - **Your year.** `GET /api/v1/annual_reports` serves what Mastodon calls
   `#Wrapstodon`: one report per year you wrote anything in, with twelve months
   of what you posted and who arrived, the hashtags you used most, your three

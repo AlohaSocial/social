@@ -961,6 +961,16 @@ uploads in the account's name are all refused while the user is disabled, and
 no push notification goes to the person's devices. Nothing is revoked, so
 enabling the user again brings the apps back without signing in again.
 
+**The reporter is told the outcome** (DSA Art. 16(5)). Resolving a report filed
+by somebody on this server sends them a Nextcloud notification saying whether
+the moderators *took action* or *took no action*, never which moderator
+decided. *Action* means a warning, a silence, a suspension or a takedown
+recorded against the reported account since the report was filed, or taken
+from the report itself; marking the account's media sensitive and a lift do not
+count. Reopening the report withdraws the notification, and resolving it again
+sends a new one. A report that arrived from another server has nobody here to
+tell.
+
 **What is recorded.** `social_moderation` holds what stands *now* — one row an
 account, replaced by the next decision and gone when it is lifted.
 `social_strikes` is the history: a warning, a silence, a suspension, a takedown
