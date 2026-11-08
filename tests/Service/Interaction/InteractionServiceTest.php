@@ -313,6 +313,41 @@ class InteractionServiceTest extends TestCase {
 		$this->assertSame(['accounts' => [], 'filling' => true], $service->reactedBy($post, 'Like', 12));
 	}
 
+	public function testAReadReactionListStandsForTheWindowOfThePostsAge(): void {
+		$now = 1790000000;
+		$post = (new Note())->setId('https://remote.example/notes/1');
+		$post->setPublishedTime($now - 3 * 86400);
+		$factory = $this->createStub(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn(false);
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturnCallback(static function () use (&$now): int {
+			return $now;
+		});
+		$durableCache = new DurableCache($factory, new InMemoryDurableCacheRequest(), $time);
+		$actions = $this->createMock(ActionService::class);
+		$actions->method('reactedBy')->willReturn([]);
+		$cacheActors = $this->createMock(CacheActorService::class);
+		$cacheActors->method('getCachedFromIds')->willReturn([]);
+		$bluesky = $this->createMock(BlueskyInteractionSource::class);
+		$bluesky->method('supports')->willReturn(true);
+		$bluesky->expects($this->exactly(2))->method('actors')->willReturn([]);
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->willReturnMap([
+			[ActivityPubInteractionSource::class, $this->createStub(ActivityPubInteractionSource::class)],
+			[BlueskyInteractionSource::class, $bluesky],
+		]);
+		$service = new InteractionService(
+			$actions, $cacheActors, $this->createMock(StreamRequest::class), $durableCache,
+			$this->createMock(RemoteFetchQueue::class), new NullLogger(), $container, null, $time
+		);
+
+		$service->reactedBy($post, 'Like', 12);
+		$now += 600;
+		$service->reactedBy($post, 'Like', 12);
+		$now += 300;
+		$service->reactedBy($post, 'Like', 12);
+	}
+
 	public function testFailedVisibleReadRetriesOnTheVisibleRefreshCadence(): void {
 		$post = (new Note())->setId('https://remote.example/notes/1');
 		$actorId = 'https://remote.example/users/alice';
@@ -354,7 +389,7 @@ class InteractionServiceTest extends TestCase {
 		$this->assertTrue($waiting['filling']);
 		$this->assertTrue($service->reactedBy($post, 'Like', 12)['filling'], 'polling does not repeat the failed AppView request while the queued fill is active');
 
-		$now += 5;
+		$now += \OCA\Social\Service\Counts\CountService::VISIBLE_INTERVAL;
 		$ready = $service->reactedBy($post, 'Like', 12);
 		$this->assertSame([$actorId], array_map(static fn (Person $person): string => $person->getId(), $ready['accounts']));
 		$this->assertFalse($ready['filling'], 'a visible poll retries after the short pending window');

@@ -2183,20 +2183,58 @@ a Bluesky record (`StreamRequest::getPublishedStreamsDueForCounts()`, a join
 on `social_atproto_record`); an older one is asked about when somebody looks
 at it.
 
-Posts opened in their detail view have a faster path:
-`TimelineList` refreshes up to four visible non-direct posts on entry, scroll
-and every five seconds, rotating through the visible posts when there are more
-than four. This includes local posts mirrored to Bluesky; the backend chooses
-the source that supports each post. `TimelineSinglePost` also asks for the
-status again when opened, even if a copy is already in the timeline.
-`StatusApiController::statusGet()` asks the matching ActivityPub or Bluesky
-count source directly when `counts_at` is at least five seconds old, with a
-three-second network timeout and a per-post lock, then reads the updated row
-for the response. A failed or timed-out read leaves stored counts untouched
-and queues the normal background retry; the follow-up status read is
-read-only, so it cannot start another slow request. This keeps reader-facing
-counts independent of Nextcloud's cron cadence; posts outside the viewport
-still use the queued background path above. Bluesky thread reads use the same
+Posts on a reader's screen have a faster path, and it reads counts only.
+`TimelineList` watches its entries with an `IntersectionObserver`; once
+scrolling has rested for a second and a half it asks for the counts of the
+non-direct posts that came into view, and every minute after that for the ones
+still on screen, never the same post twice within fifty seconds
+(`COUNT_REFRESH_MS`, `COUNT_REASK_MS`). There is no scroll handler and no layout read per scroll
+event. The request is one `GET /api/v1/social/status_counts` with up to twenty
+ids (`StatusApiController::statusCounts()`, the store's `refreshCounts()`):
+each id is resolved through the same `getStreamByNid()` visibility check as a
+status, and the answer is the five numbers of each, written onto the statuses
+the store already holds. It records **no view**: a post scrolled past has not
+been read, so it writes no `social_stream_view` row and sends no `View` to a
+PeerTube origin. `TimelineSinglePost` opens its post with
+`GET /api/v1/statuses/{nid}?force_counts=true` — the one read that counts as
+opening it — and then polls the same counts route for that post every thirty
+seconds while the page is open.
+
+`CountService::refreshVisibleMany()` asks a post's network when its counts are
+older than its **on-screen window**, which grows with the post's age
+(`CountService::VISIBLE_WINDOWS`, `visibleInterval()`):
+
+| Post age | Window |
+|---|---|
+| under 15 minutes | 10 s (`VISIBLE_INTERVAL`) |
+| under 1 hour | 30 s |
+| under 6 hours | 1 minute |
+| under 1 day | 5 minutes |
+| under 1 week | 15 minutes |
+| older | 1 hour (`VISIBLE_OLD_INTERVAL`) |
+
+A new post's numbers move by the second and an old one's hardly at all, so a
+three-day-old post on a hundred screens costs its origin four reads an hour,
+not one per reader per poll. Each window is shorter than the background interval
+for the same age, so a post on screen is never fresher in the background than
+in view. The due posts of one request are claimed with a per-post lock
+(`social-visible-count-…`; a post another request holds is left to it and
+reported pending), read again, and handed to their networks together — one
+call per source, within the three-second interactive timeout — so twenty posts
+on screen are at most one ActivityPub round and one AppView `getPosts`. A post
+just read is marked in the durable cache for its window, so other readers'
+requests within it are answered from the row. A post the network did not answer
+for (`CountSource::refresh()` says how many, and the row's `counts_at` says
+which) gets the forced background retry at `VISIBLE_INTERVAL` and the response
+carries `X-Social-Filling`.
+`StatusApiController::statusGet()` uses the same window for a single status
+(`refreshVisibleIfDue()`), and `force_counts=true` bypasses it for a detail-page
+open. A failed or timed-out read leaves stored counts untouched and queues the
+normal background retry; the follow-up status read is read-only, so it cannot
+start another slow request. This keeps reader-facing counts independent of
+Nextcloud's cron cadence; posts outside the viewport still use the queued
+background path above. The visible reaction lists (`InteractionService`) stand
+for the same window after a read. Bluesky thread reads use the same
 three-second timeout and per-post lock, and failed reads remain eligible for
 the background thread queue. When a response says counts or a conversation are
 still being filled, the client checks again after three seconds while the

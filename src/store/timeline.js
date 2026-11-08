@@ -516,6 +516,10 @@ const STATUS_REFETCH_MAX_MS = 3000
 // Keep the opened post fresh long enough to cross that cooldown and to show
 // the result of the queued refresh, while bounding both requests and lifetime.
 const MAX_STATUS_REFETCHES = 10
+/** the most posts one counts request asks about, as the server caps it */
+export const COUNTS_BATCH = 20
+/** what a counts answer carries for each post */
+const COUNT_FIELDS = ['replies_count', 'reblogs_count', 'favourites_count', 'quotes_count', 'dislikes_count']
 
 export const useTimelineStore = defineStore('timeline', {
 	state: () => ({
@@ -1611,19 +1615,19 @@ export const useTimelineStore = defineStore('timeline', {
 		 * connection, a server error, a timeout — is thrown, so the page can
 		 * offer to try again rather than call the post deleted.
 		 *
+		 * Reading a post this way is opening it: the server counts it as a
+		 * view. Counts of posts merely on screen come from `refreshCounts()`.
+		 *
 		 * @param {string} id the status id
-		 * @param {boolean} [refresh] bypass an HTTP cache when refreshing visible counts
 		 * @param {boolean} [forceCounts] ask the origin even when the last count refresh was recent
 		 * @return {Promise<object|null>} the status, or null if it is not there
 		 */
-		async fetchStatus(id, refresh = false, forceCounts = false) {
+		async fetchStatus(id, forceCounts = false) {
 			try {
 				const url = generateUrl(`apps/social/api/v1/statuses/${id}`)
-				const get = (includeForceCounts = forceCounts) => refresh
-					? axios.get(url, { params: { _social_refresh: Date.now(), ...(includeForceCounts ? { force_counts: true } : {}) } })
-					: includeForceCounts
-						? axios.get(url, { params: { force_counts: true } })
-						: axios.get(url)
+				const get = (includeForceCounts = forceCounts) => includeForceCounts
+					? axios.get(url, { params: { force_counts: true } })
+					: axios.get(url)
 				const response = await get()
 				this.addToStatuses(response.data)
 				// its counts are being asked for where it lives: read once more
@@ -1662,6 +1666,35 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.debug('A single status is not there', { error, id })
 
 				return null
+			}
+		},
+		/**
+		 * The current counts of posts on screen, written onto the statuses the
+		 * store holds. Asks for nothing but the numbers and records no view;
+		 * the server reads a post's counts from its network when they are
+		 * older than the window its age allows.
+		 *
+		 * @param {string[]} ids the ids of the posts, at most `COUNTS_BATCH`
+		 * @return {Promise<void>}
+		 */
+		async refreshCounts(ids) {
+			const wanted = [...new Set(ids.map(String))].slice(0, COUNTS_BATCH)
+			if (wanted.length === 0) {
+				return
+			}
+			const response = await axios.get(generateUrl('apps/social/api/v1/social/status_counts'), {
+				params: { ids: wanted, _social_refresh: Date.now() },
+			})
+			for (const counts of Array.isArray(response.data) ? response.data : []) {
+				const status = this.statuses[String(counts?.id)]
+				if (!status) {
+					continue
+				}
+				for (const field of COUNT_FIELDS) {
+					if (field in counts) {
+						status[field] = counts[field]
+					}
+				}
 			}
 		},
 		/**

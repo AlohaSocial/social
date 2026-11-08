@@ -122,6 +122,9 @@ import { useServerData } from '../composables/useServerData.js'
 
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
+/** how often the counts of the opened post are asked for again */
+const OPENED_COUNT_REFRESH_MS = 30 * 1000
+
 export default {
 	name: 'TimelineSinglePost',
 	components: {
@@ -321,8 +324,8 @@ export default {
 	mounted() {
 		// The main post sits between the ancestor and reply lists, so neither
 		// list's visible-card refresher sees it. Keep its counts fresh while its
-		// detail page is open, with the same cadence as visible timeline cards.
-		this.countRefreshIntervalId = window.setInterval(this.refreshOpenedPostCounts, 5000)
+		// detail page is open; only the opening read counts as a view.
+		this.countRefreshIntervalId = window.setInterval(this.refreshOpenedPostCounts, OPENED_COUNT_REFRESH_MS)
 		document.addEventListener('visibilitychange', this.refreshOpenedPostCounts)
 	},
 
@@ -353,7 +356,7 @@ export default {
 
 			const id = String(this.singlePost.id)
 			this.countRefreshInProgress = true
-			this.timelineStore.fetchStatus(id, true)
+			this.timelineStore.refreshCounts([id])
 				.catch((error) => {
 					logger.debug('The opened post counts were not refreshed', { error, id })
 				})
@@ -421,7 +424,7 @@ export default {
 				let state = ''
 				this.postState = 'loading'
 				try {
-					await this.timelineStore.fetchStatus(routeId, false, true)
+					await this.timelineStore.fetchStatus(routeId, true)
 				} catch (error) {
 					logger.debug('Could not load a single status', { error, id: routeId })
 					state = 'failed'
@@ -438,7 +441,7 @@ export default {
 				this.postState = ''
 				// A timeline copy can already be minutes old. Keep it on screen,
 				// while replacing it with the origin's current counts and details.
-				this.timelineStore.fetchStatus(id, false, true).catch((error) => {
+				this.timelineStore.fetchStatus(id, true).catch((error) => {
 					logger.debug('Could not refresh an opened status', { error, id })
 				})
 			}

@@ -1659,6 +1659,104 @@ class ApiControllerTest extends TestCase {
 		$this->assertArrayNotHasKey('X-Social-Filling', $this->controller()->statusGet(42)->getHeaders());
 	}
 
+	private function countedNote(string $id, int $likes): Note {
+		$note = new Note();
+		$note->setId($id);
+		$note->setDetailInt(\OCA\Social\Model\Details::LIKES, $likes);
+		$note->setDetailInt(\OCA\Social\Model\Details::BOOSTS, 1);
+		$note->setDetailInt(\OCA\Social\Model\Details::REPLIES, 2);
+
+		return $note;
+	}
+
+	/**
+	 * The counts of posts on screen: each read through the viewer's own
+	 * visibility, as a status is, and no view recorded for any of them.
+	 */
+	public function testStatusCountsAnswersTheCountsOfTheStatusesTheReaderMaySeeAndRecordsNoView(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$posts = ['1' => $this->countedNote('https://r.example/1', 5), '3' => $this->countedNote('https://r.example/3', 7)];
+		$this->streamService->method('getStreamByNid')->willReturnCallback(
+			static fn (int|string $nid): Stream => $posts[(string)$nid] ?? throw new StreamNotFoundException()
+		);
+		$this->counts->expects($this->once())->method('refreshVisibleMany')
+			->with(['1' => $posts['1'], '3' => $posts['3']])
+			->willReturn(['refreshed' => [], 'pending' => false]);
+		$this->counts->expects($this->never())->method('seen');
+		$this->counts->expects($this->never())->method('refreshVisibleIfDue');
+		$this->viewCountService = $this->createMock(ViewCountService::class);
+		$this->viewCountService->expects($this->never())->method('seen');
+
+		$response = $this->controller()->statusCounts(['1', '2', '3']);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([
+			['id' => '1', 'replies_count' => 2, 'reblogs_count' => 1, 'favourites_count' => 5, 'quotes_count' => 0, 'dislikes_count' => null],
+			['id' => '3', 'replies_count' => 2, 'reblogs_count' => 1, 'favourites_count' => 7, 'quotes_count' => 0, 'dislikes_count' => null],
+		], $response->getData(), 'a status the reader may not see is left out');
+		$this->assertArrayNotHasKey('X-Social-Filling', $response->getHeaders());
+	}
+
+	public function testStatusCountsReadsARefreshedPostAgainAndSaysWhenAReadIsStillOnItsWay(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$reads = 0;
+		$this->streamService->method('getStreamByNid')->willReturnCallback(
+			function (int|string $nid) use (&$reads): Stream {
+				$reads++;
+
+				return $this->countedNote('https://r.example/1', $reads === 1 ? 5 : 9);
+			}
+		);
+		$this->counts->method('refreshVisibleMany')->willReturn(['refreshed' => ['https://r.example/1'], 'pending' => true]);
+
+		$response = $this->controller()->statusCounts('1');
+
+		$this->assertSame(9, $response->getData()[0]['favourites_count'], 'the numbers the read just stored');
+		$this->assertSame(2, $reads);
+		$this->assertSame('1', $response->getHeaders()['X-Social-Filling'] ?? null);
+	}
+
+	public function testStatusCountsGivesABoostTheCountsOfItsPostAndLeavesOutABoostOfAPostNotShown(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$boost = new Announce();
+		$boost->setObject($this->countedNote('https://r.example/1', 4));
+		$hidden = new Announce();
+		$this->streamService->method('getStreamByNid')->willReturnCallback(
+			static fn (int|string $nid): Stream => (string)$nid === '8' ? $boost : $hidden
+		);
+		$this->counts->method('refreshVisibleMany')->willReturn(['refreshed' => [], 'pending' => false]);
+
+		$data = $this->controller()->statusCounts(['8', '9'])->getData();
+
+		$this->assertCount(1, $data);
+		$this->assertSame('8', $data[0]['id']);
+		$this->assertSame(4, $data[0]['favourites_count']);
+	}
+
+	public function testStatusCountsIgnoresWhatIsNotAnIdAndAsksAboutABatchAtMost(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$asked = [];
+		$this->streamService->method('getStreamByNid')->willReturnCallback(
+			function (int|string $nid) use (&$asked): Stream {
+				$asked[] = (string)$nid;
+
+				return $this->countedNote('https://r.example/' . $nid, 0);
+			}
+		);
+		$this->counts->method('refreshVisibleMany')->willReturn(['refreshed' => [], 'pending' => false]);
+
+		$this->controller()->statusCounts(['abc', '0', '-3', ['1'], '5', '5', '6']);
+		$this->assertSame(['5', '6'], $asked);
+
+		$asked = [];
+		$this->controller()->statusCounts(array_map('strval', range(1, 30)));
+		$this->assertCount(\OCA\Social\Service\Counts\CountService::VISIBLE_BATCH, $asked);
+
+		$asked = [];
+		$this->controller()->statusCounts(null);
+		$this->assertSame([], $asked);
+	}
+
 	/** A video opened on its own starts where this reader left it. */
 	public function testAStatusServedToASignedInReaderCarriesWhereTheyStopped(): void {
 		$viewer = $this->loggedInAs();

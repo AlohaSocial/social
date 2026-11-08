@@ -9,7 +9,7 @@ import { toRaw } from 'vue'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '../../../src/services/toast.js'
 
-import { isPersonalizedFeed, isRanked, useTimelineStore } from '../../../src/store/timeline.js'
+import { COUNTS_BATCH, isPersonalizedFeed, isRanked, useTimelineStore } from '../../../src/store/timeline.js'
 import logger from '../../../src/services/logger.js'
 
 vi.mock('@nextcloud/axios', () => ({
@@ -88,7 +88,7 @@ describe('timeline store state changes', () => {
 		store.changeTimelineType({ type: 'interests', params: {} })
 		store.addToTimeline([makeStatus('42', { interest: explanation })])
 		axios.get.mockResolvedValue({ data: makeStatus('42', { favourites_count: 7, interest }) })
-		await store.fetchStatus('42', true)
+		await store.fetchStatus('42')
 		expect(store.getStatus('42').favourites_count).toBe(7)
 		expect(store.getRecommendationReason('42')).toEqual(explanation)
 		expect(store.getStatus('42').interest).toBe(interest)
@@ -779,20 +779,10 @@ describe('timeline store actions', () => {
 			expect(tl().statuses['42']).toBeDefined()
 		})
 
-		it('bypasses HTTP caches when a visible post needs fresh counts', async () => {
-			axios.get.mockResolvedValue({ data: makeStatus('42') })
-
-			await store.fetchStatus('42', true)
-
-			expect(axios.get).toHaveBeenCalledWith(`${API}/statuses/42`, {
-				params: { _social_refresh: expect.any(Number) },
-			})
-		})
-
 		it('asks the server for a fresh count snapshot when opening a post', async () => {
 			axios.get.mockResolvedValue({ data: makeStatus('42') })
 
-			await store.fetchStatus('42', false, true)
+			await store.fetchStatus('42', true)
 
 			expect(axios.get).toHaveBeenCalledWith(`${API}/statuses/42`, {
 				params: { force_counts: true },
@@ -805,7 +795,7 @@ describe('timeline store actions', () => {
 				axios.get.mockResolvedValueOnce({ data: makeStatus('42'), headers: { 'x-social-filling': '1' } })
 				axios.get.mockResolvedValueOnce({ data: makeStatus('42'), headers: {} })
 
-				await store.fetchStatus('42', false, true)
+				await store.fetchStatus('42', true)
 				await vi.advanceTimersByTimeAsync(1000)
 
 				expect(axios.get).toHaveBeenNthCalledWith(1, `${API}/statuses/42`, { params: { force_counts: true } })
@@ -893,6 +883,47 @@ describe('timeline store actions', () => {
 
 			await expect(store.fetchStatus('42')).rejects.toBe(error)
 			expect(tl().statuses['42']).toBeUndefined()
+		})
+	})
+
+	describe('refreshCounts', () => {
+		it('asks for the counts of several posts in one request and writes them onto the posts held', async () => {
+			const boosted = makeStatus('7', { favourites_count: 1 })
+			store.addToStatuses(makeStatus('8', { reblog: boosted }))
+			store.addToStatuses(makeStatus('42', { favourites_count: 1, replies_count: 0 }))
+			axios.get.mockResolvedValue({
+				data: [
+					{ id: '42', favourites_count: 5, reblogs_count: 2, replies_count: 3, quotes_count: 1, dislikes_count: null },
+					{ id: '7', favourites_count: 9, reblogs_count: 0, replies_count: 0, quotes_count: 0, dislikes_count: null },
+					{ id: '99', favourites_count: 4 },
+				],
+			})
+
+			await store.refreshCounts(['42', '7', '42'])
+
+			expect(axios.get).toHaveBeenCalledTimes(1)
+			expect(axios.get).toHaveBeenCalledWith(`${API}/social/status_counts`, {
+				params: { ids: ['42', '7'], _social_refresh: expect.any(Number) },
+			})
+			expect(store.getStatus('42')).toMatchObject({ favourites_count: 5, reblogs_count: 2, replies_count: 3, quotes_count: 1 })
+			expect(store.getStatus('42').content).toBe('<p>post 42</p>')
+			// the boost shows the same post, so it shows the new number too
+			expect(store.getStatus('8').reblog.favourites_count).toBe(9)
+			expect(store.getStatus('99')).toBeUndefined()
+		})
+
+		it('asks for nothing when there is nothing on screen', async () => {
+			await store.refreshCounts([])
+
+			expect(axios.get).not.toHaveBeenCalled()
+		})
+
+		it('asks about at most a batch of posts', async () => {
+			axios.get.mockResolvedValue({ data: [] })
+
+			await store.refreshCounts(Array.from({ length: 30 }, (_, index) => String(index + 1)))
+
+			expect(axios.get.mock.calls[0][1].params.ids).toHaveLength(COUNTS_BATCH)
 		})
 	})
 

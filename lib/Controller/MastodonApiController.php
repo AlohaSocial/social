@@ -328,6 +328,7 @@ abstract class MastodonApiController extends Controller {
 		'tag' => ['read:statuses'],
 		'accountStatuses' => ['read:statuses'],
 		'statusGet' => ['read:statuses'],
+		'statusCounts' => ['read:statuses'],
 		'statusCalendar' => ['read:statuses'],
 		'statusCard' => ['read:statuses'],
 		'statusContext' => ['read:statuses'],

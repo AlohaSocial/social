@@ -4,7 +4,7 @@
  */
 
 import { flushPromises, mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, toRaw } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { register, unregister } from '@nextcloud/l10n'
 import { showError } from '../../../src/services/toast.js'
@@ -214,36 +214,91 @@ describe('TimelineList', () => {
 		})
 	})
 
-	it('refreshes visible remote counts on entry and throttles repeated checks', async () => {
-		const post = { ...status('bsky'), uri: 'at://did:plc:alice/app.bsky.feed.post/1' }
-		const { wrapper, store } = mountList({ timeline: [post] })
-		await flushPromises()
-		const entry = wrapper.find('.timeline-entry-stub').element
-		vi.spyOn(entry, 'getBoundingClientRect').mockReturnValue({ top: 10, bottom: 200 })
-		wrapper.vm.countRefreshLastAsked.clear()
-		const refresh = vi.spyOn(store, 'fetchStatus').mockResolvedValue(post)
+	describe('counts of posts on screen', () => {
+		const show = (wrapper, ids, isIntersecting = true) => wrapper.vm.countObserver.callback(ids.map((id) => ({
+			target: wrapper.find(`[data-status-id="${id}"]`).element,
+			isIntersecting,
+		})))
 
-		wrapper.vm.refreshVisiblePostCounts()
-		wrapper.vm.refreshVisiblePostCounts()
+		beforeEach(() => {
+			vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] })
+		})
 
-		expect(refresh).toHaveBeenCalledTimes(1)
-		expect(refresh).toHaveBeenCalledWith('bsky', true)
-		wrapper.unmount()
-	})
+		it('asks once scrolling settles, for what is on screen only, in one request', async () => {
+			const { wrapper, store } = mountList({ timeline: [status('1'), status('22'), status('333')] })
+			await flushPromises()
+			const refresh = vi.spyOn(store, 'refreshCounts').mockResolvedValue()
+			const fetchStatus = vi.spyOn(store, 'fetchStatus')
 
-	it('refreshes visible Fediverse counts too', async () => {
-		const post = { ...status('fediverse'), uri: 'https://remote.example/notes/1' }
-		const { wrapper, store } = mountList({ timeline: [post] })
-		await flushPromises()
-		const entry = wrapper.find('.timeline-entry-stub').element
-		vi.spyOn(entry, 'getBoundingClientRect').mockReturnValue({ top: 10, bottom: 200 })
-		wrapper.vm.countRefreshLastAsked.clear()
-		const refresh = vi.spyOn(store, 'fetchStatus').mockResolvedValue(post)
+			show(wrapper, ['1', '22'])
+			show(wrapper, ['333'])
+			show(wrapper, ['333'], false)
+			expect(refresh).not.toHaveBeenCalled()
+			vi.advanceTimersByTime(1500)
 
-		wrapper.vm.refreshVisiblePostCounts()
+			expect(refresh).toHaveBeenCalledTimes(1)
+			expect(refresh).toHaveBeenCalledWith(['1', '22'])
+			// reading whole statuses would count each post scrolled past as viewed
+			expect(fetchStatus).not.toHaveBeenCalled()
+			wrapper.unmount()
+		})
 
-		expect(refresh).toHaveBeenCalledWith('fediverse', true)
-		wrapper.unmount()
+		it('asks for a boost\'s post and leaves direct messages out', async () => {
+			const boosted = { ...status('7'), uri: 'https://remote.example/notes/7' }
+			const boost = { ...status('8'), reblog: boosted }
+			const direct = { ...status('9'), visibility: 'direct' }
+			const { wrapper, store } = mountList({ timeline: [boost, direct] })
+			await flushPromises()
+			const refresh = vi.spyOn(store, 'refreshCounts').mockResolvedValue()
+
+			show(wrapper, ['8', '9'])
+			vi.advanceTimersByTime(1500)
+
+			expect(refresh).toHaveBeenCalledWith(['7'])
+			wrapper.unmount()
+		})
+
+		it('asks about the same post again only after the slow interval', async () => {
+			const { wrapper, store } = mountList({ timeline: [status('1')] })
+			await flushPromises()
+			const refresh = vi.spyOn(store, 'refreshCounts').mockResolvedValue()
+
+			show(wrapper, ['1'])
+			vi.advanceTimersByTime(1500)
+			show(wrapper, ['1'], false)
+			show(wrapper, ['1'])
+			vi.advanceTimersByTime(1500)
+			expect(refresh).toHaveBeenCalledTimes(1)
+
+			vi.advanceTimersByTime(30 * 1000)
+			expect(refresh).toHaveBeenCalledTimes(1)
+			// the minute's tick, counted from when the list opened
+			vi.advanceTimersByTime(27 * 1000)
+
+			expect(refresh).toHaveBeenCalledTimes(2)
+			expect(refresh).toHaveBeenLastCalledWith(['1'])
+			wrapper.unmount()
+		})
+
+		it('no longer listens to scroll events', async () => {
+			const listen = vi.spyOn(document, 'addEventListener')
+			const { wrapper } = mountList({ timeline: [status('1')] })
+			await flushPromises()
+
+			expect(listen.mock.calls.filter(([event]) => event === 'scroll')).toEqual([])
+			listen.mockRestore()
+			wrapper.unmount()
+		})
+
+		it('stops observing when the list goes', async () => {
+			const { wrapper } = mountList({ timeline: [status('1')] })
+			await flushPromises()
+			const watching = wrapper.vm.countObserver
+
+			wrapper.unmount()
+
+			expect(watching.disconnect).toHaveBeenCalled()
+		})
 	})
 
 	describe('the Videos page', () => {
@@ -664,7 +719,7 @@ describe('TimelineList', () => {
 
 			it('lets go once the post has been scrolled out of view, not while j scrolls it in', async () => {
 				const { wrapper, heard, entry } = await focusFirst()
-				const watching = FakeIntersectionObserver.instances.find((one) => one.observe.mock.calls.some(([target]) => target === entry.element))
+				const watching = FakeIntersectionObserver.instances.find((one) => one !== toRaw(wrapper.vm.countObserver) && one.observe.mock.calls.some(([target]) => target === entry.element))
 				expect(watching).toBeDefined()
 
 				// still on its way in

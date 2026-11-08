@@ -184,7 +184,7 @@ import { scrollOffset, scroller } from '../utils/scroller.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
-import { isRanked, useTimelineStore } from '../store/timeline.js'
+import { COUNTS_BATCH, isRanked, useTimelineStore } from '../store/timeline.js'
 import { fetchRecommendationPreferences, isRecommendationLearningActive, isTracking } from '../services/interests.js'
 import { contextFor, createInterestTracker } from '../services/interestTracker.js'
 import { accumulateVideoPlayback } from '../services/videoPlayback.js'
@@ -249,6 +249,13 @@ function keepsPlace(identity) {
  * happen by accident, and the tab has to be in front for it to pass at all.
  */
 const SEEN_AFTER = 2000
+
+/** how often the counts of posts on screen are asked for again */
+const COUNT_REFRESH_MS = 60 * 1000
+/** how long scrolling has to rest before posts that came into view are asked about */
+const COUNT_SETTLE_MS = 1500
+/** the shortest time between two asks about one post, a little under the interval so each tick finds it due */
+const COUNT_REASK_MS = 50 * 1000
 
 /**
  * Whether a link leaves this app: not a hashtag, not a mention, not a page of
@@ -386,8 +393,16 @@ export default {
 			state: [],
 			intervalId: -1,
 			countRefreshIntervalId: -1,
+			countRefreshTimer: -1,
+			/**
+			 * Tells which entries are on screen, for their counts
+			 *
+			 * @type {IntersectionObserver|null}
+			 */
+			countObserver: null,
 			countRefreshLastAsked: new Map(),
-			countRefreshOffset: 0,
+			/** the entries on screen, by `data-status-id`, as the counts observer last said */
+			countVisible: new Set(),
 			pollEvery: 30000,
 			/** how long the poll is waiting after failures, 0 while the server answers */
 			pollWait: 0,
@@ -1059,7 +1074,7 @@ export default {
 		entries: {
 			handler() {
 				this.syncTracked()
-				this.refreshVisiblePostCounts()
+				this.observeCountTargets()
 			},
 
 			flush: 'post',
@@ -1106,11 +1121,11 @@ export default {
 
 		this.loadFirstPage()
 		// Counts on remote posts can change after their first render. Refresh
-		// only what is on screen, for either protocol, and let the server's
-		// per-post freshness window cap requests to the origin.
-		this.refreshVisiblePostCounts()
-		this.countRefreshIntervalId = window.setInterval(() => this.refreshVisiblePostCounts(), 5000)
-		document.addEventListener('scroll', this.refreshVisiblePostCounts, { capture: true, passive: true })
+		// only what is on screen, once scrolling settles and then slowly, and
+		// let the server's per-post window cap requests to the origin.
+		this.countObserver = new IntersectionObserver(this.onCountIntersection)
+		this.observeCountTargets()
+		this.countRefreshIntervalId = window.setInterval(() => this.refreshVisiblePostCounts(), COUNT_REFRESH_MS)
 		// with notify_push the server tells us about new entries; polling
 		// remains as a slow safety net. Without it, poll every 30 seconds.
 		const hasPush = onTimelinePush(this.onPushed)
@@ -1138,7 +1153,8 @@ export default {
 		eventBus.off(NOTIFICATIONS_READ, this.onMarkedAllRead)
 		clearInterval(this.intervalId)
 		clearInterval(this.countRefreshIntervalId)
-		document.removeEventListener('scroll', this.refreshVisiblePostCounts, true)
+		clearTimeout(this.countRefreshTimer)
+		this.countObserver?.disconnect()
 		this.unwatchComposer()
 		if (this.observer) {
 			this.observer.disconnect()
@@ -1395,43 +1411,73 @@ export default {
 			this.tracker.sync(pairs)
 		},
 
-		/** Refresh counts for visible remote posts without waiting for cron. */
+		/** Hands the counts observer the entries on the page. */
+		observeCountTargets() {
+			if (!this.countObserver || !this.$el?.querySelectorAll) {
+				return
+			}
+			this.countObserver.disconnect()
+			this.countVisible.clear()
+			for (const element of this.$el.querySelectorAll('[data-status-id]')) {
+				this.countObserver.observe(element)
+			}
+		},
+
+		/**
+		 * Keeps the set of entries on screen, and refreshes the counts of
+		 * the ones that came into view once scrolling has settled.
+		 *
+		 * @param {IntersectionObserverEntry[]} changes what came into or went out of view
+		 */
+		onCountIntersection(changes) {
+			let shown = false
+			for (const change of changes) {
+				const id = /** @type {HTMLElement} */ (change.target)?.dataset?.statusId
+				if (!id) {
+					continue
+				}
+				if (change.isIntersecting) {
+					this.countVisible.add(id)
+					shown = true
+				} else {
+					this.countVisible.delete(id)
+				}
+			}
+			if (shown) {
+				clearTimeout(this.countRefreshTimer)
+				this.countRefreshTimer = window.setTimeout(() => this.refreshVisiblePostCounts(), COUNT_SETTLE_MS)
+			}
+		},
+
+		/** Refresh the counts of the posts on screen without waiting for cron. */
 		refreshVisiblePostCounts() {
-			if (document.visibilityState !== 'visible' || this.display !== 'list' || this.showParents || !this.$el) {
+			if (document.visibilityState !== 'visible' || this.display !== 'list' || this.showParents) {
 				return
 			}
 
 			const now = Date.now()
-			const visible = []
-			for (const element of this.$el.querySelectorAll('[data-status-id]')) {
-				const bounds = element.getBoundingClientRect()
-				if (bounds.bottom <= 0 || bounds.top >= window.innerHeight) {
-					continue
-				}
-				const indexed = this.timelineStore.getStatus(element.dataset.statusId)
-				const status = indexed?.reblog ?? indexed
+			const ids = new Set()
+			for (const entryId of this.countVisible) {
+				const indexed = this.timelineStore.getStatus(entryId)
+				// a notification is about its status, and a boost counts what it boosts
+				const post = indexed?.status ?? indexed
+				const status = post?.reblog ?? post
 				if (status?.id && status.visibility !== 'direct'
-					&& now - (this.countRefreshLastAsked.get(status.id) ?? 0) >= 5000) {
-					visible.push(String(status.id))
+					&& now - (this.countRefreshLastAsked.get(String(status.id)) ?? 0) >= COUNT_REASK_MS) {
+					ids.add(String(status.id))
 				}
 			}
 
-			// Keep simultaneous origin requests bounded and rotate through the
-			// visible cards, so the same first four do not starve the rest.
-			const ids = [...new Set(visible)]
-			const start = ids.length === 0 ? 0 : this.countRefreshOffset % ids.length
-			const selected = ids.length <= 4
-				? ids
-				: [...ids.slice(start), ...ids.slice(0, start)].slice(0, 4)
-			this.countRefreshOffset = ids.length > 4 ? (start + selected.length) % ids.length : 0
+			const selected = [...ids].slice(0, COUNTS_BATCH)
+			if (selected.length === 0) {
+				return
+			}
 			for (const id of selected) {
 				this.countRefreshLastAsked.set(id, now)
-				// Status counts are refreshed at the origin by this request. Bypass
-				// any cached status response so the updated counters reach the card.
-				this.timelineStore.fetchStatus(id, true).catch((error) => {
-					logger.debug('Visible post counts were not refreshed', { error, id })
-				})
 			}
+			this.timelineStore.refreshCounts(selected).catch((error) => {
+				logger.debug('Visible post counts were not refreshed', { error, ids: selected })
+			})
 		},
 
 		/**
