@@ -37,7 +37,9 @@ checklist is [Atproto-Live-Test.md](Atproto-Live-Test.md).
 
 Blob CIDs identify the bytes served by `getBlob`, and duplicate registration is
 scoped to the account DID. Concurrent duplicate registration preserves the
-first document mapping and does not count its repository bytes again.
+first document mapping, does not count its repository bytes again, and removes
+the copy the losing upload stored. Blobs uploaded before the account's first
+repository commit are counted when that commit creates the repository.
 
 `uploadBlob` stores accepted files byte for byte, including image metadata,
 without resizing or transcoding. The returned CID and size describe the original

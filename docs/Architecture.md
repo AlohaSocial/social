@@ -584,7 +584,12 @@ profile back to Bluesky.
 Blob registration uses a conflict-skipping insert per DID and CID. Concurrent
 registrations keep the first document mapping and report whether a new mapping
 was inserted; image/video publishers and both migration paths increment
-repository blob-byte accounting only for that winning insert.
+repository blob-byte accounting only for that winning insert. An XRPC upload
+that loses the race, or whose registration fails, removes the document it
+stored (`BlobUploadService`, through `MediaPurgeService`). Blobs registered
+before an account's first commit have no repository row to count against; the
+first commit's head row starts `blob_bytes` at the sum of the account's
+registered blobs (`AtprotoRepoRequest::setHead()`).
 
 Repository writes for social collections are projected through their native
 Social services. Projected `createRecord` operations lock the repository and

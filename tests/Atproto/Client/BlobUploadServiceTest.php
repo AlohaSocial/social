@@ -18,10 +18,12 @@ use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\MediaPurgeService;
 use OCP\IDBConnection;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use RuntimeException;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -34,6 +36,7 @@ class BlobUploadServiceTest extends TestCase {
 	private AtprotoBlobRequest $blobs;
 	private AtprotoRepoRequest $repos;
 	private IDBConnection $connection;
+	private MediaPurgeService $purge;
 	private BlobUploadService $uploads;
 
 	protected function setUp(): void {
@@ -45,7 +48,8 @@ class BlobUploadServiceTest extends TestCase {
 		$this->blobs = $this->createMock(AtprotoBlobRequest::class);
 		$this->repos = $this->createMock(AtprotoRepoRequest::class);
 		$this->connection = $this->createMock(IDBConnection::class);
-		$this->uploads = new BlobUploadService($this->documents, $this->blobs, $this->repos, $this->connection);
+		$this->purge = $this->createMock(MediaPurgeService::class);
+		$this->uploads = new BlobUploadService($this->documents, $this->blobs, $this->repos, $this->connection, $this->purge, new NullLogger());
 	}
 
 	protected function tearDown(): void {
@@ -66,6 +70,7 @@ class BlobUploadServiceTest extends TestCase {
 		$this->repos->expects($this->once())->method('addBlobBytes')->with(self::DID, filesize($this->path));
 		$this->connection->expects($this->once())->method('beginTransaction');
 		$this->connection->expects($this->once())->method('commit');
+		$this->purge->expects($this->never())->method('purge');
 		$blob = $this->uploads->store($this->identity, $this->owner, $this->path);
 		$this->assertSame(Cid::forRaw(file_get_contents($this->path))->toString(), $blob->cid->toString());
 		$this->assertSame($mime, $blob->mime);
@@ -86,9 +91,20 @@ class BlobUploadServiceTest extends TestCase {
 	public function testConcurrentRegistrationKeepsTheWinningDocumentAndAccounting(): void {
 		$known = new BlobRef(self::DID, Cid::forRaw(file_get_contents($this->path)), 'winner', 'image/jpeg', filesize($this->path));
 		$this->blobs->method('get')->willReturnOnConsecutiveCalls(null, $known);
-		$this->documents->method('storeAsIs')->willReturn((new Document())->setId('other-copy')->setMimeType('image/jpeg'));
+		$copy = (new Document())->setId('other-copy')->setMimeType('image/jpeg');
+		$this->documents->method('storeAsIs')->willReturn($copy);
 		$this->blobs->method('put')->willReturn(false);
 		$this->repos->expects($this->never())->method('addBlobBytes');
+		$this->purge->expects($this->once())->method('purge')->with($this->identicalTo($copy));
+		$this->assertSame($known, $this->uploads->store($this->identity, $this->owner, $this->path));
+	}
+
+	public function testALosingCopyThatCannotBeRemovedStillAnswersWithTheWinner(): void {
+		$known = new BlobRef(self::DID, Cid::forRaw(file_get_contents($this->path)), 'winner', 'image/jpeg', filesize($this->path));
+		$this->blobs->method('get')->willReturnOnConsecutiveCalls(null, $known);
+		$this->documents->method('storeAsIs')->willReturn((new Document())->setId('other-copy')->setMimeType('image/jpeg'));
+		$this->blobs->method('put')->willReturn(false);
+		$this->purge->method('purge')->willThrowException(new RuntimeException('appdata unavailable'));
 		$this->assertSame($known, $this->uploads->store($this->identity, $this->owner, $this->path));
 	}
 
@@ -101,10 +117,12 @@ class BlobUploadServiceTest extends TestCase {
 	}
 
 	public function testAnAccountingFailureRollsBackTheBlobRegistration(): void {
-		$this->documents->method('storeAsIs')->willReturn((new Document())->setId('copy')->setMimeType('image/jpeg'));
+		$copy = (new Document())->setId('copy')->setMimeType('image/jpeg');
+		$this->documents->method('storeAsIs')->willReturn($copy);
 		$this->blobs->method('put')->willReturn(true);
 		$this->repos->method('addBlobBytes')->willThrowException(new RuntimeException('database failure'));
 		$this->connection->expects($this->once())->method('rollBack');
+		$this->purge->expects($this->once())->method('purge')->with($this->identicalTo($copy));
 		$this->connection->expects($this->never())->method('commit');
 		$this->expectException(RuntimeException::class);
 		$this->uploads->store($this->identity, $this->owner, $this->path);
