@@ -4,7 +4,7 @@
 -->
 # Mastodon client and federation compatibility
 
-**Reviewed against:** Aloha Social **0.26.287** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.288** on **2026-10-27**.
 
 Aloha Social implements a broad portion of the Mastodon client API and speaks
 ActivityPub to Mastodon and other Fediverse servers. It is **not a drop-in
