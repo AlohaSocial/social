@@ -787,6 +787,7 @@ Statuses carry Mastodon's `card` entity: `url`, `title`, `description`, `type` (
 There is no endpoint for cards — they are derived data, never federated, and every instance reads the linked page itself:
 
 - The first plain link of a post is what gets previewed; mentions and hashtags are skipped, and only `http(s)` links count.
+- Only public and unlisted posts get a card, inbound or local. A followers-only or direct post is never previewed: its link may be private or single-use (a share, a meeting, a password reset), and a stranger's direct message must not make this server fetch a URL of their choosing. The background job checks again, so a queue item left from before is dropped too.
 - The page is read by a background job (a `LinkPreview` item in the stream queue, drained by cron or `occ social:queue:process`), so posting and inbox delivery never wait for a stranger's web server. A post therefore gains its card shortly *after* it appears.
 - The fetch goes through `CurlService`, which means: `http(s)` only on the request and on every redirect, no local addresses, a download size cap, a 5 s timeout, and **the instance access list** — with an allow-list configured, previews only come from listed hosts.
 - The card is read from `OpenGraph`, then Twitter-card tags, then the plain `<title>` and `<meta name="description">`. Title and description are length-capped and stored as text, never as markup; a preview image must itself be an `http(s)` URL.

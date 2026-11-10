@@ -566,8 +566,9 @@ original on its home server. **Like**, **Boost** and **Reply** sit under every
 post; a post's `…` menu adds **Bookmark**, **Open on original instance** and
 **Report**.
 
-A post that links somewhere gets a preview card, read by this server rather
-than by your browser. With the `notify_push` app installed, new posts arrive
+A public or unlisted post that links somewhere gets a preview card, read by
+this server rather than by your browser. Followers-only posts and direct
+messages never get one, so a private link in them is never opened. With the `notify_push` app installed, new posts arrive
 live; without it the page checks every 30 seconds.
 
 ### For you

@@ -625,18 +625,62 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$this->handler->activity($this->wrap(Delete::TYPE, $note), $note);
 	}
 
-	public function testAStoredNoteThatLinksSomewhereIsHandedToTheQueue(): void {
+	/** @return array<string, array{list<string>, list<string>, bool}> */
+	public static function linkPreviewVisibilityProvider(): array {
+		$public = 'https://www.w3.org/ns/activitystreams#Public';
+		$followers = self::REMOTE_URL . '/users/bob/followers';
+
+		return [
+			'public' => [[$public], [], true],
+			'unlisted' => [[$followers], [$public], true],
+			'followers-only' => [[$followers], [], false],
+			'direct' => [[self::LOCAL_URL . '/users/alice'], [], false],
+		];
+	}
+
+	#[DataProvider('linkPreviewVisibilityProvider')]
+	public function testOnlyAnIncomingNoteAnyoneMayReadIsQueuedForItsLinkPreview(array $to, array $cc, bool $queued): void {
 		$note = $this->incomingNote();
+		$note->setToArray($to);
+		$note->setCcArray($cc);
 		$note->setContent('<p>see <a href="https://example.org/a">this</a></p>');
+		$this->knownActors($this->bob);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->linkPreviewService->method('extractUrl')->willReturn('https://example.org/a');
 
 		// reading the page here would hold up the inbox
 		$this->linkPreviewService->expects($this->never())->method('generate');
-		$this->streamQueueService->expects($this->once())->method('generateStreamQueue')
-			->with($note->getRequestToken(), StreamQueue::TYPE_LINK_PREVIEW, self::NOTE);
+		if ($queued) {
+			$this->streamQueueService->expects($this->once())->method('generateStreamQueue')
+				->with($note->getRequestToken(), StreamQueue::TYPE_LINK_PREVIEW, self::NOTE);
+		} else {
+			$this->streamQueueService->expects($this->never())->method('generateStreamQueue');
+		}
 
 		$this->handler->save($note);
+	}
+
+	#[DataProvider('localVisibilityProvider')]
+	public function testOnlyALocalPostAnyoneMayReadIsQueuedForItsLinkPreview(string $visibility, bool $queued): void {
+		$note = $this->note(self::LOCAL_URL . '/@alice/1', $this->alice->getId(), true);
+		$note->setVisibility($visibility);
+		$note->setContent('<p>see <a href="https://example.org/a">this</a></p>');
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->linkPreviewService->method('extractUrl')->willReturn('https://example.org/a');
+
+		$this->streamQueueService->expects($queued ? $this->once() : $this->never())->method('generateStreamQueue');
+
+		$this->handler->save($note);
+	}
+
+	/** @return array<string, array{string, bool}> */
+	public static function localVisibilityProvider(): array {
+		return [
+			'public' => [Stream::TYPE_PUBLIC, true],
+			'unlisted' => [Stream::TYPE_UNLISTED, true],
+			'followers-only' => [Stream::TYPE_FOLLOWERS, false],
+			'direct' => [Stream::TYPE_DIRECT, false],
+		];
 	}
 
 	public function testANoteWithoutALinkIsNotQueued(): void {

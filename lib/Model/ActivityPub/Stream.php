@@ -3132,6 +3132,14 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return is_string($stored) && $stored !== '' ? $stored : $this->getId();
 	}
 
+	/**
+	 * Whether anyone may read the post: public or unlisted, as against
+	 * followers-only and direct.
+	 */
+	public function isOpenToAnyone(): bool {
+		return in_array($this->getVisibility(), [self::TYPE_PUBLIC, self::TYPE_UNLISTED], true);
+	}
+
 	public function isQuotable(): bool {
 		// what the author said, where they said anything. A remote post that
 		// carries `canQuote` has answered this question itself, and quoting it
@@ -3142,8 +3150,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			return false;
 		}
 
-		return $this->isPublic()
-			|| in_array($this->getVisibility(), [self::TYPE_PUBLIC, self::TYPE_UNLISTED], true);
+		return $this->isPublic() || $this->isOpenToAnyone();
 	}
 
 	/**

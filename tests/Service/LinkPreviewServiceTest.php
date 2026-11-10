@@ -12,11 +12,13 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Exceptions\CardNotFoundException;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -37,10 +39,11 @@ class LinkPreviewServiceTest extends TestCase {
 		);
 	}
 
-	private function post(string $content): Note {
+	private function post(string $content, string $visibility = Stream::TYPE_PUBLIC): Note {
 		$note = new Note();
 		$note->setId(self::POST_ID);
 		$note->setContent($content);
+		$note->setVisibility($visibility);
 
 		return $note;
 	}
@@ -246,6 +249,26 @@ class LinkPreviewServiceTest extends TestCase {
 		$this->streamCardsRequest->expects($this->never())->method('save');
 
 		$this->assertFalse($this->service->generate($this->post('<p>no links here</p>')));
+	}
+
+	/** @return array<string, array{string, bool}> */
+	public static function visibilityProvider(): array {
+		return [
+			'public' => [Stream::TYPE_PUBLIC, true],
+			'unlisted' => [Stream::TYPE_UNLISTED, true],
+			'followers-only' => [Stream::TYPE_FOLLOWERS, false],
+			'direct' => [Stream::TYPE_DIRECT, false],
+			'not known' => ['', false],
+		];
+	}
+
+	#[DataProvider('visibilityProvider')]
+	public function testOnlyAPostAnyoneMayReadHasItsLinkFetched(string $visibility, bool $fetched): void {
+		$this->curlService->expects($fetched ? $this->once() : $this->never())->method('doRequest')
+			->willReturn('<html><head><title>t</title></head></html>');
+		$this->streamCardsRequest->expects($fetched ? $this->once() : $this->never())->method('save');
+
+		$this->assertSame($fetched, $this->service->generate($this->post('<a href="https://example.org/a">a</a>', $visibility)));
 	}
 
 	public function testAnUnreachablePageIsNotAnError(): void {
