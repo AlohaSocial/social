@@ -70,19 +70,6 @@ class AppPasswordService {
 		return $this->request->removeAppPassword($userId, $id);
 	}
 
-	/**
-	 * Removes the password with this account-scoped name and every session it opened.
-	 */
-	public function revokeByName(string $userId, string $name): bool {
-		foreach ($this->list($userId) as $password) {
-			if ($password['name'] === $name) {
-				return $this->revoke($userId, $password['id']);
-			}
-		}
-
-		return false;
-	}
-
 	public function exists(string $userId, int $id): bool {
 		return $this->request->hasAppPassword($userId, $id);
 	}

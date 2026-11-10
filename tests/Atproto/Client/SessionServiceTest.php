@@ -24,6 +24,7 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\MoveErrorException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Service\EnabledUserService;
 use OCP\Accounts\IAccount;
 use OCP\Accounts\IAccountManager;
 use OCP\Accounts\IAccountProperty;
@@ -38,6 +39,8 @@ use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class SessionServiceTest extends TestCase {
+	/** whether alice's Nextcloud account is enabled */
+	private bool $aliceEnabled = true;
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 
 	private InMemoryClientRequest $request;
@@ -88,6 +91,8 @@ class SessionServiceTest extends TestCase {
 		$this->aliceUser = $this->createMock(IUser::class);
 		$this->aliceUser->method('getUID')->willReturn('alice');
 		$this->aliceUser->method('getEMailAddress')->willReturn('alice@example.org');
+		$this->aliceEnabled = true;
+		$this->aliceUser->method('isEnabled')->willReturnCallback(fn (): bool => $this->aliceEnabled);
 		$this->emailUsers = [$this->aliceUser];
 		$this->users->method('getByEmail')->willReturnCallback(fn (string $email): array => $email === 'alice@example.org' ? $this->emailUsers : []);
 		$this->users->method('get')->willReturnCallback(fn (string $uid): ?IUser => $uid === 'alice' ? $this->aliceUser : null);
@@ -101,7 +106,7 @@ class SessionServiceTest extends TestCase {
 		$this->throttler = $this->createMock(IThrottler::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
-		$this->sessions = new SessionService($config, $this->identities, $keys, $this->appPasswords, $this->request, $this->actors, $accounts, $this->users, $this->throttler, $time);
+		$this->sessions = new SessionService($config, $this->identities, $keys, $this->appPasswords, $this->request, $this->actors, $accounts, $this->users, $this->throttler, $time, new EnabledUserService($this->users));
 	}
 
 	public function testOnlyAPrivilegedAppPasswordReachesTheDirectMessages(): void {
@@ -136,38 +141,24 @@ class SessionServiceTest extends TestCase {
 		$this->assertSame('alice.social.test', $session['handle']);
 	}
 
-	public function testPdsAppPasswordMethodsExposeOnlyLexiconFieldsAndRevokeSessions(): void {
+	public function testListingAppPasswordsExposesOnlyLexiconFields(): void {
+		$this->appPasswords->create('alice', 'chat-app', true);
+		$this->appPasswords->create('alice', 'reader');
 		$session = new ClientSession('alice', $this->identity, 'owner');
-		try {
-			$this->sessions->createAppPassword($session, 'chat-app', true);
-			$this->fail('created a privileged password without chat permission');
-		} catch (XrpcException $e) {
-			$this->assertSame(403, $e->status);
-			$this->assertSame('InsufficientScope', $e->error);
-		}
 
-		$created = $this->sessions->createAppPassword(new ClientSession('alice', $this->identity, 'owner', ['atproto', ClientSession::GENERIC, ClientSession::CHAT]), 'chat-app', true);
-		$this->assertSame([
-			'name' => 'chat-app',
-			'password' => $created['password'],
-			'createdAt' => '1970-01-01T00:00:01Z',
-			'privileged' => true,
-		], $created);
-		$this->assertSame(['passwords' => [[
-			'name' => 'chat-app',
-			'createdAt' => '1970-01-01T00:00:01Z',
-			'privileged' => true,
-		]]], $this->sessions->listAppPasswords($session));
+		$this->assertSame(['passwords' => [
+			['name' => 'chat-app', 'createdAt' => '1970-01-01T00:00:01Z', 'privileged' => true],
+			['name' => 'reader', 'createdAt' => '1970-01-01T00:00:01Z'],
+		]], $this->sessions->listAppPasswords($session));
+	}
 
-		$tokens = $this->sessions->create('alice.social.test', $created['password'], '203.0.113.5');
-		$this->sessions->revokeAppPassword($session, 'chat-app');
-		$this->assertSame(['passwords' => []], $this->sessions->listAppPasswords($session));
-		try {
-			$this->sessions->authenticate('Bearer ' . $tokens['accessJwt']);
-			$this->fail('revoked app password session stayed active');
-		} catch (XrpcException $e) {
-			$this->assertSame('ExpiredToken', $e->error);
-		}
+	public function testASessionSaysAnAppPasswordOpenedIt(): void {
+		$password = $this->appPasswords->create('alice', 'phone')['password'];
+		$session = $this->sessions->authenticate('Bearer ' . $this->sessions->create('alice.social.test', $password, '203.0.113.5')['accessJwt']);
+
+		$this->assertNotNull($session);
+		$this->assertTrue($session->appPassword);
+		$this->assertFalse((new ClientSession('alice', $this->identity, 'sid'))->appPassword, 'nothing else is one');
 	}
 
 	public function testAnAppPasswordIsShownOnceAndStoredAsAHash(): void {
@@ -329,6 +320,26 @@ class SessionServiceTest extends TestCase {
 		$this->assertSame([], $this->request->sessions, 'signed out');
 		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0);
 		$this->assertTrue($this->sessions->create('alice.social.test', $password, '203.0.113.5')['active']);
+	}
+
+	/**
+	 * A disabled Nextcloud account takes no sign-in, and no app signed in
+	 * goes on; its sessions are kept, so enabling it again brings them back.
+	 */
+	public function testADisabledNextcloudAccountTakesNoAppUntilItIsEnabledAgain(): void {
+		$password = $this->appPasswords->create('alice', 'phone')['password'];
+		$session = $this->sessions->create('alice.social.test', $password, '203.0.113.5');
+		$this->aliceEnabled = false;
+
+		$this->assertRefused(fn () => $this->sessions->authenticate('Bearer ' . $session['accessJwt']), 'AccountDeactivated');
+		$this->assertRefused(fn () => $this->sessions->refresh('Bearer ' . $session['refreshJwt']), 'AccountDeactivated');
+		$this->assertRefused(fn () => $this->sessions->create('alice.social.test', $password, '203.0.113.5'), 'AuthenticationRequired');
+		$this->assertRefused(fn () => $this->sessions->create('alice@example.org', $password, '203.0.113.5'), 'AuthenticationRequired');
+		$this->assertCount(1, $this->request->sessions, 'the session is kept');
+
+		$this->aliceEnabled = true;
+		$this->assertNotNull($this->sessions->authenticate('Bearer ' . $session['accessJwt']));
+		$this->assertNotNull($this->sessions->refresh('Bearer ' . $session['refreshJwt']));
 	}
 
 	private function claims(string $jwt): array {

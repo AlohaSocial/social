@@ -948,6 +948,14 @@ There are five things a moderator can do to an account, in order of weight:
 *Resolve* marks the complaint handled and changes nothing about the account, so
 a report can be closed with any of the four applied, or with none.
 
+**Disabling the Nextcloud user** is not a moderation action, and it deletes
+nothing: the account's posts, followers and fediverse and Bluesky identity
+stay. It stops the person's apps. Mastodon app tokens, Bluesky app-password
+and sign-in (OAuth) sessions, a Bluesky account moving here, and video
+uploads in the account's name are all refused while the user is disabled, and
+no push notification goes to the person's devices. Nothing is revoked, so
+enabling the user again brings the apps back without signing in again.
+
 **What is recorded.** `social_moderation` holds what stands *now* — one row an
 account, replaced by the next decision and gone when it is lifted.
 `social_strikes` is the history: a warning, a silence, a suspension, a takedown

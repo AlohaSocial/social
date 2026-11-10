@@ -999,6 +999,7 @@ class StatusApiController extends MastodonApiController {
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses/{nid}/{act}')]
 	public function statusAction(int|string $nid, string $act): DataResponse {
+		$act = $this->statusAct($act);
 		try {
 			$this->initViewer(true);
 			$actor = $this->accountService->getActor($this->viewer->getPreferredUsername());

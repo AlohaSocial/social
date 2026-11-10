@@ -20,7 +20,7 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
-use OCA\Social\Exceptions\MoveErrorException;
+use OCA\Social\Service\EnabledUserService;
 use OCP\Accounts\IAccountManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IUserManager;
@@ -55,6 +55,7 @@ class SessionService {
 		private IUserManager $userManager,
 		private IThrottler $throttler,
 		private ITimeFactory $time,
+		private EnabledUserService $enabledUsers,
 	) {
 	}
 
@@ -96,6 +97,7 @@ class SessionService {
 		if ($session === null || $session['expires'] < $this->time->getTime()) {
 			throw new XrpcException(400, 'ExpiredToken', 'Token has been revoked');
 		}
+		$this->assertEnabled($session['user_id'], 400);
 		if (!$this->request->removeSession($session['jti'])) {
 			throw new XrpcException(400, 'ExpiredToken', 'Token has already been used');
 		}
@@ -137,6 +139,7 @@ class SessionService {
 			$this->request->removeSession($session['jti']);
 			throw new XrpcException(401, 'ExpiredToken', 'Token has been revoked');
 		}
+		$this->assertEnabled($session['user_id'], 401);
 		$identity = $this->identityByDid($session['did']);
 		self::assertActive($identity);
 
@@ -146,7 +149,7 @@ class SessionService {
 			$scopes[] = ClientSession::CHAT;
 		}
 
-		return new ClientSession($session['user_id'], $identity, $session['jti'], $scopes);
+		return new ClientSession($session['user_id'], $identity, $session['jti'], $scopes, appPassword: true);
 	}
 
 	/**
@@ -162,40 +165,6 @@ class SessionService {
 	}
 
 	/**
-	 * `com.atproto.server.createAppPassword`.
-	 *
-	 * @throws XrpcException
-	 */
-	public function createAppPassword(ClientSession $session, string $name, bool $privileged): array {
-		if ($privileged && !$session->may(ClientSession::CHAT)) {
-			throw new XrpcException(403, 'InsufficientScope', 'This session cannot create an app password with chat access');
-		}
-
-		try {
-			$created = $this->appPasswords->create($session->userId, $name, $privileged);
-		} catch (MoveErrorException $e) {
-			throw XrpcException::invalidRequest($e->getMessage());
-		}
-
-		$metadata = null;
-		foreach ($this->appPasswords->list($session->userId) as $password) {
-			if ($password['id'] === $created['id']) {
-				$metadata = $password;
-				break;
-			}
-		}
-		if ($metadata === null) {
-			throw new XrpcException(500, 'InternalServerError', 'The app password could not be read after creation');
-		}
-
-		return [
-			'name' => $created['name'],
-			'password' => $created['password'],
-			'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z', $metadata['creation']),
-		] + ($privileged ? ['privileged' => true] : []);
-	}
-
-	/**
 	 * `com.atproto.server.listAppPasswords`; password values and internal ids never leave the server.
 	 */
 	public function listAppPasswords(ClientSession $session): array {
@@ -208,13 +177,6 @@ class SessionService {
 		}
 
 		return ['passwords' => $passwords];
-	}
-
-	/**
-	 * `com.atproto.server.revokeAppPassword`.
-	 */
-	public function revokeAppPassword(ClientSession $session, string $name): void {
-		$this->appPasswords->revokeByName($session->userId, $name);
 	}
 
 	/**
@@ -265,6 +227,18 @@ class SessionService {
 			throw new XrpcException(400, 'AccountDeactivated', $identity->state === Identity::STATE_DEACTIVATED
 				? 'This account is switched off for Bluesky; its owner can switch it on again in their settings on this server'
 				: 'This account is deactivated');
+		}
+	}
+
+	/**
+	 * Refuses the sessions of a Nextcloud account that is disabled; they
+	 * are kept, and work again once it is enabled.
+	 *
+	 * @throws XrpcException
+	 */
+	private function assertEnabled(string $userId, int $status): void {
+		if (!$this->enabledUsers->isEnabled($userId)) {
+			throw new XrpcException($status, 'AccountDeactivated', 'This account is disabled');
 		}
 	}
 
@@ -340,7 +314,7 @@ class SessionService {
 
 		foreach ($identities as $identity) {
 			$userId = $this->userIdOf($identity);
-			if ($userId === '') {
+			if (!$this->enabledUsers->isEnabled($userId)) {
 				continue;
 			}
 			$appPasswordId = $this->appPasswords->verify($userId, $password);

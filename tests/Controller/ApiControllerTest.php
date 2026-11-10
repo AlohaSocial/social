@@ -95,6 +95,7 @@ use OCA\Social\Service\TranslationService;
 use OCA\Social\Service\VapidService;
 use OCA\Social\Service\ViewCountService;
 use OCA\Social\Tests\Helper\ApiControllerRouter;
+use OCA\Social\Tests\Helper\RoutedRequest;
 use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
@@ -135,7 +136,7 @@ class ApiControllerTest extends TestCase {
 
 	private const REVOKED = 'the access_token was revoked';
 
-	/** @var IRequest&Stub */
+	/** @var RoutedRequest&Stub */
 	private $request;
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
@@ -247,10 +248,12 @@ class ApiControllerTest extends TestCase {
 	private array $filesBackup;
 	/** temporary files a test made, removed in tearDown */
 	private array $tempFiles = [];
-	/** the value getParam('_route') hands the controller, per test */
+	/** the route the request was dispatched to, per test */
 	private string $route = '';
-	/** the value getParam('act') hands the controller, per test */
+	/** the `act` of the dispatched path, per test */
 	private string $act = '';
+	/** body fields getParam() hands out over the route's own, as core merges them */
+	private array $body = [];
 	/** what passesCSRFCheck() reports, per test */
 	private bool $csrf = true;
 	/** the HTTP verb the request reports, per test */
@@ -268,7 +271,9 @@ class ApiControllerTest extends TestCase {
 		$this->filesBackup = $_FILES;
 		$_FILES = [];
 
-		$this->request = $this->createStub(IRequest::class);
+		$this->request = $this->createStub(RoutedRequest::class);
+		// the router's parameters follow the test's route and act as they change
+		$this->request->urlParams = ['_route' => &$this->route, 'act' => &$this->act];
 		$this->headers = [];
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -280,8 +285,9 @@ class ApiControllerTest extends TestCase {
 		$this->route = '';
 		$this->act = '';
 		$this->pathParam = '';
+		$this->body = [];
 		$this->request->method('getParam')->willReturnCallback(
-			fn (string $key, $default = null) => match ($key) {
+			fn (string $key, $default = null) => array_key_exists($key, $this->body) ? $this->body[$key] : match ($key) {
 				'_route' => $this->route,
 				'act' => ($this->act === '') ? $default : $this->act,
 				'description' => ($this->description === '') ? $default : $this->description,
@@ -840,6 +846,63 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertInsufficientScope(
 			$response, 'token scope does not allow this request (needs write:statuses)'
+		);
+	}
+
+	public function testARouteNamedInTheBodyDoesNotChangeTheScopeChecked(): void {
+		$this->route = 'social.StatusApi.statusNew';
+		$this->body = ['_route' => 'social.StatusApi.statusGet'];
+		$this->verb = 'POST';
+		$this->bearerFor(['read']);
+		$this->postService->expects($this->never())->method('createPost');
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->statusNew(),
+			'token scope does not allow this request (needs write:statuses)'
+		);
+	}
+
+	public function testARouteNamedInTheBodyCannotTurnAFollowIntoARead(): void {
+		$this->route = 'social.AccountApi.accountFollow';
+		$this->body = ['_route' => 'social.AccountApi.verifyCredentials'];
+		$this->verb = 'POST';
+		$this->bearerFor(['read']);
+		$this->followService->expects($this->never())->method('followAccount');
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->accountFollow('42'),
+			'token scope does not allow this request (needs write:follows or follow)'
+		);
+	}
+
+	public function testAnActNamedInTheBodyIsNeitherCheckedNorDone(): void {
+		$this->route = 'social.StatusApi.statusAction';
+		$this->act = 'favourite';
+		$this->body = ['act' => 'reblog'];
+		$this->verb = 'POST';
+		$this->bearerFor(['write:favourites']);
+		$actor = $this->createStub(Person::class);
+		$this->accountService->method('getActor')->willReturn($actor);
+		$item = $this->createStub(Stream::class);
+		// the dispatcher hands the method the merged value
+		$this->actionService->expects($this->once())->method('action')->with($actor, 12, 'favourite')->willReturn($item);
+
+		$response = $this->controller('Bearer s3cret')->statusAction(12, 'reblog');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+	}
+
+	public function testAnActNamedInTheBodyCannotWidenTheScopeChecked(): void {
+		$this->route = 'social.StatusApi.statusAction';
+		$this->act = 'reblog';
+		$this->body = ['act' => 'favourite'];
+		$this->verb = 'POST';
+		$this->bearerFor(['write:favourites']);
+		$this->actionService->expects($this->never())->method('action');
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->statusAction(12, 'favourite'),
+			'token scope does not allow this request (needs write:statuses)'
 		);
 	}
 

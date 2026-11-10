@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Protocol\Encoding;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoOAuthRequest;
+use OCA\Social\Service\EnabledUserService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Throwable;
 
@@ -62,6 +63,7 @@ class AuthorizationServer {
 		private ActorsRequest $actors,
 		private ITimeFactory $time,
 		private PermissionSets $permissionSets,
+		private EnabledUserService $enabledUsers,
 	) {
 	}
 
@@ -303,6 +305,9 @@ class AuthorizationServer {
 		if ($session === null || $session->did !== ($claims['sub'] ?? null) || ($session->expires !== 0 && $session->expires < $this->time->getTime())) {
 			throw self::challenge(new OAuthException('invalid_token', 'The session has ended', 401));
 		}
+		if (!$this->enabledUsers->isEnabled($session->userId)) {
+			throw self::challenge(new OAuthException('invalid_token', 'The account is disabled', 401));
+		}
 		try {
 			$identity = $this->identities->getByDid($session->did);
 		} catch (Throwable) {
@@ -537,6 +542,9 @@ class AuthorizationServer {
 	 * @throws OAuthException
 	 */
 	private function identityOfUser(string $userId): Identity {
+		if (!$this->enabledUsers->isEnabled($userId)) {
+			throw new OAuthException('access_denied', 'This account is disabled');
+		}
 		try {
 			$identity = $this->identities->forActor($this->actors->getFromUserId($userId));
 		} catch (Throwable) {

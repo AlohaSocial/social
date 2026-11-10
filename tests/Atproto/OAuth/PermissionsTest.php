@@ -38,6 +38,14 @@ class PermissionsTest extends TestCase {
 		$this->assertTrue($generic->mayUpload('video/mp4'));
 		$this->assertFalse($generic->mayReadEmail());
 		$this->assertTrue(Permissions::of(['atproto', 'transition:email'])->mayReadEmail());
+		$this->assertFalse($generic->mayUpdateHandle(), 'the handle takes a grant of its own');
+	}
+
+	public function testTheHandleIsChangedOnlyWithAnIdentityGrant(): void {
+		$this->assertTrue(Permissions::of(['atproto', 'identity:handle'])->mayUpdateHandle());
+		$this->assertTrue(Permissions::of(['atproto', 'identity:*'])->mayUpdateHandle());
+		$this->assertFalse(Permissions::of(['atproto', 'transition:generic', 'transition:chat.bsky', 'transition:email'])->mayUpdateHandle());
+		$this->assertFalse(Permissions::of(['atproto', 'rpc:com.atproto.identity.updateHandle?aud=*'])->mayUpdateHandle());
 	}
 
 	public function testTheChatScopeReachesTheDirectMessagesAndNothingElse(): void {

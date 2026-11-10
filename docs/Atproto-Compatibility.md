@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Reviewed against:** Aloha Social **0.26.281** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.282** on **2026-10-27**.
 
 **Current scope:** native AT Protocol hosting is an optional integration in
 Aloha Social. It runs alongside ActivityPub; it does not convert a Fediverse
@@ -25,7 +25,7 @@ checklist is [Atproto-Live-Test.md](Atproto-Live-Test.md).
 | Repository | Signed local repositories, commits, records and blobs; repository export/import and account moves | Social records are projected into Aloha's social model. Other valid collections are retained as opaque records; without a vendored Lexicon their schema cannot be checked locally. |
 | Posts | Public posts, replies, embeds, images/galleries, video, self-labels, edits, deletes and supported reply/quote rules | The social model and publication pipeline define supported post records. Long text or unsupported embeds may be mapped or refused; inspect the specific write path. |
 | Other records | Supported profile links, lists and list items, starter packs, feed records, thread gates and post gates can be retained or processed | Keeping a record does not mean Aloha provides a native editor or operates the referenced feed generator. |
-| Client authentication | PDS sessions, app passwords and OAuth are available for supported clients and permissions | OAuth scopes and permission sets are checked. General Nextcloud account password/email administration is not delegated to XRPC. |
+| Client authentication | PDS sessions, app passwords and OAuth are available for supported clients and permissions | OAuth scopes and permission sets are checked. General Nextcloud account password/email administration is not delegated to XRPC. App passwords are made and revoked in the account's settings only: `createAppPassword` and `revokeAppPassword` are refused to every app, and `listAppPasswords` to OAuth apps. `updateHandle` needs an app password or an `identity:` grant, not `transition:generic`. |
 | XRPC | PDS methods are handled locally; supported `app.bsky.*` and `chat.bsky.*` methods not hosted locally are proxied to configured services | Proxying depends on AppView/Chat service authentication and availability. A successful response does not prove feed indexing. |
 | Reading | Profiles, author feeds, threads, custom feeds, lists, starter packs, search/discovery and interactions are available through supported local and proxied paths | AppView results can lag behind the PDS or omit content according to its policies. |
 | Synchronization | Relay firehose, background polling and optional Jetstream listening can ingest remote activity | Cron, relay configuration and optional daemons must be running. A stopped or delayed source can leave the local view stale. |

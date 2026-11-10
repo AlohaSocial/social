@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.281** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.282** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -1248,7 +1248,8 @@ a different hosting provider, give this server's address, then your Bluesky
 handle and the app password. This is not your Nextcloud password; never enter
 that in a Bluesky client. What you post, like or follow there happens
 here too, as if you had done it in Aloha Social; blocks stay here and cannot
-be made from the app. Revoking the app password signs the app out.
+be made from the app. Revoking the app password signs the app out. App
+passwords are made and revoked only here in Settings, never from an app.
 
 **Pausing.** *Be on Bluesky* in Settings → Apps and account → Bluesky switches
 your presence there off, after asking: nothing new is published, Bluesky is told the

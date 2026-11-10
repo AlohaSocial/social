@@ -63,6 +63,12 @@ class MastodonPushNotification extends QueuedJob {
 		if ($userId === '' || $nid === '') {
 			return;
 		}
+		// a disabled account's devices are told nothing; its subscriptions
+		// stay for when it is enabled again
+		$user = $this->userManager->get($userId);
+		if (!$user instanceof IUser || !$user->isEnabled()) {
+			return;
+		}
 
 		try {
 			$notification = $this->streamRequest->getStreamByNid($nid, false);
@@ -83,8 +89,7 @@ class MastodonPushNotification extends QueuedJob {
 				}
 			}
 			$subject = Stream::notificationTypeOfSubType($notification->getSubType());
-			$user = $this->userManager->get($userId);
-			$locale = ($user instanceof IUser) ? $this->l10nFactory->getUserLanguage($user) : 'en';
+			$locale = $this->l10nFactory->getUserLanguage($user);
 			$l10n = $this->l10nFactory->get('social', $locale);
 			$title = $this->title($l10n, $subject, $account);
 			if ($title === null) {

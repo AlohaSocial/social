@@ -18,9 +18,9 @@ use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\ScheduledStatusService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Tests\Helper\RoutedRequest;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
@@ -133,7 +133,8 @@ class ScheduledStatusApiControllerTest extends TestCase {
 		$this->verb = $verb;
 		$this->route = 'social.ScheduledStatusApi.' . $route;
 
-		$request = $this->createStub(IRequest::class);
+		$request = $this->createStub(RoutedRequest::class);
+		$request->urlParams = ['_route' => $this->route];
 		$request->method('getHeader')->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
 		$request->method('passesCSRFCheck')->willReturnCallback(fn (): bool => $this->csrf);
 		$request->method('getMethod')->willReturnCallback(fn (): string => $this->verb);

@@ -27,6 +27,7 @@ use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Service\EnabledUserService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICacheFactory;
 use OCP\Security\ICrypto;
@@ -36,6 +37,8 @@ use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class AuthorizationServerTest extends TestCase {
+	/** @var string[] the Nextcloud accounts an administrator disabled */
+	private array $disabled = [];
 	private const ISSUER = 'https://social.test';
 	private const CLIENT = 'https://app.example.com/oauth-client-metadata.json';
 	private const REDIRECT = 'https://app.example.com/callback';
@@ -79,6 +82,9 @@ class AuthorizationServerTest extends TestCase {
 		$keys->method('serviceKey')->willReturn($this->serviceKey);
 		$actors = $this->createMock(ActorsRequest::class);
 		$actors->method('getFromUserId')->willReturn(new Person());
+		$this->disabled = [];
+		$enabledUsers = $this->createStub(EnabledUserService::class);
+		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => $userId !== '' && !in_array($userId, $this->disabled, true));
 		$sets = $this->createMock(PermissionSets::class);
 		$sets->method('expand')->willReturnCallback(static fn (string $nsid, string $aud): ?array => $nsid === 'com.example.authBasic'
 			? [['resource' => 'rpc', 'lxm' => ['com.example.getThing'], 'aud' => $aud]]
@@ -86,7 +92,7 @@ class AuthorizationServerTest extends TestCase {
 		$this->server = new AuthorizationServer(
 			$config, $this->store, new ClientMetadataService($curl, $cache),
 			new ClientAuthenticator($this->store, $curl, $time), new DpopVerifier($this->nonce, $this->store, $time),
-			$identities, $keys, $actors, $time, $sets,
+			$identities, $keys, $actors, $time, $sets, $enabledUsers,
 		);
 	}
 
@@ -327,6 +333,38 @@ class AuthorizationServerTest extends TestCase {
 			}
 		}
 		$this->assertSame(['invalid_token', 'access_denied', 'access_denied'], $refused);
+	}
+
+	/**
+	 * A disabled Nextcloud account: an app's token does nothing, its
+	 * refresh is refused and no app is let in anew; its session is kept
+	 * for when the account is enabled again.
+	 */
+	public function testADisabledNextcloudAccountLetsNoAppIn(): void {
+		$tokens = $this->signedIn();
+		[$requestUri] = $this->pushed();
+		$this->disabled = ['alice'];
+
+		$url = self::ISSUER . '/xrpc/app.bsky.feed.getTimeline';
+		$authenticate = fn () => $this->server->authenticate('DPoP ' . $tokens['access_token'], $this->proof($url, 'GET', $tokens['access_token']), 'GET', $url);
+		$refused = [];
+		foreach ([
+			$authenticate,
+			fn () => $this->server->token(['grant_type' => 'refresh_token', 'client_id' => self::CLIENT, 'refresh_token' => $tokens['refresh_token']], $this->proof(self::ISSUER . '/oauth/token')),
+			fn () => $this->server->approve(self::CLIENT, $requestUri, 'alice'),
+		] as $call) {
+			try {
+				$call();
+				$refused[] = '';
+			} catch (OAuthException $e) {
+				$refused[] = $e->error;
+			}
+		}
+		$this->assertSame(['invalid_token', 'access_denied', 'access_denied'], $refused);
+		$this->assertCount(1, $this->server->sessionsOf('alice'), 'the session is kept');
+
+		$this->disabled = [];
+		$this->assertSame('alice', $authenticate()->userId);
 	}
 
 	public function testAnExpiredRequestCannotBeApproved(): void {

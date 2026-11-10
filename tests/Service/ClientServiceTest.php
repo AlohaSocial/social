@@ -19,6 +19,7 @@ use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\EnabledUserService;
 use OCA\Social\Service\PushSubscriptionService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -34,6 +35,8 @@ class ClientServiceTest extends TestCase {
 	private PushSubscriptionService|MockObject $pushSubscriptions;
 	/** What `token_max_days` reads as. */
 	private int $maxDays = 365;
+	/** @var string[] the accounts an administrator disabled */
+	private array $disabled = [];
 
 	protected function setUp(): void {
 		$this->clientRequest = $this->createMock(ClientRequest::class);
@@ -41,6 +44,9 @@ class ClientServiceTest extends TestCase {
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->pushSubscriptions = $this->createMock(PushSubscriptionService::class);
 		$deviceAuthorizations = $this->createMock(\OCA\Social\Db\DeviceAuthorizationRequest::class);
+		$this->disabled = [];
+		$enabledUsers = $this->createStub(EnabledUserService::class);
+		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => !in_array($userId, $this->disabled, true));
 		$this->configService->method('getAppValueInt')
 			->willReturnCallback(fn (string $key): int => $key === ConfigService::SOCIAL_TOKEN_MAX_DAYS ? $this->maxDays : 0);
 		$this->service = new ClientService(
@@ -51,6 +57,7 @@ class ClientServiceTest extends TestCase {
 			$this->pushSubscriptions,
 			$deviceAuthorizations,
 			new \Psr\Log\NullLogger(),
+			$enabledUsers,
 		);
 	}
 
@@ -474,6 +481,30 @@ class ClientServiceTest extends TestCase {
 		$client->setAuthCreation(1_700_000_000);
 
 		$this->assertSame(1_700_000_000 + 365 * 86400, $this->service->expiresAt($client));
+	}
+
+	public function testATokenOfADisabledAccountIsRefusedAndKept(): void {
+		$client = $this->registeredClient();
+		$client->setAuthId(11)->setAuthUserId('alice');
+		$client->setLastUpdate(time() - ClientService::TIME_TOKEN_REFRESH - 60);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->disabled = ['alice'];
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+		$this->clientAuthRequest->expects($this->never())->method('touch');
+		$this->pushSubscriptions->expects($this->never())->method('delete');
+
+		$this->expectException(ClientNotFoundException::class);
+		$this->service->getFromToken('tok');
+	}
+
+	public function testATokenOfAnEnabledAccountIsAccepted(): void {
+		$client = $this->registeredClient();
+		$client->setAuthUserId('alice');
+		$client->setLastUpdate(time() - 60);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->disabled = ['bob'];
+
+		$this->assertSame($client, $this->service->getFromToken('tok'));
 	}
 
 	public function testGetFromTokenPropagatesUnknownToken(): void {

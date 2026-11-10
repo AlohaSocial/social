@@ -18,6 +18,7 @@ use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Tests\Helper\FrozenClock;
+use OCA\Social\Tests\Integration\Helper\CreatesUsers;
 use OCA\Social\Tests\Integration\Helper\FreezesTheClock;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
@@ -40,6 +41,7 @@ use PHPUnit\Framework\TestCase;
  * those tests stand in the past, where that is nobody's but theirs.
  */
 class TokenExpiryTest extends TestCase {
+	use CreatesUsers;
 	use FreezesTheClock;
 
 	private const APP = 'token-expiry-test';
@@ -59,6 +61,7 @@ class TokenExpiryTest extends TestCase {
 		$this->clock = $this->freezeClock(new FrozenClock(time()));
 		$this->clientService = $this->clocked(ClientService::class);
 		$this->cleanup();
+		$this->ensureUsers(...self::USERS);
 
 		$client = new SocialClient();
 		$client->setAppName(self::APP)
@@ -73,6 +76,7 @@ class TokenExpiryTest extends TestCase {
 
 	protected function tearDown(): void {
 		$this->cleanup();
+		$this->removeCreatedUsers();
 		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_MAX_DAYS, $this->maxDays);
 		$this->thawClock();
 		parent::tearDown();

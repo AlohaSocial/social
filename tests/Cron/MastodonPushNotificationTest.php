@@ -26,6 +26,7 @@ use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\IL10N;
+use OCP\IUser;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
 use PHPUnit\Framework\TestCase;
@@ -146,7 +147,23 @@ class MastodonPushNotificationTest extends TestCase {
 		$this->runJob($streams, $actors, $subscriptions, $client);
 	}
 
-	private function runJob(StreamRequest $streams, ActorsRequest $actors, PushSubscriptionService $subscriptions, SafeWebPushClient $client): void {
+	public function testADisabledAccountsDevicesAreSentNothing(): void {
+		$recipient = new Person();
+		$recipient->setId(self::RECIPIENT)->setUserId('alice');
+		$streams = $this->createStub(StreamRequest::class);
+		$streams->method('getStreamByNid')->willReturn($this->notification());
+		$actors = $this->createStub(ActorsRequest::class);
+		$actors->method('getFromId')->willReturn($recipient);
+		$subscriptions = $this->createMock(PushSubscriptionService::class);
+		$subscriptions->method('forUser')->willReturn([$this->subscription(true)]);
+		$subscriptions->expects(self::never())->method('deleteById');
+		$client = $this->createMock(SafeWebPushClient::class);
+		$client->expects(self::never())->method('sendRequest');
+
+		$this->runJob($streams, $actors, $subscriptions, $client, false);
+	}
+
+	private function runJob(StreamRequest $streams, ActorsRequest $actors, PushSubscriptionService $subscriptions, SafeWebPushClient $client, bool $enabled = true): void {
 		$keys = VAPID::createVapidKeys();
 		$vapid = $this->createStub(VapidService::class);
 		$vapid->method('auth')->willReturn([
@@ -158,7 +175,10 @@ class MastodonPushNotificationTest extends TestCase {
 		$localizer->method('t')->willReturnCallback(static fn (string $text, array $parameters = []): string => $parameters === [] ? $text : sprintf($text, ...$parameters));
 		$l10n = $this->createStub(IFactory::class);
 		$l10n->method('get')->willReturn($localizer);
+		$user = $this->createStub(IUser::class);
+		$user->method('isEnabled')->willReturn($enabled);
 		$manager = $this->createStub(IUserManager::class);
+		$manager->method('get')->willReturn($user);
 		$jobList = $this->createStub(IJobList::class);
 		$time = $this->createStub(ITimeFactory::class);
 		$job = new MastodonPushNotification(

@@ -88,6 +88,7 @@ class ClientService {
 		private PushSubscriptionService $pushSubscriptions,
 		private DeviceAuthorizationRequest $deviceAuthorizations,
 		private LoggerInterface $logger,
+		private EnabledUserService $enabledUsers,
 		private ?ITimeFactory $timeFactory = null,
 	) {
 		$this->clientRequest = $clientRequest;
@@ -350,6 +351,11 @@ class ClientService {
 			$this->deletePushSubscription($client->getAuthUserId(), $client->getToken());
 
 			throw new ClientNotFoundException('the access_token has expired');
+		}
+
+		// a disabled account keeps its tokens, and they work again once it is enabled
+		if ($client->getAuthUserId() !== '' && !$this->enabledUsers->isEnabled($client->getAuthUserId())) {
+			throw new ClientNotFoundException('the account is disabled');
 		}
 
 		// Keep the row's last_update roughly current (at most one write per

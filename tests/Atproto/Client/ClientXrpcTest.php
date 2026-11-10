@@ -18,6 +18,7 @@ use OCA\Social\Atproto\Client\Preferences;
 use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Client\WriteService;
+use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
@@ -61,6 +62,10 @@ class ClientXrpcTest extends TestCase {
 	private NotificationSettings $notificationSettings;
 	/** @var PlcSignatureService&MockObject */
 	private PlcSignatureService $plcSignatures;
+	/** @var CustomHandleService&MockObject */
+	private CustomHandleService $customHandles;
+	/** @var string[] what the OAuth session of a test was granted */
+	private array $oauthScopes = [];
 	private ClientXrpc $client;
 	private ClientSession $session;
 
@@ -70,7 +75,7 @@ class ClientXrpcTest extends TestCase {
 		$config->method('appViewDid')->willReturn('did:web:api.bsky.app');
 		$config->method('serviceDid')->willReturn('did:web:social.test');
 		$this->sessions = $this->createMock(SessionService::class);
-		$this->session = new ClientSession('alice', new Identity(1, 'https://social.test/@alice', 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
+		$this->session = new ClientSession('alice', new Identity(1, 'https://social.test/@alice', 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0), 'jti', appPassword: true);
 		$this->sessions->method('authenticate')->willReturnCallback(fn (string $h): ?ClientSession => $h === '' ? null : $this->session);
 		$this->proxy = $this->createMock(AppViewProxy::class);
 		$this->writes = $this->createMock(WriteService::class);
@@ -80,7 +85,7 @@ class ClientXrpcTest extends TestCase {
 		$this->oauth->method('issuer')->willReturn('https://social.test');
 		$this->inbound = $this->createMock(InboundMoveService::class);
 		$this->inbound->method('owns')->willReturnCallback(static fn (string $authorization): bool => $authorization === 'Bearer move');
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->threadMutes = $this->createMock(BlueskyThreadMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class), $this->notificationSettings = $this->createMock(NotificationSettings::class), $this->plcSignatures = $this->createMock(PlcSignatureService::class), $this->createMock(\OCA\Social\Atproto\Identity\CustomHandleService::class));
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->threadMutes = $this->createMock(BlueskyThreadMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class), $this->notificationSettings = $this->createMock(NotificationSettings::class), $this->plcSignatures = $this->createMock(PlcSignatureService::class), $this->customHandles = $this->createMock(CustomHandleService::class));
 	}
 
 	protected function tearDown(): void {
@@ -134,51 +139,72 @@ class ClientXrpcTest extends TestCase {
 		}
 	}
 
-	public function testAppPasswordManagementMethodsAreAuthenticatedAndDispatchedLocally(): void {
-		$headers = ['authorization' => 'Bearer t'];
+	public function testAnAppPasswordSessionListsTheAppPasswords(): void {
 		$this->sessions->expects($this->once())->method('listAppPasswords')->with($this->session)->willReturn(['passwords' => []]);
-		$this->sessions->expects($this->once())->method('createAppPassword')->with($this->session, 'phone', true)->willReturn([
-			'name' => 'phone', 'password' => 'abcd-efgh-ijkl-mnop', 'createdAt' => '2026-10-20T00:00:00Z', 'privileged' => true,
-		]);
-		$this->sessions->expects($this->once())->method('revokeAppPassword')->with($this->session, 'phone');
 		$this->proxy->expects($this->never())->method('forward');
 
-		$this->assertSame(['passwords' => []], $this->client->query('com.atproto.server.listAppPasswords', '', $headers));
-		$this->assertSame([
-			'name' => 'phone', 'password' => 'abcd-efgh-ijkl-mnop', 'createdAt' => '2026-10-20T00:00:00Z', 'privileged' => true,
-		], $this->client->procedure('com.atproto.server.createAppPassword', '{"name":"phone","privileged":true}', $headers, '1.2.3.4'));
-		$this->assertSame([], $this->client->procedure('com.atproto.server.revokeAppPassword', '{"name":"phone"}', $headers, '1.2.3.4'));
+		$this->assertSame(['passwords' => []], $this->client->query('com.atproto.server.listAppPasswords', '', ['authorization' => 'Bearer t']));
 	}
 
-	public function testAppPasswordMethodsHonorOAuthRpcGrantsForThePdsAudience(): void {
+	/** Neither an app password nor an OAuth app makes or revokes app passwords, whatever it was granted. */
+	public function testNoAppMakesOrRevokesAppPasswords(): void {
 		$this->oauth->method('authenticate')->willReturn(new ClientSession('alice', $this->session->identity, 'sid', [
-			'atproto', 'rpc:com.atproto.server.listAppPasswords?aud=did:web:social.test', 'rpc:com.atproto.server.createAppPassword?aud=did:web:social.test',
+			'atproto', 'transition:generic', 'transition:chat.bsky',
+			'rpc:com.atproto.server.createAppPassword?aud=*', 'rpc:com.atproto.server.revokeAppPassword?aud=*',
 		]));
-		$this->sessions->expects($this->once())->method('listAppPasswords')->with($this->isInstanceOf(ClientSession::class))->willReturn(['passwords' => []]);
-		$this->sessions->expects($this->once())->method('createAppPassword')->with($this->isInstanceOf(ClientSession::class), 'desktop', false)->willReturn([
-			'name' => 'desktop', 'password' => 'abcd-efgh-ijkl-mnop', 'createdAt' => '2026-10-20T00:00:00Z',
-		]);
-		$headers = ['authorization' => 'DPoP token', 'dpop' => 'proof'];
+		$this->proxy->expects($this->never())->method('forward');
 
-		$this->assertSame(['passwords' => []], $this->client->query('com.atproto.server.listAppPasswords', '', $headers));
-		$created = $this->client->procedure('com.atproto.server.createAppPassword', '{"name":"desktop"}', $headers, '1.2.3.4');
-		$this->assertIsArray($created);
-		$this->assertSame('desktop', $created['name']);
-	}
-
-	public function testAppPasswordCreateRejectsMalformedLexiconFields(): void {
-		foreach ([
-			'{"privileged":false}',
-			'{"name":"phone","privileged":"true"}',
-		] as $body) {
-			try {
-				$this->client->procedure('com.atproto.server.createAppPassword', $body, ['authorization' => 'Bearer t'], '1.2.3.4');
-				$this->fail('accepted ' . $body);
-			} catch (XrpcException $e) {
-				$this->assertSame(400, $e->status);
-				$this->assertSame('InvalidRequest', $e->error);
+		foreach ([['authorization' => 'Bearer t'], ['authorization' => 'DPoP token', 'dpop' => 'proof']] as $headers) {
+			foreach ([
+				'com.atproto.server.createAppPassword' => '{"name":"phone","privileged":true}',
+				'com.atproto.server.revokeAppPassword' => '{"name":"phone"}',
+			] as $method => $body) {
+				try {
+					$this->client->procedure($method, $body, $headers, '1.2.3.4');
+					$this->fail($method . ' with ' . $headers['authorization']);
+				} catch (XrpcException $e) {
+					$this->assertSame(403, $e->status);
+					$this->assertSame('InsufficientScope', $e->error);
+				}
 			}
 		}
+	}
+
+	public function testAnOAuthAppDoesNotSeeTheAppPasswords(): void {
+		$this->oauth->method('authenticate')->willReturn(new ClientSession('alice', $this->session->identity, 'sid', [
+			'atproto', 'transition:generic', 'rpc:com.atproto.server.listAppPasswords?aud=did:web:social.test',
+		]));
+		$this->sessions->expects($this->never())->method('listAppPasswords');
+
+		try {
+			$this->client->query('com.atproto.server.listAppPasswords', '', ['authorization' => 'DPoP token', 'dpop' => 'proof']);
+			$this->fail('an OAuth app listed the app passwords');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+		}
+	}
+
+	public function testAnOAuthAppChangesTheHandleOnlyWithAnIdentityGrant(): void {
+		$this->oauthScopes = ['atproto', 'transition:generic'];
+		$this->oauth->method('authenticate')->willReturnCallback(fn (): ClientSession => new ClientSession('alice', $this->session->identity, 'sid', $this->oauthScopes));
+		$this->customHandles->expects($this->once())->method('set')->with($this->session->identity, 'alice.example.com')->willReturn($this->session->identity);
+		$headers = ['authorization' => 'DPoP token', 'dpop' => 'proof'];
+
+		try {
+			$this->client->procedure('com.atproto.identity.updateHandle', '{"handle":"alice.example.com"}', $headers, '1.2.3.4');
+			$this->fail('transition:generic changed the handle');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+		}
+
+		$this->oauthScopes = ['atproto', 'identity:handle'];
+		$this->assertSame([], $this->client->procedure('com.atproto.identity.updateHandle', '{"handle":"alice.example.com"}', $headers, '1.2.3.4'));
+	}
+
+	public function testAnAppPasswordSessionChangesTheHandle(): void {
+		$this->customHandles->expects($this->once())->method('set')->with($this->session->identity, 'alice.example.com')->willReturn($this->session->identity);
+
+		$this->assertSame([], $this->client->procedure('com.atproto.identity.updateHandle', '{"handle":"alice.example.com"}', ['authorization' => 'Bearer t'], '1.2.3.4'));
 	}
 
 	public function testAppCallsAreProxiedAndWritesGoToSocial(): void {

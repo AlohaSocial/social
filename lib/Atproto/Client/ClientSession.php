@@ -26,6 +26,8 @@ final class ClientSession {
 
 	/**
 	 * @param string[] $scopes
+	 * @param bool $appPassword whether an app password opened the session,
+	 *                          which may list the app passwords
 	 */
 	public function __construct(
 		public readonly string $userId,
@@ -33,6 +35,7 @@ final class ClientSession {
 		public readonly string $sessionId,
 		public readonly array $scopes = ['atproto', self::GENERIC, self::EMAIL],
 		private ?Permissions $permissions = null,
+		public readonly bool $appPassword = false,
 	) {
 	}
 
