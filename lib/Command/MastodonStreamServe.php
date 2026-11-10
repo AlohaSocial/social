@@ -28,7 +28,8 @@ class MastodonStreamServe extends SocialCommand {
 		$this->setName('social:mastodon:stream')
 			->setDescription('Serve Mastodon user and notification WebSocket streams until stopped')
 			->addOption('bind', '', InputOption::VALUE_REQUIRED, 'address:port to listen on; the web server proxies the WebSocket here', MastodonStreamingDaemon::DEFAULT_BIND)
-			->addOption('max-seconds', '', InputOption::VALUE_REQUIRED, 'stop after this long; 0 runs until stopped', '0');
+			->addOption('max-seconds', '', InputOption::VALUE_REQUIRED, 'stop after this long; 0 runs until stopped', '0')
+			->addOption('max-connection-seconds', '', InputOption::VALUE_REQUIRED, 'close each connection after this long so its client reconnects; 0 keeps it open', (string)MastodonStreamingDaemon::DEFAULT_MAX_CONNECTION_SECONDS);
 	}
 
 	#[\Override]
@@ -43,6 +44,7 @@ class MastodonStreamServe extends SocialCommand {
 			$bind,
 			max(0, (int)$input->getOption('max-seconds')),
 			static fn (string $line) => $output->writeln($line),
+			max(0, (int)$input->getOption('max-connection-seconds')),
 		);
 	}
 }

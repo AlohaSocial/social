@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.282
+**App version:** 0.26.283
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -515,9 +515,26 @@ both `read:statuses` and `read:notifications`; direct streams require `read`
 or `read:statuses`; list streams require `read:statuses` and owned lists. A
 WebSocket subscriber may keep up to 20 lists active at once; each has its own
 cursor and can be unsubscribed independently.
-Once per second it reads the
-same timelines used by the REST API, applies the viewer's filters, reply
-visibility and notification policy, and emits Mastodon's event payloads.
+Once per second it reads the newest stored post id (`StreamRequest::newestNid()`,
+the last entry of `social_stream`'s primary key) once for all subscribers, and
+a subscriber's timelines are read only when that has moved since they were last
+read. Every timeline row carries its post's nid, so no timeline can gain a row
+past a cursor without it moving. Within that, the notification, direct-message,
+public and hashtag probes each have their own index-only newest id
+(`newestNidFor()` on the account's `notif` or `dm` rows, or on the public
+collection, read once per pass) and are skipped while it has not moved. Every
+30 seconds each subscriber's timelines are read regardless, which bounds the
+delay of a row stored below a newest id already seen (a second post in the same
+second can sort below the first). Deletions and edits are read only when the
+newest deletion-event or revision id is past the subscriber's cursor. A probe
+reads the same timelines used by the REST API, applies the viewer's filters,
+reply visibility and notification policy, and emits Mastodon's event payloads.
+A token is checked at the handshake and again every 60 seconds through
+`ClientService::getFromToken()`, the path REST requests take, so a revoked
+token, one past its idle or absolute lifetime, or an account that is suspended
+or no longer exists closes the connection within a minute. Each connection is
+closed after `--max-connection-seconds` (24 hours by default) and the client
+reconnects.
 Every five seconds it fingerprints each subscribed account's filters and
 emits `filters_changed` on that account's user streams when the set changes;
 the event carries no payload, as Mastodon specifies.
@@ -529,12 +546,23 @@ as raw text rather than JSON-quoted strings.
 Accepting a notification request bumps a dedicated per-account revision, which
 causes subscribed user and notification-only streams to emit
 `notifications_merged` without confusing other timeline changes with accepted
-requests.
-For edits to public posts it reads the append-only status-revision cursor and
-emits one `status.update` event per changed post on matching public and
-hashtag subscriptions. Home and owned-list streams recheck membership in the
-viewer-scoped timeline before receiving an edit, so a private post only reaches
-readers whose timeline already includes it.
+requests. The daemon reads it with `TimelineRevisionService::current()`, which
+drops the process's copy of the account's settings first (`IUserConfig::clearCache()`):
+`IUserConfig` keeps what it loaded, and the bump is written by a web request.
+For edits it reads the append-only status-revision cursor and emits one
+`status.update` event per changed post on matching streams. The edited posts
+are read once per pass for all subscribers, for what decides which streams
+could hold them. Public and hashtag streams receive an edit only if
+`StreamRequest::publicNidsAmong()` keeps it — the public timeline's filters:
+addressed to the public collection, an author with a cached account, not
+hidden by the viewer's blocks and mutes, not silenced. Home streams receive it
+only if `homeNidsAmong()` finds it on the viewer's home timeline: one query
+driven from the posts' keys through their recipient rows to the followed
+collections and the viewer's own, with the home page's block, mute and
+hidden-boost filters, plus the followed tags. Both are one batched query per
+subscriber per pass, whatever the number of edits. Owned-list streams recheck
+membership in the list timeline. The post is then read as the viewer for each
+stream it is sent to, so a private post only reaches readers who can see it.
 The direct stream resolves an edited message to a conversation visible to
 that viewer and emits the current `conversation` entity; a dismissed or
 inaccessible conversation is not emitted.

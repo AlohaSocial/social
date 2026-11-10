@@ -587,6 +587,59 @@ trait StreamTimelines {
 	}
 
 	/**
+	 * Which of `$nids` are on the viewer's home timeline: the question an
+	 * edited post asks of each streaming subscriber.
+	 *
+	 * Driven from the posts rather than from the follows: each id is a
+	 * primary-key lookup and its recipient rows are a prefix of the
+	 * `(stream_id, actor_id, type)` unique index, kept to the collections the
+	 * page reads (the followed ones and the viewer's own follower
+	 * collection). The page's per-viewer filters, as `streamsByNids()`
+	 * applies them, are in the same query, and the followed tags are asked
+	 * about the same ids. Before the recipient nids are filled the join query
+	 * is asked instead.
+	 *
+	 * @param string[] $nids
+	 *
+	 * @return string[]
+	 */
+	public function homeNidsAmong(array $nids): array {
+		$nids = array_values(array_unique($nids));
+		if ($nids === [] || $this->viewer === null) {
+			return [];
+		}
+
+		$options = (new ProbeOptions())->setLimit(count($nids));
+		if (!$this->recipientNidsAreFilled()) {
+			$found = $this->homeTimelineNidsByJoin($options, $nids);
+		} else {
+			$found = [];
+			$page = $this->getStreamNidsSelectSql();
+			$own = $this->viewer->getFollowers();
+			$collections = $this->followsRequest->limitToHomeCollections(
+				$page, 'sd.actor_id', $this->viewer->getId(), ($own === '') ? [] : [md5($own)]
+			);
+			if ($collections !== '') {
+				$page->andWhere($page->expr()->in('s.nid', $page->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY)));
+				$page->selectDestFollowing('sd', '');
+				$page->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
+				$page->andWhere($collections);
+				$page->filterType(SocialAppNotification::TYPE);
+				$page->filterHiddenBoosts();
+				$page->filterHiddenActors();
+				$page->filterDuplicate();
+				$found = $this->getNidsFromRequest($page);
+			}
+		}
+
+		if ($this->followsAnyTag()) {
+			$found = array_values(array_unique(array_merge($found, $this->followedTagNids($options, $nids))));
+		}
+
+		return $found;
+	}
+
+	/**
 	 * Runs a home recipient query within a window of publication time, widened
 	 * until the page is full.
 	 *
@@ -710,13 +763,18 @@ trait StreamTimelines {
 	 * accounts stay hidden, and a silenced account is out of the public square
 	 * this half reads from, exactly as it is out of the hashtag timeline.
 	 *
+	 * @param string[]|null $within the posts to choose among, or null for all
+	 *
 	 * @return string[]
 	 */
-	protected function followedTagNids(ProbeOptions $options): array {
+	protected function followedTagNids(ProbeOptions $options, ?array $within = null): array {
 		$page = $this->getStreamNidsSelectSql();
 
 		$page->filterType(SocialAppNotification::TYPE);
 		$page->paginate($options);
+		if ($within !== null) {
+			$page->andWhere($page->expr()->in('s.nid', $page->createNamedParameter($within, IQueryBuilder::PARAM_STR_ARRAY)));
+		}
 		$this->filterKind($page, $options);
 		$page->limitToFollowedTags('ft_st', 'ft');
 		$page->selectDestFollowing('ft_sd', '');
@@ -1430,6 +1488,26 @@ trait StreamTimelines {
 	 * "lots", which is all anyone reads from a two-digit number anyway.
 	 */
 	/**
+	 * The newest post or notification stored anywhere, as a nid, or 0: one
+	 * read of the primary key's last entry. Every timeline row carries the
+	 * nid of its post, so a timeline cannot gain a row above a cursor unless
+	 * this moves past it first.
+	 */
+	public function newestNid(): string {
+		$qb = $this->getQueryBuilder();
+		$qb->select('nid')
+			->from(self::TABLE_STREAM)
+			->orderBy('nid', 'desc')
+			->setMaxResults(1);
+
+		$cursor = $qb->executeQuery();
+		$data = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return ($data === false) ? '0' : (string)$data['nid'];
+	}
+
+	/**
 	 * The newest thing this account has been sent, as a nid, or 0.
 	 *
 	 * An entity tag for a timeline. A client polls the home page and the unread
@@ -1772,6 +1850,26 @@ trait StreamTimelines {
 		$page->orderBy('s.nid', $options->isInverted() ? 'asc' : 'desc');
 
 		return $this->getNidsFromRequest($page);
+	}
+
+	/**
+	 * Which of `$nids` the public and hashtag timelines would show this
+	 * viewer: addressed to the public collection, by an author with a cached
+	 * account, not hidden by the viewer's blocks and mutes and not silenced.
+	 * The filters of `publicNidsOf()`, for posts that reach a stream by
+	 * another road than the page, such as an edit.
+	 *
+	 * @param string[] $nids
+	 *
+	 * @return string[]
+	 */
+	public function publicNidsAmong(array $nids): array {
+		$nids = array_values(array_unique($nids));
+		if ($nids === []) {
+			return [];
+		}
+
+		return $this->publicNidsOf($nids, (new ProbeOptions())->setLimit(count($nids)), true);
 	}
 
 	/**

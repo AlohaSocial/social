@@ -4,11 +4,11 @@
 -->
 # Performance and scalability
 
-**Reviewed against:** Aloha Social **0.26.282** on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.283** on **2026-10-27**; source
 branch `main` at `33935993`. The latest successful repeatable benchmark
 available that day is the [Nightly performance run 40426921866](https://github.com/AlohaSocial/social/actions/runs/40426921866).
 It ran the benchmark from `main` commit `2ab03f1` (app **0.26.278**), so it is
-behind this checkout. No benchmark of 0.26.282 itself was available
+behind this checkout. No benchmark of 0.26.283 itself was available
 at review time.
 
 ## Latest CI query snapshot
@@ -81,6 +81,15 @@ without reviewing its guardrail effect.
 - **Large multi-protocol reads have external dependencies.** Bluesky AppView,
   Chat, PLC and relay calls and ActivityPub remote imports must be timed and
   reported separately from local DB response time.
+- **The Mastodon streaming daemon is one process polling for every
+  connection.** Once per second it reads the newest stored post id once for
+  all subscribers and reads a subscriber's timelines only when that moved; the
+  notification, direct, public and hashtag probes are further gated by their
+  own index-only newest id, edits by one batched membership query per
+  subscriber, and everything is read regardless every 30 seconds. On a busy
+  instance the newest id moves every second, so each subscribed home timeline
+  is still read about once per second; up to 256 connections share one loop.
+  Measure the pass time at that size before raising the connection limit.
 - **The benchmark does not yet populate direct messages.** Add representative
   conversations before making claims about inbox scalability.
 
