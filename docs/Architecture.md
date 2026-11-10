@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.290
+**App version:** 0.26.291
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -3190,13 +3190,14 @@ controls are grouped under More options. Its avatar stays hidden in that
 layout; a dialog uses its own header and close control.
 
 **The Settings page, and what is on it.** `src/views/Settings.vue` describes
-every section once (`{ id, group, icon, component, title, lede }`) and sorts them
+every section once (`{ id, group, icon, component, props, title, lede }`, `props`
+bound onto the section's component where it takes any) and sorts them
 into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
 `#portfolio`), **Reading** (`#interests`, `#lists`, `#bluesky-feeds` where
 Bluesky is on — `BlueskyFeedsSettings.vue`, the Bluesky custom feeds and lists
 kept, read as timelines at `/timeline/bluesky/<DID>/<feed|list>/<key>` —, `#sensitive`, `#counts`,
 `#recap`, `#senses`), **Notifications** (`#notifications` for when,
-`#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
+`#notification-policy` for who), **Your posts** (`#drafts`, `#scheduled`, `#review`,
 `#archive`, `#files-comments`), **Apps and account** (`#apps`, `#bluesky`
 where the server gives every account a Bluesky identity — `BlueskySettings.vue`,
 the handle, the DID, your own domain as the handle, the pause switch, the recovery phrase, the app
@@ -4687,7 +4688,13 @@ audience (`resumedAudienceFor`) instead of taking the parent's. A re-draft
 stores `inReplyToId` and `quoteId` with its `redraft.*` draft and
 `restoreRedraftTargets()` puts the reply target and quote back, fetching a post
 not in the store; when one cannot be found, the re-draft goes out on its own. `DraftsButton` sits under the compact composer on Home-type feeds and the
-own profile, and on Photos.
+own profile, and on Photos. With `inline` it draws the same list on the page
+without the button and the dialog: that is the `#drafts` section of Settings
+(Your posts), bound to `composerDisplayStatus` as `disabled` like the other
+places, so it reads the drafts again when the composer closes. Resuming there
+keeps the list on the page and hands the clicked row to the composer as its
+opener. `listDrafts()` only lists new posts, replies, quotes and re-drafts, so
+the `dm.*` drafts of `DirectMessages.vue` are in neither list.
 
 Feed notices keep their outer card margin, border and background; only nested
 notice content has its inner box reset. Notices are centred, except that an administrator announcement centres only its header: its text, date line and reactions are start-aligned, because they are read as prose. Text in stacked notices keeps its

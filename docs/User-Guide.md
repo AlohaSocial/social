@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.290** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.291** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -185,7 +185,10 @@ for it. Opening a post is not a draft: a reply that holds only the names it is
 addressed to is not kept. **Drafts (N)** under the compact post field on your
 home feed and your own profile (and beside **Share photos or a video** on
 Photos) lists every kept draft — new posts, replies, quotes and re-drafts —
-newest first; pick one to continue it, or delete it there. A re-draft of a
+newest first; pick one to continue it, or delete it there. The same list is
+always at hand under **Settings → Your posts → Drafts**, whatever page you are
+on; drafts of direct messages stay in their conversations and are not listed
+in either place. A re-draft of a
 deleted reply or quote is still that reply or quote: the post it answered and
 the post it quoted come back with it, shown above the box. If the post it
 answered is gone, none is shown and the re-draft goes out on its own.
