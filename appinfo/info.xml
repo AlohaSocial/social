@@ -27,7 +27,7 @@
 - **Open to guests if you like:** the administrator can let people without a Nextcloud account register for Aloha Social only, by invitation, with approval or openly.
 
 Aloha Social implements ActivityPub, a large part of the Mastodon client API and the AT Protocol. It is not a drop-in replacement for a Mastodon server; the documentation lists what is supported.]]></description>
-	<version>0.26.292</version>
+	<version>0.26.293</version>
 	<licence>agpl</licence>
 	<author mail="benedikt.schaechner@web.de" homepage="https://benedikt.xn--schchner-2za.de">Benedikt Schächner</author>
 	<namespace>Social</namespace>
