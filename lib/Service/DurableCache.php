@@ -55,7 +55,10 @@ use OCP\IMemcache;
  * early-update and early-undo buffers: a `memcache.distributed` that is
  * shared between processes (Redis, Memcached) when one is configured, and
  * the table otherwise. APCu never qualifies, whatever key it is configured
- * under, because each PHP process has its own.
+ * under, because each PHP process has its own. Nor does a cache the server
+ * hands out in place of the configured one: an instance that is not
+ * installed yet, and a PHPUnit run, get its in-process array cache for every
+ * `memcache.*` setting, and that one is not even shared within the process.
  */
 class DurableCache {
 	/** memcache classes whose contents one PHP process cannot see from another */
@@ -149,8 +152,8 @@ class DurableCache {
 
 	/**
 	 * The distributed memcache, when `memcache.distributed` names one that
-	 * every PHP process shares; null for none, for APCu, and for the
-	 * in-process array cache.
+	 * every PHP process shares and the server hands out that one; null for
+	 * none, for APCu, and for the in-process array cache.
 	 */
 	private function sharedMemcache(string $namespace): ?ICache {
 		if ($this->config === null) {
@@ -161,7 +164,14 @@ class DurableCache {
 			return null;
 		}
 
-		return $this->cache($namespace);
+		$cache = $this->cache($namespace);
+		foreach (self::PER_PROCESS as $perProcess) {
+			if ($cache instanceof $perProcess) {
+				return null;
+			}
+		}
+
+		return $cache;
 	}
 
 	/**

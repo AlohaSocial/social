@@ -258,6 +258,35 @@ class DurableCacheTest extends TestCase {
 		$this->assertSame([], $this->table->rows);
 	}
 
+	/**
+	 * Configured for Redis, the server still hands out its in-process array
+	 * cache while PHPUnit runs: a buffer kept there is lost to every other
+	 * `DurableCache`, so it goes to the table.
+	 */
+	public function testABufferUsesTheTableWhenTheServerHandsOutItsArrayCache(): void {
+		$arrayCache = $this->createMock(\OC\Memcache\ArrayCache::class);
+		$arrayCache->expects($this->never())->method('set');
+		$arrayCache->expects($this->never())->method('get');
+		$arrayCache->expects($this->never())->method('remove');
+		$factory = $this->createStub(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn(true);
+		$factory->method('createDistributed')->willReturn($arrayCache);
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
+		$config = $this->createStub(IConfig::class);
+		$config->method('getSystemValueString')->willReturnCallback(
+			static fn (string $key, string $default = ''): string => $key === 'memcache.distributed' ? '\\OC\\Memcache\\Redis' : $default
+		);
+		$cache = new DurableCache($factory, $this->table, $time, $config);
+
+		$cache->setBuffer('social.test', 'early', ['actor' => 'a'], 60);
+		$this->assertSame(['actor' => 'a'], $cache->getBuffer('social.test', 'early'));
+		$this->assertCount(1, $this->table->rows);
+
+		$cache->removeBuffer('social.test', 'early');
+		$this->assertSame([], $this->table->rows);
+	}
+
 	#[DataProvider('backends')]
 	public function testSharedStateIsTheTablesWhateverMemcacheThereIs(bool $memcache): void {
 		$cache = $this->cache($memcache);

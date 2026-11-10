@@ -92,6 +92,9 @@ to stop.
 - `Db/DurableCacheTableTest` — the table behind `DurableCache` on an instance
   with no memcache: a read ignores an expired row, an insert over an existing
   key is skipped rather than raised, the purge takes only what has expired.
+- `Service/DurableCacheBufferTest` — an inbox buffer one `DurableCache` writes
+  is read and removed by another, also where `memcache.distributed` names
+  Redis but the server hands out its in-process array cache (every PHPUnit run).
 - `Db/ActorRelationRequestTest` / `Db/StreamFilterTest` — block/mute storage and
   the hidden-actor anti-join on every timeline.
 - `Db/ListsRequestTest`, `Db/TrendsRequestTest`, `Db/DiscoveryRequestTest`,
