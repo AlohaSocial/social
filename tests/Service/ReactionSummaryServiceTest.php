@@ -9,10 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Db\ReactionsRequest;
-use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\CustomEmoji;
+use OCA\Social\Model\Moderation;
 use OCA\Social\Service\EmojiService;
+use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\ReactionSummaryService;
 use PHPUnit\Framework\TestCase;
 
@@ -25,36 +27,25 @@ use PHPUnit\Framework\TestCase;
  * container refused to build.
  */
 class ReactionSummaryServiceTest extends TestCase {
-	private function reaction(string $actor, string $emoji): EmojiReact {
-		$reaction = new EmojiReact();
-		$reaction->setActorId($actor);
-		$reaction->setObjectId('https://cloud.example/post/1');
-		$reaction->setContent($emoji);
-
-		return $reaction;
-	}
+	private const POST = 'https://cloud.example/post/1';
+	private const ALICE = 'https://cloud.example/users/alice';
 
 	/**
-	 * @param EmojiReact[] $reactions
+	 * @param array<string, int> $counts
+	 * @param array<string, true> $mine
 	 * @return list<array{name: string, count: int, me: bool}>
 	 */
-	private function summarise(array $reactions, string $viewerId = ''): array {
+	private function summarise(array $counts, array $mine = []): array {
 		$method = new \ReflectionMethod(ReactionSummaryService::class, 'summarise');
 
-		return $method->invoke(null, $reactions, $viewerId);
+		return $method->invoke(null, $counts, $mine);
 	}
 
-	public function testTheBarCountsEachEmojiOnce(): void {
-		$summary = $this->summarise([
-			$this->reaction('https://cloud.example/users/alice', '👍'),
-			$this->reaction('https://cloud.example/users/bob', '👍'),
-			$this->reaction('https://cloud.example/users/carol', '🎉'),
-		]);
-
+	public function testTheBarIsOrderedByHowMany(): void {
 		$this->assertSame([
 			['name' => '👍', 'count' => 2, 'me' => false],
 			['name' => '🎉', 'count' => 1, 'me' => false],
-		], $summary);
+		], $this->summarise(['🎉' => 1, '👍' => 2]));
 	}
 
 	/**
@@ -64,48 +55,87 @@ class ReactionSummaryServiceTest extends TestCase {
 	 * that the answer does not depend on the order they arrived in is.
 	 */
 	public function testEqualCountsAreOrderedStably(): void {
-		$oneWay = $this->summarise([
-			$this->reaction('https://cloud.example/users/alice', '🎉'),
-			$this->reaction('https://cloud.example/users/bob', '👍'),
-		]);
-		$theOther = $this->summarise([
-			$this->reaction('https://cloud.example/users/bob', '👍'),
-			$this->reaction('https://cloud.example/users/alice', '🎉'),
-		]);
+		$oneWay = $this->summarise(['🎉' => 1, '👍' => 1]);
+		$theOther = $this->summarise(['👍' => 1, '🎉' => 1]);
 
 		$this->assertSame(array_column($oneWay, 'name'), array_column($theOther, 'name'));
 	}
 
 	public function testTheBarSaysWhichOnesAreTheReadersOwn(): void {
-		$summary = $this->summarise([
-			$this->reaction('https://cloud.example/users/alice', '👍'),
-			$this->reaction('https://cloud.example/users/bob', '🎉'),
-		], 'https://cloud.example/users/alice');
+		$summary = $this->summarise(['👍' => 1, '🎉' => 1], ['👍' => true]);
 
 		$mine = array_column(array_filter($summary, static fn (array $row): bool => $row['me']), 'name');
 
 		$this->assertSame(['👍'], $mine);
 	}
 
-	public function testAnAnonymousReaderOwnsNothing(): void {
-		$summary = $this->summarise([
-			$this->reaction('https://cloud.example/users/alice', '👍'),
-		]);
-
-		$this->assertFalse($summary[0]['me']);
-	}
-
 	public function testAReactionWithNoEmojiIsNotCounted(): void {
-		$summary = $this->summarise([
-			$this->reaction('https://cloud.example/users/alice', ''),
-			$this->reaction('https://cloud.example/users/bob', '👍'),
-		]);
-
-		$this->assertSame([['name' => '👍', 'count' => 1, 'me' => false]], $summary);
+		$this->assertSame([['name' => '👍', 'count' => 1, 'me' => false]], $this->summarise(['' => 3, '👍' => 1]));
 	}
 
 	public function testNoReactionsIsAnEmptyBarRatherThanAnError(): void {
 		$this->assertSame([], $this->summarise([]));
+	}
+
+	/** Counted by the database, so a busy post is counted in full rather than to a row limit. */
+	public function testAPostIsCountedByTheDatabaseInOneQueryWithTheReadersOwnInAnother(): void {
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->expects($this->once())->method('countByObjectIds')
+			->with([self::POST], self::ALICE, [], [])
+			->willReturn([md5(self::POST) => ['👍' => 4321, '🎉' => 2]]);
+		$reactions->expects($this->once())->method('emojisOf')
+			->with(self::ALICE, [self::POST])
+			->willReturn([md5(self::POST) => ['🎉' => true]]);
+
+		$summary = (new ReactionSummaryService($reactions, $this->createStub(EmojiService::class)))->summaryOf(self::POST, self::ALICE);
+
+		$this->assertSame([
+			['name' => '👍', 'count' => 4321, 'me' => false],
+			['name' => '🎉', 'count' => 2, 'me' => true],
+		], $summary);
+	}
+
+	public function testAnAnonymousReaderOwnsNothingAndIsNotAskedAbout(): void {
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->method('countByObjectIds')->willReturn([md5(self::POST) => ['👍' => 1]]);
+		$reactions->expects($this->never())->method('emojisOf');
+
+		$summary = (new ReactionSummaryService($reactions, $this->createStub(EmojiService::class)))->summaryOf(self::POST);
+
+		$this->assertFalse($summary[0]['me']);
+	}
+
+	public function testAPageWithoutReactionsAsksNoSecondQuery(): void {
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->method('countByObjectIds')->willReturn([]);
+		$reactions->expects($this->never())->method('emojisOf');
+
+		$this->assertSame([], (new ReactionSummaryService($reactions, $this->createStub(EmojiService::class)))->summaryOfMany([self::POST, ''], self::ALICE));
+	}
+
+	/**
+	 * Suspended and silenced accounts and blocked and silenced instances are
+	 * not counted; the reader's own reactions always are.
+	 */
+	public function testModeratedAccountsAndInstancesAreLeftOutOfTheCount(): void {
+		$moderation = $this->createStub(ModerationRequest::class);
+		$moderation->method('getActorIdsAt')->willReturnMap([
+			[Moderation::SUSPEND, ['https://bad.example/users/troll']],
+			[Moderation::SILENCE, ['https://loud.example/users/shouty', self::ALICE]],
+		]);
+		$fediverse = $this->createStub(FediverseService::class);
+		$fediverse->method('blockedHosts')->willReturn(['evil.example' => true]);
+		$fediverse->method('silencedHosts')->willReturn(['noisy.example' => true]);
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->expects($this->once())->method('countByObjectIds')
+			->with(
+				[self::POST], self::ALICE,
+				['https://bad.example/users/troll', 'https://loud.example/users/shouty'],
+				['evil.example', 'noisy.example']
+			)
+			->willReturn([]);
+
+		(new ReactionSummaryService($reactions, $this->createStub(EmojiService::class), $moderation, $fediverse))->summaryOf(self::POST, self::ALICE);
 	}
 
 	public function testOnlyAnInstanceOwnedCustomEmojiGetsAnImageUrl(): void {
@@ -114,11 +144,8 @@ class ReactionSummaryServiceTest extends TestCase {
 			(new CustomEmoji('blobcat', 'blobcat.png', 'image/png'))->setUrl('https://social.example/emoji/blobcat')
 		);
 		$reactions = $this->createStub(ReactionsRequest::class);
-		$reactions->method('getByObjectId')->willReturn([
-			$this->reaction('https://remote.example/users/bob', ':blobcat:'),
-			$this->reaction('https://remote.example/users/carol', ':cat@remote.example:'),
-		]);
-		$summary = (new ReactionSummaryService($reactions, $emoji))->summaryOf('https://cloud.example/post/1');
+		$reactions->method('countByObjectIds')->willReturn([md5(self::POST) => [':blobcat:' => 1, ':cat@remote.example:' => 1]]);
+		$summary = (new ReactionSummaryService($reactions, $emoji))->summaryOf(self::POST);
 
 		$this->assertSame([
 			['name' => ':blobcat:', 'count' => 1, 'me' => false, 'url' => 'https://social.example/emoji/blobcat'],

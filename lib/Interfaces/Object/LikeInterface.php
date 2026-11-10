@@ -40,7 +40,11 @@ use OCA\Social\Service\NotificationService;
  * @package OCA\Social\Interfaces\Object
  */
 class LikeInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
-	/** Where an Undo that precedes its Like is kept, for the same six hours as an early Delete. */
+	/**
+	 * Where an Undo that precedes its Like is kept, for the same six hours as
+	 * an early Delete: a shared distributed memcache when there is one, the
+	 * table otherwise (`DurableCache::getBuffer()`).
+	 */
 	public const EARLY_UNDO_NAMESPACE = 'social.early_undo_like';
 	public const EARLY_UNDO_TTL = 21600;
 
@@ -59,7 +63,7 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 			return false;
 		}
 
-		$pending = $durableCache->getShared(self::EARLY_UNDO_NAMESPACE, hash('sha256', $likeId));
+		$pending = $durableCache->getBuffer(self::EARLY_UNDO_NAMESPACE, hash('sha256', $likeId));
 
 		return is_array($pending)
 			&& ($pending['actor'] ?? '') === $actorId
@@ -72,7 +76,7 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 			return;
 		}
 
-		$durableCache->setShared(
+		$durableCache->setBuffer(
 			self::EARLY_UNDO_NAMESPACE,
 			hash('sha256', $likeId),
 			['actor' => $actorId, 'object' => $objectId],
@@ -89,10 +93,8 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 		$like = $item;
 		$like->checkOrigin($like->getId());
 		$like->checkOrigin($like->getActorId());
-		if (self::undoneBeforeArrival($this->durableCache, $like->getId(), $like->getActorId(), $like->getObjectId())) {
-			return;
-		}
 
+		// save() refuses a like undone before it arrived
 		try {
 			$this->save($like);
 		} catch (ItemAlreadyExistsException $e) {

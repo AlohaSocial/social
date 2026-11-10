@@ -318,4 +318,40 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 
 		$this->handler->getItem($this->incomingLike());
 	}
+
+	/** A Like whose Undo came first is refused, with one buffer read before the insert and one after. */
+	public function testALikeUndoneBeforeItArrivedIsNotStoredAndTheBufferIsReadTwice(): void {
+		$like = $this->incomingLike();
+		$cache = $this->createMock(\OCA\Social\Service\DurableCache::class);
+		$cache->expects($this->once())->method('getBuffer')
+			->with(LikeInterface::EARLY_UNDO_NAMESPACE, hash('sha256', $like->getId()))
+			->willReturn(['actor' => $like->getActorId(), 'object' => $like->getObjectId()]);
+		$this->actionsRequest->expects($this->never())->method('save');
+		$handler = new LikeInterface($this->actionsRequest, $this->streamRequest, $this->cacheActorService, $this->createStub(\OCA\Social\Service\NotificationService::class), $cache);
+
+		$handler->processIncomingRequest($like);
+	}
+
+	public function testAnOrdinaryLikeReadsTheUndoBufferBeforeAndAfterItsInsertOnly(): void {
+		$like = $this->incomingLike();
+		$this->streamRequest->method('getStreamById')->willReturn($this->post(false));
+		$this->actionsRequest->method('getActionFromItem')->willThrowException(new \OCA\Social\Exceptions\ActionDoesNotExistException());
+		$cache = $this->createMock(\OCA\Social\Service\DurableCache::class);
+		$cache->expects($this->exactly(2))->method('getBuffer')->willReturn(null);
+		$cache->expects($this->never())->method('getShared');
+		$handler = new LikeInterface($this->actionsRequest, $this->streamRequest, $this->cacheActorService, $this->createStub(\OCA\Social\Service\NotificationService::class), $cache);
+
+		$handler->processIncomingRequest($like);
+	}
+
+	public function testAnUndoOfAnUnknownLikeIsRememberedInTheBuffer(): void {
+		$like = $this->incomingLike();
+		$cache = $this->createMock(\OCA\Social\Service\DurableCache::class);
+		$cache->expects($this->once())->method('setBuffer')->with(
+			LikeInterface::EARLY_UNDO_NAMESPACE, hash('sha256', $like->getId()),
+			['actor' => $like->getActorId(), 'object' => $like->getObjectId()], LikeInterface::EARLY_UNDO_TTL
+		);
+
+		LikeInterface::rememberUndoBeforeArrival($cache, $like->getId(), $like->getActorId(), $like->getObjectId());
+	}
 }

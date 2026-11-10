@@ -13,6 +13,7 @@ use OCA\Social\Db\DurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IConfig;
 use OCP\IMemcache;
 
 /**
@@ -48,8 +49,18 @@ use OCP\IMemcache;
  * APCu is not shared between the web server and `occ` or cron. State that a
  * background job writes for a web request to read goes through `getShared()`
  * and `setShared()`, which always use the table.
+ *
+ * `getBuffer()`, `setBuffer()` and `removeBuffer()` are for state any PHP
+ * worker may write and any other must read soon after, such as the inbox's
+ * early-update and early-undo buffers: a `memcache.distributed` that is
+ * shared between processes (Redis, Memcached) when one is configured, and
+ * the table otherwise. APCu never qualifies, whatever key it is configured
+ * under, because each PHP process has its own.
  */
 class DurableCache {
+	/** memcache classes whose contents one PHP process cannot see from another */
+	private const PER_PROCESS = ['oc\\memcache\\apcu', 'oc\\memcache\\arraycache', 'oc\\memcache\\nullcache'];
+
 	/** @var array<string, ICache> one distributed cache per namespace */
 	private array $caches = [];
 
@@ -57,6 +68,7 @@ class DurableCache {
 		private ICacheFactory $cacheFactory,
 		private DurableCacheRequest $durableCacheRequest,
 		private ITimeFactory $timeFactory,
+		private ?IConfig $config = null,
 	) {
 	}
 
@@ -104,6 +116,52 @@ class DurableCache {
 		$this->durableCacheRequest->write(
 			$this->rowKey($namespace, $key), $this->encode($value), $this->now() + $this->ttl($ttl)
 		);
+	}
+
+	/** `getShared()`, from a shared distributed memcache when there is one. */
+	public function getBuffer(string $namespace, string $key): mixed {
+		$cache = $this->sharedMemcache($namespace);
+
+		return $cache === null ? $this->getShared($namespace, $key) : $cache->get($key);
+	}
+
+	/** `setShared()`, into a shared distributed memcache when there is one. */
+	public function setBuffer(string $namespace, string $key, mixed $value, int $ttl): void {
+		$cache = $this->sharedMemcache($namespace);
+		if ($cache === null) {
+			$this->setShared($namespace, $key, $value, $ttl);
+
+			return;
+		}
+		$cache->set($key, $value, $this->ttl($ttl));
+	}
+
+	/** `removeShared()`, from a shared distributed memcache when there is one. */
+	public function removeBuffer(string $namespace, string $key): void {
+		$cache = $this->sharedMemcache($namespace);
+		if ($cache === null) {
+			$this->removeShared($namespace, $key);
+
+			return;
+		}
+		$cache->remove($key);
+	}
+
+	/**
+	 * The distributed memcache, when `memcache.distributed` names one that
+	 * every PHP process shares; null for none, for APCu, and for the
+	 * in-process array cache.
+	 */
+	private function sharedMemcache(string $namespace): ?ICache {
+		if ($this->config === null) {
+			return null;
+		}
+		$class = ltrim($this->config->getSystemValueString('memcache.distributed', ''), '\\');
+		if ($class === '' || in_array(strtolower($class), self::PER_PROCESS, true) || !$this->cacheFactory->isAvailable()) {
+			return null;
+		}
+
+		return $this->cache($namespace);
 	}
 
 	/**

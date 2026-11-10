@@ -188,7 +188,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		}
 
 		$key = self::EARLY_UPDATE_KEY_PREFIX . hash('sha256', $item->getId());
-		$existing = $this->durableCache->getShared(self::EARLY_UPDATE_NAMESPACE, $key);
+		$existing = $this->durableCache->getBuffer(self::EARLY_UPDATE_NAMESPACE, $key);
 		$existingUpdated = is_array($existing) ? strtotime((string)($existing['updated'] ?? '')) : false;
 		$incomingUpdated = $item->getUpdated() !== '' ? strtotime($item->getUpdated()) : false;
 		if ($existingUpdated !== false && ($incomingUpdated === false || $incomingUpdated <= $existingUpdated)) {
@@ -198,7 +198,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		$source = json_decode($activity->getSource(), true);
 		$replay = is_array($source) && ($source['type'] ?? '') === Update::TYPE
 			? $source : $activity->jsonSerialize();
-		$this->durableCache->setShared(self::EARLY_UPDATE_NAMESPACE, $key, [
+		$this->durableCache->setBuffer(self::EARLY_UPDATE_NAMESPACE, $key, [
 			'actor' => $activity->getActorId(),
 			'author' => $author,
 			'object' => $item->getId(),
@@ -215,7 +215,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			return;
 		}
 		$key = self::EARLY_UPDATE_KEY_PREFIX . hash('sha256', $objectId);
-		$pending = $this->durableCache->getShared(self::EARLY_UPDATE_NAMESPACE, $key);
+		$pending = $this->durableCache->getBuffer(self::EARLY_UPDATE_NAMESPACE, $key);
 		if (!is_array($pending)) {
 			return;
 		}
@@ -226,25 +226,25 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			|| !is_array($pending['activity'] ?? null)
 			|| !is_string($pending['origin'] ?? null)
 			|| $pending['origin'] === '') {
-			$this->durableCache->removeShared(self::EARLY_UPDATE_NAMESPACE, $key);
+			$this->durableCache->removeBuffer(self::EARLY_UPDATE_NAMESPACE, $key);
 
 			return;
 		}
 
 		$update = AP::instance()->getItemFromData($pending['activity'], deferAttachmentDownloads: true);
 		if (!$update instanceof Update || !$update->hasObject() || $update->getActorId() !== $actorId) {
-			$this->durableCache->removeShared(self::EARLY_UPDATE_NAMESPACE, $key);
+			$this->durableCache->removeBuffer(self::EARLY_UPDATE_NAMESPACE, $key);
 
 			return;
 		}
 		$update->setOrigin($pending['origin'], SignatureService::ORIGIN_REQUEST, (int)($pending['received'] ?? 0));
 		$this->activity($update, $update->getObject());
-		$this->durableCache->removeShared(self::EARLY_UPDATE_NAMESPACE, $key);
+		$this->durableCache->removeBuffer(self::EARLY_UPDATE_NAMESPACE, $key);
 	}
 
 	private function forgetEarlyUpdate(string $objectId): void {
 		if ($this->durableCache !== null && $objectId !== '') {
-			$this->durableCache->removeShared(
+			$this->durableCache->removeBuffer(
 				self::EARLY_UPDATE_NAMESPACE,
 				self::EARLY_UPDATE_KEY_PREFIX . hash('sha256', $objectId)
 			);

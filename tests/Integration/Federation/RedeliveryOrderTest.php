@@ -64,18 +64,18 @@ class RedeliveryOrderTest extends InboxTestCase {
 	}
 
 	private function forgetEarlyUpdate(): void {
-		Server::get(DurableCache::class)->removeShared(
+		Server::get(DurableCache::class)->removeBuffer(
 			NoteInterface::EARLY_UPDATE_NAMESPACE,
 			'update:' . hash('sha256', self::POST),
 		);
 	}
 
 	private function forgetEarlyUndo(): void {
-		Server::get(DurableCache::class)->removeShared(
+		Server::get(DurableCache::class)->removeBuffer(
 			LikeInterface::EARLY_UNDO_NAMESPACE,
 			hash('sha256', self::CAROL . '#likes/1'),
 		);
-		Server::get(DurableCache::class)->removeShared(
+		Server::get(DurableCache::class)->removeBuffer(
 			LikeInterface::EARLY_UNDO_NAMESPACE,
 			hash('sha256', 'https://akkoma.example/activities/0d1e2f3a-4b5c-4d6e-8f70-819293a4b5c6'),
 		);

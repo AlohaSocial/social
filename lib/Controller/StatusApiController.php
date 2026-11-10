@@ -589,6 +589,97 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
+	 * The counts of the statuses on a reader's screen, and nothing else: what
+	 * the web app polls to keep the numbers under visible posts current. Each
+	 * id is resolved as `statusGet()` resolves it, so one the caller may not
+	 * read is left out of the answer. Counts kept on another network are read
+	 * there when their on-screen window is out (`CountService::refreshVisibleMany()`).
+	 * Unlike `statusGet()`, it records no view: a post on screen has not been
+	 * opened.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/status_counts')]
+	public function statusCounts(mixed $ids = []): DataResponse {
+		try {
+			$this->initViewer(false);
+
+			$posts = [];
+			foreach ($this->countIds($ids) as $nid) {
+				try {
+					$item = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
+				} catch (StreamNotFoundException) {
+					continue;
+				}
+				if ($item->getType() === Announce::TYPE && !($item->getObject() instanceof Stream)) {
+					continue;
+				}
+				$posts[$nid] = $item;
+			}
+
+			$result = $this->counts->refreshVisibleMany($posts);
+			$refreshed = array_flip($result['refreshed']);
+			$answer = [];
+			foreach ($posts as $nid => $item) {
+				$counted = self::countedPost($item);
+				if (isset($refreshed[$counted->getId()])) {
+					try {
+						$counted = self::countedPost($this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage((string)$nid)));
+					} catch (StreamNotFoundException) {
+						continue;
+					}
+				}
+				$answer[] = ['id' => (string)$nid] + $counted->exportCounts();
+			}
+
+			$response = new DataResponse($answer, Http::STATUS_OK);
+			if ($result['pending']) {
+				$response->addHeader('X-Social-Filling', '1');
+			}
+
+			return $response;
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * The ids a counts request names, as `ids[]=…` or comma-separated: valid
+	 * numeric ids only, each once, at most `CountService::VISIBLE_BATCH`.
+	 *
+	 * @return list<string>
+	 */
+	private function countIds(mixed $raw): array {
+		if (is_string($raw)) {
+			$raw = explode(',', $raw);
+		}
+		if (!is_array($raw)) {
+			return [];
+		}
+
+		$ids = [];
+		foreach ($raw as $id) {
+			if ((!is_int($id) && !is_string($id)) || !ctype_digit((string)$id)
+				|| \OCA\Social\Tools\Nid::compare((string)$id, '0') < 1) {
+				continue;
+			}
+			$ids[\OCA\Social\Tools\Nid::normalize((string)$id)] = true;
+			if (count($ids) >= CountService::VISIBLE_BATCH) {
+				break;
+			}
+		}
+
+		return array_map('strval', array_keys($ids));
+	}
+
+	/** A boost's counts are those of the post it boosts. */
+	private static function countedPost(Stream $item): Stream {
+		$object = $item->getType() === Announce::TYPE ? $item->getObject() : null;
+
+		return $object instanceof Stream ? $object : $item;
+	}
+
+	/**
 	 * One status as a client is served it, dressed the way a timeline dresses
 	 * the same post.
 	 */

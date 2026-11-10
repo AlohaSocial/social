@@ -45,6 +45,7 @@ use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PushService;
+use OCA\Social\Service\PushSubscriptionService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\BackgroundJob\IJobList;
@@ -117,6 +118,8 @@ class NotificationServiceTest extends TestCase {
 	private IJobList|Stub $jobList;
 	/** @var list<array{class: string, argument: mixed}> */
 	private array $webPushJobs = [];
+	private bool $hasPushSubscription = true;
+	private PushSubscriptionService $pushSubscriptions;
 	/** @var array<int, array> every notification withdrawn from the bell */
 	private array $withdrawn = [];
 	/** @var array<int, array{string, string}> [id, type] of every deleted row */
@@ -274,6 +277,9 @@ class NotificationServiceTest extends TestCase {
 			$this->webPushJobs[] = ['class' => $class, 'argument' => $argument];
 		});
 
+		$this->pushSubscriptions = $this->createStub(PushSubscriptionService::class);
+		$this->pushSubscriptions->method('hasAny')->willReturnCallback(fn (string $userId): bool => $this->hasPushSubscription);
+
 		$this->service = $this->build();
 	}
 
@@ -292,6 +298,7 @@ class NotificationServiceTest extends TestCase {
 			fn (string $id): ?object => match ($id) {
 				PushService::class => $this->pushService,
 				IJobList::class => $this->jobList,
+				PushSubscriptionService::class => $this->pushSubscriptions,
 				default => null,
 			}
 		);
@@ -477,6 +484,14 @@ class NotificationServiceTest extends TestCase {
 			'class' => \OCA\Social\Cron\MastodonPushNotification::class,
 			'argument' => ['user' => 'alice', 'nid' => '5'],
 		]], $this->webPushJobs);
+	}
+
+	public function testAnAccountWithoutAPushSubscriptionGetsNoWebPushJob(): void {
+		$this->hasPushSubscription = false;
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertSame([], $this->webPushJobs);
+		$this->assertSame([self::ALICE], $this->pushed, 'the open pages are still told');
 	}
 
 	public function testHeldNotificationsDoNotQueueWebPush(): void {

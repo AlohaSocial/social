@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Interfaces\Object;
 
 use Exception;
+use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
@@ -21,6 +22,7 @@ use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCA\Social\Model\ActorRelation;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\ReactionService;
 
@@ -47,6 +49,7 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		private ReactionsRequest $reactionsRequest,
 		private StreamRequest $streamRequest,
 		private ?DurableCache $durableCache = null,
+		private ?ActorRelationRequest $actorRelationRequest = null,
 	) {
 	}
 
@@ -59,12 +62,8 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		$reaction = $item;
 		$reaction->checkOrigin($reaction->getId());
 		$reaction->checkOrigin($reaction->getActorId());
-		if (LikeInterface::undoneBeforeArrival(
-			$this->durableCache, $reaction->getId(), $reaction->getActorId(), $reaction->getObjectId()
-		)) {
-			return;
-		}
 
+		// save() refuses a reaction undone before it arrived
 		try {
 			$this->save($reaction);
 		} catch (ItemAlreadyExistsException $e) {
@@ -123,9 +122,17 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		// a reaction to a post this instance does not hold is nothing it can
 		// draw, and storing it would be a row that is never read
 		try {
-			$this->streamRequest->getStreamById($reaction->getObjectId());
+			$post = $this->streamRequest->getStreamById($reaction->getObjectId());
 		} catch (Exception $e) {
 			throw new ItemAlreadyExistsException('unknown post');
+		}
+
+		// the author blocked the account reacting, which is the end of it,
+		// as a follow from it is
+		if ($post->isLocal() && $this->actorRelationRequest?->exists(
+			$post->getAttributedTo(), $reaction->getActorId(), ActorRelation::TYPE_BLOCK
+		) === true) {
+			throw new ItemAlreadyExistsException('blocked by the author');
 		}
 
 		if (!ReactionService::isUsableEmoji($reaction->getContent())) {

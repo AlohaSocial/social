@@ -14,6 +14,7 @@ use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IConfig;
 use OCP\IMemcache;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -43,7 +44,7 @@ class DurableCacheTest extends TestCase {
 		yield 'table' => [false];
 	}
 
-	private function cache(bool $memcache): DurableCache {
+	private function cache(bool $memcache, string $distributed = ''): DurableCache {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('isAvailable')->willReturn($memcache);
 		if ($memcache) {
@@ -57,7 +58,12 @@ class DurableCacheTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 
-		return new DurableCache($factory, $this->table, $time);
+		$config = $this->createStub(IConfig::class);
+		$config->method('getSystemValueString')->willReturnCallback(
+			static fn (string $key, string $default = ''): string => $key === 'memcache.distributed' ? $distributed : $default
+		);
+
+		return new DurableCache($factory, $this->table, $time, $config);
 	}
 
 	/** An `IMemcache` over an array, expiring on the test's clock. */
@@ -217,6 +223,39 @@ class DurableCacheTest extends TestCase {
 
 		$this->assertSame(64, strlen((string)array_key_first($this->table->rows)));
 		$this->assertSame('value', $cache->get('social.test', str_repeat('k', 1000)));
+	}
+
+	/** A buffer any PHP worker writes and another reads goes to Redis or Memcached, never to APCu. */
+	public function testABufferUsesADistributedMemcacheEveryProcessShares(): void {
+		$cache = $this->cache(true, '\\OC\\Memcache\\Redis');
+		$cache->setBuffer('social.test', 'early', ['actor' => 'a'], 60);
+
+		$this->assertSame(['actor' => 'a'], $cache->getBuffer('social.test', 'early'));
+		$this->assertSame([], $this->table->rows, 'no table row for a buffer Redis holds');
+
+		$cache->removeBuffer('social.test', 'early');
+		$this->assertNull($cache->getBuffer('social.test', 'early'));
+	}
+
+	/** @return iterable<string, array{string}> */
+	public static function perProcessOrNone(): iterable {
+		yield 'none' => [''];
+		yield 'APCu' => ['\\OC\\Memcache\\APCu'];
+		yield 'APCu without a leading backslash' => ['OC\\Memcache\\APCu'];
+		yield 'the in-process array cache' => ['\\OC\\Memcache\\ArrayCache'];
+	}
+
+	#[DataProvider('perProcessOrNone')]
+	public function testABufferUsesTheTableWhenNoMemcacheIsSharedBetweenProcesses(string $distributed): void {
+		$cache = $this->cache(true, $distributed);
+		$cache->setBuffer('social.test', 'early', ['actor' => 'a'], 60);
+
+		$this->assertSame(['actor' => 'a'], $cache->getBuffer('social.test', 'early'));
+		$this->assertCount(1, $this->table->rows);
+		$this->assertSame([], $this->memcache);
+
+		$cache->removeBuffer('social.test', 'early');
+		$this->assertSame([], $this->table->rows);
 	}
 
 	#[DataProvider('backends')]

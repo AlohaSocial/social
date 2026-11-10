@@ -330,4 +330,48 @@ class RecommendationPreferenceRequestTest extends TestCase {
 		);
 		self::assertSame(1, $exposures[$postKey][$session]['impressions'] ?? null);
 	}
+
+	/** One request's events go in one transaction; a repeat and a twice-named event are duplicates. */
+	public function testABatchOfEventsIsRecordedTogetherWithDuplicatesNoted(): void {
+		$initial = $this->request->get($this->owner);
+		$enabled = $this->request->setLearningMode($this->owner, $initial['revision'], 'on');
+		self::assertNotNull($enabled);
+		$signal = ['dimension' => 'topics', 'entity_key' => 'tech.apple', 'delta' => 0.35];
+		$first = '1c5bc6c7-787f-4df7-a5bd-973cf942c55c';
+		$second = '2c5bc6c7-787f-4df7-a5bd-973cf942c55c';
+		$this->signals->record($this->owner, $first, $enabled['generation'], 'like', [$signal], null, 2_000_000_000);
+
+		$results = $this->signals->recordMany($this->owner, $enabled['generation'], [
+			['event_id' => $first, 'kind' => 'like', 'signals' => [$signal], 'impression' => null],
+			['event_id' => $second, 'kind' => 'open', 'signals' => [$signal], 'impression' => null],
+			['event_id' => $second, 'kind' => 'open', 'signals' => [$signal], 'impression' => null],
+		], 2_000_000_010);
+
+		self::assertSame([true, false, true], array_column($results, 'duplicate'));
+		self::assertSame([true, true, true], array_column($results, 'accepted'));
+
+		$stale = $this->signals->recordMany($this->owner, $enabled['generation'] + 1, [
+			['event_id' => '3c5bc6c7-787f-4df7-a5bd-973cf942c55c', 'kind' => 'open', 'signals' => [$signal], 'impression' => null],
+		], 2_000_000_020);
+		self::assertFalse($stale[0]['accepted'], 'a batch from another generation is refused as a whole');
+	}
+
+	/** The daily trim deletes by time: expired events and exposures, and a reader's events past the cap. */
+	public function testTheTrimDeletesExpiredLogRowsByTime(): void {
+		$initial = $this->request->get($this->owner);
+		$enabled = $this->request->setLearningMode($this->owner, $initial['revision'], 'on');
+		self::assertNotNull($enabled);
+		$now = 2_000_000_000;
+		$old = '4c5bc6c7-787f-4df7-a5bd-973cf942c55c';
+		$recent = '5c5bc6c7-787f-4df7-a5bd-973cf942c55c';
+		$this->signals->record($this->owner, $old, $enabled['generation'], 'open', [], null, $now - 8 * 86400);
+		$this->signals->record($this->owner, $recent, $enabled['generation'], 'open', [], null, $now - 86400);
+
+		$this->signals->trim($now);
+
+		$replayOld = $this->signals->record($this->owner, $old, $enabled['generation'], 'open', [], null, $now);
+		$replayRecent = $this->signals->record($this->owner, $recent, $enabled['generation'], 'open', [], null, $now);
+		self::assertFalse($replayOld['duplicate'], 'the expired event was forgotten');
+		self::assertTrue($replayRecent['duplicate'], 'the recent one is still known');
+	}
 }

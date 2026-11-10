@@ -60,7 +60,7 @@ class MastodonPushNotification extends QueuedJob {
 		}
 		$userId = (string)($argument['user'] ?? '');
 		$nid = (string)($argument['nid'] ?? '');
-		if ($userId === '' || $nid === '') {
+		if ($userId === '' || $nid === '' || !$this->subscriptions->hasAny($userId)) {
 			return;
 		}
 		// a disabled account's devices are told nothing; its subscriptions

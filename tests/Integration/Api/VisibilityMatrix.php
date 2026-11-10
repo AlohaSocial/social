@@ -195,6 +195,7 @@ final class VisibilityMatrix {
 		'ScheduledStatusApiController::scheduledStatuses' => 'the viewer\'s own scheduled posts',
 		'StatusApiController::pollGet' => 'the poll of a post, read through the same getStreamByNid() as status',
 		'StatusApiController::statusCard' => 'the link card of a post, read through the same getStreamByNid() as status',
+		'StatusApiController::statusCounts' => 'the counts of posts, each read through the same getStreamByNid() as status; ApiControllerTest',
 		'StatusApiController::statusDelivery' => 'the viewer\'s own post',
 		'StatusApiController::statusReactions' => 'emoji reactions of a post, read through the same getStreamByNid() as status',
 		'StatusApiController::statusSource' => 'the viewer\'s own post',

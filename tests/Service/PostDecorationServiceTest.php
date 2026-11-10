@@ -16,7 +16,6 @@ use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
-use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\Place;
 use OCA\Social\Model\StreamCard;
@@ -78,14 +77,6 @@ class PostDecorationServiceTest extends TestCase {
 		return $post;
 	}
 
-	private function reaction(string $actor, string $emoji): EmojiReact {
-		$reaction = new EmojiReact();
-		$reaction->setActorId($actor);
-		$reaction->setContent($emoji);
-
-		return $reaction;
-	}
-
 	public function testEveryKindIsReadOnceForTheWholeList(): void {
 		$first = $this->post(1, 9);
 		$second = $this->post(2, 9);
@@ -97,9 +88,12 @@ class PostDecorationServiceTest extends TestCase {
 			->with([$first->getId(), $second->getId()])
 			->willReturn([md5($first->getId()) => $card]);
 		$this->places->expects($this->once())->method('getByIds')->with([9])->willReturn([9 => $lisbon]);
-		$this->reactions->expects($this->once())->method('getByObjectIds')
-			->with([$first->getId(), $second->getId()])
-			->willReturn([md5($second->getId()) => [$this->reaction(self::ALICE, '🎉'), $this->reaction(self::BOB, '🎉')]]);
+		$this->reactions->expects($this->once())->method('countByObjectIds')
+			->with([$first->getId(), $second->getId()], self::ALICE)
+			->willReturn([md5($second->getId()) => ['🎉' => 2]]);
+		$this->reactions->expects($this->once())->method('emojisOf')
+			->with(self::ALICE, [$first->getId(), $second->getId()])
+			->willReturn([md5($second->getId()) => ['🎉' => true]]);
 		$this->mediaTags->expects($this->once())->method('forStreams')->with(['1', '2'])->willReturn([1 => [self::BOB]]);
 		$this->cacheActorService->expects($this->once())->method('getCachedFromIds')->with([self::BOB])->willReturn([self::BOB => $bob]);
 
@@ -118,7 +112,8 @@ class PostDecorationServiceTest extends TestCase {
 	/** An anonymous reader is nobody in a reaction bar. */
 	public function testAnAnonymousReaderHasNoReactionOfTheirOwn(): void {
 		$post = $this->post(1);
-		$this->reactions->method('getByObjectIds')->willReturn([md5($post->getId()) => [$this->reaction(self::ALICE, '👍')]]);
+		$this->reactions->method('countByObjectIds')->willReturn([md5($post->getId()) => ['👍' => 1]]);
+		$this->reactions->expects($this->never())->method('emojisOf');
 
 		$this->service->decorate([$post]);
 
@@ -154,7 +149,7 @@ class PostDecorationServiceTest extends TestCase {
 	public function testAnEmptyListAsksNothing(): void {
 		$this->cards->expects($this->never())->method('getByStreamIds');
 		$this->places->expects($this->never())->method('getByIds');
-		$this->reactions->expects($this->never())->method('getByObjectIds');
+		$this->reactions->expects($this->never())->method('countByObjectIds');
 		$this->mediaTags->expects($this->never())->method('forStreams');
 		$this->cacheActorService->expects($this->never())->method('getCachedFromIds');
 

@@ -4,11 +4,11 @@
 -->
 # Performance and scalability
 
-**Reviewed against:** Aloha Social **0.26.283** on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.284** on **2026-10-27**; source
 branch `main` at `33935993`. The latest successful repeatable benchmark
 available that day is the [Nightly performance run 40426921866](https://github.com/AlohaSocial/social/actions/runs/40426921866).
 It ran the benchmark from `main` commit `2ab03f1` (app **0.26.278**), so it is
-behind this checkout. No benchmark of 0.26.283 itself was available
+behind this checkout. No benchmark of 0.26.284 itself was available
 at review time.
 
 ## Latest CI query snapshot
@@ -67,6 +67,37 @@ Record the Social commit, Nextcloud version, PHP version, database version,
 cache/index state, seed parameters and run artifact with any new measurements.
 Compare like with like; do not copy an older benchmark into the baseline file
 without reviewing its guardrail effect.
+
+## Counts of posts on screen
+
+The web app keeps the like, boost, reply and quote numbers under visible posts
+current without re-reading whole statuses:
+
+- **What it asks.** `GET /api/v1/social/status_counts` with up to twenty ids
+  answers the five numbers of each post and nothing else. It records no view,
+  so scrolling writes no `social_stream_view` rows and sends no PeerTube
+  `View`s.
+- **When it asks.** A timeline watches its entries with an
+  `IntersectionObserver` and asks once scrolling has rested for 1.5 s, then
+  every 60 s for the posts still on screen. A post is never asked about twice
+  within 50 s, and nothing runs per scroll event. An opened post is asked
+  about every 30 s. Opening a post (`GET /api/v1/statuses/{nid}`) is still a
+  full read and counts as a view.
+- **When the origin is asked.** `CountService::VISIBLE_WINDOWS` sets how long
+  a post's counts stand once read, by the post's age: 10 s under 15 minutes,
+  30 s under an hour, 1 minute under 6 hours, 5 minutes under a day,
+  15 minutes under a week, 1 hour after that. The window is shared by every
+  reader through the durable cache, so it caps origin load per post, not per
+  reader. The due posts of one request go to their networks together, at most
+  one ActivityPub round and one AppView `getPosts` call, within the
+  three-second interactive timeout.
+
+For scale: before this, a timeline asked for up to four whole statuses every
+5 s and on every scroll event, and each could start origin reads on a 5 s
+window. That is about 80 requests a second for 100 idle readers. Now 100 idle
+readers showing about eight posts each make under 2 requests a second, and an
+old post costs its origin at most one read an hour however many people have
+it on screen.
 
 ## Current performance risks to investigate
 

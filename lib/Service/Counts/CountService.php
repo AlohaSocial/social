@@ -41,6 +41,10 @@ use Throwable;
  * was asked. The cron's pass over posts nobody looked at
  * (`RemoteCountService`) goes through `refreshPosts()` too.
  *
+ * A post on a reader's screen is read sooner and inline
+ * (`refreshVisibleIfDue()`, `refreshVisibleMany()`), on a window that grows
+ * with the post's age (`VISIBLE_WINDOWS`).
+ *
  * A post of this instance's own is counted here, except where it is also on
  * a network that keeps counts this instance may not have heard of: a post
  * published to Bluesky is asked about the same way
@@ -51,11 +55,26 @@ class CountService {
 	public const YOUNG = 86400;
 	public const YOUNG_INTERVAL = 900;
 	public const OLD_INTERVAL = 21600;
-	/** Live reader refresh cadence, separate from the slower background scan. */
-	public const VISIBLE_INTERVAL = 5;
-	// Visible detail views poll every five seconds. Retry a failed inline read
-	// on that same cadence rather than leaving the post stale until the slower
-	// background queue happens to run.
+	/**
+	 * The shortest time between two reads of a post's counts while somebody
+	 * is looking at it, and how soon a failed one is retried.
+	 */
+	public const VISIBLE_INTERVAL = 10;
+	/**
+	 * How long a post's counts stand while it is on screen, by its age:
+	 * [younger than (seconds), interval (seconds)]. A new post moves fast and
+	 * an old one hardly at all; past the last step `VISIBLE_OLD_INTERVAL`.
+	 */
+	public const VISIBLE_WINDOWS = [
+		[900, self::VISIBLE_INTERVAL],
+		[3600, 30],
+		[21600, 60],
+		[86400, 300],
+		[604800, 900],
+	];
+	public const VISIBLE_OLD_INTERVAL = 3600;
+	/** The most posts one counts request refreshes. */
+	public const VISIBLE_BATCH = 20;
 	private const VISIBLE_RETRY_INTERVAL = self::VISIBLE_INTERVAL;
 	private const VISIBLE_CACHE = 'social.counts.visible';
 	private const VISIBLE_PENDING = 'pending';
@@ -135,15 +154,8 @@ class CountService {
 	 */
 	public function refreshVisibleIfDue(Stream $post, bool $force = false): bool {
 		$now = $this->time->getTime();
-		if ($post->getType() === Announce::TYPE) {
-			$object = $post->getObject();
-			if ($object instanceof Stream) {
-				$post = $object;
-			}
-		}
-
-		$countsAt = $post->getCountsAt();
-		if (!$force && $countsAt !== null && $now - $countsAt < self::VISIBLE_INTERVAL) {
+		$post = self::counted($post);
+		if (!$force && !$this->isVisibleDue($post, $now)) {
 			return false;
 		}
 		$visible = $this->visibleState($post->getId());
@@ -167,8 +179,7 @@ class CountService {
 			} catch (StreamNotFoundException) {
 				return false;
 			}
-			$countsAt = $post->getCountsAt();
-			if (!$force && $countsAt !== null && $now - $countsAt < self::VISIBLE_INTERVAL) {
+			if (!$force && !$this->isVisibleDue($post, $now)) {
 				return false;
 			}
 			$visible = $this->visibleState($post->getId());
@@ -186,7 +197,7 @@ class CountService {
 						$this->queueVisibleRetry($post);
 						$this->setVisibleState($post->getId(), self::VISIBLE_PENDING, self::VISIBLE_RETRY_INTERVAL);
 					} else {
-						$this->setVisibleState($post->getId(), self::VISIBLE_DONE, self::VISIBLE_INTERVAL);
+						$this->setVisibleState($post->getId(), self::VISIBLE_DONE, self::visibleInterval($post, $now));
 					}
 				} catch (Throwable $e) {
 					$this->logger->info('Post counts not read during display', ['post' => $post->getId(), 'exception' => $e]);
@@ -200,6 +211,156 @@ class CountService {
 		} finally {
 			$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
 		}
+	}
+
+	/**
+	 * Refresh the counts of posts on a reader's screen: the ones whose
+	 * on-screen window (`visibleInterval()`) is out are asked of their
+	 * networks together, one call per network, within the interactive
+	 * timeout. A post another request is refreshing is left to it. Records
+	 * nothing about the reader.
+	 *
+	 * Answers the ids whose counts were read, and whether any read is still
+	 * running or queued.
+	 *
+	 * @param iterable<Stream> $posts
+	 * @return array{refreshed: list<string>, pending: bool}
+	 */
+	public function refreshVisibleMany(iterable $posts): array {
+		$now = $this->time->getTime();
+		$pending = false;
+		/** @var array<string, string> $locked post id => lock name */
+		$locked = [];
+		foreach ($posts as $post) {
+			$post = self::counted($post);
+			$id = $post->getId();
+			if (isset($locked[$id]) || count($locked) >= self::VISIBLE_BATCH || !$this->isVisibleDue($post, $now)) {
+				continue;
+			}
+			$visible = $this->visibleState($id);
+			if ($visible !== null) {
+				$pending = $pending || $visible === self::VISIBLE_PENDING;
+				continue;
+			}
+			$lock = self::VISIBLE_LOCK . md5($id);
+			try {
+				$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+			} catch (LockedException) {
+				$pending = true;
+				continue;
+			} catch (Throwable $e) {
+				$this->logger->info('Could not lock a visible count refresh', ['post' => $id, 'exception' => $e]);
+				continue;
+			}
+			$locked[$id] = $lock;
+		}
+		if ($locked === []) {
+			return ['refreshed' => [], 'pending' => $pending];
+		}
+
+		$refreshed = [];
+		try {
+			/** @var array<string, Stream> $due */
+			$due = [];
+			foreach (array_keys($locked) as $id) {
+				try {
+					$post = $this->streams->getStreamById((string)$id);
+				} catch (StreamNotFoundException) {
+					continue;
+				}
+				if ($this->isVisibleDue($post, $now) && $this->visibleState($post->getId()) === null) {
+					$due[$post->getId()] = $post;
+				}
+			}
+			foreach ($this->sources() as $source) {
+				$mine = array_filter($due, static fn (Stream $post): bool => $source->supports($post));
+				if ($mine === []) {
+					continue;
+				}
+				$due = array_diff_key($due, $mine);
+				try {
+					$answered = $source->refresh(array_values($mine), AppViewClient::INTERACTIVE_TIMEOUT);
+				} catch (Throwable $e) {
+					$this->logger->info('Post counts not read during display', ['source' => $source::class, 'exception' => $e]);
+					$answered = 0;
+				}
+				$unanswered = $answered >= count($mine) ? [] : $this->unanswered($mine, $now);
+				foreach ($mine as $id => $post) {
+					$id = (string)$id;
+					$refreshed[] = $id;
+					if (isset($unanswered[$id])) {
+						$this->queueVisibleRetry($post);
+						$this->setVisibleState($id, self::VISIBLE_PENDING, self::VISIBLE_RETRY_INTERVAL);
+						$pending = true;
+					} else {
+						$this->setVisibleState($id, self::VISIBLE_DONE, self::visibleInterval($post, $now));
+					}
+				}
+			}
+		} finally {
+			foreach ($locked as $lock) {
+				$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+			}
+		}
+
+		return ['refreshed' => $refreshed, 'pending' => $pending];
+	}
+
+	/**
+	 * The posts of a batch whose counts were not stored by the read that just
+	 * ran: a source answers with how many it stored, not which.
+	 *
+	 * @param array<string, Stream> $posts
+	 * @return array<string, true>
+	 */
+	private function unanswered(array $posts, int $now): array {
+		$unanswered = [];
+		foreach (array_keys($posts) as $id) {
+			try {
+				$countsAt = $this->streams->getStreamById((string)$id)->getCountsAt();
+			} catch (StreamNotFoundException) {
+				continue;
+			}
+			if ($countsAt === null || $countsAt < $now) {
+				$unanswered[(string)$id] = true;
+			}
+		}
+
+		return $unanswered;
+	}
+
+	/** A boost's counts are those of the post it boosts. */
+	private static function counted(Stream $post): Stream {
+		if ($post->getType() === Announce::TYPE) {
+			$object = $post->getObject();
+			if ($object instanceof Stream) {
+				return $object;
+			}
+		}
+
+		return $post;
+	}
+
+	/** Whether a post on screen has counts kept elsewhere that are older than its on-screen window. */
+	private function isVisibleDue(Stream $post, int $now): bool {
+		if ($post->getId() === '' || $post->getVisibility() === Stream::TYPE_DIRECT) {
+			return false;
+		}
+		$countsAt = $post->getCountsAt();
+
+		return $countsAt === null || $now - $countsAt >= self::visibleInterval($post, $now);
+	}
+
+	/** How long a post's counts stand while it is on a reader's screen (`VISIBLE_WINDOWS`), in seconds. */
+	public static function visibleInterval(Stream $post, int $now): int {
+		$age = $now - $post->getPublishedTime();
+		foreach (self::VISIBLE_WINDOWS as [$younger, $interval]) {
+			if ($age < $younger) {
+				return $interval;
+			}
+		}
+
+		return self::VISIBLE_OLD_INTERVAL;
 	}
 
 	/** Whether a visible refresh of this post is still running or queued. */

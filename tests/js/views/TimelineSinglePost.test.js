@@ -183,17 +183,24 @@ describe('TimelineSinglePost', () => {
 		expect(wrapper.findComponent(TimelineEntryStub).props('item')).toEqual(fromServer)
 	})
 
-	it('refreshes the opened post counts while its detail page stays open', async () => {
+	it('refreshes only the opened post counts while its detail page stays open', async () => {
 		vi.useFakeTimers()
 		store.addToStatuses(status)
 		const fetchStatus = vi.spyOn(store, 'fetchStatus').mockResolvedValue(status)
+		const refreshCounts = vi.spyOn(store, 'refreshCounts').mockResolvedValue()
 		mountView()
 		await flushPromises()
+		expect(fetchStatus).toHaveBeenCalledTimes(1)
 		fetchStatus.mockClear()
 
-		await vi.advanceTimersByTimeAsync(5000)
+		await vi.advanceTimersByTimeAsync(29000)
+		expect(refreshCounts).not.toHaveBeenCalled()
 
-		expect(fetchStatus).toHaveBeenCalledWith(status.id, true)
+		await vi.advanceTimersByTimeAsync(1000)
+
+		expect(refreshCounts).toHaveBeenCalledWith([status.id])
+		// reading the status again would count another view
+		expect(fetchStatus).not.toHaveBeenCalled()
 	})
 
 	it('opens a post addressed by its ActivityPub id under the id the app uses', () => {
@@ -275,7 +282,7 @@ describe('TimelineSinglePost', () => {
 			const wrapper = mountView()
 			await flushPromises()
 
-			expect(fetchStatus).toHaveBeenCalledWith('123', false, true)
+			expect(fetchStatus).toHaveBeenCalledWith('123', true)
 			expect(wrapper.findComponent(TimelineEntryStub).exists()).toBe(true)
 		})
 
@@ -286,7 +293,7 @@ describe('TimelineSinglePost', () => {
 			mountView()
 			await flushPromises()
 
-			expect(fetchStatus).toHaveBeenCalledWith('123', false, true)
+			expect(fetchStatus).toHaveBeenCalledWith('123', true)
 		})
 
 		it('still says a post is gone when the server does not have it either', async () => {

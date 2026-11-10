@@ -9,9 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Integration\Db;
 
+use OCA\Social\Db\ActorRelationRequest;
+use OCA\Social\Db\MuteExpiryRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCA\Social\Model\ActorRelation;
 use OCP\IDBConnection;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -26,11 +29,17 @@ class ReactionsRequestTest extends TestCase {
 	private const POST = 'https://itest.example/posts/react-1';
 	private const OTHER = 'https://itest.example/posts/react-2';
 
+	private const NOW = 1790000000;
+
 	private ReactionsRequest $reactions;
+	private ActorRelationRequest $relations;
+	private MuteExpiryRequest $expiries;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->reactions = Server::get(ReactionsRequest::class);
+		$this->relations = Server::get(ActorRelationRequest::class);
+		$this->expiries = Server::get(MuteExpiryRequest::class);
 		$this->cleanup();
 	}
 
@@ -42,6 +51,13 @@ class ReactionsRequestTest extends TestCase {
 	private function cleanup(): void {
 		$this->reactions->deleteByObjectId(self::POST);
 		$this->reactions->deleteByObjectId(self::OTHER);
+		$this->relations->deleteByActor(self::ALICE);
+		$this->expiries->deleteByActor(self::ALICE);
+	}
+
+	/** @return array<string, int> */
+	private function countsOf(string $post): array {
+		return $this->reactions->countByObjectIds([$post])[md5($post)] ?? [];
 	}
 
 	private function react(string $actor, string $post, string $emoji): bool {
@@ -59,7 +75,7 @@ class ReactionsRequestTest extends TestCase {
 		$this->assertFalse($this->react(self::ALICE, self::POST, "\u{1F525}"), 'the same reaction twice');
 		$this->assertTrue($this->react(self::ALICE, self::POST, "\u{1F44D}"), 'another emoji is another reaction');
 
-		$this->assertCount(2, $this->reactions->getByObjectId(self::POST));
+		$this->assertSameCounts(["\u{1F525}" => 1, "\u{1F44D}" => 1], $this->countsOf(self::POST));
 		$this->assertSame("\u{1F525}", $this->reactions->getReaction(self::ALICE, self::POST, "\u{1F525}")->getContent());
 	}
 
@@ -75,21 +91,116 @@ class ReactionsRequestTest extends TestCase {
 			$this->assertFalse($this->reactions->save($duplicate));
 			$this->assertSame($first->getId(), $this->reactions->getReaction(self::ALICE, self::POST, '👍')->getId());
 			$this->assertTrue($this->react(self::ALICE, self::POST, '🔥'));
-			$this->assertCount(2, $this->reactions->getByObjectId(self::POST));
+			$this->assertSameCounts(['👍' => 1, '🔥' => 1], $this->countsOf(self::POST));
 		} finally {
 			$connection->rollBack();
 		}
 	}
 
-	public function testManyPostsAreReadAtOnceKeyedByTheirHash(): void {
+	public function testManyPostsAreCountedAtOnceKeyedByTheirHash(): void {
 		$this->react(self::ALICE, self::POST, "\u{1F525}");
+		$this->react(self::BOB, self::POST, "\u{1F525}");
 		$this->react(self::BOB, self::OTHER, "\u{1F44D}");
 
-		$byPost = $this->reactions->getByObjectIds([self::POST, self::OTHER]);
+		$counts = $this->reactions->countByObjectIds([self::POST, self::OTHER]);
 
-		$this->assertCount(1, $byPost[md5(self::POST)] ?? []);
-		$this->assertCount(1, $byPost[md5(self::OTHER)] ?? []);
-		$this->assertSame([], $this->reactions->getByObjectIds([]));
+		$this->assertSame(["\u{1F525}" => 2], $counts[md5(self::POST)] ?? []);
+		$this->assertSame(["\u{1F44D}" => 1], $counts[md5(self::OTHER)] ?? []);
+		$this->assertSame([], $this->reactions->countByObjectIds([]));
+		$this->assertSame([], $this->reactions->countByObjectIds(['']));
+	}
+
+	/** Counted by the database: a post is counted in full, past any page of rows. */
+	public function testEveryReactionIsCountedWhateverTheirNumber(): void {
+		for ($i = 0; $i < 60; $i++) {
+			$this->react('https://itest.example/users/react-many-' . $i, self::POST, $i % 3 === 0 ? '🎉' : '👍');
+		}
+
+		$this->assertSameCounts(['👍' => 40, '🎉' => 20], $this->countsOf(self::POST));
+	}
+
+	/**
+	 * The emoji of a post come in the order they were first used, and those
+	 * first used in the same second by their bytes, on every database.
+	 */
+	public function testEmojiAreOrderedByTheirFirstUseThenByTheirBytes(): void {
+		$this->react(self::ALICE, self::POST, '👍');
+		$this->react(self::BOB, self::POST, '🔥');
+		$this->react(self::BOB, self::POST, '🎉');
+		$this->react(self::ALICE, self::POST, '🎉');
+		$this->setCreation(self::POST, '🔥', '2026-01-01 10:00:00');
+		$this->setCreation(self::POST, '👍', '2026-01-01 10:00:05');
+		$this->setCreation(self::POST, '🎉', '2026-01-01 10:00:05');
+
+		$this->assertSame(['🔥', '🎉', '👍'], array_keys($this->countsOf(self::POST)), '🎉 sorts before 👍 by its bytes');
+		$this->assertSame(2, $this->countsOf(self::POST)['🎉']);
+	}
+
+	/** The same keys and values, whatever order the database returned the rows in. */
+	private function assertSameCounts(array $expected, array $actual): void {
+		ksort($expected);
+		ksort($actual);
+		$this->assertSame($expected, $actual);
+	}
+
+	private function setCreation(string $post, string $emoji, string $at): void {
+		$qb = Server::get(IDBConnection::class)->getQueryBuilder();
+		$qb->update('social_reaction')
+			->set('creation', $qb->createNamedParameter(new \DateTime($at), \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_DATE))
+			->where($qb->expr()->eq('object_id_prim', $qb->createNamedParameter(md5($post))))
+			->andWhere($qb->expr()->eq('emoji', $qb->createNamedParameter($emoji)))
+			->executeStatement();
+	}
+
+	public function testTheReadersOwnEmojiAreReadForAPage(): void {
+		$this->react(self::ALICE, self::POST, '👍');
+		$this->react(self::ALICE, self::OTHER, '🎉');
+		$this->react(self::BOB, self::OTHER, '🔥');
+
+		$this->assertSameCounts([
+			md5(self::POST) => ['👍' => true],
+			md5(self::OTHER) => ['🎉' => true],
+		], $this->reactions->emojisOf(self::ALICE, [self::POST, self::OTHER]));
+		$this->assertSame([], $this->reactions->emojisOf('', [self::POST]));
+	}
+
+	public function testModeratedAccountsAndInstancesAreNotCounted(): void {
+		$this->react(self::ALICE, self::POST, '👍');
+		$this->react(self::BOB, self::POST, '👍');
+		$this->react('https://evil.example/users/troll', self::POST, '👍');
+		$this->react('https://sub.evil.example/users/troll', self::POST, '👍');
+		$this->react('https://notevil.example/users/fine', self::POST, '👍');
+
+		$counts = $this->reactions->countByObjectIds([self::POST], '', [self::BOB], ['evil.example']);
+
+		$this->assertSame(['👍' => 2], $counts[md5(self::POST)] ?? [], 'alice and notevil.example');
+	}
+
+	/**
+	 * The reactions of an account the reader blocks, is blocked by or mutes
+	 * are not counted for them; a mute that ran out no longer hides anything.
+	 */
+	public function testTheReadersBlocksAndMutesAreNotCountedForThem(): void {
+		$carol = 'https://itest.example/users/react-carol';
+		$dave = 'https://itest.example/users/react-dave';
+		$erin = 'https://itest.example/users/react-erin';
+		$frank = 'https://itest.example/users/react-frank';
+		foreach ([self::BOB, $carol, $dave, $erin, $frank] as $actor) {
+			$this->react($actor, self::POST, '👍');
+		}
+		$this->relations->save(self::ALICE, self::BOB, ActorRelation::TYPE_BLOCK);
+		$this->relations->save(self::ALICE, $carol, ActorRelation::TYPE_BLOCKED_BY);
+		$this->relations->save(self::ALICE, $dave, ActorRelation::TYPE_MUTE);
+		$this->relations->save(self::ALICE, $erin, ActorRelation::TYPE_MUTE);
+		$this->expiries->save(self::ALICE, $erin, self::NOW - 60);
+		$this->relations->save(self::ALICE, $frank, ActorRelation::TYPE_MUTE);
+		$this->expiries->save(self::ALICE, $frank, self::NOW + 3600);
+
+		$forAlice = $this->reactions->countByObjectIds([self::POST], self::ALICE, [], [], self::NOW);
+		$forAnybody = $this->reactions->countByObjectIds([self::POST], '', [], [], self::NOW);
+
+		$this->assertSame(['👍' => 1], $forAlice[md5(self::POST)] ?? [], 'only erin, whose mute ran out');
+		$this->assertSame(['👍' => 5], $forAnybody[md5(self::POST)] ?? []);
 	}
 
 	public function testALateUndoOfAnOldReactionKeepsItsNewerReplacement(): void {
@@ -104,7 +215,7 @@ class ReactionsRequestTest extends TestCase {
 
 		$this->assertSame($new->getId(), $this->reactions->getReaction(self::ALICE, self::POST, '👍')->getId());
 		$this->reactions->delete($new);
-		$this->assertSame([], $this->reactions->getByObjectId(self::POST));
+		$this->assertSame([], $this->countsOf(self::POST));
 	}
 
 	public function testAReactionIdMustAlsoMatchTheActorPostAndEmojiBeingRemoved(): void {
@@ -128,7 +239,7 @@ class ReactionsRequestTest extends TestCase {
 
 		$this->reactions->deleteReaction(self::ALICE, self::POST, "\u{1F525}");
 
-		$this->assertCount(1, $this->reactions->getByObjectId(self::POST));
+		$this->assertSame(["\u{1F44D}" => 1], $this->countsOf(self::POST));
 		$this->expectException(ActionDoesNotExistException::class);
 		$this->reactions->getReaction(self::ALICE, self::POST, "\u{1F525}");
 	}

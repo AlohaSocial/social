@@ -68,6 +68,20 @@ class PushSubscriptionServiceTest extends TestCase {
 		$this->assertSame([], $service->all('alice'));
 	}
 
+	public function testWhetherAnAccountHasSubscriptionsIsAnsweredWithoutDecrypting(): void {
+		$service = $this->service();
+		$this->assertFalse($service->hasAny('alice'), 'never subscribed');
+		$this->assertFalse($service->hasAny(''));
+
+		$service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/endpoint', str_repeat('A', 87), str_repeat('b', 22), [], 'all');
+		$this->assertTrue($service->hasAny('alice'));
+
+		$service->delete('alice', 'token-one');
+		$this->assertSame('', $this->stored, 'the last subscription removed leaves nothing stored');
+		$this->assertFalse($service->hasAny('alice'));
+		$this->assertSame([], $service->forUser('alice'));
+	}
+
 	public function testReplacingATokenKeepsItsIdAndEnforcesTheAccountLimit(): void {
 		$service = $this->service();
 		$first = $service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/one', str_repeat('A', 87), str_repeat('b', 22), [], 'all');

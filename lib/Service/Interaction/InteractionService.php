@@ -20,8 +20,10 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\ActionService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\RemoteFetchQueue;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use Psr\Container\ContainerInterface;
@@ -42,11 +44,13 @@ class InteractionService {
 	/** how long what a network listed is kept */
 	private const KEPT = 3600;
 	private const CACHE = 'social.reactors';
-	/** A reaction list is freshly read for five seconds after a visible request. */
+	/**
+	 * A reaction list stands after a visible read for as long as the post's
+	 * counts do on screen (`CountService::visibleInterval()`).
+	 */
 	private const VISIBLE = 'social.reactors.visible';
-	private const VISIBLE_INTERVAL = 5;
 	/** Retry a failed visible read on the same cadence as visible post refreshes. */
-	private const VISIBLE_RETRY_INTERVAL = self::VISIBLE_INTERVAL;
+	private const VISIBLE_RETRY_INTERVAL = CountService::VISIBLE_INTERVAL;
 	/** Resolve a few uncached ActivityPub profiles while the reaction list is open. */
 	private const VISIBLE_ACTOR_LIMIT = 5;
 	private const VISIBLE_DONE = 'done';
@@ -64,6 +68,7 @@ class InteractionService {
 		private LoggerInterface $logger,
 		private ?ContainerInterface $container = null,
 		private ?ILockingProvider $locks = null,
+		private ?ITimeFactory $time = null,
 	) {
 	}
 
@@ -230,7 +235,7 @@ class InteractionService {
 
 				return true;
 			}
-			$this->durableCache->setShared(self::VISIBLE, $key, self::VISIBLE_DONE, self::VISIBLE_INTERVAL);
+			$this->durableCache->setShared(self::VISIBLE, $key, self::VISIBLE_DONE, $this->visibleInterval($post));
 
 			return false;
 		} catch (Throwable $e) {
@@ -337,11 +342,15 @@ class InteractionService {
 				self::VISIBLE,
 				self::key($post, $type),
 				$failed ? self::VISIBLE_PENDING : self::VISIBLE_DONE,
-				$failed ? self::VISIBLE_RETRY_INTERVAL : self::VISIBLE_INTERVAL,
+				$failed ? self::VISIBLE_RETRY_INTERVAL : $this->visibleInterval($post),
 			);
 		}
 
 		return $failed;
+	}
+
+	private function visibleInterval(Stream $post): int {
+		return CountService::visibleInterval($post, $this->time?->getTime() ?? time());
 	}
 
 	private static function key(Stream $post, string $type): string {

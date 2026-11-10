@@ -287,6 +287,151 @@ class CountServiceTest extends TestCase {
 		$this->assertTrue($this->service()->refreshVisibleIfDue($boost));
 	}
 
+	public function testTheOnScreenWindowGrowsWithThePostsAge(): void {
+		$window = fn (int $age): int => CountService::visibleInterval($this->post('a', $age, null), self::NOW);
+
+		$this->assertSame(CountService::VISIBLE_INTERVAL, $window(60), 'a post of a minute');
+		$this->assertSame(30, $window(1800), 'half an hour');
+		$this->assertSame(60, $window(3 * 3600), 'three hours');
+		$this->assertSame(300, $window(12 * 3600), 'half a day');
+		$this->assertSame(900, $window(3 * 86400), 'three days');
+		$this->assertSame(CountService::VISIBLE_OLD_INTERVAL, $window(30 * 86400), 'a month');
+		foreach ([60, 1800, 3 * 3600, 12 * 3600, 3 * 86400, 30 * 86400] as $age) {
+			$this->assertLessThanOrEqual(
+				CountService::interval($this->post('a', $age, null), self::NOW), $window($age),
+				'a post on screen is never asked about less often than the background asks'
+			);
+		}
+	}
+
+	public function testAnOldPostOnScreenIsNotAskedAgainWithinItsLongerWindow(): void {
+		$post = $this->post('at://did:plc:author/app.bsky.feed.post/1', 30 * 86400, 600);
+		$source = $this->getMockBuilder(BlueskyCountSource::class)->disableOriginalConstructor()->onlyMethods(['supports', 'refresh'])->getMock();
+		$source->method('supports')->willReturn(true);
+		$source->expects($this->never())->method('refresh');
+		$this->sources[BlueskyCountSource::class] = $source;
+
+		$this->assertFalse($this->service()->refreshVisibleIfDue($post), 'counted ten minutes ago, a month old');
+	}
+
+	/**
+	 * @param list<Stream> $answered the posts the source stores counts for
+	 */
+	private function batchSource(string $class, callable $supports, array $answered = [], ?array &$calls = null): CountSource {
+		$calls = [];
+		$source = $this->getMockBuilder($class)->disableOriginalConstructor()->onlyMethods(['supports', 'refresh'])->getMock();
+		$source->method('supports')->willReturnCallback($supports);
+		$source->method('refresh')->willReturnCallback(static function (array $posts, ?int $timeout = null) use (&$calls, $answered): int {
+			$calls[] = [array_map(static fn (Stream $post): string => $post->getId(), $posts), $timeout];
+			$count = 0;
+			foreach ($posts as $post) {
+				if (in_array($post, $answered, true)) {
+					$post->setCountsAt(self::NOW);
+					$count++;
+				}
+			}
+
+			return $count;
+		});
+
+		return $source;
+	}
+
+	public function testPostsOnScreenAreAskedTogetherOneCallPerNetwork(): void {
+		$a = $this->post('https://r.example/1', 600, null);
+		$b = $this->post('https://r.example/2', 3600 * 3, 120);
+		$c = $this->post('at://did:plc:x/app.bsky.feed.post/3', 600, null);
+		$fresh = $this->post('https://r.example/4', 600, 2);
+		$direct = $this->post('https://r.example/5', 600, null, false, Stream::TYPE_DIRECT);
+		$boost = new Announce();
+		$boost->setObject($c);
+		$this->sources[ActivityPubCountSource::class] = $this->batchSource(
+			ActivityPubCountSource::class, static fn (Stream $p): bool => str_starts_with($p->getId(), 'https://'), [$a, $b], $apCalls
+		);
+		$this->sources[BlueskyCountSource::class] = $this->batchSource(
+			BlueskyCountSource::class, static fn (Stream $p): bool => str_starts_with($p->getId(), 'at://'), [$c], $bskyCalls
+		);
+		$this->queue->expects($this->never())->method('refreshCounts');
+		$service = $this->service();
+
+		$result = $service->refreshVisibleMany([$a, $b, $boost, $fresh, $direct]);
+
+		$this->assertSame([[['https://r.example/1', 'https://r.example/2'], AppViewClient::INTERACTIVE_TIMEOUT]], $apCalls);
+		$this->assertSame([[['at://did:plc:x/app.bsky.feed.post/3'], AppViewClient::INTERACTIVE_TIMEOUT]], $bskyCalls);
+		$this->assertEqualsCanonicalizing(['https://r.example/1', 'https://r.example/2', 'at://did:plc:x/app.bsky.feed.post/3'], $result['refreshed']);
+		$this->assertFalse($result['pending']);
+
+		$a->setCountsAt(null);
+		$again = $service->refreshVisibleMany([$a, $b, $boost]);
+		$this->assertSame([], $again['refreshed'], 'a post just read stands for its window, whoever asks');
+		$this->assertCount(1, $apCalls);
+	}
+
+	public function testAPostAnotherRequestIsReadingIsLeftToItAndReportedPending(): void {
+		$a = $this->post('https://r.example/1', 600, null);
+		$b = $this->post('https://r.example/2', 600, null);
+		$locks = $this->createMock(ILockingProvider::class);
+		$locks->method('acquireLock')->willReturnCallback(static function (string $name) use ($b): void {
+			if ($name === 'social-visible-count-' . md5($b->getId())) {
+				throw new LockedException($name);
+			}
+		});
+		$locks->expects($this->once())->method('releaseLock')->with('social-visible-count-' . md5($a->getId()), ILockingProvider::LOCK_EXCLUSIVE);
+		$this->locks = $locks;
+		$this->sources[ActivityPubCountSource::class] = $this->batchSource(ActivityPubCountSource::class, static fn (): bool => true, [$a], $calls);
+
+		$result = $this->service()->refreshVisibleMany([$a, $b]);
+
+		$this->assertSame([[['https://r.example/1'], AppViewClient::INTERACTIVE_TIMEOUT]], $calls);
+		$this->assertSame(['https://r.example/1'], $result['refreshed']);
+		$this->assertTrue($result['pending']);
+	}
+
+	public function testAPostTheNetworkDidNotAnswerForIsRetriedInTheBackground(): void {
+		$a = $this->post('https://r.example/1', 600, null);
+		$b = $this->post('https://r.example/2', 600, 3600);
+		$this->sources[ActivityPubCountSource::class] = $this->batchSource(ActivityPubCountSource::class, static fn (): bool => true, [$a]);
+		$this->queue->expects($this->once())->method('refreshCounts')->with([$b->getId() => CountService::VISIBLE_INTERVAL], true)->willReturn(true);
+		$service = $this->service();
+
+		$result = $service->refreshVisibleMany([$a, $b]);
+
+		$this->assertTrue($result['pending']);
+		$this->assertTrue($service->visibleRefreshPending($b->getId()));
+		$this->assertFalse($service->visibleRefreshPending($a->getId()));
+	}
+
+	public function testAFailingNetworkLeavesItsPostsPendingAndTheOthersRead(): void {
+		$a = $this->post('https://r.example/1', 600, null);
+		$c = $this->post('at://did:plc:x/app.bsky.feed.post/3', 600, null);
+		$failing = $this->getMockBuilder(ActivityPubCountSource::class)->disableOriginalConstructor()->onlyMethods(['supports', 'refresh'])->getMock();
+		$failing->method('supports')->willReturnCallback(static fn (Stream $p): bool => $p === $a);
+		$failing->method('refresh')->willThrowException(new RuntimeException('origin down'));
+		$this->sources[ActivityPubCountSource::class] = $failing;
+		$this->sources[BlueskyCountSource::class] = $this->batchSource(BlueskyCountSource::class, static fn (Stream $p): bool => $p === $c, [$c]);
+		$this->queue->expects($this->once())->method('refreshCounts')->with([$a->getId() => CountService::VISIBLE_INTERVAL], true)->willReturn(true);
+		$service = $this->service();
+
+		$result = $service->refreshVisibleMany([$a, $c]);
+
+		$this->assertTrue($result['pending']);
+		$this->assertTrue($service->visibleRefreshPending($a->getId()));
+		$this->assertFalse($service->visibleRefreshPending($c->getId()));
+	}
+
+	public function testOneRequestReadsABatchOfPostsAtMost(): void {
+		$posts = [];
+		for ($i = 0; $i < CountService::VISIBLE_BATCH + 5; $i++) {
+			$posts[] = $this->post('https://r.example/' . $i, 600, null);
+		}
+		$this->sources[ActivityPubCountSource::class] = $this->batchSource(ActivityPubCountSource::class, static fn (): bool => true, $posts, $calls);
+
+		$result = $this->service()->refreshVisibleMany($posts);
+
+		$this->assertCount(CountService::VISIBLE_BATCH, $calls[0][0]);
+		$this->assertCount(CountService::VISIBLE_BATCH, $result['refreshed']);
+	}
+
 	public function testAPageQueuesItsDuePostsWithTheirIntervals(): void {
 		$this->queue->expects($this->once())->method('refreshCounts')->with([
 			'https://r.example/young' => CountService::YOUNG_INTERVAL,

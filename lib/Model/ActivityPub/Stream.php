@@ -1125,6 +1125,22 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
+	 * The numbers a status entity carries about this post, under the same keys
+	 * and with the same values its local export gives them.
+	 *
+	 * @return array{replies_count: int, reblogs_count: int, favourites_count: int, quotes_count: int, dislikes_count: ?int}
+	 */
+	public function exportCounts(): array {
+		return [
+			'replies_count' => $this->getDetailInt(Details::REPLIES),
+			'reblogs_count' => $this->getDetailInt(Details::BOOSTS),
+			'favourites_count' => $this->getDetailInt(Details::LIKES),
+			'quotes_count' => $this->getDetailInt(Details::QUOTES),
+			'dislikes_count' => $this->isVideo() ? $this->getDetailInt(Details::DISLIKES) : null,
+		];
+	}
+
+	/**
 	 * Whether this post is a video, in the sense the watch page means.
 	 *
 	 * Either it arrived as one — a `Video`, which leaves the metadata block

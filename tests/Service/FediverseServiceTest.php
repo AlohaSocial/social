@@ -70,6 +70,16 @@ class FediverseServiceTest extends TestCase {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example.com');
 	}
 
+	public function testTheBlockedHostsAreTheAccessListOnlyWhenItIsABlockList(): void {
+		$this->withAccess('all_but', ['Evil.example.', 'bad.example']);
+		$this->assertSame(['evil.example' => true, 'bad.example' => true], $this->service->blockedHosts());
+	}
+
+	public function testAnAllowListBlocksNoHostByName(): void {
+		$this->withAccess('none_but', ['friend.example']);
+		$this->assertSame([], $this->service->blockedHosts());
+	}
+
 	// silencing: the tier between a block and nothing
 
 	/**
