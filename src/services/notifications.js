@@ -22,6 +22,9 @@ export const NOTIFICATION_TYPES = [
 	'update',
 	'moderation_warning',
 	'severed_relationships',
+	'story:react',
+	'story:comment',
+	'tagged',
 	'bluesky:repost_liked',
 	'bluesky:repost_reposted',
 	'bluesky:verified',
@@ -35,8 +38,8 @@ export const NOTIFICATION_TYPES = [
  */
 export const NOTIFICATION_FILTERS = {
 	all: NOTIFICATION_TYPES,
-	mentions: ['mention'],
-	favourites: ['favourite', 'bluesky:repost_liked'],
+	mentions: ['mention', 'story:comment', 'tagged'],
+	favourites: ['favourite', 'story:react', 'bluesky:repost_liked'],
 	boosts: ['reblog', 'bluesky:repost_reposted'],
 	follows: ['follow', 'follow_request', 'bluesky:starterpack_joined'],
 	polls: ['poll'],
@@ -296,6 +299,16 @@ export function notificationSummary(notification) {
 			return t('social', '{account} ended the poll', { account: notification.account.acct })
 		case 'update':
 			return t('social', '{account} edited a status', { account: notification.account.acct })
+		case 'moderation_warning':
+			return t('social', 'A moderator of this server has acted on your account')
+		case 'severed_relationships':
+			return t('social', 'Some of your follows were removed because a server was blocked')
+		case 'story:react':
+			return t('social', '{account} reacted to your story', { account: notification.account.acct })
+		case 'story:comment':
+			return t('social', '{account} replied to your story', { account: notification.account.acct })
+		case 'tagged':
+			return t('social', '{account} tagged you in a photo', { account: notification.account.acct })
 		case 'admin.sign_up':
 			return t('social', '{account} signed up', { account: notification.account.acct })
 		case 'admin.report':

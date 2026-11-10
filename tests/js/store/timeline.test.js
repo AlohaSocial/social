@@ -1082,8 +1082,16 @@ describe('timeline store actions', () => {
 
 			await expect(store.post({ status: 'x' })).resolves.toBeUndefined()
 
-			expect(showError).toHaveBeenCalledWith('Could not send the post')
+			expect(showError).toHaveBeenCalledWith({ text: 'Could not send the post', details: '' })
 			expect(logger.error).toHaveBeenCalledWith('Failed to create a status', { error: expect.any(Error) })
+		})
+
+		it('says why the server refused the post', async () => {
+			axios.post.mockRejectedValue({ response: { status: 422, data: { error: 'Text too long' } } })
+
+			await expect(store.post({ status: 'x' })).resolves.toBeUndefined()
+
+			expect(showError).toHaveBeenCalledWith({ text: 'Could not send the post', details: 'Text too long' })
 		})
 
 		it('says why a reply or quote to an account that has blocked the author was refused', async () => {
@@ -1175,7 +1183,17 @@ describe('timeline store actions', () => {
 			await expect(store.postEdit({ status, content: 'x', spoiler_text: '', sensitive: false })).resolves.toBeUndefined()
 
 			expect(tl().statuses['1']).toEqual(status)
-			expect(showError).toHaveBeenCalledWith('Could not save the changes to the post')
+			expect(showError).toHaveBeenCalledWith({ text: 'Could not save the changes to the post', details: '' })
+		})
+
+		it('says why the server refused the edit', async () => {
+			const status = makeStatus('1')
+			store.addToTimeline([status])
+			axios.put.mockRejectedValue({ response: { status: 422, data: { error: 'Events need a title and valid start time' } } })
+
+			await expect(store.postEdit({ status, content: 'x', spoiler_text: '', sensitive: false })).resolves.toBeUndefined()
+
+			expect(showError).toHaveBeenCalledWith({ text: 'Could not save the changes to the post', details: 'Events need a title and valid start time' })
 		})
 	})
 

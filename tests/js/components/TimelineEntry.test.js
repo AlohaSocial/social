@@ -242,6 +242,22 @@ describe('TimelineEntry', () => {
 			expect(header.find('.notification__summary').text()).toBe(summary)
 		})
 
+		it.each([
+			['story:react', 'emoticon-happy-outline-icon', 'bob@remote.example reacted to your story', null],
+			['story:comment', 'comment-text-outline-icon', 'bob@remote.example replied to your story', null],
+			['tagged', 'account-tag-outline-icon', 'bob@remote.example tagged you in a photo', post],
+			['moderation_warning', 'shield-alert-outline-icon', 'A moderator of this server has acted on your account', null],
+			['severed_relationships', 'account-multiple-remove-outline-icon', 'Some of your follows were removed because a server was blocked', null],
+			['bluesky:unverified', 'check-decagram-outline-icon', 'bob@remote.example no longer verifies your account on Bluesky', null],
+		])('describes a %s with its icon and summary', (type, iconClass, summary, status) => {
+			const { wrapper } = mountEntry(notification(type, { status }), { type: 'notifications' })
+
+			const header = wrapper.find('.notification__header')
+			expect(header.findAll('.notification__summary .material-design-icon')).toHaveLength(1)
+			expect(header.find('.notification__summary .material-design-icon').classes()).toContain(iconClass)
+			expect(header.find('.notification__summary').text()).toBe(summary)
+		})
+
 		describe('muting the conversation from the card', () => {
 			const actions = (wrapper) => wrapper.findAll('.notification__header .action').map((one) => one.text())
 

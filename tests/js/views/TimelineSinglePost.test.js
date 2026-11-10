@@ -409,6 +409,21 @@ describe('TimelineSinglePost', () => {
 			expect(composer.isVisible()).toBe(true)
 		})
 
+		it('starts a new reply box when another post of the thread is opened', async () => {
+			const wrapper = mountView()
+			await flushPromises()
+			const before = wrapper.findComponent(ComposerStub).vm
+			expect(before.inReplyTo.id).toBe('123')
+
+			store.addToStatuses(parent)
+			store.params = { ...store.params, singlePost: '120' }
+			await flushPromises()
+
+			const after = wrapper.findComponent(ComposerStub)
+			expect(after.props('inReplyTo').id).toBe('120')
+			expect(after.vm).not.toBe(before)
+		})
+
 		it('is not offered to a reader who is not logged in', () => {
 			makeStore({ public: true })
 			const wrapper = mountView()

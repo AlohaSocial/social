@@ -162,11 +162,44 @@ describe('FollowButton', () => {
 		expect(wrapper.find('.dialog-stub').exists()).toBe(false)
 	})
 
-	it('shows a disabled "Requested" state while a follow request is pending', () => {
+	it('shows a pending follow request as "Requested", offering to withdraw it from the keyboard too', async () => {
 		setRelationship(bob, { requested: true })
-		const button = mountButton().find('button')
+		const wrapper = mountButton()
+		const button = wrapper.find('button')
 		expect(button.text()).toBe('Requested')
-		expect(button.attributes('disabled')).toBeDefined()
+		expect(button.attributes('disabled')).toBeUndefined()
+		expect(button.attributes('aria-label')).toBe('Withdraw follow request to bob@remote.example')
+
+		await button.trigger('focus')
+		expect(button.text()).toBe('Withdraw request')
+		await button.trigger('blur')
+		expect(button.text()).toBe('Requested')
+		await button.trigger('mouseenter')
+		expect(button.text()).toBe('Withdraw request')
+	})
+
+	it('asks before withdrawing a follow request, then undoes the follow', async () => {
+		setRelationship(bob, { requested: true })
+		const { unfollow } = spyOnFollows()
+		const wrapper = mountButton()
+
+		await wrapper.find('button').trigger('click')
+		expect(unfollow).not.toHaveBeenCalled()
+		expect(wrapper.find('.dialog-name').text()).toBe('Withdraw your follow request to bob@remote.example?')
+		expect(wrapper.find('.dialog-button--1').text()).toBe('Withdraw request')
+
+		await wrapper.find('.dialog-button--1').trigger('click')
+		await flushPromises()
+		expect(unfollow).toHaveBeenCalledWith({ accountToUnfollow: wrapper.vm.profileAccount })
+	})
+
+	it('draws the request as withdrawn while the server is asked, and puts it back if it refuses', () => {
+		setRelationship(bob, { requested: true })
+		const previous = accountStore.assumeFollowing(bob.url, false)
+		expect(accountStore.accountsRelationships[bob.id].requested).toBe(false)
+
+		accountStore.restoreFollowing(previous)
+		expect(accountStore.accountsRelationships[bob.id].requested).toBe(true)
 	})
 
 	it('calls followAccount with both handles and blocks the button until it settles', async () => {

@@ -2,6 +2,8 @@
  * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, reactive } from 'vue'
@@ -369,6 +371,17 @@ describe('Timeline', () => {
 		const composer = mountTimeline().findComponent(ComposerStub)
 		expect(composer.props('oneLine')).toBe('')
 		expect(composer.props('listenForIntents')).toBe(false)
+	})
+
+	it('offers the saved drafts beside the compact composer, and keeps them while the popup is open', async () => {
+		const wrapper = mountTimeline({ params: { type: 'home' } })
+		const drafts = wrapper.findComponent({ name: 'DraftsButton' })
+		expect(drafts.exists()).toBe(true)
+		expect(drafts.props('disabled')).toBe(false)
+		timelineStore.setComposerDisplayStatus(true)
+		await nextTick()
+		expect(wrapper.findComponent({ name: 'DraftsButton' }).props('disabled')).toBe(true)
+		expect(mountTimeline({ params: { type: 'notifications' } }).findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
 	})
 
 	it('uses the conversation interface instead of the ordinary timeline composer for direct messages', () => {
@@ -1143,5 +1156,22 @@ describe('Timeline', () => {
 
 			expect(wrapper.find('h1').text()).toBe('Link')
 		})
+	})
+})
+
+describe('administrator announcements', () => {
+	const styles = () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/views/Timeline.vue'), 'utf8')
+		return source.slice(source.indexOf('<style'))
+	}
+	const rulesNaming = (css, selector) => css.split('}').filter((rule) => rule.includes(selector))
+
+	it('centre their heading and leave their text left-aligned', () => {
+		const css = styles()
+		expect(rulesNaming(css, '.feed-notice .announcement)').join('}')).toMatch(/text-align:\s*start/)
+		expect(rulesNaming(css, '.feed-notice .announcements__header').join('}')).toMatch(/justify-content:\s*center/)
+		for (const part of ['.announcement__text', '.announcement__meta', '.announcement__actions']) {
+			expect(rulesNaming(css, part).join('}')).not.toMatch(/center/)
+		}
 	})
 })

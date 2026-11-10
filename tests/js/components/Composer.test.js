@@ -1243,6 +1243,132 @@ describe('Composer', () => {
 		})
 	})
 
+	describe('an incomplete event', () => {
+		it('is pointed out once sending was tried, and forgotten with the box', async () => {
+			const { wrapper, store } = mountComposer({ startExpanded: true })
+			await flushPromises()
+			wrapper.vm.showEvent = true
+			await flushPromises()
+			expect(wrapper.find('.event-editor__error').exists()).toBe(false)
+
+			await wrapper.vm.createPost()
+			await flushPromises()
+			expect(store.post).not.toHaveBeenCalled()
+			expect(wrapper.find('.event-editor__error').exists()).toBe(true)
+
+			wrapper.vm.clearComposer()
+			expect(wrapper.vm.eventAttempted).toBe(false)
+		})
+	})
+
+	describe('reply drafts', () => {
+		const replyKey = 'social.composer.draft.reply.42::alice'
+		const storedReply = () => JSON.parse(localStorage.getItem(replyKey) ?? 'null')
+
+		it('takes up the newer words when the full composer closes without publishing', async () => {
+			const { wrapper, store } = mountComposer({ inReplyTo: replyTo(), oneLine: true, listenForIntents: false })
+			await flushPromises()
+			await setContent(wrapper, 'Older words')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			store.setComposerDisplayStatus(true)
+			await flushPromises()
+			localStorage.setItem(replyKey, JSON.stringify({ text: 'Newer words from the full composer', visibility: 'followers', savedAt: Date.now() }))
+
+			store.setComposerDisplayStatus(false)
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Newer words from the full composer')
+
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			await wrapper.find('.composer-line__expand').trigger('click')
+			expect(opened.mock.calls[0][0].draft.text).toBe('Newer words from the full composer')
+			expect(storedReply().text).toBe('Newer words from the full composer')
+			expect(wrapper.vm.visibility).toBe('followers')
+		})
+
+		it('does not write its older copy while the full composer has the draft', async () => {
+			const { wrapper, store } = mountComposer({ inReplyTo: replyTo(), oneLine: true, listenForIntents: false })
+			await flushPromises()
+			await setContent(wrapper, 'Older words')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			store.setComposerDisplayStatus(true)
+			await flushPromises()
+			localStorage.setItem(replyKey, JSON.stringify({ text: 'Newer words', savedAt: Date.now() }))
+
+			wrapper.vm.language = 'de'
+			await flushPromises()
+			expect(storedReply().text).toBe('Newer words')
+		})
+
+		it('empties itself when the full composer closed holding nothing', async () => {
+			const { wrapper, store } = mountComposer({ inReplyTo: replyTo(bob), oneLine: true, listenForIntents: false })
+			await flushPromises()
+			await setContent(wrapper, 'Words deleted in the full composer')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			store.setComposerDisplayStatus(true)
+			await flushPromises()
+			localStorage.removeItem(replyKey)
+
+			store.setComposerDisplayStatus(false)
+			await flushPromises()
+			expect(typed(wrapper)).toBe('@bob@remote.example\u00a0')
+			expect(storedReply()).toBeNull()
+		})
+
+		it('keeps the words handed over when browser storage kept nothing', async () => {
+			const { wrapper, store } = mountComposer({ inReplyTo: replyTo(), oneLine: true, listenForIntents: false })
+			await flushPromises()
+			vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+				throw new Error('Storage unavailable')
+			})
+			await setContent(wrapper, 'The only copy')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			store.setComposerDisplayStatus(true)
+			await flushPromises()
+
+			store.setComposerDisplayStatus(false)
+			await flushPromises()
+			expect(typed(wrapper)).toBe('The only copy')
+		})
+
+		it('saves nothing for a reply nobody wrote, only addressed', async () => {
+			const { wrapper } = mountComposer({ inReplyTo: replyTo(bob), oneLine: true, listenForIntents: false })
+			await flushPromises()
+			expect(typed(wrapper)).toContain('@bob@remote.example')
+			expect(storedReply()).toBeNull()
+
+			await setContent(wrapper, `${MENTION_BOB} thanks`)
+			expect(storedReply().text).toContain('thanks')
+
+			await setContent(wrapper, MENTION_BOB)
+			expect(storedReply()).toBeNull()
+		})
+
+		it('keeps the audience a resumed reply draft was given', async () => {
+			localStorage.setItem(replyKey, JSON.stringify({ text: 'My answer', visibility: 'direct', savedAt: Date.now() }))
+			const { wrapper } = mountComposer({ inReplyTo: replyTo(), listenForIntents: false, startExpanded: true, showReplyContext: true })
+			await flushPromises()
+
+			expect(typed(wrapper)).toBe('My answer')
+			expect(currentVisibility(wrapper)).toBe('direct')
+		})
+
+		it('keeps the audience of a draft handed over from the compact box', async () => {
+			const draft = { text: 'From the line', spoilerText: '', visibility: 'followers', postAs: '', media: [], poll: null, event: null, scheduledAt: '', language: '', replyPolicy: '', place: null, video: null, card: '', inReplyToId: '', quoteId: '', savedAt: Date.now() }
+			const { wrapper } = mountComposer({ inReplyTo: replyTo(), initialDraft: draft, listenForIntents: false, startExpanded: true, showReplyContext: true })
+			await flushPromises()
+
+			expect(currentVisibility(wrapper)).toBe('followers')
+		})
+
+		it('takes the audience of the post when there is no draft to resume', async () => {
+			const { wrapper } = mountComposer({ inReplyTo: replyTo(), listenForIntents: false, startExpanded: true, showReplyContext: true })
+			await flushPromises()
+
+			expect(currentVisibility(wrapper)).toBe('unlisted')
+		})
+	})
+
 	describe('the draft', () => {
 		const stored = () => JSON.parse(localStorage.getItem('social.composer.draft::alice') ?? 'null')
 
@@ -2367,7 +2493,7 @@ describe('Composer', () => {
 			const { wrapper, store } = mountComposer({ defaultVisibility: 'public' })
 			enableBluesky()
 			await wrapper.find('button[aria-label="Create an event"]').trigger('click')
-			expect(wrapper.text()).toContain('The event details are shared with the Fediverse. Bluesky receives the post text, without the event dates or location.')
+			expect(wrapper.text()).toContain('Some apps and networks show only the post text, without the event dates or location.')
 			expect(canPost(wrapper)).toBe(false)
 
 			const fields = wrapper.findAll('.event-editor input')
@@ -3462,6 +3588,92 @@ describe('Composer', () => {
 			await flushPromises()
 
 			expect(input(wrapper).element.innerText).toBe('something else')
+		})
+
+		it('goes out as the reply it was, asking for the post it answered', async () => {
+			const parentPost = replyTo(carol, { id: '90', visibility: 'public' })
+			const { wrapper, store } = mountComposer({ initialRedraft: deleted({ in_reply_to_id: '90' }), listenForIntents: false, startExpanded: true, showReplyContext: true })
+			const fetchStatus = vi.spyOn(store, 'fetchStatus').mockResolvedValue(parentPost)
+			wrapper.vm.restoreRedraftTargets('90', '')
+			await flushPromises()
+
+			expect(fetchStatus).toHaveBeenCalledWith('90')
+			expect(wrapper.vm.replyTo.id).toBe('90')
+			expect(wrapper.vm.draftContext).toBe('redraft.101')
+			expect(JSON.parse(localStorage.getItem('social.composer.draft.redraft.101::alice'))).toMatchObject({ inReplyToId: '90' })
+
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			expect(postedStatus(store).in_reply_to_id).toBe('90')
+			expect(postedStatus(store).visibility).toBe('followers')
+		})
+
+		it('uses the post it answered when it is already in hand', async () => {
+			const { wrapper, store } = mountComposer()
+			store.addToStatuses(replyTo(carol, { id: '90' }))
+			const fetchStatus = vi.spyOn(store, 'fetchStatus')
+
+			eventBus.emit('composer-redraft', deleted({ in_reply_to_id: '90' }))
+			await flushPromises()
+
+			expect(fetchStatus).not.toHaveBeenCalled()
+			expect(wrapper.vm.replyTo.id).toBe('90')
+		})
+
+		it('keeps the quote it carried', async () => {
+			const quoted = quoteOf()
+			const { wrapper, store } = mountComposer({ initialRedraft: deleted({ quote: { state: 'accepted', quoted_status: quoted } }), listenForIntents: false, startExpanded: true })
+			await flushPromises()
+
+			expect(wrapper.vm.quoteOf.id).toBe('77')
+			expect(JSON.parse(localStorage.getItem('social.composer.draft.redraft.101::alice'))).toMatchObject({ quoteId: '77' })
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			expect(postedStatus(store).quote_id).toBe('77')
+		})
+
+		it('puts the reply and the quote back when the saved re-draft is resumed', async () => {
+			localStorage.setItem('social.composer.draft.redraft.101::alice', JSON.stringify({ text: 'Revised', inReplyToId: '90', quoteId: '77', savedAt: Date.now() }))
+			const pinia = createPinia()
+			setActivePinia(pinia)
+			const store = useTimelineStore()
+			store.addToStatuses(replyTo(carol, { id: '90' }))
+			store.addToStatuses(quoteOf())
+			const wrapper = mount(Composer, {
+				props: { initialDraftContext: 'redraft.101', listenForIntents: false, startExpanded: true },
+				global: { plugins: [pinia], stubs: { NcDialog: NcDialogStub, NcAvatar: true, ActorAvatar: true, RouterLink: RouterLinkStub } },
+			})
+			wrappers.push(wrapper)
+			await flushPromises()
+
+			expect(typed(wrapper)).toBe('Revised')
+			expect(wrapper.vm.replyTo.id).toBe('90')
+			expect(wrapper.vm.quoteOf.id).toBe('77')
+			expect(wrapper.vm.draftContext).toBe('redraft.101')
+		})
+
+		it('goes out on its own when the post it answered is gone', async () => {
+			const { wrapper, store } = mountComposer()
+			vi.spyOn(store, 'fetchStatus').mockResolvedValue(null)
+
+			eventBus.emit('composer-redraft', deleted({ in_reply_to_id: '90' }))
+			await flushPromises()
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(wrapper.vm.replyTo).toBeNull()
+			expect(postedStatus(store).in_reply_to_id).toBeUndefined()
+		})
+
+		it('goes out on its own when the post it answered cannot be asked for', async () => {
+			const { wrapper, store } = mountComposer()
+			vi.spyOn(store, 'fetchStatus').mockRejectedValue(new Error('offline'))
+
+			eventBus.emit('composer-redraft', deleted({ in_reply_to_id: '90' }))
+			await flushPromises()
+
+			expect(wrapper.vm.replyTo).toBeNull()
+			expect(typed(wrapper)).toBe('Hello world')
 		})
 	})
 

@@ -39,9 +39,12 @@
 			<div v-if="singlePost" class="main-post__under">
 				<PostDetails :status="singlePost" />
 				<PostReactedBy :status="singlePost" />
+				<!-- one box per post: opened from a thread, another post gets
+				     its own recipients, audience and saved draft -->
 				<Composer
 					v-if="canReply"
 					v-show="!timelineStore.composerDisplayStatus"
+					:key="singlePost.id"
 					oneLine
 					:listenForIntents="false"
 					:inReplyTo="singlePost" />

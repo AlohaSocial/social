@@ -12,6 +12,10 @@
 			v-if="isOwnProfile && !timelineStore.composerDisplayStatus"
 			oneLine
 			:listenForIntents="false" />
+		<DraftsButton
+			v-if="isOwnProfile"
+			class="compose-drafts"
+			:disabled="timelineStore.composerDisplayStatus" />
 
 		<div class="profile-sections">
 			<router-view v-if="accountLoaded && accountInfo && profileRouteReady" name="details" :profileLayout="accountInfo.profile_layout" />
@@ -49,6 +53,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import { generateUrl } from '@nextcloud/router'
 import AlohaScene from '../components/illustrations/AlohaScene.vue'
+import DraftsButton from '../components/DraftsButton.vue'
 import ProfileInfo from './../components/ProfileInfo.vue'
 import { defineAsyncComponent, ref } from 'vue'
 import logger from '../services/logger.js'
@@ -68,6 +73,7 @@ export default {
 	components: {
 		Composer,
 		AlohaScene,
+		DraftsButton,
 		NcButton,
 		NcEmptyContent,
 		ProfileInfo,
@@ -254,6 +260,11 @@ export default {
 </script>
 
 <style scoped lang="scss">
+.compose-drafts {
+	display: flex;
+	justify-content: flex-end;
+}
+
 .social__wrapper {
 	max-width: var(--social-column);
 	margin: 0 auto;

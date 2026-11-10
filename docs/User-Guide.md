@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.285** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.286** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -147,9 +147,10 @@ people** makes an invitation link: it works once and for a week.
   administrator has blocked or limited are never offered.
 - **Follow** on a profile, in search results or on a Discover card sends a
   follow request. On an open account it is accepted at once; on a locked
-  account the button reads **Requested** until the owner answers. **Unfollow**
-  asks you to confirm, because on a locked account you would have to ask
-  again.
+  account the button reads **Requested** until the owner answers. Pointing at
+  it or tabbing to it turns it into **Withdraw request**: press it and confirm
+  to take the request back. **Unfollow** asks you to confirm, because on a
+  locked account you would have to ask again.
 - **Followed hashtags.** A hashtag timeline (`#tag` in a post, or a trending
   tag) has a follow button; following a tag puts the *public* posts carrying
   it into your home feed. It is not a relationship with anybody, and the tags
@@ -179,7 +180,19 @@ short message says so. An attachment that is still uploading cannot be kept
 yet, so leaving the page while one is on its way asks you first. A draft is
 kept for a week, for your account only. A reply keeps its own draft, under the
 post it answers, and so does a quote, so starting one does not take the place
-of a post you were still writing.
+of a post you were still writing. A resumed reply keeps the audience you chose
+for it. Opening a post is not a draft: a reply that holds only the names it is
+addressed to is not kept. **Drafts (N)** under the compact post field on your
+home feed and your own profile (and beside **Share photos or a video** on
+Photos) lists every kept draft — new posts, replies, quotes and re-drafts —
+newest first; pick one to continue it, or delete it there. A re-draft of a
+deleted reply or quote is still that reply or quote: the post it answered and
+the post it quoted come back with it, shown above the box. If the post it
+answered is gone, none is shown and the re-draft goes out on its own.
+An event needs a title and a start time, and an end after the start; the
+composer says so once you leave the event fields incomplete or try to post, not
+while you are still filling them in. Some apps show only the post text of an
+event, without its dates or location.
 **Ctrl+Enter** (**⌘+Enter** on a Mac) sends from the full composer. Closing the
 popup preserves the draft; unsaved edits and unfinished uploads ask before
 discarding. **Escape** closes the popup subject to that protection.
@@ -467,7 +480,10 @@ The sidebar is the map:
     lasts, since the browser plays it through once), uploading, posting.
     Closing the dialog with a video in it asks before throwing it away.
 - **Activities** — your notifications: mentions, favourites, boosts, new
-  followers and follow requests, poll results, edits of posts you boosted.
+  followers and follow requests, poll results, edits of posts you boosted,
+  reactions and replies to your stories, photos you were tagged in, and what a
+  moderator decided about your account. The **Mentions** filter also keeps
+  story replies and photo tags, and **Favourites** keeps story reactions.
   It is in the sidebar, between Shorts and Direct messages. The badge
   beside it counts what arrived since you last looked, plus the people
   [waiting for your review](#who-may-reach-you-and-requests); the same
@@ -504,7 +520,9 @@ The sidebar is the map:
   The new chat uses the same person header and message field as an existing
   conversation. Messages are sent privately to that person, so there is no
   public, follower-only or other audience to choose and no repeated mention to
-  type. The inbox lists conversations the way the feed lists posts — the
+  type. A message you have started is kept per chat, and one for a new chat,
+  in this browser for a week: switch to another chat or leave the page, and it
+  is back when you return; sending it clears it. The inbox lists conversations the way the feed lists posts — the
   person's face and name, a line of the last message and how long ago it was
   (*3h*, *2w*) — with **All** and **Unread** in the same switcher as My Feed
   and Local. A search box joins them once there are more than a handful of

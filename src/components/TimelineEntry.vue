@@ -46,6 +46,12 @@
 				<Heart v-if="notification.type === 'bluesky:repost_liked'" :size="16" />
 				<Repeat v-if="notification.type === 'bluesky:repost_reposted'" :size="16" />
 				<CheckDecagram v-if="notification.type === 'bluesky:verified'" :size="16" />
+				<CheckDecagramOutline v-if="notification.type === 'bluesky:unverified'" :size="16" />
+				<EmoticonHappyOutline v-if="notification.type === 'story:react'" :size="16" />
+				<CommentTextOutline v-if="notification.type === 'story:comment'" :size="16" />
+				<AccountTagOutline v-if="notification.type === 'tagged'" :size="16" />
+				<ShieldAlertOutline v-if="notification.type === 'moderation_warning'" :size="16" />
+				<AccountMultipleRemoveOutline v-if="notification.type === 'severed_relationships'" :size="16" />
 				<AccountPlusOutline v-if="notification.type === 'bluesky:starterpack_joined'" :size="16" />
 				{{ actionSummary }}
 			</span>
@@ -177,6 +183,12 @@ import At from 'vue-material-design-icons/At.vue'
 import Lock from 'vue-material-design-icons/Lock.vue'
 import Poll from 'vue-material-design-icons/Poll.vue'
 import CheckDecagram from 'vue-material-design-icons/CheckDecagram.vue'
+import CheckDecagramOutline from 'vue-material-design-icons/CheckDecagramOutline.vue'
+import EmoticonHappyOutline from 'vue-material-design-icons/EmoticonHappyOutline.vue'
+import CommentTextOutline from 'vue-material-design-icons/CommentTextOutline.vue'
+import AccountTagOutline from 'vue-material-design-icons/AccountTagOutline.vue'
+import ShieldAlertOutline from 'vue-material-design-icons/ShieldAlertOutline.vue'
+import AccountMultipleRemoveOutline from 'vue-material-design-icons/AccountMultipleRemoveOutline.vue'
 import MessageOutline from 'vue-material-design-icons/MessageOutline.vue'
 import MessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
 import Pound from 'vue-material-design-icons/Pound.vue'
@@ -243,6 +255,12 @@ export default {
 		Lock,
 		Poll,
 		CheckDecagram,
+		CheckDecagramOutline,
+		EmoticonHappyOutline,
+		CommentTextOutline,
+		AccountTagOutline,
+		ShieldAlertOutline,
+		AccountMultipleRemoveOutline,
 		MessageOutline,
 		MessagePlusOutline,
 		Pound,
