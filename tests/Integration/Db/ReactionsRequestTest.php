@@ -136,7 +136,7 @@ class ReactionsRequestTest extends TestCase {
 		$this->assertSame(2, $this->countsOf(self::POST)['🎉']);
 	}
 
-	/** The counts, whatever order emoji used in the same second come in. */
+	/** The same keys and values, whatever order the database returned the rows in. */
 	private function assertSameCounts(array $expected, array $actual): void {
 		ksort($expected);
 		ksort($actual);
@@ -157,7 +157,7 @@ class ReactionsRequestTest extends TestCase {
 		$this->react(self::ALICE, self::OTHER, '🎉');
 		$this->react(self::BOB, self::OTHER, '🔥');
 
-		$this->assertSame([
+		$this->assertSameCounts([
 			md5(self::POST) => ['👍' => true],
 			md5(self::OTHER) => ['🎉' => true],
 		], $this->reactions->emojisOf(self::ALICE, [self::POST, self::OTHER]));
