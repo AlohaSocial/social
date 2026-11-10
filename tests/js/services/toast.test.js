@@ -19,32 +19,22 @@ const SOURCE = readFileSync(resolve(process.cwd(), 'src/services/toast.js'), 'ut
 
 describe('the toast service', () => {
 	/**
-	 * `@nextcloud/dialogs` 7 draws a toast with CSS-module class names and
-	 * ships their rules in a stylesheet of its own. The server styles the
-	 * markup an older major produced and matches none of them, so without this
-	 * import every toast in the app is an unstyled block in the top left.
+	 * `@nextcloud/dialogs/toast` holds only the toasts and imports the
+	 * stylesheet they are drawn with; the main entry would bring the file
+	 * picker along.
 	 */
-	it('loads the stylesheet the toasts are drawn with', () => {
-		expect(SOURCE).toContain("'@nextcloud/dialogs/style.css'")
+	it('loads the toast entry point, lazily, in its own chunk', () => {
+		expect(SOURCE).toMatch(/import\(\s*\/\* webpackChunkName: "toast" \*\/\s*'@nextcloud\/dialogs\/toast'\)/)
+		expect(SOURCE).not.toMatch(/^import\s+.*from\s+'@nextcloud\/dialogs/m)
+		expect(SOURCE).not.toMatch(/'@nextcloud\/dialogs'/)
 	})
 
 	/**
-	 * In the same chunk as the library: a static import at the top of the
-	 * module would put the stylesheet back in the entry this file exists to
-	 * keep small.
+	 * Version 8 has no `style.css` export any more: importing it fails the
+	 * build, and the toast entry brings its rules itself.
 	 */
-	it('puts it in the lazy chunk rather than the entry', () => {
-		const styleImport = SOURCE.match(/import\([^)]*@nextcloud\/dialogs\/style\.css[^)]*\)/)
-
-		expect(styleImport).not.toBeNull()
-		expect(styleImport[0]).toContain('webpackChunkName: "toast"')
-		// no top-level `import '…style.css'`, which webpack would hoist
-		expect(SOURCE).not.toMatch(/^import\s+'@nextcloud\/dialogs\/style\.css'/m)
-	})
-
-	it('keeps the library itself out of the entry too', () => {
-		expect(SOURCE).not.toMatch(/^import\s+.*from\s+'@nextcloud\/dialogs'/m)
-		expect(SOURCE).toMatch(/import\(\s*\/\* webpackChunkName: "toast" \*\/\s*'@nextcloud\/dialogs'\)/)
+	it('imports no stylesheet of its own', () => {
+		expect(SOURCE).not.toContain('style.css')
 	})
 
 	it('forwards the four kinds of toast the app raises', () => {
@@ -91,15 +81,14 @@ describe('showError', () => {
 })
 
 /**
- * The service with `@nextcloud/dialogs` replaced, read fresh for each test.
+ * The service with `@nextcloud/dialogs/toast` replaced, read fresh for each test.
  *
  * @return {Promise<{dialogs: object, showError: Function}>} the stand-in library, and the service's showError
  */
 async function loadToast() {
 	vi.resetModules()
 	const dialogs = { showError: vi.fn(), showMessage: vi.fn(), ToastType: { ERROR: 'toast-error' } }
-	vi.doMock('@nextcloud/dialogs', () => dialogs)
-	vi.doMock('@nextcloud/dialogs/style.css', () => ({}))
+	vi.doMock('@nextcloud/dialogs/toast', () => dialogs)
 	const { showError } = await import('../../../src/services/toast.js')
 
 	return { dialogs, showError }
