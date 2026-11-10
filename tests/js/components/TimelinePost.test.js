@@ -948,7 +948,10 @@ describe('TimelinePost', () => {
 			const timestamp = wrapper.find('.post-timestamp')
 
 			expect(timestamp.element.tagName).toBe('BUTTON')
-			expect(timestamp.attributes('aria-label')).toBeTruthy()
+			// named by the time it shows (WCAG 2.5.3), with what it does as its description
+			expect(timestamp.attributes('aria-label')).toBeUndefined()
+			const description = wrapper.find(`[id="${timestamp.attributes('aria-describedby')}"]`)
+			expect(description.text()).toMatch(/^Open this post, written /)
 		})
 
 		it('keeps the like button in place as the state changes', async () => {

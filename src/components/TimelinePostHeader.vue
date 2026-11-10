@@ -30,7 +30,7 @@
 			:data-timestamp="timestamp"
 			class="post-timestamp live-relative-timestamp"
 			:title="formattedDate"
-			:aria-label="t('social', 'Open this post, written {time}', { time: formattedDate })">
+			:aria-describedby="timeDescriptionId">
 			{{ relativeTimestamp }}
 		</a>
 		<button
@@ -39,10 +39,12 @@
 			type="button"
 			class="post-timestamp live-relative-timestamp"
 			:title="formattedDate"
-			:aria-label="t('social', 'Open this post, written {time}', { time: formattedDate })"
+			:aria-describedby="timeDescriptionId"
 			@click="$emit('open')">
 			{{ relativeTimestamp }}
 		</button>
+		<!-- Core rewrites the text of .live-relative-timestamp, so the description stays outside the time. -->
+		<span :id="timeDescriptionId" class="hidden-visually">{{ t('social', 'Open this post, written {time}', { time: formattedDate }) }}</span>
 		<span v-if="item.pinned" class="post-pinned" :title="t('social', 'Pinned post')">
 			<Pin :size="14" />
 			{{ t('social', 'Pinned') }}
@@ -73,6 +75,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
+import { useId } from 'vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
 import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import MapMarkerOutline from 'vue-material-design-icons/MapMarkerOutline.vue'
@@ -114,6 +117,7 @@ export default {
 	setup() {
 		return {
 			t,
+			timeDescriptionId: useId(),
 			isBlueskyAccount,
 			isLocalAccount: (account) => Boolean(account?.acct && isLocalActor(account) && account.username),
 			localProfileUrl,
