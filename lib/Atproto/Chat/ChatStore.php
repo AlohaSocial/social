@@ -22,6 +22,7 @@ use OCA\Social\Db\AtprotoChatMessageRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
+use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -171,6 +172,9 @@ class ChatStore {
 			}
 			try {
 				$to[] = $this->actors->resolve($did)->getId();
+			} catch (CacheActorDoesNotExistException $e) {
+				// a member Bluesky no longer knows is left out of the recipients
+				$this->logger->info('Member of a Bluesky conversation left out', ['did' => $did, 'exception' => $e]);
 			} catch (Throwable $e) {
 				$this->logger->notice('Member of a Bluesky conversation not resolved', ['did' => $did, 'exception' => $e]);
 				throw $e;
@@ -372,12 +376,28 @@ class ChatStore {
 
 	/**
 	 * The message here an account sent to Bluesky as `$messageId`; '' for
-	 * one not sent from here.
+	 * one not sent from here. Read from `social_atp_chat_message`; a mapping
+	 * only the cache still holds is written there when found.
 	 */
 	public function sentHere(string $did, string $messageId): string {
+		if ($messageId === '') {
+			return '';
+		}
+		foreach ($this->messages->noteIds($did, $messageId) as $noteId) {
+			if (!self::messageLocationLooksLikeBluesky($noteId)) {
+				return $noteId;
+			}
+		}
 		$noteId = $this->durableCache->getShared(self::SENT, $did . "\0" . $messageId);
+		if (!is_string($noteId) || $noteId === '') {
+			return '';
+		}
+		$convo = $this->durableCache->getShared(self::CONVO, $noteId);
+		if (is_string($convo) && $convo !== '') {
+			$this->messages->remember($did, $noteId, $convo, $messageId);
+		}
 
-		return is_string($noteId) ? $noteId : '';
+		return $noteId;
 	}
 
 	/**
@@ -388,6 +408,10 @@ class ChatStore {
 	public function convoOf(string $noteId): string {
 		if (preg_match('#^https://bsky\.app/profile/did:[a-z]+:[A-Za-z0-9._:%-]+/convo/([^/]+)/[^/]+$#', $noteId, $m) === 1) {
 			return rawurldecode($m[1]);
+		}
+		$convo = $this->messages->convoOf($noteId);
+		if ($convo !== '') {
+			return $convo;
 		}
 		$convo = $this->durableCache->getShared(self::CONVO, $noteId);
 

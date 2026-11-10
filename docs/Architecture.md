@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.286
+**App version:** 0.26.287
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -227,7 +227,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_announce_react` | The emoji accounts have put on an announcement, unique on (announcement, account, emoji) |
 | `social_emoji` | The custom emoji this instance publishes: `shortcode` (unique), the appdata file behind it, its media type, its picker category and whether a picker offers it |
 | `social_stream_card` | The link-preview card of a status (url, title, description, image, provider), one row per stream |
-| `social_atp_chat_message` | Persistent local-to-Bluesky chat message identifiers, removed with their local message |
+| `social_atp_chat_message` | Persistent local-to-Bluesky chat message identifiers, removed with their local message; `message_prim` (md5 of the Bluesky id, indexed with `did`) finds the local message of a Bluesky id |
 | `social_reaction` | Who reacted to which post with which emoji; unique on (actor, post, emoji), so a redelivered `EmojiReact` is refused rather than counted twice. Inserts skip uniqueness conflicts at the database level, preserving an enclosing PostgreSQL transaction. Object-based removal also matches the activity ID, so a delayed Undo or post-insert cleanup cannot delete a newer reaction with the same emoji. A reaction bar is counted by the database (`ReactionsRequest::countByObjectIds()`, `GROUP BY object_id_prim, emoji`, one query for a page) with the reader's own emoji read by a second (`emojisOf()`), so a post is counted in full however many reacted. Not counted: suspended and silenced accounts, accounts on a blocked or silenced instance, and, for the reader, accounts they block, are blocked by or mute (`NOT EXISTS` probes on `social_actor_relation`'s unique index and `social_mute_expiry`). An inbound `EmojiReact` from an account the local author blocked is dropped (`EmojiReactInterface::save()`), and a local reaction to an author who blocked the reader is refused (`ReactionService::create()`, `BlockedByService`) |
 | `social_gif` | The instance's shared picture library the composer offers, unique on the slug; the bytes live in appdata beside the custom emoji |
 | `social_followed_tag` | The hashtags an account follows: one row per (actor, lowercased tag), unique on the pair; `filled` is when the tag's posts were last read from beyond this server (`FollowedTagsFill`, Unix time, 0 for never), indexed with the tag (`Version1000Date20261009000710`) |
@@ -670,13 +670,20 @@ the repository transaction. Responses report `valid` only for schema-checked
 records and `unknown` for opaque or explicitly unvalidated records.
 
 `social_atp_chat_message` retains each account's local-to-Bluesky message
-identifiers without expiry. `StreamDeletion` removes these rows when their
+identifiers without expiry, readable both ways: the Bluesky message of a local
+one, and (by `message_prim`, the md5 of the Bluesky id, indexed with the DID)
+the local message sent from here as a Bluesky message, which is how the log's
+copy of it, and Bluesky reactions and read markers on it, are recognised
+(`ChatStore::sentHere()`, `convoOf()`). `Version1000Date20261108500000` adds
+the column and computes it for the rows already there. `StreamDeletion` removes these rows when their
 local messages are deleted, including author and batch deletion. Existing
 unexpired cache mappings are promoted on lookup. Unrecoverable old mappings
 fail closed rather than falling back to ActivityPub reaction delivery.
 An interrupted initial chat backfill retains its original unread window and
 log revision while new messages arrive; subsequent log synchronization picks
-up activity beyond that revision.
+up activity beyond that revision. A history that ends before the unread count
+is reached (messages deleted since Bluesky counted them) is imported as found
+and the conversation counts as complete.
 For records retained as written, `createRecord` always uses a repository create
 operation and refuses an existing key, including under concurrent writes.
 Its optional `swapCommit` is checked under the repository lock; `putRecord`
@@ -707,10 +714,16 @@ cursors stay on that one-minute cadence even when an inbox is empty; the
 empty result is not evidence that the next event will arrive soon. The
 effective delay still depends on how often Nextcloud runs background jobs and
 how quickly the Bluesky AppView indexes an event. `FeedPoller` and
-`NotificationPoller` read at most one AppView page per due account and pass.
-A feed's first read walks pages to the end, so its cursor
+`NotificationPoller` read at most one older AppView page per due account and
+pass; while a feed's walk is unfinished it reads its newest page as well, so
+posts written meanwhile are stored on the next pass rather than after the
+walk, and the newest of them count for the walk once that page reaches it.
+A feed's first read walks back from the newest page, so its cursor
 starts without a committed timestamp and advances only when the walk finishes;
-notification polling starts with a snapshot of its newest page. `Reader\PollCursor` keeps their committed timestamp separate
+a feed walk goes back at most 30 days (`FeedPoller::BACKFILL_AGE`) and at most
+ten pages of 50 (`WALK_PAGES`), and then commits what it read, so following
+an account imports its recent posts rather than its whole history.
+Notification polling starts with a snapshot of its newest page. `Reader\PollCursor` keeps their committed timestamp separate
 from the AppView's opaque pagination cursor. While walking a backlog, the
 existing cursor column holds JSON with `since` (the previous committed
 timestamp), `newest` (the newest timestamp seen in this walk) and `page` (the
@@ -720,11 +733,24 @@ unique: an event exactly at the committed timestamp is still read, and only
 a strictly older event ends the walk. If equal-time events span pages, the
 opaque page cursor carries the walk across them. Re-reading an event at the
 boundary is safe because imports are idempotent. No schema change is needed.
-Empty intermediate pages still continue, while malformed responses, repeated
-cursors and failed reads retain the existing checkpoint and use failure
-backoff. A pending walk stays on the ordinary two-minute interval even when
+Empty intermediate pages still continue, while malformed responses and
+failed reads retain the existing checkpoint and use failure backoff. A cursor
+the AppView hands back unchanged means it has no older page, and ends the
+walk. A pending walk stays on the ordinary two-minute interval even when
 its current page stores no new rows. The initial feed read is bounded to one
-page per pass and continues until the AppView has no older page.
+older page per pass and continues until the AppView has no older page or the
+age or page limit is reached.
+
+An account the AppView refuses with a status (`AccountDeactivated`,
+`RepoSuspended`, `AccountTakedown`, `RepoNotFound` …) is acted on by
+`Reader\AccountStatus` once it has said so three times with no successful
+read between; network errors and plain not-founds in between neither count
+nor reset the count (kept as a `[status n]` prefix of the watch's
+`last_error`). Jetstream's `#account` event is acted on at once. A
+deactivated, suspended or taken-down account is hidden and kept: its posts
+leave the timelines, the follows of it stay, and when Bluesky serves it again
+everything is restored. Only a deleted account (`RepoNotFound`, or
+`status: deleted`) is purged with its posts and follows.
 Pinned feed entries do not participate in chronological synchronization:
 `BlueskyPins` handles them separately, and an old pin must not end the walk.
 
@@ -2457,13 +2483,23 @@ Messages wakes the account's next read (`ConversationService::getPage()`).
 
 On the first sync, the poller follows the cursors from `listConvos` and
 `getMessages` until it has found the conversation's reported `unreadCount`
-of incoming messages. Messages sent by the account in that range are retained
-too; deleted-message views count toward the unread boundary but are not
-recreated as content. An incomplete page, failed local write, or unavailable
-sender/member leaves the initial cursor uncommitted so the idempotent backfill
-can retry. Incremental `getLog` is a revision-based batch, not a paged API:
-each returned event is processed before its revision is committed, and an
-unknown or incomplete event prevents advancement. The Chat lexicon does not
+of incoming messages, or the history ends, in which case what was found is
+imported and the conversation is complete. Messages sent by the account in
+that range are retained too; deleted-message views count toward the unread
+boundary but are not recreated as content. An incomplete page or a failed
+local write leaves the initial cursor uncommitted so the idempotent backfill
+can retry; a message whose sender Bluesky no longer knows is passed over.
+Incremental `getLog` is a revision-based batch, not a paged API: each
+returned event is handled before its revision counts. An event that can
+never be handled — an unknown or incomplete record, a sender Bluesky no
+longer knows — is logged and passed over. Any other failure saves the
+revision of the last event handled (`AtprotoWatchRequest::checkpoint()`), so
+the events before it are not replayed, and retries the failing event with
+the ordinary backoff, at most `ChatPoller::EVENT_ATTEMPTS` (5) times before
+it is passed over too. A message the account wrote in a group goes to the
+members that can be resolved; one Bluesky no longer knows is left out.
+Every active identity gets a cursor row; the identities are walked for that
+only when their count or newest id changes, and at least hourly. The Chat lexicon does not
 expose a read cursor per conversation, so the initial boundary is derived from
 sender identities and the reported unread count.
 
@@ -2472,10 +2508,10 @@ stored as its own direct message to the conversation's other members, saved
 with `StreamRequest::save()` alone — the stream row and its recipient rows,
 no `PostService`, no `PostPublishedEvent`, not `local` — so nothing
 delivers it again. `ChatSender` remembers the Bluesky id `sendMessage`
-answered with (`ChatStore::sent()`), so the log's copy of a message sent
-from here is recognised, and which Bluesky conversation a message here is
-in (`ChatStore::convoOf()`: in the id of one from Bluesky, remembered for
-one sent from here). With that, `ConversationService::markRead()`,
+answered with (`ChatStore::sent()`, in `social_atp_chat_message`), so the
+log's copy of a message sent from here is recognised, and which Bluesky
+conversation a message here is in (`ChatStore::convoOf()`: in the id of one
+from Bluesky, from that table for one sent from here). With that, `ConversationService::markRead()`,
 `markAllRead()` and `remove()` tell `Chat\ChatState` (resolved from the
 container), which queues an `AtprotoPublish` `chat` job: `updateRead`,
 `updateAllRead`, or `leaveConvo` for a conversation that is still a
@@ -4192,7 +4228,7 @@ $context->registerEventListener(PostPublishedEvent::class, MyListener::class);
 | Background Jobs | `Cron\ExpiredStories` | `appinfo/info.xml` | Hourly: deletes the stories (24-hour shorts) whose day is up, at most 500 per run. The read filter on `expires_at` is the other half of the guarantee; this is what stops the rows and pictures outliving it |
 | Background Jobs | `Cron\ScheduledPosts` | `appinfo/info.xml` | 5-minute interval: publishes the scheduled posts whose time has come, at most 50 per run. Shorter than the other two jobs on purpose — a post may be published up to one cron period late, and a period longer than the five minutes' notice the API demands would promise a precision the app cannot keep |
 | Background Jobs | `Cron\NotificationDigests` | `appinfo/info.xml` | 5-minute interval, for the same reason as `ScheduledPosts`: visits the users flagged by `NotificationDeliveryService` (at most 1000 per run, 240 seconds), and for each raises the digests that have fallen due since their last one — the digest times in digest mode, the end of the quiet window in either mode — with the due time as the cut rather than the moment the job ran, so a late job reports the window the user asked for and the next window starts where it ended. At most four per user per run; a user with no clock yet gets one started rather than a digest of everything since 1970 |
-| Background Jobs | `Cron\AtprotoMaintenance` | `appinfo/info.xml` | 5-minute interval, only while Bluesky is on: reconciles the last day's public posts with their Bluesky records (publishes what the listener missed, replaces an edit within the grace period, removes the record of a deleted post; the newest 100 posts and post records written here, and the next 100 of the rest of the day from where the last run stopped, the position in `social_durable_cache`), resends directory operations the PLC refused, prunes the firehose past its replay window, drops retired instance keys, checks a bounded page of stored Bluesky posts against the AppView and the author's PDS (`DeletionSweep`; each cycle snapshots its highest NID, retries inconclusive per-post checks in the next cycle, and persists its cursor in `atproto_delete_cursor`), checks custom handles once a day (`CustomHandleService::recheck()`, dropping one that failed seven checks in a row), and picks up account moves whose job stopped (`StaleMoves`: a running move not written to for an hour, with no job queued and none holding its lock, is queued again once, then failed with `move-interrupted` — or, moving here at the follows or the posts, done) |
+| Background Jobs | `Cron\AtprotoMaintenance` | `appinfo/info.xml` | 5-minute interval, only while Bluesky is on: reconciles the last day's public posts with their Bluesky records (publishes what the listener missed, replaces an edit within the grace period, removes the record of a deleted post; the newest 100 posts and post records written here, and the next 100 of the rest of the day from where the last run stopped, the position in `social_durable_cache`), resends directory operations the PLC refused, prunes the firehose past its replay window, drops retired instance keys, checks stored Bluesky posts against the AppView and the author's PDS (`DeletionSweep`: up to eight pages of the posts published in the last seven days within a 20-second budget, cursor in `atproto_delete_recent_cursor`, plus one page of the whole history, whose cycle snapshots its highest NID, retries inconclusive per-post checks in the next cycle, and persists its cursor in `atproto_delete_cursor`; an instance with no Bluesky post is not asked again for an hour, and once `author_host` is filled the posts are found through its index), checks custom handles once a day (`CustomHandleService::recheck()`, dropping one that failed seven checks in a row), and picks up account moves whose job stopped (`StaleMoves`: a running move not written to for an hour, with no job queued and none holding its lock, is queued again once, then failed with `move-interrupted` — or, moving here at the follows or the posts, done) |
 | Background Jobs | `Cron\AtprotoHealthCheck` | `appinfo/info.xml` | 15-minute interval, only while Bluesky is on: refreshes cached checks of public OAuth protected-resource and authorization-server discovery (JSON origin, one authorization server, PAR, DPoP/ES256, grants, S256, scopes and client-auth methods), public PLC DID resolution, AppView profile and newest-post visibility, relay host status and one active local repo per relay, and the firehose reverse-proxy WebSocket handshake; reports missing external indexing as a warning because relays and AppViews converge asynchronously |
 | Background Jobs | `Cron\AtprotoSync` | `appinfo/info.xml` | 2-minute interval, only while Bluesky is on: reads the newest page of each due watch (`social_atproto_watch`) from the public AppView and stores what is new, then asks the AppView's notifications for each due local account (`social_atproto_notify_cursor`); both within the request ceiling, both backed off after empty reads |
 | Background Jobs | `Cron\AtprotoVideo` | `appinfo/info.xml` | 1-minute interval, only while Bluesky is on and a video service is set: sends up to three queued videos to Bluesky's video service in their accounts' names, asks after the jobs being made, and publishes each post whose video has ended — with the video, or as a link (`social_atproto_video`) |

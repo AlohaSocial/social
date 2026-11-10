@@ -165,6 +165,22 @@ class AtprotoIdentityRequest extends CoreRequestBuilder {
 		return $row === false ? null : $this->identity($row);
 	}
 
+	/**
+	 * How many identities are active and the highest id among them, in one
+	 * query: what changes when one is made, moved in, or switched on or off.
+	 */
+	public function activeSignature(): string {
+		$qb = $this->getQueryBuilder();
+		$qb->select($qb->func()->count('id', 'n'))->selectAlias($qb->func()->max('id'), 'm')
+			->from(self::TABLE_ATPROTO_IDENTITY)
+			->where($qb->expr()->eq('state', $qb->createNamedParameter(Identity::STATE_ACTIVE)));
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return is_array($row) ? (int)($row['n'] ?? 0) . ':' . (int)($row['m'] ?? 0) : '0:0';
+	}
+
 	public function count(): int {
 		$qb = $this->getQueryBuilder();
 		$qb->select($qb->func()->count('id', 'n'))->from(self::TABLE_ATPROTO_IDENTITY);

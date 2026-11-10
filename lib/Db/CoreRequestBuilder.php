@@ -133,7 +133,7 @@ class CoreRequestBuilder {
 	public const TABLE_VERIFICATIONS = 'social_verification';
 
 	public static array $tables = [
-		self::TABLE_ATPROTO_CHAT_MESSAGE => ['stream_id_prim', 'did', 'convo_id', 'message_id'],
+		self::TABLE_ATPROTO_CHAT_MESSAGE => ['stream_id_prim', 'did', 'convo_id', 'message_id', 'message_prim'],
 		self::TABLE_ATPROTO_IDENTITY => [
 			'id', 'actor_id', 'actor_id_prim', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public',
 			'state', 'moved_from_pds', 'creation', 'updated', 'custom_handle', 'custom_handle_checked', 'custom_handle_failures',

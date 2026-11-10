@@ -22,6 +22,7 @@ use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -68,6 +69,17 @@ class ChatPollerTest extends TestCase {
 	private array $durable = [];
 	private bool $failReceivedOnce = false;
 	private bool $failGetMembersOnce = false;
+	/** @var array<string, \Throwable> what the store throws, by message id, every time */
+	private array $throwFor = [];
+	/** @var list<array{string, string}> cursors saved part-way: DID and revision */
+	private array $checkpoints = [];
+	/** @var list<Identity> what the identity service lists */
+	private array $allIdentities = [];
+	private string $signature = '0:0';
+	/** @var array<string, Watch> cursor rows that exist, by DID */
+	private array $existing = [];
+	/** @var list<string> DIDs given a cursor row */
+	private array $added = [];
 
 	private function poller(): ChatPoller {
 		$config = $this->createMock(AtprotoConfig::class);
@@ -77,6 +89,8 @@ class ChatPollerTest extends TestCase {
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('getByDid')->willReturnCallback(fn (): Identity => new Identity(1, 'https://social.test/users/alice', self::ALICE, 'alice.social.test', 'sealed', '', '', $this->state, '', 0));
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
+		$identities->method('activeSignature')->willReturnCallback(fn (): string => $this->signature);
+		$identities->method('getAll')->willReturnCallback(fn (int $limit = 1000, int $offset = 0): array => array_slice($this->allIdentities, $offset, $limit));
 		$appView = $this->createMock(AppViewClient::class);
 		$appView->method('chatAs')->willReturnCallback(function (string $did, PrivateKey $key, string $method, array $params = []): array {
 			$this->asked[] = [$method, $params];
@@ -103,6 +117,15 @@ class ChatPollerTest extends TestCase {
 		$cursors->method('remove')->willReturnCallback(function (string $did): void {
 			$this->removed[] = $did;
 		});
+		$cursors->method('checkpoint')->willReturnCallback(function (string $did, string $cursor): void {
+			$this->checkpoints[] = [$did, $cursor];
+		});
+		$cursors->method('getByDids')->willReturnCallback(fn (array $dids): array => array_intersect_key($this->existing, array_flip($dids)));
+		$cursors->method('add')->willReturnCallback(function (string $did): bool {
+			$this->added[] = $did;
+
+			return true;
+		});
 		$cursors->method('failed')->willReturnCallback(function (string $did, string $error, int $next, string $table): void {
 			$this->failed[] = [$did, $next - self::NOW, $table];
 			$this->now += $this->tick;
@@ -112,6 +135,9 @@ class ChatPollerTest extends TestCase {
 			if ($this->failReceivedOnce) {
 				$this->failReceivedOnce = false;
 				throw new AtprotoException('temporary local persistence failure');
+			}
+			if (isset($this->throwFor[$message['id']])) {
+				throw $this->throwFor[$message['id']];
 			}
 			$this->handed[] = ['received', $convo . '/' . $message['id']];
 			$this->members[$message['id']] = $members;
@@ -152,7 +178,7 @@ class ChatPollerTest extends TestCase {
 			unset($this->durable[$key]);
 		});
 
-		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfill($appView, $store, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfillPages($durableCache)));
+		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfill($appView, $store, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfillPages($durableCache), new NullLogger()));
 	}
 
 	/** @return list<array> */
@@ -319,15 +345,44 @@ class ChatPollerTest extends TestCase {
 		$this->assertStringEndsWith('/own-0', $this->handed[array_key_last($this->handed)][1]);
 	}
 
-	public function testTheInitialBackfillDoesNotAdvanceWhenUnreadMessagesCannotBeFound(): void {
+	/**
+	 * Messages deleted since Bluesky counted them leave the history short of
+	 * the unread count: what was found is imported and the log cursor starts.
+	 */
+	public function testAHistoryShorterThanTheUnreadCountImportsWhatWasFoundAndCompletes(): void {
 		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
 			['id' => 'c1', 'rev' => '3k022', 'unreadCount' => 2, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
 		]];
 		$this->answers['chat.bsky.convo.getMessages'] = ['messages' => [self::message('only-one')]];
 
-		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('')));
-		$this->assertSame([], $this->synced, 'an incomplete backfill must be retried instead of cursor-committed');
-		$this->assertNotEmpty($this->failed);
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame([['received', 'c1/only-one']], $this->handed);
+		$this->assertSame('3k022', $this->synced[0][1], 'the log cursor starts once the history has ended');
+		$this->assertSame([], $this->failed);
+	}
+
+	public function testAnEmptyPageAfterTheFirstEndsTheHistoryToo(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c1', 'rev' => '3k030', 'unreadCount' => 5, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		$this->cursorAnswers['chat.bsky.convo.getMessages'][''] = ['messages' => [self::message('m2'), self::message('m1')], 'cursor' => 'older'];
+		$this->cursorAnswers['chat.bsky.convo.getMessages']['older'] = ['messages' => [], 'cursor' => 'older-still'];
+
+		$this->assertSame(2, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame([['received', 'c1/m1'], ['received', 'c1/m2']], $this->handed);
+		$this->assertSame('3k030', $this->synced[0][1]);
+	}
+
+	public function testABackfilledMessageFromAnAccountBlueskyNoLongerKnowsIsPassedOver(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c1', 'rev' => '3k040', 'unreadCount' => 2, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		$this->answers['chat.bsky.convo.getMessages'] = ['messages' => [self::message('m2'), self::message('gone')]];
+		$this->throwFor['gone'] = new CacheActorDoesNotExistException('Profile not found');
+
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame([['received', 'c1/m2']], $this->handed);
+		$this->assertSame('3k040', $this->synced[0][1]);
 	}
 
 	public function testTheInitialReadLoadsAllPagedGroupMembersForOwnMessages(): void {
@@ -511,14 +566,89 @@ class ChatPollerTest extends TestCase {
 		$this->assertNotEmpty($this->failed);
 	}
 
-	public function testAnUnknownLogTypeDoesNotAdvanceTheCursor(): void {
-		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k007', 'logs' => [
+	public function testAnUnknownOrIncompleteLogEventIsPassedOver(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
 			['$type' => 'chat.bsky.convo.defs#logFutureEvent', 'rev' => '3k006'],
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k007', 'convoId' => 'c1'],
+			'broken',
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k008', 'convoId' => 'c1', 'message' => self::message('m8')],
 		]];
 
-		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('3k005')));
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('3k005')));
+		$this->assertSame([['received', 'c1/m8']], $this->handed);
+		$this->assertSame('3k008', $this->synced[0][1]);
+		$this->assertSame([], $this->failed);
+	}
+
+	/** A sender who deleted their account must not stop every later message. */
+	public function testAMessageFromAnAccountBlueskyNoLongerKnowsIsPassedOver(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k006', 'convoId' => 'c1', 'message' => self::message('gone')],
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k007', 'convoId' => 'c1', 'message' => self::message('m7')],
+		]];
+		$this->throwFor['gone'] = new CacheActorDoesNotExistException('Profile not found');
+
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('3k005')));
+		$this->assertSame([['received', 'c1/m7']], $this->handed);
+		$this->assertSame('3k007', $this->synced[0][1]);
+	}
+
+	/**
+	 * A failure part-way keeps what was handled before it, so those events
+	 * are not replayed; the event that fails is retried a bounded number of
+	 * times and then passed over.
+	 */
+	public function testAFailurePartWaySavesTheProgressAndIsPassedOverAfterItsAttempts(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k006', 'convoId' => 'c1', 'message' => self::message('m6')],
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k007', 'convoId' => 'c1', 'message' => self::message('stuck')],
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k008', 'convoId' => 'c1', 'message' => self::message('m8')],
+		]];
+		$this->throwFor['stuck'] = new AtprotoException('database unavailable');
+		$poller = $this->poller();
+
+		$this->assertSame(0, $poller->pollAccount(self::cursor('3k005')));
+		$this->assertSame([[self::ALICE, '3k006']], $this->checkpoints, 'the event handled before the failure is kept');
 		$this->assertSame([], $this->synced);
-		$this->assertNotEmpty($this->failed);
+		$this->assertCount(1, $this->failed);
+
+		$this->answers['chat.bsky.convo.getLog']['logs'] = array_slice($this->answers['chat.bsky.convo.getLog']['logs'], 1);
+		for ($attempt = 2; $attempt < ChatPoller::EVENT_ATTEMPTS; $attempt++) {
+			$this->assertSame(0, $poller->pollAccount(self::cursor('3k006')));
+		}
+		$this->assertCount(ChatPoller::EVENT_ATTEMPTS - 1, $this->failed);
+		$this->assertSame([], $this->synced);
+		$this->assertCount(1, $this->checkpoints, 'nothing new to save while the first event fails');
+
+		$this->assertSame(1, $poller->pollAccount(self::cursor('3k006')));
+		$this->assertSame('3k008', $this->synced[0][1], 'passed over after its last attempt');
+		$this->assertSame([['received', 'c1/m6'], ['received', 'c1/m8']], $this->handed);
+	}
+
+	public function testEnrolmentAddsOnlyMissingCursorsAndIsSkippedWhileNothingChanged(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['logs' => []];
+		for ($i = 0; $i < 250; $i++) {
+			$state = $i === 3 ? Identity::STATE_DEACTIVATED : Identity::STATE_ACTIVE;
+			$this->allIdentities[] = new Identity($i + 1, 'https://social.test/users/u' . $i, 'did:plc:u' . $i, 'u' . $i . '.social.test', 'sealed', '', '', $state, '', 0);
+		}
+		$this->existing['did:plc:u0'] = self::cursor('3k001');
+		$this->signature = '249:250';
+
+		$this->poller()->poll();
+		$this->assertCount(248, $this->added, 'every active identity past the first page, but not the one with a row or the switched-off one');
+		$this->assertNotContains('did:plc:u0', $this->added);
+		$this->assertNotContains('did:plc:u3', $this->added);
+		$this->assertContains('did:plc:u249', $this->added);
+
+		$this->added = [];
+		$this->poller()->poll();
+		$this->assertSame([], $this->added, 'the identities are not walked again while their signature is unchanged');
+
+		$this->signature = '250:251';
+		$this->allIdentities[] = new Identity(251, 'https://social.test/users/new', 'did:plc:new', 'new.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0);
+		$this->existing += array_fill_keys(array_map(static fn (Identity $identity): string => $identity->did, array_slice($this->allIdentities, 0, 250)), self::cursor('3k001'));
+		$this->poller()->poll();
+		$this->assertSame(['did:plc:new'], $this->added);
 	}
 
 	public function testAQuietAccountIsAskedLessOftenButAtLeastEveryHalfHour(): void {

@@ -149,6 +149,18 @@ class AtprotoWatchRequest extends CoreRequestBuilder {
 	}
 
 	/**
+	 * Progress within a read that then failed: the cursor alone, leaving the
+	 * failure count and the next time to `failed()`.
+	 */
+	public function checkpoint(string $did, string $cursor, string $table = self::TABLE_ATPROTO_WATCH): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update($table)
+			->set('cursor', $qb->createNamedParameter($cursor))
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->executeStatement();
+	}
+
+	/**
 	 * A read that failed: one more failure, the reason, and the next time.
 	 */
 	public function failed(string $did, string $error, int $nextSync, string $table = self::TABLE_ATPROTO_WATCH): void {

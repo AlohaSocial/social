@@ -14,9 +14,11 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\AtprotoChatMessageRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
+use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
@@ -50,8 +52,13 @@ class ChatStoreTest extends TestCase {
 	private array $savedReactions = [];
 	/** @var list<array{string, string, string}> */
 	private array $deletedReactions = [];
+	/** @var array<string, array{did: string, noteId: string, convoId: string, messageId: string}> `social_atp_chat_message`, by note and account */
+	private array $rows = [];
 
-	private function store(bool $failActorResolution = false): ChatStore {
+	/**
+	 * @param list<string> $unknown DIDs Bluesky no longer knows
+	 */
+	private function store(bool $failActorResolution = false, array $unknown = []): ChatStore {
 		$posts = $this->createMock(PostStore::class);
 		$posts->method('storeMessage')->willReturnCallback(function (array $create): bool {
 			$this->stored[] = $create;
@@ -97,7 +104,10 @@ class ChatStoreTest extends TestCase {
 			$this->deletedReactions[] = [$actorId, $objectId, $emoji];
 		});
 		$actors = $this->createMock(BlueskyActorService::class);
-		$actors->method('resolve')->willReturnCallback(static function (string $did) use ($failActorResolution): Person {
+		$actors->method('resolve')->willReturnCallback(static function (string $did) use ($failActorResolution, $unknown): Person {
+			if (in_array($did, $unknown, true)) {
+				throw new CacheActorDoesNotExistException('Profile not found');
+			}
 			if ($failActorResolution) {
 				throw new \RuntimeException('temporary DID resolution failure');
 			}
@@ -111,7 +121,30 @@ class ChatStoreTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 
-		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions, $this->createMock(\OCA\Social\Db\AtprotoChatMessageRequest::class));
+		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions, $this->messages());
+	}
+
+	/** `social_atp_chat_message` held in `$rows`. */
+	private function messages(): AtprotoChatMessageRequest {
+		$messages = $this->createMock(AtprotoChatMessageRequest::class);
+		$messages->method('remember')->willReturnCallback(function (string $did, string $noteId, string $convoId, string $messageId): void {
+			$this->rows[$noteId . "\0" . $did] ??= ['did' => $did, 'noteId' => $noteId, 'convoId' => $convoId, 'messageId' => $messageId];
+		});
+		$messages->method('noteIds')->willReturnCallback(fn (string $did, string $messageId): array => array_values(array_map(
+			static fn (array $row): string => $row['noteId'],
+			array_filter($this->rows, static fn (array $row): bool => $row['did'] === $did && $row['messageId'] === $messageId),
+		)));
+		$messages->method('convoOf')->willReturnCallback(function (string $noteId): string {
+			foreach ($this->rows as $row) {
+				if ($row['noteId'] === $noteId) {
+					return $row['convoId'];
+				}
+			}
+
+			return '';
+		});
+
+		return $messages;
 	}
 
 	private function alice(): Identity {
@@ -191,6 +224,49 @@ class ChatStoreTest extends TestCase {
 		$this->assertSame([], $this->streams);
 		$this->assertSame('https://social.test/users/alice/statuses/7', $store->sentHere(self::ALICE, 'm9'));
 		$this->assertSame('https://social.test/users/alice/statuses/7', $store->last(self::ALICE, 'convo1'));
+	}
+
+	/** The cache that once held the mapping expires; the table does not. */
+	public function testWhatWasSentFromHereIsKnownAfterTheCacheForgotIt(): void {
+		$this->store()->sent(self::ALICE, 'convo1', 'm9', 'https://social.test/users/alice/statuses/7');
+		$fresh = $this->store();
+
+		$this->assertSame('https://social.test/users/alice/statuses/7', $fresh->sentHere(self::ALICE, 'm9'));
+		$this->assertSame('convo1', $fresh->convoOf('https://social.test/users/alice/statuses/7'));
+		$this->assertSame('', $fresh->sentHere(self::BOB, 'm9'), 'per account');
+		$this->assertFalse($fresh->received($this->alice(), 'convo1', self::message('m9', 'Hello', self::ALICE), [self::ALICE, self::BOB]));
+		$this->assertSame([], $this->streams);
+	}
+
+	public function testAMessageReadInFromBlueskyIsNotTakenForOneSentFromHere(): void {
+		$store = $this->store();
+		$store->received($this->alice(), 'convo1', self::message('m2', 'Hi Bob', self::ALICE), [self::ALICE, self::BOB]);
+
+		$this->assertNotSame([], $this->rows);
+		$this->assertSame('', $this->store()->sentHere(self::ALICE, 'm2'));
+	}
+
+	public function testAMappingOnlyTheCacheHoldsIsWrittenToTheTableWhenFound(): void {
+		$store = $this->store();
+		$store->sent(self::ALICE, 'convo1', 'm9', 'https://social.test/users/alice/statuses/7');
+		$this->rows = [];
+
+		$this->assertSame('https://social.test/users/alice/statuses/7', $store->sentHere(self::ALICE, 'm9'));
+		$this->assertSame(['did' => self::ALICE, 'noteId' => 'https://social.test/users/alice/statuses/7', 'convoId' => 'convo1', 'messageId' => 'm9'], array_values($this->rows)[0]);
+	}
+
+	/** A group member who deleted their account is left out; the others still get the message. */
+	public function testAnOwnMessageGoesToTheMembersThatCanBeResolved(): void {
+		$store = $this->store(false, ['did:plc:gone']);
+
+		$this->assertTrue($store->received($this->alice(), 'group', self::message('m3', 'Hi all', self::ALICE), [self::ALICE, 'did:plc:gone', self::BOB]));
+		$note = $this->streams['https://bsky.app/profile/' . self::ALICE . '/convo/group/m3'];
+		$this->assertSame(['https://bsky.app/profile/' . self::BOB], $note->getToArray());
+	}
+
+	public function testAnOwnMessageWhoseMembersAreAllGoneIsNotStored(): void {
+		$this->assertFalse($this->store(false, ['did:plc:gone'])->received($this->alice(), 'group', self::message('m4', 'Hi', self::ALICE), [self::ALICE, 'did:plc:gone']));
+		$this->assertSame([], $this->streams);
 	}
 
 	public function testAnOwnMessageWithNobodyToAddressIsNotStored(): void {

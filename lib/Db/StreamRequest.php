@@ -29,6 +29,7 @@ use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\Model\Cache;
 use OCA\Social\Tools\Nid;
 use OCP\DB\Exception as DBException;
+use OCP\DB\QueryBuilder\ICompositeExpression;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
@@ -932,7 +933,7 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->select('nid', 'id')
 			->from(self::TABLE_STREAM)
-			->where($qb->expr()->like('attributed_to', $qb->createNamedParameter('https://bsky.app/profile/%')))
+			->where($this->byBlueskyAuthor($qb))
 			->andWhere($qb->expr()->eq('type', $qb->createNamedParameter(Note::TYPE)))
 			->andWhere($qb->expr()->gt('nid', $qb->createNamedParameter($afterNid, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->gte('published_time', $qb->createNamedParameter(new \DateTime('@' . $since), IQueryBuilder::PARAM_DATE)))
@@ -956,10 +957,30 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->select($qb->func()->max('nid'))
 			->from(self::TABLE_STREAM)
-			->where($qb->expr()->like('attributed_to', $qb->createNamedParameter('https://bsky.app/profile/%')))
+			->where($this->byBlueskyAuthor($qb))
 			->andWhere($qb->expr()->eq('type', $qb->createNamedParameter(Note::TYPE)));
+		$result = $qb->executeQuery();
+		$max = (int)$result->fetchOne();
+		$result->closeCursor();
 
-		return (int)$qb->executeQuery()->fetchOne();
+		return $max;
+	}
+
+	/**
+	 * Rows a Bluesky account wrote. The indexed `author_host` narrows them
+	 * once every row carries it; until then only the pattern on the
+	 * unindexed `attributed_to` can.
+	 */
+	private function byBlueskyAuthor(IQueryBuilder $qb): string|ICompositeExpression {
+		$pattern = $qb->expr()->like('attributed_to', $qb->createNamedParameter('https://bsky.app/profile/%'));
+		if (!$this->authorHostsAreFilled()) {
+			return $pattern;
+		}
+
+		return $qb->expr()->andX(
+			$qb->expr()->eq('author_host', $qb->createNamedParameter('bsky.app')),
+			$pattern,
+		);
 	}
 
 	/**

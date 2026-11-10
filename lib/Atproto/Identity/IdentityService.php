@@ -136,6 +136,11 @@ class IdentityService {
 		return $this->identityRequest->count();
 	}
 
+	/** Changes whenever an identity is made, moved in, or switched on or off. */
+	public function activeSignature(): string {
+		return $this->identityRequest->activeSignature();
+	}
+
 	/** How many people switched their presence on Bluesky off. */
 	public function countDeactivated(): int {
 		return $this->identityRequest->countInState(Identity::STATE_DEACTIVATED);

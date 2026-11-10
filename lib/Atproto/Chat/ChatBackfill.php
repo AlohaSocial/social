@@ -12,7 +12,9 @@ namespace OCA\Social\Atproto\Chat;
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Service\DurableCache;
+use Psr\Log\LoggerInterface;
 
 /** Durable, bounded initial history import, separate from live chat log polling. */
 class ChatBackfill {
@@ -26,13 +28,17 @@ class ChatBackfill {
 		private ChatStore $store,
 		private DurableCache $durableCache,
 		private ChatBackfillPages $pages,
+		private LoggerInterface $logger,
 	) {
 	}
 
 	/**
 	 * Fetch a conversation's unread window into bounded durable pages, then
 	 * store those pages oldest-first. The state survives cron time limits and
-	 * process restarts without advancing the account log cursor.
+	 * process restarts without advancing the account log cursor. When the
+	 * history ends before the unread count is reached (messages deleted since
+	 * they were counted), what was found is imported and the conversation is
+	 * complete. A message whose sender Bluesky no longer knows is passed over.
 	 *
 	 * @param list<string> $members
 	 * @return array{handled: int, complete: bool}
@@ -65,7 +71,12 @@ class ChatBackfill {
 					}
 				}
 				if ($list === []) {
-					throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
+					// history ended before the unread count was reached: what was
+					// found is all there is to import
+					$state['storing'] = true;
+					$state['storePage'] = (int)$state['pages'] - 1;
+					$this->durableCache->setShared(self::CACHE, $baseKey, $state, self::TTL);
+					break;
 				}
 				$kept = [];
 				foreach ($list as $message) {
@@ -84,8 +95,7 @@ class ChatBackfill {
 				$state['pages']++;
 				$next = $page['cursor'] ?? '';
 				if (!$state['storing'] && ($next === '' || $next === $state['cursor'])) {
-					$this->clearBackfill($baseKey, (int)$state['pages']);
-					throw new \RuntimeException('Bluesky chat pagination ended before all unread messages were found');
+					$state['storing'] = true;
 				}
 				$state['cursor'] = $next;
 				if ($state['storing']) {
@@ -108,7 +118,11 @@ class ChatBackfill {
 				if (($message['$type'] ?? '') === 'chat.bsky.convo.defs#deletedMessageView') {
 					continue;
 				}
-				$handled += $this->store->received($identity, $convo, $message, $members) ? 1 : 0;
+				try {
+					$handled += $this->store->received($identity, $convo, $message, $members) ? 1 : 0;
+				} catch (CacheActorDoesNotExistException $e) {
+					$this->logger->info('Bluesky direct message from an unknown account passed over', ['convo' => $convo, 'exception' => $e]);
+				}
 			}
 			$state['storePage']--;
 			$this->durableCache->setShared(self::CACHE, $baseKey, $state, self::TTL);

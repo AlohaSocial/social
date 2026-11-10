@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Migration;
 
 use OCA\Social\Migration\Version1000Date20261028000001;
+use OCA\Social\Migration\Version1000Date20261108500000;
 use PHPUnit\Framework\TestCase;
 
 class AtprotoChatMessageTest extends TestCase {
@@ -21,5 +22,17 @@ class AtprotoChatMessageTest extends TestCase {
 			$this->assertTrue($table->hasColumn($column));
 		}
 		$this->assertFalse($table->hasColumn('expires'));
+	}
+
+	public function testTheBlueskyMessageIdIsIndexedPerAccountAndTheStepCanBeRepeated(): void {
+		$schema = MigrationReplay::run([Version1000Date20261028000001::class, Version1000Date20261108500000::class]);
+		$once = $schema->shape();
+		MigrationReplay::run([Version1000Date20261108500000::class], [], $schema);
+		$this->assertSame($once, $schema->shape());
+		$table = $schema->getTable('social_atp_chat_message');
+		$this->assertTrue($table->hasColumn('message_prim'));
+		$this->assertFalse($table->getColumn('message_prim')->getNotnull(), 'rows written before it have none until the backfill');
+		$indexes = array_column($once['social_atp_chat_message']['indexes'], 'columns', 'name');
+		$this->assertSame(['did', 'message_prim'], $indexes['social_atp_chat_msg_mp']);
 	}
 }

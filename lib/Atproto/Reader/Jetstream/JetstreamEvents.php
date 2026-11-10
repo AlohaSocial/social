@@ -33,8 +33,8 @@ use Throwable;
  * recorded at once (`BlockedByService`); a deleted block names nobody, so
  * the local accounts the blocker is recorded as blocking are asked about
  * again a moment later, when the AppView knows. An account Bluesky stopped
- * serving, or serves again, is hidden, purged or restored here at once
- * (`AccountStatus`).
+ * serving, or serves again, is hidden or restored here at once, and purged
+ * only when it was deleted (`AccountStatus`).
  */
 class JetstreamEvents {
 	public const POST = 'app.bsky.feed.post';
@@ -112,11 +112,11 @@ class JetstreamEvents {
 				continue;
 			}
 			unset($this->pending[$did]);
-			$watch = $this->watches->getByDid($did);
-			if ($watch === null) {
-				continue;
-			}
 			try {
+				$watch = $this->watches->getByDid($did);
+				if ($watch === null) {
+					continue;
+				}
 				$stored += $this->poller->pollWatch($watch);
 			} catch (Throwable $e) {
 				$this->logger->info('Jetstream: feed not read', ['did' => $did, 'exception' => $e]);

@@ -19,6 +19,7 @@ use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\AppViewNotFoundException;
+use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -51,6 +52,14 @@ class ChatPoller {
 	private const FIRST_IMPORT_TTL = ChatBackfill::TTL;
 	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
 	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
+	/** how often one log event may fail before it is passed over */
+	public const EVENT_ATTEMPTS = 5;
+	private const ATTEMPTS_CACHE = 'social.atproto.chat.attempts';
+	private const ATTEMPTS_TTL = 86400;
+	private const ENROL_CACHE = 'social.atproto.chat.enrol';
+	private const ENROL_TTL = 3600;
+	/** identities looked at per query while enrolling */
+	private const ENROL_PAGE = 200;
 	/** Log records which affect chat state Aloha does not currently model. */
 	private const IGNORED_LOGS = [
 		'chat.bsky.convo.defs#logBeginConvo',
@@ -299,7 +308,12 @@ class ChatPoller {
 	}
 
 	/**
-	 * What the chat log says happened since `$rev`.
+	 * What the chat log says happened since `$rev`. Each event is handled
+	 * before its revision counts. An event that can never be handled (an
+	 * unknown or incomplete record, a sender or member Bluesky no longer
+	 * knows) is logged and passed over. Any other failure keeps the cursor
+	 * at the last event handled and is retried, up to `EVENT_ATTEMPTS`
+	 * times at the same place before that event is passed over too.
 	 *
 	 * @return array{0: int, 1: string}
 	 */
@@ -315,44 +329,87 @@ class ChatPoller {
 		$handled = 0;
 		$newest = $rev;
 		foreach ($answer['logs'] as $log) {
-			if (!is_array($log) || !is_string($log['$type'] ?? null) || !is_string($log['rev'] ?? null) || $log['rev'] === '') {
-				throw new \RuntimeException('Bluesky chat log contains an incomplete event');
-			}
-			$convo = (string)($log['convoId'] ?? '');
-			$type = (string)($log['$type'] ?? '');
-			$message = is_array($log['message'] ?? null) ? $log['message'] : null;
-			if (in_array($type, [self::CREATE, self::DELETE, self::READ, self::READ_MESSAGE, self::ADD_REACTION, self::REMOVE_REACTION], true)) {
-				if ($convo === '' || $message === null) {
-					throw new \RuntimeException('Bluesky chat log event is missing its conversation or message');
+			$eventRev = is_array($log) && is_string($log['rev'] ?? null) ? $log['rev'] : '';
+			try {
+				$handled += $this->event($identity, $key, $log);
+			} catch (Throwable $e) {
+				if (!($e instanceof CacheActorDoesNotExistException) && !$this->exhausted($identity->did, $newest)) {
+					if ($newest !== $rev) {
+						$this->cursors->checkpoint($identity->did, $newest, self::TABLE);
+					}
+					throw $e;
 				}
-				$handled += match ($type) {
-					self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
-					self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
-					self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
-					self::ADD_REACTION => $this->store->reaction(
-						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, $log['rev']
-					) ? 1 : 0,
-					self::REMOVE_REACTION => $this->store->reaction(
-						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, $log['rev']
-					) ? 1 : 0,
-				};
-			} elseif (!in_array($type, self::IGNORED_LOGS, true)) {
-				// An unknown future event must not be acknowledged as though this
-				// reader understood it. Known non-message events above are deliberate
-				// no-ops; newer lexicon variants are retried after an update.
-				throw new \RuntimeException('Unsupported Bluesky chat log event: ' . $type);
+				$this->logger->warning('Bluesky chat log event passed over', ['did' => $identity->did, 'rev' => $eventRev, 'exception' => $e]);
 			}
-			// The getLog lexicon is revision based, not limit/cursor paginated.
-			// Advance only through events whose processing completed (or whose
-			// known type is deliberately ignored), never to a response cursor that
-			// could be ahead of a truncated or malformed event list.
-			$newest = max($newest, $log['rev']);
+			// The getLog lexicon is revision based, not limit/cursor paginated:
+			// the cursor advances through the events handled or passed over,
+			// never to a response cursor ahead of the events returned.
+			$newest = max($newest, $eventRev);
 		}
 		if ($answer['logs'] === []) {
 			$newest = max($newest, $answer['cursor'] ?? '');
 		}
 
 		return [$handled, $newest];
+	}
+
+	/**
+	 * One chat log event; an unusable one is logged and passed over.
+	 *
+	 * @return int how many messages it stored or changed
+	 */
+	private function event(Identity $identity, PrivateKey $key, mixed $log): int {
+		if (!is_array($log) || !is_string($log['$type'] ?? null) || !is_string($log['rev'] ?? null) || $log['rev'] === '') {
+			$this->logger->warning('Incomplete Bluesky chat log event passed over', ['did' => $identity->did]);
+
+			return 0;
+		}
+		$type = $log['$type'];
+		if (in_array($type, self::IGNORED_LOGS, true)) {
+			return 0;
+		}
+		if (!in_array($type, [self::CREATE, self::DELETE, self::READ, self::READ_MESSAGE, self::ADD_REACTION, self::REMOVE_REACTION], true)) {
+			$this->logger->notice('Unsupported Bluesky chat log event passed over', ['did' => $identity->did, 'type' => $type, 'rev' => $log['rev']]);
+
+			return 0;
+		}
+		$convo = (string)($log['convoId'] ?? '');
+		$message = is_array($log['message'] ?? null) ? $log['message'] : null;
+		if ($convo === '' || $message === null) {
+			$this->logger->warning('Bluesky chat log event without its conversation or message passed over', ['did' => $identity->did, 'rev' => $log['rev']]);
+
+			return 0;
+		}
+
+		return match ($type) {
+			self::CREATE => $this->create($identity, $key, $convo, $message),
+			self::DELETE => $this->store->deleted($identity, $convo, $message),
+			self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message),
+			self::ADD_REACTION => $this->store->reaction(
+				$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, $log['rev']
+			),
+			self::REMOVE_REACTION => $this->store->reaction(
+				$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, $log['rev']
+			),
+		} ? 1 : 0;
+	}
+
+	/**
+	 * Counts one more failure of the event after `$position` in an account's
+	 * log, and answers whether it has failed often enough to pass it over.
+	 */
+	private function exhausted(string $did, string $position): bool {
+		$key = hash('sha256', $did . "\0" . $position);
+		$attempts = $this->durableCache->getShared(self::ATTEMPTS_CACHE, $key);
+		$attempts = (is_int($attempts) ? $attempts : 0) + 1;
+		if ($attempts >= self::EVENT_ATTEMPTS) {
+			$this->durableCache->removeShared(self::ATTEMPTS_CACHE, $key);
+
+			return true;
+		}
+		$this->durableCache->setShared(self::ATTEMPTS_CACHE, $key, $attempts, self::ATTEMPTS_TTL);
+
+		return false;
 	}
 
 	/**
@@ -396,13 +453,30 @@ class ChatPoller {
 
 	/**
 	 * Every active identity gets a cursor row; one whose identity is gone
-	 * is dropped when next visited.
+	 * is dropped when next visited. The identities are walked only when
+	 * their active count or newest id changed, and at least once an hour.
 	 */
 	private function enrol(): void {
-		foreach ($this->identities->getAll() as $identity) {
-			if ($identity->isActive()) {
-				$this->cursors->add($identity->did, $identity->handle, self::TABLE);
+		$signature = $this->identities->activeSignature();
+		if ($this->durableCache->getShared(self::ENROL_CACHE, 'signature') === $signature) {
+			return;
+		}
+		for ($offset = 0; ; $offset += self::ENROL_PAGE) {
+			$page = $this->identities->getAll(self::ENROL_PAGE, $offset);
+			$active = [];
+			foreach ($page as $identity) {
+				if ($identity->isActive()) {
+					$active[$identity->did] = $identity->handle;
+				}
+			}
+			$known = $active === [] ? [] : $this->cursors->getByDids(array_keys($active), self::TABLE);
+			foreach (array_diff_key($active, $known) as $did => $handle) {
+				$this->cursors->add((string)$did, $handle, self::TABLE);
+			}
+			if (count($page) < self::ENROL_PAGE) {
+				break;
 			}
 		}
+		$this->durableCache->setShared(self::ENROL_CACHE, 'signature', $signature, self::ENROL_TTL);
 	}
 }
