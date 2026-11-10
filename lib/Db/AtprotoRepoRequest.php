@@ -122,6 +122,10 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	/**
 	 * Moves the head, creating the row the first time. Last thing a commit
 	 * does: until it runs the previous commit is the repository.
+	 *
+	 * The row made by the first commit starts with the bytes of the blobs
+	 * registered before it: `addBlobBytes()` has no row to add them to until
+	 * then.
 	 */
 	public function setHead(string $did, Cid $commitCid, string $rev, int $recordCount): void {
 		$qb = $this->getQueryBuilder();
@@ -141,11 +145,50 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 			->setValue('commit_cid', $qb->createNamedParameter($commitCid->toString()))
 			->setValue('rev', $qb->createNamedParameter($rev))
 			->setValue('record_count', $qb->createNamedParameter($recordCount, IQueryBuilder::PARAM_INT))
-			->setValue('blob_bytes', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+			->setValue('blob_bytes', $qb->createNamedParameter($this->registeredBlobBytes($did), IQueryBuilder::PARAM_INT))
 			->setValue('updated', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 		$qb->executeStatement();
 	}
 
+	/** The bytes of every blob registered for the account. */
+	private function registeredBlobBytes(string $did): int {
+		$qb = $this->getQueryBuilder();
+		$qb->selectAlias($qb->func()->sum('size'), 'bytes')
+			->from(self::TABLE_ATPROTO_BLOB)
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return (int)($row['bytes'] ?? 0);
+	}
+
+	/**
+	 * How many records an account keeps outside the given collections, and
+	 * how many bytes they take.
+	 *
+	 * @param non-empty-list<string> $collections
+	 * @return array{records: int, bytes: int}
+	 */
+	public function usageOutside(string $did, array $collections): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select($qb->func()->count('id', 'records'))
+			->selectAlias($qb->func()->sum($qb->func()->octetLength('bytes')), 'bytes')
+			->from(self::TABLE_ATPROTO_RECORD)
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->notIn('collection', $qb->createNamedParameter($collections, IQueryBuilder::PARAM_STR_ARRAY)));
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return ['records' => (int)($row['records'] ?? 0), 'bytes' => (int)($row['bytes'] ?? 0)];
+	}
+
+	/**
+	 * Counts newly registered blob bytes against the repository. Before the
+	 * first commit there is no row and nothing changes; that commit counts
+	 * every blob registered by then (`setHead()`).
+	 */
 	public function addBlobBytes(string $did, int $bytes): void {
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_ATPROTO_REPO)

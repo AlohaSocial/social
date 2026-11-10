@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\HeldPost;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -47,13 +46,7 @@ class PostHoldsRequest extends PostHoldsRequestBuilder {
 			->setValue('digest', $qb->createNamedParameter($held->digest()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertUnlessDuplicate($qb)) {
 			return 0;
 		}
 

@@ -148,6 +148,18 @@ class FollowServiceTest extends TestCase {
 		return $follow;
 	}
 
+	public function testGetFollowAnswersWithTheFollowBetweenTwoActorsOrNull(): void {
+		$alice = $this->person(self::ALICE_ID, 'alice');
+		$bob = $this->person(self::BOB_ID, 'bob');
+		$follow = new Follow();
+		$this->followsRequest->method('getByPersons')->willReturnCallback(
+			static fn (string $actor, string $object): Follow => $actor === self::ALICE_ID ? $follow : throw new FollowNotFoundException()
+		);
+
+		$this->assertSame($follow, $this->service->getFollow($alice, $bob));
+		$this->assertNull($this->service->getFollow($bob, $alice));
+	}
+
 	// followAccount()
 
 	public function testFollowAccountSavesFollowAndSendsItToTargetInbox(): void {

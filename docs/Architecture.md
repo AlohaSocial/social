@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.280
+**App version:** 0.26.281
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -332,6 +332,8 @@ There is no downgrade path, and none is possible: `Version1000Date20260611000001
 
 `Version1000Date20260925000002` adds that `account_lower` column and fills it in for the rows already cached, paged on the primary key. The account search behind the mention picker, `/api/v2/search`, `/api/v1/accounts/search` and the unified search used to match a prefix of `account` under `COLLATE utf8mb4_general_ci` on MySQL, and the lookup by handle compared `LOWER(account)`: an unindexed column either way, so every keystroke read every cached actor. They compare the lowercased copy as it stands now (`CacheActorsRequest::searchAccounts()`), which MySQL and MariaDB answer as an index range; PostgreSQL and SQLite plan a prefix `LIKE` as a range only under a C collation or `case_sensitive_like`, so there the search is still a scan, of one short column, while the lookup by handle is an index lookup everywhere.
 
+A row a unique index may refuse — an idempotent save, or an insert that falls back to an update when the row is already there — is written through `CoreRequestBuilder::insertUnlessDuplicate()`. Inside an open transaction it runs the INSERT in a savepoint and rolls back to it when the index refuses the row: PostgreSQL aborts the whole transaction at a failed statement, so a bare insert-then-catch inside the repository batch of a Bluesky app's write, or inside any other transaction, would fail everything after it. Outside a transaction the INSERT runs on its own.
+
 There is no notifications table: in-app notifications are stored in `social_stream` as `SocialAppNotification` items. (A `TABLE_NOTIFICATION` constant naming a `social_notif` table that no migration ever created used to be declared here; it has been removed.)
 
 ---
@@ -582,10 +584,18 @@ profile back to Bluesky.
 Blob registration uses a conflict-skipping insert per DID and CID. Concurrent
 registrations keep the first document mapping and report whether a new mapping
 was inserted; image/video publishers and both migration paths increment
-repository blob-byte accounting only for that winning insert.
+repository blob-byte accounting only for that winning insert. An XRPC upload
+that loses the race, or whose registration fails, removes the document it
+stored (`BlobUploadService`, through `MediaPurgeService`). Blobs registered
+before an account's first commit have no repository row to count against; the
+first commit's head row starts `blob_bytes` at the sum of the account's
+registered blobs (`AtprotoRepoRequest::setHead()`).
 
 Repository writes for social collections are projected through their native
-Social services. Projected `createRecord` operations lock the repository and
+Social services. The Bluesky posts a write replies to, quotes, likes or reposts
+and that are not stored here yet are fetched from the AppView before the
+repository lock is taken (`WriteService::fetchNamedPosts()`), so the batch does
+not hold the head row `FOR UPDATE` across those requests. Projected `createRecord` operations lock the repository and
 check `swapCommit` before changing Social state, reject an occupied requested
 key, and commit the projection and repository together. Their queued
 federation delivery starts only after commit and is discarded on rollback.
@@ -598,7 +608,13 @@ them without converting them into ActivityPub objects. Vendored Lexicons are
 schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
 size validation, but their application-specific schema and semantics are not
 known to Aloha Social. OAuth collection scopes and own-repository checks still
-apply to each write. Empty objects and objects with numeric string keys retain
+apply to each write. Records outside the collections Social has a role for
+(`WriteService::isOpaque()`) are capped per account by `OpaqueRecordQuota`:
+before a write, the account's count and byte total of such records
+(`AtprotoRepoRequest::usageOutside()`) plus what the write adds, less what it
+removes, must stay within `atproto_opaque_records` and `atproto_opaque_mb`.
+The check reads committed rows, so the writes of one mixed `applyWrites`
+batch are each checked against the usage before the batch. Empty objects and objects with numeric string keys retain
 their map identity through XRPC JSON parsing, DAG-CBOR storage and readback;
 JSON arrays remain lists, so decoding and re-encoding preserve record CIDs.
 Record reads with an explicit `cid` return only that version of the named
@@ -2447,8 +2463,11 @@ stages their Bluesky records and exposes them to later actions in the same
 batch. One database transaction commits the database-backed Social changes,
 repository records, and firehose event; ActivityPub deliveries begin after
 commit. On failure, the database transaction and deferred delivery starts are
-rolled back. Profile and media files use Nextcloud storage and are outside that
-database rollback. A mixed batch checks `swapCommit` against the locked
+rolled back. A post the review rules hold is the exception: the writes before
+it are committed with its review-queue entry, the held post and the writes after
+it are not applied, and the app gets the moderator error naming how many writes
+were left out (`WriteService::keepHeld()`). Profile and media files use
+Nextcloud storage and are outside that database rollback. A mixed batch checks `swapCommit` against the locked
 repository head before committing. Record-list cursors compare keys
 lexicographically in either direction, including numeric-looking keys such as
 `10` and `2`; the staged batch view uses the same ordering as stored records.

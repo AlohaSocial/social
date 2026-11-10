@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Reviewed against:** Aloha Social **0.26.280** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.281** on **2026-10-27**.
 
 **Current scope:** native AT Protocol hosting is an optional integration in
 Aloha Social. It runs alongside ActivityPub; it does not convert a Fediverse
@@ -37,7 +37,9 @@ checklist is [Atproto-Live-Test.md](Atproto-Live-Test.md).
 
 Blob CIDs identify the bytes served by `getBlob`, and duplicate registration is
 scoped to the account DID. Concurrent duplicate registration preserves the
-first document mapping and does not count its repository bytes again.
+first document mapping, does not count its repository bytes again, and removes
+the copy the losing upload stored. Blobs uploaded before the account's first
+repository commit are counted when that commit creates the repository.
 
 `uploadBlob` stores accepted files byte for byte, including image metadata,
 without resizing or transcoding. The returned CID and size describe the original
@@ -71,7 +73,14 @@ refuses unknown schemas, `false` skips schema checks, and omission validates
 known schemas. Single and batch responses distinguish `valid` from `unknown`.
 Social adapters still enforce their action, ownership and representation
 constraints regardless of schema validation. The explicit list
-block collection remains unsupported.
+block collection remains unsupported. Records in collections Aloha Social has
+no role for count against a per-account cap, by default 10,000 records and
+50 MB (`atproto_opaque_records`, `atproto_opaque_mb`, see
+[Admin.md](Admin.md#server-settings)); a write past it is refused with an
+`InvalidRequest` error, and deleting such records is always possible. Lists,
+starter packs, feed generators and the other known Bluesky collections kept as
+written are not capped, and their text does not pass through the review rules
+posts do.
 `com.atproto.repo.getRecord` honors an optional `cid`: a matching current
 version is returned, while a different version answers `RecordNotFound` rather
 than silently returning the latest bytes. Older record revisions are not
@@ -82,6 +91,17 @@ record embeds, combined media and supported profile-link records are mapped
 explicitly. The collection mapping is defined in
 `lib/Atproto/Client/WriteService.php` and
 `lib/Atproto/Publisher/RecordMapper.php`.
+
+A post that the review rules hold for a moderator is kept in the review queue
+and answered with an `InvalidRequest` error saying so, whether it came through
+`createRecord`, `putRecord` or `applyWrites`. In `applyWrites` the held post
+ends the batch where it stands: the writes before it are committed together
+with the queue entry, and the held post and every write after it in the same
+call are not applied. For a thread posted in one call, the posts above the held
+reply and their gates are published; the held reply's own gates and the replies
+below it are not, and the error names how many writes were left out. An
+approved post is published as a new post with the text, media and reply target
+it was held with; gates written for it in the held call are not kept.
 
 The AT Protocol does not make an uploaded post instantly visible in every
 Bluesky surface. The sequence is: PDS commit, relay crawl, AppView indexing,

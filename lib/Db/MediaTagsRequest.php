@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Tools\Nid;
 use OCA\Social\Tools\Traits\TArrayTools;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -60,17 +59,7 @@ class MediaTagsRequest extends CoreRequestBuilder {
 			->setValue('tagger_id_prim', $qb->createNamedParameter($qb->prim($taggerId)))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
-			return false;
-		}
-
-		return true;
+		return $this->insertUnlessDuplicate($qb);
 	}
 
 	/** Takes one name off one post. */

@@ -43,17 +43,7 @@ class MediaBlocksRequest extends CoreRequestBuilder {
 			->setValue('blocked', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
-			return false;
-		}
-
-		return true;
+		return $this->insertUnlessDuplicate($qb);
 	}
 
 	public function unblock(string $hash): bool {

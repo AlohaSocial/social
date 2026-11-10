@@ -4,7 +4,7 @@
 -->
 # Technical debt and current maintenance status
 
-**Reviewed against:** Aloha Social **0.26.280** (`appinfo/info.xml`) on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.281** (`appinfo/info.xml`) on **2026-10-27**; source
 branch `main` at `33935993`. Counts below were measured from
 that checkout. They describe code size and maintenance boundaries; they are not
 a quality score, a claim that every test is green, or a production audit.
@@ -49,6 +49,19 @@ policy instead of using Social's image conversion pipeline. A protocol-native
 temporary blob state, reference-aware availability and last-reference cleanup remain
 unimplemented. Completing these requires coordinated write, read, migration
 and cleanup behavior; see [ATProto compatibility](Atproto-Compatibility.md#blob-lifecycle-boundary).
+
+### Text of Bluesky records kept as written (launch review, 2026-11-08)
+
+List names and descriptions (`app.bsky.graph.list`), starter packs and feed
+generator descriptions that a Bluesky app writes are kept as written and
+published without passing the review rules posts go through. There is no clean
+hook for them: `PostReviewService` holds a post request and publishes it
+through `PostService::createPost()` on approval, and has no state for a held
+repository record. Covering them needs a review path for records (hold,
+approve into the repository, refuse) rather than a call from `WriteService`.
+Records in collections Aloha Social has no role for at all are capped per
+account (`atproto_opaque_records`, `atproto_opaque_mb`) but are not reviewed
+either.
 
 ### Pixelfed remote edit rendering (feature-branch review, 2026-10-28)
 
@@ -107,8 +120,8 @@ documented.
 A nightly benchmark now seeds 100,000 posts and times timeline/search queries
 on MySQL and PostgreSQL. The most recent successful run available during this
 review is dated 2026-10-27 and is documented in
-[Performance.md](Performance.md). It uses app version 0.26.278, one patch before
-this checkout's 0.26.280. The benchmark does not measure remote delivery,
+[Performance.md](Performance.md). It uses app version 0.26.278, before
+this checkout's 0.26.281. The benchmark does not measure remote delivery,
 AppView indexing, background queue delay, real user profiles, populated direct
 messages or browser rendering. Treat the figures as a repeatable query baseline,
 not a production service-level objective.

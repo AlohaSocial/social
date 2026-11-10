@@ -11,7 +11,6 @@ namespace OCA\Social\Db;
 
 use DateTime;
 use DateTimeZone;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -38,13 +37,7 @@ class MuteExpiryRequest extends MuteExpiryRequestBuilder {
 			)
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-
+		if (!$this->insertUnlessDuplicate($qb)) {
 			// re-muting with a different duration moves the expiry; the row is
 			// the mute's, not the mute attempt's
 			$update = $this->getMuteExpiryUpdateSql();

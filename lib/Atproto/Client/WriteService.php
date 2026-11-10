@@ -94,20 +94,43 @@ class WriteService {
 		'app.bsky.feed.generator', 'app.bsky.feed.threadgate', RecordMapper::POSTGATE,
 	];
 
+	/** Records an app writes that are the Social action they stand for; a list block is refused. */
+	private const PROJECTED = [
+		RecordMapper::POST, RecordMapper::LIKE, RecordMapper::REPOST, RecordMapper::FOLLOW,
+		RecordMapper::PROFILE, ChatDeclaration::COLLECTION, BlueskyBlocks::COLLECTION,
+		'app.bsky.graph.listblock',
+	];
+
 	/** Whether a collection is retained in the repository without a Social projection. */
 	public static function keepsAsWritten(string $collection): bool {
 		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
 			return true;
 		}
 
-		return Syntax::isNsid($collection) && !in_array($collection, [
-			RecordMapper::POST, RecordMapper::LIKE, RecordMapper::REPOST, RecordMapper::FOLLOW,
-			RecordMapper::PROFILE, ChatDeclaration::COLLECTION, BlueskyBlocks::COLLECTION,
-			'app.bsky.graph.listblock',
-		], true);
+		return Syntax::isNsid($collection) && !in_array($collection, self::PROJECTED, true);
+	}
+
+	/**
+	 * Whether a collection is one Social has no role for at all: its records
+	 * are stored and published as they came, and count against the
+	 * account's cap (`OpaqueRecordQuota`).
+	 */
+	public static function isOpaque(string $collection): bool {
+		return self::keepsAsWritten($collection) && !in_array($collection, self::KEPT_AS_WRITTEN, true);
+	}
+
+	/**
+	 * The collections Social has a role for: every record outside them is opaque.
+	 *
+	 * @return non-empty-list<string>
+	 */
+	public static function roleCollections(): array {
+		return [...self::PROJECTED, ...self::KEPT_AS_WRITTEN];
 	}
 	/** the records whose key is the key of the post they gate */
 	private const GATES = ['app.bsky.feed.threadgate', RecordMapper::POSTGATE];
+	/** the start of the error a post kept for a moderator answers with (`holdForReview()`) */
+	private const HELD = 'This post is waiting for a moderator';
 
 	public function __construct(
 		private AccountService $accounts,
@@ -142,6 +165,7 @@ class WriteService {
 		private IRecommendationSignalRecorder $recommendationSignals,
 		private Lexicon $lexicon,
 		private BlobUploadService $uploads,
+		private OpaqueRecordQuota $quota,
 	) {
 	}
 
@@ -163,6 +187,9 @@ class WriteService {
 		$ownsBatch = !$this->repositories->batchActive();
 		if (!$ownsBatch && $swapCommit !== null) {
 			throw XrpcException::invalidRequest('Conditional createRecord checks cannot be nested inside another repository batch');
+		}
+		if ($ownsBatch) {
+			$this->fetchNamedPosts($collection, $body['record'] ?? null);
 		}
 		try {
 			if ($ownsBatch) {
@@ -186,7 +213,7 @@ class WriteService {
 				$this->activities->discardDeferredDeliveries();
 			}
 			if ($ownsBatch && $this->repositories->batchActive()) {
-				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+				if (self::isHeld($e)) {
 					$this->repositories->commitBatch();
 				} else {
 					$this->repositories->rollbackBatch();
@@ -271,6 +298,7 @@ class WriteService {
 			throw XrpcException::invalidRequest('Conditional putRecord checks cannot be nested inside another repository batch');
 		}
 		if ($ownsBatch) {
+			$this->fetchNamedPosts($collection, $body['record'] ?? null);
 			try {
 				$this->repositories->beginBatch(
 					$session->identity->did,
@@ -303,7 +331,7 @@ class WriteService {
 				// A reviewed post is intentionally kept in the moderation queue
 				// before XRPC returns an error. Commit that queue entry even though
 				// no repository record is written.
-				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+				if (self::isHeld($e)) {
 					$this->repositories->commitBatch();
 				} else {
 					$this->repositories->rollbackBatch();
@@ -793,6 +821,12 @@ class WriteService {
 	 * `com.atproto.repo.applyWrites`: Social actions and their repository
 	 * records share one transaction and one repository commit.
 	 *
+	 * A post the review rules hold ends the batch where it stands: the writes
+	 * before it are committed with the queue entry, so a thread keeps the
+	 * posts above the held one and their gates, and the held post and every
+	 * write after it (its gates, the replies below it) are not applied. The
+	 * app is told so in the error.
+	 *
 	 * @throws XrpcException
 	 */
 	public function apply(ClientSession $session, array $body): array {
@@ -818,13 +852,20 @@ class WriteService {
 				throw XrpcException::invalidRequest('Every write needs a supported type and collection');
 			}
 		}
+		foreach ($writes as $write) {
+			if ($write['$type'] !== 'com.atproto.repo.applyWrites#delete') {
+				$this->fetchNamedPosts($write['collection'], $write['value'] ?? null);
+			}
+		}
 		$results = [];
+		$position = 0;
 		try {
 			$this->repositories->beginBatch($session->identity->did, $this->identities->signingKey($session->identity), $swapCommit);
 			$this->activities->beginDeferredDeliveries();
-			foreach ($writes as $write) {
+			foreach ($writes as $position => $write) {
 				$type = $write['$type'];
-				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'rkey' => $write['rkey'] ?? '', 'record' => $write['value'] ?? []] + array_intersect_key($body, ['validate' => true]);
+				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'record' => $write['value'] ?? []]
+					+ array_intersect_key($write, ['rkey' => true]) + array_intersect_key($body, ['validate' => true]);
 				if ($type === 'com.atproto.repo.applyWrites#create') {
 					$results[] = ['$type' => 'com.atproto.repo.applyWrites#createResult'] + array_intersect_key($this->create($session, $one), ['uri' => 1, 'cid' => 1, 'validationStatus' => 1]);
 				} elseif ($type === 'com.atproto.repo.applyWrites#delete') {
@@ -836,6 +877,9 @@ class WriteService {
 			}
 			$commit = $this->repositories->commitBatch();
 		} catch (Throwable $e) {
+			if ($e instanceof XrpcException && self::isHeld($e) && $this->repositories->batchActive()) {
+				$this->keepHeld($e, count($writes) - $position - 1);
+			}
 			$this->activities->discardDeferredDeliveries();
 			$this->repositories->rollbackBatch();
 			if ($e instanceof XrpcException) {
@@ -855,6 +899,33 @@ class WriteService {
 	}
 
 	/**
+	 * Commits what a batch did before the post the review rules held, with
+	 * the queue entry, and answers with the moderator error.
+	 *
+	 * @param int $skipped the writes after the held post, not applied
+	 * @throws XrpcException
+	 */
+	private function keepHeld(XrpcException $held, int $skipped): never {
+		try {
+			$this->repositories->commitBatch();
+		} catch (InvalidSwapException $e) {
+			$this->activities->discardDeferredDeliveries();
+			throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+		} catch (Throwable $e) {
+			$this->activities->discardDeferredDeliveries();
+			throw XrpcException::invalidRequest($e->getMessage());
+		}
+		$this->activities->releaseDeferredDeliveries();
+		if ($skipped === 0) {
+			throw $held;
+		}
+
+		throw XrpcException::invalidRequest($held->getMessage() . ($skipped === 1
+			? ' The write after it in this request was not applied.'
+			: ' The ' . $skipped . ' writes after it in this request were not applied.'));
+	}
+
+	/**
 	 * Keep app-owned records in one repository commit. These records have no
 	 * ActivityPub action to perform, so their batch can use the repository's
 	 * transaction directly.
@@ -868,6 +939,8 @@ class WriteService {
 		/** @var list<array{record: ?StoredRecord, collection: string, rkey: string, deleted: bool, resultIndex: ?int}> $sync */
 		$sync = [];
 		$paths = [];
+		$opaqueRecords = 0;
+		$opaqueBytes = 0;
 		foreach ($writes as $write) {
 			$type = (string)($write['$type'] ?? '');
 			$collection = (string)($write['collection'] ?? '');
@@ -897,6 +970,14 @@ class WriteService {
 			}
 			$paths[$path] = true;
 			$previous = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
+			if (self::isOpaque($collection)) {
+				$opaqueRecords += match (true) {
+					$type === 'com.atproto.repo.applyWrites#delete' => $previous === null ? 0 : -1,
+					$type === 'com.atproto.repo.applyWrites#create' => 1,
+					default => 0,
+				};
+				$opaqueBytes += ($type === 'com.atproto.repo.applyWrites#delete' ? 0 : strlen(DagCbor::encode($record))) - strlen($previous?->bytes ?? '');
+			}
 			if ($type === 'com.atproto.repo.applyWrites#delete') {
 				if ($previous !== null) {
 					$repoWrites[] = RepoWrite::delete($collection, $rkey);
@@ -921,6 +1002,9 @@ class WriteService {
 			$sync[] = ['record' => null, 'collection' => $collection, 'rkey' => $rkey, 'deleted' => false, 'resultIndex' => $resultIndex];
 		}
 		$committed = null;
+		if ($opaqueRecords > 0 || $opaqueBytes > 0) {
+			$this->quota->assertRoom($session->identity->did, $opaqueRecords, $opaqueBytes);
+		}
 		if ($repoWrites !== []) {
 			try {
 				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation($validate), $repoWrites), $swapCommit);
@@ -1165,11 +1249,13 @@ class WriteService {
 			$localId = $this->local->actorId($did);
 			$target = $this->cacheActors->getFromId($localId !== '' ? $localId : BlueskyIds::actorId($did));
 			$this->follows->followActor($actor, $target);
+			$follow = $this->follows->getFollow($actor, $target);
 		} catch (Throwable $e) {
 			throw XrpcException::invalidRequest('Could not follow: ' . $e->getMessage());
 		}
-		foreach ($this->repositories->listRecords($session->identity->did, RecordMapper::FOLLOW, 100) as $stored) {
-			if (($stored->value()['subject'] ?? '') === $did) {
+		// the record stands for the follow, made now or long ago
+		foreach ($follow === null ? [] : $this->repositories->getRecordsByLocalId($follow->getId()) as $stored) {
+			if ($stored->collection === RecordMapper::FOLLOW && $stored->did === $session->identity->did) {
 				return $stored;
 			}
 		}
@@ -1292,6 +1378,37 @@ class WriteService {
 	}
 
 	/**
+	 * Stores the Bluesky posts a record replies to, quotes, likes or reposts
+	 * before the repository lock is taken, so the batch holding it does not
+	 * wait on the AppView. What cannot be read is left to the write itself,
+	 * which refuses it.
+	 */
+	private function fetchNamedPosts(string $collection, mixed $record): void {
+		if (!is_array($record)) {
+			return;
+		}
+		$embed = is_array($record['embed'] ?? null) ? $record['embed'] : [];
+		$uris = match ($collection) {
+			RecordMapper::POST => [
+				$record['reply']['parent']['uri'] ?? null,
+				$embed['record']['record']['uri'] ?? $embed['record']['uri'] ?? null,
+			],
+			RecordMapper::LIKE, RecordMapper::REPOST => [$record['subject']['uri'] ?? null],
+			default => [],
+		};
+		foreach ($uris as $uri) {
+			if (!is_string($uri) || (Syntax::parseAtUri($uri)['collection'] ?? '') !== RecordMapper::POST) {
+				continue;
+			}
+			try {
+				$this->knownPost($uri);
+			} catch (Throwable $e) {
+				$this->logger->debug('A post a Bluesky app named was not read ahead of its write', ['uri' => $uri, 'exception' => $e]);
+			}
+		}
+	}
+
+	/**
 	 * A post the review rules hold is kept for a moderator, as one from the
 	 * web interface or a Mastodon app is, and the app is told so. It is not
 	 * published until it is approved.
@@ -1325,7 +1442,12 @@ class WriteService {
 			throw XrpcException::invalidRequest($e->getMessage());
 		}
 
-		throw XrpcException::invalidRequest('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.');
+		throw XrpcException::invalidRequest(self::HELD . ' to look at it. It has been kept, there is no need to write it again.');
+	}
+
+	/** Whether a write failed because its post was kept for a moderator. */
+	private static function isHeld(Throwable $e): bool {
+		return $e instanceof XrpcException && str_starts_with($e->getMessage(), self::HELD);
 	}
 
 	/** @return list<string> */
@@ -1518,6 +1640,9 @@ class WriteService {
 		$was = $this->repositories->getRecord($did, $collection, $rkey);
 		if (!$replace && $was !== null) {
 			throw XrpcException::invalidRequest('A record already exists at ' . $collection . '/' . $rkey);
+		}
+		if (self::isOpaque($collection)) {
+			$this->quota->assertRoom($did, $was === null ? 1 : 0, strlen(DagCbor::encode($record)) - strlen($was?->bytes ?? ''));
 		}
 		// a record replaced stands for what it stood for before
 		$write = !$replace || $was === null

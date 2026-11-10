@@ -70,9 +70,10 @@ class MediaTagsRequestTest extends TestCase {
 
 		$request = $this->getMockBuilder(MediaTagsRequest::class)
 			->disableOriginalConstructor()
-			->onlyMethods(['getQueryBuilder'])
+			->onlyMethods(['getQueryBuilder', 'insertUnlessDuplicate'])
 			->getMock();
 		$request->method('getQueryBuilder')->willReturn($qb);
+		$request->method('insertUnlessDuplicate')->willReturnCallback(static fn (IQueryBuilder $insert): bool => $insert->executeStatement() > 0);
 
 		return $request;
 	}

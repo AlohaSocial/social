@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Exceptions\CardNotFoundException;
 use OCA\Social\Model\StreamCard;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -34,12 +33,7 @@ class StreamCardsRequest extends StreamCardsRequestBuilder {
 			->setValue('provider_name', $qb->createNamedParameter($card->getProviderName()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
+		if (!$this->insertUnlessDuplicate($qb)) {
 			$this->update($card);
 		}
 	}

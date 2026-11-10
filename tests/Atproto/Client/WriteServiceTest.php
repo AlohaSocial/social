@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Atproto\Client;
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Client\BlobUploadService;
 use OCA\Social\Atproto\Client\ClientSession;
+use OCA\Social\Atproto\Client\OpaqueRecordQuota;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
@@ -42,6 +43,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Post;
@@ -81,6 +83,8 @@ class WriteServiceTest extends TestCase {
 	private LikeService $likes;
 	/** @var BoostService&MockObject */
 	private BoostService $boosts;
+	/** @var FollowService&MockObject */
+	private FollowService $follows;
 	/** @var StreamActionService&MockObject */
 	private StreamActionService $streamActions;
 	/** @var IRecommendationSignalRecorder&MockObject */
@@ -100,6 +104,8 @@ class WriteServiceTest extends TestCase {
 	/** @var PictureService&MockObject */
 	private PictureService $pictures;
 	private BlobUploadService $uploads;
+	/** @var OpaqueRecordQuota&MockObject */
+	private OpaqueRecordQuota $quota;
 	/** @var DocumentService&MockObject */
 	private DocumentService $documents;
 	/** @var LocalRecordResolver&MockObject */
@@ -146,6 +152,7 @@ class WriteServiceTest extends TestCase {
 		$this->review = $this->createMock(PostReviewService::class);
 		$this->likes = $this->createMock(LikeService::class);
 		$this->boosts = $this->createMock(BoostService::class);
+		$this->follows = $this->createMock(FollowService::class);
 		$this->streamActions = $this->createMock(StreamActionService::class);
 		$this->recommendationSignals = $this->createMock(IRecommendationSignalRecorder::class);
 		$this->interactions = $this->createMock(InteractionPublisher::class);
@@ -157,6 +164,7 @@ class WriteServiceTest extends TestCase {
 		$this->publisher = $this->createMock(Publisher::class);
 		$this->pictures = $this->createMock(PictureService::class);
 		$this->uploads = $this->createMock(BlobUploadService::class);
+		$this->quota = $this->createMock(OpaqueRecordQuota::class);
 		$this->blobs = $this->createMock(AtprotoBlobRequest::class);
 		$this->documents = $this->createMock(DocumentService::class);
 		$this->local = $this->createMock(LocalRecordResolver::class);
@@ -175,13 +183,13 @@ class WriteServiceTest extends TestCase {
 		$this->listImport = $this->createMock(BlueskyListImport::class);
 		$this->activities = $this->createMock(ActivityService::class);
 		$this->writes = new WriteService(
-			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->createMock(FollowService::class),
+			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->follows,
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->interactions, $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
 			$this->relationships, $this->blocks, $this->declaration, $this->listImport,
 			$this->activities,
-			$this->streamActions, $this->recommendationSignals, new \OCA\Social\Atproto\Lexicon\Lexicon(), $this->uploads,
+			$this->streamActions, $this->recommendationSignals, new \OCA\Social\Atproto\Lexicon\Lexicon(), $this->uploads, $this->quota,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -903,6 +911,164 @@ class WriteServiceTest extends TestCase {
 		}
 	}
 
+	public function testARecordOfACollectionSocialHasNoRoleForCountsAgainstTheCap(): void {
+		$this->keepWrites();
+		$record = ['$type' => 'com.example.notes.entry', 'text' => 'A note'];
+		$this->quota->expects($this->once())->method('assertRoom')->with(self::DID, 1, strlen(DagCbor::encode($record)));
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'com.example.notes.entry', 'record' => $record]);
+	}
+
+	public function testAWriteOverTheCapIsRefusedBeforeTheRepositoryChanges(): void {
+		$this->quota->method('assertRoom')->willThrowException(XrpcException::invalidRequest('This account has reached the limit'));
+		$this->repositories->expects($this->never())->method('write');
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('reached the limit');
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'com.example.notes.entry', 'record' => ['$type' => 'com.example.notes.entry', 'text' => 'One too many']]);
+	}
+
+	public function testReplacingARecordCountsOnlyTheBytesItAdds(): void {
+		$this->keepWrites();
+		$old = ['$type' => 'com.example.notes.entry', 'text' => 'Short'];
+		$bytes = DagCbor::encode($old);
+		$this->records[] = new StoredRecord(self::DID, 'com.example.notes.entry', 'first', Cid::forDagCbor($bytes), $bytes, '', 0);
+		$new = ['$type' => 'com.example.notes.entry', 'text' => 'A good deal longer'];
+		$this->quota->expects($this->once())->method('assertRoom')->with(self::DID, 0, strlen(DagCbor::encode($new)) - strlen($bytes));
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => 'com.example.notes.entry', 'rkey' => 'first', 'record' => $new]);
+	}
+
+	public function testListsAndOtherCollectionsSocialKnowsAreNotCapped(): void {
+		$this->keepWrites();
+		$this->quota->expects($this->never())->method('assertRoom');
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => [
+			'$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-11-08T10:00:00.000Z',
+		]]);
+	}
+
+	public function testABatchIsCappedByWhatItAddsLessWhatItRemoves(): void {
+		$this->keepWrites();
+		$gone = ['$type' => 'com.example.notes.entry', 'text' => 'Going'];
+		$goneBytes = DagCbor::encode($gone);
+		$this->records[] = new StoredRecord(self::DID, 'com.example.notes.entry', 'old', Cid::forDagCbor($goneBytes), $goneBytes, '', 0);
+		$first = ['$type' => 'com.example.notes.entry', 'text' => 'First'];
+		$second = ['$type' => 'com.example.notes.entry', 'text' => 'Second'];
+		$this->quota->expects($this->once())->method('assertRoom')->with(
+			self::DID, 1, strlen(DagCbor::encode($first)) + strlen(DagCbor::encode($second)) - strlen($goneBytes)
+		);
+
+		$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'com.example.notes.entry', 'rkey' => 'a', 'value' => $first],
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'com.example.notes.entry', 'rkey' => 'b', 'value' => $second],
+			['$type' => 'com.atproto.repo.applyWrites#delete', 'collection' => 'com.example.notes.entry', 'rkey' => 'old'],
+		]]);
+	}
+
+	public function testFollowingAgainAnswersWithTheFollowsRecordHoweverOldItIs(): void {
+		$follow = new Follow();
+		$follow->setId('https://social.test/@alice#follows/old');
+		$this->follows->expects($this->once())->method('followActor')->willReturn(false);
+		$this->follows->method('getFollow')->willReturn($follow);
+		$this->records[] = $this->record(RecordMapper::FOLLOW, '3kold', $follow->getId());
+		$this->repositories->expects($this->never())->method('listRecords');
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::FOLLOW, 'record' => [
+			'$type' => RecordMapper::FOLLOW, 'subject' => self::BOB, 'createdAt' => '2026-11-08T10:00:00.000Z',
+		]]);
+
+		$this->assertSame('at://' . self::DID . '/' . RecordMapper::FOLLOW . '/3kold', $made['uri']);
+	}
+
+	public function testAFollowWithoutARecordIsRefused(): void {
+		$this->follows->method('getFollow')->willReturn(null);
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('writes no Bluesky record');
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::FOLLOW, 'record' => [
+			'$type' => RecordMapper::FOLLOW, 'subject' => self::BOB, 'createdAt' => '2026-11-08T10:00:00.000Z',
+		]]);
+	}
+
+	/** A thread an app posts in one applyWrites: its first post, the reply the rules hold, and that reply's gate. */
+	private function applyThreadWithAHeldReply(): XrpcException {
+		$this->repositories->method('batchActive')->willReturn(true);
+		$this->review->method('assess')->willReturnCallback(static fn (Person $actor, string $text): string => str_contains($text, 'held') ? 'links' : '');
+		$made = new Note();
+		$made->setId('https://social.test/@alice/7');
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3kroot', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$post = static fn (string $text): array => ['$type' => RecordMapper::POST, 'text' => $text, 'createdAt' => '2026-11-08T10:00:00.000Z'];
+		$root = Tid::next();
+		$reply = Tid::next();
+
+		try {
+			$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POST, 'rkey' => $root, 'value' => $post('The start of a thread')],
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POST, 'rkey' => $reply, 'value' => $post('The held reply')],
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POSTGATE, 'rkey' => $reply, 'value' => [
+					'$type' => RecordMapper::POSTGATE, 'post' => 'at://' . self::DID . '/app.bsky.feed.post/' . $reply, 'createdAt' => '2026-11-08T10:00:00.000Z',
+				]],
+			]]);
+		} catch (XrpcException $e) {
+			return $e;
+		}
+
+		$this->fail('a held post is not made');
+	}
+
+	public function testAPostHeldInApplyWritesIsKeptWithTheWritesBeforeIt(): void {
+		$this->review->expects($this->once())->method('hold')->with($this->alice, $this->callback(static fn (array $params): bool => $params['text'] === 'The held reply'), 'links');
+		$this->publisher->expects($this->once())->method('publishPost');
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('commitBatch');
+		$this->repositories->expects($this->never())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('write');
+		$this->activities->expects($this->once())->method('releaseDeferredDeliveries');
+		$this->activities->expects($this->never())->method('discardDeferredDeliveries');
+
+		$e = $this->applyThreadWithAHeldReply();
+
+		$this->assertSame(400, $e->status);
+		$this->assertStringStartsWith('This post is waiting for a moderator to look at it. It has been kept', $e->getMessage());
+		$this->assertStringEndsWith('The write after it in this request was not applied.', $e->getMessage(), 'the reply\'s gate is not kept');
+	}
+
+	public function testAHeldPostThatFailsToCommitKeepsNothingAndSaysWhy(): void {
+		$this->repositories->method('commitBatch')->willThrowException(new InvalidSwapException('stale repository head'));
+		$this->activities->expects($this->never())->method('releaseDeferredDeliveries');
+		$this->activities->expects($this->atLeastOnce())->method('discardDeferredDeliveries');
+
+		$e = $this->applyThreadWithAHeldReply();
+
+		$this->assertSame('InvalidSwap', $e->error);
+	}
+
+	public function testTheOnlyPostOfAnApplyWritesHeldIsKeptWithTheModeratorAnswer(): void {
+		$this->repositories->method('batchActive')->willReturn(true);
+		$this->review->method('assess')->willReturn('first_post');
+		$this->review->expects($this->once())->method('hold');
+		$this->posts->expects($this->never())->method('createPost');
+		$this->repositories->expects($this->once())->method('commitBatch');
+		$this->repositories->expects($this->never())->method('rollbackBatch');
+
+		try {
+			$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+				['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => RecordMapper::POST, 'value' => ['$type' => RecordMapper::POST, 'text' => 'Hello from the official app', 'createdAt' => '2026-11-08T10:00:00.000Z']],
+			]]);
+			$this->fail('a held post is not made');
+		} catch (XrpcException $e) {
+			$this->assertSame('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.', $e->getMessage());
+		}
+	}
+
 	public function testAnUploadIsKeptByTheOriginalBlobStoragePath(): void {
 		$bytes = 'the original bytes, including metadata';
 		$cid = Cid::forRaw($bytes);
@@ -1301,6 +1467,44 @@ class WriteServiceTest extends TestCase {
 
 		$answer = $this->writes->create($this->session, ['repo' => 'alice.social.test', 'collection' => RecordMapper::LIKE, 'record' => ['subject' => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => 'x']]]);
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.like/3klike', $answer['uri']);
+	}
+
+	public function testTheBlueskyPostsAWriteNamesAreReadBeforeTheRepositoryIsLocked(): void {
+		$events = [];
+		$known = [];
+		$this->postStore->method('isKnown')->willReturnCallback(static function (string $id) use (&$known): bool {
+			return isset($known[$id]);
+		});
+		$this->postStore->expects($this->exactly(2))->method('storeByUri')->willReturnCallback(static function (string $uri) use (&$events, &$known): bool {
+			$events[] = 'fetch ' . $uri;
+			$known['https://bsky.app/profile/' . self::BOB . '/post/' . substr($uri, strrpos($uri, '/') + 1)] = true;
+
+			return true;
+		});
+		$this->repositories->method('beginBatch')->willReturnCallback(static function () use (&$events): void {
+			$events[] = 'lock';
+		});
+		$this->repositories->method('batchActive')->willReturnCallback(static function () use (&$events): bool {
+			return in_array('lock', $events, true);
+		});
+		$this->review->method('assess')->willReturn('first_post');
+		$reply = static fn (string $rkey): array => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/' . $rkey, 'cid' => 'bafyreicid'];
+
+		try {
+			$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+				'$type' => RecordMapper::POST, 'text' => 'A reply quoting another', 'createdAt' => '2026-11-08T10:00:00.000Z',
+				'reply' => ['root' => $reply('3kbob'), 'parent' => $reply('3kbob')],
+				'embed' => ['$type' => 'app.bsky.embed.record', 'record' => $reply('3knew')],
+			]]);
+		} catch (XrpcException) {
+			// held for review: what matters here is when the posts were read
+		}
+
+		$this->assertSame([
+			'fetch at://' . self::BOB . '/app.bsky.feed.post/3kbob',
+			'fetch at://' . self::BOB . '/app.bsky.feed.post/3knew',
+			'lock',
+		], $events);
 	}
 
 	public function testARepeatedLikeRecordDoesNotRepeatItsLearningSignal(): void {

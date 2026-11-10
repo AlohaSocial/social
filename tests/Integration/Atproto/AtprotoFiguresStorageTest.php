@@ -9,9 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Integration\Atproto;
 
+use OCA\Social\Atproto\Client\WriteService;
+use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Event;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Db\AtprotoEventRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\CoreRequestBuilder;
@@ -77,6 +80,30 @@ class AtprotoFiguresStorageTest extends TestCase {
 		);
 	}
 
+	public function testTheBlobsRegisteredBeforeTheFirstCommitAreCountedByIt(): void {
+		$blobs = Server::get(AtprotoBlobRequest::class);
+		$blobs->put(new BlobRef($this->did, Cid::forRaw('before the first commit'), 'https://social.test/documents/early', 'image/png', 4096));
+		// no repository row yet: nothing to add the bytes to
+		$this->repositories->addBlobBytes($this->did, 4096);
+
+		$this->repositories->setHead($this->did, Cid::forRaw($this->did), '3kznmn7xqxl22', 1);
+		$this->assertSame(4096, $this->repositories->getHead($this->did)?->blobBytes);
+
+		$this->repositories->addBlobBytes($this->did, 100);
+		$this->repositories->setHead($this->did, Cid::forRaw($this->did . '2'), '3kznmn7xqxl23', 2);
+		$this->assertSame(4196, $this->repositories->getHead($this->did)?->blobBytes, 'later commits keep the count');
+	}
+
+	public function testTheRecordsOutsideTheCollectionsSocialHasARoleForAreCountedWithTheirBytes(): void {
+		$this->record(RecordMapper::POST, '3kuse1', 'https://social.test/@alice/1');
+		$this->record('app.bsky.graph.list', '3kuse2', '');
+		$this->repositories->putRecord($this->did, 'com.example.notes.entry', '3kuse3', Cid::forRaw('a'), str_repeat('x', 300), '');
+		$this->repositories->putRecord($this->did, 'com.example.notes.entry', '3kuse4', Cid::forRaw('b'), str_repeat('y', 200), '');
+
+		$this->assertSame(['records' => 2, 'bytes' => 500], $this->repositories->usageOutside($this->did, WriteService::roleCollections()));
+		$this->assertSame(['records' => 0, 'bytes' => 0], $this->repositories->usageOutside('did:plc:nobodyhereatall2345678901', WriteService::roleCollections()));
+	}
+
 	public function testTheNewestEventsTimeIsTheTimeOfTheHighestSequence(): void {
 		$this->events->append($this->did, Event::KIND_IDENTITY, 'first', 2_000_000_000);
 		$this->events->append($this->did, Event::KIND_ACCOUNT, 'second', 2_000_000_100);
@@ -90,6 +117,7 @@ class AtprotoFiguresStorageTest extends TestCase {
 
 	private function cleanUp(): void {
 		$this->repositories->deleteRepository($this->did);
+		Server::get(AtprotoBlobRequest::class)->deleteByDid($this->did);
 		RowSeeder::delete(CoreRequestBuilder::TABLE_ATPROTO_EVENT, ['did' => $this->did]);
 	}
 }

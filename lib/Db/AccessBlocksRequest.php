@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\AccessBlock;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -46,14 +45,8 @@ class AccessBlocksRequest extends CoreRequestBuilder {
 			->setValue('expires', $qb->createNamedParameter($expires, IQueryBuilder::PARAM_DATE))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-
+		if ($this->insertUnlessDuplicate($qb)) {
 			return;
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
 		}
 
 		$update = $this->getQueryBuilder();

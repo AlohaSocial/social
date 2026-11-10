@@ -13,7 +13,6 @@ use DateTime;
 use DateTimeZone;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\Client\Announcement;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -176,13 +175,7 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 			->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId)))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	/**
@@ -233,13 +226,7 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 			->setValue('name', $qb->createNamedParameter($name))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	/** Takes one back. Taking back one that was never there is a no-op. */

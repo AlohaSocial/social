@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Atproto\Model\OAuthRequest;
 use OCA\Social\Atproto\Model\OAuthSession;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -212,16 +211,8 @@ class AtprotoOAuthRequest extends CoreRequestBuilder {
 		$qb->insert(self::TABLE_ATPROTO_OAUTH_REPLAY)
 			->setValue('hash', $qb->createNamedParameter($hash))
 			->setValue('expires', $qb->createNamedParameter(new DateTime('@' . $expires), IQueryBuilder::PARAM_DATE));
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				return false;
-			}
-			throw $e;
-		}
 
-		return true;
+		return $this->insertUnlessDuplicate($qb);
 	}
 
 	/**

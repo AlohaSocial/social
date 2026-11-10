@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use DateTime;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -33,13 +32,7 @@ class DomainBlocksRequest extends DomainBlocksRequestBuilder {
 			->setValue('domain', $qb->createNamedParameter($domain))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
-		}
+		$this->insertUnlessDuplicate($qb);
 	}
 
 	/** Unblocking an instance that was not blocked is not an error. */

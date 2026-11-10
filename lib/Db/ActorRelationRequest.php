@@ -12,7 +12,6 @@ namespace OCA\Social\Db;
 use DateTime;
 use OCA\Social\Model\ActivityPub\Activity\Block;
 use OCA\Social\Model\ActorRelation;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
@@ -43,12 +42,7 @@ class ActorRelationRequest extends ActorRelationRequestBuilder {
 			$qb->setValue('activity_id_prim', $qb->createNamedParameter($qb->prim($activityId)));
 		}
 
-		try {
-			$qb->executeStatement();
-		} catch (DBException $e) {
-			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-				throw $e;
-			}
+		if (!$this->insertUnlessDuplicate($qb)) {
 			$update = $this->getQueryBuilder();
 			$update->update(self::TABLE_ACTOR_RELATION)
 				->set('notifications', $update->createNamedParameter($notifications, IQueryBuilder::PARAM_BOOL));
