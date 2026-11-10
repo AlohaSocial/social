@@ -12,6 +12,7 @@ namespace OCA\Social\Settings;
 use OCA\Social\Atproto\Service\AtprotoStatusService;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Report;
+use OCA\Social\Service\AboutService;
 use OCA\Social\Service\BackgroundHealthService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ExternalAdminState;
@@ -90,6 +91,7 @@ class AdminSettings implements IDelegatedSettings {
 		private NotificationPolicyService $notificationPolicyService,
 		private AtprotoStatusService $atprotoStatus,
 		private RecommendationPreferenceService $recommendationPreferences,
+		private AboutService $aboutService,
 	) {
 	}
 
@@ -184,6 +186,9 @@ class AdminSettings implements IDelegatedSettings {
 			// about the instance, for an administrator proper
 			'notificationPolicyDefaults' => $this->isAdministrator()
 				? $this->notificationPolicyService->defaults()->getDecisions() : null,
+			// what the "ready to be public" setup check would ask for, for
+			// the administrator proper who can set it
+			'publicBasics' => $this->isAdministrator() ? $this->publicBasics() : null,
 		]);
 
 		return new TemplateResponse('social', 'settings/admin');
@@ -206,6 +211,22 @@ class AdminSettings implements IDelegatedSettings {
 			'day' => $this->streamRequest->localActivitySince($now - 86400),
 			'week' => $this->streamRequest->localActivitySince($now - 7 * 86400),
 		];
+	}
+
+	/**
+	 * What a server that takes sign-ups or federates is missing of its
+	 * contact, rules, privacy policy and legal notice, as `PublicReady` reads
+	 * it; null on a server that does neither, which that check passes.
+	 *
+	 * @return array{missing: list<string>, signUp: bool}|null
+	 */
+	private function publicBasics(): ?array {
+		$signUp = $this->aboutService->isOpenForSignUp();
+		if (!$signUp && !$this->aboutService->isFederating()) {
+			return null;
+		}
+
+		return ['missing' => $this->aboutService->missingBasics(), 'signUp' => $signUp];
 	}
 
 	/** @return array<string, mixed> */
