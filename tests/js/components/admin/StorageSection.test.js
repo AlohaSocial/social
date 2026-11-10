@@ -12,6 +12,7 @@ const MEASURED = {
 	local: { attachments: { files: 100, bytes: 5 * 1024 * 1024 * 1024 }, avatars: { files: 10, bytes: 1024 * 1024 } },
 	remote: { attachments: { files: 4000, bytes: 31 * 1024 * 1024 * 1024 }, avatars: { files: 900, bytes: 50 * 1024 * 1024 } },
 	missing: 3,
+	evicted: 25829,
 	measured: 1789480000,
 }
 
@@ -35,6 +36,24 @@ describe('the storage section', () => {
 
 		expect(wrapper.text()).toMatch(/Measured/)
 		expect(wrapper.text()).toContain('3 files named in the database were not on disk')
+	})
+
+	/**
+	 * A purged copy of another server's picture is not a lost file, and must
+	 * not read like one.
+	 */
+	it('counts purged copies apart from missing ones', () => {
+		const wrapper = mount(StorageSection, { props: { storage: MEASURED } })
+
+		expect(wrapper.text()).toContain('25829 cached copies are not on disk and are fetched again when somebody looks at them')
+	})
+
+	it('shows the media cache limits when the page has them', () => {
+		const wrapper = mount(StorageSection, {
+			props: { storage: null, mediaCache: { days: 30, sizeMb: 5120, lastPurge: null } },
+		})
+
+		expect(wrapper.text()).toContain('Media from other servers')
 	})
 
 	/**

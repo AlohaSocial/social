@@ -214,6 +214,8 @@ const NOTHING = {
 	accessList: [],
 	retentionDays: 0,
 	storage: null,
+	/** @type {?{days: number, sizeMb: number, lastPurge: ?object}} the media cache limits */
+	mediaCache: null,
 	/** @type {?object} what each section is switched to; administrators only */
 	sections: null,
 	/** @type {?Array<{id: string, name: string}>} the groups a list may follow; administrators only */
@@ -226,6 +228,8 @@ const NOTHING = {
 	external: null,
 	/** @type {?object} the Bluesky side of this server (`AtprotoStatusService::current()`); administrators only */
 	bluesky: null,
+	/** @type {?{missing: string[], signUp: boolean}} what the "ready to be public" check asks for, null when it asks nothing; administrators only */
+	publicBasics: null,
 	federation: {
 		waiting: 0,
 		running: 0,
@@ -355,6 +359,17 @@ export default {
 			const awaiting = this.state.external?.settings?.awaitingApproval ?? 0
 			// a failed delivery is tried again; it only needs somebody once it is about to be given up on
 			const retrying = federation.atRisk > 0 ? 0 : federation.failing
+			const basics = this.state.publicBasics
+			const missing = basics?.missing ?? []
+			// the contact is on the Server card; the privacy policy and legal notice links are set in Theming, off this page
+			const basicsSection = !missing.includes('contact') && missing.includes('rules') ? 'rules' : 'server'
+			const basicNames = {
+				contact: t('social', 'a contact'),
+				rules: t('social', 'server rules'),
+				privacy_policy: t('social', 'a privacy policy link (in Theming)'),
+				legal_notice: t('social', 'a legal notice link (in Theming)'),
+			}
+			const basicsList = missing.map((basic) => basicNames[basic] ?? basicNames.legal_notice).join(', ')
 
 			return [
 				{
@@ -392,6 +407,12 @@ export default {
 					type: 'warning',
 					count: awaiting,
 					text: n('social', 'registration waiting for approval', 'registrations waiting for approval', awaiting),
+				},
+				{
+					section: basicsSection,
+					type: basics?.signUp ? 'warning' : 'info',
+					count: missing.length,
+					text: n('social', 'thing a public server should show is missing: {list}', 'things a public server should show are missing: {list}', missing.length, { list: basicsList }),
 				},
 				{
 					section: 'federation',
@@ -674,10 +695,10 @@ export default {
 					group: 'server',
 					icon: 'IconStorage',
 					component: 'StorageSection',
-					props: { storage: state.storage, videoStorage: state.videoStorage },
+					props: { storage: state.storage, videoStorage: state.videoStorage, mediaCache: state.mediaCache },
 					title: t('social', 'Storage'),
-					lede: t('social', 'What Aloha Social keeps on disk, measured once a day.'),
-					keywords: t('social', 'disk space media cache'),
+					lede: t('social', 'What Aloha Social keeps on disk, measured once a day, and how much media from other servers it keeps.'),
+					keywords: t('social', 'disk space media cache purge limit'),
 				},
 				{
 					id: 'background',

@@ -11,9 +11,11 @@ namespace OCA\Social\Tests\Settings;
 
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Report;
+use OCA\Social\Service\AboutService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\FediverseService;
+use OCA\Social\Service\MediaPurgeService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostReviewService;
@@ -49,10 +51,12 @@ class AdminSettingsTest extends TestCase {
 	private PostReviewService|Stub $postReviewService;
 	private StreamRequest|Stub $streamRequest;
 	private MediaUsageService|Stub $mediaUsageService;
+	private MediaPurgeService|Stub $mediaPurgeService;
 	private ReportService|Stub $reportService;
 	private ServerSettingsService|Stub $serverSettingsService;
 	private $sectionsService;
 	private IInitialState|Stub $initialState;
+	private AboutService|Stub $aboutService;
 	private AdminSettings $settings;
 
 	/** Translates nothing, which is what a test needs of it. */
@@ -72,6 +76,7 @@ class AdminSettingsTest extends TestCase {
 		$this->federationHealthService = $this->createStub(FederationHealthService::class);
 		$this->moderationService = $this->createStub(ModerationService::class);
 		$this->initialState = $this->createStub(IInitialState::class);
+		$this->aboutService = $this->createStub(AboutService::class);
 
 		$this->serverSettingsService = $this->createStub(ServerSettingsService::class);
 		$this->serverSettingsService->method('current')->willReturn($this->serverSettings());
@@ -113,6 +118,7 @@ class AdminSettingsTest extends TestCase {
 		$this->postReviewService = $this->createStub(PostReviewService::class);
 		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->mediaUsageService = $this->createStub(MediaUsageService::class);
+		$this->mediaPurgeService = $this->createStub(MediaPurgeService::class);
 		$this->streamRequest->method('localActivitySince')->willReturn(['posts' => 0, 'authors' => 0]);
 
 		$fediverseService = $this->createStub(FediverseService::class);
@@ -127,6 +133,7 @@ class AdminSettingsTest extends TestCase {
 			$this->postReviewService,
 			$this->streamRequest,
 			$this->mediaUsageService,
+			$this->mediaPurgeService,
 			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
 			$this->createStub(\OCA\Social\Service\SensitiveMediaService::class),
 			$this->federationHealthService,
@@ -142,6 +149,7 @@ class AdminSettingsTest extends TestCase {
 			$this->createStub(\OCA\Social\Service\NotificationPolicyService::class),
 			$this->createStub(\OCA\Social\Atproto\Service\AtprotoStatusService::class),
 			$this->createStub(\OCA\Social\Service\RecommendationPreferenceService::class),
+			$this->aboutService,
 		);
 	}
 
@@ -330,6 +338,19 @@ class AdminSettingsTest extends TestCase {
 		$this->assertSame(0, $state['retentionDays']);
 	}
 
+	public function testTheMediaCacheLimitsAndTheLastPurgeTravelWithThePage(): void {
+		$this->mediaPurgeService->method('cacheDays')->willReturn(30);
+		$this->mediaPurgeService->method('cacheBytes')->willReturn(5120 * 1024 * 1024);
+		$this->mediaPurgeService->method('lastCachePurge')->willReturn(['purged' => 1789480000, 'bytes' => 42]);
+
+		$state = $this->state($this->summary());
+
+		$this->assertSame(
+			['days' => 30, 'sizeMb' => 5120, 'lastPurge' => ['purged' => 1789480000, 'bytes' => 42]],
+			$state['mediaCache']
+		);
+	}
+
 	public function testTheServerCardSaysWhatTheInstanceIsSetTo(): void {
 		$state = $this->state($this->summary());
 
@@ -346,6 +367,49 @@ class AdminSettingsTest extends TestCase {
 		$state = $this->state($this->summary(), [], [], 0, $this->settingsFor(false));
 
 		$this->assertNull($state['server']);
+	}
+
+	/**
+	 * A server open to sign-ups says what the "ready to be public" check
+	 * would warn about, so Needs attention can list it.
+	 */
+	public function testAServerOpenToSignUpsSaysWhichBasicsItLacks(): void {
+		$this->aboutService->method('isOpenForSignUp')->willReturn(true);
+		$this->aboutService->method('missingBasics')->willReturn([AboutService::MISSING_CONTACT, AboutService::MISSING_PRIVACY]);
+
+		$state = $this->state($this->summary());
+
+		$this->assertSame(['missing' => ['contact', 'privacy_policy'], 'signUp' => true], $state['publicBasics']);
+	}
+
+	public function testAServerThatOnlyFederatesSaysSoToo(): void {
+		$this->aboutService->method('isOpenForSignUp')->willReturn(false);
+		$this->aboutService->method('isFederating')->willReturn(true);
+		$this->aboutService->method('missingBasics')->willReturn([AboutService::MISSING_RULES]);
+
+		$state = $this->state($this->summary());
+
+		$this->assertSame(['missing' => ['rules'], 'signUp' => false], $state['publicBasics']);
+	}
+
+	public function testAServerThatNeitherTakesSignUpsNorFederatesNeedsNoBasics(): void {
+		$this->aboutService->method('isOpenForSignUp')->willReturn(false);
+		$this->aboutService->method('isFederating')->willReturn(false);
+		$this->aboutService->method('missingBasics')->willReturn([AboutService::MISSING_CONTACT]);
+
+		$state = $this->state($this->summary());
+
+		$this->assertNull($state['publicBasics']);
+	}
+
+	/** The contact is set on the Server card and the links in Theming: neither is a delegate's. */
+	public function testADelegateIsNotSentThePublicBasics(): void {
+		$this->aboutService->method('isOpenForSignUp')->willReturn(true);
+		$this->aboutService->method('missingBasics')->willReturn([AboutService::MISSING_CONTACT]);
+
+		$state = $this->state($this->summary(), [], [], 0, $this->settingsFor(false));
+
+		$this->assertNull($state['publicBasics']);
 	}
 
 	/**

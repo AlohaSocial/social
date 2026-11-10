@@ -124,6 +124,7 @@ describe('Settings', () => {
 			'Sound and touch',
 			'When to tell you',
 			'Who may reach you',
+			'Drafts',
 			'Scheduled posts',
 			'Waiting for review',
 			'Archived posts',
@@ -209,7 +210,7 @@ describe('Settings', () => {
 			const wrapper = await mountSettings()
 
 			expect(wrapper.findAll('.settings__group-link').map((link) => link.attributes('href')))
-				.toEqual(['#account', '#lists', '#notifications', '#scheduled', '#apps', '#introduction'])
+				.toEqual(['#account', '#lists', '#notifications', '#drafts', '#apps', '#introduction'])
 		})
 
 		it('puts the group opened into the address', async () => {

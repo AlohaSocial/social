@@ -43,7 +43,7 @@ class CacheDocumentsRequestBuilder extends CoreRequestBuilder {
 			'cd.media_type', 'cd.mime_type', 'cd.url', 'cd.local_copy', 'cd.public',
 			'cd.error', 'cd.creation', 'cd.caching', 'cd.resized_copy', 'cd.meta',
 			'cd.blurhash', 'cd.description', 'cd.size', 'cd.ai_source',
-			'cd.transcoded', 'cd.laddered'
+			'cd.transcoded', 'cd.laddered', 'cd.cached'
 		)
 			->from(self::TABLE_CACHE_DOCUMENTS, 'cd');
 

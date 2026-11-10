@@ -441,6 +441,26 @@ class ConfigService {
 	public const SOCIAL_MEDIA_USAGE = 'media_usage';
 
 	/**
+	 * Days a cached copy of another server's media is kept before the daily
+	 * purge removes it; it is fetched again when somebody next looks at it.
+	 * 0 disables the age limit. See `MediaPurgeService::purgeCache()`.
+	 */
+	public const SOCIAL_MEDIA_CACHE_DAYS = 'media_cache_days';
+
+	/**
+	 * Megabytes the cached copies of other servers' media may take up in all;
+	 * the daily purge removes the oldest until they fit. 0 disables the size
+	 * limit.
+	 */
+	public const SOCIAL_MEDIA_CACHE_MB = 'media_cache_mb';
+
+	/**
+	 * What the last purge of the media cache removed, as JSON, with the
+	 * moment it ran. Bookkeeping for the administration page.
+	 */
+	public const SOCIAL_MEDIA_CACHE_PURGED = 'media_cache_purged';
+
+	/**
 	 * The secret a story's fetch capability is derived from, generated the
 	 * first time a story is published. See `getStorySecret()`.
 	 */
@@ -615,6 +635,8 @@ class ConfigService {
 		self::SOCIAL_RETENTION_DAYS => '0',
 		self::SOCIAL_NOTIFICATION_RETENTION_DAYS => '90',
 		self::SOCIAL_CACHE_ACTOR_DAYS => '180',
+		self::SOCIAL_MEDIA_CACHE_DAYS => '30',
+		self::SOCIAL_MEDIA_CACHE_MB => '5120',
 		self::SOCIAL_TOKEN_MAX_DAYS => '365',
 		self::SOCIAL_SILENCED_LIST => '[]',
 		self::SOCIAL_BLOCKLIST_SOURCES => '[]',
@@ -782,6 +804,36 @@ class ConfigService {
 	 */
 	public function setAppValue($key, $value) {
 		$this->appConfig->setValueString(Application::APP_ID, $key, (string)$value);
+	}
+
+	/**
+	 * A value Nextcloud loads only when it is asked for, rather than on
+	 * every request: for bookkeeping too large to be worth that, such as the
+	 * JSON of a measurement (`SOCIAL_MEDIA_USAGE`). Nextcloud warns about any
+	 * value over 128 bytes that is not stored this way.
+	 *
+	 * A value an earlier version stored the other way is not returned by a
+	 * lazy read, so it is moved over first; after that, the check reads only
+	 * what every request has loaded already.
+	 */
+	public function getLazyAppValue(string $key): string {
+		$this->moveToLazy($key);
+
+		return $this->appConfig->getValueString(
+			Application::APP_ID, $key, (string)($this->defaults[$key] ?? ''), lazy: true
+		);
+	}
+
+	/** Stores a value the way `getLazyAppValue()` reads it. */
+	public function setLazyAppValue(string $key, string $value): void {
+		$this->moveToLazy($key);
+		$this->appConfig->setValueString(Application::APP_ID, $key, $value, lazy: true);
+	}
+
+	private function moveToLazy(string $key): void {
+		if ($this->appConfig->hasKey(Application::APP_ID, $key, false)) {
+			$this->appConfig->updateLazy(Application::APP_ID, $key, true);
+		}
 	}
 
 	/**

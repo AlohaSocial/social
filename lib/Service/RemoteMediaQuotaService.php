@@ -145,7 +145,7 @@ class RemoteMediaQuotaService {
 	 * cannot be constructed by the thing it constructs.
 	 */
 	private function measured(string $host): int {
-		$stored = (string)$this->configService->getAppValue(ConfigService::SOCIAL_MEDIA_USAGE);
+		$stored = $this->configService->getLazyAppValue(ConfigService::SOCIAL_MEDIA_USAGE);
 		if ($stored === '') {
 			return 0;
 		}

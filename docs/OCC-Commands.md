@@ -1228,12 +1228,13 @@ Cached from other servers     19664 files     8.7 GiB
 Total on disk                 20506 files    10.8 GiB
 ```
 
-Three counts are printed after the total when they are not zero: copies that are
+Four counts are printed after the total when they are not zero: copies that are
 *streamed* (a pointer at a file on the server that holds it, so no bytes here),
-copies served from Nextcloud's own avatar store rather than by this app, and
-copies a row names that are **not in appdata** — reported rather than counted as
-zero bytes, because a cached remote one is simply fetched again when it is next
-asked for.
+copies served from Nextcloud's own avatar store rather than by this app, cached
+remote copies that are **not on disk** (`evicted`: purged by
+`social:media:purge` or the daily job, or deleted by other means; each is
+fetched again when it is next viewed), and copies of **uploads from here** a
+row names that are not in appdata (`missing`), which are lost.
 
 No quota accounting: this is what is on disk, not what anybody is allowed. It
 also does not walk appdata looking for files no row names — the path of a copy
@@ -1241,10 +1242,68 @@ is derived from its own name, so finding an orphan means listing a four-level
 tree with a directory per file, and there is no safe way to delete a file this
 app cannot name.
 
-The number to read it against is `cache_actor_days` (default 180), which is how
-long a cached remote account nobody here refers to survives before the cache
-cron evicts it with its avatar; `occ config:app:set social cache_actor_days
---value 0` turns that sweep off.
+The numbers to read it against are the two limits of the media cache,
+`media_cache_days` (default 30) and `media_cache_mb` (default 5120), which
+`social:media:purge` below and the daily `Cron\MediaSweep` apply, and
+`cache_actor_days` (default 180), which is how long a cached remote account
+nobody here refers to survives before the cache cron evicts it with its avatar;
+`occ config:app:set social cache_actor_days --value 0` turns that sweep off.
+
+### `social:media:purge`
+
+Delete cached copies of other servers' media — attachments, and the avatars and
+headers of remote accounts — to free disk. A deleted copy is fetched again from
+its origin when somebody next looks at it.
+
+```
+php occ social:media:purge [--older-than DAYS] [--max-size SIZE] [--all] [--dry-run] [--output=plain|json|json_pretty]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--older-than` | required | Delete the copies cached more than this many days ago (1 or more) |
+| `--max-size` | required | Delete the oldest copies until the cache fits in this size: bytes, or a number with `K`, `M`, `G` or `T` (binary; `5G`, `5GB` and `5GiB` are the same) |
+| `--all` | none | Delete every cached copy; does not combine with the two above |
+| `--dry-run` | none | Count what would be deleted, and change nothing |
+
+Without `--older-than`, `--max-size` or `--all` it applies the two limits the
+administrator set, `media_cache_days` (default 30) and `media_cache_mb`
+(default 5120, i.e. 5 GiB) — the same purge `Cron\MediaSweep` runs once a day. With either
+of the first two, only what was given applies. When both settings are `0` and
+no option is given, it says so and does nothing.
+
+Only what can be fetched again is touched: rows of `social_cache_doc` nobody
+here uploaded (`account` empty), that name the file at its origin and are not
+marked as refused, and whose id is not one this instance gives its own
+documents. Uploads from here, local avatars and banners, the GIF pack and
+custom emoji are never touched, and no file is deleted that a row does not name.
+
+The copies are taken oldest first, by when the copy on disk was written (the
+`cached` column). With `--max-size` the cache is first added up from the files
+themselves — a row's `size` covers neither the preview nor the rows written
+before the column existed — and then trimmed from the oldest end. Both passes
+read 500 rows at a time, so memory stays flat however large the cache is.
+
+Files are deleted through Nextcloud's appdata API, so the file cache stays
+right, together with the folder named after each file. The row stays, names and
+all, with `cached` cleared: the names are in every link this instance has
+already served, and the next request for one fetches the file again under the
+same name (`DocumentService`). A row whose files were already gone — deleted
+by hand, say — is marked the same way and counted on its own line rather than
+as freed.
+
+```
+Deleted 9412 file(s), 11.6 GiB
+  attachments                  8890 files     11.4 GiB
+  avatars and headers           522 files    203.0 MiB
+Cache before: 16.6 GiB, after: 5.0 GiB
+```
+
+`--output=json` (or `json_pretty`) prints the same as a structure: `files`,
+`bytes`, `attachments` and `avatars` (each `files` and `bytes`), `gone`,
+`cache_bytes` and `remaining_bytes` (null when no size limit applied),
+`dry_run` and `complete`. Exits 1 when an option is malformed or the app has no
+cloud url yet.
 
 ---
 
@@ -1652,6 +1711,7 @@ the last four are queued on demand instead:
 
 | Job | Class | Description |
 |-----|-------|-------------|
+| Media sweep | `OCA\Social\Cron\MediaSweep` | Daily. Removes the cached documents whose post, cached actor or story is gone, fills in the media type of rows stored without one, and applies the two media cache limits (`media_cache_days`, default 30; `media_cache_mb`, default 5120) like `social:media:purge` does, for up to 15 minutes a run. |
 | Cache maintenance | `OCA\Social\Cron\Cache` | Every 12 minutes, with a 300-second budget. Same steps as `social:cache:refresh` (deleted actors, local actor cache, remote actors and their details, documents, hashtags), and additionally closes polls, prunes remote statuses past retention, evicts cached remote accounts nobody here refers to, syncs the timelines of the cached remote actors somebody here follows, verifies profile links, reconciles group lists, finds out which servers the Discover page may ask and deletes the expired rows of the durable cache. A run that spends its budget logs which steps it skipped, and the next run starts with the first of them, so the steps at the end of the list are not the ones that never run. No key rotation is performed. |
 | Queue processing | `OCA\Social\Cron\Queue` | Every 12 minutes. Processes the outbound request queue **and** the stream queue, like `social:queue:process`. |
 | Expired stories | `OCA\Social\Cron\ExpiredStories` | Hourly. Deletes the stories whose day is up, at most 500 per run. The second of the two guards on a story's expiry: every read already filters on `expires_at`, so an instance whose cron has stopped shows nothing it should not — but without this the rows and their pictures would pile up for ever, and "it disappears after a day" would be true of what people can see and false of what is stored. |

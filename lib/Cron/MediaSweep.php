@@ -19,8 +19,9 @@ use Throwable;
 /**
  * The housekeeping stored media needs and nothing else does.
  *
- * Two passes, both bounded, both resumable by simply being run again — the
- * first page after page for SECONDS, the second one page:
+ * Three passes, all bounded, all resumable by simply being run again — the
+ * first page after page for SECONDS, the second one page, the third for
+ * PURGE_SECONDS:
  *
  * - the documents whose parent — the post, the cached actor or the story they
  *   hang off — no longer exists. Nothing can ever refer to those files again,
@@ -30,6 +31,13 @@ use Throwable;
  *   attachment whose type it does not know, so those pictures are invisible
  *   until something says what they are, and nothing else ever will: the
  *   caching run only looks at rows with no local copy.
+ * - the cached copies of other servers' media, past the age and over the
+ *   total size the administrator set (`media_cache_days`, default 30, and
+ *   `media_cache_mb`, default 5120; 0 turns either off). Nothing else bounds
+ *   them: the two passes above only reach media whose post or account is
+ *   gone, and a post somebody here follows is kept for good. A purged copy
+ *   is fetched again when somebody next looks at it. See
+ *   `MediaPurgeService::purgeCache()`.
  *
  * Daily. Neither answer changes within the hour, the first is a delete per row
  * and the second is a read per row, and a cron slot is worth more to the
@@ -56,6 +64,13 @@ class MediaSweep extends TimedJob {
 	 */
 	public const SECONDS = 120;
 
+	/**
+	 * How long the media cache purge reads on, in seconds. The first run on
+	 * an instance that has been caching for a year has far more to remove
+	 * than one a day, and what is left is the next day's.
+	 */
+	public const PURGE_SECONDS = 900;
+
 	public function __construct(
 		ITimeFactory $time,
 		private MediaPurgeService $mediaPurgeService,
@@ -74,6 +89,9 @@ class MediaSweep extends TimedJob {
 				self::DAYS, self::BATCH, $this->time->getTime() + self::SECONDS
 			),
 			'fillMissingMediaTypes' => fn (): int => $this->documentService->fillMissingMediaTypes(self::BATCH),
+			'purgeMediaCache' => fn (): int => (int)($this->mediaPurgeService->purgeCacheAsConfigured(
+				false, $this->time->getTime() + self::PURGE_SECONDS
+			)['files'] ?? 0),
 		] as $step => $work) {
 			try {
 				$work();

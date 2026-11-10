@@ -12,12 +12,14 @@ namespace OCA\Social\Settings;
 use OCA\Social\Atproto\Service\AtprotoStatusService;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Report;
+use OCA\Social\Service\AboutService;
 use OCA\Social\Service\BackgroundHealthService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ExternalAdminState;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\MediaPurgeService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\NotificationPolicyService;
@@ -73,6 +75,7 @@ class AdminSettings implements IDelegatedSettings {
 		private PostReviewService $postReviewService,
 		private StreamRequest $streamRequest,
 		private MediaUsageService $mediaUsageService,
+		private MediaPurgeService $mediaPurgeService,
 		private VideoQuotaService $videoQuotaService,
 		private SensitiveMediaService $sensitiveMediaService,
 		private FederationHealthService $federationHealthService,
@@ -88,6 +91,7 @@ class AdminSettings implements IDelegatedSettings {
 		private NotificationPolicyService $notificationPolicyService,
 		private AtprotoStatusService $atprotoStatus,
 		private RecommendationPreferenceService $recommendationPreferences,
+		private AboutService $aboutService,
 	) {
 	}
 
@@ -147,6 +151,13 @@ class AdminSettings implements IDelegatedSettings {
 			// what is on disk, as the cron last measured it: adding it up is a
 			// `stat` per stored file and has no business in a page load
 			'storage' => $this->mediaUsageService->lastMeasured(),
+			// the two limits the daily purge of other servers' media applies,
+			// and what it last removed
+			'mediaCache' => [
+				'days' => $this->mediaPurgeService->cacheDays(),
+				'sizeMb' => intdiv($this->mediaPurgeService->cacheBytes(), 1024 * 1024),
+				'lastPurge' => $this->mediaPurgeService->lastCachePurge(),
+			],
 			// who is holding the video, which is the one question a full disk
 			// actually raises and the one the storage figures could not answer.
 			// Live rather than from the last measurement: it is one grouped
@@ -175,6 +186,9 @@ class AdminSettings implements IDelegatedSettings {
 			// about the instance, for an administrator proper
 			'notificationPolicyDefaults' => $this->isAdministrator()
 				? $this->notificationPolicyService->defaults()->getDecisions() : null,
+			// what the "ready to be public" setup check would ask for, for
+			// the administrator proper who can set it
+			'publicBasics' => $this->isAdministrator() ? $this->publicBasics() : null,
 		]);
 
 		return new TemplateResponse('social', 'settings/admin');
@@ -197,6 +211,22 @@ class AdminSettings implements IDelegatedSettings {
 			'day' => $this->streamRequest->localActivitySince($now - 86400),
 			'week' => $this->streamRequest->localActivitySince($now - 7 * 86400),
 		];
+	}
+
+	/**
+	 * What a server that takes sign-ups or federates is missing of its
+	 * contact, rules, privacy policy and legal notice, as `PublicReady` reads
+	 * it; null on a server that does neither, which that check passes.
+	 *
+	 * @return array{missing: list<string>, signUp: bool}|null
+	 */
+	private function publicBasics(): ?array {
+		$signUp = $this->aboutService->isOpenForSignUp();
+		if (!$signUp && !$this->aboutService->isFederating()) {
+			return null;
+		}
+
+		return ['missing' => $this->aboutService->missingBasics(), 'signUp' => $signUp];
 	}
 
 	/** @return array<string, mixed> */

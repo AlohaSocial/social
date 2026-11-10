@@ -322,6 +322,51 @@ describe('what needs attention', () => {
 
 		expect(badges).toEqual({ Overview: '', Moderation: '5', 'Explore and features': '', Federation: '', Server: '1' })
 	})
+
+	/**
+	 * @param {object} wrapper the page
+	 * @return {object|undefined} the line about the basics of a public server
+	 */
+	function basicsLine(wrapper) {
+		return wrapper.findAll('.attention__item').find((item) => item.text().includes('a public server should show'))
+	}
+
+	it('warns about the basics a server open to sign-ups lacks, on the Server card that holds the contact', async () => {
+		const wrapper = await mountPage({ ...STATE, publicBasics: { missing: ['contact', 'privacy_policy'], signUp: true } })
+		const line = basicsLine(wrapper)
+
+		expect(line.attributes('href')).toBe('#server')
+		expect(line.classes()).toContain('attention__item--warning')
+		expect(line.find('.attention__count').text()).toBe('2')
+		expect(line.find('.attention__text').text()).toBe('things a public server should show are missing: a contact, a privacy policy link (in Theming)')
+	})
+
+	it('only informs when the server federates without taking sign-ups, and sends missing rules to the rules', async () => {
+		const wrapper = await mountPage({ ...STATE, publicBasics: { missing: ['rules', 'legal_notice'], signUp: false } })
+		const line = basicsLine(wrapper)
+
+		expect(line.attributes('href')).toBe('#rules')
+		expect(line.classes()).toContain('attention__item--info')
+		expect(line.find('.attention__text').text()).toBe('things a public server should show are missing: server rules, a legal notice link (in Theming)')
+	})
+
+	it('names a single missing basic in the singular', async () => {
+		const wrapper = await mountPage({ ...STATE, publicBasics: { missing: ['legal_notice'], signUp: true } })
+		const line = basicsLine(wrapper)
+
+		expect(line.attributes('href')).toBe('#server')
+		expect(line.find('.attention__count').text()).toBe('1')
+		expect(line.find('.attention__text').text()).toBe('thing a public server should show is missing: a legal notice link (in Theming)')
+	})
+
+	it('lists nothing about the basics when they are all set or the server neither takes sign-ups nor federates', async () => {
+		for (const publicBasics of [{ missing: [], signUp: true }, null, undefined]) {
+			const wrapper = await mountPage({ ...STATE, publicBasics })
+
+			expect(basicsLine(wrapper)).toBeUndefined()
+			expect(wrapper.text()).toContain('Nothing is waiting for you.')
+		}
+	})
 })
 
 describe('the search', () => {

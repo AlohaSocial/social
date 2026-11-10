@@ -43,6 +43,9 @@ class RemoteMediaQuotaServiceTest extends TestCase {
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
+		// the measurement is stored lazily, the quota setting is not
+		$this->configService->method('getLazyAppValue')
+			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
 
 		$this->service = $this->build($this->cacheFactory(true));
 	}

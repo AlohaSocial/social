@@ -220,9 +220,10 @@ class DocumentService {
 	 */
 	public function getResizedFromCache(string $id, string &$mime = '', bool $public = false) {
 		$document = $this->cacheRemoteDocument($id, $public);
+		$file = $this->storedCopy($document, true);
 		$mime = $document->getMimeType();
 
-		return $this->cacheService->getContentFromCache($document->getResizedCopy());
+		return $file;
 	}
 
 	/**
@@ -240,9 +241,10 @@ class DocumentService {
 		string $id, string &$mimeType = '', bool $public = false,
 	): ISimpleFile {
 		$document = $this->cacheRemoteDocument($id, $public);
+		$file = $this->storedCopy($document, false);
 		$mimeType = $document->getMimeType();
 
-		return $this->cacheService->getContentFromCache($document->getLocalCopy());
+		return $file;
 	}
 
 	/**
@@ -364,9 +366,86 @@ class DocumentService {
 			throw new CacheDocumentDoesNotExistException('not cached');
 		}
 
+		$file = $this->storedCopy($document, false);
 		$mimeType = $document->getMimeType();
 
-		return $this->cacheService->getContentFromCache($document->getLocalCopy());
+		return $file;
+	}
+
+	/**
+	 * One of a document's two copies, fetched again first where it was a
+	 * cached remote file that is no longer on disk.
+	 *
+	 * @throws CacheContentException
+	 * @throws CacheDocumentDoesNotExistException
+	 */
+	private function storedCopy(Document $document, bool $resized): ISimpleFile {
+		try {
+			return $this->cacheService->getContentFromCache(
+				$resized ? $document->getResizedCopy() : $document->getLocalCopy()
+			);
+		} catch (CacheContentException $e) {
+			if (!$this->restoreCopy($document)) {
+				throw $e;
+			}
+		}
+
+		return $this->cacheService->getContentFromCache(
+			$resized ? $document->getResizedCopy() : $document->getLocalCopy()
+		);
+	}
+
+	/**
+	 * Fetches a cached remote file again when its row names it and the disk
+	 * does not have it: the media cache purge took it (`MediaPurgeService::purgeCache()`),
+	 * or it went missing by other means.
+	 *
+	 * The file goes back under the names the row already has, which are in
+	 * every link this instance has served. Only for what can be fetched
+	 * again -- not an upload from here, not a row marked as refused -- and at
+	 * most once per `CacheDocumentsRequest::CACHING_TIMEOUT`, which `caching`
+	 * records: a busy page asks for the same picture many times at once, and
+	 * an origin that is down should not be asked on every one of them.
+	 *
+	 * @return bool whether the file is back
+	 */
+	private function restoreCopy(Document $document): bool {
+		if ($document->isLocalUpload() || $document->getError() > 0 || $document->getUrl() === ''
+			|| !Document::isStoredName($document->getLocalCopy())
+			|| $document->getCaching() > (time() - (CacheDocumentsRequest::CACHING_TIMEOUT * 60))) {
+			return false;
+		}
+
+		try {
+			if (MediaUsageService::isLocalDocumentId($document->getId(), $this->configService->getCloudUrl())) {
+				return false;
+			}
+
+			$this->cacheDocumentsRequest->initCaching($document);
+			$resized = $document->getResizedCopy();
+			// the type, size and names of what arrived are set on the
+			// document as it is stored, and written with it
+			$this->configService->withRequestTimeout(
+				self::BACKGROUND_FETCH_TIMEOUT,
+				fn () => $this->cacheService->restoreRemoteCopy($document),
+				ConfigService::DEFAULT_REQUEST_TIMEOUT
+			);
+			$this->cacheDocumentsRequest->endCaching($document);
+
+			// a preview the row had no name for has one now, and the post
+			// carries its attachments as it last saw them
+			if ($document->getResizedCopy() !== $resized) {
+				$this->streamRequest->updateAttachments($document);
+			}
+
+			return true;
+		} catch (Throwable $e) {
+			$this->miscService->log(
+				'Could not fetch the purged copy of ' . $document->getId() . ' again: ' . $e->getMessage(), 1
+			);
+
+			return false;
+		}
 	}
 
 	/**
@@ -402,6 +481,14 @@ class DocumentService {
 			$document = $this->cacheDocumentsRequest->getByCopy($uuid);
 		} catch (CacheDocumentDoesNotExistException $e) {
 			throw new NotFoundException('unknown document');
+		}
+
+		try {
+			return [$this->cacheService->getFromUuid($uuid), $document];
+		} catch (NotFoundException $e) {
+			if (!$this->restoreCopy($document)) {
+				throw $e;
+			}
 		}
 
 		return [$this->cacheService->getFromUuid($uuid), $document];

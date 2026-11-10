@@ -21,15 +21,20 @@
 				</div>
 			</div>
 			<p class="social-admin__hint">
-				{{ t('social', 'What was posted from here is somebody\'s own work and is not going anywhere. The cached half is copies of other servers\' pictures, and is what Retention above removes — a shorter retention is the lever for this number.') }}
+				{{ t('social', 'What was posted from here is somebody\'s own work and is not going anywhere. The cached half is copies of other servers\' pictures and videos, kept within the limits below.') }}
 			</p>
 			<p class="social-admin__hint">
 				{{ t('social', 'Measured {when}.', { when: measuredAt }) }}
+				<span v-if="storage.evicted > 0">
+					{{ n('social', '%n cached copy is not on disk and is fetched again when somebody looks at it.', '%n cached copies are not on disk and are fetched again when somebody looks at them.', storage.evicted) }}
+				</span>
 				<span v-if="storage.missing > 0">
 					{{ n('social', '%n file named in the database was not on disk.', '%n files named in the database were not on disk.', storage.missing) }}
 				</span>
 			</p>
 		</template>
+
+		<MediaCacheLimits v-if="mediaCache" :mediaCache="mediaCache" />
 
 		<!-- who is holding the video. "Social is using 400 GB" is not
 		     actionable; "this account is holding 380 of it" is -->
@@ -85,18 +90,20 @@
 <script>
 import { humanSize } from '../../utils/humanSize.js'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
+import MediaCacheLimits from './MediaCacheLimits.vue'
 
 /**
  * Two numbers about disk, and which of them an administrator can act on.
  *
  * The split is the point. "Social is using 40 GB" is not actionable; "31 GB of
- * it is cached copies of other servers' pictures, and Retention is the lever"
+ * it is cached copies of other servers' pictures, and these are its limits"
  * is.
  */
 export default {
 	name: 'StorageSection',
 
 	components: {
+		MediaCacheLimits,
 	},
 
 	props: {
@@ -112,6 +119,12 @@ export default {
 		 * administers.
 		 */
 		videoStorage: {
+			type: Object,
+			default: null,
+		},
+
+		/** the limits of the cache of other servers' media, and its last purge */
+		mediaCache: {
 			type: Object,
 			default: null,
 		},

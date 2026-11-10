@@ -5,7 +5,7 @@
 <template>
 	<div class="drafts-entry">
 		<NcButton
-			v-if="drafts.length > 0"
+			v-if="!inline && drafts.length > 0"
 			ref="trigger"
 			:disabled="disabled"
 			variant="tertiary"
@@ -15,13 +15,16 @@
 			</template>
 			{{ t('social', 'Drafts ({count})', { count: drafts.length }) }}
 		</NcButton>
-		<NcModal
-			v-if="open"
-			:name="t('social', 'Drafts')"
-			size="normal"
+		<!-- inline, the list is drawn on the page itself, as on Settings -->
+		<component
+			:is="inline ? 'div' : 'NcModal'"
+			v-if="listShown"
+			v-bind="inline ? {} : { name: t('social', 'Drafts'), size: 'normal' }"
 			@close="close">
-			<div class="drafts-list">
-				<h2>{{ t('social', 'Drafts') }}</h2>
+			<div class="drafts-list" :class="{ 'drafts-list--inline': inline }">
+				<h2 v-if="!inline">
+					{{ t('social', 'Drafts') }}
+				</h2>
 				<p>{{ t('social', 'Drafts are saved in this browser for your account.') }}</p>
 				<p v-if="error" class="drafts-list__error" role="alert">
 					{{ error }}
@@ -35,7 +38,7 @@
 							type="button"
 							class="drafts-list__item"
 							:disabled="resuming"
-							@click="resume(entry.context)">
+							@click="resume(entry.context, $event)">
 							<strong>{{ preview(entry.draft) }}</strong>
 							<span>{{ contextLabel(entry.context) }}</span>
 							<span v-if="entry.draft.media.length">{{ n('social', '%n attachment', '%n attachments', entry.draft.media.length) }}</span>
@@ -57,7 +60,7 @@
 					{{ t('social', 'Opening draft…') }}
 				</p>
 			</div>
-		</NcModal>
+		</component>
 		<NcDialog
 			:open="deleteDialogOpen"
 			:name="t('social', 'Delete this draft?')"
@@ -83,12 +86,22 @@ import { userLocale } from '../utils/locale.js'
 export default {
 	name: 'DraftsButton',
 	components: { NcButton, NcDialog, NcModal, DeleteOutline, FileDocumentEditOutline },
-	props: { disabled: { type: Boolean, default: false } },
+	props: {
+		disabled: { type: Boolean, default: false },
+		/** the list itself rather than a button that opens it in a dialog */
+		inline: { type: Boolean, default: false },
+	},
+
 	data() {
 		return { drafts: listDrafts(), open: false, resuming: false, error: '', resumeRequest: 0, deleteContext: null, deleteDialogOpen: false }
 	},
 
 	computed: {
+		/** @return {boolean} whether the list is on screen */
+		listShown() {
+			return this.inline || this.open
+		},
+
 		deleteButtons() {
 			return [
 				{ label: t('social', 'Cancel'), callback: () => { this.deleteDialogOpen = false } },
@@ -175,7 +188,11 @@ export default {
 			return new Intl.DateTimeFormat(userLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 		},
 
-		async resume(context) {
+		/**
+		 * @param {string} context the draft
+		 * @param {Event} [event] the click on its row
+		 */
+		async resume(context, event) {
 			if (this.resuming || this.disabled) {
 				return
 			}
@@ -191,7 +208,7 @@ export default {
 			try {
 				const trigger = /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.trigger)
 				/** @type {{draft: import('../services/draft.js').ComposerDraft, context: string, opener?: HTMLElement, reply?: object, quote?: object}} */
-				const intent = { draft, context, opener: trigger?.$el }
+				const intent = { draft, context, opener: trigger?.$el ?? /** @type {HTMLElement|undefined} */ (event?.currentTarget ?? undefined) }
 				const target = /^(reply|quote)\.([0-9]+)$/.exec(context)
 				if (target) {
 					const status = await useTimelineStore().fetchStatus(target[2])
@@ -204,7 +221,7 @@ export default {
 						intent.quote = status
 					}
 				}
-				if (!this.open || request !== this.resumeRequest) {
+				if (!this.listShown || request !== this.resumeRequest) {
 					return
 				}
 				this.open = false
@@ -214,7 +231,7 @@ export default {
 				}
 				eventBus.emit('composer-open', intent)
 			} catch {
-				if (this.open && request === this.resumeRequest) {
+				if (this.listShown && request === this.resumeRequest) {
 					this.error = t('social', 'The original post could not be loaded. Your draft has been kept. Try again later.')
 				}
 			} finally {
@@ -230,6 +247,8 @@ export default {
 <style scoped lang="scss">
 .drafts-list {
 	padding: 20px;
+
+	&--inline { padding: 0; }
 
 	h2 { margin-block: 0 12px; }
 	p { margin-block: 8px 12px; }

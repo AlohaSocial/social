@@ -61,6 +61,23 @@ class MediaSweepTest extends TestCase {
 			->with(MediaSweep::DAYS, MediaSweep::BATCH, 1_757_937_600 + MediaSweep::SECONDS)->willReturn(3);
 		$this->documentService->expects($this->once())->method('fillMissingMediaTypes')
 			->with(MediaSweep::BATCH)->willReturn(1);
+		$this->mediaPurgeService->expects($this->once())->method('purgeCacheAsConfigured')
+			->with(false, 1_757_937_600 + MediaSweep::PURGE_SECONDS)->willReturn(null);
+
+		$this->job->start($this->jobList);
+	}
+
+	/**
+	 * The media cache purge is what bounds the copies of posts that are
+	 * kept; it runs on every pass, whatever the two before it did.
+	 */
+	public function testTheMediaCachePurgeRunsEvenWhenAnEarlierPassFails(): void {
+		$this->mediaPurgeService->method('sweepOrphans')
+			->willThrowException(new \RuntimeException('the database said no'));
+		$this->documentService->method('fillMissingMediaTypes')
+			->willThrowException(new \RuntimeException('so did the disk'));
+		$this->mediaPurgeService->expects($this->once())->method('purgeCacheAsConfigured')
+			->willReturn(['files' => 12]);
 
 		$this->job->start($this->jobList);
 	}

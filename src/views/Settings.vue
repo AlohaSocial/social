@@ -116,7 +116,7 @@
 					</header>
 
 					<div class="settings__section-body">
-						<component :is="section.component" />
+						<component :is="section.component" v-bind="section.props" />
 					</div>
 				</section>
 			</div>
@@ -128,6 +128,7 @@
 import ArchivedPosts from '../components/ArchivedPosts.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
+import DraftsButton from '../components/DraftsButton.vue'
 import HeldPosts from '../components/HeldPosts.vue'
 import IntroductionSettings from '../components/IntroductionSettings.vue'
 import PortfolioSettings from '../components/PortfolioSettings.vue'
@@ -141,6 +142,7 @@ import IconArchive from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconBellRing from 'vue-material-design-icons/BellRingOutline.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
+import IconDrafts from 'vue-material-design-icons/FileDocumentEditOutline.vue'
 import IconDirectMessages from 'vue-material-design-icons/MessageLockOutline.vue'
 import IconHelp from 'vue-material-design-icons/HelpCircleOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
@@ -166,6 +168,7 @@ import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
 import { n, t } from '@nextcloud/l10n'
 import { useServerData } from '../composables/useServerData.js'
+import { useTimelineStore } from '../store/timeline.js'
 import { currentSection, scrollToSection, watchSections } from '../services/sectionRail.js'
 
 // The forms, switches and lists below are only ever drawn on this page, so
@@ -225,6 +228,7 @@ export default {
 		BlueskySettings,
 		DeleteAccount,
 		DirectMessagesSettings,
+		DraftsButton,
 		ExternalStorage,
 		FeaturedTagsSettings,
 		HeldPosts,
@@ -239,6 +243,7 @@ export default {
 		IconBellRing,
 		IconDelete,
 		IconDirectMessages,
+		IconDrafts,
 		IconHelp,
 		IconInterests,
 		IconIntroduction,
@@ -278,8 +283,9 @@ export default {
 
 	setup() {
 		const { serverData } = useServerData()
+		const timelineStore = useTimelineStore()
 
-		return { serverData }
+		return { serverData, timelineStore }
 	},
 
 	data() {
@@ -432,6 +438,17 @@ export default {
 					title: t('social', 'Who may reach you'),
 					lede: t('social', 'Whose posts, likes and follows reach you right away, and whose wait for you to look.'),
 				},
+				// the composer's own list, drawn here as a list rather than a button;
+				// it leaves out the drafts of direct messages, as it does there
+				{
+					id: 'drafts',
+					group: 'posts',
+					icon: 'IconDrafts',
+					component: 'DraftsButton',
+					props: { inline: true, disabled: this.timelineStore.composerDisplayStatus },
+					title: t('social', 'Drafts'),
+					lede: t('social', 'Posts, replies and quotes you started and have not sent yet. Continue one in the composer or delete it.'),
+				},
 				{
 					id: 'scheduled',
 					group: 'posts',
@@ -569,7 +586,7 @@ export default {
 					id: 'posts',
 					icon: 'IconPosts',
 					title: t('social', 'Your posts'),
-					description: t('social', 'Posts waiting to go out, waiting for review, or put away.'),
+					description: t('social', 'Drafts, and posts waiting to go out, waiting for review, or put away.'),
 				},
 				{
 					id: 'security',

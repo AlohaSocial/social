@@ -896,6 +896,119 @@ class CacheDocumentServiceTest extends TestCase {
 		$this->assertSame($file, $this->service->getFromUuid('2b5a7a87-8db1-445f-a17b-405790f91c80'));
 	}
 
+	// a purged copy fetched again, and what a purge leaves behind
+
+	private const LOCAL_NAME = 'aaaaaaaa-1111-4111-8111-111111111111';
+	private const RESIZED_NAME = 'bbbbbbbb-2222-4222-8222-222222222222';
+
+	/**
+	 * The names are in every `/media/{uuid}` link already served, so a copy
+	 * fetched again after a purge has to come back under them.
+	 */
+	public function testARestoredCopyGoesBackUnderTheNamesItsRowHas(): void {
+		$this->origin($this->pngBytes());
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$document = new Document();
+		$document->setUrl('https://remote.example/files/pic.png');
+		$document->setLocalCopy(self::LOCAL_NAME);
+		$document->setResizedCopy(self::RESIZED_NAME);
+
+		$this->quietly(fn () => $this->service->restoreRemoteCopy($document));
+
+		$this->assertSame(self::LOCAL_NAME, $document->getLocalCopy());
+		$this->assertSame(self::RESIZED_NAME, $document->getResizedCopy());
+		$this->assertArrayHasKey(self::LOCAL_NAME, $written['aa/aa/aa/aa/']);
+		$this->assertArrayHasKey(self::RESIZED_NAME, $written['bb/bb/bb/bb/']);
+	}
+
+	public function testAfterARestoreTheNextFetchDrawsFreshNames(): void {
+		$this->origin($this->pngBytes());
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$restored = new Document();
+		$restored->setUrl('https://remote.example/files/pic.png');
+		$restored->setLocalCopy(self::LOCAL_NAME);
+		$this->quietly(fn () => $this->service->restoreRemoteCopy($restored));
+
+		$next = new Document();
+		$next->setUrl('https://remote.example/files/other.png');
+		$this->quietly(fn () => $this->service->saveRemoteFileToCache($next));
+
+		$this->assertMatchesRegularExpression(self::UUID_PATTERN, $next->getLocalCopy());
+		$this->assertNotSame(self::LOCAL_NAME, $next->getLocalCopy());
+		$this->assertNotSame(self::RESIZED_NAME, $next->getResizedCopy());
+	}
+
+	/**
+	 * Where only the preview went missing, the full copy is still under its
+	 * name and is replaced rather than refused.
+	 */
+	public function testARestoreReplacesTheHalfOfThePairThatWasStillThere(): void {
+		$this->origin($this->pngBytes());
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$old = $this->createMock(ISimpleFile::class);
+		$old->expects($this->once())->method('delete');
+		$folder = $this->createStub(ISimpleFolder::class);
+		$folder->method('fileExists')->willReturnCallback(static fn (string $name): bool => $name === self::LOCAL_NAME);
+		$folder->method('getFile')->willReturn($old);
+		$folder->method('newFile')->willReturn($this->createStub(ISimpleFile::class));
+		$this->appData->method('getFolder')->willReturn($folder);
+		$document = new Document();
+		$document->setUrl('https://remote.example/files/pic.png');
+		$document->setLocalCopy(self::LOCAL_NAME);
+		$document->setResizedCopy(self::RESIZED_NAME);
+
+		$this->quietly(fn () => $this->service->restoreRemoteCopy($document));
+	}
+
+	/**
+	 * The innermost folder is named after its one file: without this, every
+	 * purged copy left a folder and a file cache row behind.
+	 */
+	public function testRemovingACopyTakesItsNowEmptyFolderWithIt(): void {
+		$file = $this->createMock(ISimpleFile::class);
+		$file->expects($this->once())->method('delete');
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('getFile')->with(self::LOCAL_NAME)->willReturn($file);
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$folder->expects($this->once())->method('delete');
+		$this->appData->method('getFolder')->with('aa/aa/aa/aa/')->willReturn($folder);
+
+		$this->service->removeFromCache(self::LOCAL_NAME);
+	}
+
+	public function testAFolderThatStillHoldsAFileIsKept(): void {
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('getFile')->willReturn($this->createStub(ISimpleFile::class));
+		$folder->method('getDirectoryListing')->willReturn([$this->createStub(ISimpleFile::class)]);
+		$folder->expects($this->never())->method('delete');
+		$this->appData->method('getFolder')->willReturn($folder);
+
+		$this->service->removeFromCache(self::LOCAL_NAME);
+	}
+
+	public function testAFileAlreadyGoneStillLetsItsEmptyFolderGo(): void {
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('getFile')->willThrowException(new NotFoundException('gone'));
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$folder->expects($this->once())->method('delete');
+		$this->appData->method('getFolder')->willReturn($folder);
+
+		$this->service->removeFromCache(self::LOCAL_NAME);
+	}
+
+	public function testNamesThatAreNotFilesAreNeverLookedUp(): void {
+		$this->appData->expects($this->never())->method('getFolder');
+
+		foreach (['', Document::COPY_LOCAL_AVATAR, 'header', Document::COPY_STREAMED] as $name) {
+			$this->service->removeFromCache($name);
+			$this->assertNull($this->service->cachedFileSize($name));
+		}
+	}
+
 	public function testGetFromUuidReportsAMissingDocument(): void {
 		$folder = $this->createStub(ISimpleFolder::class);
 		$folder->method('getFile')->willThrowException(new NotFoundException('no file'));

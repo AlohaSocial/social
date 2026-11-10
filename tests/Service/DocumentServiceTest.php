@@ -338,6 +338,141 @@ class DocumentServiceTest extends TestCase {
 		$this->service->getFromUuid(self::UUID);
 	}
 
+	// a cached remote copy that is not on disk any more: purged, or lost
+
+	/** A remote row whose copies are named but, until restored, not on disk. */
+	private function purgedDocument(): Document {
+		$document = $this->document(self::UUID);
+		$document->setCaching(time() - 86400);
+		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example');
+
+		return $document;
+	}
+
+	/** Appdata that has no file until `restoreRemoteCopy()` ran. */
+	private function fileAppearsOnRestore(ISimpleFile $file): void {
+		$restored = false;
+		$this->cacheService->method('restoreRemoteCopy')->willReturnCallback(
+			function (Document $document) use (&$restored): void {
+				$this->assertTrue($this->inTimeoutScope, 'the fetch has the background timeout');
+				$restored = true;
+				$document->setMimeType('image/webp');
+			}
+		);
+		$this->cacheService->method('getFromUuid')->willReturnCallback(
+			static function (string $uuid) use (&$restored, $file): ISimpleFile {
+				if (!$restored) {
+					throw new NotFoundException('document not found');
+				}
+
+				return $file;
+			}
+		);
+		$this->cacheService->method('getContentFromCache')->willReturnCallback(
+			static function (string $name) use (&$restored, $file): ISimpleFile {
+				if (!$restored) {
+					throw new \OCA\Social\Exceptions\CacheContentException();
+				}
+
+				return $file;
+			}
+		);
+	}
+
+	public function testAPurgedRemoteCopyIsFetchedAgainUnderItsOwnName(): void {
+		$document = $this->purgedDocument();
+		$file = $this->createStub(ISimpleFile::class);
+		$this->cacheDocumentsRequest->method('getByCopy')->with(self::UUID)->willReturn($document);
+		$this->cacheDocumentsRequest->expects($this->once())->method('initCaching')->with($document);
+		$this->cacheDocumentsRequest->expects($this->once())->method('endCaching')->with($document);
+		$this->streamRequest->expects($this->never())->method('updateAttachments');
+		$this->fileAppearsOnRestore($file);
+
+		$this->assertSame([$file, $document], $this->service->getFromUuid(self::UUID));
+		$this->assertSame(self::UUID, $document->getLocalCopy(), 'the served link keeps working');
+		$this->assertSame('image/webp', $document->getMimeType());
+	}
+
+	public function testAPreviewNamedForTheFirstTimeIsWrittenIntoThePost(): void {
+		$document = $this->purgedDocument();
+		$document->setResizedCopy('');
+		$this->cacheDocumentsRequest->method('getByCopy')->willReturn($document);
+		$this->cacheService->method('restoreRemoteCopy')->willReturnCallback(
+			static function (Document $document): void {
+				$document->setResizedCopy('fresh-preview');
+			}
+		);
+		$this->cacheService->method('getFromUuid')->willThrowException(new NotFoundException('gone'));
+		$this->streamRequest->expects($this->once())->method('updateAttachments')->with($document);
+
+		try {
+			$this->service->getFromUuid(self::UUID);
+		} catch (NotFoundException $e) {
+		}
+	}
+
+	public function testAnUploadFromHereIsNeverFetchedAgain(): void {
+		$document = $this->purgedDocument();
+		$document->setAccount('alice');
+		$this->cacheDocumentsRequest->method('getByCopy')->willReturn($document);
+		$this->cacheService->method('getFromUuid')->willThrowException(new NotFoundException('document not found'));
+		$this->cacheService->expects($this->never())->method('restoreRemoteCopy');
+
+		$this->expectException(NotFoundException::class);
+		$this->service->getFromUuid(self::UUID);
+	}
+
+	public function testALocalDocumentIdIsNeverFetchedAgain(): void {
+		$document = $this->purgedDocument();
+		$document->setId('https://cloud.example/documents/local/abc');
+		$this->cacheDocumentsRequest->method('getByCopy')->willReturn($document);
+		$this->cacheService->method('getFromUuid')->willThrowException(new NotFoundException('document not found'));
+		$this->cacheService->expects($this->never())->method('restoreRemoteCopy');
+
+		$this->expectException(NotFoundException::class);
+		$this->service->getFromUuid(self::UUID);
+	}
+
+	/**
+	 * A busy page asks for the same picture many times at once, and an
+	 * origin that failed a moment ago is not asked again on every request.
+	 */
+	public function testACopyBeingFetchedOrJustFailedIsNotFetchedAgainYet(): void {
+		$document = $this->purgedDocument();
+		$document->setCaching(time() - 30);
+		$this->cacheDocumentsRequest->method('getByCopy')->willReturn($document);
+		$this->cacheService->method('getFromUuid')->willThrowException(new NotFoundException('document not found'));
+		$this->cacheService->expects($this->never())->method('restoreRemoteCopy');
+		$this->cacheDocumentsRequest->expects($this->never())->method('initCaching');
+
+		$this->expectException(NotFoundException::class);
+		$this->service->getFromUuid(self::UUID);
+	}
+
+	public function testAFetchThatFailsAnswersNotFoundAndKeepsTheRow(): void {
+		$document = $this->purgedDocument();
+		$this->cacheDocumentsRequest->method('getByCopy')->willReturn($document);
+		$this->cacheService->method('getFromUuid')->willThrowException(new NotFoundException('document not found'));
+		$this->cacheService->method('restoreRemoteCopy')->willThrowException(new RequestServerException('503'));
+		$this->cacheDocumentsRequest->expects($this->once())->method('initCaching');
+		$this->cacheDocumentsRequest->expects($this->never())->method('endCaching');
+		$this->cacheDocumentsRequest->expects($this->never())->method('deleteById');
+
+		$this->expectException(NotFoundException::class);
+		$this->service->getFromUuid(self::UUID);
+	}
+
+	public function testTheDocumentRoutesFetchAPurgedCopyAgainToo(): void {
+		$document = $this->purgedDocument();
+		$file = $this->createStub(ISimpleFile::class);
+		$this->cacheDocumentsRequest->method('getById')->willReturn($document);
+		$this->fileAppearsOnRestore($file);
+
+		$mime = '';
+		$this->assertSame($file, $this->service->getResizedFromCache(self::DOC_ID, $mime));
+		$this->assertSame('image/webp', $mime, 'the type is the one the new bytes have');
+	}
+
 	public function testCacheRemoteDocumentReturnsAnAlreadyCachedDocument(): void {
 		$doc = $this->document('local-1');
 		$this->cacheDocumentsRequest->method('getById')->with(self::DOC_ID, true)->willReturn($doc);
