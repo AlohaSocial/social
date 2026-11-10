@@ -48,6 +48,8 @@ class MoveFinishService {
 
 	private const PENDING = 'move_finish';
 	private const TIMEOUT = 15;
+	/** The code of a finish that failed for a reason the person cannot act on. */
+	private const FAILED = 'move-failed';
 
 	public function __construct(
 		private MigrationService $migrationService,
@@ -143,8 +145,9 @@ class MoveFinishService {
 			throw new InvalidResourceException('no move was started from here');
 		}
 		if ((int)$pending['created'] < time() - self::TTL) {
-			$this->store($userId, ['status' => 'failed', 'acct' => $pending['acct'], 'error' => 'the move took too long to confirm; start it again']);
-			throw new InvalidResourceException('the move took too long to confirm; start it again');
+			$expired = self::expired();
+			$this->store($userId, ['status' => 'failed', 'acct' => $pending['acct']] + ImportQueueService::failureOf($expired));
+			throw $expired;
 		}
 		if ($code === '' || !hash_equals((string)$pending['state'], $state)) {
 			throw new InvalidResourceException('this is not the move that was started');
@@ -160,7 +163,7 @@ class MoveFinishService {
 			]);
 			$accessToken = (string)($token['access_token'] ?? '');
 			if ($accessToken === '') {
-				throw new InvalidResourceException('the old server did not hand out a token');
+				throw new MoveErrorException('the old server did not hand out a token', 'old-server-refused');
 			}
 
 			// by id rather than by handle: the old server resolves an id as it
@@ -173,15 +176,16 @@ class MoveFinishService {
 				['Authorization' => 'Bearer ' . $accessToken]
 			);
 			if (($moved['moved_to'] ?? '') === '') {
-				throw new InvalidResourceException(
-					'the old server refused the move: ' . (string)($moved['error'] ?? 'no answer')
+				throw new MoveErrorException(
+					'the old server refused the move: ' . (string)($moved['error'] ?? 'no answer'),
+					'old-server-refused'
 				);
 			}
 		} catch (Throwable $e) {
 			$this->logger->notice('[MoveFinishService] finishing a move from here failed', [
 				'userId' => $userId, 'old' => $pending['old'], 'exception' => $e,
 			]);
-			$this->store($userId, ['status' => 'failed', 'acct' => $pending['acct'], 'error' => $e->getMessage()]);
+			$this->store($userId, ['status' => 'failed', 'acct' => $pending['acct']] + ImportQueueService::failureOf($e, self::FAILED));
 
 			throw $e instanceof InvalidResourceException ? $e : new InvalidResourceException($e->getMessage(), 0, $e);
 		}
@@ -193,27 +197,33 @@ class MoveFinishService {
 
 	/**
 	 * Where a finish started from here stands, for the page: `none`,
-	 * `pending`, `done` or `failed`, with the old account and the reason.
+	 * `pending`, `done` or `failed`, with the old account, and for a failure
+	 * its code with the English sentence of a refusal.
 	 *
-	 * @return array{status: string, acct: string, at: int, error: string}
+	 * @return array{status: string, acct: string, at: int, code: string, error: string}
 	 */
 	public function status(string $userId): array {
 		$pending = $this->pending($userId);
 		if ($pending === null) {
-			return ['status' => 'none', 'acct' => '', 'at' => 0, 'error' => ''];
+			return ['status' => 'none', 'acct' => '', 'at' => 0, 'code' => '', 'error' => ''];
 		}
 		$status = (string)($pending['status'] ?? 'none');
 		if ($status === 'pending' && (int)($pending['created'] ?? 0) < time() - self::TTL) {
 			$status = 'failed';
-			$pending['error'] = 'the move took too long to confirm; start it again';
+			$pending = ImportQueueService::failureOf(self::expired()) + $pending;
 		}
 
 		return [
 			'status' => $status,
 			'acct' => (string)($pending['acct'] ?? ''),
 			'at' => (int)($pending['at'] ?? 0),
+			'code' => (string)($pending['code'] ?? ($status === 'failed' ? self::FAILED : '')),
 			'error' => (string)($pending['error'] ?? ''),
 		];
+	}
+
+	private static function expired(): MoveErrorException {
+		return new MoveErrorException('the move took too long to confirm; start it again', 'move-confirm-expired');
 	}
 
 	/** The app's base URL on the old server, off the actor id it serves. */

@@ -1072,6 +1072,33 @@ class PostImportServiceTest extends TestCase {
 		$this->service->import($this->alice(), $path);
 	}
 
+	/**
+	 * Each reason a file is not an export carries the code the Migration page
+	 * explains, since the run that finds it is in the background.
+	 */
+	public function testTheReasonsAFileIsNotAnExportCarryTheirCodes(): void {
+		$json = tempnam(sys_get_temp_dir(), 'social-not-json');
+		file_put_contents((string)$json, 'not json');
+		$cases = [
+			'export-instagram-html' => $this->archive(['your_instagram_activity/content/posts_1.html' => '<html></html>']),
+			'export-not-posts' => $this->archive(['readme.txt' => 'hello']),
+			'export-peertube-no-videos' => $this->peerTubeExport([$this->peerTubeVideo()], withFiles: false),
+			'export-unreadable' => (string)$json,
+		];
+
+		$codes = [];
+		foreach ($cases as $path) {
+			try {
+				$this->service->import($this->alice(), $path);
+			} catch (MoveErrorException $e) {
+				$codes[] = $e->errorCode;
+			}
+		}
+		@unlink((string)$json);
+
+		$this->assertSame(array_keys($cases), $codes);
+	}
+
 	/** @param array<string, string> $known */
 	private function serviceKnowing(array $known): PostImportService {
 		$request = $this->createStub(ImportedPostsRequest::class);

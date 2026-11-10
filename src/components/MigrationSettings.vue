@@ -181,9 +181,7 @@
 				<p class="migration__move-in-finish">
 					{{ t('social', 'One step is left: your old server has to move your followers here. It is Aloha Social too, so you can do that from here — you will be asked to log in there and to agree to it.') }}
 				</p>
-				<p v-if="finish.status === 'failed'" class="migration__finish-error" role="alert">
-					{{ t('social', 'That did not work: {reason}', { reason: finish.error }) }}
-				</p>
+				<ServerError v-if="finish.status === 'failed'" class="migration__finish-error" :error="failureOf(finish, 'move-failed')" />
 				<NcButton variant="primary" :disabled="finishing" @click="finishFromHere">
 					<template #icon>
 						<NcLoadingIcon v-if="finishing" :size="20" />
@@ -226,7 +224,12 @@
 					class="migration__import"
 					:class="'migration__import--' + job.status">
 					<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
-					<span class="migration__result">{{ importSummary(job) }}</span>
+					<ServerError
+						v-if="job.status === 'failed'"
+						class="migration__result"
+						:error="failureOf(job.report, 'import-failed')"
+						:alert="false" />
+					<span v-else class="migration__result">{{ importSummary(job) }}</span>
 					<ul v-if="failuresOf(job).length > 0" class="migration__failures">
 						<li v-for="[what, why] in failuresOf(job)" :key="what">
 							<span class="migration__failure-what">{{ what }}</span> — {{ why }}
@@ -544,11 +547,12 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess } from '../services/toast.js'
-import { errorOf } from '../utils/serverError.js'
+import { errorOf, failureOf } from '../utils/serverError.js'
 import { confirmPassword } from '../services/externalApi.js'
 import BlueskyMoveAway from './BlueskyMoveAway.vue'
 import BlueskyMoveIn from './BlueskyMoveIn.vue'
 import BlueskyMoveInbound from './BlueskyMoveInbound.vue'
+import ServerError from './ServerError.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -596,6 +600,7 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcTextField,
+		ServerError,
 	},
 
 	data() {
@@ -640,7 +645,7 @@ export default {
 			 * Where a move finished from here stands, as the server keeps it:
 			 * `none`, `pending`, `done` or `failed`, with the old account.
 			 */
-			finish: { status: 'none', acct: '', at: 0, error: '' },
+			finish: { status: 'none', acct: '', at: 0, code: '', error: '' },
 			finishing: false,
 		}
 	},
@@ -699,6 +704,8 @@ export default {
 
 		n,
 
+		failureOf,
+
 		/**
 		 * Who the old account is, and what its server lets this one read.
 		 *
@@ -749,7 +756,7 @@ export default {
 		async loadFinish() {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/move-in/finish'))
-				this.finish = { status: 'none', acct: '', at: 0, error: '', ...data }
+				this.finish = { status: 'none', acct: '', at: 0, code: '', error: '', ...data }
 			} catch (error) {
 				logger.debug('Could not read where the move stands', { error })
 			}
@@ -1265,9 +1272,6 @@ export default {
 				return job.total > 0
 					? t('social', '{done} of {total} …', { done: job.done, total: job.total })
 					: t('social', 'Starting …')
-			}
-			if (job.status === 'failed') {
-				return t('social', 'Failed: {reason}', { reason: job.report?.error ?? t('social', 'unknown reason') })
 			}
 			if (job.kind === 'move_in') {
 				return t(

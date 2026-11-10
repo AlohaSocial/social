@@ -42,6 +42,8 @@ class MoveFinishServiceTest extends TestCase {
 	private array $posts = [];
 	/** @var array<string, array<string, mixed>|\Throwable> what each URL answers */
 	private array $answers = [];
+	/** what reading this account throws, once set */
+	private ?\Throwable $actorFailure = null;
 
 	protected function setUp(): void {
 		$old = new Person();
@@ -74,7 +76,13 @@ class MoveFinishServiceTest extends TestCase {
 		$me = new Person();
 		$me->setId('https://cloud.example/index.php/apps/social/@bob')->setPreferredUsername('bob')->setUserId('bob');
 		$accountService = $this->createStub(AccountService::class);
-		$accountService->method('getActorFromUserId')->willReturn($me);
+		$accountService->method('getActorFromUserId')->willReturnCallback(function () use ($me): Person {
+			if ($this->actorFailure !== null) {
+				throw $this->actorFailure;
+			}
+
+			return $me;
+		});
 
 		$config = $this->createStub(IConfig::class);
 		$config->method('getUserValue')->willReturnCallback(
@@ -261,7 +269,42 @@ class MoveFinishServiceTest extends TestCase {
 		}
 		$status = $this->service->status('bob');
 		$this->assertSame('failed', $status['status']);
+		$this->assertSame('old-server-refused', $status['code']);
 		$this->assertStringContainsString('can move again on 2026-10-31', $status['error']);
+	}
+
+	public function testAnOldServerThatHandsOutNoTokenIsARefusal(): void {
+		$this->registered();
+		$this->answers['https://old.example/index.php/apps/social/oauth/token'] = [];
+		$this->service->start('bob', '@alice@old.example');
+
+		try {
+			$this->service->finish('bob', 'the-code', 'state-of-the-art');
+			$this->fail('expected the refusal to surface');
+		} catch (InvalidResourceException) {
+		}
+
+		$this->assertSame('old-server-refused', $this->service->status('bob')['code']);
+	}
+
+	/** What is not a refusal is in the log only: the page shows what is kept. */
+	public function testAFailureThatIsNotARefusalKeepsOnlyItsCode(): void {
+		$this->registered();
+		$this->answers['https://old.example/index.php/apps/social/oauth/token'] = ['access_token' => 'tok'];
+		$this->answers['https://old.example/index.php/apps/social/api/v1/migration/move/authorized'] = ['moved_to' => 'https://cloud.example/x'];
+		$this->service->start('bob', '@alice@old.example');
+		$this->actorFailure = new \RuntimeException('SQLSTATE[HY000]: database went away');
+
+		try {
+			$this->service->finish('bob', 'the-code', 'state-of-the-art');
+			$this->fail('expected the failure to surface');
+		} catch (InvalidResourceException) {
+		}
+
+		$status = $this->service->status('bob');
+		$this->assertSame('failed', $status['status']);
+		$this->assertSame('move-failed', $status['code']);
+		$this->assertSame('', $status['error']);
 	}
 
 	public function testAStartNobodyCameBackFromExpires(): void {
@@ -272,6 +315,7 @@ class MoveFinishServiceTest extends TestCase {
 		$this->userValues['move_finish'] = (string)json_encode($pending);
 
 		$this->assertSame('failed', $this->service->status('bob')['status']);
+		$this->assertSame('move-confirm-expired', $this->service->status('bob')['code']);
 		$this->expectException(InvalidResourceException::class);
 		$this->expectExceptionMessage('took too long');
 		$this->service->finish('bob', 'the-code', 'state-of-the-art');

@@ -402,7 +402,7 @@ describe('Migration', () => {
 				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, {})] } })
 			}
 			if (url.endsWith('/migration/move-in/finish')) {
-				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, error: 'the old server refused the move: this account moved on 2026-10-01' } })
+				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, code: 'old-server-refused', error: 'the old server refused the move: this account moved on 2026-10-01' } })
 			}
 			return Promise.resolve({ data: { aliases: [], handle: '@alice@cloud.example' } })
 		})
@@ -410,8 +410,29 @@ describe('Migration', () => {
 		const wrapper = mountPage()
 		await flushPromises()
 
-		expect(wrapper.find('.migration__finish-error').text()).toContain('this account moved on 2026-10-01')
+		const failure = wrapper.find('.migration__finish-error')
+		expect(failure.find('[role="alert"]').text()).toBe('The old server did not let this one finish the move. Try again later, or finish the move there.')
+		expect(failure.find('details').text()).toContain('this account moved on 2026-10-01')
 		expect(buttonNamed(wrapper, 'Finish the move from here')).toBeTruthy()
+	})
+
+	it('explains a finish that failed for a reason kept only in the log in general terms', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, {})] } })
+			}
+			if (url.endsWith('/migration/move-in/finish')) {
+				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, code: 'move-failed', error: '' } })
+			}
+			return Promise.resolve({ data: { aliases: [], handle: '@alice@cloud.example' } })
+		})
+
+		const wrapper = mountPage()
+		await flushPromises()
+
+		const failure = wrapper.find('.migration__finish-error')
+		expect(failure.text()).toContain('Something went wrong on the way.')
+		expect(failure.find('details').exists()).toBe(false)
 	})
 
 	it('says in plain words when the old account cannot be found, with the server\'s words behind the details', async () => {
@@ -548,15 +569,44 @@ describe('Migration', () => {
 		expect(axios.post.mock.calls[0][1].get('fetch_media')).toBe('0')
 	})
 
-	it('shows the reason when a run failed', async () => {
-		serverQueues('posts', job('posts', 'failed', {}, { error: 'this archive has no outbox.json' }))
+	it('explains a failed run by its code, with the server\'s sentence behind the details', async () => {
+		serverQueues('posts', job('posts', 'failed', {}, { code: 'export-not-posts', error: 'this archive has no outbox.json' }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'posts', 'outbox.json')
 		await vi.runOnlyPendingTimersAsync()
 		await flushPromises()
 
-		expect(wrapper.findAll('.migration__result').at(-1).text()).toContain('this archive has no outbox.json')
+		const result = wrapper.findAll('.migration__result').at(-1)
+		expect(result.find('p').text()).toBe('That archive holds no posts. Pick the export of your posts from your old server.')
+		expect(result.find('details').text()).toContain('this archive has no outbox.json')
+		expect(result.text()).not.toContain('Failed:')
+	})
+
+	it('explains a run that failed on the server without showing what went wrong there', async () => {
+		serverQueues('follows', job('follows', 'failed', {}, { code: 'import-failed' }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'follows', 'following_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		const result = wrapper.findAll('.migration__result').at(-1)
+		expect(result.text()).toBe('The import stopped because of a problem on this server. Try again; if it happens again, ask your administrator.')
+		expect(result.find('details').exists()).toBe(false)
+	})
+
+	it('keeps what a run failed before it had a code behind the details', async () => {
+		serverQueues('posts', job('posts', 'failed', {}, { error: 'database went away' }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'posts', 'outbox.json')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		const result = wrapper.findAll('.migration__result').at(-1)
+		expect(result.find('p').text()).toContain('The import stopped because of a problem on this server.')
+		expect(result.find('details').text()).toContain('database went away')
 	})
 
 	it('says so when the export cannot be read', async () => {

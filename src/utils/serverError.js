@@ -101,6 +101,13 @@ const SENTENCES = {
 	'archive-not-social': () => t('social', 'That archive holds no account of this app. Pick the zip file the export made.'),
 	'import-running': () => t('social', 'That is under way already. See how far it got on the list of imports.'),
 	'import-not-found': () => t('social', 'That import cannot be taken off the list now. Reload the page to see where it stands.'),
+	'import-failed': () => t('social', 'The import stopped because of a problem on this server. Try again; if it happens again, ask your administrator.'),
+	'import-file-missing': () => t('social', 'The file of this import could not be read back on the server. Upload it again.'),
+	'export-unreadable': () => t('social', 'That file is not an export this page can read. Pick the archive or the JSON file your old server made.'),
+	'export-not-posts': () => t('social', 'That archive holds no posts. Pick the export of your posts from your old server.'),
+	'export-instagram-html': () => t('social', 'That is Instagram\'s HTML download, which holds pages and not posts. Ask Instagram for your information in JSON and import that.'),
+	'export-peertube-no-videos': () => t('social', 'That PeerTube export was made without the video files. Ask for the export again with the videos included.'),
+	'move-confirm-expired': () => t('social', 'The move was not confirmed in time. Start it again.'),
 	'list-unknown': () => t('social', 'There is no such list to download.'),
 	'account-not-set-up': () => t('social', 'Your account is not set up yet. Open Aloha Social and choose your username to set it up, then try again.'),
 	'account-address-invalid': () => t('social', 'That is not an account address. Type it like @you@example.social.'),
@@ -187,6 +194,22 @@ export function errorOf(error, fallback, labels = {}) {
 	return {
 		text: errorSentence(data?.code, data ?? {}, labels) ?? fallback,
 		details: typeof said === 'string' ? said : '',
+	}
+}
+
+/**
+ * Why a background job failed, from the code and sentence it kept: an import
+ * on the Migration page, or a move finished from here. A job kept before it
+ * had a code says so in general terms, with what it kept for the details.
+ *
+ * @param {{code?: string, error?: string}|null|undefined} failure what the server kept
+ * @param {string} fallback the code to explain when there is none this page knows
+ * @return {{text: string, details: string}} the sentence, and the server's own words for the details
+ */
+export function failureOf(failure, fallback) {
+	return {
+		text: errorSentence(failure?.code) ?? SENTENCES[fallback]({}),
+		details: typeof failure?.error === 'string' ? failure.error : '',
 	}
 }
 

@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { errorOf, errorSentence, stoppedMoveError } from '../../../src/utils/serverError.js'
+import { errorOf, errorSentence, failureOf, stoppedMoveError } from '../../../src/utils/serverError.js'
 
 /**
  * The codes a table of the docs lists, as the server sends them.
@@ -142,5 +142,26 @@ describe('stoppedMoveError', () => {
 			text: 'Something went wrong on the way. Try again; if it happens again, the details say what.',
 			details: 'signPlcOperation answered 400 (InvalidToken)',
 		})
+	})
+})
+
+describe('failureOf', () => {
+	it('explains the code a background job kept, with its sentence for the details', () => {
+		expect(failureOf({ code: 'export-instagram-html', error: 'this is Instagram\'s HTML download' }, 'import-failed')).toEqual({
+			text: 'That is Instagram\'s HTML download, which holds pages and not posts. Ask Instagram for your information in JSON and import that.',
+			details: 'this is Instagram\'s HTML download',
+		})
+	})
+
+	it('falls back to the job\'s own general sentence for a code it does not know, or none', () => {
+		expect(failureOf({ code: 'import-failed' }, 'import-failed')).toEqual({
+			text: 'The import stopped because of a problem on this server. Try again; if it happens again, ask your administrator.',
+			details: '',
+		})
+		expect(failureOf({ error: 'database went away' }, 'move-failed')).toEqual({
+			text: 'Something went wrong on the way. Try again; if it happens again, the details say what.',
+			details: 'database went away',
+		})
+		expect(failureOf(undefined, 'import-failed').details).toBe('')
 	})
 })
