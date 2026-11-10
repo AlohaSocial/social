@@ -89,6 +89,12 @@ if (!interface_exists('OC\\Hooks\\Emitter', false)) {
 	class_alias(\OCA\Social\Tests\Helper\HooksEmitter::class, 'OC\\Hooks\\Emitter');
 }
 
+// The cache the server hands out in place of the configured one while PHPUnit
+// runs, which DurableCache must not take for a shared one.
+if (!class_exists('OC\\Memcache\\ArrayCache', false)) {
+	class_alias(\OCA\Social\Tests\Helper\ArrayCache::class, 'OC\\Memcache\\ArrayCache');
+}
+
 // Util::addScript() constructs this one, so a settings page cannot be asked for
 // its form without it.
 if (!class_exists('OC\\AppScriptDependency', false)) {
