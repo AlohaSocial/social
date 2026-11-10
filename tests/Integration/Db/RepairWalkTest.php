@@ -76,15 +76,16 @@ class RepairWalkTest extends TestCase {
 	}
 
 	/**
-	 * `$count` notes by the cached author, with one by an author nobody has
-	 * cached every hundred, so the orphans fall across several pages.
+	 * `$count` notes by the cached author, numbered from `$from`, with one by an
+	 * author nobody has cached every hundred, so the orphans fall across
+	 * several pages.
 	 *
 	 * @return string[] the orphans' ids
 	 */
-	private function seedNotes(int $count): array {
+	private function seedNotes(int $count, int $from = 0): array {
 		$streamRequest = Server::get(StreamRequest::class);
 		$orphans = [];
-		for ($i = 0; $i < $count; $i++) {
+		for ($i = $from; $i < $from + $count; $i++) {
 			$author = ($i % 100 === 50) ? self::GONE : self::KNOWN;
 			$note = new Note();
 			$note->setId(self::BASE . '/notes/' . $i);
@@ -104,10 +105,10 @@ class RepairWalkTest extends TestCase {
 	}
 
 	/** @return string[] the ids of the follows whose follower is not cached */
-	private function seedFollows(int $count): array {
+	private function seedFollows(int $count, int $from = 0): array {
 		$followsRequest = Server::get(FollowsRequest::class);
 		$orphans = [];
-		for ($i = 0; $i < $count; $i++) {
+		for ($i = $from; $i < $from + $count; $i++) {
 			$actor = ($i % 100 === 50) ? self::GONE : self::KNOWN;
 			$follow = new Follow();
 			$follow->setId(self::BASE . '/follows/' . $i);
@@ -150,18 +151,21 @@ class RepairWalkTest extends TestCase {
 	}
 
 	/**
-	 * Runs `$repair`, and answers what it returned, the statements it ran and
-	 * how far the peak memory rose above where it started.
+	 * Runs `$repair`, and answers what it returned and how far the peak memory
+	 * rose above where it started.
 	 *
-	 * @return array{int, QueryCounter, int}
+	 * Not under `QueryCounter`: its log of every statement grows with the
+	 * deletes and would be measured along with the walk.
+	 *
+	 * @return array{int, int}
 	 */
-	private function measure(callable $repair): array {
+	private function measureMemory(callable $repair): array {
 		gc_collect_cycles();
 		memory_reset_peak_usage();
 		$before = memory_get_usage();
-		$run = QueryCounter::record($repair);
+		$result = (int)$repair();
 
-		return [(int)$run->result(), $run, memory_get_peak_usage() - $before];
+		return [$result, memory_get_peak_usage() - $before];
 	}
 
 	/**
@@ -176,6 +180,10 @@ class RepairWalkTest extends TestCase {
 
 	public function testRemovingNotesOfUncachedAuthorsWalksInPages(): void {
 		$connection = Server::get(IDBConnection::class);
+		$checkService = Server::get(CheckService::class);
+		// notes other tests left without a cached author: removed first, so
+		// the measured walks delete only the orphans seeded here
+		$checkService->removeInvalidNotes();
 		$this->cache(self::KNOWN);
 		$connection->beginTransaction();
 		$orphans = $this->seedNotes(self::NOTES);
@@ -188,9 +196,10 @@ class RepairWalkTest extends TestCase {
 		$deleteCost = QueryCounter::record(
 			static fn () => Server::get(StreamRequest::class)->deleteById($first, Note::TYPE)
 		)->count();
-		[$removed, $run, $memory] = $this->measure(static fn (): int => Server::get(CheckService::class)->removeInvalidNotes());
+		$run = QueryCounter::record(static fn (): int => $checkService->removeInvalidNotes());
+		$removed = (int)$run->result();
 
-		$this->assertGreaterThanOrEqual(count($orphans), $removed);
+		$this->assertSame(count($orphans), $removed);
 		foreach ($orphans as $id) {
 			$this->assertFalse($this->streamExists($id), $id . ' has no cached author and should be gone');
 		}
@@ -199,6 +208,15 @@ class RepairWalkTest extends TestCase {
 			self::walkBudget($rows, $removed, $deleteCost), $run->count(),
 			'a walk over ' . $rows . ' notes; ' . mb_strimwidth($run->summary(), 0, 2000, '…')
 		);
+
+		// the memory over the same table, with one new orphan to delete
+		$connection->beginTransaction();
+		$orphans = $this->seedNotes(100, self::NOTES);
+		$connection->commit();
+		$rows = $this->countRows(CoreRequestBuilder::TABLE_STREAM, Note::TYPE);
+		[$removed, $memory] = $this->measureMemory(static fn (): int => $checkService->removeInvalidNotes());
+
+		$this->assertSame(count($orphans), $removed);
 		$this->assertLessThan(
 			4 * 1024 * 1024, $memory,
 			'the walk holds one page at a time, not ' . $rows . ' notes'
@@ -207,8 +225,11 @@ class RepairWalkTest extends TestCase {
 
 	public function testRemovingFollowsOfUncachedAccountsWalksInPages(): void {
 		$connection = Server::get(IDBConnection::class);
+		$checkService = Server::get(CheckService::class);
+		// follows other tests left with an account that is not cached
+		$checkService->removeInvalidFollows();
 		$this->cache(self::KNOWN);
-		for ($i = 0; $i < self::FOLLOWS; $i++) {
+		for ($i = 0; $i < self::FOLLOWS + 100; $i++) {
 			$this->cache(self::BASE . '/users/followed' . $i);
 		}
 		$connection->beginTransaction();
@@ -216,15 +237,23 @@ class RepairWalkTest extends TestCase {
 		$connection->commit();
 		$rows = $this->countRows(CoreRequestBuilder::TABLE_FOLLOWS);
 
-		[$removed, $run, $memory] = $this->measure(static fn (): int => Server::get(CheckService::class)->removeInvalidFollows());
+		$run = QueryCounter::record(static fn (): int => $checkService->removeInvalidFollows());
+		$removed = (int)$run->result();
 
-		$this->assertGreaterThanOrEqual(count($orphans), $removed);
+		$this->assertSame(count($orphans), $removed);
 		$remaining = $this->countRows(CoreRequestBuilder::TABLE_FOLLOWS);
 		$this->assertSame($rows - $removed, $remaining);
 		$this->assertLessThanOrEqual(
 			self::walkBudget($rows, $removed, 1), $run->count(),
 			'a walk over ' . $rows . ' follows; ' . mb_strimwidth($run->summary(), 0, 2000, '…')
 		);
+
+		$connection->beginTransaction();
+		$orphans = $this->seedFollows(100, self::FOLLOWS);
+		$connection->commit();
+		[$removed, $memory] = $this->measureMemory(static fn (): int => $checkService->removeInvalidFollows());
+
+		$this->assertSame(count($orphans), $removed);
 		$this->assertLessThan(4 * 1024 * 1024, $memory, 'the walk holds one page at a time');
 	}
 }
