@@ -92,9 +92,13 @@ composer dump-autoload --no-dev --no-scripts
 That leaves the installed packages in place but excludes development packages
 from Nextcloud's autoload. Run PHP tests in a separate development checkout, or
 restore the development autoloader there with `composer dump-autoload --dev`;
-do not leave that autoloader active in the shared Nextcloud instance. See
-[Admin.md](docs/Admin.md#empty-application-after-installing-development-dependencies)
-for recovery steps. Frontend watch mode is `npm run watch`. Useful checks are:
+do not leave that autoloader active in the shared Nextcloud instance. A
+typical symptom is `Cannot redeclare function Amp\delay()`, even from
+`status.php`. A production installation from source installs only the runtime
+dependencies, `composer install --no-dev --prefer-dist --no-interaction`.
+Afterwards check `/status.php`, `occ status` and the app in a browser: a
+successful webpack build does not exercise Nextcloud's bootstrap. Frontend
+watch mode is `npm run watch`. Useful checks are:
 
 ```sh
 composer run test:unit

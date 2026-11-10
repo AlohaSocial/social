@@ -18,11 +18,13 @@ use OCP\SetupCheck\SetupResult;
  * Whether the address Social builds every id from is still the one the server
  * says it is reachable at.
  *
- * The app copies `overwrite.cli.url` once, on its first run, and never reads
- * it again. A server renamed afterwards keeps federating under the old name:
- * WebFinger answers for a host nobody asks about, and every new post carries
- * an id that resolves nowhere. Reported and not corrected — the stored
- * address is inside every id already written.
+ * The address is derived from `overwrite.cli.url` once, when an administrator
+ * confirms it on the setup screen, and never read again. A server renamed
+ * afterwards keeps federating under the old name: WebFinger answers for a host
+ * nobody asks about, and every new post carries an id that resolves nowhere.
+ * Reported and not corrected — the stored address is inside every id already
+ * written. With or without `/index.php` counts as the same address, so turning
+ * pretty URLs on later is not reported.
  *
  * The ids themselves are minted from `social_url`, which on an instance set
  * up before it was derived from `cloud_url` came from the first request's
@@ -53,7 +55,7 @@ class CloudAddressMatches implements ISetupCheck {
 
 		if ($addresses['configured'] === '') {
 			return SetupResult::info(
-				$this->l10n->t('Aloha Social has not been set up yet. It takes the address of this server the first time somebody opens it.'),
+				$this->l10n->t('Aloha Social has not been set up yet. An administrator confirms the address of this server the first time they open it.'),
 				self::DOC
 			);
 		}

@@ -97,8 +97,20 @@ describe('the server card', () => {
 			secureMode: true,
 			publishBlocks: false,
 			allowSelfSigned: false,
+			hideCounts: false,
 		})
 		expect(wrapper.text()).toContain('Saved')
+	})
+
+	it('can keep the account and post counts private', async () => {
+		const wrapper = mountServer({ hide_instance_counts: true })
+
+		expect(wrapper.vm.form.hideCounts).toBe(true)
+		expect(wrapper.text()).toContain('Hide how many accounts and posts this server has')
+
+		await wrapper.vm.save()
+
+		expect(axios.post.mock.calls[0][1].hideCounts).toBe(true)
 	})
 
 	it('says so, with the field the endpoint would not take behind the details', async () => {

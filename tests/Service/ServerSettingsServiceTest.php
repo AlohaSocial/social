@@ -78,6 +78,7 @@ class ServerSettingsServiceTest extends TestCase {
 			'secureMode' => false,
 			'publishBlocks' => false,
 			'allowSelfSigned' => false,
+			'hideCounts' => false,
 		], $overrides);
 
 		return $this->service->save(...$values);
@@ -104,6 +105,7 @@ class ServerSettingsServiceTest extends TestCase {
 			'secure_mode' => true,
 			'publish_blocks' => false,
 			'allow_self_signed' => false,
+			'hide_instance_counts' => false,
 		], $this->service->current());
 	}
 
@@ -117,6 +119,14 @@ class ServerSettingsServiceTest extends TestCase {
 		$this->assertSame('1', $this->stored[ConfigService::SOCIAL_SECURE_MODE]);
 		$this->assertSame('1', $this->stored[ConfigService::SOCIAL_PUBLISH_BLOCKS]);
 		$this->assertSame('0', $this->stored[ConfigService::SOCIAL_SELF_SIGNED]);
+	}
+
+	public function testTheInstanceCountsCanBeHidden(): void {
+		$this->assertTrue($this->save(['hideCounts' => true])['hide_instance_counts']);
+		$this->assertSame('1', $this->stored[ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS]);
+
+		$this->assertFalse($this->save()['hide_instance_counts']);
+		$this->assertSame('0', $this->stored[ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS]);
 	}
 
 	/** Switching video conversion off has to stick, now that on is the default. */

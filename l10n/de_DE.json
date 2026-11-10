@@ -2658,6 +2658,7 @@
     "Paste this code into {appDisplayName} to finish signing in. It can be used once, and only by the application that asked for it." : "Fügen Sie diesen Code in {appDisplayName} ein, um die Anmeldung abzuschließen. Er kann einmal verwendet werden, und nur von der Anwendung, die ihn angefordert hat.",
     "Authorization code" : "Autorisierungscode",
     "Copy code" : "Code kopieren",
+    "Aloha Social post" : "Beitrag auf Aloha Social",
     "Set up your account" : "Richten Sie Ihr Konto ein",
     "{appDisplayName} wants to sign in to your account here, and you do not have one yet. Choose your username first; then you decide whether to let {appDisplayName} in." : "{appDisplayName} möchte sich hier bei Ihrem Konto anmelden, und Sie haben noch keines. Wählen Sie zuerst Ihren Benutzernamen; dann entscheiden Sie, ob Sie {appDisplayName} hereinlassen.",
     "Your account is ready. Taking you on to {appDisplayName}…" : "Ihr Konto ist bereit. Es geht weiter zu {appDisplayName} …",

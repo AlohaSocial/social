@@ -22,6 +22,16 @@
 				{{ t('social', 'Two timelines in the sidebar, each the same posts read through one filter. A post is not changed by its section being off.') }}
 			</p>
 
+			<NcCheckboxRadioSwitch v-model="form.gifPack" type="switch">
+				{{ t('social', 'Animated emoji in the GIF picker') }}
+			</NcCheckboxRadioSwitch>
+			<p class="sections__hint">
+				{{ t('social', 'Google\'s Noto Animated Emoji, offered beside this server\'s own GIFs. This server fetches each picture once from {host} (Google) and keeps it; the browsers of the people here never contact Google. Off fetches nothing.', { host: gifPackSource }) }}
+			</p>
+			<NcNoteCard v-if="form.gifPack && !hasInternet" type="warning">
+				{{ t('social', 'has_internet_connection is false in config.php, so nothing is fetched and the animated emoji are not offered.') }}
+			</NcNoteCard>
+
 			<div class="sections__groups">
 				<label for="social-group-lists" class="sections__label">
 					{{ t('social', 'Nextcloud groups that become lists') }}
@@ -60,6 +70,7 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import { sectionsUrl } from '../../services/adminApi.js'
 import { errorOf } from '../../utils/serverError.js'
@@ -80,6 +91,7 @@ export default {
 		NcButton,
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
+		NcNoteCard,
 		NcSelect,
 	},
 
@@ -103,6 +115,7 @@ export default {
 				stories: this.settings?.stories !== false,
 				photos: this.settings?.section_photos !== false,
 				videos: this.settings?.section_videos !== false,
+				gifPack: this.settings?.gif_pack !== false,
 				// the picker works in whole options, so the stored ids are
 				// matched back to the groups they name; an id whose group has
 				// since been deleted stands for itself rather than vanishing
@@ -111,6 +124,8 @@ export default {
 				)),
 			},
 
+			gifPackSource: this.settings?.gif_pack_source || 'fonts.gstatic.com',
+			hasInternet: this.settings?.has_internet_connection !== false,
 			saving: false,
 		}
 	},
@@ -138,6 +153,7 @@ export default {
 					photos: this.form.photos,
 					videos: this.form.videos,
 					groupLists: this.form.groupLists.map((group) => group.id),
+					gifPack: this.form.gifPack,
 				})
 				showSuccess(t('social', 'Saved'))
 			} catch (error) {

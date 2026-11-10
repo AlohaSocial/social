@@ -82,10 +82,27 @@ class NotifierTest extends TestCase {
 		$this->assertSame('social', $this->notifier->getID());
 	}
 
-	public function testNameIsTranslated(): void {
-		$this->l10n->method('t')->with('Aloha Social')->willReturn('Sozial');
+	/** A brand, which 22 catalogues had translated into the word for "social". */
+	public function testTheNameIsTheBrandInEveryLanguage(): void {
+		$this->l10n->expects($this->never())->method('t');
 
-		$this->assertSame('Sozial', $this->notifier->getName());
+		$this->assertSame('Aloha Social', $this->notifier->getName());
+	}
+
+	public function testTheAdministratorsAreToldTheAppWaitsToBeSetUp(): void {
+		$this->translationsFor('de');
+		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social_dark.svg');
+		$this->urlGenerator->method('getAbsoluteURL')->willReturnArgument(0);
+		$this->urlGenerator->method('linkToRouteAbsolute')->with('social.Navigation.navigate')
+			->willReturn('https://cloud.example/apps/social/');
+		$notification = $this->notification('social', 'setup_required');
+		$notification->expects($this->once())->method('setParsedSubject')
+			->with('[de] Aloha Social is waiting to be set up');
+		$notification->expects($this->once())->method('setParsedMessage')
+			->with($this->stringStartsWith('[de] Somebody tried to open it.'));
+		$notification->expects($this->once())->method('setLink')->with('https://cloud.example/apps/social/');
+
+		$this->notifier->prepare($notification, 'de');
 	}
 
 	public function testNotificationsOfOtherAppsAreRejected(): void {
@@ -318,7 +335,8 @@ class NotifierTest extends TestCase {
 		$notification->expects($this->once())->method('setRichSubject')
 			->with('14 new notifications in {app}', $this->callback(
 				fn (array $rich): bool => $rich['app']['type'] === 'highlight'
-					&& $rich['app']['name'] === '[en] Aloha Social'
+					// the brand, never put through a catalogue
+					&& $rich['app']['name'] === 'Aloha Social'
 					&& $rich['app']['link'] === 'https://cloud.example/apps/social/timeline/notifications'
 			));
 

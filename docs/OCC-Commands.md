@@ -1585,13 +1585,14 @@ and make the command exit `1`; the rest of the index is still rebuilt.
 Delete all Aloha Social data, or uninstall the app's database footprint.
 
 ```
-php occ social:reset [--uninstall] [--uri ADDRESS] [-f|--force]
+php occ social:reset [--uninstall] [--uri ADDRESS] [--allow-unsafe-uri] [-f|--force]
 ```
 
 | Option | Value | Description |
 |--------|-------|-------------|
 | `--uninstall` | none | Full removal instead of a data flush |
 | `--uri` | address | The cloud base address to rebuild every id from, instead of being asked for it. This is the option `social:check:install` names when the configured address no longer matches the server. After the flush `social_url`, the base ids are minted from, is derived from the cloud address again, with or without this option |
+| `--allow-unsafe-uri` | none | Accept an address the setup screen refuses: `http://`, `localhost` or another loopback name, a bare IP address, or one with `/index.php` in it. Only for a test instance; an address that is not an absolute `http(s)` URL is refused either way |
 | `-f`, `--force` | none | Skip both confirmations (required with `--no-interaction`) |
 
 The command asks **two** confirmations before doing anything:
@@ -1603,6 +1604,11 @@ Answering anything but `y` to either question aborts with exit code `0` and chan
 nothing. Under `--no-interaction` the command refuses with exit code `1` unless
 `--force` is given: a confirmation prompt answers itself with its default when
 nobody is there, so without this the command would exit `0` having done nothing.
+
+It refuses with exit code `1`, before deleting anything, when `--uri` names
+an address the setup screen would refuse and `--allow-unsafe-uri` is not
+given. An address typed at the prompt is checked the same way, after the flush:
+a refused one leaves the old address in place and exits `1`.
 
 It refuses with exit code `1`, before asking anything, while self-registered
 external users exist: their logins are rows of this app, and flushing them
@@ -1634,7 +1640,7 @@ The app files themselves are not removed, and the app is not disabled.
 | Code | Meaning |
 |------|---------|
 | 0 | Success, and also a confirmation prompt answered with "no" |
-| 1 | A refusal to act non-interactively without `--force` (`social:reset`, `social:check:install --index`, `social:benchmark`, `social:queue:retry`), a `social:benchmark` probe over its limit or an invalid limit option, a failed flush or uninstall in `social:reset`, `social:reset` while external users exist, streams `social:check:install --index` could not parse, a setup check that `social:check:install` reports as an error, `social:account:following` handled failure, or an uncaught exception in any command |
+| 1 | A refusal to act non-interactively without `--force` (`social:reset`, `social:check:install --index`, `social:benchmark`, `social:queue:retry`), a `social:benchmark` probe over its limit or an invalid limit option, a failed flush or uninstall in `social:reset`, `social:reset` while external users exist or with a refused address, streams `social:check:install --index` could not parse, a setup check that `social:check:install` reports as an error, `social:account:following` handled failure, or an uncaught exception in any command |
 
 ---
 

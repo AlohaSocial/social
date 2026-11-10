@@ -42,6 +42,7 @@ class SectionsServiceTest extends TestCase {
 			ConfigService::SOCIAL_SECTION_PHOTOS => '1',
 			ConfigService::SOCIAL_SECTION_VIDEOS => '1',
 			ConfigService::SOCIAL_GROUP_LISTS => '[]',
+			ConfigService::SOCIAL_GIF_PACK => '1',
 		];
 
 		$this->configService = $this->createStub(ConfigService::class);
@@ -53,6 +54,8 @@ class SectionsServiceTest extends TestCase {
 			->willReturnCallback(function (string $key, string $value): void {
 				$this->stored[$key] = $value;
 			});
+
+		$this->configService->method('hasInternetConnection')->willReturn(true);
 
 		$this->groupManager = $this->createStub(IGroupManager::class);
 		$this->groupManager->method('groupExists')
@@ -67,6 +70,25 @@ class SectionsServiceTest extends TestCase {
 		$this->assertTrue($current[ConfigService::SOCIAL_STORIES]);
 		$this->assertTrue($current[ConfigService::SOCIAL_SECTION_PHOTOS]);
 		$this->assertTrue($current[ConfigService::SOCIAL_SECTION_VIDEOS]);
+	}
+
+	/** The pack is fetched from Google; the card says so, and can turn it off. */
+	public function testTheGifPackIsOnTheCardWithItsSource(): void {
+		$current = $this->service->current();
+		$this->assertTrue($current[ConfigService::SOCIAL_GIF_PACK]);
+		$this->assertSame('fonts.gstatic.com', $current['gif_pack_source']);
+		$this->assertTrue($current['has_internet_connection']);
+
+		$this->assertFalse($this->service->save(true, true, true, [], false)[ConfigService::SOCIAL_GIF_PACK]);
+		$this->assertSame('0', $this->stored[ConfigService::SOCIAL_GIF_PACK]);
+	}
+
+	public function testAClientThatDoesNotSendTheGifPackLeavesItAlone(): void {
+		$this->stored[ConfigService::SOCIAL_GIF_PACK] = '0';
+
+		$this->service->save(true, true, true, []);
+
+		$this->assertSame('0', $this->stored[ConfigService::SOCIAL_GIF_PACK]);
 	}
 
 	/** News is gone from the app, and with it the switch that offered it. */

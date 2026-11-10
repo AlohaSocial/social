@@ -38,9 +38,10 @@ use Throwable;
  * looked at what. That is the property `GifService` was written to protect and
  * the reason a Giphy or Tenor picker was refused; this keeps it.
  *
- * An administrator who wants nothing fetched at all turns the pack off with
- * `occ config:app:set social gif_pack --value=0`, and is left with whatever
- * they added themselves.
+ * An administrator who wants nothing fetched at all turns the pack off, on the
+ * Sections card or with `occ config:app:set social gif_pack --value=0`, and is
+ * left with whatever they added themselves. A server whose `config.php` says
+ * `has_internet_connection => false` offers no pack and fetches nothing.
  */
 class GifPackService {
 	/** The appdata folder the fetched pictures are kept in. */
@@ -90,9 +91,19 @@ class GifPackService {
 	) {
 	}
 
-	/** Whether the instance offers the pack at all. */
+	/**
+	 * Whether the instance offers the pack at all: switched on, and on a
+	 * server allowed to fetch the pictures. Offline, a picker of pictures
+	 * that can never arrive would be worse than none.
+	 */
 	public function enabled(): bool {
-		return $this->configService->getAppValueBool(ConfigService::SOCIAL_GIF_PACK);
+		return $this->configService->getAppValueBool(ConfigService::SOCIAL_GIF_PACK)
+			&& $this->configService->hasInternetConnection();
+	}
+
+	/** The host the pictures are fetched from, for the administrator to see. */
+	public static function sourceHost(): string {
+		return (string)parse_url(self::SOURCE, PHP_URL_HOST);
 	}
 
 	/**

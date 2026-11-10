@@ -28,7 +28,6 @@ use OCA\Social\Tests\Helper\PhpIni;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IURLGenerator;
-use OCP\IUserManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -43,7 +42,6 @@ class InstanceServiceTest extends TestCase {
 	private ConfigService|Stub $configService;
 	private IAppConfig|MockObject $appConfig;
 	private IConfig|Stub $config;
-	private IUserManager|Stub $userManager;
 	private CacheDocumentService|Stub $cacheDocumentService;
 	private InstanceService $service;
 	private VapidService|Stub $vapidService;
@@ -53,10 +51,9 @@ class InstanceServiceTest extends TestCase {
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->config = $this->createStub(IConfig::class);
-		$this->userManager = $this->createStub(IUserManager::class);
-		$this->userManager->method('countUsers')->willReturn(['Database' => 3]);
 		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 		$this->statsRequest = $this->createMock(InstanceStatsRequest::class);
+		$this->statsRequest->method('countLocalAccounts')->willReturn(3);
 		$this->translationService = $this->createStub(TranslationService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->vapidService = $this->createStub(VapidService::class);
@@ -73,7 +70,6 @@ class InstanceServiceTest extends TestCase {
 			$this->appConfig,
 			$this->config,
 			$urlGenerator,
-			$this->userManager,
 			$this->cacheDocumentService,
 			$this->statsRequest,
 			$this->translationService,
@@ -136,7 +132,9 @@ class InstanceServiceTest extends TestCase {
 		$instance = $this->service->createLocal();
 
 		$this->assertSame('0.0', $instance->getVersion());
-		$this->assertSame('a safe home for your data', $instance->getDescription());
+		// never Nextcloud's own slogan, which describes Nextcloud
+		$this->assertSame('', $instance->getDescription());
+		$this->assertSame('', $instance->getShortDescription());
 		$this->assertSame('Aloha Social', $instance->getTitle());
 		$this->assertSame('Aloha Social', $instance->jsonSerialize()['title']);
 	}
@@ -256,7 +254,7 @@ class InstanceServiceTest extends TestCase {
 	public function testFreshRememberedStatsAreServedWithoutTouchingTheDatabase(): void {
 		$this->theming([
 			'social.' . InstanceService::STATS_CACHE_KEY => json_encode(
-				['status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - 60]
+				['user_count' => 3, 'status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - 60]
 			),
 		]);
 		$this->statsRequest->expects($this->never())->method('countLocalStatuses');
@@ -277,7 +275,7 @@ class InstanceServiceTest extends TestCase {
 	public function testTheDomainCountIsTheRememberedOne(): void {
 		$this->theming([
 			'social.' . InstanceService::STATS_CACHE_KEY => json_encode(
-				['status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - 60]
+				['user_count' => 3, 'status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - 60]
 			),
 		]);
 		$this->statsRequest->expects($this->never())->method('countRemoteDomains');
@@ -289,7 +287,7 @@ class InstanceServiceTest extends TestCase {
 	public function testStaleRememberedStatsAreRecomputed(): void {
 		$this->theming([
 			'social.' . InstanceService::STATS_CACHE_KEY => json_encode(
-				['status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - InstanceService::STATS_CACHE_SECONDS - 1]
+				['user_count' => 3, 'status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - InstanceService::STATS_CACHE_SECONDS - 1]
 			),
 		]);
 		$this->statsRequest->method('countLocalStatuses')->willReturn(6);
@@ -437,5 +435,55 @@ class InstanceServiceTest extends TestCase {
 		$this->assertFalse($v2->registrations->enabled);
 		$this->assertIsObject($v2->contact);
 		$this->assertSame(3, $v2->usage->users->active_month);
+	}
+
+	public function testTheDescriptionFallsBackToTheOneWrittenForThisInstance(): void {
+		$this->theming(['social.extended_description' => 'A server for the choir.']);
+
+		$instance = $this->service->createLocal();
+
+		$this->assertSame('A server for the choir.', $instance->getDescription());
+		$this->assertSame('A server for the choir.', $instance->getShortDescription());
+	}
+
+	/**
+	 * Served without login and collected by every fediverse crawler: the
+	 * number used to be every Nextcloud user of every backend, LDAP included.
+	 */
+	public function testTheUserCountIsTheAccountsHereNotTheNextcloudUsers(): void {
+		$this->theming([]);
+		$this->statsRequest->expects($this->once())->method('countLocalStatuses')->willReturn(9);
+
+		$instance = $this->service->createLocal();
+
+		$this->assertSame(3, $instance->getStats()['user_count']);
+		$this->assertSame(['users' => ['total' => 3], 'localPosts' => 9], $instance->getUsage());
+	}
+
+	public function testAStatsCacheWrittenBeforeAccountsWereCountedIsRecounted(): void {
+		$this->theming([
+			'social.' . InstanceService::STATS_CACHE_KEY => json_encode(
+				['status_count' => 5, 'domain_count' => 2, 'computed_at' => time() - 60]
+			),
+		]);
+		$this->statsRequest->expects($this->once())->method('countLocalStatuses')->willReturn(5);
+
+		$this->assertSame(3, $this->service->createLocal()->getStats()['user_count']);
+	}
+
+	public function testAnAdministratorCanHideTheCounts(): void {
+		$this->theming([]);
+		$this->configService->method('getAppValueBool')->willReturnCallback(
+			static fn (string $key): bool => $key === ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS
+		);
+		$this->statsRequest->method('countLocalStatuses')->willReturn(9);
+		$this->statsRequest->method('countRemoteDomains')->willReturn(4);
+		$this->statsRequest->expects($this->never())->method('countLocalStatusesBetween');
+
+		$instance = $this->service->createLocal();
+
+		$this->assertSame(['user_count' => 0, 'status_count' => 0, 'domain_count' => 4], $instance->getStats());
+		$this->assertSame('{"users":{}}', json_encode($instance->getUsage()));
+		$this->assertSame('0', $this->service->getWeeklyActivity()[0]['statuses']);
 	}
 }

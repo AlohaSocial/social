@@ -105,6 +105,8 @@ class Application extends App implements IBootstrap {
 		return in_array($name, [self::SOFTWARE_NAME, self::LEGACY_SOFTWARE_NAME], true);
 	}
 	public const APP_NAME = 'Social';
+	/** The product name as people read it. A brand, so it is never translated. */
+	public const APP_NAME_DISPLAY = 'Aloha Social';
 	public const APP_SUBJECT = 'http://nextcloud.com/';
 	public const APP_REL = 'https://apps.nextcloud.com/apps/social';
 

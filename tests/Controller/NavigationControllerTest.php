@@ -121,7 +121,7 @@ class NavigationControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
-	private function controller(?string $userId = 'alice', ?\OCA\Social\Service\ModeratorService $moderators = null): NavigationController {
+	private function controller(?string $userId = 'alice', ?\OCA\Social\Service\ModeratorService $moderators = null, ?\OCA\Social\Service\SetupNotificationService $setupNotifications = null): NavigationController {
 		$feedDisplayService = $this->createStub(\OCA\Social\Service\FeedDisplayService::class);
 		$feedDisplayService->method('filterBlueskyHomePosts')->willReturnArgument(0);
 
@@ -146,6 +146,7 @@ class NavigationControllerTest extends TestCase {
 			new NullLogger(),
 			$this->createStub(\OCA\Social\Service\FollowService::class),
 			$moderators,
+			$setupNotifications,
 		);
 	}
 
@@ -456,28 +457,53 @@ class NavigationControllerTest extends TestCase {
 		$this->assertSame('https://cloud.example', $this->serverData()['cliUrl']);
 	}
 
-	public function testNavigateAutoConfiguresTheCloudAddressFromCliUrl(): void {
+	/**
+	 * The address every id is built from is proposed to an administrator and
+	 * stored only once they confirm it: copied on the first open, an http or
+	 * localhost `overwrite.cli.url` became permanent without anybody looking.
+	 */
+	public function testTheDerivedAddressIsProposedNotStored(): void {
 		$this->systemValues(['overwrite.cli.url' => 'https://cloud.example/']);
-		// the derivation itself lives in CheckService, where it is tested; here
-		// it only matters that what it answers is what gets stored and returned
 		$this->checkService->method('derivedCloudAddress')->willReturn('https://cloud.example/index.php');
 		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
-		$this->configService->method('getSocialUrl')->willReturn('x');
-		$this->checkService->expects($this->once())->method('checkInstallationStatus')->with(true);
-		$this->configService->expects($this->once())->method('setCloudUrl')->with('https://cloud.example/index.php');
-		$this->existingActor();
+		$this->groupManager->method('isAdmin')->willReturn(true);
+		$this->configService->expects($this->never())->method('setCloudUrl');
 
 		$this->controller()->navigate();
 
-		$this->assertSame('https://cloud.example/index.php', $this->serverData()['cloudAddress']);
-		$this->assertFalse($this->serverData()['setup']);
+		$this->assertTrue($this->serverData()['setup']);
+		$this->assertSame('https://cloud.example/index.php', $this->serverData()['proposedCloudAddress']);
+		$this->assertSame('overwrite.cli.url', $this->serverData()['proposedFrom']);
+		$this->assertSame(['index_php'], $this->serverData()['proposedProblems']);
+	}
+
+	public function testWithoutOverwriteCliUrlTheAddressOfTheRequestIsProposed(): void {
+		$this->systemValues(['htaccess.IgnoreFrontController' => true]);
+		$this->checkService->method('derivedCloudAddress')->willReturn('');
+		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
+		$this->groupManager->method('isAdmin')->willReturn(true);
+
+		$this->controller()->navigate();
+
+		$this->assertSame('https://cloud.example', $this->serverData()['proposedCloudAddress']);
+		$this->assertSame('request', $this->serverData()['proposedFrom']);
+		$this->assertSame([], $this->serverData()['proposedProblems']);
+	}
+
+	public function testTheSetupPageRendersBeforeAnyAddressExists(): void {
+		$this->systemValues([]);
+		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
+		$this->configService->method('getSocialAddress')->willThrowException(new SocialAppConfigException());
+		$this->groupManager->method('isAdmin')->willReturn(true);
+
+		$this->assertInstanceOf(TemplateResponse::class, $this->controller()->navigate());
+		$this->assertSame('', $this->serverData()['socialAddress']);
 	}
 
 	public function testNavigateShowsTheSetupPageToAdminsWhenNothingIsConfigured(): void {
 		$this->systemValues([]);
 		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
 		$this->groupManager->method('isAdmin')->willReturn(true);
-		$this->request->method('getParam')->with('cloudAddress')->willReturn(null);
 		$this->accountService->expects($this->never())->method('createActor');
 		$this->checkService->expects($this->never())->method('checkDefault');
 
@@ -497,7 +523,6 @@ class NavigationControllerTest extends TestCase {
 		$this->systemValues([]);
 		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
 		$this->groupManager->method('isAdmin')->willReturn(true);
-		$this->request->method('getParam')->with('cloudAddress')->willReturn(null);
 		$this->checkService->expects($this->never())->method('checkDefault');
 		$this->checkService->method('cloudAddresses')->willReturn(['configured' => '', 'expected' => '']);
 
@@ -511,19 +536,16 @@ class NavigationControllerTest extends TestCase {
 		], $this->serverData()['checks']);
 	}
 
-	public function testNavigateStoresTheCloudAddressSubmittedByAnAdmin(): void {
+	public function testTheAddressCannotBeSetThroughTheQueryString(): void {
 		$this->systemValues([]);
 		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
-		$this->configService->method('getSocialUrl')->willReturn('x');
 		$this->groupManager->method('isAdmin')->willReturn(true);
-		$this->request->method('getParam')->with('cloudAddress')->willReturn('https://cloud.example/index.php');
-		$this->configService->expects($this->once())->method('setCloudUrl')->with('https://cloud.example/index.php');
-		$this->existingActor();
+		$this->request->method('getParam')->willReturn('https://evil.example');
+		$this->configService->expects($this->never())->method('setCloudUrl');
 
 		$this->controller()->navigate();
 
 		$this->assertTrue($this->serverData()['setup']);
-		$this->assertArrayHasKey('checks', $this->serverData());
 	}
 
 	public function testNavigateContinuesForNonAdminsWhenSetupIsMissing(): void {
@@ -538,6 +560,28 @@ class NavigationControllerTest extends TestCase {
 
 		$this->assertInstanceOf(TemplateResponse::class, $response);
 		$this->assertTrue($this->serverData()['setup']);
+		$this->assertArrayNotHasKey('proposedCloudAddress', $this->serverData());
+	}
+
+	/** The person is told to ask an administrator; the administrators are told too. */
+	public function testANonAdminOnAnUnconfiguredInstanceNotifiesTheAdministrators(): void {
+		$this->systemValues([]);
+		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
+		$this->groupManager->method('isAdmin')->willReturn(false);
+		$notifications = $this->createMock(\OCA\Social\Service\SetupNotificationService::class);
+		$notifications->expects($this->once())->method('notifyAdminsOnce');
+
+		$this->controller('alice', null, $notifications)->navigate();
+	}
+
+	public function testAnAdminOnAnUnconfiguredInstanceNotifiesNobody(): void {
+		$this->systemValues([]);
+		$this->configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
+		$this->groupManager->method('isAdmin')->willReturn(true);
+		$notifications = $this->createMock(\OCA\Social\Service\SetupNotificationService::class);
+		$notifications->expects($this->never())->method('notifyAdminsOnce');
+
+		$this->controller('alice', null, $notifications)->navigate();
 	}
 
 	public function testNavigateInitialisesTheSocialUrlWhenMissing(): void {

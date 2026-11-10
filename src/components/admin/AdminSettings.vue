@@ -7,7 +7,7 @@
 		<header class="social-admin__header">
 			<div class="social-admin__header-text">
 				<h1 class="social-admin__heading">
-					{{ t('social', 'Aloha Social') }}
+					{{ appName }}
 				</h1>
 				<p class="social-admin__lede">
 					{{ t('social', 'How this server moderates, what it offers, which servers it talks to and what it keeps.') }}
@@ -126,6 +126,7 @@
 import { loadState } from '@nextcloud/initial-state'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import { APP_NAME } from '../../utils/appName.js'
 import IconAccess from 'vue-material-design-icons/ShieldLockOutline.vue'
 import IconAccounts from 'vue-material-design-icons/AccountSearchOutline.vue'
 import IconActivity from 'vue-material-design-icons/ChartLine.vue'
@@ -326,6 +327,7 @@ export default {
 
 	data() {
 		return {
+			appName: APP_NAME,
 			state: { ...NOTHING, ...loadState('social', 'adminSettings', {}) },
 			/** the group the administrator opened, '' for the first */
 			openedGroup: '',

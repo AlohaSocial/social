@@ -725,6 +725,24 @@ class CheckServiceTest extends TestCase {
 		$this->assertTrue($this->service->checkCloudAddress());
 	}
 
+	/**
+	 * Pretty URLs turned on after the setup: the server now reports the
+	 * address without `/index.php`, and the ids with it still resolve. This
+	 * used to be an error whose remedy deleted everything.
+	 */
+	public function testTurningPrettyUrlsOnLaterIsNotADisagreement(): void {
+		$this->config->method('getSystemValue')->willReturnCallback(
+			fn (string $key, $default = null) => match ($key) {
+				'overwrite.cli.url' => 'https://cloud.example',
+				'htaccess.IgnoreFrontController' => true,
+				default => $default,
+			}
+		);
+		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example/index.php');
+
+		$this->assertTrue($this->service->checkCloudAddress());
+	}
+
 	public function testAServerThatDeclaresNoUrlIsNotADisagreement(): void {
 		$this->config->method('getSystemValue')->willReturnCallback(
 			fn (string $key, $default = null) => $default

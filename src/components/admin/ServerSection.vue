@@ -30,6 +30,13 @@
 				:placeholder="t('social', 'Who runs this server, who it is for, and what is expected of the people on it.')"
 				rows="4" />
 
+			<NcCheckboxRadioSwitch v-model="form.hideCounts" type="switch">
+				{{ t('social', 'Hide how many accounts and posts this server has') }}
+			</NcCheckboxRadioSwitch>
+			<p class="server__hint">
+				{{ t('social', 'Anybody can read these numbers without logging in, and fediverse crawlers collect them. Only accounts of this app are counted, never every Nextcloud user. When hidden, the counts read 0 for Mastodon apps and are left out of NodeInfo.') }}
+			</p>
+
 			<h4 class="server__heading">
 				{{ t('social', 'Uploads') }}
 			</h4>
@@ -248,6 +255,7 @@ export default {
 				secureMode: this.settings.secure_mode === true,
 				publishBlocks: this.settings.publish_blocks === true,
 				allowSelfSigned: this.settings.allow_self_signed === true,
+				hideCounts: this.settings.hide_instance_counts === true,
 			},
 
 			message: '',
@@ -317,6 +325,7 @@ export default {
 					secureMode: this.form.secureMode,
 					publishBlocks: this.form.publishBlocks,
 					allowSelfSigned: this.form.allowSelfSigned,
+					hideCounts: this.form.hideCounts,
 				})
 				this.saved = true
 				this.message = t('social', 'Saved')

@@ -9,13 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Settings;
 
-use OCP\IL10N;
+use OCA\Social\AppInfo\Application;
 use OCP\IURLGenerator;
 use OCP\Settings\IIconSection;
 
 class AdminSection implements IIconSection {
 	public function __construct(
-		private IL10N $l10n,
 		private IURLGenerator $urlGenerator,
 	) {
 	}
@@ -30,7 +29,7 @@ class AdminSection implements IIconSection {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Aloha Social');
+		return Application::APP_NAME_DISPLAY;
 	}
 
 	#[\Override]

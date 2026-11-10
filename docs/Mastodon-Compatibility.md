@@ -4,7 +4,7 @@
 -->
 # Mastodon client and federation compatibility
 
-**Reviewed against:** Aloha Social **0.26.287** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.288** on **2026-10-27**.
 
 Aloha Social implements a broad portion of the Mastodon client API and speaks
 ActivityPub to Mastodon and other Fediverse servers. It is **not a drop-in
@@ -69,6 +69,11 @@ the push provider. Nextcloud's own notification channel is a separate feature.
   features have no Aloha web interface.
 - Public client API compatibility does not imply that Aloha can take over an
   existing Mastodon server's actor IDs, keys, host domain or followers in place.
+- The instance entity's `stats.user_count` (and NodeInfo's `usage.users.total`)
+  counts the accounts of this app, not every Nextcloud user. An administrator
+  can hide the account and post counts (`hide_instance_counts`); the client API
+  then reports `0`, because the entity requires numbers, and NodeInfo leaves
+  them out. `description` is the instance's own text, or empty.
 
 ## ActivityPub federation
 

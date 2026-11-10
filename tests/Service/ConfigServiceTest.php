@@ -321,11 +321,11 @@ class ConfigServiceTest extends TestCase {
 			});
 
 		$this->service->setCloudUrl('cloud.example.com');
-		$this->service->setCloudUrl('https://cloud.example.com/nextcloud');
+		$this->service->setCloudUrl('https://cloud.example.com/nextcloud/');
 		// the two trailing false are IAppConfig's `lazy` and `sensitive`
 		// defaults, which the service never sets
 		$this->assertSame([
-			['social', ConfigService::CLOUD_URL, 'http://cloud.example.com', false, false],
+			['social', ConfigService::CLOUD_URL, 'https://cloud.example.com', false, false],
 			['social', ConfigService::CLOUD_URL, 'https://cloud.example.com/nextcloud', false, false],
 		], $written);
 	}

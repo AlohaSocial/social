@@ -129,8 +129,8 @@ class CheckService {
 	 * Whether the address the app builds its ids from still matches the one the
 	 * server says it is reachable at.
 	 *
-	 * The app reads `overwrite.cli.url` once, when it is first opened, and never
-	 * again — every actor id, every note id and the WebFinger answer are built
+	 * The address is derived from `overwrite.cli.url` once, when an administrator
+	 * confirms it on the setup screen, and never read again — every actor id, every note id and the WebFinger answer are built
 	 * from that stored copy. Change the server's URL afterwards and the two
 	 * drift apart silently: WebFinger starts answering for a host nobody asks
 	 * about, and the app reports that .well-known is misconfigured when in fact
@@ -139,6 +139,9 @@ class CheckService {
 	 * This is only ever reported, never corrected. The stored address is baked
 	 * into every id already written, so changing it is `occ social:reset`
 	 * territory and not something to do behind an administrator's back.
+	 *
+	 * An address with and without `/index.php` is the same address: pretty
+	 * URLs turned on later serve the old ids as before.
 	 */
 	public function checkCloudAddress(): bool {
 		$expected = $this->derivedCloudAddress();
@@ -229,7 +232,7 @@ class CheckService {
 	}
 
 	private function sameAddress(string $one, string $other): bool {
-		return strtolower(rtrim($one, '/')) === strtolower(rtrim($other, '/'));
+		return CloudAddressRules::sameAddress($one, $other);
 	}
 
 	/**

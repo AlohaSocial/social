@@ -60,12 +60,6 @@ SPDX-FileCopyrightText = "2022-2026 Bluesky Social PBC, and Contributors"
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = "img/nextcloud.png"
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2016 Nextcloud GmbH"
-SPDX-License-Identifier = "LicenseRef-NextcloudTrademarks"
-
-[[annotations]]
 path = ["context/*.json", "tests/phpunit.xml"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2019 Nextcloud GmbH and Nextcloud contributors"
@@ -145,13 +139,13 @@ SPDX-FileCopyrightText = "2022 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 [[annotations]]
-path = ["img/add_user.svg", "img/boost.svg", "img/emoji.svg", "img/favicon.ico", "img/notifications.svg", "img/reply.svg", "img/social-promo.png"]
+path = ["img/add_user.svg", "img/boost.svg", "img/emoji.svg", "img/favicon.ico", "img/notifications.svg", "img/reply.svg"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2018-2024 Google LLC"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = ["img/social.svg", "img/social-dark.svg", "img/social_dark.svg"]
+path = ["img/social.svg", "img/social-dark.svg", "img/social_dark.svg", "img/social-dark.png"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
@@ -176,12 +170,6 @@ SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 [[annotations]]
 path = ["deploy.sh", "build-package.sh"]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2025 Nextcloud GmbH and Nextcloud contributors"
-SPDX-License-Identifier = "AGPL-3.0-or-later"
-
-[[annotations]]
-path = ["img/screenshot.png", "img/social-promo.png"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"

@@ -90,11 +90,11 @@ class ServerSettingsControllerTest extends TestCase {
 
 	public function testWhatTheCardSentReachesTheServiceUnchanged(): void {
 		$this->serverSettingsService->expects($this->once())->method('save')
-			->with('admin@instance.example', 'a friendly place', 20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, 'admin')
+			->with('admin@instance.example', 'a friendly place', 20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, 'admin', true)
 			->willReturn(['contact_email' => 'admin@instance.example']);
 
 		$response = $this->controller->save(
-			'admin@instance.example', 'a friendly place', 20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, 'admin'
+			'admin@instance.example', 'a friendly place', 20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, 'admin', true
 		);
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());

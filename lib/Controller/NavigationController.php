@@ -21,6 +21,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CheckService;
+use OCA\Social\Service\CloudAddressRules;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CountsService;
 use OCA\Social\Service\DocumentService;
@@ -32,6 +33,7 @@ use OCA\Social\Service\InterestService;
 use OCA\Social\Service\ModeratorService;
 use OCA\Social\Service\SectionsService;
 use OCA\Social\Service\SensitiveMediaService;
+use OCA\Social\Service\SetupNotificationService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TNCDataResponse;
@@ -96,6 +98,7 @@ class NavigationController extends Controller {
 		private LoggerInterface $logger,
 		private FollowService $followService,
 		private ?ModeratorService $moderatorService = null,
+		private ?SetupNotificationService $setupNotifications = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -215,11 +218,11 @@ class NavigationController extends Controller {
 			// handles are issued (`alice.<host>`)
 			'bluesky' => [
 				'enabled' => $this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED),
-				'host' => strtolower($this->configService->getSocialAddress()),
+				'host' => strtolower($this->socialAddress()),
 			],
 			// the host addresses here end in (`alice@<host>`), which the
 			// administrator may have set apart from the Nextcloud's own
-			'socialAddress' => $this->configService->getSocialAddress(),
+			'socialAddress' => $this->socialAddress(),
 		];
 
 		$this->logger->debug('[NavigationController] Initial serverData', ['serverData' => $serverData]);
@@ -230,44 +233,33 @@ class NavigationController extends Controller {
 				'cloudAddress' => $serverData['cloudAddress']
 			]);
 		} catch (SocialAppConfigException $e) {
-			$this->logger->warning('[NavigationController] Cloud address not configured, attempting setup', [
-				'exception' => $e->getMessage()
-			]);
+			// Nothing is stored until an administrator confirms the address:
+			// every id is built from it, and it cannot change afterwards
+			// without deleting everything.
 			$this->checkService->checkInstallationStatus(true);
-			$cloudAddress = $this->setupCloudAddress();
-			if ($cloudAddress !== '') {
-				$serverData['cloudAddress'] = $cloudAddress;
-				$this->logger->info('[NavigationController] Cloud address auto-configured', [
-					'cloudAddress' => $cloudAddress
-				]);
-			} else {
-				$serverData['setup'] = true;
-				$this->logger->warning('[NavigationController] Setup required - cloud address not configured');
+			$serverData['setup'] = true;
 
-				if ($serverData['isAdmin']) {
-					$cloudAddress = $this->request->getParam('cloudAddress');
-					if ($cloudAddress !== null) {
-						$this->configService->setCloudUrl($cloudAddress);
-						$this->logger->info('[NavigationController] Cloud address set from request', [
-							'cloudAddress' => $cloudAddress
-						]);
-					} else {
-						$this->logger->info('[NavigationController] Returning setup page (admin user)');
-						// nothing is probed before there is an address to probe
-						// from, but the page reads the same shape either way
-						$serverData['checks'] = [
-							'success' => true,
-							'checks' => [],
-							'addresses' => $this->checkService->cloudAddresses(),
-							'clientApi' => [],
-						];
-						$this->initialState->provideInitialState('serverData', $serverData);
-						return new TemplateResponse(Application::APP_ID, 'main');
-					}
-				} else {
-					$this->logger->info('[NavigationController] Returning setup page (non-admin user)');
-				}
+			if ($serverData['isAdmin']) {
+				$derived = $this->checkService->derivedCloudAddress();
+				$proposed = ($derived !== '') ? $derived : $serverData['cliUrl'];
+				$serverData['proposedCloudAddress'] = $proposed;
+				$serverData['proposedFrom'] = ($derived !== '') ? 'overwrite.cli.url' : 'request';
+				$serverData['proposedProblems'] = CloudAddressRules::problems($proposed);
+				// nothing is probed before there is an address to probe
+				// from, but the page reads the same shape either way
+				$serverData['checks'] = [
+					'success' => true,
+					'checks' => [],
+					'addresses' => $this->checkService->cloudAddresses(),
+					'clientApi' => [],
+				];
+			} else {
+				$this->setupNotifications?->notifyAdminsOnce();
 			}
+
+			$this->initialState->provideInitialState('serverData', $serverData);
+
+			return new TemplateResponse(Application::APP_ID, 'main');
 		}
 
 		try {
@@ -451,15 +443,13 @@ class NavigationController extends Controller {
 		return $path === '' || $path === 'timeline' || $path === 'timeline/home';
 	}
 
-	private function setupCloudAddress(): string {
-		// one definition of what the address should be, shared with the check
-		// that later notices the server's URL moving out from under it
-		$cloudAddress = $this->checkService->derivedCloudAddress();
-		if ($cloudAddress !== '') {
-			$this->configService->setCloudUrl($cloudAddress);
+	/** The host accounts are addressed under, or '' before the app is set up. */
+	private function socialAddress(): string {
+		try {
+			return $this->configService->getSocialAddress();
+		} catch (SocialAppConfigException $e) {
+			return '';
 		}
-
-		return $cloudAddress;
 	}
 
 	private function getCliUrl() {

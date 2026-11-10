@@ -22,7 +22,6 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IURLGenerator;
-use OCP\IUserManager;
 use OCP\Util;
 
 class InstanceService {
@@ -62,10 +61,10 @@ class InstanceService {
 	];
 
 	/**
-	 * Where the counted `status_count` and `domain_count` are remembered, as
-	 * JSON with a `computed_at` timestamp, and for how long. Five minutes is
-	 * fresh enough for a number nobody reads to the unit, and it keeps the two
-	 * table walks behind it off the request path.
+	 * Where the counted `user_count`, `status_count` and `domain_count` are
+	 * remembered, as JSON with a `computed_at` timestamp, and for how long.
+	 * Five minutes is fresh enough for a number nobody reads to the unit, and
+	 * it keeps the table walks behind them off the request path.
 	 */
 	public const STATS_CACHE_KEY = 'instance_stats';
 	public const STATS_CACHE_SECONDS = 300;
@@ -77,7 +76,7 @@ class InstanceService {
 	/** @var string[]|null memoised: filterMimeTypes() does not change mid-request */
 	private ?array $supportedMimeTypes = null;
 
-	/** @var array{status_count: int, domain_count: int}|null memoised per request */
+	/** @var array{user_count: int, status_count: int, domain_count: int}|null memoised per request */
 	private ?array $countedStats = null;
 
 	public function __construct(
@@ -86,7 +85,6 @@ class InstanceService {
 		private IAppConfig $appConfig,
 		private IConfig $config,
 		private IURLGenerator $urlGenerator,
-		private IUserManager $userManager,
 		private CacheDocumentService $cacheDocumentService,
 		private InstanceStatsRequest $instanceStatsRequest,
 		private TranslationService $translationService,
@@ -139,13 +137,9 @@ class InstanceService {
 
 		$instance->setUri($uri)
 			->setVersion($this->appConfig->getValueString(Application::APP_ID, 'installed_version', '0.0'))
-			->setTitle($this->appConfig->getValueString('theming', 'name', 'Aloha Social'))
-			->setShortDescription(
-				$this->appConfig->getValueString('theming', 'slogan', 'a safe home for your data')
-			)
-			->setDescription(
-				$this->appConfig->getValueString('theming', 'slogan', 'a safe home for your data')
-			)
+			->setTitle($this->appConfig->getValueString('theming', 'name', Application::APP_NAME_DISPLAY))
+			->setShortDescription($this->description())
+			->setDescription($this->description())
 			->setEmail($this->appConfig->getValueString(Application::APP_ID, ConfigService::CONTACT_EMAIL, ''))
 			->setImage($this->thumbnail())
 			->setLanguages([$this->defaultLanguage()])
@@ -182,6 +176,21 @@ class InstanceService {
 	}
 
 	/**
+	 * What this instance says it is: the slogan its administrator gave
+	 * Theming, else the description written for this instance, else nothing.
+	 * Never Nextcloud's own slogan, which describes Nextcloud and not this
+	 * server.
+	 */
+	private function description(): string {
+		$slogan = trim($this->appConfig->getValueString('theming', 'slogan', ''));
+		if ($slogan !== '') {
+			return $slogan;
+		}
+
+		return trim($this->appConfig->getValueString(Application::APP_ID, ConfigService::SOCIAL_EXTENDED_DESCRIPTION, ''));
+	}
+
+	/**
 	 * Mastodon's `urls`, whose only member is the streaming endpoint.
 	 *
 	 * The optional `social:mastodon:stream` daemon serves this address after
@@ -192,16 +201,6 @@ class InstanceService {
 		return ['streaming_api' => 'wss://' . $host];
 	}
 
-	/**
-	 * `stats` as an object with all three keys, all of them live.
-	 *
-	 * `user_count` is the number of Nextcloud users, which is the number of
-	 * people who can have an account here: an actor is created for a user the
-	 * first time they open the app. `status_count` and `domain_count` are
-	 * counted from the database and remembered for a few minutes, see
-	 * `countedStats()`. Nothing is read back from the stored row: it holds
-	 * whatever was true on the day the instance was set up.
-	 */
 	/**
 	 * The instances this one has heard of, for `/api/v1/instance/peers`.
 	 *
@@ -217,7 +216,8 @@ class InstanceService {
 	 *
 	 * `logins` and `registrations` are `0` and cannot be otherwise: an account
 	 * here is a Nextcloud user, so both belong to the server rather than to
-	 * this app. `statuses` is real.
+	 * this app. `statuses` is real, and 0 while the administrator hides the
+	 * counts.
 	 *
 	 * @return array<int, array<string, string>>
 	 */
@@ -228,11 +228,12 @@ class InstanceService {
 			return [];
 		}
 
+		$hidden = $this->countsHidden();
 		for ($week = 0; $week < self::ACTIVITY_WEEKS; $week++) {
 			$from = $startOfWeek - ($week * self::WEEK);
 			$weeks[] = [
 				'week' => (string)$from,
-				'statuses' => (string)$this->instanceStatsRequest->countLocalStatusesBetween(
+				'statuses' => $hidden ? '0' : (string)$this->instanceStatsRequest->countLocalStatusesBetween(
 					$from, $from + self::WEEK
 				),
 				'logins' => '0',
@@ -243,24 +244,48 @@ class InstanceService {
 		return $weeks;
 	}
 
+	/**
+	 * `stats` as an object with all three keys, all of them live.
+	 *
+	 * `user_count` is the number of accounts here: local actors that are not
+	 * deleted or suspended, never the Nextcloud users of every backend, most
+	 * of whom have no account. All three are counted from the database and
+	 * remembered for a few minutes, see `countedStats()`. An administrator
+	 * can hide the account and post counts, which are then 0: the client API
+	 * requires numbers. Nothing is read back from the stored row: it holds
+	 * whatever was true on the day the instance was set up.
+	 */
 	private function stats(): array {
 		$counted = $this->countedStats();
+		$hidden = $this->countsHidden();
 
 		return [
-			'user_count' => $this->countUsers(),
-			'status_count' => $counted['status_count'],
+			'user_count' => $hidden ? 0 : $counted['user_count'],
+			'status_count' => $hidden ? 0 : $counted['status_count'],
 			'domain_count' => $counted['domain_count'],
 		];
 	}
 
-	/** NodeInfo's shape for the same numbers. */
+	/**
+	 * NodeInfo's shape for the same numbers. Hidden, `users` is the empty
+	 * object the schema requires and `localPosts` is left out.
+	 */
 	private function usage(): array {
+		if ($this->countsHidden()) {
+			return ['users' => new \stdClass()];
+		}
+
 		$stats = $this->stats();
 
 		return [
 			'users' => ['total' => $stats['user_count']],
 			'localPosts' => $stats['status_count'],
 		];
+	}
+
+	/** Whether the administrator keeps the account and post counts private. */
+	public function countsHidden(): bool {
+		return $this->configService->getAppValueBool(ConfigService::SOCIAL_HIDE_INSTANCE_COUNTS);
 	}
 
 	/**
@@ -272,12 +297,12 @@ class InstanceService {
 	}
 
 	/**
-	 * The two counted numbers, from app config when a recent count is there,
+	 * The counted numbers, from app config when a recent count is there,
 	 * from the database otherwise — and then written back for the next
 	 * STATS_CACHE_SECONDS. Also memoised for the request, since the instance
 	 * entity is built more than once per response.
 	 *
-	 * @return array{status_count: int, domain_count: int}
+	 * @return array{user_count: int, status_count: int, domain_count: int}
 	 */
 	private function countedStats(): array {
 		if ($this->countedStats !== null) {
@@ -287,15 +312,17 @@ class InstanceService {
 		$remembered = json_decode(
 			$this->appConfig->getValueString(Application::APP_ID, self::STATS_CACHE_KEY, ''), true
 		);
-		if (is_array($remembered)
+		if (is_array($remembered) && array_key_exists('user_count', $remembered)
 			&& (int)($remembered['computed_at'] ?? 0) > time() - self::STATS_CACHE_SECONDS) {
 			return $this->countedStats = [
+				'user_count' => (int)$remembered['user_count'],
 				'status_count' => (int)($remembered['status_count'] ?? 0),
 				'domain_count' => (int)($remembered['domain_count'] ?? 0),
 			];
 		}
 
 		$counted = [
+			'user_count' => $this->instanceStatsRequest->countLocalAccounts(),
 			'status_count' => $this->instanceStatsRequest->countLocalStatuses(),
 			'domain_count' => $this->instanceStatsRequest->countRemoteDomains(),
 		];
@@ -305,15 +332,6 @@ class InstanceService {
 		);
 
 		return $this->countedStats = $counted;
-	}
-
-	private function countUsers(): int {
-		$total = 0;
-		foreach ($this->userManager->countUsers() as $count) {
-			$total += (int)$count;
-		}
-
-		return $total;
 	}
 
 	/**

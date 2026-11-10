@@ -13,14 +13,35 @@ Aloha Social is a fediverse server that happens to live inside Nextcloud, so the
 things it needs are the things any fediverse server needs: a stable public
 address, a `.well-known` answer, and a cron that runs.
 
-**A stable address.** Aloha Social copies `overwrite.cli.url` into its own
-`cloud_url` the first time somebody opens the app, derives `social_url` (that
-address followed by `/apps/social/`) from it, and builds every account id,
-post id and WebFinger answer from those copies. It never reads the system value
-again. Set `overwrite.cli.url` — and get it right — before anyone opens Aloha Social;
-changing the server's address afterwards is the single most expensive mistake
-available here, because the old address is inside every id already federated.
-See [*the address Aloha Social is set up for*](#the-address-aloha-social-is-set-up-for).
+**A stable address.** The first time an administrator opens Aloha Social, it
+shows the address it would build every id from and stores nothing until they
+confirm it: `overwrite.cli.url`, followed by `/index.php` unless pretty URLs
+are on, or the address of the page itself when `overwrite.cli.url` is not set.
+The confirmed address becomes `cloud_url`, `social_url` (that address followed
+by `/apps/social/`) is derived from it, and every account id, post id and
+WebFinger answer is built from those copies. Set `overwrite.cli.url` — and get
+it right — before anyone opens Aloha Social; changing the server's address
+afterwards is the single most expensive mistake available here, because the old
+address is inside every id already federated. See
+[*the address Aloha Social is set up for*](#the-address-aloha-social-is-set-up-for).
+
+The setup screen refuses an address other servers cannot reach or will not
+trust: `http://`, `localhost` and other loopback names, a bare IP address, and
+anything with `/index.php` in it. A test instance that needs one of those ticks
+**Use this address anyway**; `occ social:reset --uri=… --allow-unsafe-uri` is
+the same override on the command line. Something that is not an absolute
+`http(s)` address with a host is refused either way. Once an address is stored,
+the setup screen's endpoint refuses to change it (409): only
+`occ social:reset --uri=…` can, because it deletes everything built from the
+old one. A scripted test install can set
+`occ config:app:set social cloud_url --value=…` before anybody opens the app,
+which skips these checks.
+
+Somebody who is not an administrator and opens the app before it is set up is
+told to ask an administrator. Every administrator then gets one Nextcloud
+notification saying the app is waiting to be set up (once, not once per
+visitor; `setup_admins_notified` records it), and it is taken down when the
+address is confirmed.
 
 **`.well-known` redirects.** Another server looking for `@alice@example.com`
 asks `https://example.com/.well-known/webfinger`. Nextcloud serves that from
@@ -30,11 +51,13 @@ something the web server has to do; Nextcloud's
 are exactly the ones needed. Without them nobody outside can find an account
 here, however well everything inside works.
 
-**Pretty URLs are not required**, but an instance reachable only at
+**Pretty URLs.** An instance reachable only at
 `https://example.com/index.php/apps/social/...` federates under ids with
-`index.php` in them, which some peers handle poorly. If `.htaccess`-based URL
-rewriting is available, turn it on before the first account is created rather
-than after.
+`index.php` in them, which some peers handle poorly, so the setup screen asks
+for an address without it. Turn `.htaccess`-based URL rewriting on before
+opening Aloha Social for the first time. An instance set up with `/index.php`
+before that can turn pretty URLs on later: its ids keep resolving, and the
+address check treats the two forms as the same address.
 
 **Behind a reverse proxy**, set `trusted_proxies` and `overwritehost`,
 `overwriteprotocol` and `overwrite.cli.url` as the Nextcloud documentation
@@ -327,6 +350,11 @@ is inside every id already written. Either point `overwrite.cli.url` back at
 the address Aloha Social knows, or accept the rename and run `occ social:reset
 --uri=<new address>`, **which deletes everything Aloha Social holds** — every post,
 follow and cached account, local and remote alike.
+
+An address with and without `/index.php` is the same address here. An instance
+set up as `https://example.com/index.php` that turns pretty URLs on later is
+not reported: Nextcloud still answers every id that has `/index.php` in it, so
+there is nothing to reset.
 
 ### The delivery job has not run
 
@@ -745,6 +773,9 @@ Federation health widget to `#federation`.
   federates, but a group list does tell everybody in the group who else is in
   it -- which is why no group becomes one until an administrator chooses.
   Deselecting a group takes its lists away on the next cron reconcile.
+  The last switch is the *animated emoji* in the GIF picker (`gif_pack`, on by
+  default), and the card says where they come from: the server fetches each
+  picture once from Google's `fonts.gstatic.com`.
   Administrators only, not delegates.
 - **Accounts** — every account this instance knows, whether or not anybody has
   complained. Search by username, by handle or by instance, filter by origin
@@ -822,7 +853,9 @@ Federation health widget to `#federation`.
   [*following a published list*](#commands-by-task) under Moderation below.
 - **Announcements** — a notice every account here is shown once.
 - **Server settings** — the instance-wide settings below, which had no interface at all
-  before and could only be set with `occ config:app:set`.
+  before and could only be set with `occ config:app:set`. Among them is whether
+  the public instance metadata shows how many accounts and posts this server
+  has (`hide_instance_counts`).
 - **Relays** — the relays this server subscribes to. A new server sees only
   what the people on it follow, so its federated timeline is empty on the first
   day and thin for months, and nobody out there has heard of it either. A relay
@@ -851,6 +884,27 @@ federated timeline here holds and where every public post written here is
 sent. A delegate cannot act on a Nextcloud administrator's account, and
 nobody — administrator or delegate — can silence, suspend, lift or purge their
 own.
+
+### Ranked For You recommendations switch
+
+**Administration → Aloha Social → For you** includes an independent **Ranked For You
+recommendations** switch. It is off by default. Enabling it makes the ranked
+timeline available; it does not automatically opt readers into behavioral
+learning. The feed can draw on learned signals, post content, freshness, follows
+and discovery, so it does not require readers to choose topics. Readers cannot
+currently add topics manually or request a topic-specific feed. That is a
+separate product capability and should not be implied by the ranking switch.
+Turn the switch off to disable the ranked timeline. See
+[For-You.md](For-You.md) for the data and consent model.
+
+Hashtag-interest learning, the part of For You that learns from what a user
+opens, likes, boosts, replies to, saves and watches, is **opt-in** as well:
+each user turns on **Learn from my browsing** in their own For You settings.
+The card's **Learn hashtag interests for users who have not chosen** switch
+(`interests_default`) is off by default; turning it on makes learning the
+default for every user who has not made a choice, which may need their consent
+where profiling from reading requires it. Learned interests are kept while
+learning is off.
 
 ---
 
@@ -1130,7 +1184,8 @@ the moderation routes accept.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `cloud_url` | *(empty)* | The base address every id is built from, copied from `overwrite.cli.url` the first time the app is opened. Changing it by hand does not rewrite the ids already issued. |
+| `cloud_url` | *(empty)* | The base address every id is built from, confirmed by an administrator on the setup screen (see [Before it federates](#before-it-federates)). Changing it by hand does not rewrite the ids already issued. |
+| `setup_admins_notified` | *(empty)* | When the administrators were told, as a Unix timestamp, that somebody opened the app before it was set up. Written once so they are told once. Bookkeeping, not a setting. |
 | `social_url` | *(empty)* | The app's own base URL (`…/apps/social/`), which every id is minted from and which profile links, WebFinger and NodeInfo use. Derived from `cloud_url` — never from the request — the first time the app is opened with `cloud_url` set, and again by `occ social:reset`. |
 | `social_address` | *(empty)* | The hostname accounts are federated under, when it is not the host of `cloud_url`. Only set this if the fediverse address genuinely differs from the Nextcloud host, and only before the first account exists. |
 | `service` | `1` | Unused; a leftover of the original installer. |
@@ -1201,8 +1256,9 @@ settings page, which validates the ranges given here; every one can be set with
 | `secure_mode` | `0` | Refuse ActivityPub fetches that are not signed. Mastodon's secure mode. Turning it on makes this instance invisible to every peer that does not sign what it asks for, and to every anonymous reader; it is a decision about who to federate with, not a hardening step to apply by default. |
 | `publish_blocks` | `0` | Publish the deny list on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
 | `allow_self_signed` | `0` | Accept peers whose certificates do not check out. **Development only**: on a server anybody else uses, this hands every federated request to whoever can answer for the address. |
+| `hide_instance_counts` | `0` | Keep the number of accounts and posts out of the public instance metadata, which anybody can read without logging in and fediverse crawlers collect: `/api/v1/instance` and `/api/v2/instance` then report `0`, NodeInfo leaves `usage.users.total` and `usage.localPosts` out, and `/api/v1/instance/activity` reports `0` posts a week. Either way the account count is the accounts of this app — local accounts that are not deleted or suspended — never every Nextcloud user. Set from the Server card. |
 | `stories` | `1` | Whether this instance offers Shorts — a picture or a video that is gone in a day. Off, the bar goes from the timeline and nothing new is taken; what was posted expires as it would have. Set from the Sections card. |
-| `gif_pack` | `1` | Whether the composer offers the animated emoji pack. What ships is the list, not the pictures: `Cron\GifPack` fetches the first screenful into appdata ahead of time and the rest are fetched as somebody picks them. `0` fetches nothing and leaves the picker with what `occ social:gif add` added. |
+| `gif_pack` | `1` | Whether the composer offers the animated emoji pack (Google's Noto Animated Emoji). What ships is the list, not the pictures: the server fetches each picture once from `fonts.gstatic.com` and keeps it in appdata — `Cron\GifPack` the first screenful ahead of time, the rest as somebody picks them. Readers' browsers only ever ask this server. `0` fetches nothing and leaves the picker with what `occ social:gif add` added. On a server whose `config.php` sets `has_internet_connection` to `false` the pack is not offered and nothing is fetched, whatever this says. Set from the Features card. |
 | `section_photos` | `1` | Whether the Photos section is offered in the sidebar: the same posts read through one filter. Turning it off hides the section and stops it being offered; the posts are not touched, and turning it back on shows them again. Set from the Sections card. |
 | `section_videos` | `1` | The same for the Videos section. |
 | `group_lists` | `[]` | Which Nextcloud groups become lists for their members, as a JSON array of group ids; at most 100. Empty is no groups, which is the default: every group a person was in used to become a list, which tells everybody in a group who else is in it. A group that no longer exists is dropped when the setting is read, not written back. Set from the Sections card. |
@@ -1279,9 +1335,10 @@ Two `config.php` values, neither documented anywhere else:
 | `social.checkssl` | `true` | Whether the WebFinger setup check verifies the certificate it is offered. Set it to `false` on an instance using a certificate the server itself does not trust. It affects the probe only — federation still verifies. |
 | `social.tests` | *(unset)* | Enables `GET /apps/social/test/{account}/`, a WebFinger self-test. Leave it unset outside development. |
 
-And one of Nextcloud's own that matters here: `allow_local_remote_servers`,
+And two of Nextcloud's own that matter here: `allow_local_remote_servers`,
 which must be on for an instance to federate with anything on a private
-address. That is a development arrangement.
+address — a development arrangement — and `has_internet_connection`, which,
+set to `false`, stops the animated emoji pack being offered or fetched.
 
 ---
 
@@ -1497,6 +1554,42 @@ is the one a medium instance wants.
 timeline queries against it, which is the only honest way to find out what any
 of this costs on the hardware in front of you.
 
+## Backup and restore
+
+Aloha Social keeps its state in three places, and a backup needs all three,
+taken together:
+
+- **The database**: every post, follow, account, list, notification and
+  queued delivery, in the `social_*` tables (with Nextcloud's table prefix).
+  Back up the whole Nextcloud database, as the Nextcloud documentation
+  describes; a dump of only these tables is not a consistent backup, because
+  accounts are Nextcloud users.
+- **`config.php`, and in it `secret`.** Every account's ActivityPub signing key,
+  and every Bluesky key (see [Keys and backups](#bluesky)), is stored sealed with
+  that secret. A database restored next to another secret has accounts that can
+  no longer sign anything: other servers then refuse everything they send.
+- **The data directory**: the app's files are in
+  `appdata_<instanceid>/social/` — the pictures and videos posted here, custom
+  emoji, the instance's own GIFs and the animated emoji it fetched, imports in
+  progress, and the cached copies of media from other servers.
+
+Restore all three from the same moment, with the app at the version it had
+when the backup was taken, then run `occ social:check:install`.
+
+**What cannot be recovered without the secret.** The ActivityPub keys cannot be
+opened again: the accounts keep their posts and followers, but other servers
+only accept what is signed with the key they already know, so the accounts can
+no longer federate, and nothing in this app can mint a replacement other servers
+would trust. The Bluesky keys can be re-sealed under a new secret only while the
+old one is known (`occ social:atproto:keys:reseal`). Keep a copy of `secret`
+with the database backups, and as safe as they are.
+
+**What a smaller backup gives up.** The cached copies of other servers' media
+are the largest part of the data directory and the least valuable: the
+originals are on the servers that posted them. Leaving them out keeps a backup
+small, at the price of those pictures being missing here after a restore. The
+files posted here exist nowhere else.
+
 ## What to watch
 
 - **Administration → Overview.** The setup checks above are there precisely so
@@ -1511,47 +1604,3 @@ of this costs on the hardware in front of you.
   past.
 - **The audit log**, if `admin_audit` is enabled: every moderation decision,
   with the moderator who took it.
-# Ranked For You recommendations switch
-
-Administration → Social → For You includes an independent **Ranked For You
-recommendations** switch. It is off by default. Enabling it makes the ranked
-timeline available; it does not automatically opt readers into behavioral
-learning. The feed can draw on learned signals, post content, freshness, follows
-and discovery, so it does not require readers to choose topics. Readers cannot
-currently add topics manually or request a topic-specific feed. That is a
-separate product capability and should not be implied by the ranking switch.
-Turn the switch off to disable the ranked timeline. See
-[For-You.md](For-You.md) for the data and consent model.
-
-Hashtag-interest learning, the part of For You that learns from what a user
-opens, likes, boosts, replies to, saves and watches, is **opt-in** as well:
-each user turns on **Learn from my browsing** in their own For You settings.
-The card's **Learn hashtag interests for users who have not chosen** switch
-(`interests_default`) is off by default; turning it on makes learning the
-default for every user who has not made a choice, which may need their consent
-where profiling from reading requires it. Learned interests are kept while
-learning is off.
-
-## Empty application after installing development dependencies
-
-A running Nextcloud should use Social's production Composer autoloader. Development
-packages such as Psalm pull in Amp versions that may collide with the Mail app's
-Amp functions during Nextcloud startup. A typical fatal error is
-`Cannot redeclare function Amp\delay()`. This can affect even `status.php`.
-
-From the Social app directory, regenerate the runtime autoloader without
-development packages:
-
-```sh
-composer dump-autoload --no-dev --no-scripts
-```
-
-For a production installation, install the production dependencies directly with
-`composer install --no-dev --prefer-dist --no-interaction`. The dump command repairs
-the local autoloader when the packages are already installed; it does not update
-the lock file or remove packages. Run development checks in a development checkout
-or restore the development autoloader there with `composer dump-autoload --dev`.
-Do not leave that development autoloader active in a shared running Nextcloud.
-
-Afterward verify `/status.php`, `occ status`, and the Social page in a browser.
-A successful Webpack build alone does not exercise Nextcloud bootstrap.
