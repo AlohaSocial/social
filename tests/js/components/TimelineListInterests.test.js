@@ -192,7 +192,8 @@ describe('TimelineList and For you', () => {
 			await flushPromises()
 
 			const item = wrapper.findComponent(EmptyContent).props('item')
-			expect(item.description).toContain('Watching most of a video also counts')
+			expect(item.description).toContain('Turn on learning in its settings')
+			expect(item.description).toContain('simply leaving a post on screen does not count')
 			expect(item.action.to).toEqual({ name: 'settings', hash: '#interests' })
 		})
 	})

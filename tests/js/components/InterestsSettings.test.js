@@ -83,6 +83,23 @@ describe('InterestsSettings', () => {
 		expect(saveInterestSettings).toHaveBeenCalledWith({ learning: false })
 	})
 
+	it('says learning is off until the reader turns it on', async () => {
+		wrapper = await mountSettings()
+
+		expect(wrapper.text()).toContain('Off until you turn it on.')
+		expect(wrapper.text()).toContain('You cannot choose its topics.')
+	})
+
+	it('shows the switch off for a reader who has not opted in', async () => {
+		fetchInterests.mockResolvedValue({ ...initialState, settings: { ...initialState.settings, learning: false } })
+		wrapper = mount(InterestsSettings, {
+			global: { stubs: { NcButton: true, NcCheckboxRadioSwitch: SwitchStub, NcDialog: NcDialogStub, NcNoteCard: true, NcSelect: SelectStub } },
+		})
+		await flushPromises()
+
+		expect(wrapper.findComponent(SwitchStub).props('modelValue')).toBe(false)
+	})
+
 	it('saves only the selected language filter', async () => {
 		saveInterestSettings.mockResolvedValue(initialState)
 		wrapper = await mountSettings()

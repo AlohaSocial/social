@@ -71,6 +71,21 @@ class ReportsLifecycleTest extends TestCase {
 		$this->assertGreaterThan(0, $stored->getCreation());
 	}
 
+	public function testTheRulesAViolationNamedRoundTrip(): void {
+		$report = new Report();
+		$report->setActorId(self::REPORTER)
+			->setAccountId(self::TARGET)
+			->setCategory(Report::CATEGORY_VIOLATION)
+			->setRules([['id' => '2', 'text' => 'No spam — ever'], ['id' => '4', 'text' => 'Be kind']]);
+		$this->created[] = $this->request->save($report);
+
+		$this->assertSame(
+			[['id' => '2', 'text' => 'No spam — ever'], ['id' => '4', 'text' => 'Be kind']],
+			$this->request->getById($report->getId())->getRules()
+		);
+		$this->assertSame([], $this->request->getById($this->report()->getId())->getRules(), 'none stored is none read');
+	}
+
 	public function testResolveLifecycleAndOpenCount(): void {
 		$before = $this->request->countOpen();
 		$open = $this->report();

@@ -265,6 +265,7 @@ class AdminSettingsTest extends TestCase {
 			'category' => 'spam',
 			'comment' => 'endless crypto',
 			'status_ids' => ['https://spam.example/notes/1'],
+			'rules' => [],
 			'creation' => 0,
 			'resolved' => false,
 			'level' => '',

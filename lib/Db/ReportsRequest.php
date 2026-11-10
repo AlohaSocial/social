@@ -28,6 +28,7 @@ class ReportsRequest extends ReportsRequestBuilder {
 			->setValue('status_ids', $qb->createNamedParameter(json_encode($report->getStatusIds())))
 			->setValue('comment', $qb->createNamedParameter($report->getComment()))
 			->setValue('category', $qb->createNamedParameter($report->getCategory()))
+			->setValue('rules', $qb->createNamedParameter($report->getRules() === [] ? null : json_encode($report->getRules())))
 			->setValue('local', $qb->createNamedParameter($report->isLocal() ? 1 : 0))
 			->setValue('resolved', $qb->createNamedParameter($report->isResolved() ? 1 : 0))
 			->setValue('forwarded', $qb->createNamedParameter($report->isForwarded() ? 1 : 0))

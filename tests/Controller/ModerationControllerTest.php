@@ -460,6 +460,7 @@ class ModerationControllerTest extends TestCase {
 			'category' => 'spam',
 			'comment' => 'endless crypto',
 			'status_ids' => ['https://spam.example/notes/1'],
+			'rules' => [],
 			'creation' => 0,
 			'resolved' => false,
 			// what stands against the account *now*, so a report from last

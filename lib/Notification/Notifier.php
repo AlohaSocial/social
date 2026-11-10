@@ -40,6 +40,7 @@ class Notifier implements INotifier {
 		'status' => 'notifications.svg',
 		'update' => 'edit.svg',
 		'report_new' => 'report.svg',
+		'report_resolved' => 'report.svg',
 		'moderation_warning' => 'moderation.svg',
 	];
 
@@ -167,6 +168,18 @@ class Notifier implements INotifier {
 				$notification->setLink(
 					$this->url->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => 'social']) . '#reports'
 				);
+				break;
+
+			case 'report_resolved':
+				// the outcome and nothing of who decided it: the moderators
+				// decide as the server
+				$account = (string)($params['account'] ?? '');
+				$notification->setParsedSubject(($params['action_taken'] ?? false) === true
+					? $l10n->t('Your report about %s was reviewed, and the moderators of this server took action', [$account])
+					: $l10n->t('Your report about %s was reviewed, and the moderators of this server took no action', [$account]));
+				$notification->setParsedMessage(($params['action_taken'] ?? false) === true
+					? $l10n->t('Thank you for reporting. The moderators acted on the account or on what was reported.')
+					: $l10n->t('Thank you for reporting. The moderators looked at it and decided that no action was needed.'));
 				break;
 
 			case 'digest':

@@ -115,6 +115,29 @@ tables have grown past the size where that starts to cost: more than a million
 posts, or about thirty million words in the search index. See
 [The post tables keep growing](#the-post-tables-keep-growing).
 
+**Aloha Social: ready to be public.** Whether a server that faces the public
+says who runs it and on what terms. See [Ready to be public](#ready-to-be-public).
+
+### Ready to be public
+
+A server that people can sign up to, or whose posts reach other servers, should
+say who to contact, what its rules are, and link a privacy policy and a legal
+notice: people deciding whether to join look for them, the **About this
+server** page and every Mastodon client show them, and a moderator points at
+the rules. The check names whichever of the four is missing:
+
+- **a contact** — a contact address or a contact account (either is enough),
+  under **Administration → Aloha Social → Server settings**, or
+  `occ config:app:set social contact_email --value …`;
+- **server rules** — **Administration → Aloha Social → Server rules**;
+- **a privacy policy link** and **a legal notice link** — Nextcloud's own,
+  under **Administration → Theming**.
+
+It is a **warning** while people without a Nextcloud account may sign up
+(`external_enabled`), **information** while the server only federates (on
+Bluesky, or on the fediverse unless the allow list is empty), and quiet on a
+server that does neither, or once all four are set.
+
 ### Mastodon apps cannot connect
 
 A Mastodon app is given a domain and builds `https://<domain>/api/v1/...` from
@@ -753,6 +776,10 @@ Federation health widget to `#federation`.
   what is refused here is exactly what the command refuses.
 - **Server rules** — one per line. Every client shows them to
   somebody deciding whether to join, and `/api/v1/instance/rules` serves them.
+  People signed in here read them on the **About this server** page in the
+  account menu, together with the contact address and account (`contact_email`,
+  `contact_account`) and Theming's *Privacy policy link* and *Legal notice
+  link*; a report for a rules violation names them.
   Both this and the emoji were `occ`-only until now, which is why most
   instances had neither.
 - **Retention** — how long remote statuses nobody here cares about are kept.
@@ -933,7 +960,12 @@ are rows of this app.
 Reports arrive from two directions: a local user reporting somebody through a
 client, and a peer instance sending `POST /api/v1/reports` about one of its
 own users' complaints. Both land in the same table, and the administrators (and
-the delegated group) are notified.
+the delegated group) are notified. In the web interface a user reports a post
+from its menu or an account from its profile, choosing a category (spam,
+breaking the server rules, illegal, other); for a rules violation they pick the
+rules involved, which the Reports table lists under the category with the text
+each rule had when the report was filed. A report about an account on another
+server can also be forwarded there, in this server's name.
 
 There are five things a moderator can do to an account, in order of weight:
 
@@ -955,6 +987,16 @@ and sign-in (OAuth) sessions, a Bluesky account moving here, and video
 uploads in the account's name are all refused while the user is disabled, and
 no push notification goes to the person's devices. Nothing is revoked, so
 enabling the user again brings the apps back without signing in again.
+
+**The reporter is told the outcome** (DSA Art. 16(5)). Resolving a report filed
+by somebody on this server sends them a Nextcloud notification saying whether
+the moderators *took action* or *took no action*, never which moderator
+decided. *Action* means a warning, a silence, a suspension or a takedown
+recorded against the reported account since the report was filed, or taken
+from the report itself; marking the account's media sensitive and a lift do not
+count. Reopening the report withdraws the notification, and resolving it again
+sends a new one. A report that arrived from another server has nobody here to
+tell.
 
 **What is recorded.** `social_moderation` holds what stands *now* — one row an
 account, replaced by the next decision and gone when it is lifted.
@@ -1164,7 +1206,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `section_videos` | `1` | The same for the Videos section. |
 | `group_lists` | `[]` | Which Nextcloud groups become lists for their members, as a JSON array of group ids; at most 100. Empty is no groups, which is the default: every group a person was in used to become a list, which tells everybody in a group who else is in it. A group that no longer exists is dropped when the setting is read, not written back. Set from the Sections card. |
 | `interests` | `1` | Legacy hashtag-interest timeline switch and fallback configuration. The ranked web For You feed is controlled separately by `rec_v4_enabled`; see [For-You.md](For-You.md). |
-| `interests_default` | `1` | Legacy learning default used by the compatibility interest endpoints. It does not grant consent to the separate ranked-feed behavioral learning system. |
+| `interests_default` | `0` | Whether hashtag-interest learning is on for a user who never set **Learn from my browsing** themselves. **Off by default, so learning is opt-in**: each user turns it on under Settings → For You. `1` makes it the default for everyone who has not chosen; a user's own choice always wins. Switching it off does not delete anything learned, and For You keeps using it; learning resumes when it is on again. An upgrade removes a stored `1` once (`Version1000Date20261108400000`), because the For You card used to save it with every other value. It does not grant consent to the separate ranked-feed activity learning. |
 | `interests_half_life` | `30` | Legacy hashtag score decay, in days. Used only by the compatibility interest system. |
 | `interests_threshold` | `3` | Legacy threshold for listing learned hashtag interests. |
 | `interests_cap` | `30` | Legacy limit for the number of listed hashtag interests. |
@@ -1479,6 +1521,15 @@ currently add topics manually or request a topic-specific feed. That is a
 separate product capability and should not be implied by the ranking switch.
 Turn the switch off to disable the ranked timeline. See
 [For-You.md](For-You.md) for the data and consent model.
+
+Hashtag-interest learning, the part of For You that learns from what a user
+opens, likes, boosts, replies to, saves and watches, is **opt-in** as well:
+each user turns on **Learn from my browsing** in their own For You settings.
+The card's **Learn hashtag interests for users who have not chosen** switch
+(`interests_default`) is off by default; turning it on makes learning the
+default for every user who has not made a choice, which may need their consent
+where profiling from reading requires it. Learned interests are kept while
+learning is off.
 
 ## Empty application after installing development dependencies
 

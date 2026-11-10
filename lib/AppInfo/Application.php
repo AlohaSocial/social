@@ -62,6 +62,7 @@ use OCA\Social\SetupChecks\IndexRepairsComplete;
 use OCA\Social\SetupChecks\MemcacheConfigured;
 use OCA\Social\SetupChecks\OutboundQueueNotStuck;
 use OCA\Social\SetupChecks\ProxyForwardsTheScheme;
+use OCA\Social\SetupChecks\PublicReady;
 use OCA\Social\SetupChecks\ReachableByStrictPeers;
 use OCA\Social\SetupChecks\RetentionBoundsTheTables;
 use OCA\Social\SetupChecks\UploadLimitsAgree;
@@ -193,6 +194,7 @@ class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(MemcacheConfigured::class);
 		$context->registerSetupCheck(IndexRepairsComplete::class);
 		$context->registerSetupCheck(RetentionBoundsTheTables::class);
+		$context->registerSetupCheck(PublicReady::class);
 	}
 
 	/**

@@ -425,6 +425,27 @@ class InterestServiceTest extends TestCase {
 		$this->assertTrue($this->service()->settingsFor('alice')['learning']);
 	}
 
+	public function testAReaderWhoNeverChoseLearnsNothingAndKeepsWhatWasLearned(): void {
+		$this->app[ConfigService::SOCIAL_INTERESTS_DEFAULT] = '0';
+		$this->rows['cats'] = new Interest('cats', 5.0, self::NOW);
+		$this->post('1', ['dogs']);
+
+		$service = $this->service();
+		$this->assertFalse($service->settingsFor('alice')['learning']);
+		$this->assertFalse($service->isLearning('alice'));
+		$service->recordEvents($this->actor(), [['status_id' => '1', 'kind' => 'open']]);
+		$service->recordAction($this->actor(), $this->post('2', ['birds']), InterestService::ACTION_FAVOURITE);
+
+		$this->assertSame(['cats'], array_keys($this->rows));
+
+		// opting in resumes learning on top of what was kept
+		$service->saveSettings($this->actor(), ['learning' => true]);
+		$this->assertSame('1', $this->user['interests_learning']);
+		$service->recordEvents($this->actor(), [['status_id' => '1', 'kind' => 'open']]);
+
+		$this->assertEqualsCanonicalizing(['cats', 'dogs'], array_keys($this->rows));
+	}
+
 	public function testInstanceLearningPauseStopsLegacySignalsAndActions(): void {
 		$this->post('1', ['cats']);
 		$this->app[ConfigService::REC_LEARNING_PAUSED] = '1';

@@ -14,6 +14,7 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\SearchTermsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Service\AboutService;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FederationHealthService;
@@ -28,6 +29,7 @@ use OCA\Social\SetupChecks\IndexRepairsComplete;
 use OCA\Social\SetupChecks\MemcacheConfigured;
 use OCA\Social\SetupChecks\OutboundQueueNotStuck;
 use OCA\Social\SetupChecks\ProxyForwardsTheScheme;
+use OCA\Social\SetupChecks\PublicReady;
 use OCA\Social\SetupChecks\ReachableByStrictPeers;
 use OCA\Social\SetupChecks\RetentionBoundsTheTables;
 use OCA\Social\SetupChecks\UploadLimitsAgree;
@@ -441,6 +443,43 @@ class SetupChecksTest extends TestCase {
 	}
 
 	/**
+	 * @param list<string> $missing what AboutService::missingBasics() names
+	 */
+	private function publicReady(bool $signUp, bool $federating, array $missing): SetupResult {
+		$about = $this->createStub(AboutService::class);
+		$about->method('isOpenForSignUp')->willReturn($signUp);
+		$about->method('isFederating')->willReturn($federating);
+		$about->method('missingBasics')->willReturn($missing);
+
+		return (new PublicReady($this->l10n, $about))->run();
+	}
+
+	public function testAServerOpenForSignUpWithoutItsBasicsIsAWarningNamingThem(): void {
+		$result = $this->publicReady(true, false, [AboutService::MISSING_CONTACT, AboutService::MISSING_LEGAL_NOTICE]);
+
+		$this->assertSame(SetupResult::WARNING, $result->getSeverity());
+		$this->assertStringContainsString('can sign up here, but this server has no a contact address or account, a legal notice link', (string)$result->getDescription());
+		$this->assertStringContainsString('Administration → Theming', (string)$result->getDescription());
+		$this->assertSame(PublicReady::DOC, $result->getLinkToDoc());
+	}
+
+	public function testAFederatingServerWithoutItsBasicsIsInformation(): void {
+		$result = $this->publicReady(false, true, [AboutService::MISSING_RULES, AboutService::MISSING_PRIVACY]);
+
+		$this->assertSame(SetupResult::INFO, $result->getSeverity());
+		$this->assertStringContainsString('federates with other servers, but has no server rules, a privacy policy link', (string)$result->getDescription());
+	}
+
+	public function testAServerWithItsBasicsOrFacingNobodyIsQuiet(): void {
+		$this->assertSame(SetupResult::SUCCESS, $this->publicReady(true, true, [])->getSeverity());
+		$this->assertSame(
+			SetupResult::SUCCESS,
+			$this->publicReady(false, false, [AboutService::MISSING_CONTACT])->getSeverity(),
+			'a server that neither takes sign-ups nor federates has nobody to tell'
+		);
+	}
+
+	/**
 	 * A check nobody can act on is a check nobody reads twice, so each one
 	 * links to the section of the guide that says what to do — and a section
 	 * renamed without the constant is a link to nowhere, which nothing but
@@ -459,6 +498,7 @@ class SetupChecksTest extends TestCase {
 			BlueskyReady::DOC,
 			IndexRepairsComplete::DOC,
 			RetentionBoundsTheTables::DOC,
+			PublicReady::DOC,
 		] as $link) {
 			$this->assertStringStartsWith(Docs::ADMIN_GUIDE . '#', $link);
 			$anchor = substr($link, strlen(Docs::ADMIN_GUIDE) + 1);

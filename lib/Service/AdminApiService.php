@@ -1070,6 +1070,7 @@ class AdminApiService {
 			->setStatusIds(is_array($statusIds) ? $statusIds : [])
 			->setComment((string)($row['comment'] ?? ''))
 			->setCategory((string)($row['category'] ?? Report::CATEGORY_OTHER))
+			->setRules(Report::decodeRules(isset($row['rules']) ? (string)$row['rules'] : null))
 			->setLocal((int)($row['local'] ?? 1) === 1)
 			->setResolved((int)($row['resolved'] ?? 0) === 1)
 			->setCreation(DbTime::toTimestamp($row['creation'] ?? ''));
@@ -1184,7 +1185,7 @@ class AdminApiService {
 	): array {
 		$qb = $this->dbConnection->getQueryBuilder();
 		$qb->select(
-			'id', 'actor_id', 'account_id', 'status_ids', 'comment', 'category', 'local', 'resolved',
+			'id', 'actor_id', 'account_id', 'status_ids', 'comment', 'category', 'rules', 'local', 'resolved',
 			'creation', 'assigned_to', 'action_taken_by', 'action_taken_at'
 		)
 			->from(CoreRequestBuilder::TABLE_REPORTS)

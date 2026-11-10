@@ -76,7 +76,7 @@ class InterestsAdminController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/admin/interests')]
 	public function save(
 		bool $enabled = true,
-		bool $learningDefault = true,
+		bool $learningDefault = false,
 		int $halfLife = 30,
 		float $threshold = 3.0,
 		int $cap = 30,

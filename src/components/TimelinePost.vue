@@ -351,31 +351,11 @@
 				{{ t('social', 'Their posts leave your timelines, they are unfollowed both ways, and they can no longer follow you or see your posts.') }}
 			</p>
 		</NcDialog>
-		<NcDialog
+		<ReportDialog
+			v-if="showReportDialog"
 			v-model:open="showReportDialog"
-			:name="t('social', 'Report {account}', { account: item.account.acct })"
-			:buttons="reportButtons">
-			<!-- a Bluesky account has nowhere here to be reported but this
-			     server's moderators and Bluesky's own moderation service, so
-			     passing it on is offered, and ticked, for that one only -->
-			<p v-if="reportsToBluesky" class="report-hint">
-				{{ t('social', 'The report goes to the moderators of this instance. With the box below ticked, this server also passes it on to Bluesky\'s moderation service, in its own name and not yours.') }}
-			</p>
-			<p v-else class="report-hint">
-				{{ t('social', 'The report goes to the moderators of this instance. It is never sent to the reported account or their server.') }}
-			</p>
-			<textarea
-				v-model="reportComment"
-				class="report-comment"
-				:placeholder="t('social', 'Why are you reporting this post? (optional)')"
-				rows="3" />
-			<NcCheckboxRadioSwitch
-				v-if="reportsToBluesky"
-				v-model="reportForward"
-				class="report-forward">
-				{{ t('social', 'Also report to Bluesky\'s moderation service') }}
-			</NcCheckboxRadioSwitch>
-		</NcDialog>
+			:account="item.account"
+			:status="item" />
 		<DeliveryDialog
 			v-model:open="showDeliveryDialog"
 			:statusId="item.id" />
@@ -405,7 +385,6 @@ import TimelineEventCard from './TimelineEventCard.vue'
 import TimelinePostHeader from './TimelinePostHeader.vue'
 import ReactionBar from './ReactionBar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import EyeOff from 'vue-material-design-icons/EyeOff.vue'
 import axios from '@nextcloud/axios'
@@ -443,6 +422,7 @@ import { defineAsyncComponent } from 'vue'
 // The mute dialog is the same one the profile opens, and it is worth nothing
 // until somebody asks for it: the post menu is on every post on the page.
 const MuteDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./MuteDialog.vue'))
+const ReportDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ReportDialog.vue'))
 // fetched with the other dialogs a post rarely opens, for the same reason
 const CollectionPickerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./CollectionPickerDialog.vue'))
 // and the same for naming the people in a photograph, which is a thing an
@@ -468,6 +448,7 @@ export default {
 		TagPeopleDialog,
 		CollectionPickerDialog,
 		MuteDialog,
+		ReportDialog,
 		ReactionBar,
 		PostAttachment,
 		PostMenu,
@@ -475,7 +456,6 @@ export default {
 		NcDialog,
 		EyeOff,
 		NcButton,
-		NcCheckboxRadioSwitch,
 		Repeat,
 		Reply,
 		Heart,
@@ -568,9 +548,6 @@ export default {
 			showDeliveryDialog: false,
 			recommendationContext: null,
 			recommendationContextLoading: false,
-			reportComment: '',
-			/** whether a report about a Bluesky account also goes to Bluesky's moderation service */
-			reportForward: true,
 			localPoll: this.item?.poll ?? null,
 		}
 	},
@@ -806,28 +783,6 @@ export default {
 					label: t('social', 'Block'),
 					variant: 'error',
 					callback: () => this.blockAuthor(),
-				},
-			]
-		},
-
-		/** @return {boolean} whether a report can be passed on to Bluesky's moderation service */
-		reportsToBluesky() {
-			return isBlueskyAccount(this.item.account)
-		},
-
-		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
-		reportButtons() {
-			return [
-				{
-					label: t('social', 'Cancel'),
-					callback: () => {
-						this.showReportDialog = false
-					},
-				},
-				{
-					label: t('social', 'Report'),
-					variant: 'error',
-					callback: () => this.sendReport(),
 				},
 			]
 		},
@@ -1266,24 +1221,6 @@ export default {
 			if (relationship?.id) {
 				this.showBlockDialog = false
 				showSuccess(t('social', 'You have blocked {account}', { account: this.item.account.acct }))
-			}
-		},
-
-		async sendReport() {
-			try {
-				await axios.post(generateUrl('apps/social/api/v1/reports'), {
-					account_id: this.item.account.id,
-					status_ids: [this.item.id],
-					comment: this.reportComment,
-					...(this.reportsToBluesky ? { forward: this.reportForward } : {}),
-				})
-				showSuccess(t('social', 'Post reported to the moderators'))
-				this.showReportDialog = false
-				this.reportComment = ''
-				this.reportForward = true
-			} catch (error) {
-				logger.error('Failed to report the post', { error })
-				showError(t('social', 'Failed to report the post'))
 			}
 		},
 

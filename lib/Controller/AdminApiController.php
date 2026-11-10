@@ -379,11 +379,9 @@ class AdminApiController extends AdminApiControllerBase {
 	 * them correct it before deciding. Without this the category a reporter
 	 * chose was the category for ever.
 	 *
-	 * `rule_ids` is accepted and ignored, as it is on the reporting side: a
-	 * report here carries a category and never a rule id, and the instance's
-	 * rules are prose rather than numbered rows to point at. Ignoring it is
-	 * the same answer `POST /api/v1/reports` gives, which is the one thing
-	 * worse than refusing it would be — two halves of one API disagreeing.
+	 * `rule_ids` is accepted and ignored: the rules a report names are the
+	 * reporter's, kept as they read when it was filed, and a rule's id is its
+	 * line number, which an edit of the rules shifts.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

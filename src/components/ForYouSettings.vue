@@ -5,10 +5,10 @@
 <template>
 	<div class="for-you-settings">
 		<NcNoteCard v-if="recommendationsEnabled" type="info">
-			{{ t('social', 'For You builds one automatic ranking from the hashtags you read and interact with, post content, freshness, follows, discovery and any activity learning you enable. You do not need to choose topics or configure the feed.') }}
+			{{ t('social', 'For You builds one automatic ranking from the hashtags you follow, hashtag interests learned while learning is on, post content, freshness, follows, discovery and any activity learning you enable. You do not need to choose topics or configure the feed.') }}
 		</NcNoteCard>
 		<NcNoteCard v-else type="info">
-			{{ t('social', 'For You uses your automatically learned hashtag interests in one personalized ranking. The administrator has not enabled the newer recommendation signals on this instance.') }}
+			{{ t('social', 'For You ranks posts by the hashtags you follow and the hashtag interests learned while learning is on. The administrator has not enabled the newer recommendation signals on this instance.') }}
 		</NcNoteCard>
 
 		<InterestsSettings v-if="legacyEnabled" />

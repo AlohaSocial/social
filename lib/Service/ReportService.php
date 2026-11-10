@@ -10,20 +10,24 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\ReportsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Db\StrikesRequest;
+use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Flag;
 use OCA\Social\Model\Report;
+use OCA\Social\Model\Strike;
 use OCP\Notification\IManager as INotificationManager;
 use Psr\Log\LoggerInterface;
 
 /**
  * Moderation reports: stores reports filed locally over the client API or
- * received from remote instances as Flag activities, and tells the instance
- * admins about new ones.
+ * received from remote instances as Flag activities, tells the instance
+ * admins about new ones, and tells a local reporter how theirs was decided.
  */
 class ReportService {
 	public function __construct(
@@ -33,6 +37,9 @@ class ReportService {
 		private INotificationManager $notificationManager,
 		private ReportForwardService $reportForwardService,
 		private StreamRequest $streamRequest,
+		private InstanceService $instanceService,
+		private ActorsRequest $actorsRequest,
+		private StrikesRequest $strikesRequest,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -44,10 +51,13 @@ class ReportService {
 	 * @param bool $forward Mastodon's `forward`: also tell the instance the
 	 *                      reported account is on. Ignored for a local
 	 *                      account, which has no other instance to tell.
+	 * @param array<array-key, mixed> $ruleIds Mastodon's `rule_ids`: which of
+	 *                                         the instance rules were broken,
+	 *                                         kept for a `violation` only
 	 */
 	public function reportFromLocal(
 		Person $reporter, Person $target, array $statusIds, string $comment, string $category,
-		bool $forward = false,
+		bool $forward = false, array $ruleIds = [],
 	): Report {
 		$report = new Report();
 		$report->setActorId($reporter->getId())
@@ -57,6 +67,9 @@ class ReportService {
 			->setCategory($category)
 			->setLocal(true)
 			->setTargetAccount($target);
+		if ($report->getCategory() === Report::CATEGORY_VIOLATION) {
+			$report->setRules($this->rulesNamed($ruleIds));
+		}
 
 		$this->reportsRequest->save($report);
 		$this->notifyAdmins($report);
@@ -66,6 +79,24 @@ class ReportService {
 		}
 
 		return $report;
+	}
+
+	/**
+	 * The instance rules among these ids, in the order the rules are listed.
+	 * An id that names no rule is dropped rather than refused: rules can be
+	 * edited between a client reading them and the report being sent.
+	 *
+	 * @param array<array-key, mixed> $ruleIds
+	 *
+	 * @return list<array{id: string, text: string}>
+	 */
+	private function rulesNamed(array $ruleIds): array {
+		$wanted = array_map(static fn ($id): string => is_scalar($id) ? (string)$id : '', $ruleIds);
+
+		return array_values(array_filter(
+			$this->instanceService->rules(),
+			static fn (array $rule): bool => in_array($rule['id'], $wanted, true)
+		));
 	}
 
 	/**
@@ -241,13 +272,116 @@ class ReportService {
 	}
 
 	/**
+	 * Resolves a report, or reopens one, and tells a local reporter.
+	 *
+	 * Resolving tells them the outcome (DSA Art. 16(5)); reopening takes that
+	 * notification back, since the decision it described no longer stands.
+	 *
 	 * @throws ReportNotFoundException
 	 */
 	public function setResolved(int $id, bool $resolved): Report {
-		$this->reportsRequest->getById($id); // throws when unknown
+		$before = $this->reportsRequest->getById($id); // throws when unknown
 		$this->reportsRequest->setResolved($id, $resolved);
+		$report = $this->reportsRequest->getById($id);
 
-		return $this->reportsRequest->getById($id);
+		if ($resolved && !$before->isResolved()) {
+			$this->notifyReporter($report);
+		} elseif (!$resolved && $before->isResolved()) {
+			$this->withdrawOutcome($report);
+		}
+
+		return $report;
+	}
+
+	/**
+	 * Whether a moderator acted on the reported account since the report was
+	 * filed: a warning, a silence, a suspension or a post taken down, whether
+	 * or not it was taken from this report. A lift is not an action against
+	 * anybody.
+	 */
+	public function actionTaken(Report $report): bool {
+		foreach ($this->strikesRequest->getForActor($report->getAccountId()) as $strike) {
+			if (!in_array($strike->getAction(), Strike::COUNTED, true)) {
+				continue;
+			}
+			if ($strike->getReportId() === $report->getId() || $strike->getCreation() >= $report->getCreation()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * The Nextcloud account that filed a report, or '' when it was not
+	 * filed by somebody here.
+	 */
+	private function reporterUserId(Report $report): string {
+		if (!$report->isLocal()) {
+			return '';
+		}
+
+		try {
+			return $this->actorsRequest->getFromId($report->getActorId())->getUserId();
+		} catch (ActorDoesNotExistException $e) {
+			// the reporter's account is gone
+			return '';
+		}
+	}
+
+	/**
+	 * Tells the reporter the report was decided, and whether anything was
+	 * done. Never who decided: the moderators decide as the server.
+	 */
+	private function notifyReporter(Report $report): void {
+		try {
+			$userId = $this->reporterUserId($report);
+			if ($userId === '') {
+				return;
+			}
+
+			$target = $this->cacheActorService->getCachedFromIds([$report->getAccountId()])[$report->getAccountId()] ?? null;
+			$account = $target === null
+				? $report->getAccountId()
+				: ($target->getAccount() !== '' ? $target->getAccount() : $target->getPreferredUsername());
+
+			$notification = $this->notificationManager->createNotification();
+			$notification->setApp('social')
+				->setDateTime(new \DateTime('now'))
+				->setUser($userId)
+				->setObject('report', (string)$report->getId())
+				->setSubject('report_resolved', [
+					'account' => $account,
+					'action_taken' => $this->actionTaken($report),
+				]);
+			$this->notificationManager->notify($notification);
+		} catch (Exception $e) {
+			$this->logger->warning('could not tell a reporter about the outcome', [
+				'report' => $report->getId(), 'exception' => $e,
+			]);
+		}
+	}
+
+	private function withdrawOutcome(Report $report): void {
+		try {
+			$userId = $this->reporterUserId($report);
+			if ($userId === '') {
+				return;
+			}
+
+			$notification = $this->notificationManager->createNotification();
+			// the subject too, or a reporter who is also a moderator would
+			// lose the notification about the report itself
+			$notification->setApp('social')
+				->setUser($userId)
+				->setObject('report', (string)$report->getId())
+				->setSubject('report_resolved');
+			$this->notificationManager->markProcessed($notification);
+		} catch (Exception $e) {
+			$this->logger->warning('could not withdraw a report outcome', [
+				'report' => $report->getId(), 'exception' => $e,
+			]);
+		}
 	}
 
 	/**

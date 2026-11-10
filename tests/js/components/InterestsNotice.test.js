@@ -54,6 +54,8 @@ describe('the first-use notice', () => {
 	it('says what is learned and where it stays', () => {
 		const text = mountNotice().text()
 		expect(text).toContain('Watching a substantial part of a video can count too')
+		expect(text).toContain('scrolling quickly past a post counts a little against its hashtags')
+		expect(text).toContain('simply leaving a post on screen does not increase your interests')
 		expect(text).toContain('This activity profile stays on this server and is not shared with other users.')
 	})
 

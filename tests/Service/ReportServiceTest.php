@@ -9,15 +9,21 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\ReportsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Db\StrikesRequest;
+use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Flag;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Moderation;
 use OCA\Social\Model\Report;
+use OCA\Social\Model\Strike;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\ModeratorService;
 use OCA\Social\Service\ReportForwardService;
 use OCA\Social\Service\ReportService;
@@ -41,6 +47,9 @@ class ReportServiceTest extends TestCase {
 	private INotificationManager|MockObject $notificationManager;
 	private ReportForwardService|MockObject $reportForwardService;
 	private StreamRequest|MockObject $streamRequest;
+	private InstanceService|Stub $instanceService;
+	private ActorsRequest|Stub $actorsRequest;
+	private StrikesRequest|Stub $strikesRequest;
 	private ReportService $service;
 
 	protected function setUp(): void {
@@ -51,14 +60,29 @@ class ReportServiceTest extends TestCase {
 		$this->reportForwardService = $this->createMock(ReportForwardService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->instanceService = $this->createStub(InstanceService::class);
+		$this->instanceService->method('rules')->willReturn([
+			['id' => '1', 'text' => 'Be kind'],
+			['id' => '2', 'text' => 'No spam'],
+			['id' => '3', 'text' => 'Mark sensitive media'],
+		]);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
+		$this->strikesRequest = $this->createStub(StrikesRequest::class);
 
-		$this->service = new ReportService(
+		$this->service = $this->makeService();
+	}
+
+	private function makeService(): ReportService {
+		return new ReportService(
 			$this->reportsRequest,
 			$this->cacheActorService,
 			$this->moderatorService,
 			$this->notificationManager,
 			$this->reportForwardService,
 			$this->streamRequest,
+			$this->instanceService,
+			$this->actorsRequest,
+			$this->strikesRequest,
 			new NullLogger()
 		);
 	}
@@ -134,6 +158,38 @@ class ReportServiceTest extends TestCase {
 		);
 
 		$this->assertSame(Report::CATEGORY_OTHER, $report->getCategory());
+	}
+
+	public function testAViolationKeepsTheRulesItNamesWithTheirText(): void {
+		$this->withAdmin();
+		$saved = null;
+		$this->reportsRequest->method('save')->willReturnCallback(function (Report $report) use (&$saved): int {
+			$saved = $report;
+
+			return 1;
+		});
+
+		$report = $this->service->reportFromLocal(
+			$this->person(self::ALICE), $this->person(self::BOB), [], '', 'violation', false, ['3', 1, '99', ['x']]
+		);
+
+		// in the order the rules are listed; an id that names no rule is dropped
+		$expected = [['id' => '1', 'text' => 'Be kind'], ['id' => '3', 'text' => 'Mark sensitive media']];
+		$this->assertSame($expected, $report->getRules());
+		$this->assertSame($expected, $saved?->getRules(), 'stored with the report');
+		$this->assertSame(['1', '3'], $report->jsonSerialize()['rule_ids']);
+	}
+
+	public function testRulesAreKeptWithAViolationOnly(): void {
+		$this->withAdmin();
+		$this->reportsRequest->method('save')->willReturn(1);
+
+		$report = $this->service->reportFromLocal(
+			$this->person(self::ALICE), $this->person(self::BOB), [], '', 'spam', false, ['1']
+		);
+
+		$this->assertSame([], $report->getRules());
+		$this->assertNull($report->jsonSerialize()['rule_ids']);
 	}
 
 	public function testForwardIsNotAttemptedUnlessTheReporterAskedForIt(): void {
@@ -269,10 +325,7 @@ class ReportServiceTest extends TestCase {
 
 				throw new StreamNotFoundException();
 			});
-		$this->service = new ReportService(
-			$this->reportsRequest, $this->cacheActorService, $this->moderatorService,
-			$this->notificationManager, $this->reportForwardService, $this->streamRequest, new NullLogger()
-		);
+		$this->service = $this->makeService();
 		$this->reportsRequest->expects($this->once())->method('save')->willReturn(7);
 
 		$flag = new Flag();
@@ -297,10 +350,7 @@ class ReportServiceTest extends TestCase {
 		$post->setLocal(false);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
-		$this->service = new ReportService(
-			$this->reportsRequest, $this->cacheActorService, $this->moderatorService,
-			$this->notificationManager, $this->reportForwardService, $this->streamRequest, new NullLogger()
-		);
+		$this->service = $this->makeService();
 		$this->reportsRequest->expects($this->never())->method('save');
 
 		$flag = new Flag();
@@ -425,6 +475,141 @@ class ReportServiceTest extends TestCase {
 		$this->expectException(ReportNotFoundException::class);
 
 		$this->service->setResolved(9, true);
+	}
+
+	/**
+	 * A stored report, read twice by setResolved(): before and after.
+	 */
+	private function storedReport(bool $local = true, bool $resolvedBefore = false, int $creation = 1000): void {
+		$read = 0;
+		$this->reportsRequest->method('getById')->willReturnCallback(
+			function (int $id) use (&$read, $local, $resolvedBefore, $creation): Report {
+				$report = new Report();
+				$report->setId($id)->setActorId($local ? self::ALICE : self::REMOTE_ACTOR)->setAccountId(self::REMOTE_ACTOR)
+					->setLocal($local)->setCreation($creation)->setResolved($read++ === 0 ? $resolvedBefore : !$resolvedBefore);
+
+				return $report;
+			}
+		);
+		$alice = $this->person(self::ALICE);
+		$alice->setUserId('alice');
+		$this->actorsRequest->method('getFromId')->willReturnCallback(
+			fn (string $id): Person => $id === self::ALICE ? $alice : throw new ActorDoesNotExistException()
+		);
+		$cached = $this->person(self::REMOTE_ACTOR, false);
+		$cached->setAccount('spammer@mastodon.social');
+		$this->cacheActorService->method('getCachedFromIds')->willReturn([self::REMOTE_ACTOR => $cached]);
+	}
+
+	/** @return \Closure(): list<array{string, string, array}> who was told what */
+	private function capturedNotifications(): \Closure {
+		$sent = [];
+		$this->notificationManager->method('createNotification')->willReturnCallback(function () use (&$sent): INotification {
+			$entry = ['user' => '', 'subject' => '', 'params' => []];
+			$index = count($sent);
+			$sent[$index] = &$entry;
+			$notification = $this->createMock(INotification::class);
+			foreach (['setApp', 'setDateTime', 'setObject'] as $method) {
+				$notification->method($method)->willReturnSelf();
+			}
+			$notification->method('setUser')->willReturnCallback(function (string $user) use (&$entry, $notification): INotification {
+				$entry['user'] = $user;
+
+				return $notification;
+			});
+			$notification->method('setSubject')->willReturnCallback(function (string $subject, array $params = []) use (&$entry, $notification): INotification {
+				$entry['subject'] = $subject;
+				$entry['params'] = $params;
+
+				return $notification;
+			});
+			unset($entry);
+
+			return $notification;
+		});
+
+		return function () use (&$sent): array {
+			return array_values($sent);
+		};
+	}
+
+	/** @param list<array{string, int, int}> $strikes action, report id, creation */
+	private function strikes(array $strikes): void {
+		$this->strikesRequest->method('getForActor')->willReturn(array_map(
+			static fn (array $strike): Strike => new Strike(self::REMOTE_ACTOR, $strike[0], '', 'moderator', $strike[1], $strike[2]),
+			$strikes
+		));
+	}
+
+	public function testResolvingTellsTheReporterThatActionWasTakenAndNotByWhom(): void {
+		$this->storedReport();
+		$this->strikes([[Moderation::SUSPEND, 0, 2000]]);
+		$sent = $this->capturedNotifications();
+		$this->notificationManager->expects($this->once())->method('notify');
+
+		$this->service->setResolved(5, true);
+
+		$this->assertSame(
+			[['user' => 'alice', 'subject' => 'report_resolved', 'params' => ['account' => 'spammer@mastodon.social', 'action_taken' => true]]],
+			$sent()
+		);
+	}
+
+	/** @return iterable<string, array{list<array{string, int, int}>, bool}> */
+	public static function decisions(): iterable {
+		yield 'nothing was done' => [[], false];
+		yield 'a lift is no action against anybody' => [[[Strike::LIFT, 0, 2000]], false];
+		yield 'a decision older than the report' => [[[Moderation::SILENCE, 0, 500]], false];
+		yield 'a decision taken from this report' => [[[Strike::WARNING, 5, 500]], true];
+		yield 'a post taken down since' => [[[Strike::TAKEDOWN, 0, 1000]], true];
+	}
+
+	/** @param list<array{string, int, int}> $strikes */
+	#[\PHPUnit\Framework\Attributes\DataProvider('decisions')]
+	public function testTheOutcomeIsWhetherAModeratorActedSinceTheReport(array $strikes, bool $actionTaken): void {
+		$this->storedReport(creation: 1000);
+		$this->strikes($strikes);
+		$sent = $this->capturedNotifications();
+
+		$this->service->setResolved(5, true);
+
+		$this->assertSame($actionTaken, $sent()[0]['params']['action_taken']);
+	}
+
+	public function testAReportFromAnotherServerHasNobodyHereToTell(): void {
+		$this->storedReport(local: false);
+		$this->notificationManager->expects($this->never())->method('notify');
+
+		$this->service->setResolved(5, true);
+	}
+
+	public function testResolvingAResolvedReportTellsNobodyAgain(): void {
+		$report = (new Report())->setId(5)->setActorId(self::ALICE)->setLocal(true)->setResolved(true);
+		$this->reportsRequest->method('getById')->willReturn($report);
+		$this->notificationManager->expects($this->never())->method('notify');
+		$this->notificationManager->expects($this->never())->method('markProcessed');
+
+		$this->service->setResolved(5, true);
+	}
+
+	public function testReopeningTakesTheOutcomeBack(): void {
+		$this->storedReport(resolvedBefore: true);
+		$sent = $this->capturedNotifications();
+		$this->notificationManager->expects($this->never())->method('notify');
+		$this->notificationManager->expects($this->once())->method('markProcessed');
+
+		$this->service->setResolved(5, false);
+
+		$this->assertSame('alice', $sent()[0]['user']);
+		$this->assertSame('report_resolved', $sent()[0]['subject'], 'only the outcome, not the report notification itself');
+	}
+
+	public function testAFailingNotificationDoesNotUndoTheResolution(): void {
+		$this->storedReport();
+		$this->notificationManager->method('createNotification')->willThrowException(new \RuntimeException('no notifications app'));
+		$this->reportsRequest->expects($this->once())->method('setResolved')->with(5, true);
+
+		$this->assertTrue($this->service->setResolved(5, true)->isResolved());
 	}
 
 	/**

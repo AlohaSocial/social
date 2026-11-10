@@ -472,8 +472,8 @@ class ConfigService {
 	 * `interests` switches the whole feature, and off means off: nothing is
 	 * learned, the feed and its settings are gone, and what was learned is
 	 * kept for the day it is switched back on. `interests_default` is what a
-	 * reader who never touched their own switch gets — on out of the box, and
-	 * the one to turn off where learning from reading has to be opted into.
+	 * reader who never touched their own switch gets — off out of the box, so
+	 * learning from reading is opted into; what was learned before stays.
 	 * The other four tune the arithmetic: the half-life of a score in days,
 	 * the score a learned tag needs to be listed, how many are listed, and how
 	 * many days back the feed looks for posts.
@@ -638,7 +638,7 @@ class ConfigService {
 		self::SOCIAL_CONTACT_ACCOUNT => '',
 		self::SOCIAL_POLLS_SWEPT => '0',
 		self::SOCIAL_INTERESTS => '1',
-		self::SOCIAL_INTERESTS_DEFAULT => '1',
+		self::SOCIAL_INTERESTS_DEFAULT => '0',
 		self::SOCIAL_INTERESTS_HALF_LIFE => '30',
 		self::SOCIAL_INTERESTS_THRESHOLD => '3',
 		self::SOCIAL_INTERESTS_CAP => '30',

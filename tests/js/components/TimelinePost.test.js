@@ -1505,83 +1505,42 @@ describe('TimelinePost', () => {
 		})
 
 		it('lets the report dialog close itself, which needs a two-way binding', async () => {
+			axios.get.mockResolvedValue({ data: [] })
 			const { wrapper } = mountPost({ item: makeItem({ account: bob }) })
 			await menuItem(wrapper, 'Report').trigger('click')
-			expect(wrapper.find('.report-dialog').exists()).toBe(true)
+			// the dialog is fetched before it is mounted: a real `import()`
+			await vi.waitUntil(() => wrapper.find('.report-dialog').exists(), { timeout: 15000 })
 
 			// :open.sync did nothing on Vue 3: the flag never came back
 			await wrapper.find('.report-dialog__close').trigger('click')
+			await flushPromises()
 
 			expect(wrapper.find('.report-dialog').exists()).toBe(false)
 		})
 
-		describe('reporting', () => {
-			const carol = {
-				id: '3',
-				acct: 'carol.bsky.social',
-				username: 'carol.bsky.social',
-				display_name: 'Carol',
-				url: 'https://bsky.app/profile/carol.bsky.social',
-				avatar: 'https://cdn.bsky.app/carol.jpg',
-				note: '',
-				bluesky: { handle: 'carol.bsky.social', did: 'did:plc:carol', url: 'https://bsky.app/profile/carol.bsky.social', native: true },
-			}
-			const forward = (wrapper) => wrapper.find('.report-dialog').findComponent({ name: 'NcCheckboxRadioSwitch' })
+		it('reports the post and its author through the shared report dialog', async () => {
+			axios.get.mockResolvedValue({ data: [] })
+			axios.post.mockResolvedValue({ data: {} })
+			const item = makeItem({ account: bob })
+			const { wrapper } = mountPost({ item })
+			await menuItem(wrapper, 'Report').trigger('click')
+			await vi.waitUntil(() => wrapper.findComponent({ name: 'ReportDialog' }).exists(), { timeout: 15000 })
+			await flushPromises()
 
-			/**
-			 * @param {object} account whose post is reported
-			 * @return {Promise<object>} the post, with its report dialog open
-			 */
-			async function openReport(account) {
-				axios.post.mockResolvedValue({ data: {} })
-				const { wrapper } = mountPost({ item: makeItem({ account }) })
-				await menuItem(wrapper, 'Report').trigger('click')
+			const dialog = wrapper.findComponent({ name: 'ReportDialog' })
+			expect(dialog.props('account')).toEqual(bob)
+			expect(dialog.props('status')).toEqual(item)
 
-				return wrapper
-			}
+			await wrapper.find('.nc-dialog__button--1').trigger('click')
+			await flushPromises()
 
-			it('offers a Fediverse account\'s report to the moderators here only', async () => {
-				const wrapper = await openReport(bob)
-
-				expect(forward(wrapper).exists()).toBe(false)
-				expect(wrapper.find('.report-dialog').text()).toContain('It is never sent to the reported account or their server.')
-
-				await wrapper.find('.nc-dialog__button--1').trigger('click')
-				await flushPromises()
-
-				expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', {
-					account_id: '2',
-					status_ids: ['101'],
-					comment: '',
-				})
-			})
-
-			it('passes a Bluesky account\'s report on to Bluesky\'s moderation service by default', async () => {
-				const wrapper = await openReport(carol)
-
-				expect(forward(wrapper).text()).toBe('Also report to Bluesky\'s moderation service')
-				expect(forward(wrapper).props('modelValue')).toBe(true)
-				expect(wrapper.find('.report-dialog').text()).toContain('in its own name and not yours')
-
-				await wrapper.find('.nc-dialog__button--1').trigger('click')
-				await flushPromises()
-
-				expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', {
-					account_id: '3',
-					status_ids: ['101'],
-					comment: '',
-					forward: true,
-				})
-			})
-
-			it('keeps a Bluesky account\'s report here when the box is unticked', async () => {
-				const wrapper = await openReport(carol)
-
-				await forward(wrapper).vm.$emit('update:modelValue', false)
-				await wrapper.find('.nc-dialog__button--1').trigger('click')
-				await flushPromises()
-
-				expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', expect.objectContaining({ forward: false }))
+			expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', {
+				account_id: '2',
+				status_ids: ['101'],
+				comment: '',
+				category: 'spam',
+				// bob is on another fediverse server: passing it on is offered there too
+				forward: true,
 			})
 		})
 

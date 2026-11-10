@@ -238,11 +238,22 @@
 							<IconSwapHorizontal :size="20" />
 						</template>
 					</NcAppNavigationItem>
+					<!-- the server's rules, contact and legal links -->
+					<NcAppNavigationItem
+						:style="{ '--entry-index': menu.more.length + 2 }"
+						:name="t('social', 'About this server')"
+						:href="hrefFor({ name: 'about' })"
+						:active="isActive({ to: { name: 'about' } })"
+						@click="navigate({ name: 'about' }, $event)">
+						<template #icon>
+							<IconInformationOutline :size="20" />
+						</template>
+					</NcAppNavigationItem>
 					<!-- last, and on its own: everything above this menu is a
 					     place to read something, and this is the one place to
 					     change something -->
 					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 2 }"
+						:style="{ '--entry-index': menu.more.length + 3 }"
 						:name="t('social', 'Settings')"
 						:href="hrefFor({ name: 'settings' })"
 						:active="isActive({ to: { name: 'settings' } })"
@@ -403,6 +414,7 @@ import { offTimelinePush, onTimelinePush, PUSH_DIRECT, PUSH_KINDS, PUSH_NOTIFICA
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import IconCancel from 'vue-material-design-icons/Cancel.vue'
+import IconInformationOutline from 'vue-material-design-icons/InformationOutline.vue'
 import IconSwapHorizontal from 'vue-material-design-icons/SwapHorizontal.vue'
 import IconCog from 'vue-material-design-icons/Cog.vue'
 import IconAlertCircle from 'vue-material-design-icons/AlertCircle.vue'
@@ -484,6 +496,7 @@ export default {
 		IconBluesky,
 		IconCompass,
 		IconCancel,
+		IconInformationOutline,
 		IconSwapHorizontal,
 		IconCog,
 		IconAlertCircle,
@@ -686,7 +699,7 @@ export default {
 		 * added here; a test holds this equal to the number of entries drawn.
 		 */
 		moreCount() {
-			return this.menu.more.length + 3
+			return this.menu.more.length + 4
 		},
 
 		/**

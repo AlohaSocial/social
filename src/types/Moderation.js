@@ -15,6 +15,7 @@
  * @property {string} category - spam, legal, violation or other
  * @property {string} comment - what the reporter wrote
  * @property {string[]} status_ids - the posts it is about
+ * @property {string[]} [rules] - the instance rules the reporter named, as they read then
  * @property {number} creation - when it was made, in seconds since the epoch
  * @property {boolean} resolved - whether a moderator has dealt with it
  * @property {string} level - the decision standing against the account, '' for none

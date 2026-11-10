@@ -330,9 +330,10 @@ class NavigationController extends Controller {
 	/**
 	 * The pages that are the reader's own: their settings, their statistics,
 	 * moving their account, the people asking to follow them and the ones they
-	 * blocked. The same app page as navigate(), for a signed-in reader only —
-	 * not a public page, so Nextcloud sends anybody else to its login, with
-	 * this address to come back to.
+	 * blocked, and the About page of the server they are on. The same app
+	 * page as navigate(), for a signed-in reader only — not a public page, so
+	 * Nextcloud sends anybody else to its login, with this address to come
+	 * back to.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -345,6 +346,7 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/switch', postfix: 'switch')]
 	#[FrontpageRoute(verb: 'GET', url: '/follow_requests', postfix: 'followrequests')]
 	#[FrontpageRoute(verb: 'GET', url: '/blocked', postfix: 'blocked')]
+	#[FrontpageRoute(verb: 'GET', url: '/about', postfix: 'about')]
 	public function personal(): TemplateResponse {
 		return $this->navigate();
 	}

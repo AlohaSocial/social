@@ -32,7 +32,7 @@ class ReportsRequestBuilder extends CoreRequestBuilder {
 
 	protected function getReportsSelectSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
-		$qb->select('r.id', 'r.actor_id', 'r.account_id', 'r.status_ids', 'r.comment', 'r.category', 'r.local', 'r.resolved', 'r.forwarded', 'r.creation')
+		$qb->select('r.id', 'r.actor_id', 'r.account_id', 'r.status_ids', 'r.comment', 'r.category', 'r.rules', 'r.local', 'r.resolved', 'r.forwarded', 'r.creation')
 			->from(self::TABLE_REPORTS, 'r');
 
 		$this->defaultSelectAlias = 'r';
@@ -58,6 +58,7 @@ class ReportsRequestBuilder extends CoreRequestBuilder {
 			->setStatusIds(is_array($statusIds) ? $statusIds : [])
 			->setComment($this->get('comment', $data))
 			->setCategory($this->get('category', $data, Report::CATEGORY_OTHER))
+			->setRules(Report::decodeRules($this->get('rules', $data)))
 			->setLocal($this->getInt('local', $data, 1) === 1)
 			->setResolved($this->getInt('resolved', $data, 0) === 1)
 			->setForwarded($this->getInt('forwarded', $data, 0) === 1);

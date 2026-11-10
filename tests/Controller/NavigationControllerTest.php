@@ -583,6 +583,7 @@ class NavigationControllerTest extends TestCase {
 		yield 'moving in' => ['/switch', 'personal'];
 		yield 'statistics' => ['/statistics', 'personal'];
 		yield 'settings' => ['/settings', 'personal'];
+		yield 'about' => ['/about', 'personal'];
 		yield 'shorts' => ['/shorts', 'navigate'];
 		yield 'the earlier address of shorts' => ['/reels', 'navigate'];
 		yield 'search' => ['/search', 'navigate'];
@@ -607,7 +608,7 @@ class NavigationControllerTest extends TestCase {
 		$personal = new \ReflectionMethod(NavigationController::class, 'personal');
 		$this->assertSame([], $personal->getAttributes(PublicPage::class), 'personal() is a public page');
 		$this->assertSame(
-			['/blocked', '/follow_requests', '/migration', '/settings', '/statistics', '/switch'],
+			['/about', '/blocked', '/follow_requests', '/migration', '/settings', '/statistics', '/switch'],
 			self::sorted(array_keys($this->routesOf('personal')))
 		);
 

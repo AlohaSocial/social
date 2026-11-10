@@ -261,6 +261,29 @@ class NotifierTest extends TestCase {
 
 		$this->notifier->prepare($notification, 'en');
 	}
+
+	/**
+	 * The reporter hears what was decided and nothing of who decided it.
+	 *
+	 * @return iterable<string, array{bool, string, string}>
+	 */
+	public static function outcomes(): iterable {
+		yield 'action taken' => [true, '[en] Your report about bob@remote.example was reviewed, and the moderators of this server took action', 'acted on'];
+		yield 'no action' => [false, '[en] Your report about bob@remote.example was reviewed, and the moderators of this server took no action', 'no action was needed'];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('outcomes')]
+	public function testAResolvedReportTellsTheReporterTheOutcome(bool $actionTaken, string $subject, string $message): void {
+		$this->translationsFor('en');
+		$actions = [];
+		$notification = $this->notificationWith('report_resolved', ['account' => 'bob@remote.example', 'action_taken' => $actionTaken], $actions);
+		$notification->expects($this->once())->method('setParsedSubject')->with($subject);
+		$notification->expects($this->once())->method('setParsedMessage')->with($this->stringContains($message));
+		$notification->expects($this->never())->method('addAction');
+
+		$this->assertSame($notification, $this->notifier->prepare($notification, 'en'));
+	}
+
 	// -- the digest -------------------------------------------------------------
 
 	/** @return INotification&MockObject */

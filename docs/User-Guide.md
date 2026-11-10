@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.284** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.285** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -550,12 +550,14 @@ live; without it the page checks every 30 seconds.
 
 ### For you
 
-**For You** is an optional ranked feed beside My Feed and the local and global
-timelines. The administrator can enable it. It combines relevant posts already
-known to this server with bounded discovery; available candidates can include
-ActivityPub and Bluesky posts. Photos, Videos and Shorts can use the same ranking
-with the relevant media filter. A sparse candidate pool may include fallback
-discovery, so this feed is not a complete or guaranteed index of either network.
+**For You** is a personalised feed beside My Feed and the local and global
+timelines. The administrator decides whether it is offered, and whether its
+newer ranked recommendations are switched on (they are off until then). It
+combines relevant posts already known to this server with bounded discovery;
+available candidates can include posts from other servers and networks. Photos,
+Videos and Shorts can use the same ranking with the relevant media filter. A
+sparse candidate pool may include fallback discovery, so this feed is not a
+complete or guaranteed index of anything.
 
 Post menus offer feedback such as hiding a post, seeing more from an author, or
 seeing less like similar content. These actions influence recommendations; they
@@ -563,12 +565,35 @@ do not follow, mute or block anyone. The feed may show a short explanation for a
 post while it is in For You. The explanation is tied to that feed and does not
 appear in ordinary timelines.
 
-Behavioral learning is a separate setting and is not required for the feed to
-work. If enabled, supported reading and video actions can refine future feed
-sessions. Learned data is private to the account and is not federated. The
-current interface does not provide manual topic selection or topic editing.
-For details about signals, consent, data export and operational limits, see
-[For-You.md](For-You.md).
+#### Learning from your browsing
+
+**Learning is off until you turn it on**, under **Settings → For You → Learn
+from my browsing** (an administrator can make it the default for everyone who
+has not chosen). Without it, For You ranks posts by the hashtags you follow,
+the people you follow, freshness and local discovery.
+
+With it on, For You learns which **hashtags** interest you from:
+
+- posts you open, pictures you open and links you follow;
+- posts you like, boost, reply to or save, from the web or from any app;
+- in Shorts, how much of a video you watched;
+- a little *against* a post's hashtags when you scroll quickly past it, or
+  mute its author.
+
+Simply leaving a post on screen does not count. It learns only from posts you
+are allowed to see, and what it learns stays on this server: it is not
+federated and nobody else sees it. You cannot choose its topics. **Pause
+learning** stops it for a while; turning learning off stops it until you turn
+it on again and **keeps** what was already learned, which For You goes on
+using; **Reset automatic interests** forgets it.
+
+When learning is on, a one-time note above the timeline says what it learns
+from, with a way to turn it off.
+
+The ranked recommendations have a second, separate **activity learning** switch
+(likes, saves, replies, qualified views, video watching and profile visits),
+which is also off until you turn it on. For details about signals, consent, data
+export and operational limits, see [For-You.md](For-You.md).
 
 ### Announcements from your administrators
 
@@ -931,6 +956,11 @@ see its settings, or type into **Find a setting** to search all of them at once.
 Every change is saved as you make it; there is no Save button to forget, except
 in a form you fill in, such as the portfolio.
 
+**About this server.** The account menu also has **About this server**: the
+server's rules, who to contact about it (an address, an account or both), and
+links to its privacy policy and legal notice, where the administrators have set
+them.
+
 **Pronouns and a support link.** Two of the four profile fields on **Edit
 profile** have boxes of their own, because this app draws them differently: the
 pronouns appear beside your name rather than in the table at the bottom, and a
@@ -1022,9 +1052,18 @@ hand, it is picked up as one.
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
   **Approve who follows you** switch under **Settings → Profile and privacy**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.
-- **Reporting.** **Report** in a post's menu sends the post, with an optional
-  note, to the moderators of this instance. From the web client it is never
-  sent to the reported account or their server.
+- **Reporting.** **Report** in a post's menu reports that post; **Report** in
+  the menu on a profile reports the account itself. You say what is wrong —
+  spam, breaking this server's rules (and which ones; offered when the server
+  has rules), illegal, or something else — and can add a note for the
+  moderators. The account is not told who reported it. For an account on
+  another server, on the fediverse or on Bluesky alike, **Also send to the
+  moderators of their server** (ticked by default) passes the report on, since
+  only that server can act on the account everywhere: this server sends it in
+  its own name, never yours, with your note as you wrote it. When the
+  moderators have dealt with your report, a Nextcloud notification tells you
+  whether they took action or decided none was needed — not which moderator
+  decided.
 - **Your year.** `GET /api/v1/annual_reports` serves what Mastodon calls
   `#Wrapstodon`: one report per year you wrote anything in, with twelve months
   of what you posted and who arrived, the hashtags you used most, your three
@@ -1238,8 +1277,9 @@ labels always apply here: a post it hides never arrives, and adult or
 upsetting pictures come with a warning. Under *Settings → Blocking → Bluesky
 labelers* you can add other labelers by their handle and choose, label by
 label, whether it does nothing, shows a warning, or hides the post. When you
-report a Bluesky account or post, *Also report to Bluesky's moderation
-service* passes the report on — sent by this server, not in your name.
+report a Bluesky account or post, *Also send to the moderators of their server*
+passes the report on to Bluesky's moderation service — sent by this server, not
+in your name.
 
 **Bluesky apps.** You can use the Bluesky app, or any other Bluesky client,
 with this account. In *Settings → Apps and account → Bluesky* make an
