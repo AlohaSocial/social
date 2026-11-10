@@ -47,11 +47,3 @@ interface Window {
 		}
 	}
 }
-
-/**
- * A stylesheet imported for its side effect, which webpack turns into a
- * `<style>` and TypeScript has nothing to resolve: `@nextcloud/dialogs` ships
- * the rules its toasts are drawn with in one, and `services/toast.js` pulls it
- * into the same chunk as the library.
- */
-declare module '*.css'
