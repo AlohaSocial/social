@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.288** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.289** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
