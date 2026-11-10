@@ -159,7 +159,10 @@ the rules. The check names whichever of the four is missing:
 It is a **warning** while people without a Nextcloud account may sign up
 (`external_enabled`), **information** while the server only federates (on
 Bluesky, or on the fediverse unless the allow list is empty), and quiet on a
-server that does neither, or once all four are set.
+server that does neither, or once all four are set. The same finding is a line
+in **Needs attention** on the Aloha Social administration page, with the same
+weight, linking to Server settings — or to Server rules when the contact is set
+and the rules are not.
 
 ### Mastodon apps cannot connect
 
@@ -766,9 +769,12 @@ The page opens on **Overview**, and **Needs attention** at the top of it lists
 what is waiting, most urgent first, each line a link to the section that deals
 with it: background jobs that are late or not registered, deliveries close to
 being given up on, open reports, posts waiting for review, sign-ups waiting for
-approval, and deliveries that failed and will be tried again. The groups with
-something waiting carry the number beside their name; a retried delivery is
-listed but not counted, because it needs nobody yet.
+approval, what a public server should show and does not (see
+[Ready to be public](#ready-to-be-public); administrators only), and deliveries
+that failed and will be tried again. The groups with something waiting carry
+the number beside their name; a retried delivery, and the basics of a server
+that only federates, are listed but not counted, because they are information
+rather than work waiting.
 
 Each section has an id, and the address names the one on screen:
 `/settings/admin/social#reports` opens Moderation at Reports. The report

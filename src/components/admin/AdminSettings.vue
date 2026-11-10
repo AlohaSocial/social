@@ -228,6 +228,8 @@ const NOTHING = {
 	external: null,
 	/** @type {?object} the Bluesky side of this server (`AtprotoStatusService::current()`); administrators only */
 	bluesky: null,
+	/** @type {?{missing: string[], signUp: boolean}} what the "ready to be public" check asks for, null when it asks nothing; administrators only */
+	publicBasics: null,
 	federation: {
 		waiting: 0,
 		running: 0,
@@ -357,6 +359,17 @@ export default {
 			const awaiting = this.state.external?.settings?.awaitingApproval ?? 0
 			// a failed delivery is tried again; it only needs somebody once it is about to be given up on
 			const retrying = federation.atRisk > 0 ? 0 : federation.failing
+			const basics = this.state.publicBasics
+			const missing = basics?.missing ?? []
+			// the contact is on the Server card; the privacy policy and legal notice links are set in Theming, off this page
+			const basicsSection = !missing.includes('contact') && missing.includes('rules') ? 'rules' : 'server'
+			const basicNames = {
+				contact: t('social', 'a contact'),
+				rules: t('social', 'server rules'),
+				privacy_policy: t('social', 'a privacy policy link (in Theming)'),
+				legal_notice: t('social', 'a legal notice link (in Theming)'),
+			}
+			const basicsList = missing.map((basic) => basicNames[basic] ?? basicNames.legal_notice).join(', ')
 
 			return [
 				{
@@ -394,6 +407,12 @@ export default {
 					type: 'warning',
 					count: awaiting,
 					text: n('social', 'registration waiting for approval', 'registrations waiting for approval', awaiting),
+				},
+				{
+					section: basicsSection,
+					type: basics?.signUp ? 'warning' : 'info',
+					count: missing.length,
+					text: n('social', 'thing a public server should show is missing: {list}', 'things a public server should show are missing: {list}', missing.length, { list: basicsList }),
 				},
 				{
 					section: 'federation',
