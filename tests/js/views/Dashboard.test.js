@@ -97,7 +97,7 @@ describe('Dashboard', () => {
 				avatarUrl: 'https://remote.example/media/bob.png',
 				avatarUsername: 'Bob',
 				overlayIconUrl: '/index.php/svg/social/add_user',
-				mainText: 'bob@remote.example started to follow you',
+				mainText: 'Bob started to follow you',
 				subText: 'bob@remote.example',
 			},
 			{
@@ -106,7 +106,7 @@ describe('Dashboard', () => {
 				avatarUrl: 'https://cloud.example.org/avatar/carol/64',
 				avatarUsername: 'Carol',
 				overlayIconUrl: '',
-				mainText: 'carol liked your post',
+				mainText: 'Carol liked your post',
 				subText: 'carol',
 			},
 			{
@@ -115,7 +115,7 @@ describe('Dashboard', () => {
 				avatarUrl: 'https://cloud.example.org/avatar/carol/64',
 				avatarUsername: 'Carol',
 				overlayIconUrl: '',
-				mainText: 'carol mentioned you',
+				mainText: 'Carol mentioned you',
 				subText: '',
 			},
 		])

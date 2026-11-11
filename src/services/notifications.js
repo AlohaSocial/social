@@ -216,6 +216,16 @@ export function newestIdOf(card) {
 }
 
 /**
+ * How a card names a person: the display name they chose, else the handle.
+ *
+ * @param {import("../types/Mastodon").Account|null|undefined} account the account
+ * @return {string}
+ */
+export function nameOf(account) {
+	return account?.display_name || account?.acct || ''
+}
+
+/**
  * A grouped card's first line: who, and what they all did.
  *
  * @param {NotificationCard} notification a card from groupNotifications() with `accounts`
@@ -223,7 +233,7 @@ export function newestIdOf(card) {
  */
 function groupedSummary(notification) {
 	const accounts = notification.accounts
-	const named = accounts.slice(0, 2).map((account) => account.display_name || account.acct)
+	const named = accounts.slice(0, 2).map(nameOf)
 	const others = accounts.length - named.length
 
 	let who
@@ -278,51 +288,52 @@ export function notificationSummary(notification) {
 		return groupedSummary(notification)
 	}
 
+	const account = nameOf(notification.account)
 	switch (notification.type) {
 		case 'mention':
 			if (isDirectMessage(notification)) {
-				return t('social', '{account} sent you a private message', { account: notification.account.acct })
+				return t('social', '{account} sent you a private message', { account })
 			}
 
-			return t('social', '{account} mentioned you', { account: notification.account.acct })
+			return t('social', '{account} mentioned you', { account })
 		case 'status':
-			return t('social', '{account} posted a status', { account: notification.account.acct })
+			return t('social', '{account} posted a status', { account })
 		case 'reblog':
-			return t('social', '{account} boosted your post', { account: notification.account.acct })
+			return t('social', '{account} boosted your post', { account })
 		case 'follow':
-			return t('social', '{account} started to follow you', { account: notification.account.acct })
+			return t('social', '{account} started to follow you', { account })
 		case 'follow_request':
-			return t('social', '{account} requested to follow you', { account: notification.account.acct })
+			return t('social', '{account} requested to follow you', { account })
 		case 'favourite':
-			return t('social', '{account} liked your post', { account: notification.account.acct })
+			return t('social', '{account} liked your post', { account })
 		case 'poll':
-			return t('social', '{account} ended the poll', { account: notification.account.acct })
+			return t('social', '{account} ended the poll', { account })
 		case 'update':
-			return t('social', '{account} edited a status', { account: notification.account.acct })
+			return t('social', '{account} edited a status', { account })
 		case 'moderation_warning':
 			return t('social', 'A moderator of this server has acted on your account')
 		case 'severed_relationships':
 			return t('social', 'Some of your follows were removed because a server was blocked')
 		case 'story:react':
-			return t('social', '{account} reacted to your story', { account: notification.account.acct })
+			return t('social', '{account} reacted to your story', { account })
 		case 'story:comment':
-			return t('social', '{account} replied to your story', { account: notification.account.acct })
+			return t('social', '{account} replied to your story', { account })
 		case 'tagged':
-			return t('social', '{account} tagged you in a photo', { account: notification.account.acct })
+			return t('social', '{account} tagged you in a photo', { account })
 		case 'admin.sign_up':
-			return t('social', '{account} signed up', { account: notification.account.acct })
+			return t('social', '{account} signed up', { account })
 		case 'admin.report':
-			return t('social', '{account} filed a report', { account: notification.account.acct })
+			return t('social', '{account} filed a report', { account })
 		case 'bluesky:repost_liked':
-			return t('social', '{account} liked your boost', { account: notification.account.acct })
+			return t('social', '{account} liked your boost', { account })
 		case 'bluesky:repost_reposted':
-			return t('social', '{account} boosted your boost', { account: notification.account.acct })
+			return t('social', '{account} boosted your boost', { account })
 		case 'bluesky:verified':
-			return t('social', '{account} verified your account on Bluesky', { account: notification.account.acct })
+			return t('social', '{account} verified your account on Bluesky', { account })
 		case 'bluesky:unverified':
-			return t('social', '{account} no longer verifies your account on Bluesky', { account: notification.account.acct })
+			return t('social', '{account} no longer verifies your account on Bluesky', { account })
 		case 'bluesky:starterpack_joined':
-			return t('social', '{account} joined Bluesky with your starter pack', { account: notification.account.acct })
+			return t('social', '{account} joined Bluesky with your starter pack', { account })
 		default:
 			return ''
 	}

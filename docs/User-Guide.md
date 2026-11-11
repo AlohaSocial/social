@@ -523,7 +523,10 @@ The sidebar is the map:
   down its edge, and a **New** heading separates them from **Earlier** where
   the page holds both. Each activity is a row like a post in My Feed: who did
   what and how long ago (*3h*, *2w*), with the post or account it is about
-  underneath. A private message is not laid out there beside the public
+  underneath. People are named by their display name, and a small coloured
+  disc on their picture says what happened (a heart for a like, arrows for a
+  boost). When the post is your own, it shows as a short, dimmed excerpt
+  without your name above it. A private message is not laid out there beside the public
   mentions: its row says *sent you a private message* with a lock, shows its
   first words (or its content warning), and **Open the conversation** takes
   you to Direct messages.

@@ -2980,6 +2980,18 @@ reorder what happened. `TimelineEntry` draws up to `GROUP_FACES` overlapping
 avatars and `notificationSummary()` writes "Anna, Bob and 3 others liked your
 post"; `newestIdOf()` is what keeps the read marker covering every folded row.
 
+*A row* is two columns. The first holds the actor's face at the list's avatar
+size (40 px, 36 px on a phone) with the notification type as a small coloured
+disc on its bottom end corner, ringed in the row's background: red for likes,
+green for boosts, amber for moderation warnings, the theme colour for the rest
+(`TYPE_TONES` in `TimelineEntry`). A grouped card shows the disc alone in that
+column and its faces at `GROUP_FACE` (28 px) in the summary line, overlapping
+by 4 px, each ringed so one set of initials does not run into the next. The
+summary names people by display name in single and grouped rows alike
+(`nameOf()`), and falls back to the handle only when there is none. When the
+post is the reader's own (a like, a boost, a poll that ended), its author line
+is left out and the text is a dimmed excerpt of at most three lines.
+
 *Unread* has one rule: **the page is read once it has been in front of the
 reader for `SEEN_AFTER` (two seconds) with the tab visible**, and it is read up
 to the newest card on it at that moment. It used to be read by an

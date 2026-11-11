@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { FILTER_KEY, NOTIFICATION_TYPES, excludeTypesFor, groupNotifications, isDirectMessage, newestIdOf, notificationSummary, rememberFilter, rememberedFilter } from '../../../src/services/notifications.js'
+import { FILTER_KEY, NOTIFICATION_TYPES, excludeTypesFor, groupNotifications, isDirectMessage, nameOf, newestIdOf, notificationSummary, rememberFilter, rememberedFilter } from '../../../src/services/notifications.js'
 
 function notification(type, acct = 'bob@remote.tld') {
 	return {
@@ -71,6 +71,49 @@ describe('notificationSummary', () => {
 
 	it('does not let a handle inject markup into the summary', () => {
 		expect(notificationSummary(notification('mention', '<b>evil</b>@remote.tld'))).toBe('&lt;b&gt;evil&lt;/b&gt;@remote.tld mentioned you')
+	})
+
+	describe('names people the way a grouped card does', () => {
+		const named = (type, displayName) => ({
+			...notification(type),
+			account: { ...notification(type).account, display_name: displayName },
+		})
+
+		it.each([
+			['favourite', 'Bob Example liked your post'],
+			['reblog', 'Bob Example boosted your post'],
+			['mention', 'Bob Example mentioned you'],
+			['follow', 'Bob Example started to follow you'],
+			['bluesky:starterpack_joined', 'Bob Example joined Bluesky with your starter pack'],
+		])('uses the display name in a single %s row', (type, expected) => {
+			expect(notificationSummary(named(type, 'Bob Example'))).toBe(expected)
+		})
+
+		it('falls back to the handle when there is no display name', () => {
+			expect(notificationSummary(named('favourite', ''))).toBe('bob@remote.tld liked your post')
+			expect(notificationSummary(named('favourite', null))).toBe('bob@remote.tld liked your post')
+		})
+
+		it('matches the grouped card, which names its first people the same way', () => {
+			const [card] = groupNotifications([
+				entry('2', 'favourite', 'Anna', '7'),
+				entry('1', 'favourite', 'Bob', '7'),
+			])
+
+			expect(notificationSummary(card)).toBe('Anna and Bob liked your post')
+			expect(notificationSummary(entry('3', 'favourite', 'Anna', '8'))).toBe('Anna liked your post')
+		})
+
+		it('does not let a display name inject markup into the summary', () => {
+			expect(notificationSummary(named('mention', '<i>Bob</i>'))).toBe('&lt;i&gt;Bob&lt;/i&gt; mentioned you')
+		})
+
+		it('says nothing for a notification with no account at all', () => {
+			expect(nameOf(null)).toBe('')
+			expect(nameOf(undefined)).toBe('')
+			expect(nameOf({ acct: 'carol', display_name: 'Carol' })).toBe('Carol')
+			expect(notificationSummary({ type: 'moderation_warning', account: null })).toBe('A moderator of this server has acted on your account')
+		})
 	})
 })
 
