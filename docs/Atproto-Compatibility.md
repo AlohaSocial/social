@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Reviewed against:** Aloha Social **0.26.294** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.295** on **2026-10-27**.
 
 **Current scope:** native AT Protocol hosting is an optional integration in
 Aloha Social. It runs alongside ActivityPub; it does not convert a Fediverse
