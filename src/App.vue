@@ -13,7 +13,7 @@
 	</NcContent>
 	<NcContent v-else-if="!serverData.setup" appName="social" :class="{public: serverData.public}">
 		<Navigation v-if="!serverData.public" @search="search" />
-		<PhoneBar v-if="!serverData.public" />
+		<PhoneBar v-if="!serverData.public && phone" />
 		<ShortcutHelp :open="shortcutHelpOpen" @close="shortcutHelpOpen = false" />
 		<!-- one emoji picker for the page, fetched the first time a reaction
 		     bar asks for one; see ReactionPicker for why it is not on the card.
@@ -115,12 +115,11 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 
 import Navigation from './components/Navigation.vue'
-import PhoneBar from './components/PhoneBar.vue'
+import { isPhone, onPhoneChange } from './services/phone.js'
 import ShortcutHelp from './components/ShortcutHelp.vue'
 import SetupChecks from './components/SetupChecks.vue'
 import CloudAddressSetup from './components/CloudAddressSetup.vue'
 import { listenForShortcuts } from './services/shortcuts.js'
-import TimelineSkeleton from './components/TimelineSkeleton.vue'
 import { skeletonFor } from './utils/skeleton.js'
 import { isSamePage, pageDirection } from './services/pageOrder.js'
 import { canViewTransition, markDirection, startPageTransition } from './services/pageTransition.js'
@@ -144,6 +143,11 @@ const AccountSetup = defineAsyncComponent(() => import(/* webpackChunkName: "acc
 const ReactionPicker = defineAsyncComponent(() => import(/* webpackChunkName: "reaction-picker" */'./components/ReactionPicker.vue'))
 // only ever shown after a video's own page, so it travels with that page
 const MiniPlayer = defineAsyncComponent(() => import(/* webpackChunkName: "watch" */'./components/MiniPlayer.vue'))
+// shown only once a page has kept the reader waiting, and the timeline's own
+// chunk carries it too, so it need not be in the entry
+const TimelineSkeleton = defineAsyncComponent(() => import(/* webpackChunkName: "skeleton" */'./components/TimelineSkeleton.vue'))
+// drawn on a phone-sized screen only, so a wider one never downloads it
+const PhoneBar = defineAsyncComponent(() => import(/* webpackChunkName: "phone-bar" */'./components/PhoneBar.vue'))
 
 /**
  * How long a page may take to arrive before the wait is drawn. Below this a
@@ -181,6 +185,9 @@ export default {
 			state: [],
 			shortcutHelpOpen: false,
 			stopShortcuts: null,
+			/** whether the screen is phone-sized, which is when the bottom bar is drawn */
+			phone: isPhone(),
+			stopPhone: null,
 			/**
 			 * Which Vue transition the next page change uses: the direction it
 			 * is going in, or '' where the browser is animating it itself.
@@ -246,6 +253,9 @@ export default {
 
 	mounted() {
 		this.stopShortcuts = listenForShortcuts(() => this.settingsStore.shortcutsEnabled)
+		this.stopPhone = onPhoneChange((phone) => {
+			this.phone = phone
+		})
 		this.watchNavigation()
 		eventBus.on('shortcut:help', this.toggleShortcutHelp)
 		eventBus.on('shortcut:home', this.goHome)
@@ -254,6 +264,7 @@ export default {
 
 	unmounted() {
 		this.stopShortcuts?.()
+		this.stopPhone?.()
 		this.stopBefore?.()
 		this.stopAfter?.()
 		this.disarmPending()
