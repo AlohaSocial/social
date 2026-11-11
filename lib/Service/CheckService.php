@@ -334,9 +334,12 @@ class CheckService {
 	}
 
 	/**
-	 * @param bool $light
+	 * The repairs `occ social:check:install --repair` runs: the follows and
+	 * notes whose account is no longer cached are deleted, and every local
+	 * account follows itself, which its Home timeline needs. `$light` runs
+	 * only the second, which writes nothing that is already there.
 	 *
-	 * @return array
+	 * @return array{invalidFollows?: int, invalidNotes?: int}
 	 */
 	public function checkInstallationStatus(bool $light = false): array {
 		$result = [];
@@ -400,11 +403,11 @@ class CheckService {
 
 	/**
 	 * Deletes the follows whose follower or followed account is no longer
-	 * cached, a page at a time.
+	 * cached, a page at a time; with `$dryRun` only counts them.
 	 *
-	 * @return int how many were deleted
+	 * @return int how many were deleted, or would be
 	 */
-	public function removeInvalidFollows(): int {
+	public function removeInvalidFollows(bool $dryRun = false): int {
 		$count = 0;
 		$after = '';
 		do {
@@ -415,23 +418,28 @@ class CheckService {
 			foreach ($page as $prim => $follow) {
 				$after = (string)$prim;
 				if (!isset($cached[$follow['actor_id']], $cached[$follow['object_id']])) {
-					$this->followRequest->deleteById($follow['id']);
+					if (!$dryRun) {
+						$this->followRequest->deleteById($follow['id']);
+					}
 					$count++;
 				}
 			}
 		} while (count($page) === self::REPAIR_PAGE);
 
-		$this->miscService->log('removeInvalidFollows removed ' . $count . ' entries', 1);
+		if (!$dryRun) {
+			$this->miscService->log('removeInvalidFollows removed ' . $count . ' entries', 1);
+		}
 
 		return $count;
 	}
 
 	/**
-	 * Deletes the notes whose author is no longer cached, a page at a time.
+	 * Deletes the notes whose author is no longer cached, a page at a time;
+	 * with `$dryRun` only counts them.
 	 *
-	 * @return int how many were deleted
+	 * @return int how many were deleted, or would be
 	 */
-	public function removeInvalidNotes(): int {
+	public function removeInvalidNotes(bool $dryRun = false): int {
 		$count = 0;
 		$after = '';
 		do {
@@ -440,13 +448,17 @@ class CheckService {
 			foreach ($page as $prim => $note) {
 				$after = (string)$prim;
 				if (!isset($cached[$note['attributed_to']])) {
-					$this->streamRequest->deleteById($note['id'], Note::TYPE);
+					if (!$dryRun) {
+						$this->streamRequest->deleteById($note['id'], Note::TYPE);
+					}
 					$count++;
 				}
 			}
 		} while (count($page) === self::REPAIR_PAGE);
 
-		$this->miscService->log('removeInvalidNotes removed ' . $count . ' entries', 1);
+		if (!$dryRun) {
+			$this->miscService->log('removeInvalidNotes removed ' . $count . ' entries', 1);
+		}
 
 		return $count;
 	}

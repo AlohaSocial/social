@@ -34,7 +34,7 @@ use Symfony\Component\Console\Tester\CommandTester;
  * chooses at a hundred thousand: the joined public page was a twenty-entry
  * index walk on one copy of an instance and a full read of `social_stream`
  * with a sort on another, for the same SQL. This seeds fifty thousand posts
- * with `occ social:benchmark`, takes the statistics, and asks for the plans
+ * with `occ social:debug:benchmark`, takes the statistics, and asks for the plans
  * of the page queries the public timeline and its Photos narrowing run —
  * each must be one index range that stops at the limit, with no sort, no
  * temporary table and no full read.
@@ -95,7 +95,7 @@ class PublicPagePlanAtScaleTest extends TestCase {
 		$application = new Application();
 		$application->add(Server::get(Benchmark::class));
 
-		return new CommandTester($application->find('social:benchmark'));
+		return new CommandTester($application->find('social:debug:benchmark'));
 	}
 
 	protected function setUp(): void {

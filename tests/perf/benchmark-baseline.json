@@ -1,5 +1,5 @@
 {
-	"measured": "occ social:benchmark --actors=2000 --notes=100000 --follows=300 --runs=5, search_index_ready and dest_nid_filled on, two runs per database on one development machine (PostgreSQL 14, MySQL 8.4, PHP 8.5, shared with other work); each entry is the slower of the two medians, in milliseconds. Replace with the numbers of the first nightly runs on GitHub's runners.",
+	"measured": "occ social:debug:benchmark --actors=2000 --notes=100000 --follows=300 --runs=5, search_index_ready and dest_nid_filled on, two runs per database on one development machine (PostgreSQL 14, MySQL 8.4, PHP 8.5, shared with other work); each entry is the slower of the two medians, in milliseconds. Replace with the numbers of the first nightly runs on GitHub's runners.",
 	"pgsql": {
 		"home@20": 37.0,
 		"home@50": 56.3,

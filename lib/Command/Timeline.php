@@ -47,7 +47,7 @@ class Timeline extends ExtendedBase {
 	#[\Override]
 	protected function configure() {
 		parent::configure();
-		$this->setName('social:timeline')
+		$this->setName('social:debug:timeline')
 			->addArgument('userId', InputArgument::REQUIRED, 'viewer')
 			->addArgument('timeline', InputArgument::REQUIRED, 'timeline')
 			->addOption('local', '', InputOption::VALUE_NONE, 'public')
@@ -57,7 +57,7 @@ class Timeline extends ExtendedBase {
 			->addOption('limit', '', InputOption::VALUE_REQUIRED, 'limit', 5)
 			->addOption('account', '', InputOption::VALUE_REQUIRED, 'account', '')
 			->addOption('crop', '', InputOption::VALUE_REQUIRED, 'crop', 0)
-			->setDescription('Get stream by timeline and viewer');
+			->setDescription('Print a timeline as a user sees it (for debugging)');
 	}
 
 	/**

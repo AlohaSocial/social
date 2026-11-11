@@ -1230,7 +1230,7 @@ nowhere.
 
 Three things decide whether this app works on an instance with a million
 accounts and ten million posts, and all three were measured rather than
-reasoned about — `occ social:benchmark` seeds a realistic instance and times the
+reasoned about — `occ social:debug:benchmark` seeds a realistic instance and times the
 queries against it, and `EXPLAIN` was read for each of the plans below.
 
 **The home timeline pages over the recipient rows' own sort key.** It used to
@@ -1339,7 +1339,7 @@ was one plan — walk `social_sd_atn` newest first, look each post up by key,
 stop at twenty — and nothing obliged the optimizer to choose it. On MySQL with
 a hundred thousand seeded posts it chose the other one, a read of the whole of
 `social_stream` with a temporary table and a sort: **1,208 ms** against
-**10.8 ms** for the same twenty rows (`occ social:benchmark`, `public@20`, the
+**10.8 ms** for the same twenty rows (`occ social:debug:benchmark`, `public@20`, the
 nightly run's failure). So `StreamTimelines::publicTimelineNidsFromRecipients()`
 reads the page from `social_stream_dest` alone — the public collection, type
 `recipient`, subtype `to`, newest nid first, three times the page — and
@@ -2680,7 +2680,7 @@ timeline used to cost the same whether twenty rows were asked for or a hundred.
 Deduplicating one integer is cheap; the wide read is then a primary-key lookup
 of twenty rows.
 
-Measured with `occ social:benchmark` on 20 000 notes: the home timeline went
+Measured with `occ social:debug:benchmark` on 20 000 notes: the home timeline went
 from 219 ms to 89 ms and the public timeline from 121 ms to 29 ms, returning
 the same rows in the same order.
 
@@ -4269,7 +4269,7 @@ on the next poll — `setMinId()` would return the oldest matching rows instead 
 the newest. A boost renders as the post it repeats, subtitled with who boosted
 it; a boost or notification whose subject did not resolve has no row.
 
-The occ commands are registered in `appinfo/info.xml`. `lib/Command/` also holds `SocialCommand.php`, the base class all of them extend — it declares `--output` and the writers that honour it, in place of the server's private `OC\Core\Command\Base` — and `ExtendedBase.php`, a shared base several of them extend. Neither calls `setName()`, so neither registers a command of its own. See `docs/OCC-Commands.md`.
+The occ commands are registered in `appinfo/info.xml`. `lib/Command/` also holds `SocialCommand.php`, the base class all of them extend — it declares `--output` and the writers that honour it, in place of the server's private `OC\Core\Command\Base` — and `ExtendedBase.php`, a shared base several of them extend. Neither calls `setName()`, so neither registers a command of its own. `lib/Command/Alias/` holds the former names of the debugging commands (`social:note:create`, `social:timeline`, `social:details`, `social:benchmark` …, now under `social:debug:`): each is a subclass of the command that sets the old name and `setHidden(true)`, so old scripts keep working while `occ list` shows only the new name. Symfony's `setAliases()` would print the old name beside the new one in `occ list`. See `docs/OCC-Commands.md`.
 
 ---
 

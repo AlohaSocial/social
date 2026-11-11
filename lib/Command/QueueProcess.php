@@ -41,7 +41,7 @@ class QueueProcess extends SocialCommand {
 	protected function configure() {
 		parent::configure();
 		$this->setName('social:queue:process')
-			->setDescription('Process the request queue');
+			->setDescription('Send the queued deliveries and resolve the queued incoming posts once, now');
 	}
 
 	/**

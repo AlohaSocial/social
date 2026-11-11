@@ -33,7 +33,7 @@ class AccountDelete extends SocialCommand {
 		parent::configure();
 		$this->setName('social:account:delete')
 			->addArgument('account', InputArgument::REQUIRED, 'Aloha Social Local Account')
-			->setDescription('Delete a local social account');
+			->setDescription('Delete a local Aloha Social account, named by its handle');
 	}
 
 	/**

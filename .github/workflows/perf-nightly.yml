@@ -3,12 +3,12 @@
 #
 # A query's cost cannot be judged on the dozen rows a test seeds. Every night
 # this seeds an instance the size of a small community — 100,000 notes by
-# 2,000 accounts, 300 of them followed — with `occ social:benchmark` on MySQL
+# 2,000 accounts, 300 of them followed — with `occ social:debug:benchmark` on MySQL
 # and on PostgreSQL, times the timelines, the search and the notifications,
 # and fails when a probe is over its limit: the larger of a fixed ceiling and
 # three times its entry in tests/perf/benchmark-baseline.json. The JSON report
 # is kept as an artifact, so the numbers can be followed from night to night.
-# See docs/OCC-Commands.md, `social:benchmark`.
+# See docs/OCC-Commands.md, `social:debug:benchmark`.
 
 name: Nightly performance
 
@@ -119,7 +119,7 @@ jobs:
 
       - name: Seed
         run: |
-          php -d memory_limit=1G ./occ social:benchmark --viewer=admin \
+          php -d memory_limit=1G ./occ social:debug:benchmark --viewer=admin \
             --actors=2000 --notes=$NOTES --follows=300 \
             --seed-only --force --no-interaction
 
@@ -128,7 +128,7 @@ jobs:
         # written; the steps below still run, so the numbers of a failing
         # night are kept too
         run: |
-          php -d memory_limit=1G ./occ social:benchmark --viewer=admin --time-only --runs=5 \
+          php -d memory_limit=1G ./occ social:debug:benchmark --viewer=admin --time-only --runs=5 \
             --output=json_pretty \
             --baseline=apps/${{ env.APP_NAME }}/tests/perf/benchmark-baseline.json \
             --baseline-factor=$BASELINE_FACTOR \
@@ -150,7 +150,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "### social:benchmark on ${{ matrix.database }}, $NOTES notes"
+            echo "### social:debug:benchmark on ${{ matrix.database }}, $NOTES notes"
             echo
             echo '| probe | ms | rows | limit ms | |'
             echo '|---|---:|---:|---:|---|'

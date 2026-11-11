@@ -834,6 +834,26 @@ class CheckServiceTest extends TestCase {
 		$this->assertSame(1, $this->service->removeInvalidNotes());
 	}
 
+	/** What `occ social:check:install` shows without --repair: a count, and nothing deleted. */
+	public function testADryRunCountsTheInvalidFollowsAndNotesWithoutDeletingThem(): void {
+		$known = 'https://cloud.example.com/apps/social/@alice';
+		$this->followRequest->method('getKeyPage')->willReturn([
+			'p1' => $this->follow('f1', $known, 'https://remote.example/users/bob'),
+			'p2' => $this->follow('f2', $known, 'https://gone.example/users/x'),
+		]);
+		$this->streamRequest->method('getAuthorPage')->with(Note::TYPE)->willReturn([
+			'p1' => ['id' => 'https://gone.example/notes/2', 'attributed_to' => 'https://gone.example/users/x'],
+		]);
+		$this->cacheActorsRequest->method('getFromIds')
+			->willReturnCallback(static fn (array $ids): array => self::cachedUnlessGone($ids));
+		$this->followRequest->expects($this->never())->method('deleteById');
+		$this->streamRequest->expects($this->never())->method('deleteById');
+		$this->miscService->expects($this->never())->method('log');
+
+		$this->assertSame(1, $this->service->removeInvalidFollows(true));
+		$this->assertSame(1, $this->service->removeInvalidNotes(true));
+	}
+
 	/**
 	 * A page at a time from where the last one ended, with the authors of a
 	 * whole page looked up at once: two queries a page, never the table in

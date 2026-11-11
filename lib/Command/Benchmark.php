@@ -159,8 +159,8 @@ class Benchmark extends SocialCommand {
 	#[\Override]
 	protected function configure() {
 		parent::configure();
-		$this->setName('social:benchmark')
-			->setDescription('Seed a realistic amount of content and time the timeline queries')
+		$this->setName('social:debug:benchmark')
+			->setDescription('Seed a realistic amount of test content and time the timeline queries (development instances only)')
 			->addOption('actors', '', InputOption::VALUE_REQUIRED, 'remote actors to seed', '200')
 			->addOption('notes', '', InputOption::VALUE_REQUIRED, 'notes to seed', '5000')
 			->addOption('follows', '', InputOption::VALUE_REQUIRED, 'of those actors, how many the viewer follows', '150')
@@ -411,7 +411,7 @@ class Benchmark extends SocialCommand {
 	/**
 	 * This command ships to every install (appinfo/info.xml registers it), and
 	 * seeding writes thousands of rows into whichever database occ is pointed
-	 * at. There is nothing in the name to warn somebody that `social:benchmark`
+	 * at. There is nothing in the name to warn somebody that `social:debug:benchmark`
 	 * is not read-only, so it asks — and refuses to guess when nobody is
 	 * there to answer.
 	 */

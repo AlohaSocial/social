@@ -269,7 +269,7 @@ to stop.
   changed in between (or NULL against `{}`) is left alone, and the mentions
   are set on top of what another writer stored.
 - `Db/PublicPagePlanAtScaleTest` — slow, only with `SOCIAL_BENCHMARK=1`, on
-  MySQL/MariaDB and PostgreSQL: seeds 50,000 posts with `occ social:benchmark`
+  MySQL/MariaDB and PostgreSQL: seeds 50,000 posts with `occ social:debug:benchmark`
   and asserts the page query of the public timeline and of its Photos
   narrowing is one index range with no sort, no temporary table and no full
   read; removes the seed afterwards.

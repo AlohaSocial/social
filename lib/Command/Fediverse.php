@@ -70,7 +70,7 @@ class Fediverse extends SocialCommand {
 			)
 			->addArgument('action', InputArgument::OPTIONAL, 'add/remove/import/test/silence/unsilence/silenced address', '')
 			->addArgument('address', InputArgument::OPTIONAL, 'address/host or CSV file for import', '')
-			->setDescription('Allow or deny access to the fediverse');
+			->setDescription('Block, allow or silence other servers, and choose between a block list and an allow list');
 	}
 
 	/**

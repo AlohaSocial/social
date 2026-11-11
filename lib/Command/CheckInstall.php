@@ -38,6 +38,8 @@ class CheckInstall extends SocialCommand {
 	public const VERDICT_OK = '- all %d checks passed';
 	/** and when something is; the exit code is 1 */
 	public const VERDICT_ERRORS = '- %1$d of %2$d checks reported an error';
+	/** what a run without --repair says about the entries it would remove */
+	public const INVALID_FOUND = '%1$d follows and %2$d notes point to an account that is no longer cached';
 
 	use TArrayTools;
 
@@ -85,16 +87,22 @@ class CheckInstall extends SocialCommand {
 	protected function configure() {
 		parent::configure();
 		$this->setName('social:check:install')
-			->addOption('index', '', InputOption::VALUE_NONE, 'regenerate your index')
+			->addOption(
+				'repair', '', InputOption::VALUE_NONE,
+				'remove the follows and notes whose account is no longer cached, and give every local'
+				. ' account the self-follow its Home timeline needs; without it they are only counted'
+			)
+			->addOption('config', '', InputOption::VALUE_NONE, 'print the app configuration as JSON as well')
+			->addOption('index', '', InputOption::VALUE_NONE, 'rebuild the timeline index from the posts instead of running the checks (asks first)')
 			->addOption(
 				'force', 'f', InputOption::VALUE_NONE,
 				'skip the confirmation of --index (required with --no-interaction)'
 			)
 			->addOption(
 				'offline', '', InputOption::VALUE_NONE,
-				'skip the WebFinger probe, the one check that goes out on the network'
+				'skip the WebFinger and client API probes, the checks that go out on the network'
 			)
-			->setDescription('Check the integrity of the installation');
+			->setDescription('Run the setup checks without changing anything; --repair fixes what can be fixed, --index rebuilds the timeline index');
 	}
 
 	/**
@@ -107,21 +115,45 @@ class CheckInstall extends SocialCommand {
 			return $index;
 		}
 
-		$result = $this->checkService->checkInstallationStatus();
-
-		// 'invalidFollowers' was never a key of what checkInstallationStatus()
-		// returns, so this line always said 0
-		$output->writeln('- ' . $this->getInt('invalidFollows', $result, 0) . ' invalid followers removed');
-		$output->writeln('- ' . $this->getInt('invalidNotes', $result, 0) . ' invalid notes removed');
+		$this->reportInvalidEntries($output, (bool)$input->getOption('repair'));
 
 		$output->writeln('');
 		$failed = $this->reportChecks($output, (bool)$input->getOption('offline'));
 
-		$output->writeln('');
-		$output->writeln('- Your current configuration: ');
-		$output->writeln(json_encode($this->configService->getConfig(), JSON_PRETTY_PRINT));
+		if ($input->getOption('config')) {
+			$output->writeln('');
+			$output->writeln('- Your current configuration: ');
+			$output->writeln((string)json_encode($this->configService->getConfig(), JSON_PRETTY_PRINT));
+		}
 
 		return $failed ? 1 : 0;
+	}
+
+	/**
+	 * The follows and notes whose account is no longer cached: counted, and
+	 * with --repair removed, together with the self-follow every local
+	 * account needs. Without --repair nothing is written.
+	 */
+	private function reportInvalidEntries(OutputInterface $output, bool $repair): void {
+		if ($repair) {
+			$result = $this->checkService->checkInstallationStatus();
+			$output->writeln('- ' . $this->getInt('invalidFollows', $result, 0) . ' invalid follows removed');
+			$output->writeln('- ' . $this->getInt('invalidNotes', $result, 0) . ' invalid notes removed');
+			$output->writeln('- every local account follows itself, as its Home timeline needs');
+
+			return;
+		}
+
+		$follows = $this->checkService->removeInvalidFollows(true);
+		$notes = $this->checkService->removeInvalidNotes(true);
+		if ($follows === 0 && $notes === 0) {
+			$output->writeln('- no follows or notes point to an account that is no longer cached');
+
+			return;
+		}
+
+		$output->writeln('- <comment>' . sprintf(self::INVALID_FOUND, $follows, $notes) . '</comment>');
+		$output->writeln('  occ social:check:install --repair removes them; nothing was changed');
 	}
 
 	/**

@@ -223,7 +223,7 @@ jobs:
           # a hashtag the search test can find: search reads the hashtag
           # table the twelve-minute cron fills, and no cron runs here
           ./occ social:account:create admin
-          ./occ social:note:create -q admin 'Seeded for the search test #alohasearch'
+          ./occ social:debug:note:create -q admin 'Seeded for the search test #alohasearch'
           ./occ social:cache:refresh
 
       - name: Run Nextcloud

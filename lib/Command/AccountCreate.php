@@ -44,7 +44,7 @@ class AccountCreate extends SocialCommand {
 		$this->setName('social:account:create')
 			->addArgument('userId', InputArgument::REQUIRED, 'Nextcloud username of the account')
 			->addOption('handle', '', InputOption::VALUE_REQUIRED, 'social handle')
-			->setDescription('Create a new social account');
+			->setDescription('Create the Aloha Social account of a Nextcloud user');
 	}
 
 	/**

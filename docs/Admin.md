@@ -89,8 +89,9 @@ connecting, without anything else saying so, and each links back to this page.
 
 `occ social:check:install` runs the same classes (`lib/SetupChecks/`),
 prints each with its severity and exits `1` if any of them reports an error, so
-a deployment script can run it. `--offline` leaves out the WebFinger probe, the
-only one that goes out on the network.
+a deployment script can run it. It changes nothing unless `--repair` is given.
+`--offline` leaves out the WebFinger and client API probes, the two that go
+out on the network.
 
 **Aloha Social: upload size.** Whether PHP will accept the uploads this app promises
 to. PHP's `upload_max_filesize` and `post_max_size` are enforced before a byte
@@ -1427,11 +1428,17 @@ administrator reaches for.
 **Is it working?**
 
 ```bash
-occ social:check:install            # the setup checks it can run from the console, plus repairs
-occ social:check:install --offline  # the same without the network probe
+occ social:check:install            # the setup checks; reads only, changes nothing
+occ social:check:install --offline  # the same without the two network probes
 occ social:queue:status             # what the outbound queue is doing
-occ social:details <id>             # who can see one post and where it lands
+occ social:debug:details <id>       # who can see one post and where it lands
 ```
+
+`social:check:install` also counts the follows and posts that point to an
+account that is no longer cached. It only reports them.
+`occ social:check:install --repair` removes them and gives every local account
+the self-follow its Home timeline needs. `--config` prints the app
+configuration too.
 
 Aloha Social also repairs the recipient and hashtag side indexes automatically in
 bounded five-minute cron passes. Each pass visits at most 500 streams, stores
@@ -1645,7 +1652,7 @@ and `media_cache_days` and `media_cache_mb` bound what cached remote media
 costs. Both trade completeness for a bounded cost, and the default of each
 is the one a medium instance wants.
 
-`occ social:benchmark` seeds a realistic amount of content and times the
+`occ social:debug:benchmark` seeds a realistic amount of content and times the
 timeline queries against it, which is the only honest way to find out what any
 of this costs on the hardware in front of you.
 
@@ -1669,7 +1676,12 @@ taken together:
   progress, and the cached copies of media from other servers.
 
 Restore all three from the same moment, with the app at the version it had
-when the backup was taken, then run `occ social:check:install`.
+when the backup was taken, then run `occ social:check:install`. It only reads:
+it runs the setup checks and counts the follows and posts whose account is
+not in the account cache. After a complete restore that count is small. A
+large one means the `social_*` tables were not all restored from the same
+moment. Restore the database whole again rather than running `--repair`,
+which would delete the follows and posts of every account it cannot find.
 
 **What cannot be recovered without the secret.** The ActivityPub keys cannot be
 opened again: the accounts keep their posts and followers, but other servers

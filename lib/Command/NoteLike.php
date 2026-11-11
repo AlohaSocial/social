@@ -46,11 +46,11 @@ class NoteLike extends SocialCommand {
 	#[\Override]
 	protected function configure() {
 		parent::configure();
-		$this->setName('social:note:like')
+		$this->setName('social:debug:note:like')
 			->addArgument('user_id', InputArgument::REQUIRED, 'userId of the author')
 			->addArgument('note_id', InputArgument::REQUIRED, 'Note to like')
 			->addOption('unlike', '', InputOption::VALUE_NONE, 'Unlike')
-			->setDescription('Like a note');
+			->setDescription('Like or unlike a post as a user (for testing)');
 	}
 
 	/**

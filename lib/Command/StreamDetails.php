@@ -47,10 +47,10 @@ class StreamDetails extends ExtendedBase {
 	#[\Override]
 	protected function configure() {
 		parent::configure();
-		$this->setName('social:details')
+		$this->setName('social:debug:details')
 			->addArgument('streamId', InputArgument::REQUIRED, 'Id of the Stream item')
 			->addOption('json', '', InputOption::VALUE_NONE, 'return JSON format')
-			->setDescription('Get details about a Stream item');
+			->setDescription('Show who can see a post and which timelines it lands on (for debugging)');
 	}
 
 	/**

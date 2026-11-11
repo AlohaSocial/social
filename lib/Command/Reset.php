@@ -60,7 +60,7 @@ class Reset extends SocialCommand {
 				'force', 'f', InputOption::VALUE_NONE,
 				'skip the confirmation prompts (required with --no-interaction)'
 			)
-			->setDescription('Reset ALL data related to the Aloha Social App');
+			->setDescription('Delete all Aloha Social data and start again, or remove the app\'s tables with --uninstall');
 	}
 
 	/**
