@@ -166,6 +166,12 @@ class CacheDocumentsCopyLookupTest extends TestCase {
 		$this->assertSame(md5('small-copy'), $this->written['resized_copy_prim']);
 	}
 
+	public function testAnIconThumbnailWritesTheResizedKey(): void {
+		$this->request($this->builder())->updateThumbnail($this->document());
+
+		$this->assertSame(md5('small-copy'), $this->written['resized_copy_prim']);
+	}
+
 	public function testARewrittenCopyWritesItsKey(): void {
 		$this->request($this->builder())->replaceLocalCopy(3, 'rewritten', 10);
 

@@ -142,6 +142,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb = $this->getCacheDocumentsUpdateSql();
 		$qb->limitToIdString($document->getId());
 		$qb->set('resized_copy', $qb->createNamedParameter($document->getResizedCopy()));
+		$qb->set('resized_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getResizedCopy())));
 		$qb->set('blurhash', $qb->createNamedParameter($document->getBlurHash()));
 
 		$qb->executeStatement();
