@@ -105,6 +105,38 @@ class DagCborTest extends TestCase {
 		DagCbor::decode(str_repeat("\x81", 100) . "\x01");
 	}
 
+	/**
+	 * As a fuzzed input had it: an integer head flipped into an array head
+	 * declaring 2^63-1 items, followed by megabytes of one-byte values.
+	 */
+	public function testAContainerDeclaringMoreItemsThanADecodeReadsIsRefusedAtItsHead(): void {
+		$values = str_repeat("\xf5\xf4\xf6\x60", 1024);
+		foreach (["\x9b" => 'CBOR array has too many items', "\xbb" => 'CBOR map has too many entries'] as $head => $message) {
+			try {
+				DagCbor::decode("\x82\x01" . $head . "\x7f\xff\xff\xff\xff\xff\xff\xff" . $values);
+				$this->fail('a container of 2^63-1 items is read');
+			} catch (InvalidArgumentException $e) {
+				$this->assertSame($message, $e->getMessage());
+			}
+		}
+	}
+
+	public function testTheValuesOneDecodeReadsAreBounded(): void {
+		$emptyMaps = static fn (int $count): string => "\x9a" . pack('N', $count) . str_repeat("\xa0", $count);
+
+		$this->assertCount(128 * 1024 - 1, DagCbor::decode($emptyMaps(128 * 1024 - 1)), 'the array and its items are the whole budget');
+
+		$this->expectException(InvalidArgumentException::class);
+		DagCbor::decode($emptyMaps(128 * 1024));
+	}
+
+	/** Small containers, each within the budget at its head, add up past it. */
+	public function testTheBudgetCountsTheValuesOfEveryContainer(): void {
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('too many items');
+		DagCbor::decode("\x9a" . pack('N', 70000) . str_repeat("\x81\xa0", 70000));
+	}
+
 	public function testIntegersAcrossTheirWidths(): void {
 		foreach ([0, 23, 24, 255, 256, 65535, 65536, 4294967295, 4294967296, PHP_INT_MAX, -1, -24, -25, -256, -257, PHP_INT_MIN + 1] as $int) {
 			$this->assertSame($int, DagCbor::decode(DagCbor::encode($int)), (string)$int);

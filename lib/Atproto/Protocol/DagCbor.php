@@ -31,6 +31,13 @@ final class DagCbor {
 	/** deeper than any record or MST node; a bound on untrusted input */
 	private const MAX_DEPTH = 64;
 
+	/**
+	 * the most values one decode reads, map keys included: far more than any
+	 * record, tree node or commit holds, and a bound on the memory a few
+	 * bytes can make, as one byte is a whole value (an empty map is an object)
+	 */
+	private const MAX_ITEMS = 128 * 1024;
+
 	private const MAJOR_UINT = 0;
 	private const MAJOR_NEGINT = 1;
 	private const MAJOR_BYTES = 2;
@@ -50,11 +57,12 @@ final class DagCbor {
 	}
 
 	/**
-	 * @throws InvalidArgumentException when the bytes are not one complete DRISL value
+	 * @throws InvalidArgumentException when the bytes are not one complete DRISL value, or hold more values than one decode reads
 	 */
 	public static function decode(string $bytes): mixed {
 		$offset = 0;
-		$value = self::decodeValue($bytes, $offset, 0);
+		$items = 0;
+		$value = self::decodeValue($bytes, $offset, 0, $items);
 		if ($offset !== strlen($bytes)) {
 			throw new InvalidArgumentException('Trailing bytes after the CBOR value');
 		}
@@ -69,7 +77,9 @@ final class DagCbor {
 	 * @throws InvalidArgumentException
 	 */
 	public static function decodeAt(string $bytes, int &$offset): mixed {
-		return self::decodeValue($bytes, $offset, 0);
+		$items = 0;
+
+		return self::decodeValue($bytes, $offset, 0, $items);
 	}
 
 	/**
@@ -224,9 +234,13 @@ final class DagCbor {
 		return chr($type | 27) . pack('J', $argument);
 	}
 
-	private static function decodeValue(string $bytes, int &$offset, int $depth): mixed {
+	/** @param int $items the values read so far, this one not yet counted */
+	private static function decodeValue(string $bytes, int &$offset, int $depth, int &$items): mixed {
 		if ($depth > self::MAX_DEPTH) {
 			throw new InvalidArgumentException('CBOR value nested too deeply');
+		}
+		if (++$items > self::MAX_ITEMS) {
+			throw new InvalidArgumentException('CBOR value has too many items');
 		}
 		$initial = self::byte($bytes, $offset);
 		$major = $initial >> 5;
@@ -257,17 +271,23 @@ final class DagCbor {
 
 				return $text;
 			case self::MAJOR_ARRAY:
-				$items = [];
+				if ($argument > self::MAX_ITEMS - $items) {
+					throw new InvalidArgumentException('CBOR array has too many items');
+				}
+				$list = [];
 				for ($i = 0; $i < $argument; $i++) {
-					$items[] = self::decodeValue($bytes, $offset, $depth + 1);
+					$list[] = self::decodeValue($bytes, $offset, $depth + 1, $items);
 				}
 
-				return $items;
+				return $list;
 			case self::MAJOR_MAP:
+				if ($argument > intdiv(self::MAX_ITEMS - $items, 2)) {
+					throw new InvalidArgumentException('CBOR map has too many entries');
+				}
 				$map = [];
 				$previous = null;
 				for ($i = 0; $i < $argument; $i++) {
-					$key = self::decodeValue($bytes, $offset, $depth + 1);
+					$key = self::decodeValue($bytes, $offset, $depth + 1, $items);
 					if (!is_string($key)) {
 						throw new InvalidArgumentException('CBOR map keys must be text');
 					}
@@ -279,7 +299,7 @@ final class DagCbor {
 						throw new InvalidArgumentException('CBOR map keys out of order');
 					}
 					$previous = $key;
-					$map[$key] = self::decodeValue($bytes, $offset, $depth + 1);
+					$map[$key] = self::decodeValue($bytes, $offset, $depth + 1, $items);
 				}
 
 				return ($map === [] || array_filter(array_keys($map), 'is_int') !== []) ? (object)$map : $map;
@@ -287,7 +307,7 @@ final class DagCbor {
 				if ($argument !== self::TAG_CID) {
 					throw new InvalidArgumentException('CBOR tag not allowed: ' . $argument);
 				}
-				$link = self::decodeValue($bytes, $offset, $depth + 1);
+				$link = self::decodeValue($bytes, $offset, $depth + 1, $items);
 				if (!$link instanceof Bytes || !str_starts_with($link->value, "\0")) {
 					throw new InvalidArgumentException('A CID link must be a byte string with a leading zero');
 				}
