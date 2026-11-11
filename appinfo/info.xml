@@ -144,6 +144,8 @@ Aloha Social implements ActivityPub, a large part of the Mastodon client API and
 		<command>OCA\Social\Command\AtprotoRotateKey</command>
 		<command>OCA\Social\Command\AtprotoKeysReseal</command>
 		<command>OCA\Social\Command\AtprotoBlock</command>
+		<command>OCA\Social\Command\IpBlocksList</command>
+		<command>OCA\Social\Command\IpBlocksRemove</command>
 	</commands>
 
 	<settings>

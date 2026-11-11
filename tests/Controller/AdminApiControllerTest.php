@@ -575,6 +575,33 @@ class AdminApiControllerTest extends TestCase {
 		$this->assertSame('silence', $response->getData()->getSeverity());
 	}
 
+	/** The caller's address as the middleware sees it, so a block cannot shut the caller out. */
+	public function testAnIpBlockIsCheckedAgainstTheCallersOwnAddress(): void {
+		$this->request->method('getRemoteAddress')->willReturn('203.0.113.7');
+		$blocks = $this->createMock(AccessBlockService::class);
+		$blocks->expects($this->once())->method('blockIp')
+			->with('203.0.113.0/24', 'no_access', '', 0, '203.0.113.7')
+			->willThrowException(new \OCA\Social\Exceptions\InvalidResourceException('203.0.113.0/24 holds your own address'));
+		$this->accessBlockService = $blocks;
+
+		$response = $this->controller()->ipBlockCreate('203.0.113.0/24');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('your own address', $response->getData()['error']);
+	}
+
+	public function testAnIpBlockUpdateIsCheckedAgainstTheCallersOwnAddressToo(): void {
+		$this->request->method('getRemoteAddress')->willReturn('198.51.100.1');
+		$blocks = $this->createMock(AccessBlockService::class);
+		$blocks->method('ipBlock')->willReturn(new \OCA\Social\Model\AccessBlock('ip', '203.0.113.0/24'));
+		$blocks->expects($this->once())->method('blockIp')
+			->with('203.0.113.0/24', 'no_access', 'note', 0, '198.51.100.1')
+			->willReturn(new \OCA\Social\Model\AccessBlock('ip', '203.0.113.0/24'));
+		$this->accessBlockService = $blocks;
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->ipBlockUpdate(4, 'no_access', 'note')->getStatus());
+	}
+
 	public function testABlockIsLiftedByTheEntryItNames(): void {
 		$this->adminApiService->expects($this->once())
 			->method('unblockDomain')

@@ -9,13 +9,18 @@ declare(strict_types=1);
 
 namespace OCA\Social\Middleware;
 
+use OCA\Social\Controller\AdminApiControllerBase;
 use OCA\Social\Service\AccessBlockService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Middleware;
+use OCP\IGroupManager;
 use OCP\IRequest;
+use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -42,12 +47,20 @@ use Psr\Log\LoggerInterface;
  * access list without saying anything — which is the wrong way round for a
  * security control to fail, for one query out of the fifteen or so a request
  * already makes.
+ *
+ * **Nextcloud administrators are let through to the administration
+ * routes**: the admin API (`AdminApiControllerBase`) and every route only an
+ * administrator may call (no `NoAdminRequired`, no `PublicPage`), such as the
+ * settings page's own. That is where a block is lifted, and a block that
+ * covers the administrator's address must not be one only SQL can undo.
  */
 class AccessBlockMiddleware extends Middleware {
 	public function __construct(
 		private IRequest $request,
 		private AccessBlockService $accessBlockService,
 		private LoggerInterface $logger,
+		private IUserSession $userSession,
+		private IGroupManager $groupManager,
 	) {
 	}
 
@@ -57,12 +70,39 @@ class AccessBlockMiddleware extends Middleware {
 		if ($ip === '' || !$this->accessBlockService->isBlockedIp($ip)) {
 			return;
 		}
+		if ($this->isAdministration($controller, $methodName)) {
+			$this->logger->info('a blocked address was let through to an administration route', [
+				'ip' => $ip, 'controller' => $controller::class, 'method' => $methodName,
+			]);
+
+			return;
+		}
 
 		$this->logger->info('a blocked address was refused', [
 			'ip' => $ip, 'controller' => $controller::class, 'method' => $methodName,
 		]);
 
 		throw new AccessBlockedException();
+	}
+
+	/** Whether a Nextcloud administrator is calling an administration route. */
+	private function isAdministration(Controller $controller, string $methodName): bool {
+		$user = $this->userSession->getUser();
+		if ($user === null || !$this->groupManager->isAdmin($user->getUID())) {
+			return false;
+		}
+		if ($controller instanceof AdminApiControllerBase) {
+			return true;
+		}
+		if (!method_exists($controller, $methodName)) {
+			return false;
+		}
+
+		$method = new \ReflectionMethod($controller, $methodName);
+		$doc = (string)$method->getDocComment();
+
+		return $method->getAttributes(NoAdminRequired::class) === [] && $method->getAttributes(PublicPage::class) === []
+			&& !str_contains($doc, '@NoAdminRequired') && !str_contains($doc, '@PublicPage');
 	}
 
 	#[\Override]

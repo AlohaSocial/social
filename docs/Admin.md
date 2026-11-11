@@ -1493,6 +1493,22 @@ administrator can download and review a [The Bad Space CSV export](https://tweak
 before importing it; the export source and moderation policy remain the
 administrator's choice.
 
+**IP blocks**
+
+An IP block refuses an address or range everything Aloha Social serves. Blocks
+are made through the admin API (`POST /api/v1/admin/ip_blocks`), which refuses
+a range wider than a /16 (IPv4) or a /32 (IPv6) and one holding your own
+address as the server sees it: behind a reverse proxy that Nextcloud does not
+trust (`trusted_proxies`), that address is the proxy's, and blocking it would
+shut everybody out. Nextcloud administrators also reach the admin API and the
+settings page from a blocked address, so they can always lift a block. Where
+that is not enough, for example from a token or a script, use the console:
+
+```bash
+occ social:ip-blocks:list                     # every block, with its id
+occ social:ip-blocks:remove <id-or-range>     # lift one; the range completes in the shell
+```
+
 **Housekeeping**
 
 ```bash

@@ -38,6 +38,11 @@ use OCA\Social\Model\AccessBlock;
  *   to hold.
  */
 class AccessBlockService {
+	/** the widest IPv4 prefix a block may have: a /16, 65,536 addresses */
+	public const WIDEST_V4 = 16;
+	/** the widest IPv6 prefix a block may have: a /32, what one provider is given */
+	public const WIDEST_V6 = 32;
+
 	/** @var AccessBlock[]|null the live IP blocks, for this request */
 	private ?array $cachedIps = null;
 
@@ -61,19 +66,40 @@ class AccessBlockService {
 	/**
 	 * Refuses an address or a range everything this app serves.
 	 *
+	 * A range wider than WIDEST_V4 or WIDEST_V6 is refused, and so is one
+	 * holding the caller's own address: either answers every request from
+	 * whole networks, the admin API that would lift it included.
+	 *
 	 * @param string $ip an address or a CIDR range, v4 or v6
 	 * @param int $expiresAt when it lifts itself, or 0 for never
+	 * @param string $callerIp the address the request came from, as the
+	 *                         middleware sees it (`IRequest::getRemoteAddress()`); '' from the command line
 	 *
-	 * @throws InvalidResourceException the address, or a severity this
-	 *                                  instance cannot honour
+	 * @throws InvalidResourceException the address, a range too wide or holding
+	 *                                  the caller, or a severity this instance cannot honour
 	 */
 	public function blockIp(
 		string $ip, string $severity = AccessBlock::SEVERITY_NO_ACCESS,
-		string $comment = '', int $expiresAt = 0,
+		string $comment = '', int $expiresAt = 0, string $callerIp = '',
 	): AccessBlock {
 		$range = self::normaliseRange($ip);
 		if ($range === '') {
 			throw new InvalidResourceException('not an IP address or range: ' . $ip);
+		}
+
+		[$address, $bits] = explode('/', $range, 2);
+		$widest = str_contains($address, ':') ? self::WIDEST_V6 : self::WIDEST_V4;
+		if ((int)$bits < $widest) {
+			throw new InvalidResourceException(
+				$range . ' is wider than /' . $widest . ': a block that wide shuts out whole networks. Block narrower ranges.'
+			);
+		}
+
+		if (trim($callerIp) !== '' && self::inRange(trim($callerIp), $range)) {
+			throw new InvalidResourceException(
+				$range . ' holds your own address, ' . trim($callerIp) . ', as this server sees it: the block would '
+				. 'lock you out, and where that is a reverse proxy, everybody.'
+			);
 		}
 
 		if ($severity !== AccessBlock::SEVERITY_NO_ACCESS) {
