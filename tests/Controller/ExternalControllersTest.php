@@ -230,15 +230,13 @@ class ExternalControllersTest extends TestCase {
 	}
 
 	public function testAUsersInvitationsAreTheirsAndOnlyWhileAllowed(): void {
-		$users = $this->createStub(ExternalUserService::class);
-		$users->method('isEnabled')->willReturn(true);
-		$users->method('usersMayInvite')->willReturn(false);
 		$signups = $this->createMock(ExternalSignupService::class);
+		$signups->method('mayInvite')->with('carol')->willReturn(false);
 		$signups->expects($this->never())->method('invites');
 		$carol = $this->createStub(IUser::class);
 		$carol->method('getUID')->willReturn('carol');
 
-		$controller = new ExternalInviteController($this->createStub(IRequest::class), $signups, $users, $this->session($carol));
+		$controller = new ExternalInviteController($this->createStub(IRequest::class), $signups, $this->session($carol));
 
 		$this->assertSame(['allowed' => false, 'invites' => []], $controller->list()->getData());
 		foreach (['list', 'create', 'revoke'] as $method) {
@@ -252,8 +250,33 @@ class ExternalControllersTest extends TestCase {
 		$carol = $this->createStub(IUser::class);
 		$carol->method('getUID')->willReturn('carol');
 
-		$controller = new ExternalInviteController($this->createStub(IRequest::class), $signups, $this->createStub(ExternalUserService::class), $this->session($carol));
+		$controller = new ExternalInviteController($this->createStub(IRequest::class), $signups, $this->session($carol));
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $controller->revoke(3)->getStatus());
+	}
+
+	public function testAnAllowedUserSeesTheirInvitations(): void {
+		$signups = $this->createMock(ExternalSignupService::class);
+		$signups->method('mayInvite')->with('carol')->willReturn(true);
+		$signups->expects($this->once())->method('invites')->with('carol')->willReturn([['id' => 3]]);
+		$carol = $this->createStub(IUser::class);
+		$carol->method('getUID')->willReturn('carol');
+
+		$controller = new ExternalInviteController($this->createStub(IRequest::class), $signups, $this->session($carol));
+
+		$this->assertSame(['allowed' => true, 'invites' => [['id' => 3]]], $controller->list()->getData());
+	}
+
+	/** An external user's invitation is refused by the service, and answered as such. */
+	public function testARefusedInvitationIsA422(): void {
+		$signups = $this->createMock(ExternalSignupService::class);
+		$signups->method('createInvite')->with('eve', '', 1, ExternalSignupService::USER_INVITE_DAYS, false)
+			->willThrowException(new \OCA\Social\Exceptions\ExternalUserException('Invitations are not available on this server.'));
+		$eve = $this->createStub(IUser::class);
+		$eve->method('getUID')->willReturn('eve');
+
+		$response = (new ExternalInviteController($this->createStub(IRequest::class), $signups, $this->session($eve)))->create();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
 	}
 }

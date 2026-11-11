@@ -1006,7 +1006,11 @@ Below it, the invitation links: a note to remember who each is for, how many
 registrations it admits (0 for any number) and how many days it works (0 for
 ever). *Let everybody here send invitation links* also gives every user an
 *Invite people* section in their Aloha Social settings, single-use links that work
-for a week, at most ten open at a time.
+for a week, at most ten open at a time. External users are never offered it and
+cannot send invitations: an invited registration skips approval, so their
+invitations would let each invitee bring in more without anybody approving
+them. A registration confirmed after you switched to approval waits for it
+too, even if it was sent before.
 
 **External accounts.** Every external account with its email and verification
 status, enabled or disabled status, registration source, when it registered

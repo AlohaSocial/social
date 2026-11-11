@@ -1402,8 +1402,8 @@ The registration routes are public and refuse a visitor who is logged in. The ad
 | DELETE | `/admin/external/requests/{id}` | **administrator**, csrf | `id`, `reason` | Turns a registration down and forgets it. The person is emailed, with `reason` when there is one. **404** for an unknown id. |
 | POST | `/admin/external/invites` | **administrator**, csrf | `note`, `maxUses` (1), `days` (7) | An invitation link. `maxUses` 0 admits any number of registrations and `days` 0 never expires. Answers with the invitation: `{"id", "url", "creator", "note", "maxUses", "uses", "expires", "created"}`. |
 | DELETE | `/admin/external/invites/{id}` | **administrator**, csrf | `id` | Withdraws anybody's invitation. **404** for an unknown id. |
-| GET | `/invites` | user, csrf | — | Whether this person may send invitations (`allowed`, which the administrator switches on) and the ones they sent (`invites`). |
-| POST | `/invites` | user, csrf | `note` | An invitation from this person: single-use, valid for 7 days, at most 10 open at a time. A **422** when invitations are off or the limit is reached. Rate limited to 20 an hour. |
+| GET | `/invites` | user, csrf | — | Whether this person may send invitations (`allowed`, which the administrator switches on, and never for an external user) and the ones they sent (`invites`). |
+| POST | `/invites` | user, csrf | `note` | An invitation from this person: single-use, valid for 7 days, at most 10 open at a time. A **422** when invitations are off, the person is an external user (an invited registration skips approval, so invitations from invitees would chain past it), or the limit is reached. Rate limited to 20 an hour. |
 | DELETE | `/invites/{id}` | user, csrf | `id` | Withdraws one of this person's own invitations. **404** for anybody else's. |
 
 ---

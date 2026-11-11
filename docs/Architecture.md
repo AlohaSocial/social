@@ -4446,7 +4446,18 @@ invitation only. The mode decides who is admitted: `open` admits anybody,
 `invite` only the holder of an invitation link, `approval` puts the
 registration in a queue on the settings page. A valid invitation admits its
 holder in every mode, approval included, and a use is counted when the form is
-sent. With email confirmation on, which is the default, the account is made
+sent. Because of that, **an external user never invites**:
+`ExternalSignupService::mayInvite()` is false for them, so `POST /invites` is
+refused, `GET /invites` answers `allowed: false` and the page's
+`externalInvites` is false, which hides the *Invite people* section; and an
+invitation whose creator is an external user (one made before this rule) is not
+valid, so it neither skips approval nor opens an invitation-only server.
+Otherwise one approved external user could invite five people, each of them
+five more, and nobody would ever be approved. Approval is also decided again
+when the address is confirmed: a registration without an invitation that is
+confirmed while the mode is `approval` joins the queue
+(`ExternalSignupsRequest::markVerified(…, true)`), even if it was sent before
+approval was switched on. With email confirmation on, which is the default, the account is made
 only when the link in the confirmation email is followed, within 24 hours.
 The form asks for the handle, the email, a password (8 characters at least,
 and the instance's password policy), acceptance of the server rules and, when

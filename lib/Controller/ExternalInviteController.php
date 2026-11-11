@@ -12,7 +12,6 @@ namespace OCA\Social\Controller;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Service\ExternalSignupService;
-use OCA\Social\Service\ExternalUserService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -33,7 +32,6 @@ class ExternalInviteController extends Controller {
 	public function __construct(
 		IRequest $request,
 		private ExternalSignupService $signupService,
-		private ExternalUserService $externalUserService,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -43,7 +41,7 @@ class ExternalInviteController extends Controller {
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/invites')]
 	public function list(): DataResponse {
-		$allowed = $this->externalUserService->isEnabled() && $this->externalUserService->usersMayInvite();
+		$allowed = $this->signupService->mayInvite($this->uid());
 
 		return new DataResponse([
 			'allowed' => $allowed,

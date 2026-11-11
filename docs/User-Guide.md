@@ -95,7 +95,8 @@ each such account your pictures and videos take up. Deleting your Aloha Social
 account deletes the whole account.
 
 Where the administrators let everybody invite people, **Settings → Apps and account → Invite
-people** makes an invitation link: it works once and for a week.
+people** makes an invitation link: it works once and for a week. Such an
+account for Aloha Social only cannot invite people.
 
 ## Finding and following people
 

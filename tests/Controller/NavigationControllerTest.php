@@ -142,7 +142,7 @@ class NavigationControllerTest extends TestCase {
 			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$this->streamService,
 			$this->filterService,
-			$this->createStub(\OCA\Social\Service\ExternalMediaQuota::class),
+			$this->externalMediaQuota ?? $this->createStub(\OCA\Social\Service\ExternalMediaQuota::class),
 			new NullLogger(),
 			$this->createStub(\OCA\Social\Service\FollowService::class),
 			$moderators,
@@ -162,6 +162,39 @@ class NavigationControllerTest extends TestCase {
 
 	private function existingActor(): void {
 		$this->accountService->method('createActor')->willThrowException(new AccountAlreadyExistsException('account for this user already exist', 'account-exists'));
+	}
+
+	private ?\OCA\Social\Service\ExternalMediaQuota $externalMediaQuota = null;
+
+	/** Invitations switched on for users; `$external` makes alice a self-registered external user. */
+	private function invitesOnFor(bool $external): void {
+		$this->systemValues([]);
+		$this->configuredCloud();
+		$this->existingActor();
+		$this->accountService->method('getActorFromUserId')->willReturn((new Person())->setPreferredUsername('alice'));
+		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
+		$this->configService->method('getAppValue')->willReturnCallback(
+			static fn (string $key): string => in_array($key, [ConfigService::SOCIAL_EXTERNAL_ENABLED, ConfigService::SOCIAL_EXTERNAL_USER_INVITES], true) ? '1' : ''
+		);
+		$this->externalMediaQuota = $this->createStub(\OCA\Social\Service\ExternalMediaQuota::class);
+		$this->externalMediaQuota->method('usageOf')->willReturn($external ? ['quota' => 100, 'used' => 0] : null);
+	}
+
+	public function testAUserIsOfferedTheInviteSettingsWhereInvitationsAreOn(): void {
+		$this->invitesOnFor(false);
+
+		$this->controller()->navigate();
+
+		$this->assertTrue($this->serverData()['externalInvites']);
+	}
+
+	/** An invited registration skips approval, so an external user is never offered invitations. */
+	public function testAnExternalUserIsNotOfferedTheInviteSettings(): void {
+		$this->invitesOnFor(true);
+
+		$this->controller()->navigate();
+
+		$this->assertFalse($this->serverData()['externalInvites']);
 	}
 
 	private function serverData(): array {

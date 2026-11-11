@@ -167,6 +167,7 @@ class NavigationController extends Controller {
 			'userId' => $this->userId,
 		]);
 
+		$externalMedia = $this->externalMediaQuota->usageOf($this->userId);
 		$serverData = [
 			'public' => false,
 			'timeZone' => $this->config->getUserValue($this->userId, 'core', 'timezone', $this->config->getSystemValueString('default_timezone', 'UTC')),
@@ -210,9 +211,11 @@ class NavigationController extends Controller {
 			'interests' => $this->interestService->pageState($this->userId),
 			// a self-registered external user: no Files to attach from, and a
 			// media quota the settings page shows. Null for everybody else.
-			'externalMedia' => $this->externalMediaQuota->usageOf($this->userId),
-			// whether the administrator lets people invite others to register
-			'externalInvites' => $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_ENABLED) === '1'
+			'externalMedia' => $externalMedia,
+			// whether the administrator lets people invite others to register;
+			// never an external user (ExternalSignupService::mayInvite())
+			'externalInvites' => $externalMedia === null
+				&& $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_ENABLED) === '1'
 				&& $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES) === '1',
 			// whether this instance is a Bluesky host, and under which host its
 			// handles are issued (`alice.<host>`)
