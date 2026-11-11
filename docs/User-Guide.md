@@ -826,7 +826,10 @@ refuses it, the row goes back and says why.
 is the private-mentions row seen from the other side: *Everybody*, *People
 you follow* (a message from anybody else waits with the rest), or *Nobody*
 (every direct message waits, except from people you allowed). People on
-Bluesky go by the same choice.
+Bluesky go by the same choice. A conversation a held person starts is not
+listed in **Direct messages**, in Mastodon apps either, until you accept them
+under Requests; a conversation you started, or have written in, is always
+listed.
 
 A new account starts calm: people you don't follow, new accounts, private
 mentions you didn't ask for and accounts this server limited are held, and

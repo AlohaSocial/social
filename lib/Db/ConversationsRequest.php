@@ -185,6 +185,36 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
+	 * Who wrote each of the given posts, keyed by the post's id. A post not
+	 * stored here is left out.
+	 *
+	 * @param string[] $ids
+	 *
+	 * @return array<string, string> post id => author id
+	 */
+	public function getAuthorsOf(array $ids): array {
+		$prims = $this->prims($ids);
+		if ($prims === []) {
+			return [];
+		}
+
+		$qb = $this->getQueryBuilder();
+		$qb->select('s.id', 's.attributed_to')
+			->from(self::TABLE_STREAM, 's')
+			->where($qb->expr()->in('s.id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)))
+			->setMaxResults(count($prims));
+
+		$authors = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$authors[(string)$data['id']] = (string)($data['attributed_to'] ?? '');
+		}
+		$cursor->closeCursor();
+
+		return $authors;
+	}
+
+	/**
 	 * Stores the root of the thread a direct message belongs to: its parent's
 	 * stored root, else the topmost post the walk up reaches, else itself.
 	 * The replies that arrived before it were their own roots, and they and

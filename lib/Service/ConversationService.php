@@ -107,14 +107,19 @@ class ConversationService {
 	 * direct message arriving or sent moves the newest one and the
 	 * conversations' revision (`TimelineRevisionService::CONVERSATIONS`) —
 	 * the revision too, as a second message in the same second can sort
-	 * below the first — marking read or dismissing moves the revision, and
-	 * blocking or muting somebody moves the timeline revision. One
-	 * index-only probe and two user settings, in place of the count.
+	 * below the first — marking read or dismissing moves the revision,
+	 * blocking or muting somebody or deciding about a request moves the
+	 * timeline revision, and changing who may reach the account moves the
+	 * notification policy's state. One index-only probe and a few user
+	 * settings, in place of the count.
 	 */
 	public function unreadTag(Person $viewer): string {
+		$policy = $this->notificationPolicy();
+
 		return $this->streamRequest->newestNidFor([md5($viewer->getId())], 'dm')
 			. '-' . $this->timelineRevisionService->of($viewer->getUserId())
-			. '-' . $this->timelineRevisionService->of($viewer->getUserId(), TimelineRevisionService::CONVERSATIONS);
+			. '-' . $this->timelineRevisionService->of($viewer->getUserId(), TimelineRevisionService::CONVERSATIONS)
+			. (($policy === null) ? '' : '-' . $policy->stateOf($viewer->getUserId()));
 	}
 
 	/**
@@ -188,8 +193,9 @@ class ConversationService {
 	/**
 	 * The current conversation after one of its messages was edited.
 	 *
-	 * @return Conversation|null null when the viewer cannot read the message
-	 *                           or has dismissed its conversation
+	 * @return Conversation|null null when the viewer cannot read the message,
+	 *                           has dismissed its conversation or the
+	 *                           notification policy holds it
 	 */
 	public function updatedByStatus(Person $viewer, int|string $statusNid): ?Conversation {
 		try {
@@ -201,7 +207,8 @@ class ConversationService {
 		$lastNid = $this->newestOf($thread);
 		$markers = $this->conversationsRequest->getMarkers($viewer->getId(), [$root['id']]);
 		$marker = $markers[$root['id']] ?? ['readNid' => 0, 'hiddenNid' => 0];
-		if ($this->isDismissed($lastNid, $marker['hiddenNid'])) {
+		if ($this->isDismissed($lastNid, $marker['hiddenNid'])
+			|| $this->isHeldThread($viewer, $root['id'], array_keys($thread))) {
 			return null;
 		}
 
@@ -219,8 +226,8 @@ class ConversationService {
 	 *
 	 * What the sidebar badge shows, asked on every poll and every push. It
 	 * walks the same window, the same grouping and the same rules the list
-	 * itself uses — dismissed left out, unread past the read marker, never
-	 * for a message the account sent — rather than counting messages with a
+	 * itself uses — dismissed and held left out, unread past the read marker,
+	 * never for a message the account sent — rather than counting messages with a
 	 * query of its own: a badge saying two beside a list showing one is worse
 	 * than no badge. But it reads only what those rules look at, the
 	 * messages' places in their threads (`StreamService::getDirectTimelineLinks()`),
@@ -246,12 +253,21 @@ class ConversationService {
 
 		// newest first, so the first message seen of a thread is its newest
 		$newest = [];
+		$threads = [];
 		foreach ($messages as $message) {
-			$newest[$this->rootOf($message['id'], $links)] ??= $message;
+			$rootId = $this->rootOf($message['id'], $links);
+			$newest[$rootId] ??= $message;
+			$threads[$rootId] ??= ['written' => false, 'author' => ''];
+			if ($message['attributedTo'] === $viewer->getId()) {
+				$threads[$rootId]['written'] = true;
+			}
+			if ($message['id'] === $rootId) {
+				$threads[$rootId]['author'] = $message['attributedTo'];
+			}
 		}
 
 		$markers = $this->conversationsRequest->getMarkers($viewer->getId(), array_keys($newest));
-		$count = 0;
+		$unread = [];
 		foreach ($newest as $rootId => $last) {
 			$marker = $markers[$rootId] ?? ['readNid' => 0, 'hiddenNid' => 0];
 			if ($this->isDismissed($last['nid'], $marker['hiddenNid'])
@@ -260,13 +276,12 @@ class ConversationService {
 				continue;
 			}
 
-			$count++;
-			if ($count >= $cap) {
-				break;
-			}
+			$unread[$rootId] = $threads[$rootId];
 		}
 
-		return $count;
+		$held = $this->heldRoots($viewer, $unread);
+
+		return min($cap, count(array_diff_key($unread, $held)));
 	}
 
 	/**
@@ -384,6 +399,19 @@ class ConversationService {
 		}
 
 		return $state instanceof ChatState ? $state : null;
+	}
+
+	/**
+	 * Who may reach the account; resolved when needed, like `chatState()`.
+	 */
+	private function notificationPolicy(): ?NotificationPolicyService {
+		try {
+			$policy = $this->container?->get(NotificationPolicyService::class);
+		} catch (Throwable) {
+			return null;
+		}
+
+		return $policy instanceof NotificationPolicyService ? $policy : null;
 	}
 
 	/**
@@ -560,7 +588,8 @@ class ConversationService {
 
 	/**
 	 * The grouped messages that are listed, newest first: dismissed ones left
-	 * out, and those whose root is not a post this instance can name. Decided
+	 * out, those the notification policy holds (`heldRoots()`), and those
+	 * whose root is not a post this instance can name. Decided
 	 * before anything is built, so that a page is cut before its accounts are
 	 * looked up.
 	 *
@@ -596,7 +625,111 @@ class ConversationService {
 			];
 		}
 
-		return $listed;
+		$threads = [];
+		foreach ($listed as $conversation) {
+			$thread = ['written' => false, 'author' => ''];
+			foreach ($conversation['messages'] as $message) {
+				if ($message->getAttributedTo() === $viewer->getId()) {
+					$thread['written'] = true;
+				}
+				if ($message->getId() === $conversation['rootId']) {
+					$thread['author'] = $message->getAttributedTo();
+				}
+			}
+			$threads[$conversation['rootId']] = $thread;
+		}
+		$held = $this->heldRoots($viewer, $threads);
+		if ($held === []) {
+			return $listed;
+		}
+
+		return array_values(array_filter(
+			$listed,
+			static fn (array $conversation): bool => !isset($held[$conversation['rootId']])
+		));
+	}
+
+	/**
+	 * Whether the notification policy holds the thread under `$rootId` back
+	 * (`heldRoots()`), with its authors read from storage.
+	 *
+	 * @param string[] $ids the viewer's messages in the thread
+	 */
+	private function isHeldThread(Person $viewer, string $rootId, array $ids): bool {
+		if (!$this->holdsAnything($viewer)) {
+			return false;
+		}
+
+		$authors = $this->conversationsRequest->getAuthorsOf(array_merge([$rootId], $ids));
+
+		return $this->heldRoots($viewer, [
+			$rootId => [
+				'written' => in_array($viewer->getId(), $authors, true),
+				'author' => $authors[$rootId] ?? '',
+			],
+		]) !== [];
+	}
+
+	/**
+	 * The conversations the notification policy holds back, out of the given
+	 * ones: started by somebody else, not written in by the reader, and
+	 * started by somebody a direct message from is held
+	 * (`NotificationPolicyService::heldDirectSenders()`, the rule the bell and
+	 * the requests go by). Such a conversation is not listed: its first
+	 * message waits among the requests as the mention it raised, and the
+	 * conversation is listed once the reader accepts its starter there.
+	 *
+	 * @param array<string, array{written: bool, author: string}> $threads by root id; `author` is '' where the root was not read
+	 *
+	 * @return array<string, true> the held root ids
+	 */
+	private function heldRoots(Person $viewer, array $threads): array {
+		if ($threads === [] || !$this->holdsAnything($viewer)) {
+			return [];
+		}
+
+		$authors = [];
+		$unknown = [];
+		foreach ($threads as $rootId => $thread) {
+			if ($thread['written']) {
+				continue;
+			}
+			if ($thread['author'] === '') {
+				$unknown[] = (string)$rootId;
+			} else {
+				$authors[(string)$rootId] = $thread['author'];
+			}
+		}
+		if ($unknown !== []) {
+			$authors += $this->conversationsRequest->getAuthorsOf($unknown);
+		}
+		$authors = array_filter(
+			$authors,
+			static fn (string $author): bool => $author !== '' && $author !== $viewer->getId()
+		);
+		if ($authors === []) {
+			return [];
+		}
+
+		$cached = $this->cachedActors(array_values($authors));
+		$senders = [];
+		foreach ($authors as $author) {
+			$senders[$author] = isset($cached[$author]) ? $cached[$author]->getCreation() : 0;
+		}
+		$heldSenders = $this->notificationPolicy()?->heldDirectSenders($viewer, $senders) ?? [];
+
+		$held = [];
+		foreach ($authors as $rootId => $author) {
+			if (isset($heldSenders[$author])) {
+				$held[(string)$rootId] = true;
+			}
+		}
+
+		return $held;
+	}
+
+	private function holdsAnything(Person $viewer): bool {
+		return $this->notificationPolicy()?->holdsAnything($viewer->getUserId()) ?? false;
 	}
 
 	/**

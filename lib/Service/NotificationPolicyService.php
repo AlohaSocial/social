@@ -47,10 +47,12 @@ use Psr\Container\ContainerInterface;
  * not show what was refused on Monday. The reader sees the same thing either
  * way; what differs is whether the decision can be taken back.
  *
- * The policy applies in two places, with the same rules (`isHeld()`): when
- * the list is read, so what is held is not listed, and when a notification is
+ * The policy applies in three places, with the same rules (`isHeld()`): when
+ * the list is read, so what is held is not listed, when a notification is
  * stored, so what is held raises no Nextcloud notification — no bell, push or
- * mail (`isHeldFor()`, called from `NotificationService::emit()`).
+ * mail (`isHeldFor()`, called from `NotificationService::emit()`), and when
+ * the direct messages are listed, so a conversation a held sender started is
+ * not among them (`heldDirectSenders()`, called from `ConversationService`).
  *
  * Who may send the account direct messages (`directMessagesFrom()`) is the
  * policy's `for_private_mentions` seen from the other side: everybody when
@@ -448,6 +450,37 @@ class NotificationPolicyService {
 			$policy, $senderId, $senderCreation, $directMention, $this->factsAbout($viewer, [$senderId]),
 			$this->directMessagesFrom($viewer->getUserId()) === self::DIRECT_NONE
 		);
+	}
+
+	/** Whether the account's policy holds anybody back at all. */
+	public function holdsAnything(string $userId): bool {
+		return !$this->of($userId)->isEverythingAccepted();
+	}
+
+	/**
+	 * Which of the senders a direct message from is held: the rules
+	 * `isHeldFor()` applies to a direct mention, asked of several senders at
+	 * once. What keeps a conversation they started out of the reader's
+	 * direct messages (`ConversationService`) while its mention waits among
+	 * the requests.
+	 *
+	 * @param array<string, int> $senders sender id => account creation as a unix time, 0 when unknown
+	 *
+	 * @return array<string, true> the held sender ids
+	 */
+	public function heldDirectSenders(Person $viewer, array $senders): array {
+		$about = [];
+		foreach ($senders as $senderId => $creation) {
+			$senderId = (string)$senderId;
+			$about[$senderId] = ['sender' => $senderId, 'creation' => $creation, 'privateMention' => true];
+		}
+
+		$held = [];
+		foreach (array_keys($this->heldAmong($viewer, $about)) as $senderId) {
+			$held[(string)$senderId] = true;
+		}
+
+		return $held;
 	}
 
 	/**

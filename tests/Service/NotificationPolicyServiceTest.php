@@ -690,6 +690,33 @@ class NotificationPolicyServiceTest extends TestCase {
 		$this->assertFalse($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'except from somebody allowed from the requests');
 	}
 
+	public function testTheSendersOfConversationsAreHeldByTheRuleOfADirectMention(): void {
+		$friend = 'https://remote.example/users/dave';
+		$this->withFollows([$friend], []);
+
+		$this->assertFalse($this->service->holdsAnything('alice'), 'an account that never chose holds nothing');
+		$this->assertSame([], $this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]));
+
+		$this->service->saveDirectMessagesFrom('alice', 'following');
+		$this->assertTrue($this->service->holdsAnything('alice'));
+		$this->assertSame([self::STRANGER => true], $this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]));
+		$this->assertTrue($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'what the bell is told agrees');
+
+		$this->service->saveDirectMessagesFrom('alice', 'none');
+		$this->assertSame(
+			[self::STRANGER => true, $friend => true],
+			$this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]),
+			'nobody: somebody followed waits too'
+		);
+
+		$this->decisions['accepted'][$friend] = true;
+		$this->assertSame(
+			[self::STRANGER => true],
+			$this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]),
+			'except somebody allowed from the requests'
+		);
+	}
+
 	/** Bluesky has the same setting: told when the answer changes, from either place, and not otherwise. */
 	public function testAChangeOfWhoMaySendDirectMessagesIsToldToBluesky(): void {
 		$declaration = $this->createMock(\OCA\Social\Atproto\Chat\ChatDeclaration::class);

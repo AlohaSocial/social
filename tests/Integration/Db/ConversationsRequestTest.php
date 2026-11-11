@@ -118,6 +118,16 @@ class ConversationsRequestTest extends TestCase {
 		$this->assertSame([], $this->conversations->getThread('not-a-url'));
 	}
 
+	public function testTheAuthorsOfPostsAreReadInOneStatement(): void {
+		$this->seedThread();
+
+		$authors = $this->conversations->getAuthorsOf([self::ROOT, self::REPLY, self::BASE . '/notes/missing', 'not-a-url']);
+		ksort($authors);
+
+		$this->assertSame([self::REPLY => self::AUTHOR, self::ROOT => self::AUTHOR], $authors);
+		$this->assertSame([], $this->conversations->getAuthorsOf([]));
+	}
+
 	public function testAReaderSeesOnlyTheMessagesAddressedToThem(): void {
 		$this->seedThread();
 

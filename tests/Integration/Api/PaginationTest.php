@@ -298,7 +298,8 @@ class PaginationTest extends ApiTestCase {
 	 * skips the conversations between.
 	 */
 	public function testConversations(): void {
-		$this->account('alice');
+		// bob is a stranger to alice, whose new account would hold his messages among her requests
+		$this->acceptEveryNotification('alice');
 		$rows = [];
 		for ($i = 1; $i <= self::ROWS; $i++) {
 			$rows[] = $this->publish('bob', ['status' => '@' . self::PREFIX . 'alice a word, ' . $i, 'visibility' => 'direct'])->id;
