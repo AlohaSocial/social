@@ -146,8 +146,7 @@ class NotificationCountsTest extends ApiTestCase {
 
 	/** The same for a direct message, and the badge of conversations. */
 	public function testADirectMessageBelowTheNewestInTheSameSecondMovesTheBadge(): void {
-		// bob is a stranger to alice, whose new account would hold his messages among her requests
-		$this->acceptEveryNotification('alice');
+		$this->account('alice');
 		$first = $this->publish('bob', ['status' => '@' . self::PREFIX . 'alice between us', 'visibility' => 'direct']);
 		$count = $this->call(ConversationController::class, 'unreadCount', [], [], 'alice');
 		$this->assertSame(1, $count->body->count);

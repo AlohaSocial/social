@@ -690,19 +690,20 @@ class NotificationPolicyServiceTest extends TestCase {
 		$this->assertFalse($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'except from somebody allowed from the requests');
 	}
 
-	public function testTheSendersOfConversationsAreHeldByTheRuleOfADirectMention(): void {
+	public function testTheSendersOfConversationsAreHeldByTheRuleOfADirectMentionOnlyForNobody(): void {
 		$friend = 'https://remote.example/users/dave';
 		$this->withFollows([$friend], []);
 
-		$this->assertFalse($this->service->holdsAnything('alice'), 'an account that never chose holds nothing');
+		$this->assertFalse($this->service->holdsConversations('alice'), 'an account that never chose holds nothing');
 		$this->assertSame([], $this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]));
 
 		$this->service->saveDirectMessagesFrom('alice', 'following');
-		$this->assertTrue($this->service->holdsAnything('alice'));
-		$this->assertSame([self::STRANGER => true], $this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]));
-		$this->assertTrue($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'what the bell is told agrees');
+		$this->assertFalse($this->service->holdsConversations('alice'), 'people you follow: only the notification waits');
+		$this->assertSame([], $this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]));
+		$this->assertTrue($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'the bell is still held');
 
 		$this->service->saveDirectMessagesFrom('alice', 'none');
+		$this->assertTrue($this->service->holdsConversations('alice'));
 		$this->assertSame(
 			[self::STRANGER => true, $friend => true],
 			$this->service->heldDirectSenders($this->viewer(), [self::STRANGER => 0, $friend => 0]),

@@ -456,8 +456,8 @@ class ConversationServiceTest extends TestCase {
 		$this->assertSame($tags[3], $tags[4], 'reading changes nothing');
 	}
 
-	/** "People you follow": a stranger's conversation waits among the requests, a friend's is listed. */
-	public function testAConversationAHeldStrangerStartedIsNotListed(): void {
+	/** "People you follow": only the stranger's notification waits; the conversation is listed, as on Mastodon. */
+	public function testAStrangersConversationIsListedForPeopleYouFollow(): void {
 		$this->following = [self::CAROL];
 		$policy = $this->policy();
 		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_FOLLOWING);
@@ -467,8 +467,9 @@ class ConversationServiceTest extends TestCase {
 			$this->note('https://a/2', 12, 'https://a/1', self::BOB),
 		);
 
-		$this->assertSame([11], $this->listedIds($policy));
-		$this->assertSame(1, $this->service(null, $policy)->countUnread($this->reader()), 'the badge agrees');
+		$this->assertCount(2, $this->listedIds($policy));
+		$this->assertSame(2, $this->service(null, $policy)->countUnread($this->reader()), 'the badge agrees');
+		$this->assertNotContains('authors', $this->reads, 'and nothing more is read for it');
 	}
 
 	/** "Nobody": every conversation waits, until its starter is allowed from the requests. */
@@ -506,7 +507,7 @@ class ConversationServiceTest extends TestCase {
 	/** The starter of a thread whose root is outside the window is read from storage. */
 	public function testTheStarterOfARootOutsideTheWindowIsLookedUp(): void {
 		$policy = $this->policy();
-		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_FOLLOWING);
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
 		$this->note('https://a/1', 10, '', self::BOB);
 		$this->given($this->note('https://a/9', 19, 'https://a/1', self::CAROL));
 
@@ -530,7 +531,7 @@ class ConversationServiceTest extends TestCase {
 	/** The streaming update of an edited message does not bring a held conversation in. */
 	public function testAnEditInAHeldConversationIsNotStreamed(): void {
 		$policy = $this->policy();
-		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_FOLLOWING);
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
 		$this->given($this->note('https://a/1', 10, '', self::BOB));
 		$this->threads['https://a/1'] = ['https://a/1' => 10];
 
@@ -554,9 +555,9 @@ class ConversationServiceTest extends TestCase {
 
 	/** `/api/v1/conversations`, as Mastodon apps and the web page read it, leaves a held conversation out. */
 	public function testTheMastodonListingLeavesAHeldConversationOut(): void {
-		$this->following = [self::CAROL];
+		$this->decisions['accepted'][self::CAROL] = true;
 		$policy = $this->policy();
-		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_FOLLOWING);
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
 		$this->given(
 			$this->note('https://a/1', 10, '', self::BOB),
 			$this->note('https://b/1', 11, '', self::CAROL),

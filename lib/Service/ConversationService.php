@@ -656,7 +656,7 @@ class ConversationService {
 	 * @param string[] $ids the viewer's messages in the thread
 	 */
 	private function isHeldThread(Person $viewer, string $rootId, array $ids): bool {
-		if (!$this->holdsAnything($viewer)) {
+		if (!$this->holdsConversations($viewer)) {
 			return false;
 		}
 
@@ -671,20 +671,20 @@ class ConversationService {
 	}
 
 	/**
-	 * The conversations the notification policy holds back, out of the given
-	 * ones: started by somebody else, not written in by the reader, and
-	 * started by somebody a direct message from is held
-	 * (`NotificationPolicyService::heldDirectSenders()`, the rule the bell and
-	 * the requests go by). Such a conversation is not listed: its first
-	 * message waits among the requests as the mention it raised, and the
-	 * conversation is listed once the reader accepts its starter there.
+	 * The conversations held back from a reader who takes direct messages
+	 * from nobody, out of the given ones: started by somebody else, not
+	 * written in by the reader, and started by somebody a direct message from
+	 * is held (`NotificationPolicyService::heldDirectSenders()`, the rule the
+	 * bell and the requests go by). Such a conversation is not listed: its
+	 * first message waits among the requests as the mention it raised, and
+	 * the conversation is listed once the reader accepts its starter there.
 	 *
 	 * @param array<string, array{written: bool, author: string}> $threads by root id; `author` is '' where the root was not read
 	 *
 	 * @return array<string, true> the held root ids
 	 */
 	private function heldRoots(Person $viewer, array $threads): array {
-		if ($threads === [] || !$this->holdsAnything($viewer)) {
+		if ($threads === [] || !$this->holdsConversations($viewer)) {
 			return [];
 		}
 
@@ -728,8 +728,8 @@ class ConversationService {
 		return $held;
 	}
 
-	private function holdsAnything(Person $viewer): bool {
-		return $this->notificationPolicy()?->holdsAnything($viewer->getUserId()) ?? false;
+	private function holdsConversations(Person $viewer): bool {
+		return $this->notificationPolicy()?->holdsConversations($viewer->getUserId()) ?? false;
 	}
 
 	/**
