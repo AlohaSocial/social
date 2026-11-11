@@ -69,8 +69,49 @@ class Post implements JsonSerializable {
 	/** @var Document[] */
 	private array $documents = [];
 
+	/**
+	 * What `PostService::createPost()` does with the review queue
+	 * (`PostReviewService`) for this post.
+	 *
+	 * - `REVIEW_HOLD`, the default: a post a rule holds is stored as a request
+	 *   for a moderator and nothing is published.
+	 * - `REVIEW_REFUSE`: a post a rule holds is refused, and nothing is stored.
+	 * - `REVIEW_EXEMPT`: not reviewed. Only for a post a moderator approved,
+	 *   one reviewed when it was scheduled, and posts the server writes itself.
+	 */
+	public const REVIEW_HOLD = 'hold';
+	public const REVIEW_REFUSE = 'refuse';
+	public const REVIEW_EXEMPT = 'exempt';
+
+	private string $review = self::REVIEW_HOLD;
+
+	/** the person who wrote it, when that is not the actor it is published as */
+	private ?Person $author = null;
+
 	public function __construct(Person $actor) {
 		$this->actor = $actor;
+	}
+
+	public function getReview(): string {
+		return $this->review;
+	}
+
+	public function setReview(string $review): self {
+		$this->review = in_array($review, [self::REVIEW_HOLD, self::REVIEW_REFUSE, self::REVIEW_EXEMPT], true)
+			? $review : self::REVIEW_HOLD;
+
+		return $this;
+	}
+
+	/** Who the review asks about: the person who wrote it, a team post's writer included. */
+	public function getAuthor(): Person {
+		return $this->author ?? $this->actor;
+	}
+
+	public function setAuthor(Person $author): self {
+		$this->author = $author;
+
+		return $this;
 	}
 
 	/**

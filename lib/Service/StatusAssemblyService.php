@@ -80,6 +80,46 @@ class StatusAssemblyService {
 	}
 
 	/**
+	 * The stored request a `Post` is replayed from: what `fromParams()` reads
+	 * back, so a post held for a moderator is approved as it was written,
+	 * whichever door it came in by.
+	 *
+	 * @param string $inReplyToNid the nid of the post it answers, '' for none
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function paramsOfPost(Post $post, string $inReplyToNid = ''): array {
+		$params = [
+			'text' => $post->getContent(),
+			'media_ids' => array_values(array_filter(array_map(
+				static fn (MediaAttachment $media): string => $media->getId(), $post->getMedias()
+			), static fn (string $id): bool => $id !== '')),
+			'poll' => $post->getPoll(),
+			'event' => $post->getEvent(),
+			'in_reply_to_id' => ($inReplyToNid !== '') ? $inReplyToNid : null,
+			'quoted_status_id' => ($post->getQuotedId() !== '') ? $post->getQuotedId() : null,
+			'sensitive' => $post->isSensitive(),
+			'spoiler_text' => $post->getSpoilerText(),
+			'visibility' => $post->getType(),
+			'language' => $post->getLanguage(),
+		];
+		if ($post->getReplyRule() !== '') {
+			$params['reply_policy'] = $post->getReplyRule();
+		}
+		if ($post->getAtprotoRecordEmbed() !== null) {
+			$params['atproto_record_embed'] = $post->getAtprotoRecordEmbed();
+		}
+		if ($post->getAtprotoSelfLabels() !== []) {
+			$params['atproto_self_labels'] = $post->getAtprotoSelfLabels();
+		}
+		if ($post->getLinkCard() !== null) {
+			$params['atproto_card'] = $post->getLinkCard();
+		}
+
+		return $params;
+	}
+
+	/**
 	 * The same assembly an immediate post gets, reading from stored `params`
 	 * instead of from the live request.
 	 */

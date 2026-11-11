@@ -36,6 +36,7 @@ use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -53,9 +54,6 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\IRecommendationSignalRecorder;
 use OCA\Social\Service\LikeService;
-use OCA\Social\Service\ModerationService;
-use OCA\Social\Service\PeerTubeService;
-use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\ReportService;
@@ -129,14 +127,12 @@ class WriteService {
 	}
 	/** the records whose key is the key of the post they gate */
 	private const GATES = ['app.bsky.feed.threadgate', RecordMapper::POSTGATE];
-	/** the start of the error a post kept for a moderator answers with (`holdForReview()`) */
+	/** the start of the error a post kept for a moderator answers with */
 	private const HELD = 'This post is waiting for a moderator';
 
 	public function __construct(
 		private AccountService $accounts,
 		private PostService $posts,
-		private PostReviewService $review,
-		private ModerationService $moderation,
 		private StreamService $streams,
 		private LikeService $likes,
 		private BoostService $boosts,
@@ -1159,12 +1155,14 @@ class WriteService {
 			$post->setSpoilerText($spoilerText);
 			$post->setSensitive(true);
 		}
-		$this->holdForReview($actor, $post, $documents);
 		try {
 			$activity = $this->posts->createPost($post);
 			$note = $activity === null ? null : $this->streams->getStreamById($activity->getObjectId());
 		} catch (XrpcException $e) {
 			throw $e;
+		} catch (PostHeldException) {
+			// kept for a moderator, as one from the composer is
+			throw XrpcException::invalidRequest(self::HELD . ' to look at it. It has been kept, there is no need to write it again.');
 		} catch (Throwable $e) {
 			throw XrpcException::invalidRequest($e->getMessage());
 		}
@@ -1406,43 +1404,6 @@ class WriteService {
 				$this->logger->debug('A post a Bluesky app named was not read ahead of its write', ['uri' => $uri, 'exception' => $e]);
 			}
 		}
-	}
-
-	/**
-	 * A post the review rules hold is kept for a moderator, as one from the
-	 * web interface or a Mastodon app is, and the app is told so. It is not
-	 * published until it is approved.
-	 *
-	 * @param Document[] $documents
-	 * @throws XrpcException
-	 */
-	private function holdForReview(Person $actor, Post $post, array $documents): void {
-		try {
-			$this->moderation->assertNotMoved($actor);
-			$reason = $this->review->assess($actor, $post->getContent(), $post->getType(), PeerTubeService::soleVideo($post->getMedias()) !== null);
-			if ($reason === '') {
-				return;
-			}
-			$replyTo = $post->getReplyTo() === '' ? null : (string)$this->streams->getStreamById($post->getReplyTo())->getNid();
-			$this->review->hold($actor, [
-				'text' => $post->getContent(),
-				'media_ids' => array_map(static fn (Document $document): string => (string)$document->getNid(), $documents),
-				'poll' => [],
-				'in_reply_to_id' => $replyTo,
-				'quoted_status_id' => $post->getQuotedId() !== '' ? $post->getQuotedId() : null,
-				'sensitive' => $post->isSensitive(),
-				'spoiler_text' => '',
-				'visibility' => $post->getType(),
-				'language' => $post->getLanguage(),
-				'atproto_record_embed' => $post->getAtprotoRecordEmbed(),
-				'atproto_self_labels' => $post->getAtprotoSelfLabels(),
-				'atproto_card' => $post->getLinkCard(),
-			], $reason);
-		} catch (Throwable $e) {
-			throw XrpcException::invalidRequest($e->getMessage());
-		}
-
-		throw XrpcException::invalidRequest(self::HELD . ' to look at it. It has been kept, there is no need to write it again.');
 	}
 
 	/** Whether a write failed because its post was kept for a moderator. */

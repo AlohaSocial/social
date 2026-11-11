@@ -20,6 +20,7 @@ use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Create;
@@ -29,6 +30,7 @@ use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Details;
+use OCA\Social\Model\HeldPost;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
@@ -44,6 +46,7 @@ use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostDecorationService;
+use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\ReplyRuleService;
 use OCA\Social\Service\StatusRevisionService;
@@ -103,6 +106,8 @@ class PostServiceTest extends TestCase {
 	private ContainerInterface $container;
 	/** @var BlockedByService&MockObject */
 	private BlockedByService $blockedBy;
+	/** the review queue, once a test puts one in the container */
+	private ?PostReviewService $postReview = null;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
@@ -162,6 +167,7 @@ class PostServiceTest extends TestCase {
 			Postgates::class => $this->postgates,
 			ReplyRuleService::class => $this->replyRules,
 			BlockedByService::class => $this->blockedBy,
+			PostReviewService::class => $this->postReview ?? $this->threadgates,
 			default => $this->threadgates,
 		});
 		$this->service = new PostService(
@@ -242,6 +248,135 @@ class PostServiceTest extends TestCase {
 
 				return $token;
 			});
+	}
+
+	// the review queue
+
+	/** @return PostReviewService&MockObject a queue whose rules answer `$reason` */
+	private function reviewAnswering(string $reason): PostReviewService {
+		$review = $this->createMock(PostReviewService::class);
+		$review->method('assess')->willReturn($reason);
+		$this->postReview = $review;
+
+		return $review;
+	}
+
+	public function testAPostARuleHoldsIsStoredForAModeratorAndNothingIsWritten(): void {
+		$review = $this->reviewAnswering(HeldPost::REASON_FIRST_POST);
+		$held = (new HeldPost())->setId(3);
+		$review->expects($this->once())->method('hold')
+			->with(
+				$this->callback(fn (Person $author): bool => $author->getId() === self::ACTOR_ID),
+				$this->callback(function (array $params): bool {
+					$this->assertSame('hello everybody', $params['text']);
+					$this->assertSame(Stream::TYPE_PUBLIC, $params['visibility']);
+					$this->assertNull($params['in_reply_to_id']);
+					$this->assertArrayNotHasKey('scheduled_at', $params);
+
+					return true;
+				}),
+				HeldPost::REASON_FIRST_POST
+			)
+			->willReturn($held);
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		try {
+			$this->service->createPost($this->post('hello everybody'));
+			$this->fail('a held post is not published');
+		} catch (PostHeldException $e) {
+			$this->assertSame(HeldPost::REASON_FIRST_POST, $e->getReason());
+			$this->assertSame($held, $e->getHeld());
+		}
+		$this->assertSame([], $this->dispatched, 'nobody is told a post was published');
+	}
+
+	public function testAPostNoRuleHoldsIsAskedOnceAndPublished(): void {
+		$review = $this->reviewAnswering('');
+		$review->expects($this->once())->method('assess')
+			->with($this->anything(), 'just text', Stream::TYPE_PUBLIC, false);
+		$review->expects($this->never())->method('hold');
+		$this->expectCreateActivity($note);
+
+		$this->service->createPost($this->post('just text'));
+
+		$this->assertInstanceOf(Note::class, $note);
+	}
+
+	/** Pixelfed's direct messages and every other caller go through the same question. */
+	public function testADirectMessageIsAskedAboutToo(): void {
+		$review = $this->reviewAnswering('');
+		$review->expects($this->once())->method('assess')
+			->with($this->anything(), $this->anything(), Stream::TYPE_DIRECT, false);
+		$this->expectCreateActivity($note);
+
+		$this->service->createPost($this->post('psst', Stream::TYPE_DIRECT));
+	}
+
+	public function testAPostThatAsksToBeRefusedIsNotStored(): void {
+		$review = $this->reviewAnswering(HeldPost::REASON_LINKS);
+		$review->expects($this->never())->method('hold');
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		$post = $this->post('buy now')->setReview(Post::REVIEW_REFUSE);
+
+		try {
+			$this->service->createPost($post);
+			$this->fail('a refused post is not published');
+		} catch (PostHeldException $e) {
+			$this->assertNull($e->getHeld());
+			$this->assertSame(HeldPost::REASON_LINKS, $e->getReason());
+		}
+	}
+
+	public function testAnExemptPostIsNotReviewed(): void {
+		$review = $this->reviewAnswering(HeldPost::REASON_FIRST_POST);
+		$review->expects($this->never())->method('assess');
+		$this->expectCreateActivity($note);
+
+		$this->service->createPost($this->post('approved')->setReview(Post::REVIEW_EXEMPT));
+	}
+
+	/** A team post is reviewed as the person who wrote it, not as the team. */
+	public function testTheReviewAsksAboutTheAuthorNotTheTeam(): void {
+		$writer = new Person();
+		$writer->setId('https://social.example/@bea');
+		$review = $this->reviewAnswering('');
+		$review->expects($this->once())->method('assess')->with($this->identicalTo($writer));
+		$this->expectCreateActivity($note);
+
+		$this->service->createPost($this->post('from the team')->setAuthor($writer));
+	}
+
+	/** The held reply names the post it answers by nid, as a client sends it, so approving it replies again. */
+	public function testAHeldReplyKeepsThePostItAnswers(): void {
+		$parent = new Note();
+		$parent->setId('https://remote.example/notes/1');
+		$parent->setNid(4242);
+		$parent->setAttributedTo(self::BOB_ID);
+		$parent->setVisibility(Stream::TYPE_PUBLIC);
+		$this->streamRequest->method('getStreamById')->willReturn($parent);
+		$this->cacheActorService->method('getFromId')->willReturn($this->bob());
+		$review = $this->reviewAnswering(HeldPost::REASON_LINKS);
+		$review->expects($this->once())->method('hold')
+			->with($this->anything(), $this->callback(fn (array $params): bool => $params['in_reply_to_id'] === '4242'))
+			->willReturn(new HeldPost());
+
+		$post = $this->post('a reply');
+		$post->setReplyTo('https://remote.example/notes/1');
+
+		$this->expectException(PostHeldException::class);
+		$this->service->createPost($post);
+	}
+
+	/** A post stored to go out later keeps its time with the held request. */
+	public function testReviewingAScheduledPostKeepsItsTime(): void {
+		$review = $this->reviewAnswering(HeldPost::REASON_FIRST_POST);
+		$review->expects($this->once())->method('hold')
+			->with($this->anything(), $this->callback(fn (array $params): bool => $params['scheduled_at'] === 1893499200))
+			->willReturn(new HeldPost());
+
+		$this->expectException(PostHeldException::class);
+		$this->service->review($this->post('later'), '', 1893499200);
 	}
 
 	// createPost()

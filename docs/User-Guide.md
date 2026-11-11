@@ -322,7 +322,9 @@ where yours are, and you can take one back from there, which deletes it and
 tells nobody.
 
 If it is approved, it goes out as an ordinary post, dated the moment it was
-approved rather than when you wrote it. If it is refused, it is deleted and
+approved rather than when you wrote it. A post you schedule is looked at when
+you schedule it, so you hear about it then; approved, it goes out at the time
+you picked, or at once if that time has passed. If it is refused, it is deleted and
 you are told.
 
 ### Replies in Files

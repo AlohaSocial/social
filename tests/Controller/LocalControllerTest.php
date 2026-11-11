@@ -20,7 +20,6 @@ use OCA\Social\Exceptions\CacheContentMimeTypeException;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Exceptions\FollowLimitException;
 use OCA\Social\Exceptions\FollowSameAccountException;
-use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidHandleException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\StreamNotFoundException;
@@ -31,7 +30,6 @@ use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
-use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\ActorService;
@@ -44,7 +42,6 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\LikeService;
-use OCA\Social\Service\PostService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -81,8 +78,6 @@ class LocalControllerTest extends TestCase {
 	private $hashtagService;
 	/** @var FollowService&MockObject */
 	private $followService;
-	/** @var PostService&MockObject */
-	private $postService;
 	/** @var StreamService&MockObject */
 	private $streamService;
 	/** @var SearchService&Stub */
@@ -132,7 +127,6 @@ class LocalControllerTest extends TestCase {
 		);
 		$this->hashtagService = $this->createMock(HashtagService::class);
 		$this->followService = $this->createMock(FollowService::class);
-		$this->postService = $this->createMock(PostService::class);
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->searchService = $this->createStub(SearchService::class);
 		$this->boostService = $this->createStub(BoostService::class);
@@ -174,7 +168,6 @@ class LocalControllerTest extends TestCase {
 			$this->cacheActorsRequest,
 			$this->hashtagService,
 			$this->followService,
-			$this->postService,
 			$this->streamService,
 			$this->documentService,
 			$this->configService,
@@ -264,91 +257,20 @@ class LocalControllerTest extends TestCase {
 		self::assertSame(422, $this->controller()->accountProfileLayout(['default_tab' => 'private'])->getStatus());
 	}
 
-	// postCreate()
+	// the legacy POST /api/v1/post
 
-	public function testPostCreateBuildsThePostFromTheRequest(): void {
-		$actor = $this->actorForUser();
-		$object = $this->createStub(Note::class);
-		$activity = $this->createMock(ACore::class);
-		$activity->method('getObject')->willReturn($object);
-
-		$created = null;
-		$this->postService->expects($this->once())->method('createPost')
-			->willReturnCallback(function (Post $post, string &$token) use (&$created, $activity): ACore {
-				$created = $post;
-				$token = 'tok-123';
-
-				return $activity;
-			});
-
-		$response = $this->controller()->postCreate(
-			'Hello <b>world</b>', ['bob@remote.example'], 'followers', 'https://remote.example/n/1',
-			['https://cloud.example/documents/1'], ['nextcloud']
-		);
-
-		$this->assertSuccess($response, ['post' => $object, 'token' => 'tok-123']);
-		$this->assertSame($actor, $created->getActor());
-		$this->assertSame('Hello <b>world</b>', $created->getContent());
-		$this->assertSame(['bob@remote.example'], $created->getTo());
-		$this->assertSame('followers', $created->getType());
-		$this->assertSame('https://remote.example/n/1', $created->getReplyTo());
-		$this->assertSame(['https://cloud.example/documents/1'], $created->getAttachments());
-		$this->assertSame(['nextcloud'], $created->getHashtags());
-	}
-
-	public function testAPostTheServiceRefusesIsAnswered422WithTheReason(): void {
-		// 500 and 'request failed' reads as "the server broke"; the composer
-		// has to be able to say why the post was not made
-		$this->actorForUser();
-		$this->postService->method('createPost')
-			->willThrowException(new InvalidActionException('a post may not be longer than 5000 characters'));
-
-		$response = $this->controller()->postCreate('far too much');
-
-		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
-		$this->assertSame(
-			['status' => -1, 'error' => 'a post may not be longer than 5000 characters'],
-			$response->getData()
-		);
-	}
-
-	public function testPostCreateDefaultsToAPublicTopLevelPost(): void {
-		$this->actorForUser();
-		$created = null;
-		$this->postService->method('createPost')->willReturnCallback(function (Post $post) use (&$created): ACore {
-			$created = $post;
-
-			return $this->createMock(ACore::class);
-		});
-
-		$this->controller()->postCreate('just text');
-
-		$this->assertSame(Stream::TYPE_PUBLIC, $created->getType());
-		$this->assertSame('', $created->getReplyTo());
-		$this->assertSame([], $created->getTo());
-		$this->assertSame([], $created->getAttachments());
-		$this->assertSame([], $created->getHashtags());
-		$this->assertSame('', $created->getSpoilerText());
-	}
-
-	public function testPostCreateCarriesTheContentWarning(): void {
-		$this->actorForUser();
-		$created = null;
-		$this->postService->method('createPost')->willReturnCallback(function (Post $post) use (&$created): ACore {
-			$created = $post;
-
-			return $this->createMock(ACore::class);
-		});
-
-		$this->controller()->postCreate('who shot him', [], null, null, null, [], null, 'season finale');
-
-		$this->assertSame('season finale', $created->getSpoilerText());
-	}
-
-	public function testPostCreateRequiresALoggedInUser(): void {
-		$this->postService->expects($this->never())->method('createPost');
-
-		$this->assertNotLoggedIn($this->controller(null)->postCreate('x'));
+	/** Gone: a post written here goes through POST /api/v1/statuses and its review. */
+	public function testThereIsNoLegacyRouteToPostBy(): void {
+		$this->assertFalse(method_exists(LocalController::class, 'postCreate'));
+		foreach ((new \ReflectionClass(LocalController::class))->getMethods() as $method) {
+			foreach ($method->getAttributes(\OCP\AppFramework\Http\Attribute\FrontpageRoute::class) as $route) {
+				$arguments = $route->getArguments();
+				$this->assertFalse(
+					($arguments['verb'] ?? '') === 'POST' && ($arguments['url'] ?? '') === '/api/v1/post',
+					$method->getName()
+				);
+			}
+		}
 	}
 
 	/**
@@ -359,7 +281,6 @@ class LocalControllerTest extends TestCase {
 	public function testTheOwnAccountRoutesTellAReaderWithoutOneWhereToSetItUp(): void {
 		$this->accountService->method('getActorFromUserId')
 			->willThrowException(new ActorDoesNotExistException('Actor not found for user: alice'));
-		$this->postService->expects($this->never())->method('createPost');
 		$this->followService->expects($this->never())->method('followAccount');
 		$this->accountService->expects($this->never())->method('setFields');
 		$this->bannerService->expects($this->never())->method('setFromTempFile');
@@ -368,7 +289,6 @@ class LocalControllerTest extends TestCase {
 		$_FILES['file'] = ['tmp_name' => '/tmp/php-upload-1', 'error' => UPLOAD_ERR_OK];
 
 		foreach ([
-			'postCreate' => fn () => $this->controller()->postCreate('x'),
 			'postDelete' => fn () => $this->controller()->postDelete('https://cloud.example/@alice/1'),
 			'actionFollow' => fn () => $this->controller()->actionFollow('bob@remote.example'),
 			'actionUnfollow' => fn () => $this->controller()->actionUnfollow('bob@remote.example'),
@@ -383,13 +303,6 @@ class LocalControllerTest extends TestCase {
 			$this->assertSame('account-not-set-up', $response->getData()['code'], $route);
 			$this->assertSame('https://cloud.example.org/social.Navigation.navigate', $response->getData()['setup_url'], $route);
 		}
-	}
-
-	public function testPostCreateReportsServiceFailures(): void {
-		$this->actorForUser();
-		$this->postService->method('createPost')->willThrowException(new \RuntimeException('cannot post'));
-
-		$this->assertFailure($this->controller()->postCreate('x'), \RuntimeException::class, 'cannot post');
 	}
 
 	// postDelete()

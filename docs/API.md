@@ -70,10 +70,15 @@ gets a 404 and should move to the Mastodon route beside it:
 | `GET /api/v1/global/actor/header` | the `header` field of the Account entity |
 | `PUT /api/v1/account/summary` | `PATCH /api/v1/accounts/update_credentials` |
 | `GET /local/v1/search` | `GET /api/v2/search` |
+| `POST /api/v1/post` | `POST /api/v1/statuses` |
 
-The twelve that the frontend still uses -- the banner uploads, the
+`POST /api/v1/post` followed later: nothing in the web app used it any more,
+and it published without passing the post-review queue. Every local post now
+goes through that queue inside `PostService::createPost()`.
+
+The eleven that the frontend still uses -- the banner uploads, the
 `global/account` and `global/tags` searches, the profile field and avatar
-endpoints, `POST`/`DELETE /api/v1/post` and `/api/v1/current/follow` -- have no
+endpoints, `DELETE /api/v1/post` and `/api/v1/current/follow` -- have no
 Mastodon equivalent yet and stay.
 
 
@@ -1013,7 +1018,6 @@ A failure on the routes of `LocalController`, `NavigationController` and `OStatu
 
 | Method | Route | Auth | Parameters | Description |
 |--------|-------|------|------------|-------------|
-| POST | `/api/v1/post` | user | `content` (`''`), `to` (array), `type` (default `public`), `replyTo` (`''`), `attachments` (mixed, default `[]`), `hashtags` (array), `poll` (object, optional), `spoilerText` (`''`, the content warning) | Creates a post. A `replyTo` naming a post the writer may not read is a **404**, as one naming nothing is. Returns `{"result": {"post": <object>, "token": "<request token>"}, "status": 1}`. |
 | DELETE | `/api/v1/post` | user | `id` (required) | Deletes an own post; `{"result": [], "status": 1}`. An unknown id is a **404**, a post not attributed to the caller a **422**. |
 
 Boosting from a client goes through `POST /api/v1/statuses/{nid}/{act}` with `reblog`.
@@ -1190,6 +1194,8 @@ A held post is **not** in `social_stream`. What is stored is the request, so a p
 | DELETE | `/api/v1/review/{id}` | user | — | Takes one back. An author changing their mind about a post nobody has seen is not a moderation decision and leaves no record. Somebody else's, and one that does not exist, are the same **404**. |
 
 What happens at the moment of posting is on `POST /api/v1/statuses`: a held post answers **422** with `held_for_review: true`, the rule under `reason`, and the held post itself — the vocabulary Mastodon's API has for "this did not become a status", with enough beside it for a client to say something better than "failed". The request has been kept, so writing it again only finds the first one: the queue is unique on (account, text).
+
+The review runs in one place every local post goes through, `PostService::createPost()`, so no route can publish around it: the composer and Mastodon apps, Bluesky apps writing through this server, Pixelfed's direct messages and comments on Files all pass it. A post with `scheduled_at` is reviewed **when it is scheduled**, and a held one answers the same 422 then rather than being dropped by the cron later; its time is kept with it, and approving it schedules it for that time, or publishes it at once when the time has passed or is less than five minutes away. Not reviewed: a post a moderator approved, a scheduled post when it goes out (it was reviewed when it was scheduled), the announcement of an account move, the command a Bluesky move sends to Bridgy Fed, and `occ social:note:create`.
 
 ### Statistics
 

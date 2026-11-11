@@ -25,7 +25,6 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheContentDecodeException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
 use OCA\Social\Exceptions\CacheContentSizeException;
-use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidHandleException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\RefusalException;
@@ -33,9 +32,7 @@ use OCA\Social\External\ExternalUserBackend;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
-use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
-use OCA\Social\Model\Post;
 use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Security\RemoteAddress;
 use OCA\Social\Service\AccountService;
@@ -46,7 +43,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\HashtagService;
-use OCA\Social\Service\PostService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Traits\TArrayTools;
@@ -93,7 +89,6 @@ class LocalController extends Controller {
 		private CacheActorsRequest $cacheActorsRequest,
 		private HashtagService $hashtagService,
 		private FollowService $followService,
-		private PostService $postService,
 		private StreamService $streamService,
 		private DocumentService $documentService,
 		private ConfigService $configService,
@@ -343,70 +338,6 @@ class LocalController extends Controller {
 			if (is_string($tmpFile) && $tmpFile !== '' && file_exists($tmpFile)) {
 				unlink($tmpFile);
 			}
-		}
-	}
-
-	/**
-	 * Create a new post.
-	 *
-	 */
-	#[NoAdminRequired]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1/post')]
-	public function postCreate(string $content = '', array $to = [], ?string $type = null, ?string $replyTo = null, $attachments = null, array $hashtags = [], ?array $poll = null, string $spoilerText = ''): DataResponse {
-		$content = $content ?: '';
-		$replyTo = $replyTo ?? '';
-		$type = $type ?? Stream::TYPE_PUBLIC;
-		$attachments = $attachments ?? [];
-
-		$this->logger->debug('[LocalController] postCreate called', [
-			'userId' => $this->userId,
-			'contentLength' => strlen($content),
-			'type' => $type,
-			'hasAttachments' => !empty($attachments),
-		]);
-
-		try {
-			$actor = $this->ownAccount();
-			$this->logger->debug('[LocalController] Actor retrieved', ['actorId' => $actor->getId()]);
-
-			$post = new Post($actor);
-			$post->setContent($content);
-			$post->setReplyTo($replyTo);
-			$post->setTo($to);
-			$post->setType($type);
-			$post->setHashtags($hashtags);
-			$post->setAttachments($attachments);
-			$post->setPoll($poll);
-			$post->setSpoilerText($spoilerText);
-
-			$token = '';
-			$activity = $this->postService->createPost($post, $token);
-			$this->logger->info('[LocalController] Post created successfully', [
-				'token' => $token,
-				'activityId' => $activity->getId()
-			]);
-
-			return $this->success(
-				[
-					'post' => $activity->getObject(),
-					'token' => $token
-				]
-			);
-		} catch (InvalidActionException $e) {
-			// The request was understood and refused: too long, or a quote of a
-			// post that may not be quoted. `fail()` answers 500 with 'request
-			// failed', which reads as "the server broke" and leaves the composer
-			// nothing to say; this one exception is raised with a message meant
-			// for whoever is writing the post, so it is the one that is passed on.
-			return new DataResponse(
-				['status' => -1, 'error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY
-			);
-		} catch (Exception $e) {
-			$this->logger->error('[LocalController] postCreate failed', [
-				'exception' => $e->getMessage(),
-				'trace' => $e->getTraceAsString()
-			]);
-			return $this->failFor($e);
 		}
 	}
 

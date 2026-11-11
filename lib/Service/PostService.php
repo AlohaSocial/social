@@ -20,6 +20,7 @@ use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemUnknownException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Exceptions\RedundancyLimitException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\StreamNotFoundException;
@@ -139,6 +140,10 @@ class PostService {
 				throw new InvalidActionException($refusal);
 			}
 		}
+
+		// after every refusal, so nothing refused is put in front of a
+		// moderator, and before anything is written
+		$this->review($post, ($parent === null) ? '' : (string)$parent->getNid());
 
 		$note = new Note();
 		if ($post->getEvent() !== null) {
@@ -329,6 +334,67 @@ class PostService {
 	 *
 	 * @throws StreamNotFoundException
 	 */
+	/**
+	 * Puts a post past the review queue (`PostReviewService`): every post
+	 * written here goes through it, in `createPost()`, unless the post says
+	 * it is exempt (`Post::REVIEW_EXEMPT`). A post a rule holds is stored as
+	 * a request for a moderator (`REVIEW_HOLD`) or refused (`REVIEW_REFUSE`),
+	 * and either way nothing is published.
+	 *
+	 * Public for a post that is stored now and published later: a scheduled
+	 * post is reviewed when it is scheduled, while its author is there to be
+	 * told, and published exempt.
+	 *
+	 * @param string $inReplyToNid the nid of the post it answers, '' for none
+	 * @param int $scheduledAt when a scheduled post is to go out, kept with
+	 *                         the request so an approval schedules it
+	 *
+	 * @throws PostHeldException
+	 * @throws InvalidActionException the author has too many posts waiting
+	 */
+	public function review(Post $post, string $inReplyToNid = '', int $scheduledAt = 0): void {
+		if ($post->getReview() === Post::REVIEW_EXEMPT) {
+			return;
+		}
+		$review = $this->postReview();
+		if ($review === null) {
+			return;
+		}
+
+		$author = $post->getAuthor();
+		$reason = $review->assess(
+			$author,
+			$post->getContent(),
+			$post->getType(),
+			// asked of the attachments that were resolved, not of the ids a
+			// client sent: an id that named nothing is not a video on this post
+			PeerTubeService::soleVideo($post->getMedias()) !== null
+		);
+		if ($reason === '') {
+			return;
+		}
+		if ($post->getReview() === Post::REVIEW_REFUSE) {
+			throw new PostHeldException($reason);
+		}
+
+		$params = StatusAssemblyService::paramsOfPost($post, $inReplyToNid);
+		if ($scheduledAt > 0) {
+			$params['scheduled_at'] = $scheduledAt;
+		}
+
+		throw new PostHeldException($reason, $review->hold($author, $params, $reason));
+	}
+
+	/**
+	 * Resolved when first needed: the queue publishes what it approves through
+	 * this service. Null without a container, as in a unit test.
+	 */
+	private function postReview(): ?PostReviewService {
+		$service = $this->container?->get(PostReviewService::class);
+
+		return $service instanceof PostReviewService ? $service : null;
+	}
+
 	/**
 	 * Resolved when first needed rather than injected: the Bluesky side needs
 	 * services that need this one. Null without a container, as in a unit test.

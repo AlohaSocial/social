@@ -1928,8 +1928,6 @@ class ApiControllerTest extends TestCase {
 		$this->request->method('getParams')->willReturn(['status' => 'hello everybody']);
 		$this->moderationService->method('assertNotMoved')
 			->willThrowException(new \OCA\Social\Exceptions\AccountMovedException('this account has moved to https://new.example/users/alice'));
-		$this->postReviewService->method('assess')->willReturn(HeldPost::REASON_FIRST_POST);
-		$this->postReviewService->expects($this->never())->method('hold');
 		$this->postService->expects($this->never())->method('createPost');
 
 		$response = $this->controller()->statusNew();
@@ -2079,11 +2077,16 @@ class ApiControllerTest extends TestCase {
 	public function testStatusNewHeldForReviewStoresTheRequestAndPublishesNothing(): void {
 		$this->loggedInAs();
 		$this->request->method('getParams')->willReturn(['status' => 'hello everybody']);
-		$this->postReviewService->method('assess')->willReturn(HeldPost::REASON_FIRST_POST);
-		$this->postReviewService->method('paramsOf')->willReturn(['text' => 'hello everybody']);
 		$held = (new HeldPost())->setId(7)->setReason(HeldPost::REASON_FIRST_POST);
-		$this->postReviewService->expects($this->once())->method('hold')->willReturn($held);
-		$this->postService->expects($this->never())->method('createPost');
+		// reviewed once, by createPost(): the controller asks no rule itself
+		$this->postReviewService->expects($this->never())->method('assess');
+		$this->postService->expects($this->once())->method('createPost')
+			->willReturnCallback(function (Post $post) use ($held): never {
+				$this->assertSame(Post::REVIEW_HOLD, $post->getReview());
+
+				throw new \OCA\Social\Exceptions\PostHeldException(HeldPost::REASON_FIRST_POST, $held);
+			});
+		$this->streamService->expects($this->never())->method('getStreamById');
 
 		$response = $this->controller()->statusNew();
 
@@ -2094,10 +2097,30 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testStatusNewIsPostedWhenNoRuleHoldsIt(): void {
-		$this->postReviewService->method('assess')->willReturn('');
-		$this->postReviewService->expects($this->never())->method('hold');
+		$post = $this->postWith(['status' => 'hi']);
 
-		$this->assertSame('hi', $this->postWith(['status' => 'hi'])->getContent());
+		$this->assertSame('hi', $post->getContent());
+		$this->assertSame(Post::REVIEW_HOLD, $post->getReview(), 'reviewed inside createPost()');
+		$this->assertSame('https://cloud.example/apps/social/@alice', $post->getAuthor()->getId(), 'as the person who wrote it');
+	}
+
+	/** Reviewed when it is scheduled, so its author hears of a hold then. */
+	public function testAScheduledPostARuleHoldsIsAnsweredAsHeldWhenItIsScheduled(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn([
+			'status' => 'later', 'scheduled_at' => '2030-01-01T12:00:00Z',
+		]);
+		$held = (new HeldPost())->setId(8)->setReason(HeldPost::REASON_LINKS);
+		$this->scheduledStatusService->method('requestedTime')->willReturn(1893499200);
+		$this->scheduledStatusService->method('schedule')
+			->willThrowException(new \OCA\Social\Exceptions\PostHeldException(HeldPost::REASON_LINKS, $held));
+		$this->postService->expects($this->never())->method('createPost');
+
+		$response = $this->controller()->statusNew();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertTrue($response->getData()['held_for_review']);
+		$this->assertSame($held, $response->getData()['held_post']);
 	}
 
 	public function testStatusNewWithoutAScheduledTimePostsStraightAway(): void {

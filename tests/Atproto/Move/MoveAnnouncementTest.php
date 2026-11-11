@@ -43,6 +43,7 @@ class MoveAnnouncementTest extends TestCase {
 			$this->assertSame('My account alice.social.test now lives at alice.pds.example.com: https://bsky.app/profile/alice.pds.example.com', $post->getContent());
 			$this->assertSame('public', $post->getType());
 			$this->assertSame($this->actor, $post->getActor());
+			$this->assertSame(Post::REVIEW_EXEMPT, $post->getReview(), 'this server\'s template');
 
 			return true;
 		}));

@@ -173,6 +173,8 @@ class BridgyTwin {
 		$post = new Post($actor);
 		$post->setContent('@' . self::BOT . ' ' . $command);
 		$post->setType(Stream::TYPE_DIRECT);
+		// a command this server wrote, for a bot
+		$post->setReview(Post::REVIEW_EXEMPT);
 		$this->posts->createPost($post);
 	}
 }

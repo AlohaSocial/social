@@ -38,6 +38,7 @@ use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Model\ActivityPub\Activity\Create;
 use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -46,6 +47,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\HeldPost;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
@@ -57,8 +59,6 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\IRecommendationSignalRecorder;
 use OCA\Social\Service\LikeService;
-use OCA\Social\Service\ModerationService;
-use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\ReportService;
@@ -77,8 +77,6 @@ class WriteServiceTest extends TestCase {
 
 	/** @var PostService&MockObject */
 	private PostService $posts;
-	/** @var PostReviewService&MockObject */
-	private PostReviewService $review;
 	/** @var LikeService&MockObject */
 	private LikeService $likes;
 	/** @var BoostService&MockObject */
@@ -149,7 +147,6 @@ class WriteServiceTest extends TestCase {
 		$this->banners = $this->createMock(BannerService::class);
 		$this->posts = $this->createMock(PostService::class);
 		$this->streams = $this->createMock(StreamService::class);
-		$this->review = $this->createMock(PostReviewService::class);
 		$this->likes = $this->createMock(LikeService::class);
 		$this->boosts = $this->createMock(BoostService::class);
 		$this->follows = $this->createMock(FollowService::class);
@@ -183,7 +180,7 @@ class WriteServiceTest extends TestCase {
 		$this->listImport = $this->createMock(BlueskyListImport::class);
 		$this->activities = $this->createMock(ActivityService::class);
 		$this->writes = new WriteService(
-			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->follows,
+			$accounts, $this->posts, $this->streams, $this->likes, $this->boosts, $this->follows,
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->interactions, $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
@@ -887,17 +884,16 @@ class WriteServiceTest extends TestCase {
 		]]);
 	}
 
+	/** Reviewed once, inside createPost(), as a post from the composer is; a hold is the moderator answer. */
 	public function testAPostTheReviewRulesHoldIsKeptAndNotPublished(): void {
-		$this->review->method('assess')->willReturn('first_post');
-		$this->review->expects($this->once())->method('hold')->with($this->alice, $this->callback(function (array $params): bool {
-			$this->assertSame('Hello from an app', $params['text']);
-			$this->assertSame('public', $params['visibility']);
-			$this->assertSame([], $params['media_ids']);
-			$this->assertNull($params['in_reply_to_id']);
+		$this->posts->expects($this->once())->method('createPost')
+			->willReturnCallback(function (Post $post): never {
+				$this->assertSame(Post::REVIEW_HOLD, $post->getReview(), 'not exempt from the review');
+				$this->assertSame('Hello from an app', $post->getContent());
+				$this->assertSame('public', $post->getType());
 
-			return true;
-		}), 'first_post');
-		$this->posts->expects($this->never())->method('createPost');
+				throw new PostHeldException('first_post', new HeldPost());
+			});
 		$this->publisher->expects($this->never())->method('publishPost');
 
 		try {
@@ -994,10 +990,12 @@ class WriteServiceTest extends TestCase {
 	/** A thread an app posts in one applyWrites: its first post, the reply the rules hold, and that reply's gate. */
 	private function applyThreadWithAHeldReply(): XrpcException {
 		$this->repositories->method('batchActive')->willReturn(true);
-		$this->review->method('assess')->willReturnCallback(static fn (Person $actor, string $text): string => str_contains($text, 'held') ? 'links' : '');
 		$made = new Note();
 		$made->setId('https://social.test/@alice/7');
-		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+		$this->posts->expects($this->exactly(2))->method('createPost')->willReturnCallback(function (Post $post) use ($made): Create {
+			if (str_contains($post->getContent(), 'held')) {
+				throw new PostHeldException('links', new HeldPost());
+			}
 			$this->records[] = $this->record(RecordMapper::POST, '3kroot', $made->getId());
 			$activity = new Create();
 			$activity->setObjectId($made->getId());
@@ -1025,7 +1023,6 @@ class WriteServiceTest extends TestCase {
 	}
 
 	public function testAPostHeldInApplyWritesIsKeptWithTheWritesBeforeIt(): void {
-		$this->review->expects($this->once())->method('hold')->with($this->alice, $this->callback(static fn (array $params): bool => $params['text'] === 'The held reply'), 'links');
 		$this->publisher->expects($this->once())->method('publishPost');
 		$this->repositories->expects($this->once())->method('beginBatch');
 		$this->repositories->expects($this->once())->method('commitBatch');
@@ -1053,9 +1050,8 @@ class WriteServiceTest extends TestCase {
 
 	public function testTheOnlyPostOfAnApplyWritesHeldIsKeptWithTheModeratorAnswer(): void {
 		$this->repositories->method('batchActive')->willReturn(true);
-		$this->review->method('assess')->willReturn('first_post');
-		$this->review->expects($this->once())->method('hold');
-		$this->posts->expects($this->never())->method('createPost');
+		$this->posts->expects($this->once())->method('createPost')
+			->willThrowException(new PostHeldException('first_post', new HeldPost()));
 		$this->repositories->expects($this->once())->method('commitBatch');
 		$this->repositories->expects($this->never())->method('rollbackBatch');
 
@@ -1487,7 +1483,7 @@ class WriteServiceTest extends TestCase {
 		$this->repositories->method('batchActive')->willReturnCallback(static function () use (&$events): bool {
 			return in_array('lock', $events, true);
 		});
-		$this->review->method('assess')->willReturn('first_post');
+		$this->posts->method('createPost')->willThrowException(new PostHeldException('first_post', new HeldPost()));
 		$reply = static fn (string $rkey): array => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/' . $rkey, 'cid' => 'bafyreicid'];
 
 		try {

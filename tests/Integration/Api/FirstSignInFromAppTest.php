@@ -169,7 +169,7 @@ class FirstSignInFromAppTest extends ApiTestCase {
 			'a Mastodon route, app password' => $this->call(AccountApiController::class, 'verifyCredentials', [], [], 'dora', appPassword: true),
 			'a client-API route, web session' => $this->call(ListController::class, 'index', [], [], 'dora', webSession: true),
 			'a client-API route, app password' => $this->call(ListController::class, 'index', [], [], 'dora', appPassword: true),
-			'a route of the web app' => $this->call(LocalController::class, 'postCreate', [], ['content' => 'hello'], 'dora', 'POST', webSession: true),
+			'a route of the web app' => $this->call(LocalController::class, 'postDelete', [], ['id' => 'https://cloud.example/@dora/1'], 'dora', 'DELETE', webSession: true),
 			'held posts' => $this->call(ReviewController::class, 'held', [], [], 'dora', webSession: true),
 			'a shared moderation list' => $this->call(ModerationListController::class, 'subscribe', [], ['url' => 'https://lists.example/mute.csv'], 'dora', 'POST', webSession: true),
 			'the address to leave behind' => $this->call(MigrationController::class, 'switchAnnouncement', [], [], 'dora', webSession: true),

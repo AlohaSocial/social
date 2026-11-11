@@ -13,6 +13,7 @@ use DateTime;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FileCommentsRequest;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\ActorRelation;
@@ -388,24 +389,21 @@ class FileCommentsService {
 			return;
 		}
 
-		$text = $this->textOf($comment);
-		$review = $this->container->get(PostReviewService::class);
-		if ($review->assess($actor, $text, $post->getVisibility()) !== '') {
-			$this->logger->info('[FileCommentsService] a comment would be held for review, so it stays a comment', [
-				'comment' => $comment->getId(),
-			]);
-
-			return;
-		}
-
 		$reply = new Post($actor);
-		$reply->setContent($text);
+		$reply->setContent($this->textOf($comment));
 		$reply->setType($post->getVisibility());
 		$reply->setReplyTo($link->postId);
+		// refused rather than held: the comment stays a comment, and nothing
+		// is put in front of a moderator
+		$reply->setReview(Post::REVIEW_REFUSE);
 
 		$this->publishing = $comment;
 		try {
 			$this->postService()->createPost($reply);
+		} catch (PostHeldException) {
+			$this->logger->info('[FileCommentsService] a comment would be held for review, so it stays a comment', [
+				'comment' => $comment->getId(),
+			]);
 		} finally {
 			$this->publishing = null;
 		}

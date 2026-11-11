@@ -109,6 +109,7 @@ class BridgyTwinTest extends TestCase {
 		$posts->expects($this->once())->method('createPost')->with($this->callback(function (Post $post): bool {
 			$this->assertSame('@bsky.brid.gy@bsky.brid.gy migrate-to social.example.com alice@social.example.com alice.social.example.com code-1 code-1', $post->getContent());
 			$this->assertSame(Stream::TYPE_DIRECT, $post->getType());
+			$this->assertSame(Post::REVIEW_EXEMPT, $post->getReview(), 'a command this server wrote');
 
 			return true;
 		}));
