@@ -13,9 +13,11 @@ use DateTime;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
+use OCA\Social\Migration\Version1000Date20261110000001;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
+use OCP\Migration\IOutput;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -321,5 +323,51 @@ class CacheDocumentsRequestTest extends TestCase {
 		$doc = $this->document('by-url');
 		$this->documents->deleteByUrl($doc->getUrl());
 		$this->assertFalse($this->documents->isDuplicate($doc));
+	}
+
+	/**
+	 * `/media/{uuid}` finds a row by the indexed key of its copy names, so a
+	 * name that changes is found under the new name and no longer under the
+	 * old one, and a purge, which keeps the names, keeps the row reachable.
+	 */
+	public function testACopyIsFoundUnderItsCurrentNameOnly(): void {
+		$doc = $this->document('renamed', ['localCopy' => 'uuid-r-full', 'resizedCopy' => 'uuid-r-small']);
+
+		$doc->setLocalCopy('uuid-r-full-2')->setResizedCopy('uuid-r-small-2');
+		$this->documents->endCaching($doc);
+		$this->assertSame($doc->getId(), $this->documents->getByCopy('uuid-r-full-2')->getId());
+		$this->assertSame($doc->getId(), $this->documents->getByCopy('uuid-r-small-2')->getId());
+
+		$this->documents->replaceLocalCopy($doc->getNid(), 'uuid-r-full-3', 10);
+		$this->assertSame($doc->getId(), $this->documents->getByLocalCopy('uuid-r-full-3')->getId());
+
+		$this->documents->markEvicted($doc->getNid());
+		$this->assertSame($doc->getId(), $this->documents->getByCopy('uuid-r-full-3')->getId());
+
+		$this->expectException(CacheDocumentDoesNotExistException::class);
+		$this->documents->getByCopy('uuid-r-full-2');
+	}
+
+	/** Rows written before the keys existed are keyed by the migration. */
+	public function testTheMigrationKeysTheRowsAlreadyThere(): void {
+		$doc = $this->document('legacy', ['localCopy' => 'uuid-l-full', 'resizedCopy' => 'uuid-l-small']);
+		$qb = Server::get(IDBConnection::class)->getQueryBuilder();
+		$qb->update(CoreRequestBuilder::TABLE_CACHE_DOCUMENTS)
+			->set('local_copy_prim', $qb->createNamedParameter(''))
+			->set('resized_copy_prim', $qb->createNamedParameter(''))
+			->where($qb->expr()->eq('id_prim', $qb->createNamedParameter(md5($doc->getId()))));
+		$qb->executeStatement();
+
+		try {
+			$this->documents->getByCopy('uuid-l-small');
+			$this->fail('an unkeyed row was found');
+		} catch (CacheDocumentDoesNotExistException) {
+		}
+
+		Server::get(Version1000Date20261110000001::class)
+			->postSchemaChange($this->createStub(IOutput::class), static fn () => null, []);
+
+		$this->assertSame($doc->getId(), $this->documents->getByCopy('uuid-l-full')->getId());
+		$this->assertSame($doc->getId(), $this->documents->getByCopy('uuid-l-small')->getId());
 	}
 }
