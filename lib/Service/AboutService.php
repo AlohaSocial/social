@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\SocialAppConfigException;
@@ -16,7 +17,8 @@ use OCP\IAppConfig;
 
 /**
  * What this server says about itself to the people on it: its rules, who to
- * contact, and its privacy policy and legal notice.
+ * contact, its privacy policy and legal notice, and the address an app signs
+ * in with.
  *
  * Read from the settings that already hold each of them — the rules and the
  * contact from this app, the two links from Nextcloud's Theming — so the
@@ -34,6 +36,8 @@ class AboutService {
 		private InstanceService $instanceService,
 		private ActorsRequest $actorsRequest,
 		private IAppConfig $appConfig,
+		private CheckService $checkService,
+		private AtprotoConfig $atprotoConfig,
 	) {
 	}
 
@@ -44,7 +48,8 @@ class AboutService {
 	 *     rules: array<array{id: string, text: string}>,
 	 *     contact: array{email: string, account: array{username: string, display_name: string}|null},
 	 *     privacy_policy_url: string,
-	 *     legal_notice_url: string
+	 *     legal_notice_url: string,
+	 *     apps: array{mastodon: string, bluesky: string}
 	 * }
 	 */
 	public function about(): array {
@@ -58,7 +63,37 @@ class AboutService {
 			],
 			'privacy_policy_url' => $this->webUrl('privacyUrl'),
 			'legal_notice_url' => $this->webUrl('imprintUrl'),
+			'apps' => $this->appAddresses(),
 		];
+	}
+
+	/**
+	 * What to type into a phone or desktop app to sign in here, '' where that
+	 * kind of app cannot.
+	 *
+	 * A Mastodon app is given a domain and asks `/api/v1/instance` at its
+	 * root, so the domain is offered only once the setup check has found the
+	 * client API answering there; the stored result is read, never probed,
+	 * because anybody signed in may ask. A Bluesky app is given the PDS, which
+	 * exists while Bluesky is switched on.
+	 *
+	 * @return array{mastodon: string, bluesky: string}
+	 */
+	public function appAddresses(): array {
+		$mastodon = '';
+		$bluesky = '';
+		try {
+			if ($this->checkService->clientApiRootIsKnownGood()) {
+				$mastodon = $this->configService->getCloudAuthority();
+			}
+			if ($this->atprotoConfig->isEnabled()) {
+				$bluesky = $this->atprotoConfig->pdsEndpoint();
+			}
+		} catch (SocialAppConfigException $e) {
+			// no address confirmed yet: there is nothing an app could reach
+		}
+
+		return ['mastodon' => $mastodon, 'bluesky' => $bluesky];
 	}
 
 	/**

@@ -55,6 +55,26 @@ describe('the authorized apps', () => {
 		expect(rows(wrapper)).toHaveLength(0)
 	})
 
+	it('shows how to sign an app in while there is none', async () => {
+		get.mockImplementation((url) => Promise.resolve({
+			data: url.endsWith('/about/info') ? { apps: { mastodon: 'cloud.example', bluesky: '' } } : [],
+		}))
+
+		const wrapper = mount(AuthorizedApps)
+		await flushPromises()
+
+		expect(wrapper.find('.use-in-app__code').text()).toBe('cloud.example')
+	})
+
+	it('leaves the app address out once an app is signed in', async () => {
+		get.mockResolvedValue({ data: [app()] })
+
+		const wrapper = mount(AuthorizedApps)
+		await flushPromises()
+
+		expect(wrapper.find('.use-in-app').exists()).toBe(false)
+	})
+
 	it('shows the app, what it may do and when it was last used', async () => {
 		get.mockResolvedValue({ data: [app()] })
 

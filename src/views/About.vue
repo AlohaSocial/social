@@ -53,6 +53,13 @@
 				</p>
 			</section>
 
+			<section class="about__section" aria-labelledby="about-apps">
+				<h2 id="about-apps">
+					{{ t('social', 'Use it in an app') }}
+				</h2>
+				<UseInAppCard :apps="about.apps" :titled="false" />
+			</section>
+
 			<section v-if="about.privacy_policy_url || about.legal_notice_url" class="about__section" aria-labelledby="about-legal">
 				<h2 id="about-legal">
 					{{ t('social', 'Legal') }}
@@ -76,11 +83,13 @@ import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import UseInAppCard from '../components/UseInAppCard.vue'
 import logger from '../services/logger.js'
 
 /**
  * The server's own page for the people on it: its rules, who to contact,
- * and its privacy policy and legal notice where the administrators set them.
+ * how to use it from an app, and its privacy policy and legal notice where
+ * the administrators set them.
  */
 export default {
 	name: 'About',
@@ -88,6 +97,7 @@ export default {
 	components: {
 		NcLoadingIcon,
 		NcNoteCard,
+		UseInAppCard,
 	},
 
 	data() {
@@ -101,6 +111,7 @@ export default {
 				contact: { email: '', account: null },
 				privacy_policy_url: '',
 				legal_notice_url: '',
+				apps: { mastodon: '', bluesky: '' },
 			},
 		}
 	},

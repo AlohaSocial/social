@@ -151,6 +151,17 @@ describe('BlueskySettings', () => {
 		expect(writeText).toHaveBeenCalledWith(window.location.origin)
 	})
 
+	it('puts the sign-in help and the app passwords first, ahead of recovery and handles', async () => {
+		serverHas()
+		const wrapper = mountSettings()
+		await flushPromises()
+
+		const order = [...wrapper.element.querySelectorAll('.bluesky-settings__pds-sign-in, .bluesky-settings__app-passwords, .bluesky-settings__recovery, .bluesky-settings__control, .bluesky-settings__custom-handle')]
+			.map((element) => element.className.replace('bluesky-settings__', ''))
+		expect(order.slice(0, 2)).toEqual(['pds-sign-in', 'app-passwords'])
+		expect(order).toContain('recovery')
+	})
+
 	it('says so when the identity could not be read', async () => {
 		axios.get.mockRejectedValue(new Error('offline'))
 		const wrapper = mountSettings()

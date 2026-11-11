@@ -54,7 +54,8 @@ Aloha Social (see [Managing your account](#managing-your-account)).
 
 On the first visit the app shows a four-step introduction: your address with a
 copy button (and your Bluesky address under it, where the account has one), people to follow, a way to bring the follows you already have from
-another server, and a button that puts you in the composer. Every step can be
+another server, and a button that puts you in the composer, above the *Use it
+in an app* card (see [Using it from an app](#using-it-from-an-app)). Every step can be
 skipped; once closed it stays closed, and **Settings → Help → Introduction** shows it
 again.
 
@@ -74,6 +75,25 @@ An app that signs in with a Nextcloud app password instead is told, until you
 have an account here, that your account is not set up yet, with the address
 of the setup page: open it in a browser, choose your username, and try the
 app again.
+
+### Using it from an app
+
+The **Use it in an app** card says what to type into an app on your phone or
+computer. It is in the last step of the introduction, in **Settings → Apps and
+account → Authorized apps** while no app is signed in, and on **About this
+server**. It shows only what works on this server:
+
+- **In a Mastodon app**, the server's domain, with a copy button. The app opens
+  the sign-in page in your browser, so your password is never given to the app.
+  The domain is shown only once the administrators have set the server up for
+  Mastodon apps; until then the card says that Mastodon apps cannot sign in
+  yet.
+- **In a Bluesky app**, where Bluesky is switched on, the hosting provider
+  address, and a link to the app passwords in **Settings → Apps and account →
+  Bluesky** (see [Bluesky apps](#bluesky)).
+- **Apps known to work**: Aloha Social for iPhone, iPad and Mac, Aloha Social
+  for Android, and Elk and Phanpy in a browser, all of them Mastodon apps, and
+  the Bluesky app. The card has no QR code.
 
 ### Registering without a Nextcloud account
 
@@ -986,9 +1006,9 @@ Every change is saved as you make it; there is no Save button to forget, except
 in a form you fill in, such as the portfolio.
 
 **About this server.** The account menu also has **About this server**: the
-server's rules, who to contact about it (an address, an account or both), and
-links to its privacy policy and legal notice, where the administrators have set
-them.
+server's rules, who to contact about it (an address, an account or both), the
+*Use it in an app* card, and links to its privacy policy and legal notice, where
+the administrators have set them.
 
 **Pronouns and a support link.** Two of the four profile fields on **Edit
 profile** have boxes of their own, because this app draws them differently: the
@@ -1113,7 +1133,8 @@ hand, it is picked up as one.
   used. **Sign this app out** takes the key back, and the app asks you to sign
   in again the next time you open it. It is the page to open after losing a
   phone, and the only page where signing an app out does not depend on still
-  having the app.
+  having the app. While nothing is signed in, it shows the *Use it in an app*
+  card instead.
 - **Export and migration.** The whole move, in order, is one page:
   [Moving.md](Moving.md). **Migration** (in the account menu at the foot of
   the sidebar, a page of its own) has these sections.
@@ -1314,7 +1335,9 @@ passes the report on to Bluesky's moderation service — sent by this server, no
 in your name.
 
 **Bluesky apps.** You can use the Bluesky app, or any other Bluesky client,
-with this account. In *Settings → Apps and account → Bluesky* make an
+with this account. *Sign in to the Bluesky app*, at the top of *Settings → Apps
+and account → Bluesky*, shows the address to enter, with the app passwords
+under it. There, make an
 **app password** and copy it — it is shown once. In the app, choose to sign in with
 a different hosting provider, give this server's address, then your Bluesky
 handle and the app password. This is not your Nextcloud password; never enter
