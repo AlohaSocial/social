@@ -67,6 +67,21 @@ class AsyncRequestSignerTest extends TestCase {
 		$this->assertFalse($signer->verify('tok-1', self::NOW . '.' . bin2hex(hash_hmac('sha512', 'social-async-request:tok-1', 'instance-secret', true))), 'the time is part of what is signed');
 	}
 
+	/**
+	 * A follow-up round of a drain is signed with its number, so a signature
+	 * for one round starts no other; the first round is signed as it always
+	 * was.
+	 */
+	public function testARoundIsPartOfWhatIsSigned(): void {
+		$signer = $this->signer();
+
+		$this->assertTrue($signer->verify('tok-1', $signer->sign('tok-1', 2), 2));
+		$this->assertFalse($signer->verify('tok-1', $signer->sign('tok-1', 2), 3));
+		$this->assertFalse($signer->verify('tok-1', $signer->sign('tok-1', 2)));
+		$this->assertFalse($signer->verify('tok-1', $signer->sign('tok-1'), 2));
+		$this->assertSame($signer->sign('tok-1'), $signer->sign('tok-1', 0));
+	}
+
 	/** The time, a dot, lower-case hex: it travels in a header unchanged. */
 	public function testTheSignatureIsTheTimeAndHex(): void {
 		$this->assertMatchesRegularExpression('/^[0-9]+\.[0-9a-f]{128}$/', $this->signer()->sign('tok-1'));

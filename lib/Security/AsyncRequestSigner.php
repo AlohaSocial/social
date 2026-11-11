@@ -23,11 +23,17 @@ use OCP\Security\ICrypto;
  * more than MAX_AGE ago, is refused before the queue is read.
  *
  * The header reads `<unix time>.<hex HMAC>`.
+ *
+ * A follow-up round of the same drain (`QueueController::MAX_ROUNDS`) names
+ * its number in `ROUND_HEADER`, and the number is signed with the token, so
+ * a signature for one round cannot start another.
  */
 class AsyncRequestSigner {
 	public const HEADER = 'X-Social-Async-Signature';
 	/** how long a signature is good for, in seconds, either way of the clock */
 	public const MAX_AGE = 300;
+	/** which round of a token's drain the call starts; absent for the first */
+	public const ROUND_HEADER = 'X-Social-Async-Round';
 
 	public function __construct(
 		private ICrypto $crypto,
@@ -35,13 +41,13 @@ class AsyncRequestSigner {
 	) {
 	}
 
-	public function sign(string $token): string {
+	public function sign(string $token, int $round = 0): string {
 		$at = $this->time->getTime();
 
-		return $at . '.' . $this->mac($token, $at);
+		return $at . '.' . $this->mac($token, $at, $round);
 	}
 
-	public function verify(string $token, string $signature): bool {
+	public function verify(string $token, string $signature, int $round = 0): bool {
 		if ($token === '' || !str_contains($signature, '.')) {
 			return false;
 		}
@@ -50,10 +56,15 @@ class AsyncRequestSigner {
 			return false;
 		}
 
-		return hash_equals($this->mac($token, (int)$at), $mac);
+		return hash_equals($this->mac($token, (int)$at, $round), $mac);
 	}
 
-	private function mac(string $token, int $at): string {
-		return bin2hex($this->crypto->calculateHMAC('social-async-request:' . $at . ':' . $token));
+	private function mac(string $token, int $at, int $round): string {
+		$message = 'social-async-request:' . $at . ':' . $token;
+		if ($round > 0) {
+			$message .= ':' . $round;
+		}
+
+		return bin2hex($this->crypto->calculateHMAC($message));
 	}
 }
