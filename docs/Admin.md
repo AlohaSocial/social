@@ -388,6 +388,18 @@ The **Deliveries** section of the Aloha Social settings names the instances
 the failures are stacked against, with the highest attempt count so far and
 when each was last tried.
 
+### Stored posts and bios after an upgrade
+
+Post bodies and the bios of cached accounts are stored already cleaned by the
+HTML sanitizer and stamped with its version, so reading them does not run it
+again. Text stored by an older version, or under the other HTML parser (PHP
+8.3 against 8.4 and later), is cleaned on every read as before until
+`Cron\Resanitize` has rewritten it: every five minutes it takes up to 10,000
+posts and as many bios, walking each table once from a cursor in the app
+settings, and does nothing once both walks have reached the end. A row it
+cannot rewrite is logged (`cannot bring a stored text up to the current
+sanitizer`) and passed over; it still reads correctly, only slower.
+
 ### Posts the index repairs skipped
 
 Two background jobs walk the posts an older version stored, oldest first, from

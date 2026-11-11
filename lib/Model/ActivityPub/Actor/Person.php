@@ -1437,7 +1437,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		$this->setPreferredUsername($this->validate(self::AS_USERNAME, 'preferred_username', $data, ''))
 			->setUserId($this->get('user_id', $data, ''))
 			->setName($this->validate(self::AS_USERNAME, 'name', $data, ''))
-			->setDescription($this->validate(self::AS_CONTENT, 'summary', $data))
+			->setDescription($this->storedDescription($data))
 			->setAccount($this->validate(self::AS_ACCOUNT, 'account', $data, ''))
 			->setPublicKey($this->get('public_key', $data, ''))
 			->setPrivateKey($this->get('private_key', $data, ''))
@@ -1477,6 +1477,20 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			}
 		} catch (Exception $e) {
 		}
+	}
+
+	/**
+	 * The bio as the sanitizer makes it out of `summary`: the cached actor
+	 * row stores it ready, stamped (`CacheActorsRequest`), and only a row
+	 * under another stamp, or a row of another table, is sanitized here.
+	 */
+	private function storedDescription(array $data): string {
+		if ($this->getInt('sanitized', $data, 0) === HtmlSanitizer::version()
+			&& is_string($data['description'] ?? null)) {
+			return $data['description'];
+		}
+
+		return $this->validate(self::AS_CONTENT, 'summary', $data);
 	}
 
 	/**

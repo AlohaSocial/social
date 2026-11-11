@@ -78,6 +78,7 @@ Aloha Social implements ActivityPub, a large part of the Mastodon client API and
 		<job>OCA\Social\Cron\ModerationLists</job>
 		<job>OCA\Social\Cron\AtprotoVideo</job>
 		<job>OCA\Social\Cron\FillFollowedTags</job>
+		<job>OCA\Social\Cron\Resanitize</job>
 	</background-jobs>
 
 	<repair-steps>

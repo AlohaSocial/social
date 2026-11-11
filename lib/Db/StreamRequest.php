@@ -22,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use OCA\Social\Security\HtmlSanitizer;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FediverseService;
@@ -295,7 +296,8 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->set(
 			'to_array', $qb->createNamedParameter(json_encode($stream->getToArray(), JSON_UNESCAPED_SLASHES))
 		);
-		$qb->set('content', $qb->createNamedParameter($stream->getContent()));
+		$qb->set('content', $qb->createNamedParameter(HtmlSanitizer::sanitize($stream->getContent(), $stream->getId())));
+		$qb->set('sanitized', $qb->createNamedParameter(HtmlSanitizer::version(), IQueryBuilder::PARAM_INT));
 		$qb->set('summary', $qb->createNamedParameter($stream->getSummary()));
 		$qb->set('sensitive', $qb->createNamedParameter($stream->isSensitive() ? 1 : 0));
 		$qb->set('source', $qb->createNamedParameter($stream->getSource()));
@@ -1345,7 +1347,10 @@ class StreamRequest extends StreamRequestBuilder {
 					json_encode($stream->getBccArray(), JSON_UNESCAPED_SLASHES)
 				)
 			)
-			->setValue('content', $qb->createNamedParameter($stream->getContent()))
+			// stored as every read hands it out, stamped, so a read need not
+			// sanitize it again (Stream::importFromDatabase())
+			->setValue('content', $qb->createNamedParameter(HtmlSanitizer::sanitize($stream->getContent(), $stream->getId())))
+			->setValue('sanitized', $qb->createNamedParameter(HtmlSanitizer::version(), IQueryBuilder::PARAM_INT))
 			->setValue('summary', $qb->createNamedParameter($stream->getSummary()))
 			->setValue('published', $qb->createNamedParameter($stream->getPublished()))
 			->setValue('attributed_to', $qb->createNamedParameter($attributedTo))
