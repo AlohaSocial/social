@@ -458,8 +458,13 @@ class SetupChecksTest extends TestCase {
 		$result = $this->publicReady(true, false, [AboutService::MISSING_CONTACT, AboutService::MISSING_LEGAL_NOTICE]);
 
 		$this->assertSame(SetupResult::WARNING, $result->getSeverity());
-		$this->assertStringContainsString('can sign up here, but this server has no a contact address or account, a legal notice link', (string)$result->getDescription());
-		$this->assertStringContainsString('Administration → Theming', (string)$result->getDescription());
+		$this->assertSame(
+			'People without a Nextcloud account can sign up here, so this server should say who runs it and on what terms.'
+			. ' No contact address or account is set. No legal notice link is set.'
+			. ' Set the contact and the rules under Administration → Aloha Social → About this server.'
+			. ' Set the privacy policy and legal notice links under Administration → Theming.',
+			(string)$result->getDescription()
+		);
 		$this->assertSame(PublicReady::DOC, $result->getLinkToDoc());
 	}
 
@@ -467,7 +472,15 @@ class SetupChecksTest extends TestCase {
 		$result = $this->publicReady(false, true, [AboutService::MISSING_RULES, AboutService::MISSING_PRIVACY]);
 
 		$this->assertSame(SetupResult::INFO, $result->getSeverity());
-		$this->assertStringContainsString('federates with other servers, but has no server rules, a privacy policy link', (string)$result->getDescription());
+		$this->assertStringStartsWith('This server federates with other servers, so it should say who runs it and on what terms. No server rules are written. No privacy policy link is set.', (string)$result->getDescription());
+	}
+
+	/** only the place that holds what is missing is named */
+	public function testOnlyTheThemingLinksMissingPointsOnlyToTheming(): void {
+		$description = (string)$this->publicReady(true, false, [AboutService::MISSING_PRIVACY])->getDescription();
+
+		$this->assertStringNotContainsString('About this server', $description);
+		$this->assertStringEndsWith('Set the privacy policy and legal notice links under Administration → Theming.', $description);
 	}
 
 	public function testAServerWithItsBasicsOrFacingNobodyIsQuiet(): void {

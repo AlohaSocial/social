@@ -148,7 +148,7 @@ describe('the administration page', () => {
 	it('puts every section in exactly one group, shown one group at a time', async () => {
 		const wrapper = await mountPage(STATE)
 
-		expect(groupNames(wrapper)).toEqual(['Overview', 'Moderation', 'Explore and features', 'Federation', 'Server'])
+		expect(groupNames(wrapper)).toEqual(['Overview', 'Moderation', 'Discover and features', 'Federation', 'Server'])
 
 		const seen = {}
 		for (const name of groupNames(wrapper)) {
@@ -159,10 +159,10 @@ describe('the administration page', () => {
 
 		expect(seen).toEqual({
 			Overview: ['Needs attention', 'Activity here'],
-			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Verified accounts', 'Refused pictures', 'Server rules'],
-			'Explore and features': ['About this server', 'What may trend', 'Custom emoji', 'Announcements', 'Features'],
+			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Verified accounts', 'Refused pictures'],
+			'Discover and features': ['Topics on Discover', 'What may trend', 'Custom emoji', 'Announcements', 'Features'],
 			Federation: ['Allowed and blocked servers', 'Block lists', 'Relays', 'Deliveries'],
-			Server: ['Server settings', 'Retention', 'Storage', 'Background jobs'],
+			Server: ['About this server', 'Server settings', 'Retention', 'Storage', 'Background jobs'],
 		})
 	})
 
@@ -196,6 +196,8 @@ describe('the administration page', () => {
 		// nor what the app offers everybody, which is a decision about the
 		// instance rather than about a report
 		expect(all).not.toContain('Features')
+		// the rules are the moderators' to keep, inside the About card
+		expect(all).toContain('About this server')
 		expect(all).toHaveLength(17)
 	})
 
@@ -320,7 +322,7 @@ describe('what needs attention', () => {
 			link.find('.social-admin__badge').exists() ? link.find('.social-admin__badge').text() : '',
 		]))
 
-		expect(badges).toEqual({ Overview: '', Moderation: '5', 'Explore and features': '', Federation: '', Server: '1' })
+		expect(badges).toEqual({ Overview: '', Moderation: '5', 'Discover and features': '', Federation: '', Server: '1' })
 	})
 
 	/**
@@ -331,32 +333,34 @@ describe('what needs attention', () => {
 		return wrapper.findAll('.attention__item').find((item) => item.text().includes('a public server should show'))
 	}
 
-	it('warns about the basics a server open to sign-ups lacks, on the Server card that holds the contact', async () => {
+	it('warns about the basics a server open to sign-ups lacks, on the About this server card', async () => {
 		const wrapper = await mountPage({ ...STATE, publicBasics: { missing: ['contact', 'privacy_policy'], signUp: true } })
 		const line = basicsLine(wrapper)
 
-		expect(line.attributes('href')).toBe('#server')
+		expect(line.attributes('href')).toBe('#about')
 		expect(line.classes()).toContain('attention__item--warning')
 		expect(line.find('.attention__count').text()).toBe('2')
-		expect(line.find('.attention__text').text()).toBe('things a public server should show are missing: a contact, a privacy policy link (in Theming)')
+		// no list of translated fragments glued with commas: the card names each
+		expect(line.find('.attention__text').text()).toBe('things a public server should show are missing')
 	})
 
-	it('only informs when the server federates without taking sign-ups, and sends missing rules to the rules', async () => {
+	it('only informs when the server federates without taking sign-ups, and sends missing rules to the same card', async () => {
 		const wrapper = await mountPage({ ...STATE, publicBasics: { missing: ['rules', 'legal_notice'], signUp: false } })
 		const line = basicsLine(wrapper)
 
-		expect(line.attributes('href')).toBe('#rules')
+		expect(line.attributes('href')).toBe('#about')
 		expect(line.classes()).toContain('attention__item--info')
-		expect(line.find('.attention__text').text()).toBe('things a public server should show are missing: server rules, a legal notice link (in Theming)')
 	})
 
-	it('names a single missing basic in the singular', async () => {
+	it('names a single missing basic in the singular, and the card says which, a sentence each', async () => {
 		const wrapper = await mountPage({ ...STATE, publicBasics: { missing: ['legal_notice'], signUp: true } })
 		const line = basicsLine(wrapper)
 
-		expect(line.attributes('href')).toBe('#server')
 		expect(line.find('.attention__count').text()).toBe('1')
-		expect(line.find('.attention__text').text()).toBe('thing a public server should show is missing: a legal notice link (in Theming)')
+		expect(line.find('.attention__text').text()).toBe('thing a public server should show is missing')
+
+		await openGroup(wrapper, 'Server')
+		expect(wrapper.find('#about').text()).toContain('No legal notice link is set.')
 	})
 
 	it('lists nothing about the basics when they are all set or the server neither takes sign-ups nor federates', async () => {

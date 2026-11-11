@@ -6,30 +6,8 @@
 	<div>
 		<div class="server">
 			<h4 class="server__heading">
-				{{ t('social', 'How this server presents itself') }}
+				{{ t('social', 'Public numbers') }}
 			</h4>
-			<NcTextField
-				v-model="form.contactEmail"
-				class="server__field"
-				type="email"
-				:label="t('social', 'Contact address')"
-				placeholder="admin@instance.example"
-				:helperText="t('social', 'Shown to anybody asking this server what it is. Clients read it on their first request.')" />
-
-			<NcTextField
-				v-model="form.contactAccount"
-				class="server__field"
-				:label="t('social', 'Contact account')"
-				:placeholder="t('social', 'Local Aloha Social username')"
-				:helperText="t('social', 'Shown to Mastodon-compatible clients as the account responsible for this instance. Leave empty to omit it.')" />
-
-			<NcTextArea
-				v-model="form.extendedDescription"
-				class="server__field"
-				:label="t('social', 'About this instance')"
-				:placeholder="t('social', 'Who runs this server, who it is for, and what is expected of the people on it.')"
-				rows="4" />
-
 			<NcCheckboxRadioSwitch v-model="form.hideCounts" type="switch">
 				{{ t('social', 'Hide how many accounts and posts this server has') }}
 			</NcCheckboxRadioSwitch>
@@ -199,7 +177,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { serverUrl } from '../../services/adminApi.js'
@@ -207,7 +184,8 @@ import { errorOf } from '../../utils/serverError.js'
 import { showError, showSuccess } from '../../services/toast.js'
 
 /**
- * What this instance says about itself, and the limits it holds peers to.
+ * The limits this instance holds uploads and peers to. What it says about
+ * itself is the About this server card's.
  *
  * Rendered for an administrator and not for a delegate: what it holds is
  * administration rather than moderation, and its endpoint refuses anybody who
@@ -222,7 +200,6 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcNoteCard,
-		NcTextArea,
 		NcSelect,
 		NcTextField,
 	},
@@ -238,9 +215,6 @@ export default {
 	data() {
 		return {
 			form: {
-				contactEmail: this.settings.contact_email ?? '',
-				contactAccount: this.settings.contact_account ?? '',
-				extendedDescription: this.settings.extended_description ?? '',
 				maxSize: String(this.settings.max_size ?? 10),
 				maxVideoSize: String(this.settings.max_video_size ?? 2048),
 				imageMaxEdge: String(this.settings.image_max_edge ?? 0),
@@ -308,9 +282,6 @@ export default {
 			this.saving = true
 			try {
 				await axios.post(serverUrl(), {
-					contactEmail: this.form.contactEmail.trim(),
-					contactAccount: this.form.contactAccount.trim().replace(/^@/, ''),
-					extendedDescription: this.form.extendedDescription,
 					maxSize: parseInt(this.form.maxSize, 10),
 					maxVideoSize: parseInt(this.form.maxVideoSize, 10),
 					imageMaxEdge: parseInt(this.form.imageMaxEdge, 10),
@@ -337,9 +308,6 @@ export default {
 				// thing that tells the administrator what to change
 				this.saved = false
 				const reason = errorOf(error, t('social', 'Could not save the server settings'), {
-					contact_email: t('social', 'Contact address'),
-					contact_account: t('social', 'Contact account'),
-					extended_description: t('social', 'About this instance'),
 					max_size: t('social', 'Largest picture or file (MB)'),
 					max_video_size: t('social', 'Largest video (MB)'),
 					image_max_edge: t('social', 'Shrink pictures to (pixels)'),

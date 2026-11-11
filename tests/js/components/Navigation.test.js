@@ -286,12 +286,14 @@ describe('Navigation', () => {
 			expect(listItems(wrapper).map((e) => e.attributes('data-name'))).toEqual(['Friends'])
 		})
 
-		it('shows a compass icon of its own while keeping icons on its children', async () => {
+		it('shows an icon of its own, not Discover\'s compass, while keeping icons on its children', async () => {
 			withExplore({ lists: [list(1, 'Friends')] })
 			const wrapper = mountNavigation()
 			await flushPromises()
 
-			expect(explore(wrapper).find('.nav-item__icon .material-design-icon').exists()).toBe(true)
+			const icon = explore(wrapper).find('.nav-item__icon > .material-design-icon')
+			expect(icon.classes()).toContain('binoculars-icon')
+			expect(item(wrapper, 'Discover').find('.compass-icon').exists()).toBe(true)
 			expect(listItems(wrapper)[0].find('.material-design-icon').exists()).toBe(true)
 		})
 

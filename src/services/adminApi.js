@@ -43,6 +43,24 @@ export function serverUrl() {
 }
 
 /**
+ * The About this server card's one endpoint.
+ *
+ * @return {string} the whole URL
+ */
+export function aboutUrl() {
+	return generateUrl('/apps/social/admin/about')
+}
+
+/**
+ * Nextcloud's Theming settings, which hold the name and the two legal links.
+ *
+ * @return {string} the whole URL
+ */
+export function themingUrl() {
+	return generateUrl('/settings/admin/theming')
+}
+
+/**
  * The Sections card's one endpoint.
  *
  * @return {string} the whole URL

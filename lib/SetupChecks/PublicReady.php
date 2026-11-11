@@ -54,17 +54,26 @@ class PublicReady implements ISetupCheck {
 			return SetupResult::success($this->l10n->t('The contact, the server rules, the privacy policy and the legal notice are all set.'));
 		}
 
-		$names = array_map(fn (string $basic): string => match ($basic) {
-			AboutService::MISSING_CONTACT => $this->l10n->t('a contact address or account'),
-			AboutService::MISSING_RULES => $this->l10n->t('server rules'),
-			AboutService::MISSING_PRIVACY => $this->l10n->t('a privacy policy link'),
-			default => $this->l10n->t('a legal notice link'),
-		}, $missing);
-
-		$text = ($signUp
-			? $this->l10n->t('People without a Nextcloud account can sign up here, but this server has no %s.', [implode(', ', $names)])
-			: $this->l10n->t('This server federates with other servers, but has no %s.', [implode(', ', $names)]))
-			. ' ' . $this->l10n->t('Set the contact and the rules under Administration → Aloha Social, and the privacy policy and legal notice links under Administration → Theming.');
+		// whole sentences, one per gap: a list of translated fragments joined
+		// with commas cannot be put into every language's grammar
+		$sentences = [$signUp
+			? $this->l10n->t('People without a Nextcloud account can sign up here, so this server should say who runs it and on what terms.')
+			: $this->l10n->t('This server federates with other servers, so it should say who runs it and on what terms.')];
+		foreach ($missing as $basic) {
+			$sentences[] = match ($basic) {
+				AboutService::MISSING_CONTACT => $this->l10n->t('No contact address or account is set.'),
+				AboutService::MISSING_RULES => $this->l10n->t('No server rules are written.'),
+				AboutService::MISSING_PRIVACY => $this->l10n->t('No privacy policy link is set.'),
+				default => $this->l10n->t('No legal notice link is set.'),
+			};
+		}
+		if (array_intersect($missing, [AboutService::MISSING_CONTACT, AboutService::MISSING_RULES]) !== []) {
+			$sentences[] = $this->l10n->t('Set the contact and the rules under Administration → Aloha Social → About this server.');
+		}
+		if (array_intersect($missing, [AboutService::MISSING_PRIVACY, AboutService::MISSING_LEGAL_NOTICE]) !== []) {
+			$sentences[] = $this->l10n->t('Set the privacy policy and legal notice links under Administration → Theming.');
+		}
+		$text = implode(' ', $sentences);
 
 		return $signUp ? SetupResult::warning($text, self::DOC) : SetupResult::info($text, self::DOC);
 	}

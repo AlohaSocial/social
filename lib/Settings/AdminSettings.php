@@ -189,6 +189,12 @@ class AdminSettings implements IDelegatedSettings {
 			// what the "ready to be public" setup check would ask for, for
 			// the administrator proper who can set it
 			'publicBasics' => $this->isAdministrator() ? $this->publicBasics() : null,
+			// what the About this server card shows from Theming, which it
+			// links to rather than edits
+			'about' => array_intersect_key(
+				$this->aboutService->about(),
+				array_flip(['name', 'privacy_policy_url', 'legal_notice_url'])
+			),
 		]);
 
 		return new TemplateResponse('social', 'settings/admin');

@@ -437,13 +437,31 @@ class InstanceServiceTest extends TestCase {
 		$this->assertSame(3, $v2->usage->users->active_month);
 	}
 
-	public function testTheDescriptionFallsBackToTheOneWrittenForThisInstance(): void {
-		$this->theming(['social.extended_description' => 'A server for the choir.']);
+	public function testTheDescriptionIsTheOneWrittenForThisInstance(): void {
+		$this->theming(['social.extended_description' => 'A server for the choir.', 'theming.slogan' => 'Our slogan']);
 
 		$instance = $this->service->createLocal();
 
 		$this->assertSame('A server for the choir.', $instance->getDescription());
 		$this->assertSame('A server for the choir.', $instance->getShortDescription());
+	}
+
+	public function testTheShortDescriptionIsTheFirstParagraph(): void {
+		$this->theming(['social.extended_description' => "A server for the choir.\r\n\r\nWe sing on Tuesdays.\n\nBe kind."]);
+
+		$instance = $this->service->createLocal();
+
+		$this->assertSame('A server for the choir.', $instance->getShortDescription());
+		$this->assertSame("A server for the choir.\r\n\r\nWe sing on Tuesdays.\n\nBe kind.", $instance->getDescription());
+	}
+
+	public function testWithoutAWrittenDescriptionTheThemingSloganStandsIn(): void {
+		$this->theming(['theming.slogan' => 'Our slogan']);
+
+		$instance = $this->service->createLocal();
+
+		$this->assertSame('Our slogan', $instance->getDescription());
+		$this->assertSame('Our slogan', $instance->getShortDescription());
 	}
 
 	/**

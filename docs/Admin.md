@@ -150,19 +150,23 @@ server** page and every Mastodon client show them, and a moderator points at
 the rules. The check names whichever of the four is missing:
 
 - **a contact** — a contact address or a contact account (either is enough),
-  under **Administration → Aloha Social → Server settings**, or
+  under **Administration → Aloha Social → About this server**, or
   `occ config:app:set social contact_email --value …`;
-- **server rules** — **Administration → Aloha Social → Server rules**;
+- **server rules** — in the same **About this server** section;
 - **a privacy policy link** and **a legal notice link** — Nextcloud's own,
-  under **Administration → Theming**.
+  under **Administration → Theming**, which the **About this server** section
+  shows and links to.
+
+The check says it in whole sentences, one per missing item, and names only the
+places that hold what is missing.
 
 It is a **warning** while people without a Nextcloud account may sign up
 (`external_enabled`), **information** while the server only federates (on
 Bluesky, or on the fediverse unless the allow list is empty), and quiet on a
 server that does neither, or once all four are set. The same finding is a line
 in **Needs attention** on the Aloha Social administration page, with the same
-weight, linking to Server settings — or to Server rules when the contact is set
-and the rules are not.
+weight, linking to **About this server**, which lists what is missing a
+sentence per item.
 
 ### Mastodon apps cannot connect
 
@@ -767,11 +771,11 @@ administrator came to do, and one group is shown at a time:
 | Group | Sections |
 | --- | --- |
 | **Overview** | Needs attention, Activity here |
-| **Moderation** | Reports, Posts waiting for review, Accounts, Verified accounts, Refused pictures, Server rules |
+| **Moderation** | Reports, Posts waiting for review, Accounts, Verified accounts, Refused pictures |
 | **Sign-ups** | Who may sign up, Waiting and invited, External accounts (only when the server sends them, see [External users](#external-users)) |
-| **Explore and features** | About this server, What may trend, Custom emoji, Announcements, Features, For you |
+| **Discover and features** | Topics on Discover, What may trend, Custom emoji, Announcements, Features, For you |
 | **Federation** | Allowed and blocked servers, Block lists, Relays, Deliveries |
-| **Server** | Server settings, Retention, Storage, Background jobs |
+| **Server** | About this server, Server settings, Retention, Storage, Background jobs |
 
 On a wide screen the groups are a list beside the page, each with a line saying
 what is in it, and the sections of the open group are listed under it. On a
@@ -835,11 +839,12 @@ Federation health widget to `#federation`.
   or an attachment fetched from another server. The list shows the newest 100;
   when there are more it says how many, and **Show more** adds the next 100
   below. **Allow again** works on any row, on whichever page.
-- **About this server** — a few named subjects, each a handful of
-  hashtags, shown at the top of Explore above the trending lists. Trending on
-  a small server is four hashtags and a wedding; this is the part of that page
-  chosen rather than counted, and it is what makes Explore look like somewhere
-  to start. Nothing is named by default and the section of the page is absent
+- **Topics on Discover** — a few named subjects, each a handful of
+  hashtags, shown at the top of the **Discover** page above the trending lists.
+  Trending on a small server is four hashtags and a wedding; this is the part
+  of that page chosen rather than counted, and it is what makes Discover look
+  like somewhere to start. (The sidebar's **Explore** entry is something else:
+  the hashtags and lists each person follows, with its own binoculars icon.) Nothing is named by default and the section of the page is absent
   until something is.
 - **What may trend** — Explore shows whatever is being talked about, counted
   and nothing else, so the first ugly hashtag to catch on does so on
@@ -854,14 +859,25 @@ Federation health widget to `#federation`.
   `:shortcode:`. They travel with the post, so somebody on another server sees
   them too. The upload goes through the same code `occ social:emoji` uses, so
   what is refused here is exactly what the command refuses.
-- **Server rules** — one per line. Every client shows them to
-  somebody deciding whether to join, and `/api/v1/instance/rules` serves them.
-  People signed in here read them on the **About this server** page in the
-  account menu, together with the contact address and account (`contact_email`,
-  `contact_account`) and Theming's *Privacy policy link* and *Legal notice
-  link*; a report for a rules violation names them.
-  Both this and the emoji were `occ`-only until now, which is why most
-  instances had neither.
+- **About this server** (in the **Server** group) — everything the user-facing
+  **About this server** page in the account menu shows, in one place:
+  - the **name**, which is Theming's, shown with a link to Theming;
+  - the **description** (`extended_description`), which is also what Mastodon
+    apps are given as this server's description, its first paragraph where an
+    app lists servers; without one they get Theming's slogan;
+  - the **contact address** and **contact account** (`contact_email`,
+    `contact_account`);
+  - the **server rules**, one per line. Every client shows them to somebody
+    deciding whether to join, `/api/v1/instance/rules` serves them, and a report
+    for a rules violation names them. Moderators the section is delegated to
+    can edit the rules; the description and the contact are for an
+    administrator;
+  - Theming's *Privacy policy link* and *Legal notice link*, shown with a link
+    to Theming, where they are set.
+
+  When the server faces the public and something of this is missing, the
+  section says what, one sentence each. The rules and the emoji were `occ`-only
+  once, which is why most instances had neither.
 - **Retention** — how long remote statuses nobody here cares about are kept.
 - **Storage** — what is on disk, split into what was posted here (somebody's
   own work, not going anywhere) and what is cached from other servers. Added up
@@ -905,7 +921,8 @@ Federation health widget to `#federation`.
   [*following a published list*](#commands-by-task) under Moderation below.
 - **Announcements** — a notice every account here is shown once.
 - **Server settings** — the instance-wide settings below, which had no interface at all
-  before and could only be set with `occ config:app:set`. Among them is whether
+  before and could only be set with `occ config:app:set`; the contact and the
+  description are under **About this server**. Among them is whether
   the public instance metadata shows how many accounts and posts this server
   has (`hide_instance_counts`).
 - **Relays** — the relays this server subscribes to. A new server sees only
@@ -977,7 +994,7 @@ administrator approves, or only the holders of an invitation link; an
 invitation admits its holder in every mode, without approval. With *Confirm
 the email address* on, which is the default, the account is made when the
 link in the confirmation email is followed, so the server needs working
-mail. The form also asks to accept the server rules (the **Server rules** section) and
+mail. The form also asks to accept the server rules (in the **About this server** section) and
 links the privacy policy and legal notice set in Administration → Theming.
 The additional registration and privacy information box is plain text shown
 on the introduction page and beside the form. It starts with a translated
@@ -1275,15 +1292,15 @@ the moderation routes accept.
 
 ### Server settings
 
-Instance-wide settings. Most of them are on the **Server** section of the
-settings page, which validates the ranges given here; every one can be set with
-`occ`.
+Instance-wide settings. Most of them are on the **Server settings** section of
+the settings page, and the contact and description on **About this server**;
+both validate the ranges given here, and every one can be set with `occ`.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `contact_email` | *(empty)* | Who to write to about this instance. Mastodon's `instance.email`: every client reads it on its first request and shows it on the server's about page. Empty until somebody fills it in, which until now most instances never did, because nothing said it existed. |
-| `contact_account` | *(empty)* | The local Aloha Social account responsible for this instance. Choose a local account by username under Server settings; remote accounts and team accounts without a Nextcloud user are refused. Aloha Social stores the owning Nextcloud user id and resolves the current account when it builds `/api/v1/instance` and `/api/v2/instance`, so profile changes are reflected without rewriting the setting. Clearing the field omits the contact account. |
-| `extended_description` | *(empty)* | The long form of what this instance is, for `/api/v1/instance/extended_description`. Up to 10000 characters. |
+| `contact_account` | *(empty)* | The local Aloha Social account responsible for this instance. Choose a local account by username under About this server; remote accounts and team accounts without a Nextcloud user are refused. Aloha Social stores the owning Nextcloud user id and resolves the current account when it builds `/api/v1/instance` and `/api/v2/instance`, so profile changes are reflected without rewriting the setting. Clearing the field omits the contact account. |
+| `extended_description` | *(empty)* | What this instance is, written under About this server: the About page shows it, Mastodon apps get it as the instance `description` (its first paragraph as `short_description` and in `/api/v2/instance`, Theming's slogan when it is empty), and `/api/v1/instance/extended_description` serves it. Up to 10000 characters. |
 | `max_size` | `10` | The largest picture or file an upload may be, in MB. 1–10240. |
 | `max_video_size` | `2048` | The largest video, in MB. 1–102400. A peer will refuse a great deal less than the ceiling. |
 | `image_max_edge` | `0` | The longest edge a **stored** picture may have, in pixels. `0` stores every upload exactly as it arrived — the default, and the only setting that loses nothing: this app strips metadata losslessly and re-encodes only a picture it has to rotate. Set it (480–16384) on an instance where storage costs money or whose people post from a 48-megapixel phone. A picture already inside the ceiling is not re-encoded, because shrinking nothing and losing a generation anyway is the worst of both. |

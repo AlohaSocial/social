@@ -382,6 +382,25 @@ class AdminSettingsTest extends TestCase {
 		$this->assertSame(['missing' => ['contact', 'privacy_policy'], 'signUp' => true], $state['publicBasics']);
 	}
 
+	public function testTheAboutCardIsGivenWhatThemingHoldsAndNothingElse(): void {
+		$this->aboutService->method('about')->willReturn([
+			'name' => 'Cloud',
+			'description' => 'A server for the club.',
+			'rules' => [],
+			'contact' => ['email' => '', 'account' => null],
+			'privacy_policy_url' => 'https://cloud.example/privacy',
+			'legal_notice_url' => '',
+			'apps' => ['mastodon' => '', 'bluesky' => ''],
+		]);
+
+		$state = $this->state($this->summary());
+
+		$this->assertSame(
+			['name' => 'Cloud', 'privacy_policy_url' => 'https://cloud.example/privacy', 'legal_notice_url' => ''],
+			$state['about']
+		);
+	}
+
 	public function testAServerThatOnlyFederatesSaysSoToo(): void {
 		$this->aboutService->method('isOpenForSignUp')->willReturn(false);
 		$this->aboutService->method('isFederating')->willReturn(true);

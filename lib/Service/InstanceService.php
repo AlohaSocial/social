@@ -138,7 +138,7 @@ class InstanceService {
 		$instance->setUri($uri)
 			->setVersion($this->appConfig->getValueString(Application::APP_ID, 'installed_version', '0.0'))
 			->setTitle($this->appConfig->getValueString('theming', 'name', Application::APP_NAME_DISPLAY))
-			->setShortDescription($this->description())
+			->setShortDescription($this->shortDescription())
 			->setDescription($this->description())
 			->setEmail($this->appConfig->getValueString(Application::APP_ID, ConfigService::CONTACT_EMAIL, ''))
 			->setImage($this->thumbnail())
@@ -176,18 +176,28 @@ class InstanceService {
 	}
 
 	/**
-	 * What this instance says it is: the slogan its administrator gave
-	 * Theming, else the description written for this instance, else nothing.
-	 * Never Nextcloud's own slogan, which describes Nextcloud and not this
-	 * server.
+	 * What this instance says it is: the description its administrator wrote
+	 * under About this server, the same text the About page shows, else the
+	 * slogan they gave Theming, else nothing. Never Nextcloud's own slogan,
+	 * which describes Nextcloud and not this server.
 	 */
 	private function description(): string {
-		$slogan = trim($this->appConfig->getValueString('theming', 'slogan', ''));
-		if ($slogan !== '') {
-			return $slogan;
+		$written = trim($this->appConfig->getValueString(Application::APP_ID, ConfigService::SOCIAL_EXTENDED_DESCRIPTION, ''));
+		if ($written !== '') {
+			return $written;
 		}
 
-		return trim($this->appConfig->getValueString(Application::APP_ID, ConfigService::SOCIAL_EXTENDED_DESCRIPTION, ''));
+		return trim($this->appConfig->getValueString('theming', 'slogan', ''));
+	}
+
+	/**
+	 * The description's first paragraph: what a client shows in a list of
+	 * servers, where the whole of a long description does not fit.
+	 */
+	private function shortDescription(): string {
+		$paragraphs = preg_split('/\R\s*\R/u', $this->description(), 2);
+
+		return trim(is_array($paragraphs) ? $paragraphs[0] : $this->description());
 	}
 
 	/**

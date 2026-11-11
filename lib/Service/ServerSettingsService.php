@@ -49,11 +49,15 @@ class ServerSettingsService {
 	/** Past this far down, a re-encoded photograph is visibly worse. */
 	public const MIN_IMAGE_QUALITY = 40;
 
-	/** The keys this page owns, in the order the page shows them. */
-	public const KEYS = [
+	/** The keys the About this server card writes, in the order it shows them. */
+	public const ABOUT_KEYS = [
+		ConfigService::SOCIAL_EXTENDED_DESCRIPTION,
 		ConfigService::CONTACT_EMAIL,
 		ConfigService::SOCIAL_CONTACT_ACCOUNT,
-		ConfigService::SOCIAL_EXTENDED_DESCRIPTION,
+	];
+
+	/** The keys the Server card writes, in the order it shows them. */
+	public const KEYS = [
 		ConfigService::SOCIAL_MAX_SIZE,
 		ConfigService::SOCIAL_MAX_VIDEO_SIZE,
 		ConfigService::SOCIAL_IMAGE_MAX_EDGE,
@@ -158,42 +162,17 @@ class ServerSettingsService {
 	}
 
 	/**
-	 * Validates every value and writes them all, or writes none.
+	 * What the About this server card writes: the description, and who to
+	 * contact. Validated and written together, or not at all.
 	 *
-	 * All-or-nothing on purpose: a form that saved six of its eight fields
-	 * and refused two leaves the administrator guessing which took.
-	 *
+	 * @param string $extendedDescription what this server is, shown on the About page and to Mastodon apps
 	 * @param string $contactEmail empty, or an address
-	 * @param int $maxSize megabytes, 1 to MAX_SIZE_MB
-	 * @param int $maxVideoSize megabytes, 1 to MAX_VIDEO_SIZE_MB
-	 * @param int $videoQuota megabytes of video one account may keep; 0 is no quota
-	 * @param string $nsfwPolicy what to do with sensitive media for readers who have not chosen
-	 * @param int $inboxThrottle requests per host per minute, 0 to MAX_INBOX_THROTTLE
-	 * @param bool $hideCounts leave the account and post counts out of the public instance metadata
+	 * @param string $contactAccount the preferred username of a local account, or empty to clear
 	 *
 	 * @return array what current() answers afterwards
 	 * @throws SettingRefusedException naming the field that was refused, with its code
 	 */
-	public function save(
-		string $contactEmail,
-		string $extendedDescription,
-		int $maxSize,
-		int $maxVideoSize,
-		int $imageMaxEdge,
-		int $imageQuality,
-		bool $videoTranscode,
-		int $videoMaxHeight,
-		bool $videoLadder,
-		string $videoLadderHeights,
-		int $videoQuota,
-		string $nsfwPolicy,
-		int $inboxThrottle,
-		bool $secureMode,
-		bool $publishBlocks,
-		bool $allowSelfSigned,
-		string $contactAccount = '',
-		bool $hideCounts = false,
-	): array {
+	public function saveAbout(string $extendedDescription, string $contactEmail, string $contactAccount = ''): array {
 		$contactEmail = trim($contactEmail);
 		if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL) === false) {
 			throw new SettingRefusedException('contact_email is not an email address', 'setting-not-email', null, ['field' => 'contact_email']);
@@ -224,6 +203,47 @@ class ServerSettingsService {
 			);
 		}
 
+		$this->configService->setAppValue(ConfigService::SOCIAL_EXTENDED_DESCRIPTION, $extendedDescription);
+		$this->configService->setAppValue(ConfigService::CONTACT_EMAIL, $contactEmail);
+		$this->configService->setAppValue(ConfigService::SOCIAL_CONTACT_ACCOUNT, $contactUserId);
+
+		return $this->current();
+	}
+
+	/**
+	 * Validates every value of the Server card and writes them all, or writes
+	 * none.
+	 *
+	 * All-or-nothing on purpose: a form that saved six of its eight fields
+	 * and refused two leaves the administrator guessing which took.
+	 *
+	 * @param int $maxSize megabytes, 1 to MAX_SIZE_MB
+	 * @param int $maxVideoSize megabytes, 1 to MAX_VIDEO_SIZE_MB
+	 * @param int $videoQuota megabytes of video one account may keep; 0 is no quota
+	 * @param string $nsfwPolicy what to do with sensitive media for readers who have not chosen
+	 * @param int $inboxThrottle requests per host per minute, 0 to MAX_INBOX_THROTTLE
+	 * @param bool $hideCounts leave the account and post counts out of the public instance metadata
+	 *
+	 * @return array what current() answers afterwards
+	 * @throws SettingRefusedException naming the field that was refused, with its code
+	 */
+	public function save(
+		int $maxSize,
+		int $maxVideoSize,
+		int $imageMaxEdge,
+		int $imageQuality,
+		bool $videoTranscode,
+		int $videoMaxHeight,
+		bool $videoLadder,
+		string $videoLadderHeights,
+		int $videoQuota,
+		string $nsfwPolicy,
+		int $inboxThrottle,
+		bool $secureMode,
+		bool $publishBlocks,
+		bool $allowSelfSigned,
+		bool $hideCounts = false,
+	): array {
 		if ($maxSize < 1 || $maxSize > self::MAX_SIZE_MB) {
 			throw new SettingRefusedException(
 				'max_size must be between 1 and ' . self::MAX_SIZE_MB . ' MB',
@@ -311,9 +331,6 @@ class ServerSettingsService {
 			);
 		}
 
-		$this->configService->setAppValue(ConfigService::CONTACT_EMAIL, $contactEmail);
-		$this->configService->setAppValue(ConfigService::SOCIAL_CONTACT_ACCOUNT, $contactUserId);
-		$this->configService->setAppValue(ConfigService::SOCIAL_EXTENDED_DESCRIPTION, $extendedDescription);
 		$this->configService->setAppValue(ConfigService::SOCIAL_MAX_SIZE, (string)$maxSize);
 		$this->configService->setAppValue(ConfigService::SOCIAL_MAX_VIDEO_SIZE, (string)$maxVideoSize);
 		$this->configService->setAppValue(ConfigService::SOCIAL_IMAGE_MAX_EDGE, (string)$imageMaxEdge);
