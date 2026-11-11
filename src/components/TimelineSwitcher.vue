@@ -28,7 +28,10 @@
 				type="button"
 				:aria-checked="option.value === value"
 				:tabindex="option.value === value ? 0 : -1"
-				@click="show(index)">
+				@click="show(index)"
+				@pointerenter="$emit('intent', option.value)"
+				@focus="$emit('intent', option.value)"
+				@touchstart.passive="$emit('intent', option.value)">
 				<component
 					:is="option.icon"
 					class="switcher__icon"
@@ -102,7 +105,11 @@ export default {
 		},
 	},
 
-	emits: ['update:value'],
+	/**
+	 * `intent`: the reader is pointing at, focusing or touching an option, by
+	 * its `value` -- the moment to fetch what it shows, before the click.
+	 */
+	emits: ['update:value', 'intent'],
 
 	data() {
 		return {

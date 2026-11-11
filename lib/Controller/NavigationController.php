@@ -34,6 +34,7 @@ use OCA\Social\Service\ModeratorService;
 use OCA\Social\Service\SectionsService;
 use OCA\Social\Service\SensitiveMediaService;
 use OCA\Social\Service\SetupNotificationService;
+use OCA\Social\Service\StartupHintsService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TNCDataResponse;
@@ -99,6 +100,7 @@ class NavigationController extends Controller {
 		private FollowService $followService,
 		private ?ModeratorService $moderatorService = null,
 		private ?SetupNotificationService $setupNotifications = null,
+		private ?StartupHintsService $startupHints = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -291,6 +293,11 @@ class NavigationController extends Controller {
 				'username' => $actor->getPreferredUsername(),
 				'address' => $actor->getPreferredUsername() . '@' . $this->configService->getSocialAddress(),
 			];
+			// which of the requests the home timeline opens with would come
+			// back empty, so the app does not send them (StartupHintsService)
+			if ($this->startupHints !== null) {
+				$serverData['startup'] = $this->startupHints->forViewer($actor, $this->userId);
+			}
 		} catch (ActorDoesNotExistException $e) {
 			$serverData['needsAccount'] = true;
 			try {

@@ -168,10 +168,10 @@ const NcDialogStub = {
  * @param {object} [options.router] what stands in for `$router`
  * @return {object} the wrapper and the timeline store
  */
-function mountComposer(props = {}, { accountPrivacy, attachTo, router } = {}) {
+function mountComposer(props = {}, { accountPrivacy, attachTo, router, startup } = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
-	useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', viewer: { username: 'alice', address: 'alice@cloud.example.org' } })
+	useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', viewer: { username: 'alice', address: 'alice@cloud.example.org' }, ...(startup === undefined ? {} : { startup }) })
 	if (accountPrivacy !== undefined) {
 		useAccountStore().setCredentials({
 			id: '1',
@@ -3684,6 +3684,16 @@ describe('Composer', () => {
 			const { wrapper } = mountComposer()
 			await flushPromises()
 
+			expect(wrapper.find('.composer-post-as').exists()).toBe(false)
+		})
+
+		it('does not ask when the page says this account is in no team', async () => {
+			get.mockResolvedValue({ data: { teams: [press] } })
+
+			const { wrapper } = mountComposer({}, { startup: { has_teams: false } })
+			await flushPromises()
+
+			expect(get).not.toHaveBeenCalledWith(expect.stringContaining('api/v1.1/teams'))
 			expect(wrapper.find('.composer-post-as').exists()).toBe(false)
 		})
 

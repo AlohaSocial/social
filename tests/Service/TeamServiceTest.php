@@ -244,4 +244,20 @@ class TeamServiceTest extends TestCase {
 
 		$this->service->create('press', 'press');
 	}
+
+	public function testWhetherSomebodyHasATeamIsAskedOfTheirGroups(): void {
+		$this->groupManager->method('getUserGroupIds')->willReturn(['staff']);
+		$this->teamsRequest->method('getByGroups')->willReturnCallback(
+			static fn (array $groups): array => $groups === ['staff'] ? [['actor_id' => 'https://cloud.example/users/team', 'group_id' => 'staff']] : []
+		);
+
+		$this->assertTrue($this->service->hasTeamsFor('alice'));
+	}
+
+	public function testSomebodyInNoTeamsGroupHasNone(): void {
+		$this->groupManager->method('getUserGroupIds')->willReturn([]);
+		$this->teamsRequest->method('getByGroups')->willReturn([]);
+
+		$this->assertFalse($this->service->hasTeamsFor('alice'));
+	}
 }

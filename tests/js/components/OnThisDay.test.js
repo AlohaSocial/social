@@ -5,7 +5,9 @@
 import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios from '@nextcloud/axios'
+import { createPinia, setActivePinia } from 'pinia'
 import OnThisDay from '../../../src/components/OnThisDay.vue'
+import { useSettingsStore } from '../../../src/store/settings.js'
 
 vi.mock('@nextcloud/axios', () => ({ default: { get: vi.fn() } }))
 vi.mock('../../../src/services/logger.js', () => ({
@@ -27,8 +29,10 @@ function memory(overrides = {}) {
  * @param {Array} memories what the server answers
  * @return {Promise<object>} the mounted card, once its request has settled
  */
-async function mountCard(memories) {
+async function mountCard(memories, serverData = { public: false }) {
 	axios.get.mockResolvedValue({ data: memories })
+	setActivePinia(createPinia())
+	useSettingsStore().setServerData(serverData)
 
 	const wrapper = mount(OnThisDay, { global: { stubs: { RouterLink: RouterLinkStub } } })
 	await flushPromises()
@@ -46,6 +50,13 @@ describe('OnThisDay', () => {
 
 	afterEach(() => {
 		vi.useRealTimers()
+	})
+
+	it('does not ask when the page says the reader has nothing a year old', async () => {
+		const wrapper = await mountCard([memory()], { public: false, startup: { has_memories: false } })
+
+		expect(axios.get).not.toHaveBeenCalled()
+		expect(wrapper.find('.on-this-day').exists()).toBe(false)
 	})
 
 	it('shows nothing at all when there is nothing to remember', async () => {

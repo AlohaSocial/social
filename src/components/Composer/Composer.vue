@@ -667,6 +667,7 @@ import { mentionTributeOptions } from '../../utils/mentionTribute.js'
 import eventBus, { SHORT_COMPOSE } from '../../services/eventBus.js'
 import { emojiPickerModule } from '../../services/emojiPicker.js'
 import logger from '../../services/logger.js'
+import { mayHave } from '../../services/startupHints.js'
 import { feel } from '../../services/senses.js'
 import { commandsIn, resolveCommands, tumble } from '../../utils/composerCommands.js'
 import { accountHue } from '../../services/accountColour.js'
@@ -2054,6 +2055,11 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async loadTeams() {
+			if (!mayHave('has_teams')) {
+				this.pendingPostAs = ''
+				return
+			}
+
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1.1/teams'))
 				this.teams = data.teams ?? []

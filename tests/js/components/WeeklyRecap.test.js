@@ -5,7 +5,9 @@
 import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios from '@nextcloud/axios'
+import { createPinia, setActivePinia } from 'pinia'
 import WeeklyRecap from '../../../src/components/WeeklyRecap.vue'
+import { useSettingsStore } from '../../../src/store/settings.js'
 
 vi.mock('@nextcloud/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('../../../src/services/logger.js', () => ({
@@ -16,8 +18,10 @@ vi.mock('../../../src/services/logger.js', () => ({
  * @param {object} data what the server answers
  * @return {Promise<object>} the mounted card, once its request has settled
  */
-async function mountRecap(data) {
+async function mountRecap(data, serverData = { public: false }) {
 	axios.get.mockResolvedValue({ data })
+	setActivePinia(createPinia())
+	useSettingsStore().setServerData(serverData)
 
 	const wrapper = mount(WeeklyRecap, { global: { stubs: { RouterLink: RouterLinkStub } } })
 	await flushPromises()
@@ -35,6 +39,19 @@ describe('WeeklyRecap', () => {
 
 	afterEach(() => {
 		vi.useRealTimers()
+	})
+
+	it('does not ask when the page says the reader never turned it on', async () => {
+		const wrapper = await mountRecap({ enabled: true, this_week: 3, last_week: 1 }, { public: false, startup: { recap_enabled: false } })
+
+		expect(axios.get).not.toHaveBeenCalled()
+		expect(wrapper.find('.weekly-recap').exists()).toBe(false)
+	})
+
+	it('asks when the page says it is on', async () => {
+		await mountRecap({ enabled: true, this_week: 3, last_week: 1 }, { public: false, startup: { recap_enabled: true } })
+
+		expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/memories/recap')
 	})
 
 	// it is opt-in: a card commenting on how much somebody has posted is

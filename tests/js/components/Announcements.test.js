@@ -81,6 +81,16 @@ function reactions(wrapper) {
 }
 
 describe('the announcements above the timeline', () => {
+	it('does not ask when the page says nothing applies, and asks the next time', async () => {
+		await mountCard([announcement()], { startup: { has_announcements: false } })
+		expect(axios.get).not.toHaveBeenCalled()
+
+		const wrapper = mount(Announcements, { global: { stubs: { RouterLink: RouterLinkStub } } })
+		await flushPromises()
+		expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/announcements')
+		wrapper.unmount()
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.useFakeTimers()

@@ -183,8 +183,8 @@ describe('Timeline', () => {
 		})
 	})
 
-	// the switcher's other scopes are fetched ahead once a scope is on
-	// screen, so that the switch has its posts at once
+	// another scope is fetched ahead only when the reader points at it on
+	// the switcher, never on a timer
 	describe('fetching the other scopes ahead', () => {
 		beforeEach(() => {
 			vi.useFakeTimers()
@@ -194,41 +194,44 @@ describe('Timeline', () => {
 			vi.useRealTimers()
 		})
 
-		it('fetches the other scopes once the list is on screen', async () => {
+		it('fetches nothing ahead just because the list is on screen', async () => {
 			const prefetch = vi.spyOn(timelineStore, 'prefetchTimeline').mockResolvedValue(undefined)
 			mountTimeline({ params: { type: 'timeline' } })
 
 			eventBus.emit('timeline:rendered')
-			expect(prefetch).not.toHaveBeenCalled()
-			await vi.advanceTimersByTimeAsync(1500)
+			await vi.advanceTimersByTimeAsync(10000)
 
-			expect(prefetch.mock.calls.map(([list]) => list.type)).toEqual(['home', 'federated'])
+			expect(prefetch).not.toHaveBeenCalled()
 		})
 
-		it.each([
-			[{ name: 'tags', params: { tag: 'nextcloud' } }],
-			[{ params: { type: 'photos' } }],
-			[{ params: { type: 'notifications' } }],
-		])('fetches nothing ahead on a page that is not the feed: %o', async (route) => {
+		it('fetches the scope the reader points at, and only that one', async () => {
 			const prefetch = vi.spyOn(timelineStore, 'prefetchTimeline').mockResolvedValue(undefined)
-			mountTimeline(route)
+			const wrapper = mountTimeline({ params: { type: 'timeline' } })
 
-			eventBus.emit('timeline:rendered')
-			await vi.advanceTimersByTimeAsync(1500)
+			wrapper.findComponent(TimelineSwitcher).vm.$emit('intent', 'federated')
 
-			expect(prefetch).not.toHaveBeenCalled()
+			expect(prefetch.mock.calls.map(([list]) => list.type)).toEqual(['federated'])
 		})
 
-		it('fetches nothing once the page is gone', async () => {
+		it('fetches nothing for the scope already on screen or one that is not offered', async () => {
 			const prefetch = vi.spyOn(timelineStore, 'prefetchTimeline').mockResolvedValue(undefined)
-			const wrapper = mountTimeline()
+			const wrapper = mountTimeline({ params: { type: 'timeline' } })
+			const switcher = wrapper.findComponent(TimelineSwitcher)
 
-			eventBus.emit('timeline:rendered')
-			wrapper.unmount()
-			await vi.advanceTimersByTimeAsync(1500)
+			switcher.vm.$emit('intent', 'timeline')
+			switcher.vm.$emit('intent', 'notifications')
 
 			expect(prefetch).not.toHaveBeenCalled()
 		})
+	})
+
+	/** The conversations page and a new account's welcome are not on the screen most readers open. */
+	it('fetches the direct messages and the first-run card only when they are drawn', () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/views/Timeline.vue'), 'utf8')
+
+		expect(source).toMatch(/const DirectMessages = defineAsyncComponent\(/)
+		expect(source).toMatch(/const FirstRun = defineAsyncComponent\(/)
+		expect(source).not.toMatch(/^import (DirectMessages|FirstRun) from/m)
 	})
 
 	it('switches the store to the home timeline when no type is in the route', () => {

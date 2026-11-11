@@ -357,6 +357,7 @@
 			:account="item.account"
 			:status="item" />
 		<DeliveryDialog
+			v-if="showDeliveryDialog"
 			v-model:open="showDeliveryDialog"
 			:statusId="item.id" />
 		<!-- deleting is irreversible and federates: it is not something to
@@ -377,7 +378,6 @@
 <script>
 
 import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
-import DeliveryDialog from './DeliveryDialog.vue'
 import PostAttachment from './PostAttachment.vue'
 import PostMenu from './PostMenu.vue'
 import PostCard from './PostCard.vue'
@@ -419,6 +419,8 @@ import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 import { defineAsyncComponent } from 'vue'
 
+// opened from the menu of one's own post, and only then fetched
+const DeliveryDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./DeliveryDialog.vue'))
 // The mute dialog is the same one the profile opens, and it is worth nothing
 // until somebody asks for it: the post menu is on every post on the page.
 const MuteDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./MuteDialog.vue'))

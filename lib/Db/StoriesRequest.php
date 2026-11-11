@@ -216,6 +216,21 @@ class StoriesRequest extends CoreRequestBuilder {
 		return $this->getStoriesFromRequest($qb);
 	}
 
+	/** Whether any story on this instance is live: none, and every carousel is empty. */
+	public function hasLive(): bool {
+		$qb = $this->getQueryBuilder();
+		$qb->select('st.id')
+			->from(self::TABLE_STORIES, 'st');
+		$this->limitToLive($qb);
+		$qb->setMaxResults(1);
+
+		$cursor = $qb->executeQuery();
+		$found = $cursor->fetch() !== false;
+		$cursor->closeCursor();
+
+		return $found;
+	}
+
 	/**
 	 * The live stories of a set of accounts, for the carousel.
 	 *

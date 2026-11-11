@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -35,6 +35,20 @@ describe('the toast service', () => {
 	 */
 	it('imports no stylesheet of its own', () => {
 		expect(SOURCE).not.toContain('style.css')
+	})
+
+	/**
+	 * One static import of the package's main entry puts its toast chunk —
+	 * about 58 KB gzipped, most of it the file picker's translations — on
+	 * the path to the first screen. The file picker is imported where it is
+	 * wanted, with `import()`.
+	 */
+	it('is the only way the app reaches the toasts', () => {
+		const offenders = sourceFiles(resolve(process.cwd(), 'src'))
+			.filter((file) => /^import\s[^;]*from\s+'@nextcloud\/dialogs(\/toast)?'/m.test(readFileSync(file, 'utf8')))
+			.map((file) => file.slice(process.cwd().length + 1))
+
+		expect(offenders).toEqual([])
 	})
 
 	it('forwards the four kinds of toast the app raises', () => {
@@ -92,4 +106,19 @@ async function loadToast() {
 	const { showError } = await import('../../../src/services/toast.js')
 
 	return { dialogs, showError }
+}
+
+/**
+ * @param {string} dir a directory
+ * @return {string[]} every .js and .vue file under it that is not a test
+ */
+function sourceFiles(dir) {
+	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+		const path = resolve(dir, entry.name)
+		if (entry.isDirectory()) {
+			return sourceFiles(path)
+		}
+
+		return /\.(js|vue)$/.test(entry.name) && !/\.test\.js$/.test(entry.name) ? [path] : []
+	})
 }

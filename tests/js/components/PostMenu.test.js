@@ -7,9 +7,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { Fragment, h } from 'vue'
 
-vi.mock('@nextcloud/dialogs', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
+vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 
 import PostMenu from '../../../src/components/PostMenu.vue'
+import { showError, showSuccess } from '../../../src/services/toast.js'
 
 const ME = { acct: 'alice' }
 
@@ -325,6 +326,16 @@ describe('the post menu', () => {
 			await itemFor(wrapper, 'Copy code').trigger('click')
 
 			expect(writeText).toHaveBeenCalledWith('<iframe src="https://cloud.example/apps/social/@alice/1/embed" width="550" height="480" loading="lazy" frameborder="0" style="max-width:100%;border:0;border-radius:12px" title="Aloha Social post"></iframe>')
+		})
+
+		it('says through the lazily loaded toasts whether the code was copied', async () => {
+			Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } })
+			await itemFor(mountMenu({ ...MINE, visibility: 'public' }), 'Copy code').trigger('click')
+			await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('Copied'))
+
+			Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } })
+			await itemFor(mountMenu({ ...MINE, visibility: 'public' }), 'Copy code').trigger('click')
+			await vi.waitFor(() => expect(showError).toHaveBeenCalled())
 		})
 
 		it('does not offer a quote the author said no to', () => {

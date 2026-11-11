@@ -114,6 +114,11 @@ class AnnouncementService {
 		return $announcements;
 	}
 
+	/** Whether any announcement applies now, read or not: what `active()` would list. */
+	public function hasActive(?int $now = null): bool {
+		return $this->announcementsRequest->getActive($now) !== [];
+	}
+
 	/**
 	 * Marks it read for that account.
 	 *

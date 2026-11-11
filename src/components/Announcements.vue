@@ -102,6 +102,7 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import MessageContent from './MessageContent.js'
 import eventBus, { REACTION_PICK } from '../services/eventBus.js'
 import logger from '../services/logger.js'
+import { mayHave, setHint } from '../services/startupHints.js'
 import { showError } from '../services/toast.js'
 import { errorOf } from '../utils/serverError.js'
 import { useServerData } from '../composables/useServerData.js'
@@ -260,6 +261,12 @@ export default {
 		async load() {
 			// nothing behind this route answers without a viewer
 			if (this.serverData.public) {
+				return
+			}
+			// the page said nothing applied when it was opened; that spares the
+			// first read only, because one may be published while it is open
+			if (!mayHave('has_announcements')) {
+				setHint('has_announcements', true)
 				return
 			}
 

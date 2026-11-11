@@ -116,6 +116,7 @@ import IconPlus from 'vue-material-design-icons/Plus.vue'
 import ActorAvatar from './ActorAvatar.vue'
 import eventBus, { SHORT_COMPOSE } from '../services/eventBus.js'
 import logger from '../services/logger.js'
+import { mayHave, setHint } from '../services/startupHints.js'
 import { ownAvatarUrl } from '../services/avatar.js'
 import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
@@ -290,6 +291,13 @@ export default {
 		/** @return {Promise<void>} */
 		async load() {
 			this.loadedAt = Date.now()
+			// the page said no story was live anywhere on the instance; that
+			// spares the first read only, and any later one asks the server
+			if (!mayHave('has_stories')) {
+				setHint('has_stories', true)
+				return
+			}
+
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/stories/carousel'))
 				this.groups = this.group(Array.isArray(data) ? data : [])
