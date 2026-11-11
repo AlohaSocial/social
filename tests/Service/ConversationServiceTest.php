@@ -10,23 +10,37 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Atproto\Chat\ChatState;
+use OCA\Social\Controller\ConversationController;
 use OCA\Social\Db\ConversationsRequest;
+use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Conversation;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use OCA\Social\Service\AccountRelationService;
+use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ClientService;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ConversationService;
+use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TimelineRevisionService;
+use OCP\AppFramework\Http;
+use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * What turns a direct timeline into conversations.
@@ -65,6 +79,14 @@ class ConversationServiceTest extends TestCase {
 	private array $reads = [];
 	/** @var list<string[]> the actor ids of every cache lookup */
 	private array $lookedUp = [];
+	/** @var array<string, string> post id => author, for the posts the walks can find */
+	private array $authors = [];
+	/** @var array<string, string> the user values of the notification policy */
+	private array $policyValues = [];
+	/** @var string[] the accounts the viewer follows */
+	private array $following = [];
+	/** @var array{accepted: array<string, bool>, dismissed: array<string, bool>} */
+	private array $decisions = ['accepted' => [], 'dismissed' => []];
 
 	protected function setUp(): void {
 		$this->streamService = $this->createStub(StreamService::class);
@@ -188,6 +210,12 @@ class ConversationServiceTest extends TestCase {
 
 				return $thread;
 			});
+		$this->conversationsRequest->method('getAuthorsOf')
+			->willReturnCallback(function (array $ids): array {
+				$this->reads[] = 'authors';
+
+				return array_intersect_key($this->authors, array_flip($ids));
+			});
 		$this->conversationsRequest->method('getMarkers')
 			->willReturnCallback(function (string $actorId, array $rootIds): array {
 				return array_intersect_key($this->markers, array_flip($rootIds));
@@ -202,11 +230,15 @@ class ConversationServiceTest extends TestCase {
 			});
 	}
 
-	private function service(?ChatState $chat = null): ConversationService {
+	private function service(?ChatState $chat = null, ?NotificationPolicyService $policy = null): ConversationService {
 		$container = null;
-		if ($chat !== null) {
+		if ($chat !== null || $policy !== null) {
 			$container = $this->createStub(ContainerInterface::class);
-			$container->method('get')->willReturnCallback(static fn (string $id): ?object => $id === ChatState::class ? $chat : null);
+			$container->method('get')->willReturnCallback(static fn (string $id): ?object => match ($id) {
+				ChatState::class => $chat,
+				NotificationPolicyService::class => $policy,
+				default => null,
+			});
 		}
 
 		return new ConversationService(
@@ -260,8 +292,45 @@ class ConversationServiceTest extends TestCase {
 		$note->setToArray($to);
 
 		$this->stored[$id] = ['nid' => $nid, 'inReplyTo' => $inReplyTo];
+		$this->authors[$id] = $author;
 
 		return $note;
+	}
+
+	/**
+	 * The real notification policy, over what the viewer chose, follows and
+	 * decided about: the rule a conversation is held by is the bell's.
+	 */
+	private function policy(): NotificationPolicyService {
+		$config = $this->createStub(ConfigService::class);
+		$config->method('getUserValue')
+			->willReturnCallback(fn (string $key, string $userId = ''): string => $this->policyValues[$key] ?? '');
+		$config->method('setValueForUser')
+			->willReturnCallback(function (string $userId, string $key, string $value): void {
+				$this->policyValues[$key] = $value;
+			});
+		$follows = $this->createStub(FollowsRequest::class);
+		$follows->method('getBetweenMany')
+			->willReturnCallback(fn (): array => ['following' => array_fill_keys($this->following, new Follow()), 'followedBy' => []]);
+		$moderation = $this->createStub(ModerationRequest::class);
+		$moderation->method('getActorIdsAt')->willReturn([]);
+		$relations = $this->createStub(AccountRelationService::class);
+		$relations->method('notificationDecisions')->willReturnCallback(fn (): array => $this->decisions);
+
+		return new NotificationPolicyService($config, $follows, $moderation, $relations, $this->timelineRevisionService);
+	}
+
+	/** The viewer as a request has them: with the Nextcloud user the policy is stored for. */
+	private function reader(): Person {
+		return $this->viewer()->setUserId('alice');
+	}
+
+	/** @return list<int|string> the ids of the conversations listed */
+	private function listedIds(NotificationPolicyService $policy): array {
+		return array_map(
+			static fn (Conversation $c): int|string => $c->getId(),
+			$this->service(null, $policy)->getPage($this->reader(), 20)['conversations']
+		);
 	}
 
 	/** The direct timeline, in the order it answers: newest message first. */
@@ -385,6 +454,138 @@ class ConversationServiceTest extends TestCase {
 
 		$this->assertCount(4, array_unique($tags));
 		$this->assertSame($tags[3], $tags[4], 'reading changes nothing');
+	}
+
+	/** "People you follow": only the stranger's notification waits; the conversation is listed, as on Mastodon. */
+	public function testAStrangersConversationIsListedForPeopleYouFollow(): void {
+		$this->following = [self::CAROL];
+		$policy = $this->policy();
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_FOLLOWING);
+		$this->given(
+			$this->note('https://a/1', 10, '', self::BOB),
+			$this->note('https://b/1', 11, '', self::CAROL),
+			$this->note('https://a/2', 12, 'https://a/1', self::BOB),
+		);
+
+		$this->assertCount(2, $this->listedIds($policy));
+		$this->assertSame(2, $this->service(null, $policy)->countUnread($this->reader()), 'the badge agrees');
+		$this->assertNotContains('authors', $this->reads, 'and nothing more is read for it');
+	}
+
+	/** "Nobody": every conversation waits, until its starter is allowed from the requests. */
+	public function testNobodyHoldsTheConversationsOfPeopleFollowedUntilAllowed(): void {
+		$this->following = [self::CAROL];
+		$policy = $this->policy();
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
+		$this->given(
+			$this->note('https://a/1', 10, '', self::BOB),
+			$this->note('https://b/1', 11, '', self::CAROL),
+		);
+
+		$this->assertSame([], $this->listedIds($policy));
+		$this->assertSame(0, $this->service(null, $policy)->countUnread($this->reader()));
+
+		$this->decisions['accepted'][self::CAROL] = true;
+
+		$this->assertSame([11], $this->listedIds($policy));
+	}
+
+	/** A conversation the reader started, or has written in, is theirs whoever else is in it. */
+	public function testAConversationTheReaderStartedOrWroteInIsListed(): void {
+		$policy = $this->policy();
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
+		$this->given(
+			$this->note('https://a/1', 10, '', self::VIEWER, [self::BOB]),
+			$this->note('https://a/2', 11, 'https://a/1', self::BOB),
+			$this->note('https://b/1', 12, '', self::CAROL),
+			$this->note('https://b/2', 13, 'https://b/1', self::VIEWER, [self::CAROL]),
+		);
+
+		$this->assertSame([12, 10], $this->listedIds($policy));
+	}
+
+	/** The starter of a thread whose root is outside the window is read from storage. */
+	public function testTheStarterOfARootOutsideTheWindowIsLookedUp(): void {
+		$policy = $this->policy();
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
+		$this->note('https://a/1', 10, '', self::BOB);
+		$this->given($this->note('https://a/9', 19, 'https://a/1', self::CAROL));
+
+		$this->assertSame([], $this->listedIds($policy));
+		$this->assertContains('authors', $this->reads);
+	}
+
+	/** A policy that holds nobody costs the list nothing: no author is read, no actor looked up twice. */
+	public function testAPolicyThatHoldsNobodyReadsNothingMore(): void {
+		$this->given(
+			$this->note('https://a/1', 10, '', self::BOB),
+			$this->note('https://b/9', 19, 'https://b/1', self::CAROL),
+		);
+		$this->note('https://b/1', 11, '', self::CAROL);
+
+		$this->assertSame([11, 10], $this->listedIds($this->policy()));
+		$this->assertNotContains('authors', $this->reads);
+		$this->assertCount(1, array_keys($this->reads, 'accounts', true), 'the participants alone');
+	}
+
+	/** The streaming update of an edited message does not bring a held conversation in. */
+	public function testAnEditInAHeldConversationIsNotStreamed(): void {
+		$policy = $this->policy();
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
+		$this->given($this->note('https://a/1', 10, '', self::BOB));
+		$this->threads['https://a/1'] = ['https://a/1' => 10];
+
+		$this->assertNull($this->service(null, $policy)->updatedByStatus($this->reader(), 10));
+
+		$this->decisions['accepted'][self::BOB] = true;
+
+		$this->assertNotNull($this->service(null, $policy)->updatedByStatus($this->reader(), 10));
+	}
+
+	/** Changing who may write moves the badge's tag, so a client that cached the count asks again. */
+	public function testTheTagMovesWhenWhoMayWriteChanges(): void {
+		$policy = $this->policy();
+		$service = $this->service(null, $policy);
+		$before = $service->unreadTag($this->reader());
+
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
+
+		$this->assertNotSame($before, $service->unreadTag($this->reader()));
+	}
+
+	/** `/api/v1/conversations`, as Mastodon apps and the web page read it, leaves a held conversation out. */
+	public function testTheMastodonListingLeavesAHeldConversationOut(): void {
+		$this->decisions['accepted'][self::CAROL] = true;
+		$policy = $this->policy();
+		$policy->saveDirectMessagesFrom('alice', NotificationPolicyService::DIRECT_NONE);
+		$this->given(
+			$this->note('https://a/1', 10, '', self::BOB),
+			$this->note('https://b/1', 11, '', self::CAROL),
+		);
+
+		$request = $this->createStub(IRequest::class);
+		$request->method('getHeader')->willReturn('');
+		$request->method('passesCSRFCheck')->willReturn(true);
+		$request->method('getRequestUri')->willReturn('/index.php/apps/social/api/v1/conversations');
+		$request->method('getParam')->willReturn('');
+		$request->method('getParams')->willReturn([]);
+		$user = $this->createStub(IUser::class);
+		$user->method('getUID')->willReturn('alice');
+		$session = $this->createStub(IUserSession::class);
+		$session->method('getUser')->willReturn($user);
+		$accounts = $this->createStub(AccountService::class);
+		$accounts->method('getActorFromUserId')->willReturn($this->reader());
+
+		$response = (new ConversationController(
+			$request, $session, new NullLogger(), $accounts,
+			$this->createStub(ClientService::class), $this->service(null, $policy)
+		))->index();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['11'], array_map(
+			static fn (Conversation $c): string => (string)$c->jsonSerialize()['id'],
+			$response->getData()
+		));
 	}
 
 	public function testAThreadWhoseParentIsNotStoredHereRootsAtTheTopmostMessageThatIs(): void {

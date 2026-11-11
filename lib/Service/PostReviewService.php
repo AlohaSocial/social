@@ -17,8 +17,8 @@ use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
-use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\HeldPost;
+use OCA\Social\Model\Post;
 use OCA\Social\Model\Strike;
 use OCP\IGroupManager;
 use Psr\Log\LoggerInterface;
@@ -90,6 +90,7 @@ class PostReviewService {
 		private ModerationService $moderationService,
 		private PostService $postService,
 		private StatusAssemblyService $statusAssemblyService,
+		private ScheduledStatusService $scheduledStatusService,
 		private StrikeService $strikeService,
 		private AccountService $accountService,
 		private ConfigService $configService,
@@ -199,19 +200,6 @@ class PostReviewService {
 	}
 
 	/**
-	 * The request to store, as the assembler will read it back.
-	 *
-	 * Held here so a controller does not have to know which service owns the
-	 * shape of a stored request: it hands over what the client sent and the
-	 * visibility that was resolved for it.
-	 *
-	 * @return array<string, mixed>
-	 */
-	public function paramsOf(Status $status, string $visibility): array {
-		return $this->statusAssemblyService->paramsOf($status, $visibility);
-	}
-
-	/**
 	 * Puts one post in the queue.
 	 *
 	 * @param array<string, mixed> $params the post request, in the shape
@@ -298,7 +286,9 @@ class PostReviewService {
 	 *
 	 * The published post is dated now, not when it was written. It became a
 	 * post when it was approved; a post that appeared in a timeline already a
-	 * day old would be one nobody saw.
+	 * day old would be one nobody saw. A post held when it was scheduled is
+	 * scheduled for its time instead, while that is still ahead, and the
+	 * answer is null.
 	 *
 	 * @throws ItemNotFoundException no such held post
 	 * @throws Throwable whatever `createPost()` refuses it for
@@ -311,8 +301,16 @@ class PostReviewService {
 
 		$this->postHoldsRequest->delete($id);
 
+		// held when it was scheduled: it goes out at its time, unless that
+		// has passed while it waited
+		$when = (int)($held->getParams()['scheduled_at'] ?? 0);
+		if ($this->scheduledStatusService->scheduleApproved($author, $held->getParams(), $when)) {
+			return null;
+		}
+
+		// reviewed once, by the moderator approving it
 		return $this->postService->createPost(
-			$this->statusAssemblyService->fromParams($author, $held)
+			$this->statusAssemblyService->fromParams($author, $held)->setReview(Post::REVIEW_EXEMPT)
 		);
 	}
 

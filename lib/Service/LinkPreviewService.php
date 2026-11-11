@@ -56,9 +56,16 @@ class LinkPreviewService {
 	/**
 	 * Reads the page a post links to and stores the card. Returns false when
 	 * there is nothing worth showing — no link, an unreadable page, or a page
-	 * that says nothing about itself.
+	 * that says nothing about itself — and for a post that is not public or
+	 * unlisted. A followers-only or direct post can carry a private or
+	 * single-use link (a share, a meeting, a password reset) that a fetch
+	 * would expose or use up, and a stranger's direct message must not make
+	 * this server fetch a URL of their choosing.
 	 */
 	public function generate(Stream $post): bool {
+		if (!$post->isOpenToAnyone()) {
+			return false;
+		}
 		$url = $this->extractUrl($post->getContent());
 		if ($url === '') {
 			return false;

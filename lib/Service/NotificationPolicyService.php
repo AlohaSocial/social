@@ -47,10 +47,13 @@ use Psr\Container\ContainerInterface;
  * not show what was refused on Monday. The reader sees the same thing either
  * way; what differs is whether the decision can be taken back.
  *
- * The policy applies in two places, with the same rules (`isHeld()`): when
- * the list is read, so what is held is not listed, and when a notification is
+ * The policy applies in three places, with the same rules (`isHeld()`): when
+ * the list is read, so what is held is not listed, when a notification is
  * stored, so what is held raises no Nextcloud notification — no bell, push or
- * mail (`isHeldFor()`, called from `NotificationService::emit()`).
+ * mail (`isHeldFor()`, called from `NotificationService::emit()`), and, for a
+ * reader who takes direct messages from nobody, when the direct messages are
+ * listed, so a conversation a held sender started is not among them
+ * (`heldDirectSenders()`, called from `ConversationService`).
  *
  * Who may send the account direct messages (`directMessagesFrom()`) is the
  * policy's `for_private_mentions` seen from the other side: everybody when
@@ -448,6 +451,46 @@ class NotificationPolicyService {
 			$policy, $senderId, $senderCreation, $directMention, $this->factsAbout($viewer, [$senderId]),
 			$this->directMessagesFrom($viewer->getUserId()) === self::DIRECT_NONE
 		);
+	}
+
+	/** Whether the account holds conversations back: only when it takes direct messages from nobody. */
+	public function holdsConversations(string $userId): bool {
+		return $this->directMessagesFrom($userId) === self::DIRECT_NONE;
+	}
+
+	/**
+	 * Which of the senders a direct message from is held, for a reader who
+	 * takes direct messages from nobody: the rules `isHeldFor()` applies to a
+	 * direct mention, asked of several senders at once. What keeps a
+	 * conversation they started out of the reader's direct messages
+	 * (`ConversationService`) while its mention waits among the requests.
+	 *
+	 * Any other answer holds no conversation, only its notification, as
+	 * Mastodon does: a stranger's message is still in the reader's direct
+	 * messages, where a reader on the default policy would otherwise never
+	 * find it.
+	 *
+	 * @param array<string, int> $senders sender id => account creation as a unix time, 0 when unknown
+	 *
+	 * @return array<string, true> the held sender ids
+	 */
+	public function heldDirectSenders(Person $viewer, array $senders): array {
+		if ($senders === [] || $this->directMessagesFrom($viewer->getUserId()) !== self::DIRECT_NONE) {
+			return [];
+		}
+
+		$about = [];
+		foreach ($senders as $senderId => $creation) {
+			$senderId = (string)$senderId;
+			$about[$senderId] = ['sender' => $senderId, 'creation' => $creation, 'privateMention' => true];
+		}
+
+		$held = [];
+		foreach (array_keys($this->heldAmong($viewer, $about)) as $senderId) {
+			$held[(string)$senderId] = true;
+		}
+
+		return $held;
 	}
 
 	/**

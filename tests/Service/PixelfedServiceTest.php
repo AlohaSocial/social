@@ -352,6 +352,7 @@ class PixelfedServiceTest extends TestCase {
 
 		$this->assertSame(Stream::TYPE_DIRECT, $sent->getType());
 		$this->assertSame('@bob@cloud.example see you at eight', $sent->getContent());
+		$this->assertSame(Post::REVIEW_HOLD, $sent->getReview(), 'past the review queue, as a post from the composer');
 		$this->assertSame('31', $message['id']);
 		$this->assertTrue($message['isAuthor']);
 	}

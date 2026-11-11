@@ -1006,7 +1006,11 @@ Below it, the invitation links: a note to remember who each is for, how many
 registrations it admits (0 for any number) and how many days it works (0 for
 ever). *Let everybody here send invitation links* also gives every user an
 *Invite people* section in their Aloha Social settings, single-use links that work
-for a week, at most ten open at a time.
+for a week, at most ten open at a time. External users are never offered it and
+cannot send invitations: an invited registration skips approval, so their
+invitations would let each invitee bring in more without anybody approving
+them. A registration confirmed after you switched to approval waits for it
+too, even if it was sent before.
 
 **External accounts.** Every external account with its email and verification
 status, enabled or disabled status, registration source, when it registered
@@ -1488,6 +1492,22 @@ refused unread. An
 administrator can download and review a [The Bad Space CSV export](https://tweaking.thebad.space/exports)
 before importing it; the export source and moderation policy remain the
 administrator's choice.
+
+**IP blocks**
+
+An IP block refuses an address or range everything Aloha Social serves. Blocks
+are made through the admin API (`POST /api/v1/admin/ip_blocks`), which refuses
+a range wider than a /16 (IPv4) or a /32 (IPv6) and one holding your own
+address as the server sees it: behind a reverse proxy that Nextcloud does not
+trust (`trusted_proxies`), that address is the proxy's, and blocking it would
+shut everybody out. Nextcloud administrators also reach the admin API and the
+settings page from a blocked address, so they can always lift a block. Where
+that is not enough, for example from a token or a script, use the console:
+
+```bash
+occ social:ip-blocks:list                     # every block, with its id
+occ social:ip-blocks:remove <id-or-range>     # lift one; the range completes in the shell
+```
 
 **Housekeeping**
 

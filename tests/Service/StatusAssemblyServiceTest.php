@@ -13,7 +13,9 @@ use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Status;
+use OCA\Social\Model\Post;
 use OCA\Social\Model\StatusParams;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\StatusAssemblyService;
@@ -190,6 +192,39 @@ class StatusAssemblyServiceTest extends TestCase {
 		$this->assertSame('pt', $post->getLanguage());
 		$this->assertSame('112233', $post->getQuotedId());
 		$this->assertSame(['options' => ['yes', 'no']], $post->getPoll());
+	}
+
+	/** What a held post is stored as comes back, when it is approved, as the post that was written. */
+	public function testAPostStoredForTheQueueComesBackAsItWasWritten(): void {
+		$written = new Post($this->actor());
+		$written->setContent('Cais do Sodré at six');
+		$written->setSpoilerText('sunset')
+			->setSensitive(true)
+			->setType(Stream::TYPE_UNLISTED)
+			->setLanguage('pt')
+			->setQuotedId('112233')
+			->setReplyRule(Stream::REPLY_RULE_MENTIONED)
+			->setPoll(['options' => ['yes', 'no']])
+			->setAtprotoSelfLabels(['!warn'])
+			->setMedias([(new MediaAttachment())->setId('7')]);
+		$this->document(7, false);
+
+		$params = StatusAssemblyService::paramsOfPost($written, '4242');
+		$this->assertSame('4242', $params['in_reply_to_id']);
+		$this->assertSame(['7'], $params['media_ids']);
+		$this->assertArrayNotHasKey('atproto_card', $params, 'nothing that was not there');
+
+		$post = $this->service->fromParams($this->actor(), $this->params($params));
+		$this->assertSame('Cais do Sodré at six', $post->getContent());
+		$this->assertSame('sunset', $post->getSpoilerText());
+		$this->assertTrue($post->isSensitive());
+		$this->assertSame(Stream::TYPE_UNLISTED, $post->getType());
+		$this->assertSame('pt', $post->getLanguage());
+		$this->assertSame('112233', $post->getQuotedId());
+		$this->assertSame(Stream::REPLY_RULE_MENTIONED, $post->getReplyRule());
+		$this->assertSame(['options' => ['yes', 'no']], $post->getPoll());
+		$this->assertSame(['!warn'], $post->getAtprotoSelfLabels());
+		$this->assertCount(1, $post->getMedias());
 	}
 
 	public function testAHeldAtProtoPostKeepsItsSelfLabelsWhenItIsApproved(): void {

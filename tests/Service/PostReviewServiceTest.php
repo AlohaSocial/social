@@ -24,6 +24,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
+use OCA\Social\Service\ScheduledStatusService;
 use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StrikeService;
 use OCP\IGroupManager;
@@ -50,6 +51,7 @@ class PostReviewServiceTest extends TestCase {
 	private ModerationService|MockObject $moderationService;
 	private PostService|MockObject $postService;
 	private StatusAssemblyService|Stub $statusAssemblyService;
+	private ScheduledStatusService|MockObject $scheduledStatusService;
 	private StrikeService|MockObject $strikeService;
 	private ConfigService|Stub $configService;
 	private IGroupManager|MockObject $groupManager;
@@ -70,6 +72,7 @@ class PostReviewServiceTest extends TestCase {
 		$this->moderationService = $this->createMock(ModerationService::class);
 		$this->postService = $this->createMock(PostService::class);
 		$this->statusAssemblyService = $this->createStub(StatusAssemblyService::class);
+		$this->scheduledStatusService = $this->createMock(ScheduledStatusService::class);
 		$this->strikeService = $this->createMock(StrikeService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 
@@ -90,6 +93,7 @@ class PostReviewServiceTest extends TestCase {
 			$this->moderationService,
 			$this->postService,
 			$this->statusAssemblyService,
+			$this->scheduledStatusService,
 			$this->strikeService,
 			$this->accountService,
 			$this->configService,
@@ -489,6 +493,29 @@ class PostReviewServiceTest extends TestCase {
 		// deleted first: a failure to publish must leave nothing a second
 		// approval could publish twice
 		$this->assertSame(['delete', 'publish'], $order);
+		$this->assertSame(Post::REVIEW_EXEMPT, $post->getReview(), 'approved is reviewed: not held a second time');
+	}
+
+	public function testAnApprovedPostHeldWhenItWasScheduledIsScheduledForItsTime(): void {
+		$when = time() + 86400;
+		$held = (new HeldPost())->setId(7)->setActorId(self::ALICE)->setParams(['text' => 'next week', 'scheduled_at' => $when]);
+		$this->postHoldsRequest->method('getById')->willReturn($held);
+		$this->scheduledStatusService->expects($this->once())->method('scheduleApproved')
+			->with($this->anything(), ['text' => 'next week', 'scheduled_at' => $when], $when)
+			->willReturn(true);
+		$this->postService->expects($this->never())->method('createPost');
+
+		$this->assertNull($this->service->approve(7, $this->alice()));
+	}
+
+	public function testAnApprovedPostWhoseTimeHasPassedIsPublishedNow(): void {
+		$held = (new HeldPost())->setId(7)->setActorId(self::ALICE)->setParams(['text' => 'late', 'scheduled_at' => time() - 60]);
+		$this->postHoldsRequest->method('getById')->willReturn($held);
+		$this->statusAssemblyService->method('fromParams')->willReturn(new Post($this->alice()));
+		$this->scheduledStatusService->method('scheduleApproved')->willReturn(false);
+		$this->postService->expects($this->once())->method('createPost');
+
+		$this->service->approve(7, $this->alice());
 	}
 
 	public function testApprovingAPostOfSomebodyElseIsRefused(): void {

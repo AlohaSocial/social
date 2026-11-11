@@ -12,12 +12,14 @@ namespace OCA\Social\Service;
 use OCA\Social\Db\ScheduledStatusesRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\ScheduledStatus;
 use OCA\Social\Model\Client\Status;
+use OCA\Social\Model\Post;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
@@ -132,6 +134,7 @@ class ScheduledStatusService {
 	 *
 	 * @param array<string, mixed> $request the decoded request body
 	 *
+	 * @throws PostHeldException a review rule holds it; nothing is scheduled
 	 * @throws InvalidActionException
 	 */
 	public function schedule(Person $actor, Status $status, array $request): ScheduledStatus {
@@ -149,10 +152,45 @@ class ScheduledStatusService {
 			->setScheduledAt($when)
 			->setParams($this->statusAssemblyService->paramsOf($status, $this->visibilityOf($status, $actor)));
 
+		// reviewed now, while its author is there to be told: a post a rule
+		// holds waits for a moderator instead, with its time kept, and the
+		// cron publishes the others exempt
+		$this->postService->review(
+			$this->statusAssemblyService->fromParams($actor, $scheduled),
+			$scheduled->paramString('in_reply_to_id'),
+			$when
+		);
+
 		$this->scheduledRequest->save($scheduled);
 		$this->hydrateMedia($scheduled, $actor);
 
 		return $scheduled;
+	}
+
+	/**
+	 * Schedules a post a moderator approved after it was held when it was
+	 * scheduled, for the time it was scheduled for. Nothing is scheduled,
+	 * and the caller publishes it now, when that time is closer than
+	 * `MIN_LEAD_TIME` or has passed while it waited.
+	 *
+	 * @param array<string, mixed> $params the held request
+	 * @param int $when when it was scheduled for; 0 for a post that was not
+	 *
+	 * @return bool whether it was scheduled
+	 */
+	public function scheduleApproved(Person $actor, array $params, int $when): bool {
+		if ($when - $this->time->getTime() < self::MIN_LEAD_TIME) {
+			return false;
+		}
+
+		unset($params['scheduled_at']);
+		$scheduled = new ScheduledStatus();
+		$scheduled->setActorId($actor->getId())
+			->setScheduledAt($when)
+			->setParams($params);
+		$this->scheduledRequest->save($scheduled);
+
+		return true;
 	}
 
 	/**
@@ -278,8 +316,9 @@ class ScheduledStatusService {
 	private function publish(ScheduledStatus $scheduled): void {
 		$actor = $this->accountService->getFromId($scheduled->getActorId());
 
+		// reviewed when it was scheduled (`schedule()`)
 		$this->postService->createPost(
-			$this->statusAssemblyService->fromParams($actor, $scheduled)
+			$this->statusAssemblyService->fromParams($actor, $scheduled)->setReview(Post::REVIEW_EXEMPT)
 		);
 	}
 

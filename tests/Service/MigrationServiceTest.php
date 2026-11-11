@@ -479,6 +479,30 @@ class MigrationServiceTest extends TestCase {
 		$this->service->move('alice', self::NEW_ALICE);
 	}
 
+	/** A move granted to one server's callback goes to an account on that server only. */
+	public function testMoveRefusesATargetOnAnotherHostThanTheOneGranted(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->cacheActorService->method('getFromAccount')->willReturn($this->newAlice());
+		$this->activityService->expects($this->never())->method('request');
+		$this->accountService->expects($this->never())->method('setMovedTo');
+
+		try {
+			$this->service->move('alice', '@alice@new.example', true, 'deactivate', 'evil.example');
+			$this->fail('a target on another host was taken');
+		} catch (MoveErrorException $e) {
+			$this->assertSame('move-target-host', $e->errorCode);
+		}
+	}
+
+	public function testMoveTakesATargetOnTheHostGranted(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->cacheActorService->method('getFromId')->willReturn($this->newAlice());
+		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
+		$this->activityService->expects($this->once())->method('request')->willReturn('token');
+
+		$this->assertSame(self::NEW_ALICE, $this->service->move('alice', self::NEW_ALICE, true, 'deactivate', 'NEW.example')->getId());
+	}
+
 	public function testMoveRefusesToMoveAnAccountOntoItself(): void {
 		$alice = $this->alice();
 		$alice->setAlsoKnownAs([self::ALICE]);

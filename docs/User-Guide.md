@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.293** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.294** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -95,7 +95,8 @@ each such account your pictures and videos take up. Deleting your Aloha Social
 account deletes the whole account.
 
 Where the administrators let everybody invite people, **Settings → Apps and account → Invite
-people** makes an invitation link: it works once and for a week.
+people** makes an invitation link: it works once and for a week. Such an
+account for Aloha Social only cannot invite people.
 
 ## Finding and following people
 
@@ -321,7 +322,9 @@ where yours are, and you can take one back from there, which deletes it and
 tells nobody.
 
 If it is approved, it goes out as an ordinary post, dated the moment it was
-approved rather than when you wrote it. If it is refused, it is deleted and
+approved rather than when you wrote it. A post you schedule is looked at when
+you schedule it, so you hear about it then; approved, it goes out at the time
+you picked, or at once if that time has passed. If it is refused, it is deleted and
 you are told.
 
 ### Replies in Files
@@ -565,8 +568,9 @@ original on its home server. **Like**, **Boost** and **Reply** sit under every
 post; a post's `…` menu adds **Bookmark**, **Open on original instance** and
 **Report**.
 
-A post that links somewhere gets a preview card, read by this server rather
-than by your browser. With the `notify_push` app installed, new posts arrive
+A public or unlisted post that links somewhere gets a preview card, read by
+this server rather than by your browser. Followers-only posts and direct
+messages never get one, so a private link in them is never opened. With the `notify_push` app installed, new posts arrive
 live; without it the page checks every 30 seconds.
 
 ### For you
@@ -824,7 +828,11 @@ refuses it, the row goes back and says why.
 is the private-mentions row seen from the other side: *Everybody*, *People
 you follow* (a message from anybody else waits with the rest), or *Nobody*
 (every direct message waits, except from people you allowed). People on
-Bluesky go by the same choice.
+Bluesky go by the same choice. With *People you follow*, a stranger's message
+is still in **Direct messages**; only its notification waits under Requests.
+With *Nobody*, a conversation somebody else starts is not listed in **Direct
+messages**, in Mastodon apps either, until you accept them under Requests; a
+conversation you started, or have written in, is always listed.
 
 A new account starts calm: people you don't follow, new accounts, private
 mentions you didn't ask for and accounts this server limited are held, and
@@ -1155,7 +1163,10 @@ hand, it is picked up as one.
   different account*, and enter your handle here. If the old server is Aloha
   Social too, the page offers **Finish the move from here** instead: you are
   sent to your old Nextcloud to log in and agree, and your followers are moved
-  without a visit to its settings.
+  without a visit to its settings. The old Nextcloud warns that this server
+  may move your account there and asks for your password before you agree.
+  It lets only an Aloha Social server finishing a move ask for this, never
+  an ordinary app, and moves the account only to that server.
 - **Naming your old account.** Your old server will not send your followers
   here until this account says it is also you. **Migration →
   Accounts you also answer to** is where you say it: type the old account's

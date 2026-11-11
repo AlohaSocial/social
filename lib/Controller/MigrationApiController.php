@@ -33,7 +33,8 @@ use Throwable;
  * person's new instance obtained by sending them here to consent — and it
  * takes exactly `write:migration`, never the broad `write` every phone app
  * holds: a token that can post must not be a token that can move the
- * account away.
+ * account away. The token has to have been sent to an Aloha Social move-in
+ * callback, and the target has to be on that callback's host.
  */
 class MigrationApiController extends ClientApiController {
 	public function __construct(
@@ -59,8 +60,15 @@ class MigrationApiController extends ClientApiController {
 				throw new InsufficientScopeException('moving the account needs a token granted ' . MoveFinishService::SCOPE . ' itself');
 			}
 
+			// the token went to one move-in callback, and the move may only
+			// go to an account on the server that callback belongs to
+			$callback = $this->client->getAuthRedirectUri();
+			if (!ClientService::isMoveInCallback($callback)) {
+				throw new InsufficientScopeException('this token was not granted to an Aloha Social server finishing a move');
+			}
+
 			$userId = $this->viewer()->getUserId();
-			$moved = $this->migrationService->move($userId, $target, true, $bluesky);
+			$moved = $this->migrationService->move($userId, $target, true, $bluesky, (string)parse_url($callback, PHP_URL_HOST));
 
 			return new DataResponse(
 				$this->migrationService->moveStatus($userId)

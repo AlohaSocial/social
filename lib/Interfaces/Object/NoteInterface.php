@@ -486,12 +486,14 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * A post that links somewhere gets its preview read by a background job:
-	 * reading the page here would hold up the inbox for as long as a stranger's
-	 * web server feels like taking.
+	 * A public or unlisted post that links somewhere gets its preview read by
+	 * a background job: reading the page here would hold up the inbox for as
+	 * long as a stranger's web server feels like taking. A followers-only or
+	 * direct post never does (`LinkPreviewService::generate()`).
 	 */
 	private function queueLinkPreview(Note $note): void {
-		if ($this->linkPreviewService->extractUrl($note->getContent()) === '') {
+		if (!$note->isOpenToAnyone()
+			|| $this->linkPreviewService->extractUrl($note->getContent()) === '') {
 			return;
 		}
 

@@ -12,17 +12,18 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\HeldPost;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DomainBlockService;
 use OCA\Social\Service\FileCommentsService;
-use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tests\Helper\FakeComment;
@@ -61,7 +62,6 @@ class FileCommentsServiceTest extends TestCase {
 	/** @var string[] users who never opened Aloha Social */
 	private array $withoutAccount = [];
 	private bool $commentsEnabled = true;
-	private string $review = '';
 	private PostService|MockObject $postService;
 	private StreamService|MockObject $streamService;
 	/** @var array<string, Stream> */
@@ -161,14 +161,11 @@ class FileCommentsServiceTest extends TestCase {
 		$this->streamService->method('getStreamById')->willReturnCallback(function (string $id): Stream {
 			return $this->streams[$id] ?? throw new \OCA\Social\Exceptions\StreamNotFoundException();
 		});
-		$review = $this->createStub(PostReviewService::class);
-		$review->method('assess')->willReturnCallback(fn (): string => $this->review);
 
 		$container = $this->createStub(ContainerInterface::class);
 		$container->method('get')->willReturnCallback(fn (string $class): object => match ($class) {
 			PostService::class => $this->postService,
 			StreamService::class => $this->streamService,
-			PostReviewService::class => $review,
 		});
 
 		$this->service = new FileCommentsService(
@@ -481,13 +478,21 @@ class FileCommentsServiceTest extends TestCase {
 		$this->service->onCommentAdded($this->comment('alice', 'hello'));
 	}
 
+	/** Reviewed once, inside createPost(), and refused rather than queued for a moderator. */
 	public function testACommentTheReviewWouldHoldStaysAComment(): void {
 		$this->publishPostFromFile();
-		$this->review = 'spam';
+		$comment = $this->comment('alice', 'buy now');
 
-		$this->postService->expects($this->never())->method('createPost');
+		$this->postService->expects($this->once())->method('createPost')
+			->willReturnCallback(function (Post $post): never {
+				$this->assertSame(Post::REVIEW_REFUSE, $post->getReview());
 
-		$this->service->onCommentAdded($this->comment('alice', 'buy now'));
+				throw new PostHeldException(HeldPost::REASON_LINKS);
+			});
+
+		$this->service->onCommentAdded($comment);
+
+		$this->assertNull($this->request->getByComment((int)$comment->getId()), 'nothing went out');
 	}
 
 	public function testNoCommentGoesOutOnceTheAuthorTurnedItOff(): void {

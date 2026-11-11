@@ -197,6 +197,47 @@ class AccessBlockServiceTest extends TestCase {
 		$this->service->blockIp('evil.example');
 	}
 
+	public static function provideRangesTooWide(): iterable {
+		yield 'everything, IPv4' => ['0.0.0.0/0'];
+		yield 'a /8' => ['10.0.0.0/8'];
+		yield 'a /15' => ['192.168.0.0/15'];
+		yield 'everything, IPv6' => ['::/0'];
+		yield 'a /31' => ['2001:db8::/31'];
+	}
+
+	/** A block that wide shuts out whole networks, the admin API that would lift it included. */
+	#[\PHPUnit\Framework\Attributes\DataProvider('provideRangesTooWide')]
+	public function testARangeWiderThanTheLimitIsRefused(string $range): void {
+		$this->expectException(InvalidResourceException::class);
+		$this->expectExceptionMessage('is wider than');
+
+		$this->service->blockIp($range);
+	}
+
+	public function testTheWidestAllowedRangesAreTaken(): void {
+		$this->assertSame('10.1.0.0/16', $this->service->blockIp('10.1.0.0/16')->getValue());
+		$this->assertSame('2001:db8::/32', $this->service->blockIp('2001:db8::/32')->getValue());
+	}
+
+	public static function provideRangesHoldingTheCaller(): iterable {
+		yield 'the address itself' => ['203.0.113.7', '203.0.113.7'];
+		yield 'its /24' => ['203.0.113.0/24', '203.0.113.7'];
+		yield 'IPv6, written longer' => ['2001:db8:1::/48', '2001:0db8:0001:0000:0000:0000:0000:0001'];
+	}
+
+	/** Where the caller is the reverse proxy, that is everybody. */
+	#[\PHPUnit\Framework\Attributes\DataProvider('provideRangesHoldingTheCaller')]
+	public function testARangeHoldingTheCallersOwnAddressIsRefused(string $range, string $caller): void {
+		$this->expectException(InvalidResourceException::class);
+		$this->expectExceptionMessage('holds your own address');
+
+		$this->service->blockIp($range, AccessBlock::SEVERITY_NO_ACCESS, '', 0, $caller);
+	}
+
+	public function testARangeBesideTheCallerIsTaken(): void {
+		$this->assertSame('203.0.113.0/24', $this->service->blockIp('203.0.113.0/24', AccessBlock::SEVERITY_NO_ACCESS, '', 0, '198.51.100.1')->getValue());
+	}
+
 	/** Blocking the same range twice changes it rather than adding a second. */
 	public function testBlockingTheSameRangeAgainReplacesIt(): void {
 		$this->service->blockIp('1.2.3.0/24', AccessBlock::SEVERITY_NO_ACCESS, 'first');

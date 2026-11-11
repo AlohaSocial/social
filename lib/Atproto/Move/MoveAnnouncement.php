@@ -69,6 +69,8 @@ class MoveAnnouncement {
 			$post = new Post($this->accountService->getActorFromUserId($userId));
 			$post->setContent(self::text($oldHandle, $newHandle));
 			$post->setType(Stream::TYPE_PUBLIC);
+			// this server's own template, not the person's words
+			$post->setReview(Post::REVIEW_EXEMPT);
 			$this->postService()->createPost($post);
 		} elseif ($kind === self::PROFILE) {
 			$this->accountService->setFields($userId, $this->withField($userId, self::url($newHandle)));

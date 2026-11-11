@@ -646,7 +646,8 @@ class AdminApiController extends AdminApiControllerBase {
 	 * does not lift itself. A severity this instance cannot honour is a
 	 * **422** rather than a row nothing will ever read — an admin told their
 	 * rule was stored would believe sign-ups from that range were being turned
-	 * away.
+	 * away. So is a range wider than a /16 (IPv4) or a /32 (IPv6), or one
+	 * holding the caller's own address as the middleware sees it.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -662,7 +663,8 @@ class AdminApiController extends AdminApiControllerBase {
 
 			return new DataResponse(
 				$this->accessBlockService->blockIp(
-					$ip, $severity, $comment, $expires_in > 0 ? time() + $expires_in : 0
+					$ip, $severity, $comment, $expires_in > 0 ? time() + $expires_in : 0,
+					$this->request->getRemoteAddress()
 				),
 				Http::STATUS_OK
 			);
@@ -693,7 +695,8 @@ class AdminApiController extends AdminApiControllerBase {
 			return new DataResponse(
 				$this->accessBlockService->blockIp(
 					$block->getValue(), $severity, $comment,
-					$expires_in > 0 ? time() + $expires_in : 0
+					$expires_in > 0 ? time() + $expires_in : 0,
+					$this->request->getRemoteAddress()
 				),
 				Http::STATUS_OK
 			);

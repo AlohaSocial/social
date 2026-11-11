@@ -113,6 +113,8 @@ class NoteCreate extends SocialCommand {
 		$post->setReplyTo(($replyTo === null) ? '' : $replyTo);
 		$post->addTo(($to === null) ? '' : $to);
 		$post->setHashtags(($hashtag === null) ? [] : [$hashtag]);
+		// written by whoever runs occ, who administers this server
+		$post->setReview(Post::REVIEW_EXEMPT);
 
 		$token = '';
 		$activity = $this->postService->createPost($post, $token);

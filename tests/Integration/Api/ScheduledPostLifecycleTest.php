@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Integration\Api;
 
 use OCA\Social\Controller\AccountApiController;
+use OCA\Social\Controller\ReviewController;
 use OCA\Social\Controller\ScheduledStatusApiController;
 use OCA\Social\Controller\StatusApiController;
 use OCA\Social\Service\ScheduledStatusService;
@@ -109,6 +110,37 @@ class ScheduledPostLifecycleTest extends ApiTestCase {
 
 		$nextDay = $this->scheduleResponse('bob', 'first of the leap day', '2024-02-29T00:00:00Z');
 		$this->assertSame(200, $nextDay->status, json_encode($nextDay->body) ?: '');
+	}
+
+	/**
+	 * Reviewed when it is scheduled: a post a rule holds is answered as held
+	 * then, waits for a moderator with nothing scheduled, and the cron never
+	 * publishes it on its own.
+	 */
+	public function testAPostARuleHoldsIsHeldWhenItIsScheduledAndTheCronPublishesNothing(): void {
+		$clock = $this->freezeClock(new FrozenClock(time() - 30 * 86400));
+		$marker = 'held probe ' . bin2hex(random_bytes(4));
+		$links = implode(' ', array_map(static fn (int $n): string => 'https://spam.example/' . $n, range(1, 6)));
+		$due = $clock->getTime() + self::LEAD;
+		$waitingBefore = $this->waiting('bob');
+
+		$response = $this->scheduleResponse('bob', $marker . ' ' . $links, gmdate('Y-m-d\TH:i:s\Z', $due));
+
+		try {
+			$this->assertSame(422, $response->status, json_encode($response->body) ?: '');
+			$this->assertTrue($response->body->held_for_review);
+			$this->assertSame('links', $response->body->reason);
+			$this->assertSame($waitingBefore, $this->waiting('bob'), 'nothing is scheduled');
+
+			$clock->set($due);
+			$this->runCron();
+			$this->assertSame([], array_filter($this->postsOf('bob'), static fn (string $post): bool => str_contains($post, $marker)));
+		} finally {
+			$id = (int)($response->body->held_post->id ?? 0);
+			if ($id > 0) {
+				$this->call(ReviewController::class, 'withdraw', ['id' => $id], [], 'bob', 'DELETE', webSession: true);
+			}
+		}
 	}
 
 	private function schedule(string $as, string $text, string $scheduledAt): \stdClass {

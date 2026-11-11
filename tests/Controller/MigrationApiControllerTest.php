@@ -61,11 +61,12 @@ class MigrationApiControllerTest extends TestCase {
 	}
 
 	/** @param string[] $scopes */
-	private function token(array $scopes): void {
+	private function token(array $scopes, string $redirectUri = 'https://new.example/index.php/apps/social/migration/move-in/callback'): void {
 		$this->headers = ['Authorization' => 'Bearer tok'];
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes($scopes);
+		$client->setAuthRedirectUri($redirectUri);
 		$this->clientService->method('getFromToken')->willReturn($client);
 	}
 
@@ -78,7 +79,9 @@ class MigrationApiControllerTest extends TestCase {
 
 	public function testATokenGrantedTheMigrationScopeMovesTheAccount(): void {
 		$this->token(['write:migration']);
-		$this->migrationService->expects($this->once())->method('move')->with('alice', '@alice@new.example')->willReturn($this->moved());
+		// only to an account on the server whose callback the token went to
+		$this->migrationService->expects($this->once())->method('move')
+			->with('alice', '@alice@new.example', true, 'deactivate', 'new.example')->willReturn($this->moved());
 		$this->migrationService->method('moveStatus')->willReturn(['moved_to' => 'https://new.example/index.php/apps/social/@alice', 'moved_at' => 1, 'can_move_at' => 2]);
 
 		$response = $this->controller()->moveAuthorized('@alice@new.example');
@@ -97,6 +100,16 @@ class MigrationApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 		$this->assertStringContainsString('write:migration', $response->getData()['error']);
+	}
+
+	/** A token that was not sent to a move-in callback moves nothing, whatever its scope. */
+	public function testATokenGrantedElsewhereIsRefused(): void {
+		$this->token(['write:migration'], 'https://evil.example/cb');
+		$this->migrationService->expects($this->never())->method('move');
+
+		$response = $this->controller()->moveAuthorized('@alice@new.example');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 	}
 
 	/** The button has a password step; this route has a token or nothing. */

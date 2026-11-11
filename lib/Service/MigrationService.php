@@ -177,6 +177,8 @@ class MigrationService {
 	 *                              yes, an administrator's command may say no
 	 * @param string $bluesky what becomes of the account's Bluesky identity,
 	 *                        one of BlueskyAfterMoveOut::CHOICES
+	 * @param string $targetHost when not empty, the host the target's actor id
+	 *                           has to be on (`move-target-host` otherwise)
 	 *
 	 * @return Person the target as fetched
 	 * @throws InvalidResourceException when the target does not list the actor, or is the actor,
@@ -184,7 +186,7 @@ class MigrationService {
 	 *                                  Bluesky choice cannot be followed — a
 	 *                                  MoveErrorException with its code for these
 	 */
-	public function move(string $userId, string $targetId, bool $enforceCooldown = true, string $bluesky = BlueskyAfterMoveOut::DEACTIVATE): Person {
+	public function move(string $userId, string $targetId, bool $enforceCooldown = true, string $bluesky = BlueskyAfterMoveOut::DEACTIVATE, string $targetHost = ''): Person {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		if ($enforceCooldown) {
 			$status = $this->moveStatus($userId);
@@ -198,6 +200,12 @@ class MigrationService {
 		}
 		$this->blueskyAfterMove->assertPossible($actor, $bluesky);
 		$target = $this->resolveActor($targetId);
+		if ($targetHost !== '' && strcasecmp((string)parse_url($target->getId(), PHP_URL_HOST), $targetHost) !== 0) {
+			throw new MoveErrorException(
+				$target->getId() . ' is not on ' . $targetHost . ', the server this move was granted to',
+				'move-target-host'
+			);
+		}
 
 		if ($target->getId() === $actor->getId()) {
 			throw new MoveErrorException('an account cannot be moved onto itself', 'move-onto-self');

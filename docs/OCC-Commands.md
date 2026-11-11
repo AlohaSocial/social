@@ -1566,6 +1566,40 @@ for cron.
 
 ---
 
+## Access
+
+### `social:ip-blocks:list`
+
+List the IP blocks: the addresses and ranges every route of Aloha Social
+refuses with a 403 (`AccessBlockMiddleware`).
+
+```
+php occ social:ip-blocks:list [--output=json]
+```
+
+Each row has the `id`, the `range` (a bare address is stored as the range
+holding only itself), the `severity` (always `no_access`), the `comment` and
+when the block `expires` (`never`, or a UTC time). A block past its expiry is
+still listed but no longer refuses anything.
+
+### `social:ip-blocks:remove`
+
+Lift one IP block. Blocks are made through the admin API, which this app
+serves behind the blocks themselves; this is the way back in when a block
+shuts out the address the administrator, or every request, arrives from.
+
+```
+php occ social:ip-blocks:remove <block>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `block` | Yes | The `id` from `social:ip-blocks:list`, or the range as it lists it (`203.0.113.0/24`; a bare address means its single-address range). The shell completes it from the ranges blocked now |
+
+An unknown id or range prints an error and exits with 2.
+
+---
+
 ## External Users
 
 ### `social:external`
@@ -1699,6 +1733,7 @@ The app files themselves are not removed, and the app is not disabled.
 | Code | Meaning |
 |------|---------|
 | 0 | Success, and also a confirmation prompt answered with "no" |
+| 2 | `social:ip-blocks:remove` with an id or range no block has |
 | 1 | A refusal to act non-interactively without `--force` (`social:reset`, `social:check:install --index`, `social:benchmark`, `social:queue:retry`), a `social:benchmark` probe over its limit or an invalid limit option, a failed flush or uninstall in `social:reset`, `social:reset` while external users exist or with a refused address, streams `social:check:install --index` could not parse, a setup check that `social:check:install` reports as an error, `social:account:following` handled failure, or an uncaught exception in any command |
 
 ---

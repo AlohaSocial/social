@@ -2626,6 +2626,8 @@ OC.L10N.register(
     "Send reports as you" : "In deinem Namen Meldungen senden",
     "Publish, edit and delete posts as you" : "In deinem Namen Beiträge veröffentlichen, bearbeiten und löschen",
     "Publish and delete 24-hour shorts as you" : "24-Stunden-Shorts in deinem Namen veröffentlichen und löschen",
+    "Move your account to another server, taking your followers with it" : "Dein Konto auf einen anderen Server umziehen und deine Follower mitnehmen",
+    "This lets {target} move your account there: your followers are sent to the new account and this one is marked as moved. Authorize it only if you are moving to {target} yourself. You will be asked for your password." : "Damit kann {target} dein Konto dorthin umziehen: Deine Follower werden an das neue Konto weitergeleitet und dieses wird als umgezogen markiert. Erlaube das nur, wenn du selbst zu {target} umziehst. Du wirst nach deinem Passwort gefragt.",
     "The authorization code will be shown to you, to copy into the application yourself." : "Der Autorisierungscode wird dir angezeigt, damit du ihn selbst in die Anwendung kopierst.",
     "The authorization code will be sent to {target}." : "Der Autorisierungscode wird an {target} gesendet.",
     "Device authorized" : "Gerät autorisiert",

@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -39,11 +40,9 @@ use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\Interaction\InteractionService;
 use OCA\Social\Service\ModerationService;
-use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\PlaceService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\PostDecorationService;
-use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\QuoteService;
 use OCA\Social\Service\ReactionService;
@@ -106,7 +105,6 @@ class StatusApiController extends MastodonApiController {
 		private CacheDocumentsRequest $cacheDocumentsRequest,
 		private FilterService $filterService,
 		private ScheduledStatusService $scheduledStatusService,
-		private PostReviewService $postReviewService,
 		private ModerationService $moderationService,
 		private ViewCountService $viewCountService,
 		private TeamService $teamService,
@@ -167,15 +165,20 @@ class StatusApiController extends MastodonApiController {
 			// told it had been scheduled. This sits before the idempotency
 			// lookup, which remembers a published status by nid and has nothing
 			// to remember here.
+			// It is reviewed now, while its author is there to be told.
 			if ($this->scheduledStatusService->requestedTime($data) > 0) {
-				return new DataResponse(
-					$this->scheduledStatusService->schedule(
-						$this->accountService->getActorFromUserId($this->currentSession()),
-						$status,
-						$data
-					),
-					Http::STATUS_OK
-				);
+				try {
+					return new DataResponse(
+						$this->scheduledStatusService->schedule(
+							$this->accountService->getActorFromUserId($this->currentSession()),
+							$status,
+							$data
+						),
+						Http::STATUS_OK
+					);
+				} catch (PostHeldException $e) {
+					return self::heldForReview($e);
+				}
 			}
 
 			// Tusky and Ivory send an Idempotency-Key and retry the post when
@@ -263,43 +266,26 @@ class StatusApiController extends MastodonApiController {
 			$post->setReplyRule($status->getReplyRule());
 			$post->setVideoMeta($status->getVideoMeta());
 
-			// Before anything is written: a post a rule holds is stored as a
-			// request and never reaches `social_stream`, so there is no row for
-			// a timeline to find. The 422 is what a client can be told with the
-			// vocabulary Mastodon's API has — `held_for_review` beside it is
-			// what this app's own composer reads to say something better than
-			// "failed".
 			// a moved account may not post at all, and is told so before the
 			// review queue gets to hold something a moderator would then be
 			// shown from an account that has left
 			$this->moderationService->assertNotMoved($author);
-			// assessed against the person who wrote it, not the team: first-post
+			// reviewed as the person who wrote it, not the team: first-post
 			// review is about an account nobody has vouched for yet, and a team
 			// account exists because an administrator made it
-			$reason = $this->postReviewService->assess(
-				$author,
-				$post->getContent(),
-				$post->getType(),
-				// asked of the attachments that were actually resolved, not of
-				// the ids the client sent: an id that named nothing, or
-				// somebody else's upload, is not a video on this post
-				PeerTubeService::soleVideo($post->getMedias()) !== null
-			);
-			if ($reason !== '') {
-				$held = $this->postReviewService->hold(
-					$author, $this->postReviewService->paramsOf($status, $post->getType()), $reason
-				);
+			$post->setAuthor($author);
 
-				return new DataResponse([
-					'error' => 'This post is waiting for a moderator to look at it. '
-						. 'It has been kept — there is no need to write it again.',
-					'held_for_review' => true,
-					'reason' => $held->getReason(),
-					'held_post' => $held,
-				], Http::STATUS_UNPROCESSABLE_ENTITY);
+			// A post a rule holds is stored as a request inside createPost()
+			// and never reaches `social_stream`, so there is no row for a
+			// timeline to find. The 422 is what a client can be told with the
+			// vocabulary Mastodon's API has — `held_for_review` beside it is
+			// what this app's own composer reads to say something better than
+			// "failed".
+			try {
+				$activity = $this->postService->createPost($post);
+			} catch (PostHeldException $e) {
+				return self::heldForReview($e);
 			}
-
-			$activity = $this->postService->createPost($post);
 
 			if ($postAs !== '') {
 				$this->teamService->recordAuthor($activity->getObjectId(), $author);
@@ -321,6 +307,20 @@ class StatusApiController extends MastodonApiController {
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/**
+	 * The answer to a post a review rule holds: the request is kept for a
+	 * moderator and the client is told so, with the held request beside it.
+	 */
+	private static function heldForReview(PostHeldException $e): DataResponse {
+		return new DataResponse([
+			'error' => 'This post is waiting for a moderator to look at it. '
+				. 'It has been kept — there is no need to write it again.',
+			'held_for_review' => true,
+			'reason' => $e->getHeld()?->getReason() ?? $e->getReason(),
+			'held_post' => $e->getHeld(),
+		], Http::STATUS_UNPROCESSABLE_ENTITY);
 	}
 
 	/**

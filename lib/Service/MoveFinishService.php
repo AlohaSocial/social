@@ -31,11 +31,15 @@ use Throwable;
  * person to log in and consent on their old Nextcloud, and with the token
  * that comes back calls the old instance's move route naming this account.
  *
- * The scope is the whole of the safety: a token with `write:migration` can
- * do nothing else, and nothing else can do this — the old instance accepts
- * that scope spelled out, never the broad `write` every phone app holds.
- * The old instance still checks, as it does for its own button, that the
- * target names the old account in `alsoKnownAs`, which the move-in here set.
+ * A token with `write:migration` can do nothing else, and nothing else can
+ * do this — the old instance accepts that scope spelled out, never the broad
+ * `write` every phone app holds. It grants the scope only to a registration
+ * that asks for it alone with this one callback as its redirect URI, behind
+ * the person's password, and moves the account only to an account on the
+ * callback's host (`ClientService::migrationScopeProblem()`,
+ * `MigrationApiController`). It still checks, as it does for its own button,
+ * that the target names the old account in `alsoKnownAs`, which the move-in
+ * here set.
  */
 class MoveFinishService {
 	public const SCOPE = 'write:migration';

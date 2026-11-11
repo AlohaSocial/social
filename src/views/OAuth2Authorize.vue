@@ -128,7 +128,8 @@
 			v-else
 			class="guest-box oauth__box"
 			method="post"
-			:action="device ? deviceDecisionUrl : undefined">
+			:action="device ? deviceDecisionUrl : undefined"
+			@submit="onSubmit">
 			<header class="oauth__header">
 				<!--
 					An application registers no logo, so the mark is the letter
@@ -192,6 +193,9 @@
 
 			<NcNoteCard type="warning">
 				{{ t('social', 'If you do not trust it, then you should not authorize it.') }}
+			</NcNoteCard>
+			<NcNoteCard v-if="movesAccount" type="error">
+				{{ t('social', 'This lets {target} move your account there: your followers are sent to the new account and this one is marked as moved. Authorize it only if you are moving to {target} yourself. You will be asked for your password.', { target: redirectTarget }) }}
 			</NcNoteCard>
 
 			<h2>{{ t('social', 'This application will be able to:') }}</h2>
@@ -293,8 +297,11 @@ import { loadState } from '@nextcloud/initial-state'
 import { t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import AccountSetupForm from '../components/AccountSetupForm.vue'
+import { confirmPassword } from '../services/externalApi.js'
 
 const OUT_OF_BAND = 'urn:ietf:wg:oauth:2.0:oob'
+// MoveFinishService::SCOPE: another Aloha Social server finishing a move here
+const MIGRATION_SCOPE = 'write:migration'
 export default {
 	name: 'OAuth2Authorize',
 	components: {
@@ -390,6 +397,7 @@ export default {
 				'write:reports': t('social', 'Send reports as you'),
 				'write:statuses': t('social', 'Publish, edit and delete posts as you'),
 				'write:stories': t('social', 'Publish and delete 24-hour shorts as you'),
+				'write:migration': t('social', 'Move your account to another server, taking your followers with it'),
 				atproto: t('social', 'Know which account you are'),
 				'transition:generic': t('social', 'Post, like, follow, upload and read as you, everywhere on Bluesky'),
 				'transition:email': t('social', 'See your e-mail address'),
@@ -403,6 +411,11 @@ export default {
 
 		device() {
 			return this.deviceDecisionUrl !== ''
+		},
+
+		/** @return {boolean} whether granting this lets the application move the account away */
+		movesAccount() {
+			return !this.device && this.scopes.includes(MIGRATION_SCOPE)
 		},
 
 		deviceUrl() {
@@ -502,6 +515,35 @@ export default {
 		/** @param {string} url where to send the browser; a test replaces this */
 		reloadTo(url) {
 			window.location.assign(url)
+		},
+
+		/**
+		 * A grant that lets the application move the account away goes to
+		 * its own route, which Nextcloud holds behind the password: asked
+		 * for here first, so the form arrives confirmed.
+		 *
+		 * @param {SubmitEvent} event the consent form's submission
+		 */
+		async onSubmit(event) {
+			if (!this.movesAccount) {
+				return
+			}
+			event.preventDefault()
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.submitTo(/** @type {HTMLFormElement} */ (event.currentTarget), generateUrl('/apps/social/oauth/authorize/move') + window.location.search)
+		},
+
+		/**
+		 * @param {HTMLFormElement} form the consent form
+		 * @param {string} action where it is posted; a test replaces this
+		 */
+		submitTo(form, action) {
+			form.action = action
+			form.submit()
 		},
 
 		/** Focusing the field selects the whole code, so one tap picks it up. */

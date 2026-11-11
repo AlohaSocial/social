@@ -305,8 +305,11 @@ class ExternalSignupService {
 			throw new ExternalUserException($this->l10n->t('This confirmation link is not valid any more. Please register again.'));
 		}
 
-		if ($row['approval']) {
-			$this->signupsRequest->markVerified($row['id']);
+		// the mode when the address is confirmed counts, so a registration
+		// sent before approval was switched on does not walk past it
+		if ($row['approval']
+			|| ($row['inviteId'] === 0 && $this->externalUserService->mode() === ExternalUserService::MODE_APPROVAL)) {
+			$this->signupsRequest->markVerified($row['id'], true);
 
 			return ['state' => self::STATE_APPROVAL, 'handle' => $row['handle']];
 		}
@@ -377,7 +380,7 @@ class ExternalSignupService {
 	 */
 	public function createInvite(string $creator, string $note, int $maxUses, int $days, bool $byAdministrator): array {
 		if (!$byAdministrator) {
-			if (!$this->externalUserService->isEnabled() || !$this->externalUserService->usersMayInvite()) {
+			if (!$this->mayInvite($creator)) {
 				throw new ExternalUserException($this->l10n->t('Invitations are not available on this server.'));
 			}
 			if (count($this->openInvites($creator)) >= self::USER_INVITES_OPEN) {
@@ -466,11 +469,26 @@ class ExternalSignupService {
 	}
 
 	/**
+	 * Whether this person may send invitations: users may when the
+	 * administrator lets them, and an external user never does, since an
+	 * invited registration skips approval and invitations from invitees
+	 * would chain past it.
+	 */
+	public function mayInvite(string $uid): bool {
+		return $this->externalUserService->isEnabled()
+			&& $this->externalUserService->usersMayInvite()
+			&& !$this->externalUserService->isExternalUid($uid);
+	}
+
+	/**
+	 * An invitation that may still be used. One an external user made is not:
+	 * see mayInvite().
+	 *
 	 * @return array{id: int, token: string, creator: string, note: string, maxUses: int, uses: int, expires: int, creation: int}|null
 	 */
 	private function validInvite(string $token): ?array {
 		$invite = $this->invitesRequest->getByToken(trim($token));
-		if ($invite === null) {
+		if ($invite === null || $this->externalUserService->isExternalUid($invite['creator'])) {
 			return null;
 		}
 		if ($invite['expires'] > 0 && $invite['expires'] < $this->timeFactory->getTime()) {

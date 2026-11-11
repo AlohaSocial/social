@@ -96,13 +96,17 @@ class ExternalSignupsRequest {
 		return $this->one('email', mb_strtolower($email), IQueryBuilder::PARAM_STR);
 	}
 
-	public function markVerified(int $id): void {
+	/** @param bool $approval whether it also has to wait for an administrator from now on */
+	public function markVerified(int $id, bool $approval = false): void {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->update(self::TABLE)
 			->set('verified', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
 			->set('email_verified', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
 			->set('token', $qb->createNamedParameter(''))
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+		if ($approval) {
+			$qb->set('approval', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT));
+		}
 		$qb->executeStatement();
 	}
 

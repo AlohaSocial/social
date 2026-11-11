@@ -389,10 +389,29 @@ class ExternalSignupServiceTest extends TestCase {
 
 	public function testConfirmingAnApprovalRegistrationQueuesIt(): void {
 		$this->signups->method('getByTokenHash')->willReturn($this->pending(false, true));
-		$this->signups->expects($this->once())->method('markVerified')->with(9);
+		$this->signups->expects($this->once())->method('markVerified')->with(9, true);
 		$this->users->expects($this->never())->method('createAccount');
 
 		$this->assertSame('approval', $this->service()->verify('abc')['state']);
+	}
+
+	/** Approval switched on between registering and confirming still applies. */
+	public function testARegistrationConfirmedAfterApprovalWasSwitchedOnWaitsForIt(): void {
+		$this->mode = ExternalUserService::MODE_APPROVAL;
+		$this->signups->method('getByTokenHash')->willReturn($this->pending(false, false));
+		$this->signups->expects($this->once())->method('markVerified')->with(9, true);
+		$this->users->expects($this->never())->method('createAccount');
+
+		$this->assertSame('approval', $this->service()->verify('abc')['state']);
+	}
+
+	public function testAnInvitedRegistrationConfirmedInApprovalModeIsAnAccount(): void {
+		$this->mode = ExternalUserService::MODE_APPROVAL;
+		$this->signups->method('getByTokenHash')->willReturn(['inviteId' => 5] + $this->pending(false, false));
+		$this->signups->expects($this->never())->method('markVerified');
+		$this->users->expects($this->once())->method('createAccount')->willReturn($this->createStub(IUser::class));
+
+		$this->assertSame('created', $this->service()->verify('abc')['state']);
 	}
 
 	public function testAnExpiredOrUnknownLinkDoesNothing(): void {
@@ -447,6 +466,35 @@ class ExternalSignupServiceTest extends TestCase {
 
 		$this->assertSame('https://cloud.example/social.Signup.page?invite=TOKEN', $invite['url']);
 		$this->assertSame(1, $invite['maxUses']);
+	}
+
+	/**
+	 * An invited registration skips approval, so an external user's invitation
+	 * would let each invitee bring in more, past the approval queue.
+	 */
+	public function testAnExternalUserCannotInvite(): void {
+		$this->users->method('usersMayInvite')->willReturn(true);
+		$this->users->method('isExternalUid')->willReturnCallback(static fn (string $uid): bool => $uid === 'eve');
+		$this->invites->expects($this->never())->method('create');
+
+		$this->assertFalse($this->service()->mayInvite('eve'));
+		$this->assertTrue($this->service()->mayInvite('carol'));
+		$this->expectException(ExternalUserException::class);
+		$this->service()->createInvite('eve', '', 1, 7, false);
+	}
+
+	/** An invitation an external user made before the rule counts for nothing. */
+	public function testAnExternalUsersInvitationNeitherSkipsApprovalNorOpensInviteOnly(): void {
+		$this->users->method('isExternalUid')->willReturnCallback(static fn (string $uid): bool => $uid === 'admin');
+		$this->invites->expects($this->never())->method('consume');
+
+		$this->mode = ExternalUserService::MODE_INVITE;
+		$this->assertFalse($this->service()->pageState('good')['open']);
+
+		$this->verify = false;
+		$this->mode = ExternalUserService::MODE_APPROVAL;
+		$this->users->expects($this->never())->method('createAccount');
+		$this->assertSame('approval', $this->submit('good')['state']);
 	}
 
 	public function testUsersCannotInviteUnlessAllowed(): void {

@@ -13,6 +13,7 @@ use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\ScheduledStatusesRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -21,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\ScheduledStatus;
 use OCA\Social\Model\Client\Status;
+use OCA\Social\Model\HeldPost;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\DocumentService;
@@ -591,6 +593,61 @@ class ScheduledStatusServiceTest extends TestCase {
 		$this->assertTrue($this->posts[0]->isSensitive());
 		$this->assertSame('de', $this->posts[0]->getLanguage());
 		$this->assertSame('5', $this->posts[0]->getQuotedId());
+		$this->assertSame(Post::REVIEW_EXEMPT, $this->posts[0]->getReview(), 'reviewed when it was scheduled, not again now');
+	}
+
+	// ----------------------------------------------------------------- review
+
+	/** Reviewed when it is scheduled, as the post it will be, with its time. */
+	public function testAPostIsReviewedWhenItIsScheduled(): void {
+		$this->captureSave();
+		$when = self::NOW + 3600;
+		$asked = [];
+		$this->postService->method('review')
+			->willReturnCallback(function (Post $post, string $inReplyTo = '', int $scheduledAt = 0) use (&$asked): void {
+				$asked[] = [$post->getContent(), $post->getType(), $post->getReview(), $scheduledAt];
+			});
+
+		$this->service->schedule($this->alice(), $this->aStatus(['status' => 'next hour', 'visibility' => 'unlisted']), ['scheduled_at' => $this->iso($when)]);
+
+		$this->assertSame([['next hour', Stream::TYPE_UNLISTED, Post::REVIEW_HOLD, $when]], $asked);
+		$this->assertNotNull($this->saved);
+	}
+
+	/** A post a rule holds is not scheduled: it waits for a moderator, and its author is told now. */
+	public function testAPostARuleHoldsWhenItIsScheduledIsNotStored(): void {
+		$this->postService->method('review')->willThrowException(new PostHeldException(HeldPost::REASON_FIRST_POST, new HeldPost()));
+		$this->scheduledRequest->expects($this->never())->method('save');
+
+		$this->expectException(PostHeldException::class);
+		$this->service->schedule($this->alice(), $this->aStatus(['status' => 'hi']), ['scheduled_at' => $this->iso(self::NOW + 3600)]);
+	}
+
+	public function testAnApprovedPostIsScheduledForTheTimeItWasHeldWith(): void {
+		$this->captureSave();
+		$when = self::NOW + 86400;
+
+		$this->assertTrue($this->service->scheduleApproved($this->alice(), ['text' => 'tomorrow', 'scheduled_at' => $when], $when));
+
+		$this->assertSame($when, $this->saved->getScheduledAt());
+		$this->assertSame(self::ALICE, $this->saved->getActorId());
+		$this->assertSame('tomorrow', $this->saved->paramText());
+	}
+
+	/** @return array<string, array{int}> */
+	public static function timesTooCloseToSchedule(): array {
+		return [
+			'passed while it waited' => [self::NOW - 60],
+			'closer than five minutes' => [self::NOW + ScheduledStatusService::MIN_LEAD_TIME - 1],
+			'never scheduled' => [0],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('timesTooCloseToSchedule')]
+	public function testAnApprovedPostWhoseTimeIsTooCloseIsLeftToBePublishedNow(int $when): void {
+		$this->scheduledRequest->expects($this->never())->method('save');
+
+		$this->assertFalse($this->service->scheduleApproved($this->alice(), ['text' => 'now'], $when));
 	}
 
 	public function testAPostIsClaimedBeforeItIsPublished(): void {
