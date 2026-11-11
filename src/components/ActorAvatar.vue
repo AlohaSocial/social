@@ -26,6 +26,7 @@ import { translate as t } from '@nextcloud/l10n'
 import AccountHoverCard from './AccountHoverCard.vue'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
 import { isLocalAccount, nextcloudUserOf } from '../utils/accountLocality.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
 export default {
 	name: 'ActorAvatar',
@@ -166,7 +167,7 @@ export default {
 			// Remote actors are delivered with an avatar URL already pointing at this
 			// server's document cache. Actors cached without an icon have none, so fall
 			// back to the endpoint that resolves one from the ActivityPub id.
-			return this.actor.avatar
+			return accountAvatarUrl(this.actor, this.size)
 				|| generateUrl('/apps/social/api/v1/global/actor/avatar?id=' + encodeURIComponent(this.actor.url ?? ''))
 		},
 

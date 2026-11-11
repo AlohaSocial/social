@@ -12,6 +12,7 @@ namespace OCA\Social\Cron;
 use Exception;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AvatarThumbnailBackfill;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheActorSweepService;
 use OCA\Social\Service\ClientService;
@@ -102,6 +103,7 @@ class Cache extends TimedJob {
 		private ?RemoteCountService $remoteCountService = null,
 		private ?ClientService $clientService = null,
 		private ?VideoViewService $videoViewService = null,
+		private ?AvatarThumbnailBackfill $avatarThumbnailBackfill = null,
 	) {
 		parent::__construct($time);
 		$this->setInterval(12 * 60);
@@ -203,6 +205,11 @@ class Cache extends TimedJob {
 				// who was counted watching a video is kept for the day it was
 				// counted on, and not a day longer
 				$this->videoViewService?->forgetEarlierDays();
+			},
+			'thumbnailAvatars' => function (): void {
+				// the small copy the web UI draws, for the icons cached before
+				// icons were stored with one; nothing once it has been through them
+				$this->avatarThumbnailBackfill?->next();
 			},
 		];
 	}

@@ -368,6 +368,29 @@ class CacheTest extends TestCase {
 		$job->start($this->jobList);
 	}
 
+	public function testTheCachedAvatarsAreGivenTheirThumbnailsHere(): void {
+		$backfill = $this->createMock(\OCA\Social\Service\AvatarThumbnailBackfill::class);
+		$backfill->expects($this->once())->method('next')->willReturn(0);
+		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willReturn([]);
+
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$job = new Cache(
+			$time,
+			$this->accountService,
+			$this->cacheActorService,
+			$this->documentService,
+			$this->hashtagService,
+			$this->streamService,
+			$this->streamPruneService,
+			$this->cacheActorsRequest,
+			$this->pollService,
+			$this->logger,
+			avatarThumbnailBackfill: $backfill,
+		);
+		$job->start($this->jobList);
+	}
+
 	/** The Discover page reads what this finds out, and never asks itself. */
 	public function testTheDirectorySourcesAreRefreshedHere(): void {
 		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willReturn([]);
@@ -406,7 +429,7 @@ class CacheTest extends TestCase {
 			'nothing after the step that ran out of time may run'
 		);
 		$this->assertCount(1, $this->warnings);
-		$this->assertStringContainsString('17 step(s) skipped', $this->warnings[0]['message']);
+		$this->assertStringContainsString('18 step(s) skipped', $this->warnings[0]['message']);
 		$this->assertStringContainsString('manageCacheLocalActors', $this->warnings[0]['message']);
 	}
 

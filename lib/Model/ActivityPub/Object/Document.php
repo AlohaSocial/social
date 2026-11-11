@@ -15,6 +15,7 @@ use JsonSerializable;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\UrlCloudException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\AttachmentMetaDim;
 use OCA\Social\Model\Client\AttachmentMetaFocus;
@@ -99,6 +100,15 @@ class Document extends ACore implements JsonSerializable {
 	private array $localCopySize = [0, 0];
 	private array $resizedCopySize = [0, 0];
 
+	/**
+	 * Whether this document is the icon of a cached actor, which makes its
+	 * `resized_copy` a thumbnail of `CacheDocumentService::AVATAR_THUMBNAIL`
+	 * pixels rather than an 800 px preview. Not stored: the caller that knows
+	 * says so (`DocumentService` from `social_cache_actor`), and an icon read
+	 * off an actor document says so by its parent.
+	 */
+	private bool $actorIcon = false;
+
 	public function __construct($parent = null) {
 		parent::__construct($parent);
 
@@ -125,6 +135,17 @@ class Document extends ACore implements JsonSerializable {
 	public static function isStoredName(string $name): bool {
 		return $name !== '' && $name !== self::COPY_LOCAL_AVATAR && $name !== 'header'
 			&& $name !== self::COPY_STREAMED;
+	}
+
+	public function setActorIcon(bool $actorIcon): self {
+		$this->actorIcon = $actorIcon;
+
+		return $this;
+	}
+
+	/** Whether this is the icon of an actor; see `$actorIcon`. */
+	public function isActorIcon(): bool {
+		return $this->actorIcon || (!$this->isRoot() && $this->getParent() instanceof Person);
 	}
 
 	/**

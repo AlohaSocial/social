@@ -112,6 +112,7 @@
             "url": "https://remote.example/users/bob",
             "avatar": "https://cloud.example/apps/social/img/social.svg",
             "avatar_static": "https://cloud.example/apps/social/img/social.svg",
+            "avatar_small": "https://cloud.example/apps/social/img/social.svg",
             "header": "https://remote.example/header.png",
             "header_static": "https://remote.example/header.png",
             "avatar_default": true,

@@ -51,7 +51,7 @@
 					<NcAvatar
 						v-else
 						:size="48"
-						:url="account.avatar"
+						:url="accountAvatarUrl(account, 48) || undefined"
 						:hideStatus="true"
 						:disableMenu="true"
 						:disableTooltip="true" />
@@ -138,6 +138,7 @@ import BlueskyBadge from './BlueskyBadge.vue'
 import VerifiedBadge from './VerifiedBadge.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
 import { isBlueskyAccount, nextcloudUserOf } from '../utils/accountLocality.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 import { originOf } from '../utils/instanceIdentity.js'
 import { profileFields } from '../utils/profileFields.js'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
@@ -437,6 +438,7 @@ export default {
 	},
 
 	methods: {
+		accountAvatarUrl,
 		t,
 		n,
 		nextcloudUserOf,

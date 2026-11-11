@@ -39,6 +39,13 @@ const remote = {
 const AVATAR_ENDPOINT = '/index.php/apps/social/api/v1/global/actor/avatar?id='
 
 describe('ActorAvatar', () => {
+	it('draws a remote face from its thumbnail at small sizes and from the original at large ones', () => {
+		const actor = { ...remote, avatar_small: 'https://cloud.example.org/index.php/apps/social/media/small' }
+		expect(mountAvatar({ actor }).findComponent(NcAvatarStub).props('url')).toBe(actor.avatar_small)
+		expect(mountAvatar({ actor, size: 64 }).findComponent(NcAvatarStub).props('url')).toBe(actor.avatar_small)
+		expect(mountAvatar({ actor, size: 128 }).findComponent(NcAvatarStub).props('url')).toBe(remote.avatar)
+	})
+
 	it('draws a local actor as its Nextcloud user', () => {
 		const avatar = mountAvatar({ actor: local }).findComponent(NcAvatarStub)
 		expect(avatar.props('user')).toBe('bob')

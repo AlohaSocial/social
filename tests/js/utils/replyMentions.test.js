@@ -62,6 +62,14 @@ describe('mentionPills', () => {
 		expect(alice.querySelector('img')).toBeNull()
 	})
 
+	it('draws a pill from the account thumbnail where there is one', () => {
+		const [bob] = /** @type {HTMLElement[]} */ (mentionPills([
+			{ acct: 'bob@remote.example', url: 'https://remote.example/@bob', avatar: 'https://cloud.example/media/bob', avatar_small: 'https://cloud.example/media/bob-small' },
+		], 'cloud.example'))
+
+		expect(bob.querySelector('img')?.getAttribute('src')).toBe('https://cloud.example/media/bob-small')
+	})
+
 	it('writes a Bluesky mention as the bare handle', () => {
 		const [dana] = /** @type {HTMLElement[]} */ (mentionPills([
 			{ acct: 'dana.bsky.social', url: 'https://bsky.app/profile/dana.bsky.social', bluesky: { native: true } },

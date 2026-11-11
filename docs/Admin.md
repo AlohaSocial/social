@@ -459,7 +459,9 @@ copies on posts that are kept — everything by an account somebody here follows
 them once a day: copies older than `media_cache_days` (default 30) go, and then
 the oldest go until the rest fit in `media_cache_mb` (default 5120, i.e. 5 GiB).
 `0` turns either off. Both are on the Storage card, which also shows what the
-last run removed.
+last run removed. A remote avatar is kept twice: the original, and a thumbnail at most 128 px
+across that the web app draws (WebP where PHP's GD can write it); the purge
+takes both, and both come back when the avatar is next looked at.
 
 A deleted copy is fetched again from its origin the next time somebody looks at
 it, under the same name, so links already handed out keep working; one whose
@@ -1252,6 +1254,7 @@ the moderation routes accept.
 | `story_secret` | *(generated)* | The secret a 24-hour short's fetch capability (the bearcap Pixelfed fetches it with) is derived from, made the first time one is published. Changing it invalidates every outstanding capability at once, which is the only revocation it needs: a 24-hour short lives a day. Never set this by hand. |
 | `cache_cron_start` | `0` | Which of `Cron\Cache`'s steps the next pass begins with. Written by the job when it runs out of its five-minute budget, so the steps at the end of its list are not the ones that never run on a busy instance; a pass that finishes starts from the top again. Bookkeeping, not a setting. |
 | `poster_backfill_cursor` | `0` | The nid of the last stored video `Cron\VideoPosters` looked at for a poster frame. Written by the job, five videos every fifteen minutes; a video it could not take a frame from is behind it and is not tried again by the job — `occ social:media:posters` tries every video that still has none. Bookkeeping, not a setting: delete it to have the job go through every video again. |
+| `avatar_thumb_cursor` | `0` | The nid of the last cached remote avatar `Cron\Cache` gave the small thumbnail the web app draws, or `done` once it has been through them all. Written by the job, 100 avatars a pass; avatars cached since are stored with their thumbnail. Bookkeeping, not a setting: delete it to have the job look at every cached avatar again. |
 | `client_api_root` | *(unset)* | Whether the client API answered at the domain root the last time the *Mastodon apps cannot connect* setup check probed it: `1`, `0`, or unset where nothing has asked yet. Written down rather than only cached because the OAuth discovery document is built from it, and that is a route any client may call. |
 | `client_api_scheme` | *(unset)* | Whether that probe's answer carried addresses in the scheme it was asked over: `0` once a proxy that drops the scheme has been seen (every absolute URL says `http` on an `https` site), which the same setup check reports. |
 | `dest_nid_filled` | `0` | Set to `1` by `Version1000Date20260917000001` once every recipient row carries the post's numeric id, which is what lets the home timeline use its fast page query; a flag, because asking the table for a row with a zero nid is a full scan of the largest table the app has. Bookkeeping, not a setting. |

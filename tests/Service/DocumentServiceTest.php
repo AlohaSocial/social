@@ -516,6 +516,63 @@ class DocumentServiceTest extends TestCase {
 		$this->assertSame('fresh', $doc->getLocalCopy());
 	}
 
+	/** Whether a document is an actor's icon is asked of the actor cache before it is stored. */
+	public function testAnActorsIconIsCachedAsOne(): void {
+		$doc = $this->document();
+		$doc->setCaching(time() - CacheDocumentsRequest::CACHING_TIMEOUT * 60 - 10);
+		$this->cacheDocumentsRequest->method('getById')->willReturn($doc);
+		$this->cacheDocumentsRequest->expects($this->once())->method('isActorIcon')
+			->with($this->identicalTo($doc))->willReturn(true);
+		$seen = null;
+		$this->cacheService->method('saveRemoteFileToCache')
+			->willReturnCallback(function (Document $document) use (&$seen): void {
+				$seen = $document->isActorIcon();
+				$document->setLocalCopy('fresh');
+			});
+
+		$this->service->cacheRemoteDocument(self::DOC_ID);
+
+		$this->assertTrue($seen);
+	}
+
+	public function testAnAttachmentIsNotCachedAsAnIcon(): void {
+		$doc = $this->document();
+		$doc->setCaching(time() - CacheDocumentsRequest::CACHING_TIMEOUT * 60 - 10);
+		$this->cacheDocumentsRequest->method('getById')->willReturn($doc);
+		$this->cacheDocumentsRequest->method('isActorIcon')->willReturn(false);
+		$seen = null;
+		$this->cacheService->method('saveRemoteFileToCache')
+			->willReturnCallback(function (Document $document) use (&$seen): void {
+				$seen = $document->isActorIcon();
+				$document->setLocalCopy('fresh');
+			});
+
+		$this->service->cacheRemoteDocument(self::DOC_ID);
+
+		$this->assertFalse($seen);
+	}
+
+	/** A purged icon fetched again is given its thumbnail again. */
+	public function testAPurgedIconIsRestoredAsAnIcon(): void {
+		$document = $this->purgedDocument();
+		$this->cacheDocumentsRequest->method('getByCopy')->willReturn($document);
+		$this->cacheDocumentsRequest->method('isActorIcon')->with($this->identicalTo($document))->willReturn(true);
+		$seen = null;
+		$this->cacheService->method('restoreRemoteCopy')->willReturnCallback(
+			static function (Document $document) use (&$seen): void {
+				$seen = $document->isActorIcon();
+			}
+		);
+		$this->cacheService->method('getFromUuid')->willThrowException(new NotFoundException('gone'));
+
+		try {
+			$this->service->getFromUuid(self::UUID);
+		} catch (NotFoundException $e) {
+		}
+
+		$this->assertTrue($seen);
+	}
+
 	/** @return array<string, array{\Exception, int}> */
 	public static function cachingErrorProvider(): array {
 		return [

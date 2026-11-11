@@ -644,6 +644,65 @@ class PersonTest extends TestCase {
 		$this->assertSame('https://cloud.example.org/apps/social/media/abc123', $account['avatar_static']);
 	}
 
+	public function testACachedRemoteIconOffersItsThumbnailAsTheSmallAvatar(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$icon = new Document();
+		$icon->setLocalCopy('aaaaaaaa-1111-4111-8111-111111111111')
+			->setResizedCopy('bbbbbbbb-2222-4222-8222-222222222222')
+			->setUrl('https://files.mastodon.social/avatars/bob.png');
+		$person = new Person();
+		$person->setPreferredUsername('bob')->setAccount('bob@mastodon.social');
+		$person->setIcon($icon);
+
+		$account = $person->exportAsLocal();
+
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/aaaaaaaa-1111-4111-8111-111111111111', $account['avatar'], 'Mastodon apps keep the original');
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/bbbbbbbb-2222-4222-8222-222222222222', $account['avatar_small']);
+	}
+
+	public function testTheSmallAvatarIsTheAvatarWhereThereIsNoThumbnail(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$icon = new Document();
+		$icon->setLocalCopy('aaaaaaaa-1111-4111-8111-111111111111')
+			->setUrl('https://files.mastodon.social/avatars/bob.png');
+		$remote = new Person();
+		$remote->setPreferredUsername('bob')->setAccount('bob@mastodon.social');
+		$remote->setIcon($icon);
+		$account = $remote->exportAsLocal();
+		$this->assertSame($account['avatar'], $account['avatar_small']);
+
+		// still being fetched: the placeholder, for both
+		$fetching = new Document();
+		$fetching->setResizedCopy('bbbbbbbb-2222-4222-8222-222222222222')
+			->setUrl('https://files.mastodon.social/avatars/carol.png');
+		$carol = new Person();
+		$carol->setPreferredUsername('carol')->setAccount('carol@mastodon.social');
+		$carol->setIcon($fetching);
+		$account = $carol->exportAsLocal();
+		$this->assertTrue($account['avatar_default']);
+		$this->assertSame($account['avatar'], $account['avatar_small']);
+
+		// no icon at all
+		$dave = new Person();
+		$dave->setPreferredUsername('dave')->setAccount('dave@mastodon.social')
+			->setAvatar('https://cloud.example.org/apps/social/media/dave');
+		$this->assertSame('https://cloud.example.org/apps/social/media/dave', $dave->exportAsLocal()['avatar_small']);
+	}
+
+	public function testALocalAccountsSmallAvatarIsItsAvatarRoute(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$icon = new Image();
+		$icon->setUrl('https://cloud.example.org/index.php/avatar/alice/128');
+		$icon->setLocalCopy(Document::COPY_LOCAL_AVATAR);
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setLocal(true);
+		$person->setIcon($icon);
+
+		$account = $person->exportAsLocal();
+
+		$this->assertSame($account['avatar'], $account['avatar_small']);
+	}
+
 	/** The router refuses an empty route parameter, as the real one does. */
 	private function routerThatRefusesAnEmptyUuid(): void {
 		$this->urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(

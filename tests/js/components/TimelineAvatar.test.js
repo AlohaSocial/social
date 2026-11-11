@@ -33,6 +33,12 @@ const remoteStatus = {
 }
 
 describe('TimelineAvatar', () => {
+	it('draws a remote author from the thumbnail the server made', () => {
+		const status = { ...remoteStatus, account: { ...remoteStatus.account, avatar_small: 'https://cloud.example.org/apps/social/media/small' } }
+		expect(mountAvatar(status).findComponent(NcAvatarStub).props('url')).toBe('https://cloud.example.org/apps/social/media/small')
+		expect(mountAvatar(status, { size: 40 }).findComponent(NcAvatarStub).props('url')).toBe('https://cloud.example.org/apps/social/media/small')
+	})
+
 	it('shows a local author through the server avatar of their uid', () => {
 		const wrapper = mountAvatar(localStatus)
 		const avatar = wrapper.findComponent(NcAvatarStub)

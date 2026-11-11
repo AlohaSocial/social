@@ -59,6 +59,23 @@ describe('mentionTributeOptions', () => {
 		])
 	})
 
+	it('draws each account in the menu from its thumbnail where it has one', async () => {
+		vi.mocked(axios.get).mockResolvedValue({
+			data: {
+				result: {
+					accounts: [
+						{ id: '2', username: 'bob', acct: 'bob@remote.example', url: 'https://remote.example/users/bob', avatar: 'https://cloud.example/apps/social/media/b0b', avatar_small: 'https://cloud.example/apps/social/media/b0b-small' },
+					],
+				},
+			},
+		})
+		const [mention] = mentionTributeOptions().collection
+
+		const shown = await lookUp(mention, 'b')
+
+		expect(shown[0].avatar).toBe('https://cloud.example/apps/social/media/b0b-small')
+	})
+
 	it('mentions a Bluesky account by its bare handle', async () => {
 		vi.mocked(axios.get).mockResolvedValue({
 			data: {

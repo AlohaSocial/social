@@ -182,7 +182,7 @@
 						<img
 							v-if="entry.status.account.avatar"
 							class="short__avatar"
-							:src="entry.status.account.avatar"
+							:src="accountAvatarUrl(entry.status.account)"
 							alt="">
 						<span class="short__names">
 							<span class="short__name">{{ entry.status.account.display_name || entry.status.account.username }}</span>
@@ -401,6 +401,7 @@ import { showError, showUndo } from '../services/toast.js'
 const POPULARITY_FLOOR = 10
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
 import { useSoundAutoplay } from '../composables/useSoundAutoplay.js'
@@ -810,6 +811,7 @@ export default {
 	},
 
 	methods: {
+		accountAvatarUrl,
 		canExpandCaption(text) {
 			return text.length > 120 || text.split('\n').length > 2
 		},

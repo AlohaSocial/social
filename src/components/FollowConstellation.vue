@@ -56,7 +56,7 @@
 			@click="press(node)">
 			<img
 				class="constellation__avatar"
-				:src="node.account.avatar"
+				:src="accountAvatarUrl(node.account)"
 				alt=""
 				draggable="false">
 			<span class="constellation__name">{{ nameOf(node.account) }}</span>
@@ -68,6 +68,7 @@
 import { translate as t } from '@nextcloud/l10n'
 import { markRaw } from 'vue'
 import { buildGraph, settle, step } from '../utils/constellation.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
 /** the most frames the sky is animated for before it is left where it is */
 const MAX_FRAMES = 240
@@ -200,6 +201,7 @@ export default {
 	},
 
 	methods: {
+		accountAvatarUrl,
 		t,
 
 		/** Lays the sky out afresh from the suggestions. */
