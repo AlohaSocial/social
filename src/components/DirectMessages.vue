@@ -1668,7 +1668,7 @@ export default {
  * field off a short screen and scrolled the whole page instead. Below
  * `$folded` the page starts under the navigation toggle (Timeline.vue), and
  * that distance comes off the height too, or the Send button is below the
- * bottom edge.
+ * bottom edge; so does the phone bar's room (PhoneBar.vue).
  */
 .direct-messages {
 	/* the feed's reading column, which a conversation keeps to as well */
@@ -1676,7 +1676,7 @@ export default {
 	display: grid;
 	grid-template-columns: clamp(17.5rem, 23vw, 21rem) minmax(0, 1fr);
 	width: 100%;
-	height: calc(100dvh - var(--header-height, 50px) - 0.6rem - var(--social-toggle-clearance, 0px));
+	height: calc(100dvh - var(--header-height, 50px) - 0.6rem - var(--social-phone-bar-space, 0px) - var(--social-toggle-clearance, 0px));
 	background: var(--color-main-background);
 }
 

@@ -13,6 +13,7 @@
 	</NcContent>
 	<NcContent v-else-if="!serverData.setup" appName="social" :class="{public: serverData.public}">
 		<Navigation v-if="!serverData.public" @search="search" />
+		<PhoneBar v-if="!serverData.public" />
 		<ShortcutHelp :open="shortcutHelpOpen" @close="shortcutHelpOpen = false" />
 		<!-- one emoji picker for the page, fetched the first time a reaction
 		     bar asks for one; see ReactionPicker for why it is not on the card.
@@ -114,6 +115,7 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 
 import Navigation from './components/Navigation.vue'
+import PhoneBar from './components/PhoneBar.vue'
 import ShortcutHelp from './components/ShortcutHelp.vue'
 import SetupChecks from './components/SetupChecks.vue'
 import CloudAddressSetup from './components/CloudAddressSetup.vue'
@@ -159,6 +161,7 @@ export default {
 		NcButton,
 		MiniPlayer,
 		Navigation,
+		PhoneBar,
 		ReactionPicker,
 		ShortcutHelp,
 		SetupChecks,
@@ -613,6 +616,9 @@ a.external_link {
 	 * untouched.
 	 */
 	align-content: start;
+	/* the foot of every page stays above the phone bar (PhoneBar.vue) */
+	box-sizing: border-box;
+	padding-block-end: var(--social-phone-bar-space, 0px);
 	/* What the browser animates. Without a name of its own the only thing
 	   there is to animate is `root`, which is a picture of the whole window --
 	   so the sidebar, the header and the search box all slid across with the

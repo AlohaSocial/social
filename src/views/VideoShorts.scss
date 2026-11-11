@@ -6,8 +6,9 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	/* the phone bar's room comes off too, or its foot is under the bar */
 	block-size: calc(
-		100dvh - var(--header-height, 50px) - var(--body-container-margin, 8px)
+		100dvh - var(--header-height, 50px) - var(--body-container-margin, 8px) - var(--social-phone-bar-space, 0px)
 	);
 	inline-size: 100%;
 	min-block-size: 0;

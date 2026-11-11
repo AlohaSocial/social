@@ -184,8 +184,9 @@ account for Aloha Social only cannot invite people.
 
 ## Writing a post
 
-**New post** at the top of the sidebar, the compact post field on a feed or
-profile, or `n` opens the shared composer. The compact field sends a simple
+**New post** at the top of the sidebar (the **+** in the bar at the bottom on
+a phone), the compact post field on a feed or profile, or `n` opens the shared
+composer. The compact field sends a simple
 text post directly; expand it to open the full popup for attachments, polls,
 events, warnings, scheduling and other options. Replies use the same compact
 entry and popup with the reply context. An empty composer greets you by first
@@ -417,7 +418,15 @@ of the post, *Settings* — in front of the app's name, so the history and a
 screen reader can tell the pages apart. A link to a page that does not exist
 says *Page not found* and offers the way back to your feed.
 
-The sidebar is the map:
+The sidebar is the map. On a phone it folds away behind the button at the
+top left, and a bar along the bottom of the screen holds the four places you
+go most: **My Feed**, **Discover**, **Activities** and **Messages** (your
+direct messages), each with the same badge as in the sidebar, and a **+** in
+the middle that opens **New post**. The page you are on is highlighted. The
+bar slides away while you scroll down and comes back as soon as you scroll up
+(without the slide when your device asks for less motion); everything else is
+in the sidebar.
+
 
 - **My Feed**, **Local**, **Global** — a switcher above the posts. My Feed is
   what the people and hashtags you follow post; Local is every public post
