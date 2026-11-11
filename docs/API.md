@@ -237,6 +237,14 @@ for an account without a banner. They are on every Account entity,
 `verify_credentials` and `update_credentials` included; `avatar` and `header`
 stay URLs, so a client that does not know the keys draws what it drew before.
 
+**An Account entity carries a small copy of its picture.**
+`avatar_small` is the same picture at most 128 px across where this instance
+has one — the thumbnail it keeps of a remote account's cached avatar — and
+the same URL as `avatar` otherwise (a local account's avatar route is already
+128 px, and a placeholder is a placeholder). `avatar` and `avatar_static` stay
+the original, which is what a Mastodon app is given and draws; the web app
+draws `avatar_small` wherever a face is 64 px or less.
+
 **An Account entity names the Nextcloud user of a local account.**
 `nextcloud_user` is the user id a local account belongs to, which its username
 need not be: the username is chosen when the account is made. The web app

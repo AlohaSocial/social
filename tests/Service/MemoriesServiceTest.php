@@ -245,4 +245,26 @@ class MemoriesServiceTest extends TestCase {
 
 		$this->service->setRecapEnabled('alice', false);
 	}
+
+	public function testThereCanBeMemoriesOnlyWithAPostNearlyAYearOld(): void {
+		$now = 1_800_000_000;
+		$asked = [];
+		$this->streamRequest->method('getByAuthorBetween')->willReturnCallback(
+			function (string $actor, int $from, int $until, int $limit) use (&$asked): array {
+				$asked[] = [$from, $until, $limit];
+
+				return [$this->post('https://cloud.example/users/alice/1', $until - 10)];
+			}
+		);
+
+		$this->assertTrue($this->service->mayHaveMemories($this->actor(), $now));
+		$this->assertSame([[0, $now - 363 * 86400, 1]], $asked, 'one row, older than a year less two days');
+	}
+
+	public function testAnAccountWithNothingThatOldHasNoMemories(): void {
+		$this->streamRequest->method('getByAuthorBetween')->willReturn([]);
+
+		$this->assertFalse($this->service->mayHaveMemories($this->actor(), 1_800_000_000));
+		$this->assertFalse($this->service->mayHaveMemories(new Person(), 1_800_000_000));
+	}
 }

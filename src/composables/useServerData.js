@@ -59,6 +59,7 @@ import { useSettingsStore } from '../store/settings.js'
  * @property {'overwrite.cli.url'|'request'} [proposedFrom] - Where that address came from (only with setup)
  * @property {string[]} [proposedProblems] - What the server objects to in it, as CloudAddressRules codes (only with setup)
  * @property {string} [socialAddress] - The host addresses here end in, which the administrator may have set apart from the cloud address (not on a public page)
+ * @property {{has_announcements: boolean, has_stories: boolean, recap_enabled: boolean, has_memories: boolean, has_teams: boolean}} [startup] - Which requests the home timeline opens with would certainly come back empty (`StartupHintsService`; signed-in readers with an account only)
  * @property {string} [suggestedHandle] - The handle offered to somebody creating an account (only with needsAccount)
  * @property {{username: string, address: string}} [viewer] - The reader's account: the username they chose, which need not be their user id, and their address (only once the account exists)
  */

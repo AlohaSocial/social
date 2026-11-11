@@ -289,6 +289,17 @@ describe('TimelineSwitcher', () => {
 		expect(push).not.toHaveBeenCalled()
 	})
 
+	it('says which option the reader is about to choose: hovered, focused or touched', async () => {
+		const { wrapper } = mountSwitcher('first')
+
+		await options(wrapper)[1].trigger('pointerenter')
+		await options(wrapper)[2].trigger('focus')
+		await options(wrapper)[1].trigger('touchstart')
+
+		expect(wrapper.emitted('intent')).toEqual([['second'], ['third'], ['second']])
+		wrapper.unmount()
+	})
+
 	it('says nothing when the one already on screen is chosen again', async () => {
 		const { wrapper } = mountSwitcher('packs', STATEFUL)
 

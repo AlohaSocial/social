@@ -1723,6 +1723,26 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
+	 * Where this instance serves the thumbnail of a cached remote icon, or
+	 * `$avatar` where there is none: a local account's avatar route is
+	 * already small, and an icon without a resized copy has only the original.
+	 */
+	private function smallIconUrl(IURLGenerator $urlGenerator, string $avatar): string {
+		if (!$this->hasIcon()) {
+			return $avatar;
+		}
+
+		$icon = $this->getIcon();
+		$resized = $icon->getResizedCopy();
+		if (!Document::isStoredName($icon->getLocalCopy()) || !Document::isStoredName($resized)
+			|| $resized === $icon->getLocalCopy()) {
+			return $avatar;
+		}
+
+		return $icon->getResizedMediaUrl($urlGenerator);
+	}
+
+	/**
 	 * @return array
 	 */
 	#[\Override]
@@ -1743,6 +1763,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			$avatar = $this->placeholderImage(Server::get(IURLGenerator::class));
 			$avatarDefault = true;
 		}
+
+		$avatar ??= $this->getAvatar();
+		$avatarSmall = $avatarDefault ? $avatar : $this->smallIconUrl(Server::get(IURLGenerator::class), $avatar);
 
 		$headerUrl = $this->getHeader();
 		$headerDefault = ($headerUrl === '');
@@ -1780,8 +1803,13 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				'created_at' => gmdate('Y-m-d\TH:i:s', $this->getCreation()) . '.000Z',
 				'note' => $this->isLocal() ? $this->bioAsHtml() : $this->getDescription(),
 				'url' => $this->getId(),
-				'avatar' => $avatar ?? $this->getAvatar(),
-				'avatar_static' => $avatar ?? $this->getAvatar(),
+				'avatar' => $avatar,
+				'avatar_static' => $avatar,
+				// this app's own: the same picture at most
+				// `CacheDocumentService::AVATAR_THUMBNAIL` px across where this
+				// instance has one, `avatar` otherwise; what the web UI draws
+				// at 64 px and less
+				'avatar_small' => $avatarSmall,
 				'header' => $headerUrl,
 				'header_static' => $headerUrl,
 				// this app's own: whether `avatar` and `header` are placeholders

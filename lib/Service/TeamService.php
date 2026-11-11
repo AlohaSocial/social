@@ -107,6 +107,13 @@ class TeamService {
 		return $actor;
 	}
 
+	/** Whether somebody may post as any team account: whether `forUser()` could list one. */
+	public function hasTeamsFor(string $userId): bool {
+		$user = $this->userManager->get($userId);
+
+		return $user !== null && $this->teamsRequest->getByGroups($this->groupManager->getUserGroupIds($user)) !== [];
+	}
+
 	/**
 	 * The team accounts somebody may post as, right now.
 	 *

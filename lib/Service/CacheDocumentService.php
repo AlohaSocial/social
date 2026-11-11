@@ -46,6 +46,13 @@ class CacheDocumentService {
 	public const RESIZED_HEIGHT = 800;
 
 	/**
+	 * The bounding box of an actor icon's `resized_copy`, in pixels: what the
+	 * web UI draws at 64 px and less, at twice that for a high-density screen.
+	 * The original stays the `avatar` a Mastodon app is given.
+	 */
+	public const AVATAR_THUMBNAIL = 128;
+
+	/**
 	 * Ceiling on the pixel count of an image this app will decode.
 	 *
 	 * A decoded image costs roughly four bytes a pixel in GD, so the size of
@@ -894,13 +901,19 @@ class CacheDocumentService {
 			throw new CacheContentDecodeException('cannot read image: ' . $e->getMessage());
 		}
 
+		$icon = $document->isActorIcon();
 		try {
 			$image->quality_jpg = 80;
 			$image->quality_png = 7;
 			$image->quality_webp = 80;
 
-			$image->resizeToBestFit(self::RESIZED_WIDTH, self::RESIZED_HEIGHT);
-			$newContent = $image->getImageAsString();
+			if ($icon) {
+				$image->resizeToBestFit(self::AVATAR_THUMBNAIL, self::AVATAR_THUMBNAIL);
+				$newContent = $image->getImageAsString(self::thumbnailType());
+			} else {
+				$image->resizeToBestFit(self::RESIZED_WIDTH, self::RESIZED_HEIGHT);
+				$newContent = $image->getImageAsString();
+			}
 
 			if ($newContent) {
 				$content = $newContent;
@@ -917,6 +930,66 @@ class CacheDocumentService {
 		if ($gd !== false) {
 			$document->setBlurHash($this->blurService->generateBlurHash($gd));
 		}
+	}
+
+	/**
+	 * What an icon thumbnail is written as: WebP where this PHP's GD can
+	 * write it, which keeps a transparent avatar transparent at a fraction of
+	 * a PNG's weight; the original's own format otherwise.
+	 */
+	private static function thumbnailType(): ?int {
+		return (function_exists('imagewebp') && (imagetypes() & IMG_WEBP) !== 0) ? IMAGETYPE_WEBP : null;
+	}
+
+	/**
+	 * Makes a cached actor icon's `resized_copy` the small thumbnail a new
+	 * icon is stored with, from the original already on disk.
+	 *
+	 * For the icons stored before thumbnails existed, whose resized copy is
+	 * the 800 px preview of the original. The thumbnail is written under the
+	 * name that copy already has, so every link to it keeps working; an icon
+	 * that had none gets a fresh name. An icon whose resized copy is already
+	 * no larger than the thumbnail is left alone.
+	 *
+	 * @return bool whether a thumbnail was written
+	 *
+	 * @throws CacheContentDecodeException
+	 * @throws NotFoundException
+	 * @throws NotPermittedException
+	 */
+	public function rebuildIconThumbnail(Document $document): bool {
+		if (!Document::isStoredName($document->getLocalCopy())
+			|| !str_starts_with($document->getMediaType(), 'image/')) {
+			return false;
+		}
+
+		$resized = $document->getResizedCopy();
+		if ($resized === $document->getLocalCopy() || !Document::isStoredName($resized)) {
+			$resized = '';
+		}
+
+		if ($resized !== '' && $this->isThumbnail($resized)) {
+			return false;
+		}
+
+		$content = $this->getFromUuid($document->getLocalCopy())->getContent();
+		$document->setActorIcon(true);
+		$this->resizeImage($document, $content);
+		$document->setResizedCopy($this->generateFileFromContent($content, $resized));
+
+		return true;
+	}
+
+	/** Whether a stored copy already fits the icon thumbnail's box. */
+	private function isThumbnail(string $uuid): bool {
+		try {
+			$size = @getimagesizefromstring($this->getFromUuid($uuid)->getContent());
+		} catch (Exception $e) {
+			return false;
+		}
+
+		return $size !== false
+			&& $size[0] <= self::AVATAR_THUMBNAIL && $size[1] <= self::AVATAR_THUMBNAIL;
 	}
 
 	/**

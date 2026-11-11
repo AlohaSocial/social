@@ -7,7 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import axios from '@nextcloud/axios'
 
+import { createPinia, setActivePinia } from 'pinia'
 import RecapSettings from '../../../src/components/RecapSettings.vue'
+import { useSettingsStore } from '../../../src/store/settings.js'
 import { showError } from '../../../src/services/toast.js'
 
 vi.mock('@nextcloud/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
@@ -27,6 +29,8 @@ async function mountSettings(answer = { enabled: false }) {
 		? Promise.reject(answer)
 		: Promise.resolve({ data: answer })))
 	axios.post.mockResolvedValue({ data: {} })
+	setActivePinia(createPinia())
+	useSettingsStore().setServerData({ public: false, startup: { recap_enabled: answer?.enabled === true } })
 
 	const wrapper = mount(RecapSettings)
 	await flushPromises()
@@ -79,6 +83,17 @@ describe('the weekly recap switch', () => {
 
 		expect(axios.post).toHaveBeenCalledWith(ROUTE, { enabled: true })
 		expect(toggle(wrapper).props('modelValue')).toBe(true)
+		expect(useSettingsStore().getServerData.startup.recap_enabled).toBe(true)
+	})
+
+	/** What the page says about the recap follows the switch. */
+	it('tells the page when the recap is turned off', async () => {
+		const wrapper = await mountSettings({ enabled: true })
+
+		toggle(wrapper).vm.$emit('update:modelValue', false)
+		await flushPromises()
+
+		expect(useSettingsStore().getServerData.startup.recap_enabled).toBe(false)
 	})
 
 	/** A switch that waits for a round trip before it moves reads as broken. */

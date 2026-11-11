@@ -134,6 +134,21 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
+	 * Writes an icon's rebuilt thumbnail (`CacheDocumentService::rebuildIconThumbnail()`):
+	 * its name, which is new only where the icon had no resized copy, and the
+	 * blurhash read off it. Leaves `creation` and `cached` as they are.
+	 */
+	public function updateThumbnail(Document $document): void {
+		$qb = $this->getCacheDocumentsUpdateSql();
+		$qb->limitToIdString($document->getId());
+		$qb->set('resized_copy', $qb->createNamedParameter($document->getResizedCopy()));
+		$qb->set('resized_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getResizedCopy())));
+		$qb->set('blurhash', $qb->createNamedParameter($document->getBlurHash()));
+
+		$qb->executeStatement();
+	}
+
+	/**
 	 * Writes the focal point back, which means rewriting the whole `meta` blob
 	 * it rides in -- there is no column of its own to set.
 	 */
@@ -686,6 +701,63 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {
 			$documents[] = $this->parseCacheDocumentsSelectSql($data);
+		}
+		$cursor->closeCursor();
+
+		return $documents;
+	}
+
+	/**
+	 * Whether a document is the icon of a cached actor: its parent is a row of
+	 * `social_cache_actor` whose `icon_id` names it. Looked up by the actor's
+	 * primary key, which is indexed.
+	 */
+	public function isActorIcon(Document $document): bool {
+		if ($document->getParentId() === '' || $document->getId() === '') {
+			return false;
+		}
+
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('ca.id_prim')
+			->from(self::TABLE_CACHE_ACTORS, 'ca')
+			->where($expr->eq('ca.id_prim', $qb->createNamedParameter($qb->prim($document->getParentId()))))
+			->andWhere($expr->eq('ca.icon_id', $qb->createNamedParameter($qb->prim($document->getId()))))
+			->setMaxResults(1);
+
+		$cursor = $qb->executeQuery();
+		$found = $cursor->fetch() !== false;
+		$cursor->closeCursor();
+
+		return $found;
+	}
+
+	/**
+	 * The cached icons of remote actors whose files are on disk, a page at a
+	 * time after the nid `$after`, for `AvatarThumbnailBackfill`.
+	 *
+	 * @return Document[]
+	 */
+	public function getCachedActorIcons(int $limit, int|string $after = '0'): array {
+		$qb = $this->getCacheDocumentsSelectSql();
+		$alias = $qb->getDefaultSelectAlias();
+		$expr = $qb->expr();
+
+		$qb->innerJoin($alias, self::TABLE_CACHE_ACTORS, 'ca', $expr->andX(
+			$expr->eq('ca.id_prim', $alias . '.parent_id_prim'),
+			$expr->eq('ca.icon_id', $alias . '.id_prim')
+		));
+		$qb->andWhere($expr->eq($alias . '.account', $qb->createNamedParameter('')));
+		$qb->andWhere($expr->isNotNull($alias . '.cached'));
+		$qb->andWhere($expr->like($alias . '.media_type', $qb->createNamedParameter('image/%')));
+		$qb->andWhere($expr->gt($alias . '.nid', $qb->createNamedParameter($after)));
+		$qb->orderBy($alias . '.nid', 'asc');
+		$qb->setMaxResults($limit);
+
+		$documents = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$documents[] = $this->parseCacheDocumentsSelectSql($data)->setActorIcon(true);
 		}
 		$cursor->closeCursor();
 

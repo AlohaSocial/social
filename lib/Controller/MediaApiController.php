@@ -45,6 +45,7 @@ use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IRequest;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
@@ -463,7 +464,7 @@ class MediaApiController extends MastodonApiController {
 			// the whole file.
 			$response = new RangedFileResponse(
 				$file,
-				$this->servedMediaType($document, $uuid),
+				self::servedMediaType($document, $uuid, $file),
 				$this->request->getHeader('Range'),
 				// a timeline is forty to sixty of these a screen, and the bytes
 				// behind a uuid never change
@@ -856,8 +857,8 @@ class MediaApiController extends MastodonApiController {
 	/**
 	 * What the bytes behind a uuid actually are.
 	 *
-	 * A document's media type describes the *file*, and for every image that is
-	 * also what both of its copies are. A video's resized copy is not: it is
+	 * A document's media type describes the *file*, and for nearly every image
+	 * that is also what both of its copies are. A video's resized copy is not: it is
 	 * the poster frame, a JPEG, and served as `video/mp4` a browser with
 	 * `nosniff` on — which is every Nextcloud — refuses to draw it. So the
 	 * answer depends on which copy the uuid named.
@@ -867,14 +868,44 @@ class MediaApiController extends MastodonApiController {
 	 * never what their sender called them. The extension in the URL is
 	 * whatever the requester chose to write there and is not consulted.
 	 */
-	private function servedMediaType(Document $document, string $uuid): string {
+	private static function servedMediaType(Document $document, string $uuid, ISimpleFile $file): string {
 		$mediaType = $document->getMediaType();
+		if ($uuid !== $document->getResizedCopy()) {
+			return $mediaType;
+		}
 
-		if ($uuid === $document->getResizedCopy() && !str_starts_with($mediaType, 'image/')) {
+		if (!str_starts_with($mediaType, 'image/')) {
 			return VideoThumbnailService::MEDIA_TYPE;
 		}
 
+		// the thumbnail of a cached actor icon is WebP whatever the original
+		// was (`CacheDocumentService::AVATAR_THUMBNAIL`); the first twelve
+		// bytes say which, and only a remote picture's resized copy can be one
+		if ($mediaType !== 'image/webp' && !$document->isLocalUpload() && self::isWebp($file)) {
+			return 'image/webp';
+		}
+
 		return $mediaType;
+	}
+
+	/** Whether a stored file starts with WebP's RIFF header. */
+	private static function isWebp(ISimpleFile $file): bool {
+		try {
+			$stream = $file->read();
+		} catch (\Throwable $e) {
+			return false;
+		}
+		if (!is_resource($stream)) {
+			return false;
+		}
+
+		try {
+			$head = (string)fread($stream, 12);
+		} finally {
+			fclose($stream);
+		}
+
+		return strlen($head) === 12 && str_starts_with($head, 'RIFF') && substr($head, 8, 4) === 'WEBP';
 	}
 
 	/**

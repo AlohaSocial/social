@@ -36,6 +36,7 @@ import NcDashboardWidget from '@nextcloud/vue/components/NcDashboardWidget'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import { notificationSummary } from '../services/notifications.js'
 import logger from '../services/logger.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
 /** Without notify_push the widget has to ask; once a minute is enough for a tile. */
 const POLL_MS = 60 * 1000
@@ -212,7 +213,7 @@ export default {
 
 		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getAvatarUrl(n) {
-			return n.account.avatar
+			return accountAvatarUrl(n.account)
 		},
 
 		/** @param {import('../types/Mastodon.js').Notification} n the notification */

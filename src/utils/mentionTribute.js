@@ -8,6 +8,7 @@ import { generateUrl } from '@nextcloud/router'
 import debounce from 'debounce'
 import logger from '../services/logger.js'
 import { escapeHtml, hashtagChip, mentionChip, mentionMenuItem } from './mentionTemplates.js'
+import { accountAvatarUrl } from './accountAvatar.js'
 
 /**
  * @param {string} text what was typed after the @
@@ -65,7 +66,7 @@ export function mentionTributeOptions() {
 						key: user.username,
 						value: user.acct,
 						url: user.url,
-						avatar: user.avatar,
+						avatar: accountAvatarUrl(user),
 					}))
 
 					logger.debug('Found accounts for a mention', { count: users.length })

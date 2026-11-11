@@ -603,4 +603,16 @@ class AnnouncementServiceTest extends TestCase {
 
 		$this->assertCount(8, $this->reactionsSeenBy('alice', $id));
 	}
+
+	/** The page's hint asks the same question the list answers, read or not. */
+	public function testWhetherAnythingAppliesIsWhatTheListWouldServe(): void {
+		$this->assertFalse($this->service->hasActive(5_000));
+
+		$this->announcement('Over', 1_000, 2_000);
+		$this->assertFalse($this->service->hasActive(5_000));
+
+		$live = $this->announcement('Now', 4_000, 6_000);
+		$this->service->dismiss($live->getId(), self::ALICE);
+		$this->assertTrue($this->service->hasActive(5_000), 'a read announcement is still served');
+	}
 }

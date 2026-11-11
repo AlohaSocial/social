@@ -37,7 +37,7 @@
 				<img
 					v-if="short.account.avatar"
 					class="day-short__avatar"
-					:src="short.account.avatar"
+					:src="accountAvatarUrl(short.account)"
 					alt="">
 				<span class="day-short__name">{{ short.account.display_name || short.account.username }}</span>
 			</router-link>
@@ -103,6 +103,7 @@ import IconSend from 'vue-material-design-icons/Send.vue'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
 import { errorOf } from '../utils/serverError.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
 /** how often a picture's clock moves, in ms */
 const TICK = 100
@@ -226,6 +227,7 @@ export default {
 	},
 
 	methods: {
+		accountAvatarUrl,
 		t,
 		n,
 

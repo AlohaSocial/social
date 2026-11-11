@@ -102,6 +102,7 @@
  * @property {string} url - Ex: "https://mastodon.social/@Gargron"
  * @property {string} avatar - Ex: "https://files.mastodon.social/accounts/avatars/000/000/001/original/d96d39a0abb45b92.jpg"
  * @property {string} avatar_static - Ex: "https://files.mastodon.social/accounts/avatars/000/000/001/original/d96d39a0abb45b92.jpg"
+ * @property {string} [avatar_small] - this app's own: the picture at most 128 px across, for drawing at 64 px and less
  * @property {string} header - Ex: "https://files.mastodon.social/accounts/headers/000/000/001/original/c91b871f294ea63e.png"
  * @property {string} header_static - Ex: "https://files.mastodon.social/accounts/headers/000/000/001/original/c91b871f294ea63e.png"
  * @property {number} followers_count - Ex: 322930

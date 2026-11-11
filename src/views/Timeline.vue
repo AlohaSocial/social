@@ -23,7 +23,8 @@
 			v-if="isFeed"
 			:options="scopes"
 			:value="scope"
-			:label="t('social', 'Which posts to show')" />
+			:label="t('social', 'Which posts to show')"
+			@intent="prefetchScope" />
 		<InfoCard
 			v-if="scopeDescription"
 			:dismissKey="'feed-help-v1:' + scope"
@@ -210,11 +211,9 @@ import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
 import DraftsButton from '../components/DraftsButton.vue'
 import MediaUploadButton from '../components/MediaUploadButton.vue'
 import TimelineList from './../components/TimelineList.vue'
-import DirectMessages from './../components/DirectMessages.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
 import FirstPostCelebration from './../components/FirstPostCelebration.vue'
 import Announcements from './../components/Announcements.vue'
-import FirstRun from './../components/FirstRun.vue'
 import HashtagFollowButton from './../components/HashtagFollowButton.vue'
 import InterestsLearningBanner from './../components/InterestsLearningBanner.vue'
 import InterestsNotice from './../components/InterestsNotice.vue'
@@ -239,11 +238,13 @@ import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 
-/** How long after a feed is on screen its other scopes are fetched ahead, in milliseconds. */
-const PREFETCH_AFTER = 1500
-
 // only drawn when somebody asks to review who is waiting
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
+
+// the conversations page and a new account's welcome: neither is on the
+// screen most people open the app to
+const DirectMessages = defineAsyncComponent(() => import(/* webpackChunkName: "direct-messages" */'../components/DirectMessages.vue'))
+const FirstRun = defineAsyncComponent(() => import(/* webpackChunkName: "first-run" */'../components/FirstRun.vue'))
 
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
@@ -280,7 +281,6 @@ export default {
 			infoHidden: false,
 			selectedPhotoLayout: photoLayout(),
 			/** the pending fetch-ahead of the other scopes, or 0 */
-			prefetchTimer: 0,
 			/** the title of the list being read, once the server has said */
 			listTitle: '',
 			/**
@@ -737,13 +737,10 @@ export default {
 
 	mounted() {
 		eventBus.on('post-published', this.onPostPublished)
-		eventBus.on('timeline:rendered', this.schedulePrefetch)
 	},
 
 	beforeUnmount() {
 		eventBus.off('post-published', this.onPostPublished)
-		eventBus.off('timeline:rendered', this.schedulePrefetch)
-		clearTimeout(this.prefetchTimer)
 		// navigating away mid-celebration must not leave the flag standing for
 		// whatever timeline mounts next
 		if (this.celebratingFirstPost) {
@@ -761,28 +758,21 @@ export default {
 		},
 
 		/**
-		 * Once a scope of the feed is on screen, fetches the first page of
-		 * the others, so that the switcher puts each on screen at once.
+		 * Fetches the first page of a scope the reader is pointing at on the
+		 * switcher, so that the click puts it on screen at once. Only on that
+		 * intent: most readers never switch, and the federated scope is the
+		 * slowest and largest page there is. The store skips a page it holds
+		 * fresh or is already fetching.
 		 *
-		 * After a pause, and one after another: the list being read goes
-		 * first, and a reader who never switches costs the server three small
-		 * requests rather than three at the same moment as their own.
+		 * @param {string} value the scope's timeline type
 		 */
-		schedulePrefetch() {
-			clearTimeout(this.prefetchTimer)
-			if (!this.isFeed || this.isScopedPage) {
+		prefetchScope(value) {
+			if (value === this.type || !this.isFeed || this.isScopedPage
+				|| !this.scopes.some((scope) => scope.value === value)) {
 				return
 			}
 
-			this.prefetchTimer = window.setTimeout(async () => {
-				this.prefetchTimer = 0
-				for (const { value } of this.scopes) {
-					if (value === this.type || !this.isFeed || this.isScopedPage) {
-						continue
-					}
-					await this.timelineStore.prefetchTimeline({ type: value })
-				}
-			}, PREFETCH_AFTER)
+			this.timelineStore.prefetchTimeline({ type: value })
 		},
 
 		/**

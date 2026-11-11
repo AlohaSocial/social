@@ -42,6 +42,12 @@ class MemoriesService {
 	/** How many years back to look. */
 	private const YEARS = 5;
 
+	/**
+	 * How old a post has to be, in seconds, to be a memory today somewhere: a
+	 * year less two days, which covers the reader's day in every timezone.
+	 */
+	private const OLD_ENOUGH = 363 * 86400;
+
 	/** How many posts one year may contribute. */
 	private const PER_YEAR = 3;
 
@@ -102,6 +108,18 @@ class MemoriesService {
 			'this_week' => ($count > 0) ? $weeks[$count - 1] : 0,
 			'last_week' => ($count > 1) ? $weeks[$count - 2] : 0,
 		];
+	}
+
+	/**
+	 * Whether `onThisDay()` can find anything at all: whether the reader has a
+	 * post (not a reply) old enough to be from a year ago in any timezone.
+	 * One row is read; most accounts are younger than a year.
+	 */
+	public function mayHaveMemories(Person $actor, ?int $now = null): bool {
+		$until = ($now ?? time()) - self::OLD_ENOUGH;
+
+		return $actor->getId() !== '' && $until > 0
+			&& $this->streamRequest->getByAuthorBetween($actor->getId(), 0, $until, 1, ACore::FORMAT_LOCAL) !== [];
 	}
 
 	/**

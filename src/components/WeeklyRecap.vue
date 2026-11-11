@@ -35,6 +35,7 @@ import ChartLine from 'vue-material-design-icons/ChartLine.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import logger from '../services/logger.js'
+import { mayHave } from '../services/startupHints.js'
 
 /** where a dismissal is remembered, as the week it was dismissed in */
 const DISMISSED_KEY = 'social.weeklyRecap.dismissed'
@@ -148,6 +149,10 @@ export default {
 		async load() {
 			if (this.dismissedThisWeek()) {
 				this.dismissed = true
+				return
+			}
+			if (!mayHave('recap_enabled')) {
+				this.enabled = false
 				return
 			}
 

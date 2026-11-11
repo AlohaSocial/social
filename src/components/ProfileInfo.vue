@@ -324,7 +324,7 @@
 						v-for="account in familiar"
 						:key="account.id || account.acct"
 						class="user-profile__familiar-face"
-						:src="account.avatar_static || account.avatar"
+						:src="accountAvatarUrl(account, 20)"
 						alt=""
 						width="20"
 						height="20">
@@ -604,6 +604,7 @@ import { useServerData } from '../composables/useServerData.js'
 import { fullDateTime } from '../utils/relativeTime.js'
 import { defineAsyncComponent } from 'vue'
 import { bannerOf } from '../utils/banner.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
 // Neither is any use until the reader asks for it, and both bring a dialog
 // with them; they share one chunk, which is the same one the post overflow
@@ -1083,6 +1084,7 @@ export default {
 	},
 
 	methods: {
+		accountAvatarUrl,
 		nextcloudUserOf,
 
 		/**

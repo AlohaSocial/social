@@ -65,6 +65,15 @@ describe('ShortsBar', () => {
 		get.mockReset()
 	})
 
+	it('does not ask when the page says no short is live, and asks the next time', async () => {
+		const wrapper = mountBar([short('2', bob)], { serverData: { public: false, startup: { has_stories: false } } })
+		await flushPromises()
+		expect(get).not.toHaveBeenCalled()
+
+		await wrapper.vm.load()
+		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/stories/carousel')
+	})
+
 	it('is headed Shorts and says nothing of stories', async () => {
 		const wrapper = mountBar([short('2', bob)])
 		await flushPromises()

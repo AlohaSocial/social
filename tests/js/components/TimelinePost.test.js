@@ -1699,6 +1699,8 @@ describe('TimelinePost', () => {
 			const { wrapper, item } = mountPost()
 
 			await menuItem(wrapper, 'Delivery status').trigger('click')
+			// the dialog is fetched when it is first opened
+			await vi.waitUntil(() => wrapper.findComponent({ name: 'DeliveryDialog' }).exists(), { timeout: 15000 })
 			await flushPromises()
 
 			expect(axios.get).toHaveBeenCalledWith(`/index.php/apps/social/api/v1/statuses/${item.id}/delivery`)
@@ -1717,6 +1719,8 @@ describe('TimelinePost', () => {
 			const { wrapper } = mountPost()
 
 			await menuItem(wrapper, 'Delivery status').trigger('click')
+			// the dialog is fetched when it is first opened
+			await vi.waitUntil(() => wrapper.findComponent({ name: 'DeliveryDialog' }).exists(), { timeout: 15000 })
 			await flushPromises()
 
 			const dialog = wrapper.findAll('.nc-dialog').find((el) => el.text().includes('Delivery status'))
@@ -1730,6 +1734,8 @@ describe('TimelinePost', () => {
 			const { wrapper } = mountPost()
 
 			await menuItem(wrapper, 'Delivery status').trigger('click')
+			// the dialog is fetched when it is first opened
+			await vi.waitUntil(() => wrapper.findComponent({ name: 'DeliveryDialog' }).exists(), { timeout: 15000 })
 			await flushPromises()
 
 			const dialog = wrapper.findAll('.nc-dialog').find((el) => el.text().includes('Delivery status'))

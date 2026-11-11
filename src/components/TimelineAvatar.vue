@@ -41,7 +41,7 @@
 					:disableTooltip="true" />
 				<NcAvatar
 					v-else
-					:url="item.account.avatar"
+					:url="accountAvatarUrl(item.account, size) || undefined"
 					:size="size ?? undefined"
 					:disableMenu="true"
 					:disableTooltip="true" />
@@ -57,6 +57,7 @@ import AccountHoverCard from './AccountHoverCard.vue'
 import { originOf } from '../utils/instanceIdentity.js'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
 import { isLocalAccount, nextcloudUserOf } from '../utils/accountLocality.js'
+import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
 export default {
 	name: 'TimelineAvatar',
@@ -144,6 +145,7 @@ export default {
 	},
 
 	methods: {
+		accountAvatarUrl,
 		t,
 		nextcloudUserOf,
 	},

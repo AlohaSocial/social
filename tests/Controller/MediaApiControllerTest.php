@@ -14,6 +14,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
+use OCP\Files\SimpleFS\ISimpleFile;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -121,6 +122,41 @@ class MediaApiControllerTest extends TestCase {
 		$this->assertTrue($method->invoke(null, $streamed('image/heic')));
 		$this->assertTrue($method->invoke(null, $streamed('application/pdf')));
 		$this->assertFalse($method->invoke(null, $streamed('video/mp4')));
+	}
+
+	private function storedFile(string $bytes): ISimpleFile {
+		$file = $this->createStub(ISimpleFile::class);
+		$file->method('read')->willReturnCallback(static function () use ($bytes) {
+			$stream = fopen('php://temp', 'r+');
+			fwrite($stream, $bytes);
+			rewind($stream);
+
+			return $stream;
+		});
+
+		return $file;
+	}
+
+	public function testEachCopyIsServedAsWhatItIs(): void {
+		$method = new ReflectionMethod(MediaApiController::class, 'servedMediaType');
+		$webp = 'RIFF' . pack('V', 100) . 'WEBPVP8 ' . str_repeat("\0", 20);
+		$png = "\x89PNG\r\n\x1a\n" . str_repeat("\0", 20);
+		$icon = (new Document())->setLocalCopy('local')->setResizedCopy('small');
+		$icon->setMediaType('image/png');
+
+		$this->assertSame('image/png', $method->invoke(null, $icon, 'local', $this->storedFile($png)));
+		$this->assertSame('image/webp', $method->invoke(null, $icon, 'small', $this->storedFile($webp)), 'an icon thumbnail is WebP');
+		$this->assertSame('image/png', $method->invoke(null, $icon, 'small', $this->storedFile($png)));
+
+		$upload = (new Document())->setLocalCopy('local')->setResizedCopy('small');
+		$upload->setMediaType('image/png');
+		$upload->setAccount('alice');
+		$this->assertSame('image/png', $method->invoke(null, $upload, 'small', $this->storedFile($webp)), 'an upload is not sniffed');
+
+		$video = (new Document())->setLocalCopy('local')->setResizedCopy('poster');
+		$video->setMediaType('video/mp4');
+		$this->assertSame('image/jpeg', $method->invoke(null, $video, 'poster', $this->storedFile($png)));
+		$this->assertSame('video/mp4', $method->invoke(null, $video, 'local', $this->storedFile($png)));
 	}
 
 	/** The verb a route was declared with. */

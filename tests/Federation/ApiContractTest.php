@@ -261,7 +261,7 @@ class ApiContractTest extends TestCase {
 		// null, and `nextcloud_user`, the Nextcloud user of a local account or
 		// null
 		$expected = [
-			'acct', 'avatar', 'avatar_default', 'avatar_static', 'bluesky', 'bot', 'created_at', 'discoverable',
+			'acct', 'avatar', 'avatar_default', 'avatar_small', 'avatar_static', 'bluesky', 'bot', 'created_at', 'discoverable',
 			'display_name', 'emojis', 'fields', 'followers_count', 'following_count',
 			'group', 'header', 'header_default', 'header_static', 'id', 'indexable', 'last_status_at', 'locked',
 			'nextcloud_user', 'nid', 'note', 'profile_layout', 'pronouns', 'roles', 'statuses_count', 'support_link', 'url', 'username', 'verification',

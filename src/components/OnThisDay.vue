@@ -39,6 +39,7 @@ import CalendarHeart from 'vue-material-design-icons/CalendarHeart.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import logger from '../services/logger.js'
+import { mayHave } from '../services/startupHints.js'
 
 /** how much of a post is shown before it is left to the post itself */
 const EXCERPT = 140
@@ -164,7 +165,7 @@ export default {
 
 		/** Reads the reader's own anniversaries, and shows nothing if it cannot. */
 		async load() {
-			if (this.dismissedToday()) {
+			if (this.dismissedToday() || !mayHave('has_memories')) {
 				return
 			}
 

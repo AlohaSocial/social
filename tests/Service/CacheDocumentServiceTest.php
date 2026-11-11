@@ -1370,6 +1370,166 @@ class CacheDocumentServiceTest extends TestCase {
 
 		return $quota;
 	}
+
+	/** A real PNG of the given size with some detail in it, so the resizer has something to scale. */
+	private function avatarPng(int $size = 400): string {
+		$image = imagecreatetruecolor($size, $size);
+		for ($x = 0; $x < $size; $x += 8) {
+			imagefilledrectangle($image, $x, 0, $x + 3, $size, imagecolorallocate($image, $x % 255, 90, 200));
+		}
+		ob_start();
+		imagepng($image);
+
+		return ob_get_clean();
+	}
+
+	private static function webpWritable(): bool {
+		return function_exists('imagewebp') && (imagetypes() & IMG_WEBP) !== 0;
+	}
+
+	public function testAnActorIconIsStoredWithASmallThumbnail(): void {
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$png = $this->avatarPng();
+		$icon = (new Document())->setActorIcon(true);
+
+		$this->quietly(fn () => $this->storeBytes($icon, $png));
+
+		$this->assertSame([400, 400], $icon->getLocalCopySize(), 'the original is kept for Mastodon apps');
+		$this->assertSame([CacheDocumentService::AVATAR_THUMBNAIL, CacheDocumentService::AVATAR_THUMBNAIL], $icon->getResizedCopySize());
+		$thumbnail = $written[chunk_split(substr($icon->getResizedCopy(), 0, 8), 2, '/')][$icon->getResizedCopy()];
+		$size = getimagesizefromstring($thumbnail);
+		$this->assertSame([128, 128], [$size[0], $size[1]]);
+		$this->assertSame(self::webpWritable() ? 'image/webp' : 'image/png', $size['mime']);
+		$this->assertLessThan(strlen($png), strlen($thumbnail));
+		$this->assertSame($png, $written[chunk_split(substr($icon->getLocalCopy(), 0, 8), 2, '/')][$icon->getLocalCopy()]);
+	}
+
+	public function testAnAttachmentKeepsItsLargePreview(): void {
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$document = new Document();
+
+		$this->quietly(fn () => $this->storeBytes($document, $this->pngBytes(1200, 900)));
+
+		$this->assertSame([800, 600], $document->getResizedCopySize());
+		$preview = $written[chunk_split(substr($document->getResizedCopy(), 0, 8), 2, '/')][$document->getResizedCopy()];
+		$this->assertSame('image/png', getimagesizefromstring($preview)['mime']);
+	}
+
+	public function testAnIconFetchedAgainAfterAPurgeComesBackAsAThumbnail(): void {
+		$this->origin($this->avatarPng());
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$icon = (new Document())->setActorIcon(true);
+		$icon->setUrl('https://remote.example/avatars/bob.png');
+		$icon->setLocalCopy(self::LOCAL_NAME);
+		$icon->setResizedCopy(self::RESIZED_NAME);
+
+		$this->quietly(fn () => $this->service->restoreRemoteCopy($icon));
+
+		$this->assertSame(self::RESIZED_NAME, $icon->getResizedCopy());
+		$size = getimagesizefromstring($written['bb/bb/bb/bb/'][self::RESIZED_NAME]);
+		$this->assertSame([128, 128], [$size[0], $size[1]]);
+	}
+
+	/**
+	 * Storage holding the given files by name, read back as they are and
+	 * written into `$written`.
+	 *
+	 * @param array<string, string> $files
+	 * @param array<string, string> $written
+	 */
+	private function storedFiles(array $files, array &$written): void {
+		$this->appData->method('getFolder')->willReturnCallback(function () use ($files, &$written) {
+			$folder = $this->createMock(ISimpleFolder::class);
+			$folder->method('fileExists')->willReturnCallback(static fn (string $name): bool => isset($files[$name]));
+			$folder->method('getFile')->willReturnCallback(function (string $name) use ($files) {
+				if (!isset($files[$name])) {
+					throw new NotFoundException();
+				}
+				$file = $this->createMock(ISimpleFile::class);
+				$file->method('getContent')->willReturn($files[$name]);
+
+				return $file;
+			});
+			$folder->method('newFile')->willReturnCallback(function (string $name) use (&$written) {
+				$file = $this->createMock(ISimpleFile::class);
+				$file->method('putContent')->willReturnCallback(function (string $content) use ($name, &$written): void {
+					$written[$name] = $content;
+				});
+
+				return $file;
+			});
+
+			return $folder;
+		});
+	}
+
+	public function testAnIconCachedBeforeThumbnailsIsGivenOneUnderItsOwnName(): void {
+		$png = $this->avatarPng();
+		$written = [];
+		$this->storedFiles([self::LOCAL_NAME => $png, self::RESIZED_NAME => $png], $written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$icon = new Document();
+		$icon->setMediaType('image/png');
+		$icon->setLocalCopy(self::LOCAL_NAME);
+		$icon->setResizedCopy(self::RESIZED_NAME);
+
+		$made = false;
+		$this->quietly(function () use ($icon, &$made): void {
+			$made = $this->service->rebuildIconThumbnail($icon);
+		});
+
+		$this->assertTrue($made);
+		$this->assertSame(self::RESIZED_NAME, $icon->getResizedCopy(), 'every link to the old preview keeps working');
+		$this->assertSame([self::RESIZED_NAME], array_keys($written), 'the original is left as it is');
+		$size = getimagesizefromstring($written[self::RESIZED_NAME]);
+		$this->assertSame([128, 128], [$size[0], $size[1]]);
+		$this->assertSame('hash', $icon->getBlurHash());
+	}
+
+	public function testAnIconWithoutAResizedCopyIsGivenAFreshName(): void {
+		$written = [];
+		$this->storedFiles([self::LOCAL_NAME => $this->avatarPng()], $written);
+		$icon = new Document();
+		$icon->setMediaType('image/png');
+		$icon->setLocalCopy(self::LOCAL_NAME);
+
+		$this->quietly(fn () => $this->service->rebuildIconThumbnail($icon));
+
+		$this->assertMatchesRegularExpression(self::UUID_PATTERN, $icon->getResizedCopy());
+		$this->assertNotSame(self::LOCAL_NAME, $icon->getResizedCopy());
+		$this->assertSame([$icon->getResizedCopy()], array_keys($written));
+	}
+
+	public function testAnIconThatAlreadyHasAThumbnailIsLeftAlone(): void {
+		$written = [];
+		$this->storedFiles([self::LOCAL_NAME => $this->avatarPng(), self::RESIZED_NAME => $this->avatarPng(96)], $written);
+		$icon = new Document();
+		$icon->setMediaType('image/png');
+		$icon->setLocalCopy(self::LOCAL_NAME);
+		$icon->setResizedCopy(self::RESIZED_NAME);
+
+		$this->assertFalse($this->service->rebuildIconThumbnail($icon));
+		$this->assertSame([], $written);
+	}
+
+	public function testOnlyAStoredPictureIsGivenAThumbnail(): void {
+		$written = [];
+		$this->storedFiles([], $written);
+		$video = (new Document())->setLocalCopy(self::LOCAL_NAME);
+		$video->setMediaType('video/mp4');
+		$local = (new Document())->setLocalCopy(Document::COPY_LOCAL_AVATAR);
+		$local->setMediaType('image/png');
+
+		$this->assertFalse($this->service->rebuildIconThumbnail($video));
+		$this->assertFalse($this->service->rebuildIconThumbnail($local));
+		$this->assertSame([], $written);
+	}
 }
 
 /** Captures what is written to a stream, so a streamed copy can be asserted. */

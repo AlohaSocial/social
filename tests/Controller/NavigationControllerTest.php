@@ -121,7 +121,7 @@ class NavigationControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
-	private function controller(?string $userId = 'alice', ?\OCA\Social\Service\ModeratorService $moderators = null, ?\OCA\Social\Service\SetupNotificationService $setupNotifications = null): NavigationController {
+	private function controller(?string $userId = 'alice', ?\OCA\Social\Service\ModeratorService $moderators = null, ?\OCA\Social\Service\SetupNotificationService $setupNotifications = null, ?\OCA\Social\Service\StartupHintsService $startupHints = null): NavigationController {
 		$feedDisplayService = $this->createStub(\OCA\Social\Service\FeedDisplayService::class);
 		$feedDisplayService->method('filterBlueskyHomePosts')->willReturnArgument(0);
 
@@ -147,6 +147,7 @@ class NavigationControllerTest extends TestCase {
 			$this->createStub(\OCA\Social\Service\FollowService::class),
 			$moderators,
 			$setupNotifications,
+			$startupHints,
 		);
 	}
 
@@ -283,6 +284,34 @@ class NavigationControllerTest extends TestCase {
 			['username' => 'aloha_al', 'address' => 'aloha_al@social.example'],
 			$this->serverData()['viewer']
 		);
+	}
+
+	/** The requests the home timeline would open with and find empty are named in the page. */
+	public function testThePageSaysWhichStartupRequestsWouldComeBackEmpty(): void {
+		$this->systemValues([]);
+		$this->configuredCloud();
+		$actor = (new Person())->setPreferredUsername('alice');
+		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn($actor);
+		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
+		$hints = ['has_announcements' => false, 'has_stories' => false, 'recap_enabled' => false, 'has_memories' => true, 'has_teams' => false];
+		$startup = $this->createMock(\OCA\Social\Service\StartupHintsService::class);
+		$startup->expects($this->once())->method('forViewer')->with($actor, 'alice')->willReturn($hints);
+
+		$this->controller(startupHints: $startup)->navigate();
+
+		$this->assertSame($hints, $this->serverData()['startup']);
+	}
+
+	public function testAReaderWithoutAnAccountIsGivenNoStartupHints(): void {
+		$this->systemValues([]);
+		$this->configuredCloud();
+		$this->accountService->method('getActorFromUserId')->willThrowException(new \OCA\Social\Exceptions\ActorDoesNotExistException());
+		$startup = $this->createMock(\OCA\Social\Service\StartupHintsService::class);
+		$startup->expects($this->never())->method('forViewer');
+
+		$this->controller(startupHints: $startup)->navigate();
+
+		$this->assertArrayNotHasKey('startup', $this->serverData());
 	}
 
 	public function testAReaderWhoTurnedTheShortcutsOffIsToldSo(): void {

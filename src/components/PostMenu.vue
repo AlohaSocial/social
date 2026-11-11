@@ -229,7 +229,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
-import { showError, showSuccess } from '@nextcloud/dialogs'
+import { showError, showSuccess } from '../services/toast.js'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActionLink from '@nextcloud/vue/components/NcActionLink'
 import NcActions from '@nextcloud/vue/components/NcActions'

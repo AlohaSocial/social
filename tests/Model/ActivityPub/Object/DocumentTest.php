@@ -11,7 +11,10 @@ namespace OCA\Social\Tests\Model\ActivityPub\Object;
 
 use OCA\Social\Exceptions\UrlCloudException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Model\ActivityPub\Object\Image;
+use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\ImageMetadataService;
@@ -371,5 +374,18 @@ class DocumentTest extends TestCase {
 		$media = $document->convertToMediaAttachment($this->urlGenerator);
 
 		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc.jpeg', $media->getUrl());
+	}
+
+	public function testAnIconReadOffAnActorDocumentIsAnActorIcon(): void {
+		$icon = new Image();
+		$this->assertFalse($icon->isActorIcon(), 'an attachment of its own is not');
+
+		$icon->setParent(new Person());
+		$this->assertTrue($icon->isActorIcon());
+
+		$attachment = new Document();
+		$attachment->setParent(new Note());
+		$this->assertFalse($attachment->isActorIcon());
+		$this->assertTrue($attachment->setActorIcon(true)->isActorIcon(), 'the caller that knows says so');
 	}
 }

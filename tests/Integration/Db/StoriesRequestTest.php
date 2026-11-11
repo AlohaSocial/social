@@ -79,6 +79,13 @@ class StoriesRequestTest extends TestCase {
 		$this->stories->getLiveById($expired->getId());
 	}
 
+	/** What the page's `has_stories` hint is read from; other tests' rows may be live too, so only `true` is certain. */
+	public function testALiveStoryAnywhereIsFound(): void {
+		$this->story(self::ALICE);
+
+		$this->assertTrue($this->stories->hasLive());
+	}
+
 	public function testTheBarReadsEveryonesLiveStoriesInOneQuery(): void {
 		$a = $this->story(self::ALICE);
 		$b = $this->story(self::BOB);

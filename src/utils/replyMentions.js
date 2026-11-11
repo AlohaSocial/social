@@ -4,6 +4,7 @@
  */
 
 import { isBlueskyAccount } from './accountLocality.js'
+import { accountAvatarUrl } from './accountAvatar.js'
 
 /**
  * @param {string|{acct: string, bluesky?: object|null}} account a handle, with or without its host, or the account carrying it
@@ -70,7 +71,7 @@ export function mentionPills(accounts, hostname) {
 		// carries none either rather than a broken one
 		if (account.avatar) {
 			const avatar = document.createElement('img')
-			avatar.src = account.avatar
+			avatar.src = accountAvatarUrl(account)
 			avatar.alt = ''
 			link.append(avatar)
 		}

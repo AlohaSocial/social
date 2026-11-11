@@ -123,6 +123,7 @@ class DocumentService {
 		$this->cacheDocumentsRequest->initCaching($document);
 
 		try {
+			$document->setActorIcon($this->cacheDocumentsRequest->isActorIcon($document));
 			$this->cacheService->saveRemoteFileToCache($document, $mime);
 			// The mime type is sniffed from the bytes at this point and nowhere
 			// else; unpersisted, the copy is later served with no Content-Type.
@@ -422,6 +423,7 @@ class DocumentService {
 			}
 
 			$this->cacheDocumentsRequest->initCaching($document);
+			$document->setActorIcon($this->cacheDocumentsRequest->isActorIcon($document));
 			$resized = $document->getResizedCopy();
 			// the type, size and names of what arrived are set on the
 			// document as it is stored, and written with it

@@ -125,6 +125,13 @@ class ConfigService {
 	public const SOCIAL_POSTER_CURSOR = 'poster_backfill_cursor';
 
 	/**
+	 * The nid of the last cached actor icon `AvatarThumbnailBackfill` gave a
+	 * thumbnail, or `done` once it has been through them all — bookkeeping,
+	 * not a setting.
+	 */
+	public const SOCIAL_AVATAR_THUMB_CURSOR = 'avatar_thumb_cursor';
+
+	/**
 	 * Instances whose accounts are silenced rather than blocked: out of the
 	 * public and global timelines, still readable by whoever follows them.
 	 *
