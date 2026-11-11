@@ -202,6 +202,68 @@ describe('OAuth2Authorize', () => {
 		expect(deny.attributes('href')).toBe('tusky://oauth?error=access_denied&state=s1')
 	})
 
+	describe('a move to another Aloha Social server', () => {
+		afterEach(() => {
+			delete window.OC.PasswordConfirmation
+		})
+
+		function movePage() {
+			setState('scopes', ['write:migration'])
+			setState('redirectUri', 'https://new.example/index.php/apps/social/migration/move-in/callback')
+			return mount(OAuth2Authorize)
+		}
+
+		it('says in words that the account can be moved, and to where', () => {
+			const page = movePage()
+
+			expect(page.find('.scopes__label').text()).toBe('Move your account to another server, taking your followers with it')
+			expect(page.find('.scopes__icon').classes('scopes__icon--write')).toBe(true)
+			expect(page.text()).toContain('This lets new.example move your account there')
+		})
+
+		it('gives no such warning for an ordinary application', () => {
+			setState('scopes', ['read', 'write'])
+
+			expect(mount(OAuth2Authorize).text()).not.toContain('move your account there')
+		})
+
+		it('asks for the password, then posts to the confirmed route with the same request', async () => {
+			const page = movePage()
+			const confirm = vi.fn((resolve) => resolve())
+			window.OC.PasswordConfirmation = { requirePasswordConfirmation: confirm }
+			const submit = vi.spyOn(page.vm, 'submitTo').mockImplementation(() => {})
+
+			await page.find('form.guest-box').trigger('submit')
+			await flushPromises()
+
+			expect(confirm).toHaveBeenCalledOnce()
+			expect(submit).toHaveBeenCalledOnce()
+			expect(submit.mock.calls[0][1]).toBe('/index.php/apps/social/oauth/authorize/move' + window.location.search)
+		})
+
+		it('stays on the page when the password dialog is dismissed', async () => {
+			const page = movePage()
+			window.OC.PasswordConfirmation = { requirePasswordConfirmation: (resolve, options, reject) => reject() }
+			const submit = vi.spyOn(page.vm, 'submitTo').mockImplementation(() => {})
+
+			await page.find('form.guest-box').trigger('submit')
+			await flushPromises()
+
+			expect(submit).not.toHaveBeenCalled()
+		})
+
+		it('leaves an ordinary consent to post where it was', async () => {
+			setState('scopes', ['read'])
+			const page = mount(OAuth2Authorize)
+			const submit = vi.spyOn(page.vm, 'submitTo').mockImplementation(() => {})
+
+			await page.find('form.guest-box').trigger('submit')
+			await flushPromises()
+
+			expect(submit).not.toHaveBeenCalled()
+		})
+	})
+
 	it('picks up a different app name from the initial state', () => {
 		setState('appName', 'Ivory')
 		expect(mount(OAuth2Authorize).find('p').text()).toContain('Ivory would like permission')

@@ -31,6 +31,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DeviceAuthorizationService;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\InstanceService;
+use OCA\Social\Service\MoveFinishService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -39,6 +40,7 @@ use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\ContentSecurityPolicy;
@@ -271,6 +273,14 @@ class OAuthController extends Controller {
 		try {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
 			$client = $this->clientService->getFromClientId($client_id);
+			// RFC 8628 §3.5: a token that moves the account away goes to the
+			// move-in callback only, never to whoever polls with a device code
+			if (in_array(MoveFinishService::SCOPE, $client->getScopesFromString($scope), true)) {
+				return new DataResponse(
+					['error' => 'invalid_scope', 'error_description' => MoveFinishService::SCOPE . ' is not granted to a device'],
+					Http::STATUS_BAD_REQUEST
+				);
+			}
 			$credentials = ['app_scopes' => $scope];
 			if ($client_secret !== '' || $client->getAppClientSecret() !== '') {
 				$credentials['client_secret'] = $client_secret;
@@ -439,7 +449,7 @@ class OAuthController extends Controller {
 				return $this->invalidRequest('redirect_uri is not registered for this client');
 			}
 
-			$this->clientService->confirmData($client, ['app_scopes' => $scope]);
+			$this->clientService->confirmData($client, ['app_scopes' => $scope, 'redirect_uri' => $redirect_uri]);
 
 			// what the person is being asked to agree to: the app, what it may
 			// do, and where the code is about to be sent
@@ -744,6 +754,45 @@ class OAuthController extends Controller {
 		if ($request_uri !== '') {
 			return $this->atprotoAuthorizing($client_id, $request_uri);
 		}
+
+		return $this->grantCode($client_id, $redirect_uri, $response_type, $scope, $state, $code_challenge, $code_challenge_method, false);
+	}
+
+	/**
+	 * The consent to `write:migration`, which lets another Aloha Social
+	 * server move the account there: the same grant as `authorizing()`,
+	 * behind Nextcloud's password confirmation, as the Move button is.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/oauth/authorize/move')]
+	public function authorizingMove(
+		string $client_id,
+		string $redirect_uri = '',
+		string $response_type = '',
+		string $scope = '',
+		string $state = '',
+		string $code_challenge = '',
+		string $code_challenge_method = '',
+	): Response {
+		return $this->grantCode($client_id, $redirect_uri, $response_type, $scope, $state, $code_challenge, $code_challenge_method, true);
+	}
+
+	/**
+	 * Issues an authorization code for the signed-in account.
+	 *
+	 * @param bool $passwordConfirmed whether the request came through the password-confirmed route, the only one that grants `write:migration`
+	 */
+	private function grantCode(
+		string $client_id,
+		string $redirect_uri,
+		string $response_type,
+		string $scope,
+		string $state,
+		string $code_challenge,
+		string $code_challenge_method,
+		bool $passwordConfirmed,
+	): Response {
 		try {
 			$user = $this->userSession->getUser();
 
@@ -758,7 +807,10 @@ class OAuthController extends Controller {
 				return $this->invalidRequest('redirect_uri is not registered for this client');
 			}
 
-			$this->clientService->confirmData($client, ['app_scopes' => $scope]);
+			$this->clientService->confirmData($client, ['app_scopes' => $scope, 'redirect_uri' => $redirect_uri]);
+			if (!$passwordConfirmed && in_array(MoveFinishService::SCOPE, $client->getScopesFromString($scope), true)) {
+				throw new ClientException(MoveFinishService::SCOPE . ' is granted only after the password is confirmed');
+			}
 
 			// no code without an account: a token names the account it acts as
 			$account = $this->accountService->getActorFromUserId($user->getUID());

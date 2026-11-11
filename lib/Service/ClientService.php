@@ -64,6 +64,9 @@ class ClientService {
 	/** what an app token may do: read what anybody may read */
 	public const APP_TOKEN_SCOPES = ['read'];
 
+	/** the path a move-in callback ends in, after any `/index.php` or subdirectory */
+	public const MOVE_IN_CALLBACK_PATH = '/apps/social/migration/move-in/callback';
+
 	/** `scheme://`, lower case: a web origin or a native application's own scheme */
 	private const REDIRECT_URI_SCHEME_PATTERN = '/^([a-z][a-z0-9+.\-]*):\/\//';
 
@@ -115,6 +118,11 @@ class ClientService {
 			}
 		}
 
+		$problem = self::migrationScopeProblem($client->getAppScopes(), $client->getAppRedirectUris());
+		if ($problem !== null) {
+			throw new ClientException($problem);
+		}
+
 		$client->setAppClientId($this->token(40));
 		$client->setAppClientSecret($this->token(40));
 
@@ -145,6 +153,47 @@ class ClientService {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether a URI is the move-in callback of an Aloha Social server: an
+	 * `http`/`https` address with a host, no credentials, query or fragment,
+	 * whose path ends in the callback route (`MigrationController::moveInFinishCallback()`).
+	 */
+	public static function isMoveInCallback(string $uri): bool {
+		$parts = parse_url($uri);
+		if (!is_array($parts)
+			|| !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+			|| ($parts['host'] ?? '') === ''
+			|| isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) {
+			return false;
+		}
+
+		return str_ends_with($parts['path'] ?? '', self::MOVE_IN_CALLBACK_PATH);
+	}
+
+	/**
+	 * Why `write:migration` may not be held with these scopes and redirect
+	 * URIs, or null when it may (or is not among them). It lets the holder
+	 * move the account away, so only another Aloha Social server finishing a
+	 * move-in holds it: alone, and for its one move-in callback.
+	 *
+	 * @param string[] $scopes
+	 * @param string[] $redirectUris
+	 */
+	public static function migrationScopeProblem(array $scopes, array $redirectUris): ?string {
+		$scopes = array_values(array_unique(array_filter($scopes, static fn ($scope): bool => $scope !== '')));
+		if (!in_array(MoveFinishService::SCOPE, $scopes, true)) {
+			return null;
+		}
+		if (count($scopes) !== 1) {
+			return MoveFinishService::SCOPE . ' cannot be combined with other scopes';
+		}
+		if (count($redirectUris) !== 1 || !self::isMoveInCallback((string)reset($redirectUris))) {
+			return MoveFinishService::SCOPE . ' is only for the move-in callback of an Aloha Social server';
+		}
+
+		return null;
 	}
 
 	/**
@@ -466,6 +515,16 @@ class ClientService {
 			foreach ($scopes as $scope) {
 				if (!in_array($scope, $client->getAppScopes(), true)) {
 					throw new ClientException('invalid scope');
+				}
+			}
+
+			// a token that can move the account away is only ever sent to the
+			// registered move-in callback, never handed to a polling device
+			if (in_array(MoveFinishService::SCOPE, $scopes, true)) {
+				$problem = self::migrationScopeProblem($scopes, $client->getAppRedirectUris())
+					?? (array_key_exists('redirect_uri', $data) ? null : MoveFinishService::SCOPE . ' is granted only through the authorization code flow');
+				if ($problem !== null) {
+					throw new ClientException($problem);
 				}
 			}
 		}

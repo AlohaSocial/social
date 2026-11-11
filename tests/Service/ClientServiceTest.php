@@ -176,6 +176,111 @@ class ClientServiceTest extends TestCase {
 	 * the second person to sign in with a client signed the first one out.
 	 * What is written now is a row of that account's own.
 	 */
+	private const MOVE_IN_CALLBACK = 'https://new.example/index.php/apps/social/migration/move-in/callback';
+
+	/** What `MoveFinishService::start()` registers at the old server. */
+	private function moveInClient(): SocialClient {
+		$client = new SocialClient();
+		$client->setAppName('Aloha Social at new.example');
+		$client->setAppRedirectUris([self::MOVE_IN_CALLBACK]);
+		$client->setAppScopes(['write:migration']);
+
+		return $client;
+	}
+
+	public function testAnAlohaSocialServerFinishingAMoveMayRegisterForTheMigrationScope(): void {
+		$client = $this->moveInClient();
+		$this->clientRequest->expects($this->once())->method('saveApp');
+
+		$this->service->createApp($client);
+
+		$this->assertSame(['write:migration'], $client->getAppScopes());
+	}
+
+	public static function migrationScopeRegistrations(): array {
+		return [
+			'beside other scopes' => [['read', 'write:migration'], [self::MOVE_IN_CALLBACK], 'cannot be combined'],
+			'with write' => [['write', 'write:migration'], [self::MOVE_IN_CALLBACK], 'cannot be combined'],
+			'for an ordinary app' => [['write:migration'], ['https://app.example/callback'], 'move-in callback'],
+			'out of band' => [['write:migration'], ['urn:ietf:wg:oauth:2.0:oob'], 'move-in callback'],
+			'for a phone app' => [['write:migration'], ['tusky://oauth'], 'move-in callback'],
+			'with a second redirect' => [['write:migration'], [self::MOVE_IN_CALLBACK, 'https://app.example/callback'], 'move-in callback'],
+			'with a query string' => [['write:migration'], [self::MOVE_IN_CALLBACK . '?x=1'], 'move-in callback'],
+		];
+	}
+
+	/** @param string[] $scopes @param string[] $redirectUris */
+	#[DataProvider('migrationScopeRegistrations')]
+	public function testNoOtherRegistrationMayHoldTheMigrationScope(array $scopes, array $redirectUris, string $why): void {
+		$client = $this->moveInClient();
+		$client->setAppScopes($scopes)->setAppRedirectUris($redirectUris);
+		$this->clientRequest->expects($this->never())->method('saveApp');
+
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage($why);
+		$this->service->createApp($client);
+	}
+
+	/** Mastodon clients register scopes this server has never heard of. */
+	public function testUnknownScopesAreRegisteredAsTheyCame(): void {
+		$client = $this->registeredClient();
+		$client->setAppScopes(['read', 'write', 'follow', 'push', 'admin:read', 'profile', 'write:something-new']);
+		$this->clientRequest->expects($this->once())->method('saveApp');
+
+		$this->service->createApp($client);
+
+		$this->assertSame(['read', 'write', 'follow', 'push', 'admin:read', 'profile', 'write:something-new'], $client->getAppScopes());
+	}
+
+	public static function moveInCallbacks(): array {
+		return [
+			'with index.php' => [self::MOVE_IN_CALLBACK, true],
+			'pretty URLs' => ['https://new.example/apps/social/migration/move-in/callback', true],
+			'in a subdirectory' => ['https://example.org/cloud/index.php/apps/social/migration/move-in/callback', true],
+			'plain http' => ['http://new.example/apps/social/migration/move-in/callback', true],
+			'another path' => ['https://new.example/apps/social/migration/move-in/callback/x', false],
+			'a query string' => ['https://new.example/apps/social/migration/move-in/callback?x=1', false],
+			'a fragment' => ['https://new.example/apps/social/migration/move-in/callback#x', false],
+			'credentials' => ['https://u:p@new.example/apps/social/migration/move-in/callback', false],
+			'a custom scheme' => ['tusky://new.example/apps/social/migration/move-in/callback', false],
+			'no host' => ['https:///apps/social/migration/move-in/callback', false],
+			'out of band' => ['urn:ietf:wg:oauth:2.0:oob', false],
+		];
+	}
+
+	#[DataProvider('moveInCallbacks')]
+	public function testWhatCountsAsAMoveInCallback(string $uri, bool $expected): void {
+		$this->assertSame($expected, ClientService::isMoveInCallback($uri));
+	}
+
+	public function testTheMigrationScopeIsConfirmedForItsCallback(): void {
+		$this->service->confirmData($this->moveInClient(), ['app_scopes' => 'write:migration', 'redirect_uri' => self::MOVE_IN_CALLBACK]);
+
+		$this->addToAssertionCount(1);
+	}
+
+	/** The device flow names no redirect: the token would go to whoever polls. */
+	public function testTheMigrationScopeIsNotConfirmedWithoutARedirect(): void {
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage('authorization code flow');
+		$this->service->confirmData($this->moveInClient(), ['app_scopes' => 'write:migration']);
+	}
+
+	/** A registration stored before the rules is held to them when it asks. */
+	public function testAnOlderRegistrationHoldingTheMigrationScopeCannotUseIt(): void {
+		$client = $this->registeredClient();
+		$client->setAppScopes(['read', 'write:migration']);
+
+		foreach (['write:migration', 'read write:migration'] as $scope) {
+			try {
+				$this->service->confirmData($client, ['app_scopes' => $scope, 'redirect_uri' => 'https://app.example/callback']);
+				$this->fail($scope . ' was confirmed');
+			} catch (ClientException $e) {
+				$this->assertStringContainsString('write:migration', $e->getMessage());
+			}
+		}
+	}
+
 	public function testAuthClientRecordsTheAuthorizationOfOneAccount(): void {
 		$client = $this->registeredClient();
 		$client->setId(7)->setAuthUserId('alice')->setAuthAccount('alice')

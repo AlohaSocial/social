@@ -1727,4 +1727,127 @@ class OAuthControllerTest extends TestCase {
 		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class));
 		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
 	}
+
+	// write:migration
+
+	private const MOVE_IN_CALLBACK = 'https://new.example/index.php/apps/social/migration/move-in/callback';
+
+	/**
+	 * The real ClientService over one stored registration, so the scope rules
+	 * are the ones that run; `$authorized` collects every code issued.
+	 *
+	 * @param string[] $scopes
+	 * @param string[] $redirectUris
+	 */
+	private function storedRegistration(array $scopes, array $redirectUris, ?ArrayObject $authorized = null): ClientService {
+		$clientRequest = $this->createStub(ClientRequest::class);
+		$clientRequest->method('getFromClientId')->willReturnCallback(
+			fn (): SocialClient => (new SocialClient())->setId(9)->setAppClientId('client-1')->setAppName('An app')
+				->setAppRedirectUris($redirectUris)->setAppScopes($scopes)
+		);
+		$clientAuthRequest = $this->createStub(ClientAuthRequest::class);
+		$clientAuthRequest->method('authorize')->willReturnCallback(
+			function (int $clientId, string $userId, string $account, array $granted) use ($authorized): void {
+				$authorized?->append($granted);
+			}
+		);
+
+		return $this->realClientService($clientRequest, $clientAuthRequest);
+	}
+
+	private function realClientService(ClientRequest $clientRequest, ?ClientAuthRequest $clientAuthRequest = null): ClientService {
+		return new ClientService(
+			$clientRequest,
+			new SecretHasher(),
+			$clientAuthRequest ?? $this->createStub(ClientAuthRequest::class),
+			$this->createStub(ConfigService::class),
+			$this->createStub(\OCA\Social\Service\PushSubscriptionService::class),
+			$this->createStub(\OCA\Social\Db\DeviceAuthorizationRequest::class),
+			new NullLogger(),
+			$this->createStub(\OCA\Social\Service\EnabledUserService::class),
+		);
+	}
+
+	public function testAFreshlyRegisteredAppCannotHoldTheMigrationScope(): void {
+		$clientRequest = $this->createMock(ClientRequest::class);
+		$clientRequest->expects($this->never())->method('saveApp');
+		$controller = $this->controllerWith($this->realClientService($clientRequest));
+
+		foreach (['read write:migration', 'write:migration'] as $scopes) {
+			$response = $controller->apps('Evil', 'https://evil.example/cb', 'https://evil.example', $scopes);
+
+			$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus(), $scopes);
+			$this->assertStringContainsString('write:migration', $response->getData()['error'], $scopes);
+		}
+	}
+
+	/** What a Mastodon client registers keeps registering, unknown scopes and all. */
+	public function testExtraAndUnknownScopesStillRegister(): void {
+		$clientRequest = $this->createMock(ClientRequest::class);
+		$clientRequest->expects($this->once())->method('saveApp');
+
+		$response = $this->controllerWith($this->realClientService($clientRequest))
+			->apps('Ivory', 'https://ivory.app/cb', '', 'read write follow push admin:read profile');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['read', 'write', 'follow', 'push', 'admin:read', 'profile'], $response->getData()['scopes']);
+	}
+
+	/** A registration stored before the rule, asking now: nothing it can be granted. */
+	public function testAnOrdinaryAppHoldingTheMigrationScopeCannotBeGrantedIt(): void {
+		$this->loggedIn('alice');
+		$authorized = new ArrayObject();
+		$controller = $this->controllerWith($this->storedRegistration(['read', 'write:migration'], ['https://evil.example/cb'], $authorized));
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorize('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizing('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizingMove('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizing('client-1', 'https://evil.example/cb', 'code', 'read write:migration')->getStatus());
+		$this->assertCount(0, $authorized);
+	}
+
+	public function testTheDeviceFlowNeverHandsOutTheMigrationScope(): void {
+		$devices = $this->createMock(DeviceAuthorizationService::class);
+		$devices->expects($this->never())->method('create');
+		$controller = $this->controllerWith($this->storedRegistration(['write:migration'], [self::MOVE_IN_CALLBACK]), $devices);
+
+		$response = $controller->deviceAuthorization('client-1', 'write:migration');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_scope', $response->getData()['error']);
+	}
+
+	/**
+	 * The move-in path end to end on this side: the consent page draws, the
+	 * plain route refuses, and the password-confirmed one sends the code to
+	 * the callback.
+	 */
+	public function testAnAlohaSocialServerFinishingAMoveIsGrantedTheScopeBehindThePassword(): void {
+		$this->loggedIn('alice');
+		$authorized = new ArrayObject();
+		$controller = $this->controllerWith($this->storedRegistration(['write:migration'], [self::MOVE_IN_CALLBACK], $authorized));
+		$states = $this->recordInitialState();
+
+		$page = $controller->authorize('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
+		$this->assertInstanceOf(TemplateResponse::class, $page);
+		$this->assertSame(['write:migration'], $states['scopes']);
+
+		$unconfirmed = $controller->authorizing('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $unconfirmed->getStatus());
+		$this->assertStringContainsString('password', $unconfirmed->getData()['error']);
+		$this->assertCount(0, $authorized);
+
+		$granted = $controller->authorizingMove('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
+		$this->assertInstanceOf(RedirectResponse::class, $granted);
+		$this->assertStringStartsWith(self::MOVE_IN_CALLBACK . '?code=', $granted->getRedirectURL());
+		$this->assertStringEndsWith('&state=s1', $granted->getRedirectURL());
+		$this->assertSame([['write:migration']], $authorized->getArrayCopy());
+	}
+
+	public function testOnlyTheMoveConsentAsksForThePassword(): void {
+		$attribute = \OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired::class;
+
+		$this->assertNotSame([], (new \ReflectionMethod(OAuthController::class, 'authorizingMove'))->getAttributes($attribute));
+		$this->assertSame([], (new \ReflectionMethod(OAuthController::class, 'authorizing'))->getAttributes($attribute));
+	}
 }

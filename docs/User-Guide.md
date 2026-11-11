@@ -1155,7 +1155,10 @@ hand, it is picked up as one.
   different account*, and enter your handle here. If the old server is Aloha
   Social too, the page offers **Finish the move from here** instead: you are
   sent to your old Nextcloud to log in and agree, and your followers are moved
-  without a visit to its settings.
+  without a visit to its settings. The old Nextcloud warns that this server
+  may move your account there and asks for your password before you agree.
+  It lets only an Aloha Social server finishing a move ask for this, never
+  an ordinary app, and moves the account only to that server.
 - **Naming your old account.** Your old server will not send your followers
   here until this account says it is also you. **Migration →
   Accounts you also answer to** is where you say it: type the old account's
