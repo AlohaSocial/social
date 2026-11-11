@@ -487,6 +487,13 @@ in the sidebar.
   this server knows how long it is and how it is shaped, which it learns
   from the other server or by measuring the file when it keeps a copy. Where
   there are no shorts yet, Shorts says so.
+  On a phone the player fills the screen between Nextcloud's header and the
+  bar at the bottom: the switch of whose videos floats over the top of the
+  video beside the **+** for a new short, the like, sound and next buttons
+  stand in a column on the right, and the caption keeps to two lines —
+  **Show more** opens the whole of it in a sheet from the bottom, with
+  **Open the post** under it; **Close** or Escape puts it away. Swipe up or
+  down to move, tap to pause.
   The switch in the top corner picks whose videos (**My Feed**, **For you**,
   **Local** or **Global**); it opens on For you once your reading has taught
   it something, and on My Feed before that. It plays

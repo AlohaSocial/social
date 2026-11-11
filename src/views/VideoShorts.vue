@@ -6,6 +6,7 @@
 	<div
 		ref="page"
 		class="shorts"
+		:class="{ 'shorts--phone': phone }"
 		role="region"
 		:aria-label="t('social', 'Videos, one at a time')">
 		<header ref="header" class="shorts__header">
@@ -22,7 +23,9 @@
 					<template #icon>
 						<IconPlus :size="20" />
 					</template>
-					{{ t('social', 'New short') }}
+					<template v-if="!phone">
+						{{ t('social', 'New short') }}
+					</template>
 				</NcButton>
 			</div>
 			<nav class="shorts__scopes" :aria-label="t('social', 'Whose videos')">
@@ -193,8 +196,8 @@
 						v-if="entry.text"
 						:id="`short-caption-${index}`"
 						class="short__text"
-						:class="{ 'short__text--expanded': expandedCaption === entry.key }"
-						:tabindex="expandedCaption === entry.key ? 0 : undefined">
+						:class="{ 'short__text--expanded': expandedCaption === entry.key && !phone }"
+						:tabindex="expandedCaption === entry.key && !phone ? 0 : undefined">
 						{{ entry.text }}
 					</p>
 					<button
@@ -202,9 +205,10 @@
 						type="button"
 						class="short__caption-toggle"
 						:aria-expanded="expandedCaption === entry.key"
-						:aria-controls="`short-caption-${index}`"
+						:aria-controls="phone ? 'shorts-caption-sheet' : `short-caption-${index}`"
+						:aria-haspopup="phone ? 'dialog' : undefined"
 						@click.stop="toggleCaption(entry)">
-						{{ expandedCaption === entry.key ? t('social', 'Show less') : t('social', 'Show more') }}
+						{{ expandedCaption === entry.key && !phone ? t('social', 'Show less') : t('social', 'Show more') }}
 					</button>
 					<!-- why For you put it here, as the chip over a post says it -->
 					<p v-if="reasonOf(entry.status)" class="short__reason" :aria-label="reasonOf(entry.status).label">
@@ -284,7 +288,7 @@
 				</NcButton>
 			</div>
 			<div
-				v-if="current"
+				v-if="current && !phone"
 				class="shorts__controls"
 				role="group"
 				:aria-label="t('social', 'Short playback')">
@@ -301,15 +305,71 @@
 					{{ playbackPaused ? t('social', 'Play') : t('social', 'Pause') }}
 				</NcButton>
 				<span class="shorts__position" role="status">
-					{{ loading ? t('social', 'Loading…') : t('social', '{current} of {total}', { current: playing + 1, total: shorts.length }) }}
+					{{ positionText }}
 				</span>
-				<NcButton :disabled="loading || (allLoaded && playing >= shorts.length - 1)" :aria-label="t('social', 'Next short')" @click="nextShort">
+				<NcButton :disabled="atEnd" :aria-label="t('social', 'Next short')" @click="nextShort">
 					<template #icon>
 						<IconChevronDown :size="20" />
 					</template>
 				</NcButton>
 			</div>
+			<p v-else-if="current" class="hidden-visually" role="status">
+				{{ positionText }}
+			</p>
 		</div>
+
+		<!-- on a phone, the foot of the rail the like and sound buttons stand
+		     on: a swipe is the gesture, this is the same move for a press -->
+		<button
+			v-if="phone && current"
+			type="button"
+			class="shorts__next"
+			:disabled="atEnd"
+			:aria-label="t('social', 'Next short')"
+			:title="t('social', 'Next short')"
+			@click="nextShort">
+			<IconChevronDown :size="24" />
+		</button>
+
+		<!-- a phone's caption reads in a sheet from the foot of the player,
+		     rather than growing over the video it describes -->
+		<template v-if="sheetEntry">
+			<div class="shorts__sheet-scrim" aria-hidden="true" @click="closeCaption" />
+			<section
+				id="shorts-caption-sheet"
+				ref="sheet"
+				class="shorts__sheet"
+				role="dialog"
+				aria-labelledby="shorts-caption-sheet-title"
+				tabindex="-1"
+				@keydown.esc.stop.prevent="closeCaption">
+				<div class="shorts__sheet-head">
+					<h2 id="shorts-caption-sheet-title" class="shorts__sheet-title">
+						{{ t('social', 'Caption') }}
+					</h2>
+					<NcButton
+						variant="tertiary"
+						:aria-label="t('social', 'Close')"
+						@click="closeCaption">
+						<template #icon>
+							<IconClose :size="20" />
+						</template>
+					</NcButton>
+				</div>
+				<p class="shorts__sheet-author">
+					{{ sheetEntry.status.account.display_name || sheetEntry.status.account.username }}
+					<span class="shorts__sheet-handle">@{{ sheetEntry.status.account.acct }}</span>
+				</p>
+				<p class="shorts__sheet-text">
+					{{ sheetEntry.text }}
+				</p>
+				<router-link
+					class="shorts__sheet-open"
+					:to="{ name: 'single-post', params: { account: sheetEntry.status.account.acct, id: sheetEntry.status.id } }">
+					{{ t('social', 'Open the post') }}
+				</router-link>
+			</section>
+		</template>
 		<p id="shorts-keyboard-help" class="hidden-visually">
 			{{ t('social', 'Use Up and Down to change shorts, Space to pause, M for sound and L to like.') }}
 		</p>
@@ -371,6 +431,7 @@ import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconChevronUp from 'vue-material-design-icons/ChevronUp.vue'
 import IconChevronDown from 'vue-material-design-icons/ChevronDown.vue'
+import IconClose from 'vue-material-design-icons/Close.vue'
 import IconPlay from 'vue-material-design-icons/Play.vue'
 import IconPause from 'vue-material-design-icons/Pause.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
@@ -406,6 +467,7 @@ import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
 import { useSoundAutoplay } from '../composables/useSoundAutoplay.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
+import { isPhone, onPhoneChange } from '../services/phone.js'
 import DayShortPanel from '../components/DayShortPanel.vue'
 import ShortComposerDialog from '../components/ShortComposerDialog.vue'
 
@@ -433,6 +495,7 @@ export default {
 		DayShortPanel,
 		IconChevronUp,
 		IconChevronDown,
+		IconClose,
 		IconPlay,
 		IconPause,
 		IconHeart,
@@ -499,6 +562,9 @@ export default {
 			/** the slide on screen, which the player is over */
 			playing: 0,
 			expandedCaption: '',
+			/** a phone-sized screen: full-height player, rail and caption sheet */
+			phone: isPhone(),
+			stopPhone: null,
 			playerPaused: true,
 			videoFailed: false,
 			/** slide currently loaded by the single video player */
@@ -692,6 +758,26 @@ export default {
 			return this.current?.key ?? ''
 		},
 
+		/** @return {boolean} whether there is no short after this one to go to */
+		atEnd() {
+			return this.loading || (this.allLoaded && this.playing >= this.shorts.length - 1)
+		},
+
+		/** @return {string} where in the stack the reader is */
+		positionText() {
+			return this.loading ? t('social', 'Loading…') : t('social', '{current} of {total}', { current: this.playing + 1, total: this.shorts.length })
+		},
+
+		/** @return {object|null} the kept short whose caption a phone's sheet is showing */
+		sheetEntry() {
+			const entry = this.current
+			if (!this.phone || !entry?.status || this.expandedCaption === '' || this.expandedCaption !== entry.key) {
+				return null
+			}
+
+			return entry
+		},
+
 		/** @return {Record<string, string>} the largest frame that fits the page */
 		trackStyle() {
 			const width = this.availableWidth || 440
@@ -736,6 +822,19 @@ export default {
 			}
 		},
 
+		sheetEntry(now, before) {
+			if (now !== null && before === null) {
+				this.$nextTick(() => /** @type {HTMLElement|undefined} */ (this.$refs.sheet)?.focus?.())
+			}
+		},
+
+		phone(now) {
+			// what was open was the other layout's
+			if (!now) {
+				this.expandedCaption = ''
+			}
+		},
+
 		currentKey() {
 			this.expandedCaption = ''
 			this.videoFailed = false
@@ -747,6 +846,9 @@ export default {
 	},
 
 	mounted() {
+		this.stopPhone = onPhoneChange((phone) => {
+			this.phone = phone
+		})
 		this.open()
 		this.loadDay()
 		const serverData = this.settingsStore.getServerData
@@ -787,6 +889,7 @@ export default {
 	},
 
 	beforeUnmount() {
+		this.stopPhone?.()
 		this.shortSignals.leave()
 		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
@@ -813,7 +916,18 @@ export default {
 	methods: {
 		accountAvatarUrl,
 		canExpandCaption(text) {
-			return text.length > 120 || text.split('\n').length > 2
+			// three lines on a wide screen, two on a phone's narrower column
+			return this.phone
+				? text.length > 70 || text.split('\n').length > 2
+				: text.length > 120 || text.split('\n').length > 2
+		},
+
+		/** Closes a phone's caption sheet, back to the button that opened it. */
+		closeCaption() {
+			this.expandedCaption = ''
+			this.$nextTick(() => {
+				this.slides[this.playing]?.querySelector?.('.short__caption-toggle')?.focus?.()
+			})
 		},
 
 		toggleCaption(entry) {

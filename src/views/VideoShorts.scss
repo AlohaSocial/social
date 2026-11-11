@@ -557,19 +557,268 @@
 	}
 }
 
-@media (max-width: 600px) {
+/* A phone: the player takes the whole page below Nextcloud's header (and
+   above the phone bar), the way every short-video app has it. The title and
+   the scopes float over the top of the video, like, sound and next stand in a
+   rail on the end, and the caption keeps to two lines with the rest in a
+   sheet. `shorts--phone` is set from the same query as the stylesheets'
+   600px (services/phone.js), so a wider screen never sees any of this. */
+.shorts--phone {
+	gap: 0;
+	background: var(--social-on-dark-ground);
+
 	.shorts__header {
-		align-items: flex-start;
-		padding-inline: 12px;
+		position: absolute;
+		z-index: 5;
+		inset-block-start: 0;
+		inset-inline: 0;
+		flex-direction: row;
+		align-items: center;
+		gap: 8px;
+		/* the start is Nextcloud's sidebar toggle, which sits over this corner */
+		padding-block: 8px 24px;
+		padding-inline: calc(var(--default-clickable-area, 44px) + 12px) 8px;
+		background: linear-gradient(to bottom, var(--social-on-dark-scrim), transparent);
+		/* the scrim is not a target: a tap on it is a tap on the video */
+		pointer-events: none;
+
+		a,
+		button {
+			pointer-events: auto;
+		}
 	}
 
-	.shorts__track {
-		border-radius: var(--border-radius-large, 12px) var(--border-radius-large, 12px) 0 0;
+	.shorts__heading-row {
+		order: 2;
+		flex: 0 0 auto;
+	}
+
+	.shorts__heading {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.shorts__scopes {
+		order: 1;
+		flex: 1 1 auto;
+		flex-wrap: nowrap;
+		justify-content: center;
+		min-inline-size: 0;
+		margin-inline: auto;
+		padding: 0;
+		overflow-x: auto;
+		background: transparent;
+		scrollbar-width: none;
 	}
 
 	.shorts__scope {
+		flex: 0 0 auto;
+		min-block-size: 36px;
 		padding-inline: 8px;
-		font-size: 12px;
+		background: transparent;
+		color: var(--social-on-dark-text-muted);
+		font-size: 14px;
+		text-shadow: 0 1px 2px var(--social-on-dark-shadow);
+
+		&--current {
+			background: var(--social-on-dark-tint);
+			color: var(--social-on-dark-text);
+			box-shadow: none;
+		}
+
+		&:focus-visible {
+			outline-color: var(--social-on-dark-text);
+		}
+	}
+
+	.shorts__track {
+		flex: 1 1 auto;
+		inline-size: 100%;
+		block-size: auto;
+		border: none;
+		border-radius: 0;
+	}
+
+	.shorts__footer {
+		position: absolute;
+		z-index: 6;
+		/* below the overlaid scopes, clear of the caption and the rail */
+		inset-block-start: 64px;
+		inset-inline: 8px;
+		padding: 0;
+	}
+
+	.shorts__next {
+		position: absolute;
+		z-index: 4;
+		inset-block-end: 16px;
+		inset-inline-end: 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		inline-size: 44px;
+		block-size: 44px;
+		padding: 0;
+		border: none;
+		border-radius: 50%;
+		background: var(--social-on-dark-scrim);
+		color: var(--social-on-dark-text);
+		cursor: pointer;
+
+		&:disabled {
+			opacity: .5;
+			cursor: default;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--social-on-dark-text);
+			outline-offset: 2px;
+		}
+	}
+
+	/* the rail, from the foot up: next (above), sound, like, For you */
+	.short__sound {
+		inset-block-end: 72px;
+		inset-inline-end: 12px;
+	}
+
+	.short__sound-hint {
+		inset-block-end: 82px;
+		inset-inline-end: 64px;
+	}
+
+	.short__like {
+		inset-block-end: 128px;
+		inset-inline-end: 12px;
+	}
+
+	.short__heart--float {
+		inset-block-end: 192px;
+	}
+
+	.short__recommendation-menu {
+		inset-block-end: 204px;
+		inset-inline-end: 12px;
+	}
+
+	.short__text {
+		-webkit-line-clamp: 2;
+	}
+
+	/* a word after the caption rather than a pill: the caption is two lines
+	   and the pill was most of a third */
+	.short__caption-toggle {
+		min-block-size: 32px;
+		padding: 0;
+		border: none;
+		background: none;
+		font-weight: 600;
+
+		&:hover,
+		&:focus,
+		&:active {
+			background: none;
+		}
+	}
+
+	.shorts__sheet-scrim {
+		position: absolute;
+		z-index: 7;
+		inset: 0;
+		background: var(--social-on-dark-scrim-light);
+	}
+
+	.shorts__sheet {
+		position: absolute;
+		z-index: 8;
+		inset-block-end: 0;
+		inset-inline: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		max-block-size: 70%;
+		padding: 8px 16px 16px;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		border-start-start-radius: var(--border-radius-container-large, 16px);
+		border-start-end-radius: var(--border-radius-container-large, 16px);
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		box-shadow: var(--social-elevation-raised);
+		animation: shorts-sheet-in .2s ease-out both;
+
+		&:focus-visible {
+			outline: 2px solid var(--color-primary-element);
+			outline-offset: -2px;
+		}
+	}
+
+	.shorts__sheet-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
+	.shorts__sheet-title {
+		margin: 0;
+		font-size: 18px;
+		font-weight: 700;
+	}
+
+	.shorts__sheet-author {
+		margin: 0;
+		font-weight: 700;
+	}
+
+	.shorts__sheet-handle {
+		color: var(--color-text-maxcontrast);
+		font-weight: normal;
+	}
+
+	.shorts__sheet-text {
+		margin: 0;
+		overflow-wrap: anywhere;
+		white-space: pre-line;
+	}
+
+	.shorts__sheet-open {
+		align-self: flex-start;
+		color: var(--color-primary-element);
+		text-decoration: underline;
+	}
+}
+
+@keyframes shorts-sheet-in {
+	from { transform: translateY(100%); }
+	to { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shorts--phone .shorts__sheet {
+		animation: none;
+	}
+}
+
+@media (forced-colors: active) {
+	.shorts--phone .shorts__next,
+	.shorts--phone .shorts__scope {
+		border: 1px solid ButtonText;
+		background: ButtonFace;
+		color: ButtonText;
+	}
+
+	.shorts--phone .shorts__scope--current {
+		background: Highlight;
+		color: HighlightText;
+	}
+
+	.shorts--phone .shorts__sheet {
+		border-block-start: 1px solid CanvasText;
 	}
 }
 
