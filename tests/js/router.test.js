@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import router, { loginUrl, needsSignIn } from '../../src/router.js'
 import eventBus from '../../src/services/eventBus.js'
+import { skeletonFor } from '../../src/utils/skeleton.js'
 
 // The views are lazy-loaded chunks; navigation would otherwise pull in the
 // whole component tree. Stubs keep the routing table under test.
@@ -589,5 +590,34 @@ describe('router base detection', () => {
 		expect(testRouter.currentRoute.value.name).toBe('timeline')
 		expect(['home', 'timeline']).toContain(testRouter.currentRoute.value.params.type)
 		document.getElementById('initial-state-social-serverData')?.remove()
+	})
+})
+
+describe('the placeholder each page loads behind', () => {
+	it('is rows for a feed, and for a tag or a list read through the timeline', () => {
+		expect(skeletonFor(router.resolve('/timeline/home'))).toEqual({ variant: 'rows', shape: 'square' })
+		expect(skeletonFor(router.resolve('/timeline/notifications'))).toEqual({ variant: 'rows', shape: 'square' })
+		expect(skeletonFor(router.resolve('/timeline/tags/nextcloud'))).toEqual({ variant: 'rows', shape: 'square' })
+		expect(skeletonFor(router.resolve('/timeline/list/4'))).toEqual({ variant: 'rows', shape: 'square' })
+	})
+
+	it('is the video cards for Videos', () => {
+		expect(skeletonFor(router.resolve('/timeline/videos'))).toEqual({ variant: 'grid', shape: 'video' })
+	})
+
+	it('is rows for a single post', () => {
+		expect(skeletonFor(router.resolve('/@alice/123'))).toEqual({ variant: 'rows', shape: 'square' })
+	})
+
+	it('is tiles for a collection and a place, which are photo grids', () => {
+		expect(skeletonFor(router.resolve('/collections/9'))).toEqual({ variant: 'grid', shape: 'square' })
+		expect(skeletonFor(router.resolve('/places/9'))).toEqual({ variant: 'grid', shape: 'square' })
+	})
+
+	// Discover opened behind three post cards before its map appeared
+	it('is the neutral page for Discover and the pages of their own shape', () => {
+		for (const path of ['/discover', '/settings', '/statistics', '/about', '/shorts', '/@alice', '/timeline/direct']) {
+			expect(skeletonFor(router.resolve(path)), path).toEqual({ variant: 'page', shape: 'square' })
+		}
 	})
 })

@@ -3406,7 +3406,20 @@ permission and are gone; anything new has to be ours.
   detached icon's `closest('button')` finds nothing.
 - **Loading rolls in.** At the foot of a timeline, the next page's wait is
   `WaveLoading`: one wavelength-wide line slid by exactly one wavelength, so it
-  loops without a jump. The first page keeps `TimelineSkeleton`.
+  loops without a jump. The first page keeps `TimelineSkeleton`, in the shape
+  of what it stands in for: `rows` copies the flat timeline row (its padding,
+  hairline and 40 px face, 36 px in the corner on a phone), `grid` draws the
+  photo grid's squares (`ProfileMediaGrid`, on its first page) or the Videos
+  page's 16:9 cards (`shape="video"`, `VideoBrowse`), and `page` is a heading
+  and a few neutral blocks. While a lazily loaded page's code is on its way,
+  `App.vue` draws it `standalone` (in the column that kind of page takes, with
+  a heading) and picks the variant with `skeletonFor()` (`utils/skeleton.js`)
+  from the route being opened: its `meta.skeleton` is a variant, a variant and
+  shape, or a function of the route. The timeline route asks
+  `timelineSkeleton()` (video cards for Videos, squares for Photos when the
+  reader chose the grid, the neutral page for Direct messages, rows for the
+  rest); a single post asks for rows, a collection and a place for squares,
+  and every other route, Discover among them, gets `page`.
 - **The composer says Aloha.** A post of its own is asked for as "Aloha, {name}.
   What’s new?", with the first word of the display name (or the user id). A
   reply, a quote, a caption, or a user with no name keep their plain prompts.

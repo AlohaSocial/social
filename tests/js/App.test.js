@@ -446,6 +446,71 @@ describe('App', () => {
 		})
 	})
 
+	describe('while a page is being waited for', () => {
+		let hooks
+
+		beforeEach(() => {
+			vi.useFakeTimers()
+			hooks = {}
+			router = {
+				push: vi.fn(),
+				beforeEach: vi.fn((hook) => {
+					hooks.before = hook
+					return () => {}
+				}),
+				beforeResolve: vi.fn((hook) => {
+					hooks.resolve = hook
+					return () => {}
+				}),
+			}
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		const skeleton = (wrapper) => wrapper.findComponent({ name: 'TimelineSkeleton' })
+
+		async function startNavigation(wrapper, to) {
+			hooks.before(to, route.value, () => {})
+			vi.advanceTimersByTime(200)
+			await nextTick()
+		}
+
+		it('draws the placeholder the route being opened names, as a whole page', async () => {
+			const wrapper = mountApp()
+			await startNavigation(wrapper, { name: 'timeline', params: { type: 'videos' }, meta: { skeleton: { variant: 'grid', shape: 'video' } } })
+
+			expect(skeleton(wrapper).props()).toMatchObject({ variant: 'grid', shape: 'video', standalone: true })
+			expect(skeleton(wrapper).classes()).toContain('social__pending')
+		})
+
+		// Discover opened behind three post cards before its map appeared
+		it('draws the neutral page for a route that names none', async () => {
+			const wrapper = mountApp()
+			await startNavigation(wrapper, { name: 'discover', params: {}, meta: {} })
+
+			expect(skeleton(wrapper).props('variant')).toBe('page')
+			expect(skeleton(wrapper).find('.skeleton__row').exists()).toBe(false)
+		})
+
+		it('draws nothing for a page that arrives quickly, and goes when it lands', async () => {
+			const wrapper = mountApp()
+			hooks.before({ name: 'discover', params: {}, meta: {} }, route.value, () => {})
+			vi.advanceTimersByTime(50)
+			await nextTick()
+			expect(skeleton(wrapper).exists()).toBe(false)
+
+			vi.advanceTimersByTime(200)
+			await nextTick()
+			expect(skeleton(wrapper).exists()).toBe(true)
+
+			hooks.resolve({ name: 'discover', params: {}, fullPath: '/discover' }, route.value)
+			await nextTick()
+			expect(skeleton(wrapper).exists()).toBe(false)
+		})
+	})
+
 	it('does not remount the whole view on every route change', () => {
 		// :key="$route.fullPath" refetched page one of the timeline and
 		// landed at the top for every navigation, Back included
