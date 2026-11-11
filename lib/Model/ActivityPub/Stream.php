@@ -36,6 +36,7 @@ use OCA\Social\Model\Client\Place;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Model\StreamCard;
+use OCA\Social\Security\HtmlSanitizer;
 use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\VideoDeliveryHold;
 use OCA\Social\Tools\ActivityPubEvent;
@@ -2243,7 +2244,13 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		}
 
 		$this->setActivityId($this->validate(self::AS_ID, 'activity_id', $data, ''));
-		$this->setContent($this->validate(self::AS_CONTENT, 'content', $data, ''));
+		// stored sanitized and stamped (StreamRequest); only a row under
+		// another stamp, or with none, goes through the sanitizer again
+		if ($this->getInt('sanitized', $data, 0) === HtmlSanitizer::version()) {
+			$this->setContent($this->get('content', $data, ''));
+		} else {
+			$this->setContent($this->validate(self::AS_CONTENT, 'content', $data, ''));
+		}
 		$this->setSensitive($this->getBool('sensitive', $data, false));
 		$this->setArchived($this->getBool('archived', $data, false));
 		$this->setPlaceId($this->getInt('place_id', $data, 0));

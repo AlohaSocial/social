@@ -349,9 +349,12 @@ class CurlService {
 	 * the rows left on standby are delivered without the caller waiting. The
 	 * request is signed, since the route refuses one this server did not send.
 	 *
+	 * @param int $round the round of the token's drain this starts: 0 for the
+	 *                   first, and `QueueController` counts the follow-ups
+	 *
 	 * @throws SocialAppConfigException
 	 */
-	public function asyncWithToken(string $token): void {
+	public function asyncWithToken(string $token, int $round = 0): void {
 		$address = $this->configService->getSocialUrl();
 
 		$path = $this->withEndSlash((string)parse_url($address, PHP_URL_PATH));
@@ -359,6 +362,10 @@ class CurlService {
 		$path = str_replace('{token}', $token, $path);
 
 		$url = parse_url($address, PHP_URL_SCHEME) . '://' . $this->configService->getCloudHost() . $path;
+		$headers = [AsyncRequestSigner::HEADER => $this->asyncRequestSigner->sign($token, $round)];
+		if ($round > 0) {
+			$headers[AsyncRequestSigner::ROUND_HEADER] = (string)$round;
+		}
 
 		try {
 			// This instance's own address, which behind a reverse proxy or in a
@@ -370,7 +377,7 @@ class CurlService {
 			// genuinely remote address is still refused.
 			$this->retrieveJson('post', $url, [
 				'allow_local_address' => true,
-				'headers' => [AsyncRequestSigner::HEADER => $this->asyncRequestSigner->sign($token)],
+				'headers' => $headers,
 			]);
 		} catch (RequestResultNotJsonException $e) {
 		} catch (Exception $e) {

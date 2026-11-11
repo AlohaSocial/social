@@ -38,6 +38,25 @@ use DOMText;
  */
 final class HtmlSanitizer {
 	/**
+	 * The revision of what this class lets through. Bump it whenever the
+	 * allowlists or the way a tree is walked change: a stored post or bio
+	 * stamped with an older `version()` is sanitized again on every read
+	 * until `Cron\Resanitize` has rewritten it.
+	 */
+	public const VERSION = 1;
+
+	/**
+	 * What a stored text is stamped with once it went through `sanitize()`:
+	 * the revision, and which parser this PHP has, because the HTML4 path's
+	 * output carries a weaker promise than the HTML5 one's (see
+	 * `sanitizeWith()`). A text is trusted as it is only under the stamp it
+	 * was written with.
+	 */
+	public static function version(): int {
+		return self::VERSION * 2 + ((PHP_VERSION_ID >= 80400) ? 1 : 0);
+	}
+
+	/**
 	 * Elements that survive, mapped to the attributes each may keep.
 	 *
 	 * @var array<string, list<string>>

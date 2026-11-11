@@ -11,10 +11,12 @@ namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Exceptions\SignatureException;
+use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\RequestQueueService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -32,8 +34,11 @@ class QueueControllerTest extends TestCase {
 	private LoggerInterface|MockObject $logger;
 	private TestableQueueController $controller;
 	private AsyncRequestSigner $signer;
+	private CurlService|MockObject $curlService;
 	/** What the request carries in the signature header. */
 	private string $signature = '';
+	/** What the request carries in the round header. */
+	private string $round = '';
 
 	protected function setUp(): void {
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
@@ -47,15 +52,21 @@ class QueueControllerTest extends TestCase {
 		$this->signer = new AsyncRequestSigner($crypto, $time);
 		$request = $this->createStub(IRequest::class);
 		$request->method('getHeader')->willReturnCallback(
-			fn (string $name): string => $name === AsyncRequestSigner::HEADER ? $this->signature : ''
+			fn (string $name): string => match ($name) {
+				AsyncRequestSigner::HEADER => $this->signature,
+				AsyncRequestSigner::ROUND_HEADER => $this->round,
+				default => '',
+			}
 		);
+		$this->curlService = $this->createMock(CurlService::class);
 		$this->signature = $this->signer->sign('tok');
 		$this->controller = new TestableQueueController(
 			$request,
 			$this->requestQueueService,
 			$this->activityService,
 			$this->logger,
-			$this->signer
+			$this->signer,
+			$this->curlService
 		);
 	}
 
@@ -177,6 +188,106 @@ class QueueControllerTest extends TestCase {
 		$this->controller->handBackOne((new RequestQueue())->setToken('tok'), new \RuntimeException('boom'));
 		$this->addToAssertionCount(1);
 	}
+	private function row(int $tries = 0, int $last = 0): RequestQueue {
+		$row = new RequestQueue('{}', new InstancePath('https://host.example/inbox', InstancePath::TYPE_INBOX), 'alice');
+		$row->setTries($tries);
+		$row->setLast($last);
+
+		return $row;
+	}
+
+	/**
+	 * The round is part of what is signed: a signature for the first round
+	 * does not start the fifth, and a round past the last is refused however
+	 * it is signed.
+	 */
+	public function testARoundIsRefusedUnlessItsOwnNumberWasSigned(): void {
+		$this->requestQueueService->expects($this->never())->method('getRequestFromToken');
+		$cases = [
+			['5', $this->signer->sign('tok')],
+			['5', $this->signer->sign('tok', 4)],
+			[(string)QueueController::MAX_ROUNDS, $this->signer->sign('tok', QueueController::MAX_ROUNDS)],
+			['-1', $this->signer->sign('tok')],
+			['two', $this->signer->sign('tok')],
+		];
+		foreach ($cases as [$round, $signature]) {
+			$this->round = $round;
+			$this->signature = $signature;
+
+			$response = $this->controller->asyncForRequest('tok');
+
+			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus(), 'round ' . $round);
+		}
+	}
+
+	public function testASignedFollowUpRoundIsServed(): void {
+		$this->round = '3';
+		$this->signature = $this->signer->sign('tok', 3);
+		$this->requestQueueService->expects($this->once())->method('getRequestFromToken')->willReturn([]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->asyncForRequest('tok')->getStatus());
+	}
+
+	/**
+	 * A post followed from 150 servers: the first round reaches 40 of them,
+	 * and the rest is no longer left for a cron that runs every twelve
+	 * minutes -- the round starts the next one.
+	 */
+	public function testARoundThatLeavesUntriedRowsStartsTheNext(): void {
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->row(), $this->row(1)]);
+		$this->curlService->expects($this->once())->method('asyncWithToken')->with('tok', 1);
+
+		$this->controller->nextRoundNow('tok', 0);
+	}
+
+	/**
+	 * What failed in a round waits for the cron's backoff, and what is held
+	 * back waits for its time: neither starts another round, so a token
+	 * whose remaining hosts are down does not spin.
+	 */
+	public function testOnlyFailedOrHeldRowsStartNoRound(): void {
+		$this->requestQueueService->method('getRequestFromToken')
+			->willReturn([$this->row(1), $this->row(3), $this->row(0, time() + 600)]);
+		$this->curlService->expects($this->never())->method('asyncWithToken');
+
+		$this->controller->nextRoundNow('tok', 0);
+	}
+
+	public function testTheLastRoundLeavesTheRestToTheCron(): void {
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->row()]);
+		$this->curlService->expects($this->never())->method('asyncWithToken');
+
+		$this->controller->nextRoundNow('tok', QueueController::MAX_ROUNDS - 1);
+	}
+
+	public function testANextRoundThatCannotBeStartedIsLoggedAndLeftToTheCron(): void {
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->row()]);
+		$this->curlService->method('asyncWithToken')->willThrowException(new SocialAppConfigException('no url'));
+		$this->logger->expects($this->once())->method('warning');
+
+		$this->controller->nextRoundNow('tok', 2);
+	}
+
+	/**
+	 * The first round delivers every due row, the one tried before included;
+	 * a follow-up round only rows never tried, as the tried ones failed in a
+	 * round before it.
+	 */
+	public function testAFollowUpRoundTakesOnlyRowsNeverTried(): void {
+		$fresh = $this->row();
+		$failed = $this->row(1);
+		$held = $this->row(0, time() + 600);
+		$this->requestQueueService->method('getRequestFromToken')
+			->with('tok', RequestQueue::STATUS_STANDBY)
+			->willReturn([$fresh, $failed, $held]);
+
+		$this->assertSame([$fresh, $failed], $this->controller->dueNow('tok', 0));
+		$this->assertSame([$fresh], $this->controller->dueNow('tok', 1));
+	}
+
+	public function testTheRoundsReachSomeHundredsOfInboxes(): void {
+		$this->assertGreaterThanOrEqual(150, QueueController::ASYNC_ROWS * QueueController::MAX_ROUNDS);
+	}
 }
 
 /**
@@ -192,5 +303,14 @@ class TestableQueueController extends QueueController {
 	/** @param list<RequestQueue> $requests */
 	public function drainNow(array $requests): void {
 		$this->drain($requests);
+	}
+
+	public function nextRoundNow(string $token, int $round): void {
+		$this->nextRound($token, $round);
+	}
+
+	/** @return list<RequestQueue> */
+	public function dueNow(string $token, int $round): array {
+		return $this->due($token, $round);
 	}
 }

@@ -924,6 +924,22 @@ class CurlServiceTest extends TestCase {
 		$this->assertTrue($this->signer()->verify('tok-1', $sent()['options']['headers'][AsyncRequestSigner::HEADER]));
 	}
 
+	/** The first round names no round; a follow-up names and signs its own. */
+	public function testAFollowUpRoundNamesAndSignsItsNumber(): void {
+		$this->configService->method('getSocialUrl')->willReturn('https://cloud.example/apps/social/');
+		$this->configService->method('getCloudHost')->willReturn('cloud.example');
+		$sent = $this->captureRequest($this->answer('{}'));
+
+		$this->service()->asyncWithToken('tok-1');
+		$this->assertArrayNotHasKey(AsyncRequestSigner::ROUND_HEADER, $sent()['options']['headers']);
+
+		$this->service()->asyncWithToken('tok-1', 3);
+		$headers = $sent()['options']['headers'];
+		$this->assertSame('3', $headers[AsyncRequestSigner::ROUND_HEADER]);
+		$this->assertTrue($this->signer()->verify('tok-1', $headers[AsyncRequestSigner::HEADER], 3));
+		$this->assertFalse($this->signer()->verify('tok-1', $headers[AsyncRequestSigner::HEADER]));
+	}
+
 	/** A signer under a fixed secret, as the instance's own would be. */
 	private function signer(): AsyncRequestSigner {
 		$crypto = $this->createStub(ICrypto::class);

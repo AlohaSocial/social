@@ -19,6 +19,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Details;
+use OCA\Social\Security\HtmlSanitizer;
 use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -120,6 +121,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 			)
 			->setValue('name', $qb->createNamedParameter($actor->getName()))
 			->setValue('summary', $qb->createNamedParameter($actor->getSummary()))
+			// the bio as a read hands it out, stamped (Person::importFromDatabase())
+			->setValue('description', $qb->createNamedParameter(HtmlSanitizer::sanitize($actor->getSummary(), $actor->getId())))
+			->setValue('sanitized', $qb->createNamedParameter(HtmlSanitizer::version(), IQueryBuilder::PARAM_INT))
 			->setValue('public_key', $qb->createNamedParameter($actor->getPublicKey()))
 			->setValue('source', $qb->createNamedParameter($actor->getSource()))
 			->setValue('details', $qb->createNamedParameter(json_encode($actor->getDetailsAll())))
@@ -196,6 +200,8 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 			)
 			->set('name', $qb->createNamedParameter($actor->getName()))
 			->set('summary', $qb->createNamedParameter($actor->getSummary()))
+			->set('description', $qb->createNamedParameter(HtmlSanitizer::sanitize($actor->getSummary(), $actor->getId())))
+			->set('sanitized', $qb->createNamedParameter(HtmlSanitizer::version(), IQueryBuilder::PARAM_INT))
 			->set('public_key', $qb->createNamedParameter($actor->getPublicKey()))
 			->set('source', $qb->createNamedParameter($actor->getSource()))
 			->set('details', $qb->createNamedParameter(json_encode($actor->getDetailsAll())));

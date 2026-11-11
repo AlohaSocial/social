@@ -15,6 +15,15 @@ use OCA\Social\Tools\Traits\TArrayTools;
 class CacheDocumentsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
+	/**
+	 * The indexed key of a `local_copy` or `resized_copy` name, as stored in
+	 * `local_copy_prim` and `resized_copy_prim`: the copy columns are
+	 * unindexed text, so `/media/{uuid}` finds its row through this.
+	 */
+	public static function copyPrim(string $copy): string {
+		return ($copy === '') ? '' : md5($copy);
+	}
+
 	protected function getCacheDocumentsInsertSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->insert(self::TABLE_CACHE_DOCUMENTS);

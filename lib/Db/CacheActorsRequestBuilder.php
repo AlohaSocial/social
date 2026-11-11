@@ -56,7 +56,7 @@ class CacheActorsRequestBuilder extends CoreRequestBuilder {
 		$qb->select(
 			'ca.nid', 'ca.id', 'ca.account', 'ca.following', 'ca.followers', 'ca.inbox',
 			'ca.shared_inbox', 'ca.outbox', 'ca.featured', 'ca.url', 'ca.type', 'ca.preferred_username',
-			'ca.name', 'ca.summary', 'ca.public_key', 'ca.local', 'ca.details', 'ca.source', 'ca.creation',
+			'ca.name', 'ca.summary', 'ca.description', 'ca.sanitized', 'ca.public_key', 'ca.local', 'ca.details', 'ca.source', 'ca.creation',
 			'ca.details_update',
 			// the three counters, which `Person::importFromDatabase()` lays over
 			// what `details` says. Without them in the row the overlay has

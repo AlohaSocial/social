@@ -36,7 +36,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->setValue('mime_type', $qb->createNamedParameter($document->getMimeType()))
 			->setValue('error', $qb->createNamedParameter($document->getError()))
 			->setValue('local_copy', $qb->createNamedParameter($document->getLocalCopy()))
+			->setValue('local_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getLocalCopy())))
 			->setValue('resized_copy', $qb->createNamedParameter($document->getResizedCopy()))
+			->setValue('resized_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getResizedCopy())))
 			->setValue('blurhash', $qb->createNamedParameter($document->getBlurHash()))
 			->setValue('size', $qb->createNamedParameter($document->getSizeBytes(), IQueryBuilder::PARAM_INT))
 			->setValue('description', $qb->createNamedParameter($document->getDescription()))
@@ -79,7 +81,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->set('mime_type', $qb->createNamedParameter($document->getMimeType()))
 			->set('error', $qb->createNamedParameter($document->getError()))
 			->set('local_copy', $qb->createNamedParameter($document->getLocalCopy()))
+			->set('local_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getLocalCopy())))
 			->set('resized_copy', $qb->createNamedParameter($document->getResizedCopy()))
+			->set('resized_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getResizedCopy())))
 			->set('blurhash', $qb->createNamedParameter($document->getBlurHash()))
 			->set('size', $qb->createNamedParameter($document->getSizeBytes(), IQueryBuilder::PARAM_INT))
 			->set('description', $qb->createNamedParameter($document->getDescription()))
@@ -123,6 +127,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb = $this->getCacheDocumentsUpdateSql();
 		$qb->limitToIdString($document->getId());
 		$qb->set('resized_copy', $qb->createNamedParameter($document->getResizedCopy()));
+		$qb->set('resized_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getResizedCopy())));
 		$qb->set('meta', $qb->createNamedParameter(json_encode($document->getMeta())));
 
 		$qb->executeStatement();
@@ -208,7 +213,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb = $this->getCacheDocumentsUpdateSql();
 		$qb->limitToIdString($document->getId());
 		$qb->set('local_copy', $qb->createNamedParameter($document->getLocalCopy()));
+		$qb->set('local_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getLocalCopy())));
 		$qb->set('resized_copy', $qb->createNamedParameter($document->getResizedCopy()));
+		$qb->set('resized_copy_prim', $qb->createNamedParameter(self::copyPrim($document->getResizedCopy())));
 		$qb->set('blurhash', $qb->createNamedParameter($document->getBlurHash()));
 		$qb->set('size', $qb->createNamedParameter($document->getSizeBytes(), IQueryBuilder::PARAM_INT));
 		$qb->set('description', $qb->createNamedParameter($document->getDescription()));
@@ -242,14 +249,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	 * @throws CacheDocumentDoesNotExistException
 	 */
 	public function getByLocalCopy(string $uuid): Document {
-		$qb = $this->getCacheDocumentsSelectSql();
-		$qb->limitToDBField('local_copy', $uuid, false);
-
-		$cursor = $qb->executeQuery();
-		$data = $cursor->fetch();
-		$cursor->closeCursor();
-
-		if ($data === false) {
+		$data = $this->firstByCopyPrim('local_copy_prim', $uuid);
+		if ($data === null) {
 			throw new CacheDocumentDoesNotExistException();
 		}
 
@@ -289,28 +290,40 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	 * A preview link carries the resized uuid, so a lookup that knew only
 	 * about `local_copy` could never serve one.
 	 *
+	 * Two indexed lookups rather than one `OR`, which no database answers
+	 * from two separate indexes reliably: the full copy first, as most links
+	 * name it.
+	 *
 	 * @throws CacheDocumentDoesNotExistException
 	 */
 	public function getByCopy(string $uuid): Document {
-		$qb = $this->getCacheDocumentsSelectSql();
+		$data = $this->firstByCopyPrim('local_copy_prim', $uuid)
+			?? $this->firstByCopyPrim('resized_copy_prim', $uuid);
+		if ($data === null) {
+			throw new CacheDocumentDoesNotExistException();
+		}
 
-		$expr = $qb->expr();
-		$qb->andWhere(
-			$expr->orX(
-				$expr->eq('cd.local_copy', $qb->createNamedParameter($uuid)),
-				$expr->eq('cd.resized_copy', $qb->createNamedParameter($uuid))
-			)
-		);
+		return $this->parseCacheDocumentsSelectSql($data);
+	}
+
+	/**
+	 * @param 'local_copy_prim'|'resized_copy_prim' $column
+	 * @return ?array<string, mixed> the first row whose copy in that column is `$copy`
+	 */
+	private function firstByCopyPrim(string $column, string $copy): ?array {
+		if ($copy === '') {
+			return null;
+		}
+
+		$qb = $this->getCacheDocumentsSelectSql();
+		$qb->limitToDBField($column, self::copyPrim($copy));
+		$qb->setMaxResults(1);
 
 		$cursor = $qb->executeQuery();
 		$data = $cursor->fetch();
 		$cursor->closeCursor();
 
-		if ($data === false) {
-			throw new CacheDocumentDoesNotExistException();
-		}
-
-		return $this->parseCacheDocumentsSelectSql($data);
+		return ($data === false) ? null : $data;
 	}
 
 	public function getByUrl(string $url) {
@@ -720,6 +733,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_CACHE_DOCUMENTS)
 			->set('local_copy', $qb->createNamedParameter($localCopy))
+			->set('local_copy_prim', $qb->createNamedParameter(self::copyPrim($localCopy)))
 			->set('size', $qb->createNamedParameter($size, IQueryBuilder::PARAM_INT))
 			->set('laddered', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
 			->where($qb->expr()->eq('nid', $qb->createNamedParameter($nid)));
@@ -847,6 +861,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_CACHE_DOCUMENTS)
 			->set('local_copy', $qb->createNamedParameter($localCopy))
+			->set('local_copy_prim', $qb->createNamedParameter(self::copyPrim($localCopy)))
 			->set('media_type', $qb->createNamedParameter($mediaType))
 			->set('mime_type', $qb->createNamedParameter($mediaType))
 			->set('transcoded', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))

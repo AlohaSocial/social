@@ -235,6 +235,8 @@ class CoreRequestBuilder {
 			'name',
 			'icon_id',
 			'summary',
+			'description',
+			'sanitized',
 			'public_key',
 			'source',
 			'details',
@@ -815,6 +817,7 @@ class CoreRequestBuilder {
 			'cc',
 			'bcc',
 			'content',
+			'sanitized',
 			'summary',
 			'published',
 			'published_time',
@@ -1366,6 +1369,8 @@ class CoreRequestBuilder {
 			->selectAlias('ca.preferred_username', 'ca_preferred_username')
 			->selectAlias('ca.name', 'ca_name')
 			->selectAlias('ca.summary', 'ca_summary')
+			->selectAlias('ca.description', 'ca_description')
+			->selectAlias('ca.sanitized', 'ca_sanitized')
 			->selectAlias('ca.public_key', 'ca_public_key')
 			->selectAlias('ca.source', 'ca_source')
 			->selectAlias('ca.creation', 'ca_creation')
