@@ -3218,7 +3218,7 @@ title, lede and group, and draws the matches from all groups at once with their
 group named above each. The rail marks the last section whose heading has passed
 the top (`services/sectionRail.js`), and the first one before any has: keeping
 the previous mark left a section far down the page marked at the very top.
-`#migration` is sent on to the Migration page.
+`#migration` is sent on to the Migration page. The Migration page (`MigrationSettings`) opens with three choices — Bring an account here, Keep a copy, Leave this server — each showing only its own cards (`v-show`, so the file inputs and polls stay mounted); `#bring`, `#copy` and `#leave` open one and the choice is written back to the hash, and without a hash it opens on the work under way (a running import or a move still to finish → bring, a moved account → leave). The Bluesky cards render only when `serverData.bluesky.enabled` is set.
 
 `AccountSettings.vue` is `PATCH /api/v1/accounts/update_credentials` for
 `locked`, `discoverable`, `indexable`, `bot` and `source[privacy]`, saved as each

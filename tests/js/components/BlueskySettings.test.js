@@ -377,7 +377,7 @@ describe('BlueskySettings', () => {
 			await flushPromises()
 
 			const link = wrapper.findAllComponents(RouterLinkStub).find((candidate) => candidate.text() === 'Open Migration')
-			expect(link.props('to')).toEqual({ name: 'migration' })
+			expect(link.props('to')).toEqual({ name: 'migration', hash: '#copy' })
 			expect(wrapper.text()).toContain('The archive from the Migration page holds the same files.')
 			expect(wrapper.text()).not.toContain('Settings → Migration')
 		})

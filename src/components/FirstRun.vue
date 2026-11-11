@@ -138,7 +138,7 @@
 				</h2>
 				<p class="first-run__lead">
 					{{ t('social', 'If you have an account on Mastodon or another server, type its address. Everyone it follows is followed from here and its public posts are brought along, in the background. Moving your followers over as well is the last step, done on your old server; the Migration page tells you how.') }}
-					<router-link class="first-run__link" :to="{ name: 'migration' }">
+					<router-link class="first-run__link" :to="{ name: 'migration', hash: '#bring' }">
 						{{ t('social', 'Open Migration') }}
 					</router-link>
 				</p>
@@ -188,7 +188,7 @@
 				</div>
 				<p class="first-run__hint">
 					{{ t('social', 'On Mastodon: Preferences → Import and export → Data export → Follows (CSV). Moving your followers over as well is on the Migration page — that one is a one-way move, so it is not a button here.') }}
-					<router-link class="first-run__link" :to="{ name: 'migration' }">
+					<router-link class="first-run__link" :to="{ name: 'migration', hash: '#bring' }">
 						{{ t('social', 'Open Migration') }}
 					</router-link>
 				</p>

@@ -1137,14 +1137,23 @@ hand, it is picked up as one.
   card instead.
 - **Export and migration.** The whole move, in order, is one page:
   [Moving.md](Moving.md). **Migration** (in the account menu at the foot of
-  the sidebar, a page of its own) has these sections.
-  **Export** downloads a zip of your profile, follows, followers, blocks,
+  the sidebar, a page of its own) opens with three choices, and each shows
+  only its own steps: **Bring an account here**, **Keep a copy** and **Leave
+  this server**. The longer explanations of each step are behind **How this
+  works**. A link can open one choice directly: `…/apps/social/migration#bring`,
+  `#copy` or `#leave`. Without one, the page opens on the choice whose work is
+  under way — an import that is running or a move still to finish under
+  Bring, a moved account under Leave — and otherwise on the three choices
+  alone. Anything about Bluesky is only on the page when this server has
+  Bluesky switched on.
+  Under **Keep a copy**, **Export** downloads a zip of your profile, follows, followers, blocks,
   mutes, lists, blocked domains, bookmarks, likes and every post you wrote — your private key is
-  deliberately not in it. **Import** reads such an archive (or a Nextcloud
+  deliberately not in it. **Import an archive** reads such an archive (or a Nextcloud
   account export) back in without deleting anything; posts in it are listed,
-  not published again. The third section imports the follows from another
-  network's export — a `following_accounts.csv`, or Pixelfed's
-  `pixelfed-following.json`.
+  not published again. Under **Bring an account here**, **Bring your follows
+  with you** imports the follows from another network's export — a
+  `following_accounts.csv`, or Pixelfed's `pixelfed-following.json` — and
+  **Where to find that file** says where each network keeps it.
 - **One list at a time, out.** Under the Export button, **Or one list at a
   time** downloads your follows, your followers, your blocks, your mutes,
   your lists, your bookmarks or your blocked domains as a single CSV, each
@@ -1166,8 +1175,8 @@ hand, it is picked up as one.
   as skipped rather than followed by a button that says lists. A list you
   already have is filled rather than made a second time, and a list that
   follows a Nextcloud group is left alone — its members are the group's.
-- **Moving in from another server.** The quickest way in is the first thing
-  on the **Migration** page: type the handle of your old account
+- **Moving in from another server.** The quickest way in is under **Bring an
+  account here** on the **Migration** page: type the handle of your old account
   (`@you@mastodon.example`) and press **Look it up**. You are shown who that
   is, how many accounts it follows and how many posts it has, and whether its
   server lets those be read — Mastodon hides them if you turned on *Hide your
@@ -1175,7 +1184,9 @@ hand, it is picked up as one.
   that case. Press **Move here** and this account is marked as also being
   that one, and in the background everyone the old account follows is followed
   from here and its public posts are written here as yours, dated when you
-  wrote them. The list at the top of the page shows where it has got to, and
+  wrote them. **Your imports**, at the top of Bring an account here, shows where it has got to — and,
+  when an import fails, why, in words you can act on, with the server's own
+  sentence behind *Details* — and
   once it is done, **Copy newer posts** under it runs the copy again for
   whatever you wrote on the old account since — only what is new is written.
   Nothing is sent to anybody; your followers stay where they are until the
@@ -1194,7 +1205,7 @@ hand, it is picked up as one.
   handle (`@you@pixelfed.social`) and press Add. Nothing is sent to anybody — it is a note this server keeps about an
   account it owns — and you can take it off again whenever you like. The
   wizard above sets it for you.
-- **Moving away.** The last section of the **Migration** page moves this
+- **Moving away.** **Leave this server** on the **Migration** page moves this
   account to another server. First, on the new account, name this one as an
   account you also answer to — on Mastodon, *Preferences → Account → Moving
   from a different account* — then type the new account's handle here, type
@@ -1206,7 +1217,7 @@ hand, it is picked up as one.
   thirty days. **Undo the move** takes the redirect off and lets you post and
   follow from here again; your followers do not come back by themselves,
   because their servers acted on the move when it arrived.
-- **Bringing your posts.** The fourth section of the **Migration** page reads
+- **Bringing your posts.** **Bring your posts with you**, under Bring an account here, reads
   the export from your old server — this app's own archive, Mastodon's or
   GoToSocial's `outbox.json`, or Pixelfed's `pixelfed-statuses.json` — and
   writes the posts in it here as yours, dated when you wrote them, with their
@@ -1215,8 +1226,8 @@ hand, it is picked up as one.
   and direct messages are left out, and a reply keeps the post it answers when
   the file holds both. A picture the export names only by its address is
   fetched from the old server, which has to still be running; the switch above
-  the button turns that off. At most 2000 posts a run — upload the same file
-  again to carry on — and an archive too large for a browser can be imported by
+  the button turns that off. The import runs in the background, the whole
+  archive in one run, and an archive too large for a browser can be imported by
   an administrator with `occ social:account:import-posts`.
 - **Coming from Instagram.** The same button reads an Instagram archive. Ask
   Instagram to download your information and **choose JSON**: the HTML download
@@ -1234,7 +1245,7 @@ hand, it is picked up as one.
   the account is told it is gone — a post already on somebody else's server is
   deleted by asking that server to delete it, which almost all of them do and
   none of them can be made to. You are asked to type your handle first, because
-  it cannot be undone; take an archive from **Migration → Export**
+  it cannot be undone; take an archive from **Migration → Keep a copy → Export**
   first if you might want one. Afterwards you are back at the setup screen and
   can make a new account straight away, under a different handle: the old one
   is held for an hour so that nobody can take it the moment you let it go.

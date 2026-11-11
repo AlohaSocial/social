@@ -4,542 +4,618 @@
 -->
 <template>
 	<div class="migration">
-		<!--
-			First, because it is what somebody arriving is looking for and the
-			rest of this page is written for people who already know what an
-			export is.
-		-->
-		<section class="migration__card migration__card--lead">
-			<h4>
-				<IconAccountArrowRight :size="20" />
-				{{ t('social', 'Moving in') }}
-			</h4>
-			<p>
-				{{ t('social', 'Coming from X, Instagram, TikTok or YouTube? The step-by-step way in: your posts, the accounts you followed where they can be found again, and a card to post where you used to be.') }}
-			</p>
-			<NcButton variant="primary" :to="{ name: 'switch' }">
-				<template #icon>
+		<!-- three jobs; each shows only its own steps, and #bring, #copy or
+		     #leave in the address opens one of them -->
+		<div class="migration__choices" role="group" :aria-label="t('social', 'What do you want to do?')">
+			<button
+				v-for="option in choices"
+				:key="option.id"
+				type="button"
+				class="migration__choice"
+				:class="['migration__choice--' + option.id, { 'migration__choice--active': choice === option.id }]"
+				:aria-pressed="choice === option.id ? 'true' : 'false'"
+				:aria-controls="'migration-' + option.id"
+				@click="choose(option.id)">
+				<component :is="option.icon" :size="24" class="migration__choice-icon" />
+				<span class="migration__choice-title">{{ option.title }}</span>
+				<span class="migration__choice-text">{{ option.text }}</span>
+			</button>
+		</div>
+
+		<!-- bring an account here -->
+		<div v-show="choice === 'bring'" id="migration-bring" class="migration__section">
+			<section v-if="imports.length > 0" class="migration__card migration__card--imports">
+				<h4>
+					<IconFormatListBulleted :size="20" />
+					{{ t('social', 'Your imports') }}
+				</h4>
+				<ul class="migration__imports" aria-live="polite">
+					<li
+						v-for="job in imports"
+						:key="job.id"
+						class="migration__import"
+						:class="'migration__import--' + job.status">
+						<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
+						<ServerError
+							v-if="job.status === 'failed'"
+							class="migration__result"
+							:error="failureOf(job.report, 'import-failed')"
+							:alert="false" />
+						<span v-else class="migration__result">{{ importSummary(job) }}</span>
+						<ul v-if="failuresOf(job).length > 0" class="migration__failures">
+							<li v-for="[what, why] in failuresOf(job)" :key="what">
+								<span class="migration__failure-what">{{ what }}</span> — {{ why }}
+							</li>
+							<li v-if="job.failed > failuresOf(job).length">
+								{{ n('social', 'and %n more', 'and %n more', job.failed - failuresOf(job).length) }}
+							</li>
+						</ul>
+						<NcButton
+							v-if="job.status === 'done' || job.status === 'failed'"
+							variant="tertiary"
+							:aria-label="t('social', 'Dismiss')"
+							:title="t('social', 'Dismiss')"
+							@click="dismissImport(job.id)">
+							<template #icon>
+								<IconClose :size="20" />
+							</template>
+						</NcButton>
+					</li>
+				</ul>
+			</section>
+
+			<section class="migration__card migration__card--lead">
+				<h4>
 					<IconAccountArrowRight :size="20" />
-				</template>
-				{{ t('social', 'Move in from another network') }}
-			</NcButton>
-		</section>
-
-		<!-- out -->
-		<section class="migration__card">
-			<h4>
-				<IconDownload :size="20" />
-				{{ t('social', 'Export your data') }}
-			</h4>
-			<p>
-				{{ t('social', 'A zip file holding your profile, the people you follow, your followers, the accounts you block and mute, your bookmarks and likes, and every post you have written — with the pictures and videos on those posts, and your profile banner, as files inside the archive rather than as links back to this server.') }}
-			</p>
-			<p class="migration__note">
-				{{ t('social', 'Your private key is deliberately not in it. An archive is an ordinary file that can be copied anywhere, and a key that could sign as you cannot be taken back once it has been seen.') }}
-			</p>
-			<NcButton
-				variant="primary"
-				:disabled="exporting"
-				@click="exportArchive">
-				<template #icon>
-					<NcLoadingIcon v-if="exporting" :size="20" />
-					<IconDownload v-else :size="20" />
-				</template>
-				{{ exporting ? t('social', 'Preparing the archive …') : t('social', 'Export') }}
-			</NcButton>
-
-			<h5>{{ t('social', 'Or one list at a time') }}</h5>
-			<p>
-				{{ t('social', 'The same lists of accounts as single CSV files, each written the way Mastodon writes it — so another server\'s importer reads them without being asked to understand a whole archive. The followers file is a record rather than something an import can re-create: a follower follows again, or their server is told by the move.') }}
-			</p>
-			<div class="migration__csv-buttons">
-				<NcButton
-					v-for="kind in csvKinds"
-					:key="kind.name"
-					:disabled="csvBusy !== ''"
-					@click="downloadCsv(kind.name)">
+					{{ t('social', 'Moving in') }}
+				</h4>
+				<p>
+					{{ t('social', 'Coming from X, Instagram, TikTok or YouTube? The step-by-step way in: your posts, the accounts you followed where they can be found again, and a card to post where you used to be.') }}
+				</p>
+				<NcButton variant="primary" :to="{ name: 'switch' }">
 					<template #icon>
-						<NcLoadingIcon v-if="csvBusy === kind.name" :size="20" />
-						<IconDownload v-else :size="20" />
+						<IconAccountArrowRight :size="20" />
 					</template>
-					{{ kind.label }}
+					{{ t('social', 'Move in from another network') }}
 				</NcButton>
-			</div>
-		</section>
+			</section>
 
-		<!-- in -->
-		<section class="migration__card">
-			<h4>
-				<IconUpload :size="20" />
-				{{ t('social', 'Import an archive') }}
-			</h4>
-			<p>
-				{{ t('social', 'Reads an archive from the Export button — or from a Nextcloud account export — back into this account. Nothing is deleted: your profile, follows, blocks, mutes, bookmarks and likes are restored alongside what is already here.') }}
-			</p>
-			<p class="migration__note">
-				{{ t('social', 'Posts in the archive are listed rather than published again, so importing cannot flood the timelines of people who follow you. Their pictures are put back on the posts this server still has, and your banner is restored.') }}
-			</p>
-			<!-- each file input here is opened by the button after it, which is
-			     the control a keyboard and a screen reader reach; the input
-			     itself is kept out of both, or it is an unnamed "Browse…" -->
-			<input
-				ref="archive"
-				type="file"
-				accept=".zip,application/zip"
-				class="hidden-visually"
-				tabindex="-1"
-				aria-hidden="true"
-				@change="importArchive">
-			<NcButton :disabled="importing" @click="pick('archive')">
-				<template #icon>
-					<NcLoadingIcon v-if="importing" :size="20" />
-					<IconUpload v-else :size="20" />
-				</template>
-				{{ importing ? t('social', 'Importing …') : t('social', 'Import') }}
-			</NcButton>
-
-			<ul v-if="importLog.length" class="migration__log">
-				<li v-for="(line, index) in importLog" :key="index">
-					{{ line }}
-				</li>
-			</ul>
-		</section>
-
-		<!-- from another server, starting from the old handle -->
-		<section class="migration__card migration__card--move-in">
-			<h4>
-				<IconAccountArrowLeft :size="20" />
-				{{ t('social', 'Move here from another server') }}
-			</h4>
-			<p>
-				{{ t('social', 'Type the handle of your old account. This account is marked as also being that one, everyone it follows is followed from here, and its public posts are written here as yours, dated when you wrote them — all in the background. Your followers stay where they are until the last step, which is done on the old server.') }}
-			</p>
-			<div class="migration__move-in-form">
-				<NcTextField
-					v-model="moveHandle"
-					class="migration__move-in-field"
-					:label="t('social', 'Your old account')"
-					placeholder="@you@mastodon.example"
-					:disabled="moveInspecting || moveStarting"
-					@keydown.enter="inspectMoveIn" />
-				<NcButton :disabled="moveInspecting || moveHandle.trim() === ''" @click="inspectMoveIn">
-					<template v-if="moveInspecting" #icon>
-						<NcLoadingIcon :size="20" />
-					</template>
-					{{ t('social', 'Look it up') }}
-				</NcButton>
-			</div>
-			<div v-if="moveAccount" class="migration__move-in-account">
-				<img
-					v-if="moveAccount.avatar"
-					:src="moveAccount.avatar"
-					alt=""
-					class="migration__move-in-avatar">
-				<div class="migration__move-in-who">
-					<strong>{{ moveAccount.name }}</strong>
-					<span class="migration__move-in-acct">@{{ moveAccount.acct }}</span>
-					<p class="migration__note">
-						{{ moveAccount.following.readable
-							? n('social', 'It follows %n account.', 'It follows %n accounts.', moveAccount.following.total)
-							: t('social', 'Its follows are hidden by its server; bring them with the file below.') }}
-						{{ moveAccount.posts.readable
-							? n('social', '%n public post can be brought over.', '%n public posts can be brought over.', moveAccount.posts.total)
-							: t('social', 'Its posts cannot be read from here; bring them with the export below.') }}
-						<template v-if="moveAccount.finishable">
-							{{ t('social', 'Its server is Aloha Social too, so the last step — moving your followers — can be done from here once the run is through.') }}
-						</template>
+			<!-- from another server, starting from the old handle -->
+			<section class="migration__card migration__card--move-in">
+				<h4>
+					<IconAccountArrowLeft :size="20" />
+					{{ t('social', 'Move here from another server') }}
+				</h4>
+				<p>
+					{{ t('social', 'Type the handle of your old account on Mastodon or a similar server. Everyone it follows is followed from here, and its public posts are brought over, in the background.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'Type the handle of your old account. This account is marked as also being that one, everyone it follows is followed from here, and its public posts are written here as yours, dated when you wrote them — all in the background. Your followers stay where they are until the last step, which is done on the old server.') }}
 					</p>
+				</details>
+				<div class="migration__move-in-form">
+					<NcTextField
+						v-model="moveHandle"
+						class="migration__move-in-field"
+						:label="t('social', 'Your old account')"
+						placeholder="@you@mastodon.example"
+						:disabled="moveInspecting || moveStarting"
+						@keydown.enter="inspectMoveIn" />
+					<NcButton :disabled="moveInspecting || moveHandle.trim() === ''" @click="inspectMoveIn">
+						<template v-if="moveInspecting" #icon>
+							<NcLoadingIcon :size="20" />
+						</template>
+						{{ t('social', 'Look it up') }}
+					</NcButton>
 				</div>
-			</div>
-			<template v-if="moveAccount">
-				<NcCheckboxRadioSwitch
-					v-model="moveFollows"
-					class="migration__move-in-switch"
-					:disabled="!moveAccount.following.readable || moveStarting">
-					{{ t('social', 'Follow everyone it follows') }}
-				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch
-					v-model="movePosts"
-					class="migration__move-in-switch"
-					:disabled="!moveAccount.posts.readable || moveStarting">
-					{{ t('social', 'Bring its public posts over, with their pictures') }}
-				</NcCheckboxRadioSwitch>
-				<NcButton
-					variant="primary"
-					:disabled="moveStarting || (!moveFollows && !movePosts)"
-					@click="startMoveIn">
-					<template v-if="moveStarting" #icon>
-						<NcLoadingIcon :size="20" />
-					</template>
-					{{ t('social', 'Move here') }}
-				</NcButton>
-			</template>
-			<p v-if="finish.status === 'done'" class="migration__move-in-finish migration__move-in-finish--done">
-				{{ t('social', 'Done: {acct} told every server that knows you to follow this account instead. Your followers are on their way.', { acct: '@' + finish.acct }) }}
-			</p>
-			<template v-else-if="finishedMoveIn && finishedMoveIn.options?.finishable">
-				<p class="migration__move-in-finish">
-					{{ t('social', 'One step is left: your old server has to move your followers here. It is Aloha Social too, so you can do that from here — you will be asked to log in there and to agree to it.') }}
+				<div v-if="moveAccount" class="migration__move-in-account">
+					<img
+						v-if="moveAccount.avatar"
+						:src="moveAccount.avatar"
+						alt=""
+						class="migration__move-in-avatar">
+					<div class="migration__move-in-who">
+						<strong>{{ moveAccount.name }}</strong>
+						<span class="migration__move-in-acct">@{{ moveAccount.acct }}</span>
+						<p class="migration__note">
+							{{ moveAccount.following.readable
+								? n('social', 'It follows %n account.', 'It follows %n accounts.', moveAccount.following.total)
+								: t('social', 'Its follows are hidden by its server; bring them with the file below.') }}
+							{{ moveAccount.posts.readable
+								? n('social', '%n public post can be brought over.', '%n public posts can be brought over.', moveAccount.posts.total)
+								: t('social', 'Its posts cannot be read from here; bring them with the export below.') }}
+							<template v-if="moveAccount.finishable">
+								{{ t('social', 'Its server is Aloha Social too, so the last step — moving your followers — can be done from here once the run is through.') }}
+							</template>
+						</p>
+					</div>
+				</div>
+				<template v-if="moveAccount">
+					<NcCheckboxRadioSwitch
+						v-model="moveFollows"
+						class="migration__move-in-switch"
+						:disabled="!moveAccount.following.readable || moveStarting">
+						{{ t('social', 'Follow everyone it follows') }}
+					</NcCheckboxRadioSwitch>
+					<NcCheckboxRadioSwitch
+						v-model="movePosts"
+						class="migration__move-in-switch"
+						:disabled="!moveAccount.posts.readable || moveStarting">
+						{{ t('social', 'Bring its public posts over, with their pictures') }}
+					</NcCheckboxRadioSwitch>
+					<NcButton
+						variant="primary"
+						:disabled="moveStarting || (!moveFollows && !movePosts)"
+						@click="startMoveIn">
+						<template v-if="moveStarting" #icon>
+							<NcLoadingIcon :size="20" />
+						</template>
+						{{ t('social', 'Move here') }}
+					</NcButton>
+				</template>
+				<p v-if="finish.status === 'done'" class="migration__move-in-finish migration__move-in-finish--done">
+					{{ t('social', 'Done: {acct} told every server that knows you to follow this account instead. Your followers are on their way.', { acct: '@' + finish.acct }) }}
 				</p>
-				<ServerError v-if="finish.status === 'failed'" class="migration__finish-error" :error="failureOf(finish, 'move-failed')" />
-				<NcButton variant="primary" :disabled="finishing" @click="finishFromHere">
-					<template #icon>
-						<NcLoadingIcon v-if="finishing" :size="20" />
-						<IconAccountArrowLeft v-else :size="20" />
-					</template>
-					{{ t('social', 'Finish the move from here') }}
-				</NcButton>
-			</template>
-			<p v-else-if="finishedMoveIn" class="migration__move-in-finish">
-				{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
-			</p>
-			<div v-if="finishedMoveIn && finishedMoveIn.options?.posts" class="migration__move-in-again">
-				<p class="migration__note">
-					{{ t('social', 'Posts written on the old account since the copy are not picked up by anything. Running the copy again brings over only what is new; nothing already here is written twice.') }}
+				<template v-else-if="finishedMoveIn && finishedMoveIn.options?.finishable">
+					<p class="migration__move-in-finish">
+						{{ t('social', 'One step is left: your old server has to move your followers here. It is Aloha Social too, so you can do that from here — you will be asked to log in there and to agree to it.') }}
+					</p>
+					<ServerError v-if="finish.status === 'failed'" class="migration__finish-error" :error="failureOf(finish, 'move-failed')" />
+					<NcButton variant="primary" :disabled="finishing" @click="finishFromHere">
+						<template #icon>
+							<NcLoadingIcon v-if="finishing" :size="20" />
+							<IconAccountArrowLeft v-else :size="20" />
+						</template>
+						{{ t('social', 'Finish the move from here') }}
+					</NcButton>
+				</template>
+				<p v-else-if="finishedMoveIn" class="migration__move-in-finish">
+					{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
 				</p>
-				<NcButton :disabled="moveStarting || moveInRunning" @click="copyNewerPosts">
+				<div v-if="finishedMoveIn && finishedMoveIn.options?.posts" class="migration__move-in-again">
+					<p class="migration__note">
+						{{ t('social', 'Posts written on the old account since the copy are not picked up by anything. Running the copy again brings over only what is new; nothing already here is written twice.') }}
+					</p>
+					<NcButton :disabled="moveStarting || moveInRunning" @click="copyNewerPosts">
+						<template #icon>
+							<NcLoadingIcon v-if="moveStarting" :size="20" />
+							<IconPostOutline v-else :size="20" />
+						</template>
+						{{ t('social', 'Copy newer posts from {acct}', { acct: '@' + finishedMoveIn.options.acct }) }}
+					</NcButton>
+				</div>
+			</section>
+
+			<template v-if="blueskyEnabled">
+				<BlueskyMoveIn />
+				<BlueskyMoveInbound />
+			</template>
+
+			<section class="migration__card migration__card--follows">
+				<h4>
+					<IconAccountMultiplePlus :size="20" />
+					{{ t('social', 'Bring your follows with you') }}
+				</h4>
+				<p>
+					{{ t('social', 'Upload the list of accounts you follow, exported from your old server, and each of them is followed again from here.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'Mastodon, Pixelfed, GoToSocial, Akkoma, Misskey and this app are connected to each other: an account here can follow, and be followed by, accounts on any of them. So what you bring with you is mostly the list of people you follow.') }}
+					</p>
+					<p>
+						{{ t('social', 'Every one of those servers exports the people you follow — most as a following_accounts.csv, Pixelfed as pixelfed-following.json. Upload that file and each account is followed again from here. A follow is an agreement between two servers, so it has to be asked for again — it cannot be copied out of a file.') }}
+					</p>
+				</details>
+				<input
+					ref="follows"
+					type="file"
+					accept=".csv,text/csv,.json,application/json"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importFollows">
+				<NcButton :disabled="followsBusy" @click="pick('follows')">
 					<template #icon>
-						<NcLoadingIcon v-if="moveStarting" :size="20" />
-						<IconPostOutline v-else :size="20" />
+						<NcLoadingIcon v-if="followsBusy" :size="20" />
+						<IconAccountMultiplePlus v-else :size="20" />
 					</template>
-					{{ t('social', 'Copy newer posts from {acct}', { acct: '@' + finishedMoveIn.options.acct }) }}
+					{{ followsBusy ? t('social', 'Following …') : t('social', 'Import follows from a file') }}
 				</NcButton>
-			</div>
-		</section>
 
-		<!-- from elsewhere -->
-		<section class="migration__card">
-			<h4>
-				<IconAccountArrowRight :size="20" />
-				{{ t('social', 'Coming from another network') }}
-			</h4>
-			<p>
-				{{ t('social', 'The fediverse is one network with many doors. Mastodon, Pixelfed, GoToSocial, Akkoma, Misskey and this app all speak ActivityPub, so an account here can follow and be followed by any of them — and what you bring with you is mostly the list of people you had found.') }}
-			</p>
-
-			<ul v-if="imports.length > 0" class="migration__imports" aria-live="polite">
-				<li
-					v-for="job in imports"
-					:key="job.id"
-					class="migration__import"
-					:class="'migration__import--' + job.status">
-					<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
-					<ServerError
-						v-if="job.status === 'failed'"
-						class="migration__result"
-						:error="failureOf(job.report, 'import-failed')"
-						:alert="false" />
-					<span v-else class="migration__result">{{ importSummary(job) }}</span>
-					<ul v-if="failuresOf(job).length > 0" class="migration__failures">
-						<li v-for="[what, why] in failuresOf(job)" :key="what">
-							<span class="migration__failure-what">{{ what }}</span> — {{ why }}
+				<details class="migration__how migration__where">
+					<summary>{{ t('social', 'Where to find that file') }}</summary>
+					<ul class="migration__list">
+						<li>
+							<strong>{{ t('social', 'Mastodon') }}</strong>
+							{{ t('social', '— Preferences → Import and export → Data export → Follows (CSV). The archive there also holds your posts and media.') }}
 						</li>
-						<li v-if="job.failed > failuresOf(job).length">
-							{{ n('social', 'and %n more', 'and %n more', job.failed - failuresOf(job).length) }}
+						<li>
+							<strong>{{ t('social', 'Pixelfed') }}</strong>
+							{{ t('social', '— Settings → Data export → Following (JSON), which writes pixelfed-following.json: a list of account addresses rather than a CSV, and read here all the same. Photos come across as posts once you follow the accounts again.') }}
+						</li>
+						<li>
+							<strong>{{ t('social', 'Instagram') }}</strong>
+							{{ t('social', '— Settings → Accounts Centre → Your information and permissions → Download your information, and choose JSON. The HTML download holds the pages and not the posts. The posts and reels in it come over with Import posts from an export, and the accounts it says you follow can be looked up on Threads, which is connected, in Moving in.') }}
+						</li>
+						<li>
+							<strong>{{ t('social', 'GoToSocial and Akkoma') }}</strong>
+							{{ t('social', '— Settings → Export, which writes the same Mastodon-shaped CSV.') }}
+						</li>
+						<li>
+							<strong>{{ t('social', 'Threads') }}</strong>
+							{{ t('social', '— Threads accounts that have turned on sharing to other servers can be followed from here directly, and a Threads name is the same as the Instagram one. There is no follow list to export, so Moving in looks them up from the Instagram archive instead.') }}
+						</li>
+						<li>
+							<strong>{{ t('social', 'X') }}</strong>
+							{{ t('social', '— X exports the accounts it follows as numbers rather than names, so there is no follow list this can read. Your X posts can still be imported with Import posts from an export.') }}
+						</li>
+						<li v-if="blueskyEnabled">
+							<strong>{{ t('social', 'Bluesky') }}</strong>
+							{{ t('social', '— a Bluesky account of your own moves here whole, followers and all, with Bring your Bluesky account here on this page.') }}
 						</li>
 					</ul>
-					<NcButton
-						v-if="job.status === 'done' || job.status === 'failed'"
-						variant="tertiary"
-						:aria-label="t('social', 'Dismiss')"
-						:title="t('social', 'Dismiss')"
-						@click="dismissImport(job.id)">
-						<template #icon>
-							<IconClose :size="20" />
-						</template>
-					</NcButton>
-				</li>
-			</ul>
-		</section>
+				</details>
+			</section>
 
-		<section class="migration__card">
-			<h4>
-				<IconAccountMultiplePlus :size="20" />
-				{{ t('social', 'Bring your follows with you') }}
-			</h4>
-			<p>
-				{{ t('social', 'Every one of those servers exports the people you follow — most as a following_accounts.csv, Pixelfed as pixelfed-following.json. Upload that file and each account is followed again from here. A follow is an agreement between two servers, so it has to be asked for again — it cannot be copied out of a file.') }}
-			</p>
-			<input
-				ref="follows"
-				type="file"
-				accept=".csv,text/csv,.json,application/json"
-				class="hidden-visually"
-				tabindex="-1"
-				aria-hidden="true"
-				@change="importFollows">
-			<NcButton :disabled="followsBusy" @click="pick('follows')">
-				<template #icon>
-					<NcLoadingIcon v-if="followsBusy" :size="20" />
-					<IconAccountMultiplePlus v-else :size="20" />
-				</template>
-				{{ followsBusy ? t('social', 'Following …') : t('social', 'Import follows from a file') }}
-			</NcButton>
-		</section>
-
-		<section class="migration__card">
-			<h4>
-				<IconCancel :size="20" />
-				{{ t('social', 'Bring your blocks, mutes, lists, bookmarks and blocked domains') }}
-			</h4>
-			<p>
-				{{ t('social', 'The rest of what the same export holds. Blocks and mutes are decisions this account makes on its own, so they apply the moment the file is read — and a block federates, exactly as blocking somebody from here does. Bookmarks are the addresses of posts: each is fetched from where it lives and marked here, for you alone. A blocked domain hides a whole server from you, as it did there.') }}
-			</p>
-			<p class="migration__note">
-				{{ t('social', 'Import your follows first and your lists after. A list here can only hold accounts you follow, as on Mastodon, so anybody you have not followed again yet is counted as skipped rather than followed by a button that says lists. A list you already have is filled rather than made twice.') }}
-			</p>
-			<div class="migration__csv-buttons">
-				<input
-					ref="blocks"
-					type="file"
-					accept=".csv,text/csv"
-					class="hidden-visually"
-					tabindex="-1"
-					aria-hidden="true"
-					@change="importCsv($event, 'blocks')">
-				<NcButton :disabled="csvImport !== ''" @click="pick('blocks')">
-					<template #icon>
-						<NcLoadingIcon v-if="csvImport === 'blocks'" :size="20" />
-						<IconCancel v-else :size="20" />
-					</template>
-					{{ t('social', 'Import blocks') }}
-				</NcButton>
-				<input
-					ref="mutes"
-					type="file"
-					accept=".csv,text/csv"
-					class="hidden-visually"
-					tabindex="-1"
-					aria-hidden="true"
-					@change="importCsv($event, 'mutes')">
-				<NcButton :disabled="csvImport !== ''" @click="pick('mutes')">
-					<template #icon>
-						<NcLoadingIcon v-if="csvImport === 'mutes'" :size="20" />
-						<IconVolumeOff v-else :size="20" />
-					</template>
-					{{ t('social', 'Import mutes') }}
-				</NcButton>
-				<input
-					ref="lists"
-					type="file"
-					accept=".csv,text/csv"
-					class="hidden-visually"
-					tabindex="-1"
-					aria-hidden="true"
-					@change="importCsv($event, 'lists')">
-				<NcButton :disabled="csvImport !== ''" @click="pick('lists')">
-					<template #icon>
-						<NcLoadingIcon v-if="csvImport === 'lists'" :size="20" />
-						<IconFormatListBulleted v-else :size="20" />
-					</template>
-					{{ t('social', 'Import lists') }}
-				</NcButton>
-				<input
-					ref="bookmarks"
-					type="file"
-					accept=".csv,text/csv"
-					class="hidden-visually"
-					tabindex="-1"
-					aria-hidden="true"
-					@change="importCsv($event, 'bookmarks')">
-				<NcButton :disabled="csvImport !== ''" @click="pick('bookmarks')">
-					<template #icon>
-						<NcLoadingIcon v-if="csvImport === 'bookmarks'" :size="20" />
-						<IconBookmarkOutline v-else :size="20" />
-					</template>
-					{{ t('social', 'Import bookmarks') }}
-				</NcButton>
-				<input
-					ref="domain_blocks"
-					type="file"
-					accept=".csv,text/csv"
-					class="hidden-visually"
-					tabindex="-1"
-					aria-hidden="true"
-					@change="importCsv($event, 'domain_blocks')">
-				<NcButton :disabled="csvImport !== ''" @click="pick('domain_blocks')">
-					<template #icon>
-						<NcLoadingIcon v-if="csvImport === 'domain_blocks'" :size="20" />
-						<IconDomainOff v-else :size="20" />
-					</template>
-					{{ t('social', 'Import blocked domains') }}
-				</NcButton>
-			</div>
-		</section>
-
-		<section class="migration__card">
-			<h4>
-				<IconPostOutline :size="20" />
-				{{ t('social', 'Bring your posts with you') }}
-			</h4>
-			<p>
-				{{ t('social', 'The one thing moving has never carried. Upload the export from your old server and the posts in it are written here as yours, dated when you wrote them, with their pictures.') }}
-			</p>
-			<p class="migration__note">
-				{{ t('social', 'Nothing is sent to anybody: your followers do not get years of posts in one afternoon, because nothing here is published again. Boosts and direct messages are left out, and a reply keeps the post it answers where the file holds both. Importing the same file twice changes nothing the second time.') }}
-			</p>
-			<NcCheckboxRadioSwitch v-model="fetchMedia" type="switch" class="migration__media-switch">
-				{{ t('social', 'Fetch the pictures from the old server') }}
-			</NcCheckboxRadioSwitch>
-			<p class="migration__note">
-				{{ t('social', 'An archive usually holds the files themselves and they are used as they are. A file that only lists where its pictures are — Pixelfed writes one — needs them fetched, which tells that server the import is happening and only works while it is still running.') }}
-			</p>
-			<input
-				ref="posts"
-				type="file"
-				accept=".zip,application/zip,.json,application/json"
-				class="hidden-visually"
-				tabindex="-1"
-				aria-hidden="true"
-				@change="importPosts">
-			<NcButton :disabled="postsBusy" @click="pick('posts')">
-				<template #icon>
-					<NcLoadingIcon v-if="postsBusy" :size="20" />
-					<IconPostOutline v-else :size="20" />
-				</template>
-				{{ postsBusy ? t('social', 'Writing your posts …') : t('social', 'Import posts from an export') }}
-			</NcButton>
-			<p class="migration__note">
-				{{ t('social', 'At most 2000 posts at a time; run it again to carry on. An archive too large for a browser to upload can be imported by an administrator with occ social:account:import-posts.') }}
-			</p>
-			<p class="migration__note">
-				{{ t('social', 'Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their pictures and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are.') }}
-			</p>
-
-			<h5>{{ t('social', 'Where to find that file') }}</h5>
-			<ul class="migration__list">
-				<li>
-					<strong>{{ t('social', 'Mastodon') }}</strong>
-					{{ t('social', '— Preferences → Import and export → Data export → Follows (CSV). The archive there also holds your posts and media.') }}
-				</li>
-				<li>
-					<strong>{{ t('social', 'Pixelfed') }}</strong>
-					{{ t('social', '— Settings → Data export → Following (JSON), which writes pixelfed-following.json: a list of account addresses rather than a CSV, and read here all the same. Photos come across as posts once you follow the accounts again.') }}
-				</li>
-				<li>
-					<strong>{{ t('social', 'Instagram') }}</strong>
-					{{ t('social', '— Settings → Accounts Centre → Your information and permissions → Download your information, and choose JSON. The HTML download holds the pages and not the posts. The posts and reels in it come over with the button above, and the accounts it says you follow can be looked up on Threads — which does federate — in Moving in.') }}
-				</li>
-				<li>
-					<strong>{{ t('social', 'GoToSocial and Akkoma') }}</strong>
-					{{ t('social', '— Settings → Export, which writes the same Mastodon-shaped CSV.') }}
-				</li>
-				<li>
-					<strong>{{ t('social', 'Threads') }}</strong>
-					{{ t('social', '— Threads accounts that have turned fediverse sharing on can be followed from here directly, and a Threads name is the same as the Instagram one. There is no follow list to export, so Moving in looks them up from the Instagram archive instead.') }}
-				</li>
-				<li>
-					<strong>{{ t('social', 'Bluesky and X') }}</strong>
-					{{ t('social', '— neither carries a follow list this can read: X exports the accounts it follows as numbers rather than names, and nothing on either side federates a follow. X posts can still be imported with the button above. A Bluesky account of your own moves here whole, followers and all, with Bring your Bluesky account here below.') }}
-				</li>
-			</ul>
-		</section>
-
-		<section class="migration__card">
-			<h4>
-				<IconAccountArrowLeft :size="20" />
-				{{ t('social', 'Accounts you also answer to') }}
-			</h4>
-			<p>
-				{{ t('social', 'Before your old server will send your followers here, it wants this account to say it is also you. Add the old account\'s address and it does. Nothing is sent to anybody by this — it is a note this server keeps about an account it owns — and you can take it off again at any time.') }}
-			</p>
-			<ul v-if="aliases.length > 0" class="migration__aliases">
-				<li v-for="alias in aliases" :key="alias" class="migration__alias">
-					<span class="migration__alias-id">{{ alias }}</span>
-					<NcButton
-						variant="tertiary"
-						:aria-label="t('social', 'Remove this alias')"
-						:title="t('social', 'Remove this alias')"
-						:disabled="aliasBusy"
-						@click="removeAlias(alias)">
-						<template #icon>
-							<IconClose :size="20" />
-						</template>
-					</NcButton>
-				</li>
-			</ul>
-			<div class="migration__alias-add">
-				<NcTextField
-					v-model="aliasInput"
-					class="migration__alias-field"
-					:label="t('social', 'The old account')"
-					placeholder="@you@pixelfed.social"
-					:disabled="aliasBusy"
-					@keydown.enter="addAlias" />
-				<NcButton :disabled="aliasBusy || aliasInput.trim() === ''" @click="addAlias">
-					<template v-if="aliasBusy" #icon>
-						<NcLoadingIcon :size="20" />
-					</template>
-					{{ t('social', 'Add') }}
-				</NcButton>
-			</div>
-			<p class="migration__note">
-				{{ t('social', 'The handle as you would give it to somebody — or, if you have it, the address its server publishes, like https://pixelfed.social/users/you.') }}
-			</p>
-		</section>
-
-		<!-- away -->
-		<section class="migration__card migration__card--move-out">
-			<h4>
-				<IconAccountArrowRight :size="20" />
-				{{ t('social', 'Move your account away') }}
-			</h4>
-			<template v-if="moveStatus && moveStatus.moved_to">
+			<section class="migration__card migration__card--posts">
+				<h4>
+					<IconPostOutline :size="20" />
+					{{ t('social', 'Bring your posts with you') }}
+				</h4>
 				<p>
-					{{ t('social', 'This account moved to {target} on {date}. Its followers were told to follow the new account; nothing is posted from here while it stays moved.', { target: moveStatus.moved_to, date: dateOf(moveStatus.moved_at) }) }}
+					{{ t('social', 'Upload the export from your old server and the posts in it are written here as yours, dated when you wrote them, with their pictures. Nothing is sent to your followers.') }}
 				</p>
-				<p class="migration__note">
-					{{ t('social', 'Undoing the move lets you post and follow from here again. Your followers do not come back by themselves: their servers acted on the move when it arrived.') }}
-				</p>
-				<NcButton :disabled="moveOutBusy" @click="undoMove">
-					<template v-if="moveOutBusy" #icon>
-						<NcLoadingIcon :size="20" />
-					</template>
-					{{ t('social', 'Undo the move') }}
-				</NcButton>
-			</template>
-			<template v-else>
-				<p>
-					{{ t('social', 'Tell every server that knows you to follow your new account instead of this one. First, on the new account, name this one as an account you also answer to — on Mastodon that is Preferences → Account → Moving from a different account — and then type it here. Your posts stay where they are: a move carries the followers, never the content.') }}
-				</p>
-				<p v-if="moveStatus && moveStatus.can_move_at * 1000 > Date.now()" class="migration__note">
-					{{ t('social', 'This account moved on {date} and can move again on {next}.', { date: dateOf(moveStatus.moved_at), next: dateOf(moveStatus.can_move_at) }) }}
-				</p>
-				<template v-else>
-					<div class="migration__move-out-form">
-						<NcTextField
-							v-model="moveTarget"
-							class="migration__move-out-field"
-							:label="t('social', 'Your new account')"
-							placeholder="@you@new.example"
-							:disabled="moveOutBusy" />
-						<NcTextField
-							v-model="moveConfirm"
-							class="migration__move-out-field"
-							:label="t('social', 'Type your handle here to confirm')"
-							:placeholder="ownHandle || '@you@this.server'"
-							:disabled="moveOutBusy" />
-					</div>
-					<p class="migration__note">
-						{{ t('social', 'This cannot be taken back: it federates to every server that knows you. You will be asked for your password.') }}
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'Nothing is sent to anybody: your followers do not get years of posts in one afternoon, because nothing here is published again. Boosts and direct messages are left out, and a reply keeps the post it answers where the file holds both. Importing the same file twice changes nothing the second time.') }}
 					</p>
+					<p>
+						{{ t('social', 'Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their pictures and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are.') }}
+					</p>
+					<p>
+						{{ t('social', 'An archive too large for a browser to upload can be imported by an administrator with occ social:account:import-posts.') }}
+					</p>
+				</details>
+				<NcCheckboxRadioSwitch v-model="fetchMedia" type="switch" class="migration__media-switch">
+					{{ t('social', 'Fetch the pictures from the old server') }}
+				</NcCheckboxRadioSwitch>
+				<p class="migration__note">
+					{{ t('social', 'An archive usually holds the files themselves and they are used as they are. A file that only lists where its pictures are — Pixelfed writes one — needs them fetched, which tells that server the import is happening and only works while it is still running.') }}
+				</p>
+				<input
+					ref="posts"
+					type="file"
+					accept=".zip,application/zip,.json,application/json"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importPosts">
+				<NcButton :disabled="postsBusy" @click="pick('posts')">
+					<template #icon>
+						<NcLoadingIcon v-if="postsBusy" :size="20" />
+						<IconPostOutline v-else :size="20" />
+					</template>
+					{{ postsBusy ? t('social', 'Writing your posts …') : t('social', 'Import posts from an export') }}
+				</NcButton>
+			</section>
+
+			<section class="migration__card migration__card--lists">
+				<h4>
+					<IconCancel :size="20" />
+					{{ t('social', 'Bring your blocks, mutes, lists, bookmarks and blocked domains') }}
+				</h4>
+				<p>
+					{{ t('social', 'Upload the other lists your old server exported. Import your follows first and your lists after.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'The rest of what the same export holds. Blocks and mutes are decisions this account makes on its own, so they apply the moment the file is read — and a block reaches the other server, exactly as blocking somebody from here does. Bookmarks are the addresses of posts: each is fetched from where it lives and marked here, for you alone. A blocked domain hides a whole server from you, as it did there.') }}
+					</p>
+					<p>
+						{{ t('social', 'Import your follows first and your lists after. A list here can only hold accounts you follow, as on Mastodon, so anybody you have not followed again yet is counted as skipped rather than followed by a button that says lists. A list you already have is filled rather than made twice.') }}
+					</p>
+				</details>
+				<div class="migration__csv-buttons">
+					<input
+						ref="blocks"
+						type="file"
+						accept=".csv,text/csv"
+						class="hidden-visually"
+						tabindex="-1"
+						aria-hidden="true"
+						@change="importCsv($event, 'blocks')">
+					<NcButton :disabled="csvImport !== ''" @click="pick('blocks')">
+						<template #icon>
+							<NcLoadingIcon v-if="csvImport === 'blocks'" :size="20" />
+							<IconCancel v-else :size="20" />
+						</template>
+						{{ t('social', 'Import blocks') }}
+					</NcButton>
+					<input
+						ref="mutes"
+						type="file"
+						accept=".csv,text/csv"
+						class="hidden-visually"
+						tabindex="-1"
+						aria-hidden="true"
+						@change="importCsv($event, 'mutes')">
+					<NcButton :disabled="csvImport !== ''" @click="pick('mutes')">
+						<template #icon>
+							<NcLoadingIcon v-if="csvImport === 'mutes'" :size="20" />
+							<IconVolumeOff v-else :size="20" />
+						</template>
+						{{ t('social', 'Import mutes') }}
+					</NcButton>
+					<input
+						ref="lists"
+						type="file"
+						accept=".csv,text/csv"
+						class="hidden-visually"
+						tabindex="-1"
+						aria-hidden="true"
+						@change="importCsv($event, 'lists')">
+					<NcButton :disabled="csvImport !== ''" @click="pick('lists')">
+						<template #icon>
+							<NcLoadingIcon v-if="csvImport === 'lists'" :size="20" />
+							<IconFormatListBulleted v-else :size="20" />
+						</template>
+						{{ t('social', 'Import lists') }}
+					</NcButton>
+					<input
+						ref="bookmarks"
+						type="file"
+						accept=".csv,text/csv"
+						class="hidden-visually"
+						tabindex="-1"
+						aria-hidden="true"
+						@change="importCsv($event, 'bookmarks')">
+					<NcButton :disabled="csvImport !== ''" @click="pick('bookmarks')">
+						<template #icon>
+							<NcLoadingIcon v-if="csvImport === 'bookmarks'" :size="20" />
+							<IconBookmarkOutline v-else :size="20" />
+						</template>
+						{{ t('social', 'Import bookmarks') }}
+					</NcButton>
+					<input
+						ref="domain_blocks"
+						type="file"
+						accept=".csv,text/csv"
+						class="hidden-visually"
+						tabindex="-1"
+						aria-hidden="true"
+						@change="importCsv($event, 'domain_blocks')">
+					<NcButton :disabled="csvImport !== ''" @click="pick('domain_blocks')">
+						<template #icon>
+							<NcLoadingIcon v-if="csvImport === 'domain_blocks'" :size="20" />
+							<IconDomainOff v-else :size="20" />
+						</template>
+						{{ t('social', 'Import blocked domains') }}
+					</NcButton>
+				</div>
+			</section>
+
+			<section class="migration__card migration__card--aliases">
+				<h4>
+					<IconAccountArrowLeft :size="20" />
+					{{ t('social', 'Accounts you also answer to') }}
+				</h4>
+				<p>
+					{{ t('social', 'Before your old server sends your followers here, this account has to say it is also the old one. Add the old account\'s address here.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'Before your old server will send your followers here, it wants this account to say it is also you. Add the old account\'s address and it does. Nothing is sent to anybody by this — it is a note this server keeps about an account it owns — and you can take it off again at any time.') }}
+					</p>
+				</details>
+				<ul v-if="aliases.length > 0" class="migration__aliases">
+					<li v-for="alias in aliases" :key="alias" class="migration__alias">
+						<span class="migration__alias-id">{{ alias }}</span>
+						<NcButton
+							variant="tertiary"
+							:aria-label="t('social', 'Remove this alias')"
+							:title="t('social', 'Remove this alias')"
+							:disabled="aliasBusy"
+							@click="removeAlias(alias)">
+							<template #icon>
+								<IconClose :size="20" />
+							</template>
+						</NcButton>
+					</li>
+				</ul>
+				<div class="migration__alias-add">
+					<NcTextField
+						v-model="aliasInput"
+						class="migration__alias-field"
+						:label="t('social', 'The old account')"
+						placeholder="@you@pixelfed.social"
+						:disabled="aliasBusy"
+						@keydown.enter="addAlias" />
+					<NcButton :disabled="aliasBusy || aliasInput.trim() === ''" @click="addAlias">
+						<template v-if="aliasBusy" #icon>
+							<NcLoadingIcon :size="20" />
+						</template>
+						{{ t('social', 'Add') }}
+					</NcButton>
+				</div>
+				<p class="migration__note">
+					{{ t('social', 'The handle as you would give it to somebody — or, if you have it, the address its server publishes, like https://pixelfed.social/users/you.') }}
+				</p>
+			</section>
+		</div>
+
+		<!-- keep a copy -->
+		<div v-show="choice === 'copy'" id="migration-copy" class="migration__section">
+			<section class="migration__card migration__card--export">
+				<h4>
+					<IconDownload :size="20" />
+					{{ t('social', 'Export your data') }}
+				</h4>
+				<p>
+					{{ t('social', 'A zip file holding your profile, the people you follow, your followers, the accounts you block and mute, your bookmarks and likes, and every post you have written — with the pictures and videos on those posts, and your profile banner, as files inside the archive rather than as links back to this server.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'Your private key is deliberately not in it. An archive is an ordinary file that can be copied anywhere, and a key that could sign as you cannot be taken back once it has been seen.') }}
+					</p>
+				</details>
+				<NcButton
+					class="migration__export-button"
+					variant="primary"
+					:disabled="exporting"
+					@click="exportArchive">
+					<template #icon>
+						<NcLoadingIcon v-if="exporting" :size="20" />
+						<IconDownload v-else :size="20" />
+					</template>
+					{{ exporting ? t('social', 'Preparing the archive …') : t('social', 'Export') }}
+				</NcButton>
+
+				<h5>{{ t('social', 'Or one list at a time') }}</h5>
+				<p>
+					{{ t('social', 'The same lists of accounts as single CSV files, in the format Mastodon and most other servers import.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'The same lists of accounts as single CSV files, each written the way Mastodon writes it — so another server\'s importer reads them without being asked to understand a whole archive. The followers file is a record rather than something an import can re-create: a follower follows again, or their server is told by the move.') }}
+					</p>
+				</details>
+				<div class="migration__csv-buttons">
 					<NcButton
-						class="migration__move-out-button"
-						variant="error"
-						:disabled="moveOutBusy || moveTarget.trim() === '' || moveConfirm.trim() === ''"
-						@click="moveOut">
+						v-for="kind in csvKinds"
+						:key="kind.name"
+						:disabled="csvBusy !== ''"
+						@click="downloadCsv(kind.name)">
+						<template #icon>
+							<NcLoadingIcon v-if="csvBusy === kind.name" :size="20" />
+							<IconDownload v-else :size="20" />
+						</template>
+						{{ kind.label }}
+					</NcButton>
+				</div>
+			</section>
+
+			<section class="migration__card migration__card--import">
+				<h4>
+					<IconUpload :size="20" />
+					{{ t('social', 'Import an archive') }}
+				</h4>
+				<p>
+					{{ t('social', 'Reads an archive from the Export button — or from a Nextcloud account export — back into this account. Nothing is deleted: your profile, follows, blocks, mutes, bookmarks and likes are restored alongside what is already here.') }}
+				</p>
+				<details class="migration__how">
+					<summary>{{ t('social', 'How this works') }}</summary>
+					<p>
+						{{ t('social', 'Posts in the archive are listed rather than published again, so importing cannot flood the timelines of people who follow you. Their pictures are put back on the posts this server still has, and your banner is restored.') }}
+					</p>
+				</details>
+				<!-- each file input here is opened by the button after it, which is
+				     the control a keyboard and a screen reader reach; the input
+				     itself is kept out of both, or it is an unnamed "Browse…" -->
+				<input
+					ref="archive"
+					type="file"
+					accept=".zip,application/zip"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importArchive">
+				<NcButton :disabled="importing" @click="pick('archive')">
+					<template #icon>
+						<NcLoadingIcon v-if="importing" :size="20" />
+						<IconUpload v-else :size="20" />
+					</template>
+					{{ importing ? t('social', 'Importing …') : t('social', 'Import') }}
+				</NcButton>
+
+				<ul v-if="importLog.length" class="migration__log">
+					<li v-for="(line, index) in importLog" :key="index">
+						{{ line }}
+					</li>
+				</ul>
+			</section>
+		</div>
+
+		<!-- leave this server -->
+		<div v-show="choice === 'leave'" id="migration-leave" class="migration__section">
+			<section class="migration__card migration__card--move-out">
+				<h4>
+					<IconAccountArrowRight :size="20" />
+					{{ t('social', 'Move your account away') }}
+				</h4>
+				<template v-if="moveStatus && moveStatus.moved_to">
+					<p>
+						{{ t('social', 'This account moved to {target} on {date}. Its followers were told to follow the new account; nothing is posted from here while it stays moved.', { target: moveStatus.moved_to, date: dateOf(moveStatus.moved_at) }) }}
+					</p>
+					<p class="migration__note">
+						{{ t('social', 'Undoing the move lets you post and follow from here again. Your followers do not come back by themselves: their servers acted on the move when it arrived.') }}
+					</p>
+					<NcButton :disabled="moveOutBusy" @click="undoMove">
 						<template v-if="moveOutBusy" #icon>
 							<NcLoadingIcon :size="20" />
 						</template>
-						{{ t('social', 'Move my followers to the new account') }}
+						{{ t('social', 'Undo the move') }}
 					</NcButton>
 				</template>
-			</template>
-		</section>
+				<template v-else>
+					<p>
+						{{ t('social', 'Every server that knows you is told to follow your new account instead of this one. Your posts stay here.') }}
+					</p>
+					<ol class="migration__steps">
+						<li>{{ t('social', 'On your new account, add this one as an account it also answers to. On Mastodon that is Preferences → Account → Moving from a different account.') }}</li>
+						<li>{{ t('social', 'Type the new account and your own handle below, and confirm with your password.') }}</li>
+					</ol>
+					<details class="migration__how">
+						<summary>{{ t('social', 'How this works') }}</summary>
+						<p>
+							{{ t('social', 'Tell every server that knows you to follow your new account instead of this one. First, on the new account, name this one as an account you also answer to — on Mastodon that is Preferences → Account → Moving from a different account — and then type it here. Your posts stay where they are: a move carries the followers, never the content.') }}
+						</p>
+					</details>
+					<p v-if="moveStatus && moveStatus.can_move_at * 1000 > Date.now()" class="migration__note">
+						{{ t('social', 'This account moved on {date} and can move again on {next}.', { date: dateOf(moveStatus.moved_at), next: dateOf(moveStatus.can_move_at) }) }}
+					</p>
+					<template v-else>
+						<div class="migration__move-out-form">
+							<NcTextField
+								v-model="moveTarget"
+								class="migration__move-out-field"
+								:label="t('social', 'Your new account')"
+								placeholder="@you@new.example"
+								:disabled="moveOutBusy" />
+							<NcTextField
+								v-model="moveConfirm"
+								class="migration__move-out-field"
+								:label="t('social', 'Type your handle here to confirm')"
+								:placeholder="ownHandle || '@you@this.server'"
+								:disabled="moveOutBusy" />
+						</div>
+						<p class="migration__note">
+							{{ t('social', 'This cannot be taken back: it reaches every server that knows you. You will be asked for your password.') }}
+						</p>
+						<NcButton
+							class="migration__move-out-button"
+							variant="error"
+							:disabled="moveOutBusy || moveTarget.trim() === '' || moveConfirm.trim() === ''"
+							@click="moveOut">
+							<template v-if="moveOutBusy" #icon>
+								<NcLoadingIcon :size="20" />
+							</template>
+							{{ t('social', 'Move my followers to the new account') }}
+						</NcButton>
+					</template>
+				</template>
+			</section>
 
-		<BlueskyMoveIn />
-		<BlueskyMoveInbound />
-		<BlueskyMoveAway />
+			<BlueskyMoveAway v-if="blueskyEnabled" />
+		</div>
 	</div>
 </template>
 
@@ -569,13 +645,23 @@ import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted
 import IconPostOutline from 'vue-material-design-icons/PostOutline.vue'
 import IconUpload from 'vue-material-design-icons/Upload.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import { loadState } from '@nextcloud/initial-state'
 import { n, t } from '@nextcloud/l10n'
 import logger from '../services/logger.js'
+
+/** The three jobs the page offers, by the hash that opens each. */
+const CHOICES = ['bring', 'copy', 'leave']
 
 /**
  * Taking your account out, and bringing one in: the body of the Migration
  * page. The heading and the sentence under it belong to the page, so they
  * live in `views/Migration.vue` rather than being repeated here.
+ *
+ * It opens with three choices, each showing only its own steps: bringing an
+ * account here, keeping a copy, and leaving this server. `#bring`, `#copy`
+ * and `#leave` open one of them; without a hash the page opens on whatever
+ * is under way (an import, a move to finish, a move away), or on the choices
+ * alone.
  */
 export default {
 	name: 'MigrationSettings',
@@ -605,6 +691,8 @@ export default {
 
 	data() {
 		return {
+			/** @type {string} the open choice: bring, copy, leave, or '' for none yet */
+			choice: '',
 			exporting: false,
 			importing: false,
 			followsBusy: false,
@@ -651,6 +739,22 @@ export default {
 	},
 
 	computed: {
+		/** @return {Array<{id: string, title: string, text: string, icon: object}>} the three jobs */
+		choices() {
+			return [
+				{ id: 'bring', title: t('social', 'Bring an account here'), text: t('social', 'Move your follows, posts and followers here from another server or network.'), icon: IconAccountArrowLeft },
+				{ id: 'copy', title: t('social', 'Keep a copy'), text: t('social', 'Download your account as a file, or put a downloaded copy back.'), icon: IconDownload },
+				{ id: 'leave', title: t('social', 'Leave this server'), text: t('social', 'Send your followers to your new account on another server.'), icon: IconAccountArrowRight },
+			]
+		},
+
+		/** @return {boolean} whether this server gives accounts a Bluesky identity */
+		blueskyEnabled() {
+			const serverData = /** @type {{bluesky?: {enabled?: boolean}}} */ (loadState('social', 'serverData', {}))
+
+			return serverData?.bluesky?.enabled === true
+		},
+
 		/** @return {object|undefined} a move here that has run */
 		finishedMoveIn() {
 			return this.imports.find((job) => job.kind === 'move_in' && job.status === 'done')
@@ -682,12 +786,23 @@ export default {
 		},
 	},
 
-	mounted() {
+	watch: {
+		'$route.hash': function(hash) {
+			const choice = this.choiceOf(hash)
+			if (choice !== '') {
+				this.choice = choice
+			}
+		},
+	},
+
+	async mounted() {
+		this.choice = this.choiceOf(this.$route?.hash ?? window.location.hash)
 		this.loadAliases()
-		this.loadImports()
-		this.loadMoveStatus()
 		this.loadOwnHandle()
-		this.loadFinish()
+		await Promise.all([this.loadImports(), this.loadMoveStatus(), this.loadFinish()])
+		if (this.choice === '') {
+			this.choice = this.underWay()
+		}
 	},
 
 	beforeUnmount() {
@@ -695,6 +810,44 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * @param {string|undefined} hash the address's hash
+		 * @return {string} the choice it names, or ''
+		 */
+		choiceOf(hash) {
+			const choice = String(hash ?? '').replace(/^#/, '')
+
+			return CHOICES.includes(choice) ? choice : ''
+		},
+
+		/**
+		 * Opens a choice, and puts it in the address so a reload or a shared
+		 * link opens the same one.
+		 *
+		 * @param {string} choice bring, copy or leave
+		 */
+		choose(choice) {
+			this.choice = choice
+			this.$router?.replace({ hash: '#' + choice })?.catch?.(() => {})
+		},
+
+		/**
+		 * The choice whose work is under way: a moved account is about leaving,
+		 * and a running import or a move still to finish is about bringing.
+		 *
+		 * @return {string} the choice, or '' when nothing is under way
+		 */
+		underWay() {
+			if (this.moveStatus?.moved_to) {
+				return 'leave'
+			}
+			const finishing = this.finish.status === 'pending' || this.finish.status === 'failed'
+			const running = this.imports.some((job) => job.status === 'queued' || job.status === 'running')
+			const toFinish = Boolean(this.finishedMoveIn) && this.finish.status !== 'done'
+
+			return finishing || running || toFinish ? 'bring' : ''
+		},
+
 		/** @param {string} name the ref of the file input behind a button */
 		pick(name) {
 			/** @type {HTMLInputElement} */ (this.$refs[name]).click()
@@ -1332,9 +1485,74 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.migration__hint {
+.migration__choices {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 8px;
 	margin-bottom: 16px;
+}
+
+.migration__choice {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	height: auto;
+	margin: 0;
+	padding: 12px 14px;
+	border: 2px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	text-align: start;
+	white-space: normal;
+	cursor: pointer;
+
+	&:hover,
+	&:focus-visible {
+		border-color: var(--color-primary-element);
+	}
+}
+
+.migration__choice--active {
+	border-color: var(--color-primary-element);
+	background: var(--color-primary-element-light);
+}
+
+.migration__choice-icon {
+	color: var(--color-primary-element);
+}
+
+.migration__choice-title {
+	font-weight: bold;
+}
+
+.migration__choice-text {
 	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
+.migration__how {
+	margin-block: 4px 10px;
+
+	summary {
+		cursor: pointer;
+		color: var(--color-text-maxcontrast);
+	}
+
+	p {
+		margin-top: 6px;
+	}
+}
+
+.migration__steps {
+	margin: 0 0 10px;
+	padding-inline-start: 22px;
+	list-style: decimal;
+
+	li {
+		margin-bottom: 4px;
+	}
 }
 
 .migration__csv-buttons {

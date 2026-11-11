@@ -383,7 +383,7 @@ describe('FirstRun', () => {
 		const links = wrapper.findAllComponents(RouterLinkStub)
 		expect(links).toHaveLength(2)
 		for (const link of links) {
-			expect(link.props('to')).toEqual({ name: 'migration' })
+			expect(link.props('to')).toEqual({ name: 'migration', hash: '#bring' })
 			expect(link.text()).toBe('Open Migration')
 		}
 		expect(wrapper.text()).not.toContain('Settings → Migration')
