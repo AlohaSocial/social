@@ -4,18 +4,17 @@
 -->
 <template>
 	<div class="social__migration">
-		<h2 class="social__migration-title">
-			{{ t('social', 'Migration') }}
-		</h2>
-		<p class="social__migration-lede">
-			{{ t('social', 'Your account is yours. Take a copy of it whenever you like, move it to another server, or bring one here from somewhere else — including the posts you wrote there, with their pictures.') }}
-		</p>
+		<PageHeader
+			:title="t('social', 'Migration')"
+			:description="t('social', 'Your account is yours. Take a copy of it whenever you like, move it to another server, or bring one here from somewhere else — including the posts you wrote there, with their pictures.')"
+			clearNavigation />
 
 		<MigrationSettings />
 	</div>
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import { translate as t } from '@nextcloud/l10n'
 import MigrationSettings from '../components/MigrationSettings.vue'
 
@@ -37,6 +36,7 @@ export default {
 	name: 'Migration',
 
 	components: {
+		PageHeader,
 		MigrationSettings,
 	},
 
@@ -51,15 +51,6 @@ export default {
 	max-width: var(--social-column);
 	margin: 15px auto;
 	padding: 0 10px;
-}
-
-.social__migration-title {
-	margin-bottom: 4px;
-}
-
-.social__migration-lede {
-	margin-bottom: 18px;
-	color: var(--color-text-maxcontrast);
 }
 
 .social__migration :deep(.migration) {

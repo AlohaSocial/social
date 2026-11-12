@@ -4,12 +4,12 @@
 -->
 <template>
 	<div class="social__follow-requests">
-		<h2>{{ t('social', 'Follow requests') }}</h2>
+		<PageHeader :title="t('social', 'Follow requests')" clearNavigation />
 		<!-- the empty state waits for the last row to finish collapsing (the
 		     delay is on .empty-enter-active) so the two do not cross -->
 		<transition name="empty">
 			<NcEmptyContent
-				v-if="!loading && requests.length === 0"
+				v-if="!loading && !loadFailed && cursor === '' && requests.length === 0"
 				:name="t('social', 'No pending follow requests')">
 				<template #icon>
 					<AccountClock />
@@ -60,7 +60,13 @@
 				</div>
 			</div>
 		</transition-group>
-		<div v-if="loading" class="loading-indicator">
+		<div v-if="loadFailed" class="loading-indicator" role="alert">
+			<p>{{ t('social', 'Failed to load follow requests') }}</p>
+			<NcButton @click="fetchRequests(cursor !== '')">
+				{{ t('social', 'Try again') }}
+			</NcButton>
+		</div>
+		<div v-else-if="loading" class="loading-indicator" role="status">
 			{{ t('social', 'Loading…') }}
 		</div>
 		<p v-else-if="cursor !== ''" class="follow-requests__more">
@@ -72,6 +78,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError } from '../services/toast.js'
@@ -90,6 +97,7 @@ const PAGE_SIZE = 40
 export default {
 	name: 'FollowRequests',
 	components: {
+		PageHeader,
 		ActorAvatar,
 		NcButton,
 		NcEmptyContent,
@@ -105,6 +113,7 @@ export default {
 			busy: [],
 			loading: true,
 			loadingMore: false,
+			loadFailed: false,
 			/** the `max_id` of the next page, '' once the server says there is none */
 			cursor: '',
 		}
@@ -137,6 +146,7 @@ export default {
 				this.loading = true
 			}
 
+			this.loadFailed = false
 			const params = { limit: PAGE_SIZE }
 			if (more) {
 				params.max_id = this.cursor
@@ -155,7 +165,7 @@ export default {
 				this.cursor = nextCursor(headers)
 			} catch (error) {
 				logger.error('Failed to fetch follow requests', { error, more })
-				showError(t('social', 'Failed to load follow requests'))
+				this.loadFailed = true
 			} finally {
 				this.loading = false
 				this.loadingMore = false
@@ -191,9 +201,6 @@ export default {
 	margin: 15px auto;
 	padding: 0 10px;
 
-	h2 {
-		margin-bottom: 20px;
-	}
 }
 
 .follow-request {

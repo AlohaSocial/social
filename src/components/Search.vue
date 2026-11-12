@@ -7,9 +7,7 @@
 		class="social__wrapper social__search"
 		:class="{ 'social__search--refreshing': loading && !isEmpty }"
 		:aria-busy="loading ? 'true' : 'false'">
-		<h1 class="social__search-heading">
-			{{ t('social', 'Search results for “{term}”', { term: query }) }}
-		</h1>
+		<PageHeader :title="t('social', 'Search results for “{term}”', { term: query })" clearNavigation />
 
 		<!-- Other servers are asked only when the reader asks: typing a
 		     handle searches this server, and an address it does not hold
@@ -120,6 +118,7 @@
 </template>
 
 <script>
+import PageHeader from './PageHeader.vue'
 
 import UserEntry from './UserEntry.vue'
 import TimelineEntry from './TimelineEntry.vue'
@@ -147,6 +146,7 @@ export const SEARCH_REFILL_MS = 6000
 export default {
 	name: 'Search',
 	components: {
+		PageHeader,
 		Magnify,
 		NcButton,
 		NcEmptyContent,
@@ -445,13 +445,6 @@ export default {
 		max-width: var(--social-column);
 		margin: 0 auto;
 		padding: calc(var(--default-grid-baseline) * 2);
-	}
-
-	.social__search-heading {
-		font-size: 20px;
-		font-weight: 700;
-		margin: calc(var(--default-grid-baseline) * 3) 0;
-		overflow-wrap: break-word;
 	}
 
 	.social__search-section {

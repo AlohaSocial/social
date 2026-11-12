@@ -174,6 +174,23 @@ function mountPage() {
 const text = (wrapper) => wrapper.text().replace(/\s+/g, ' ')
 
 describe('Statistics', () => {
+	it('ignores an older response after the reader picks another period', async () => {
+		const { promise, resolve: finishOld } = Promise.withResolvers()
+		axios.get.mockReset()
+		axios.get.mockReturnValueOnce(promise)
+		const wrapper = mountPage()
+
+		const current = answer({ posts: { total: 7 } })
+		axios.get.mockResolvedValueOnce({ data: current })
+		await wrapper.vm.pick(30)
+		expect(wrapper.vm.stats.posts.total).toBe(7)
+
+		finishOld({ data: answer() })
+		await flushPromises()
+		expect(wrapper.vm.days).toBe(30)
+		expect(wrapper.vm.stats.posts.total).toBe(7)
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 		document.body.innerHTML = ''

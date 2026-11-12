@@ -24,7 +24,11 @@ const bob = { id: '22', acct: 'bob@remote.tld', username: 'bob', display_name: '
 const carol = { id: '33', acct: 'carol@remote.tld', username: 'carol', display_name: 'Carol', avatar: 'https://remote.tld/carol.png' }
 
 async function mountView(requests = [bob, carol], headers = {}) {
-	axios.get.mockResolvedValueOnce({ data: requests, headers })
+	if (requests instanceof Error) {
+		axios.get.mockRejectedValueOnce(requests)
+	} else {
+		axios.get.mockResolvedValueOnce({ data: requests, headers })
+	}
 	const wrapper = mount(FollowRequests, {
 		global: {
 			stubs: {
@@ -63,10 +67,19 @@ describe('FollowRequests', () => {
 		expect(wrapper.findAll('.follow-request')).toHaveLength(0)
 	})
 
-	/**
-	 * The page is empty for two quite different reasons, and one of them is
-	 * that the switch the sentence names is off.
-	 */
+	it('offers a retry after the first request fails without claiming the list is empty', async () => {
+		const wrapper = await mountView(new Error('offline'))
+		expect(wrapper.find('.empty-content').exists()).toBe(false)
+		expect(wrapper.get('[role="alert"]').text()).toContain('Failed to load follow requests')
+
+		axios.get.mockResolvedValueOnce({ data: [bob], headers: {} })
+		await wrapper.get('[role="alert"] button').trigger('click')
+		await flushPromises()
+
+		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+		expect(wrapper.get('.follow-request').text()).toContain('Bob')
+	})
+
 	it('sends the reader to the switch the empty state talks about', async () => {
 		const wrapper = await mountView([])
 

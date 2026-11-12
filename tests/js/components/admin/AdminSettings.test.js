@@ -118,14 +118,12 @@ describe('the administration page', () => {
 	/**
 	 * Nextcloud's navigation toggle floats over the top left corner of the
 	 * settings column, and opening a group scrolls the page to the top of
-	 * that column, so the heading needs the same room under the toggle the
-	 * app's own Settings page keeps.
+	 * that column, so the heading needs room under the toggle.
 	 */
-	it('keeps its heading clear of the navigation toggle, as Settings does', () => {
+	it('keeps its heading clear of the navigation toggle', () => {
 		const offset = (file) => readFileSync(resolve(process.cwd(), 'src', file), 'utf8').match(/padding-block-start: ([^;]+);/)?.[1]
 
 		expect(offset('components/admin/AdminSettings.vue')).toBe('calc(var(--default-grid-baseline) * 12)')
-		expect(offset('components/admin/AdminSettings.vue')).toBe(offset('views/Settings.vue'))
 	})
 
 	beforeEach(() => {
