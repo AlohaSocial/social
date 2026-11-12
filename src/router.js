@@ -10,6 +10,7 @@ import { loadState } from '@nextcloud/initial-state'
 import eventBus from './services/eventBus.js'
 import { setPageTitle, titleForRoute } from './services/pageTitle.js'
 import { scroller } from './utils/scroller.js'
+import { timelineSkeleton } from './utils/skeleton.js'
 
 const Timeline = () => import('./views/Timeline.vue')
 const TimelineSinglePost = () => import('./views/TimelineSinglePost.vue')
@@ -265,6 +266,8 @@ const router = createRouter({
 			},
 			props: true,
 			name: 'timeline',
+			// the placeholder App draws while the page loads: see utils/skeleton.js
+			meta: { skeleton: timelineSkeleton },
 			children: [
 				// rendered by the parent: the timeline reads the tag from the route
 				/** @type {import('vue-router').RouteRecordRaw} */ ({
@@ -345,6 +348,7 @@ const router = createRouter({
 			},
 			props: true,
 			name: 'collection',
+			meta: { skeleton: 'grid' },
 		},
 		{
 			path: '/places/:id',
@@ -353,6 +357,7 @@ const router = createRouter({
 			},
 			props: true,
 			name: 'place',
+			meta: { skeleton: 'grid' },
 		},
 		{
 			// a Bluesky starter pack, at the path bsky.app gives it
@@ -481,6 +486,7 @@ const router = createRouter({
 			},
 			props: true,
 			name: 'single-post',
+			meta: { skeleton: 'rows' },
 		},
 		{
 			path: '/ostatus/follow',

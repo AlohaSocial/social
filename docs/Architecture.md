@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.297
+**App version:** 0.26.298
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -2980,6 +2980,18 @@ reorder what happened. `TimelineEntry` draws up to `GROUP_FACES` overlapping
 avatars and `notificationSummary()` writes "Anna, Bob and 3 others liked your
 post"; `newestIdOf()` is what keeps the read marker covering every folded row.
 
+*A row* is two columns. The first holds the actor's face at the list's avatar
+size (40 px, 36 px on a phone) with the notification type as a small coloured
+disc on its bottom end corner, ringed in the row's background: red for likes,
+green for boosts, amber for moderation warnings, the theme colour for the rest
+(`TYPE_TONES` in `TimelineEntry`). A grouped card shows the disc alone in that
+column and its faces at `GROUP_FACE` (28 px) in the summary line, overlapping
+by 4 px, each ringed so one set of initials does not run into the next. The
+summary names people by display name in single and grouped rows alike
+(`nameOf()`), and falls back to the handle only when there is none. When the
+post is the reader's own (a like, a boost, a poll that ended), its author line
+is left out and the text is a dimmed excerpt of at most three lines.
+
 *Unread* has one rule: **the page is read once it has been in front of the
 reader for `SEEN_AFTER` (two seconds) with the tab visible**, and it is read up
 to the newest card on it at that moment. It used to be read by an
@@ -3185,7 +3197,7 @@ stops there so the whole thing comes to rest. `FollowConstellation.vue` draws it
 label says who and why; `prefers-reduced-motion` gets `settle()` at once instead
 of the animation.
 
-**Phone layout.** One breakpoint, 600px, stated twice on purpose: as `PHONE_WIDTH` in `src/services/phone.js` (a shared `matchMedia` query with `isPhone()` and `onPhoneChange()`) and as the `@media (max-width: 600px)` rule in the stylesheets that lay themselves out differently on a phone — `TimelineEntry.vue` (the avatar column goes; the face, 36px, sits inside the card over the corner `.post-header` leaves for it, which is why `TimelineAvatar` takes a `size`), `TimelinePost.vue` (less padding), `TimelineSinglePost.vue` (the 64px the fine print and the spine kept for the avatar column), and `Composer.vue` (the toolbar wraps, the visibility menu is icon-only, Post keeps the end of its row). Nextcloud's own mobile breakpoint, 1024px, is where the sidebar collapses; the only rule at that width is `Timeline.vue`'s, which starts the page's first element below the sidebar toggle. A tablet in portrait is between the two and keeps the avatar column.
+**Phone layout.** One breakpoint, 600px, stated twice on purpose: as `PHONE_WIDTH` in `src/services/phone.js` (a shared `matchMedia` query with `isPhone()` and `onPhoneChange()`) and as the `@media (max-width: 600px)` rule in the stylesheets that lay themselves out differently on a phone — `TimelineEntry.vue` (the avatar column goes; the face, 36px, sits inside the card over the corner `.post-header` leaves for it, which is why `TimelineAvatar` takes a `size`), `TimelinePost.vue` (less padding), `TimelineSinglePost.vue` (the 64px the fine print and the spine kept for the avatar column), and `Composer.vue` (the toolbar wraps, the visibility menu is icon-only, Post keeps the end of its row). Nextcloud's own mobile breakpoint, 1024px, is where the sidebar collapses; the only rule at that width is `Timeline.vue`'s, which starts the page's first element below the sidebar toggle. A tablet in portrait is between the two and keeps the avatar column. Below the same 600px `PhoneBar.vue`, mounted once beside `Navigation.vue` in `App.vue` and drawn only while `isPhone()` holds and the page is not a visitor's, is a fixed bottom bar: My Feed, Discover, Activities and Messages with the counts the sidebar shows (read from the notifications store, which `Navigation.vue` keeps fresh), and a centred compose button that emits `composer-open` for the sidebar's dialog; a moved account gets no compose button. The current page is matched with `isEntryActive()` (`src/utils/navigationActive.js`), the same function the sidebar uses. It hides after 24px of downward scrolling of `#app-content-vue` and comes back on the way up, near the top, on a page change and when focus enters it. While it is drawn it puts `social-phone-bar` on the root, which sets `--social-phone-bar-space` (56px plus `env(safe-area-inset-bottom)`) and `--toast-offset-block-end` from `@nextcloud/dialogs`; `.social__pages`, `MiniPlayer.vue`, the `DirectMessages.vue` height and the Shorts page take that space off, so nothing fixed sits under it. `VideoShorts.vue` reads the same `isPhone()` and lays itself out as a full-height player there (`shorts--phone`: scopes over the video, like, sound and next on a rail, a two-line caption whose Show more opens a bottom sheet); see [Frontend-UX.md](Frontend-UX.md).
 
 `Composer.vue` carries a full `tributeOptions` config for `@` account and `#` hashtag completion. `tributejs` is a plain DOM library rather than a component: it is attached to the contenteditable in `mounted()` and detached in `unmounted()`, and it appends its menu to the body, which the unscoped `.tribute-container` rule at the end of the file styles. The account collection searches `/api/v1/global/accounts/search` and the hashtag collection `/api/v1/global/tags/search`, both debounced. The composer's HTML-to-text conversion inserts one newline at each block boundary, including before a block that follows an unwrapped text node; browser contenteditables commonly encode the first Enter in that mixed form, so missing the leading separator concatenates the first two lines in a new post. The shared `htmlToPlainText()` applies the same rule when editing/redrafting and when presenting portfolio captions. The emoji picker is a separate `NcEmojiPicker`; it is loaded on first use and portals to `#content`, outside the composer toolbar and reaction modal's clipping/stacking containers while retaining Nextcloud theme variables inherited from the app root. The reaction picker shares that portal so the popover does not participate in its centered flex panel's sizing or sit beneath its backdrop. Portfolio captions are reduced to plain text by `htmlToPlainText()` and use `white-space: pre-line` so paragraph boundaries remain visible without rendering untrusted HTML.
 
@@ -3394,7 +3406,20 @@ permission and are gone; anything new has to be ours.
   detached icon's `closest('button')` finds nothing.
 - **Loading rolls in.** At the foot of a timeline, the next page's wait is
   `WaveLoading`: one wavelength-wide line slid by exactly one wavelength, so it
-  loops without a jump. The first page keeps `TimelineSkeleton`.
+  loops without a jump. The first page keeps `TimelineSkeleton`, in the shape
+  of what it stands in for: `rows` copies the flat timeline row (its padding,
+  hairline and 40 px face, 36 px in the corner on a phone), `grid` draws the
+  photo grid's squares (`ProfileMediaGrid`, on its first page) or the Videos
+  page's 16:9 cards (`shape="video"`, `VideoBrowse`), and `page` is a heading
+  and a few neutral blocks. While a lazily loaded page's code is on its way,
+  `App.vue` draws it `standalone` (in the column that kind of page takes, with
+  a heading) and picks the variant with `skeletonFor()` (`utils/skeleton.js`)
+  from the route being opened: its `meta.skeleton` is a variant, a variant and
+  shape, or a function of the route. The timeline route asks
+  `timelineSkeleton()` (video cards for Videos, squares for Photos when the
+  reader chose the grid, the neutral page for Direct messages, rows for the
+  rest); a single post asks for rows, a collection and a place for squares,
+  and every other route, Discover among them, gets `page`.
 - **The composer says Aloha.** A post of its own is asked for as "Aloha, {name}.
   What’s new?", with the first word of the display name (or the user id). A
   reply, a quote, a caption, or a user with no name keep their plain prompts.

@@ -36,6 +36,16 @@ vi.mock('../../../src/services/interests.js', async (importOriginal) => ({
 	sendSignals,
 }))
 
+// a wide screen unless a test says otherwise, and changeable under a mounted page
+const screen = vi.hoisted(() => ({ phone: false, listeners: new Set() }))
+vi.mock('../../../src/services/phone.js', () => ({
+	isPhone: () => screen.phone,
+	onPhoneChange: (callback) => {
+		screen.listeners.add(callback)
+		return () => screen.listeners.delete(callback)
+	},
+}))
+
 /** The observers each mount made, so a test can fire one by hand. */
 let observers = []
 
@@ -51,7 +61,7 @@ function video(id, { attachments, content = '<p>a clip</p>', acct = 'alice@cloud
 	}
 }
 
-async function mountShorts(statuses = [video('1'), video('2')], { props = {}, serverData = null } = {}) {
+async function mountShorts(statuses = [video('1'), video('2')], { props = {}, serverData = null, attachTo = undefined } = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
 	if (serverData !== null) {
@@ -71,6 +81,7 @@ async function mountShorts(statuses = [video('1'), video('2')], { props = {}, se
 
 	const wrapper = mount(VideoShorts, {
 		props,
+		attachTo,
 		global: { plugins: [pinia], stubs: {
 			NcButton: true,
 			RouterLink: RouterLinkStub,
@@ -89,6 +100,8 @@ async function mountShorts(statuses = [video('1'), video('2')], { props = {}, se
 
 describe('VideoShorts', () => {
 	beforeEach(() => {
+		screen.phone = false
+		screen.listeners.clear()
 		observers = []
 		// the mute choice is kept for the tab, and a test is a new tab
 		window.sessionStorage.clear()
@@ -1235,5 +1248,112 @@ describe('VideoShorts', () => {
 
 			expect(keys(wrapper)[0]).toBe('day:5')
 		})
+	})
+	describe('on a phone', () => {
+		const long = () => video('2', { content: '<p>' + 'Long caption '.repeat(35) + '</p>' })
+
+		beforeEach(() => {
+			screen.phone = true
+		})
+
+		it('lays the page out full height and moves next onto the rail', async () => {
+			const { wrapper } = await mountShorts()
+			const next = vi.spyOn(wrapper.vm, 'nextShort')
+
+			expect(wrapper.find('.shorts').classes()).toContain('shorts--phone')
+			expect(wrapper.find('.shorts__controls').exists()).toBe(false)
+			expect(wrapper.find('.shorts__footer [role="status"]').text()).toBe('1 of 2')
+			const rail = wrapper.find('button.shorts__next')
+			expect(rail.attributes('aria-label')).toBe('Next short')
+			await rail.trigger('click')
+			expect(next).toHaveBeenCalled()
+		})
+
+		it('keeps the scopes in the page, over the player', async () => {
+			const { wrapper } = await mountShorts()
+
+			expect(wrapper.find('.shorts__header nav.shorts__scopes').attributes('aria-label')).toBe('Whose videos')
+			expect(wrapper.find('.shorts__heading').text()).toBe('Shorts')
+		})
+
+		it('offers the rest of a caption past two lines', async () => {
+			const { wrapper } = await mountShorts()
+
+			expect(wrapper.vm.canExpandCaption('x'.repeat(71))).toBe(true)
+			expect(wrapper.vm.canExpandCaption('x'.repeat(70))).toBe(false)
+			expect(wrapper.vm.canExpandCaption('one\ntwo\nthree')).toBe(true)
+		})
+
+		it('opens the caption in a sheet that holds playback and closes back to its button', async () => {
+			const { wrapper } = await mountShorts([long(), video('1')], { attachTo: document.body })
+			const toggle = wrapper.find('.short__caption-toggle')
+			const pause = wrapper.find('video').element.pause
+
+			expect(toggle.attributes('aria-haspopup')).toBe('dialog')
+			expect(toggle.attributes('aria-controls')).toBe('shorts-caption-sheet')
+			await toggle.trigger('click')
+			await flushPromises()
+
+			const sheet = wrapper.find('#shorts-caption-sheet')
+			expect(sheet.attributes('role')).toBe('dialog')
+			expect(sheet.attributes('aria-labelledby')).toBe('shorts-caption-sheet-title')
+			expect(wrapper.find('#shorts-caption-sheet-title').text()).toBe('Caption')
+			// the close button's icon is a registered component, not an unknown tag
+			expect(VideoShorts.components.IconClose).toBeDefined()
+			expect(sheet.find('.shorts__sheet-text').text()).toContain('Long caption Long caption')
+			expect(sheet.find('.shorts__sheet-author').text()).toContain('@alice@cloud.example')
+			expect(toggle.attributes('aria-expanded')).toBe('true')
+			expect(toggle.text()).toBe('Show more')
+			expect(wrapper.find('.short__text--expanded').exists()).toBe(false)
+			expect(pause).toHaveBeenCalled()
+			expect(document.activeElement).toBe(sheet.element)
+
+			await sheet.trigger('keydown', { key: 'Escape' })
+			await flushPromises()
+			expect(wrapper.find('#shorts-caption-sheet').exists()).toBe(false)
+			expect(document.activeElement).toBe(toggle.element)
+			wrapper.unmount()
+		})
+
+		it('closes the sheet from the scrim and on another short', async () => {
+			const { wrapper } = await mountShorts([long(), long()])
+			const toggle = wrapper.find('.short__caption-toggle')
+
+			await toggle.trigger('click')
+			await wrapper.find('.shorts__sheet-scrim').trigger('click')
+			expect(wrapper.find('.shorts__sheet').exists()).toBe(false)
+
+			await toggle.trigger('click')
+			expect(wrapper.find('.shorts__sheet').exists()).toBe(true)
+			wrapper.vm.playing = 1
+			await flushPromises()
+			expect(wrapper.find('.shorts__sheet').exists()).toBe(false)
+		})
+
+		it('goes back to the wide layout when the window widens, with the sheet closed', async () => {
+			const { wrapper } = await mountShorts([long(), video('1')])
+			await wrapper.find('.short__caption-toggle').trigger('click')
+			expect(wrapper.find('.shorts__sheet').exists()).toBe(true)
+
+			screen.phone = false
+			screen.listeners.forEach((callback) => callback(false))
+			await flushPromises()
+
+			expect(wrapper.find('.shorts').classes()).not.toContain('shorts--phone')
+			expect(wrapper.find('.shorts__sheet').exists()).toBe(false)
+			expect(wrapper.find('.shorts__controls').exists()).toBe(true)
+			expect(wrapper.find('.shorts__next').exists()).toBe(false)
+		})
+	})
+
+	it('keeps the wide layout off a phone: controls row, inline caption, no rail or sheet', async () => {
+		const { wrapper } = await mountShorts([video('2', { content: '<p>' + 'Long caption '.repeat(35) + '</p>' }), video('1')])
+
+		expect(wrapper.find('.shorts').classes()).not.toContain('shorts--phone')
+		expect(wrapper.find('.shorts__controls').exists()).toBe(true)
+		expect(wrapper.find('.shorts__next').exists()).toBe(false)
+		await wrapper.find('.short__caption-toggle').trigger('click')
+		expect(wrapper.find('.short__text--expanded').exists()).toBe(true)
+		expect(wrapper.find('.shorts__sheet').exists()).toBe(false)
 	})
 })

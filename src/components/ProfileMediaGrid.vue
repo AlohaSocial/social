@@ -56,7 +56,10 @@
 			</li>
 		</ul>
 
-		<NcLoadingIcon v-if="loading" class="media-grid__loading" :size="32" />
+		<!-- the first page lands in squares already drawn where its tiles
+		     go; a later page arrives under tiles already there -->
+		<TimelineSkeleton v-if="loading && tiles.length === 0" variant="grid" />
+		<NcLoadingIcon v-else-if="loading" class="media-grid__loading" :size="32" />
 	</div>
 </template>
 
@@ -66,6 +69,7 @@ import ImageMultipleOutline from 'vue-material-design-icons/ImageMultipleOutline
 import ImageOffOutline from 'vue-material-design-icons/ImageOffOutline.vue'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import PlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.vue'
+import TimelineSkeleton from './TimelineSkeleton.vue'
 import { t } from '@nextcloud/l10n'
 import { positionOfFocus } from '../utils/focalPoint.js'
 import { filterCoverLabel, matchedFilters } from '../utils/filters.js'
@@ -93,6 +97,7 @@ export default {
 		ImageOffOutline,
 		NcLoadingIcon,
 		PlayCircleOutline,
+		TimelineSkeleton,
 	},
 
 	props: {

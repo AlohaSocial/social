@@ -145,6 +145,19 @@ Long descriptions can be expanded inside the current slide, in a bounded,
 keyboard-scrollable text area. Opening the description pauses playback; closing
 it does not resume unexpectedly. Changing to another short resets the expander.
 The existing Open the post link remains available for the complete post.
+
+On a phone (`isPhone()`, 600 px) the page carries `shorts--phone` and the
+player fills the height below the Nextcloud header and above the phone bar,
+edge to edge. The heading is visually hidden; the scope links and an icon-only
+New short float over the top of the video on a scrim that lets taps through,
+clear of Nextcloud's sidebar toggle. Like, sound and the For you menu move
+into a right-hand rail whose foot is a page-level Next button; the row of
+previous/play/next controls is not drawn, and the position stays as a
+visually hidden status. The caption clamps to two lines, and Show more opens a
+non-modal bottom sheet (`role="dialog"`, labelled Caption) with the full text,
+the author and Open the post; focus moves into it, Escape, Close or the scrim
+close it and focus returns to Show more, and it closes on another short or
+when the window widens. Wider screens are unchanged.
 Long display names/handles truncate within the author row rather than covering
 controls. Scope links, sound and like controls have at least 44 px touch targets.
 

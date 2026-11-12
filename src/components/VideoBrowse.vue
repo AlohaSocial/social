@@ -64,13 +64,11 @@
 			</section>
 		</template>
 
-		<ul v-if="loading && posts.length === 0" class="video-browse__grid" aria-hidden="true">
-			<li v-for="index in columns * 2" :key="index" class="video-browse__cell video-browse__bone">
-				<span class="video-browse__bone-thumb" />
-				<span class="video-browse__bone-line" />
-				<span class="video-browse__bone-line video-browse__bone-line--short" />
-			</li>
-		</ul>
+		<TimelineSkeleton
+			v-if="loading && posts.length === 0"
+			variant="grid"
+			shape="video"
+			:count="columns * 2" />
 
 		<p v-if="filteredOut" class="video-browse__none">
 			{{ t('social', 'No videos of this kind in what has been loaded.') }}
@@ -90,6 +88,7 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { mapStores } from 'pinia'
 import VideoCard from './VideoCard.vue'
+import TimelineSkeleton from './TimelineSkeleton.vue'
 import MediaUploadButton from './MediaUploadButton.vue'
 import { loadUnfinished } from '../services/videoProgress.js'
 import { useSettingsStore } from '../store/settings.js'
@@ -160,6 +159,7 @@ export default {
 		NcButton,
 		VideoCard,
 		MediaUploadButton,
+		TimelineSkeleton,
 	},
 
 	props: {
@@ -613,25 +613,6 @@ export default {
 
 	&__shelf-item {
 		scroll-snap-align: start;
-	}
-
-	&__bone-thumb {
-		display: block;
-		aspect-ratio: 16 / 9;
-		border-radius: var(--border-radius-large);
-		background: var(--color-background-dark);
-	}
-
-	&__bone-line {
-		display: block;
-		block-size: 12px;
-		margin-block-start: calc(var(--default-grid-baseline) * 3);
-		border-radius: 4px;
-		background: var(--color-background-dark);
-	}
-
-	&__bone-line--short {
-		inline-size: 60%;
 	}
 
 	&__none {

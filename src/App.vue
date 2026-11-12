@@ -13,6 +13,7 @@
 	</NcContent>
 	<NcContent v-else-if="!serverData.setup" appName="social" :class="{public: serverData.public}">
 		<Navigation v-if="!serverData.public" @search="search" />
+		<PhoneBar v-if="!serverData.public && phone" />
 		<ShortcutHelp :open="shortcutHelpOpen" @close="shortcutHelpOpen = false" />
 		<!-- one emoji picker for the page, fetched the first time a reaction
 		     bar asks for one; see ReactionPicker for why it is not on the card.
@@ -74,7 +75,12 @@
 				     nothing happens at all. This is what happens instead, and
 				     only once the wait is long enough to notice. -->
 				<transition name="pending">
-					<TimelineSkeleton v-if="pending" class="social__pending" />
+					<TimelineSkeleton
+						v-if="pending"
+						class="social__pending"
+						:variant="pendingSkeleton.variant"
+						:shape="pendingSkeleton.shape"
+						standalone />
 				</transition>
 			</div>
 		</NcAppContent>
@@ -109,11 +115,12 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 
 import Navigation from './components/Navigation.vue'
+import { isPhone, onPhoneChange } from './services/phone.js'
 import ShortcutHelp from './components/ShortcutHelp.vue'
 import SetupChecks from './components/SetupChecks.vue'
 import CloudAddressSetup from './components/CloudAddressSetup.vue'
 import { listenForShortcuts } from './services/shortcuts.js'
-import TimelineSkeleton from './components/TimelineSkeleton.vue'
+import { skeletonFor } from './utils/skeleton.js'
 import { isSamePage, pageDirection } from './services/pageOrder.js'
 import { canViewTransition, markDirection, startPageTransition } from './services/pageTransition.js'
 import eventBus, { REACTION_PICK } from './services/eventBus.js'
@@ -136,6 +143,11 @@ const AccountSetup = defineAsyncComponent(() => import(/* webpackChunkName: "acc
 const ReactionPicker = defineAsyncComponent(() => import(/* webpackChunkName: "reaction-picker" */'./components/ReactionPicker.vue'))
 // only ever shown after a video's own page, so it travels with that page
 const MiniPlayer = defineAsyncComponent(() => import(/* webpackChunkName: "watch" */'./components/MiniPlayer.vue'))
+// shown only once a page has kept the reader waiting, and the timeline's own
+// chunk carries it too, so it need not be in the entry
+const TimelineSkeleton = defineAsyncComponent(() => import(/* webpackChunkName: "skeleton" */'./components/TimelineSkeleton.vue'))
+// drawn on a phone-sized screen only, so a wider one never downloads it
+const PhoneBar = defineAsyncComponent(() => import(/* webpackChunkName: "phone-bar" */'./components/PhoneBar.vue'))
 
 /**
  * How long a page may take to arrive before the wait is drawn. Below this a
@@ -153,6 +165,7 @@ export default {
 		NcButton,
 		MiniPlayer,
 		Navigation,
+		PhoneBar,
 		ReactionPicker,
 		ShortcutHelp,
 		SetupChecks,
@@ -172,6 +185,9 @@ export default {
 			state: [],
 			shortcutHelpOpen: false,
 			stopShortcuts: null,
+			/** whether the screen is phone-sized, which is when the bottom bar is drawn */
+			phone: isPhone(),
+			stopPhone: null,
 			/**
 			 * Which Vue transition the next page change uses: the direction it
 			 * is going in, or '' where the browser is animating it itself.
@@ -179,6 +195,8 @@ export default {
 			transitionName: 'page',
 			/** whether a page is being waited for long enough to say so */
 			pending: false,
+			/** which placeholder stands in for the page being waited for */
+			pendingSkeleton: skeletonFor(undefined),
 			pendingTimer: null,
 			/** the router hooks, so they can be taken off again */
 			stopBefore: null,
@@ -235,6 +253,9 @@ export default {
 
 	mounted() {
 		this.stopShortcuts = listenForShortcuts(() => this.settingsStore.shortcutsEnabled)
+		this.stopPhone = onPhoneChange((phone) => {
+			this.phone = phone
+		})
 		this.watchNavigation()
 		eventBus.on('shortcut:help', this.toggleShortcutHelp)
 		eventBus.on('shortcut:home', this.goHome)
@@ -243,6 +264,7 @@ export default {
 
 	unmounted() {
 		this.stopShortcuts?.()
+		this.stopPhone?.()
 		this.stopBefore?.()
 		this.stopAfter?.()
 		this.disarmPending()
@@ -299,7 +321,7 @@ export default {
 			// the wait for a chunk happens before this, so the skeleton is armed
 			// at the start of the navigation and disarmed when it lands
 			this.stopBefore = router.beforeEach((to, from, next) => {
-				this.armPending()
+				this.armPending(to)
 				next()
 			})
 
@@ -333,9 +355,13 @@ export default {
 		 *
 		 * Not at once: most changes are a few milliseconds, and a skeleton that
 		 * flashed up for every one of them would be the busiest thing on screen.
+		 * The placeholder is the one the route being opened names.
+		 *
+		 * @param {object} [to] the route being opened
 		 */
-		armPending() {
+		armPending(to) {
 			this.disarmPending()
+			this.pendingSkeleton = skeletonFor(to)
 			this.pendingTimer = window.setTimeout(() => {
 				this.pending = true
 			}, PENDING_AFTER_MS)
@@ -601,6 +627,9 @@ a.external_link {
 	 * untouched.
 	 */
 	align-content: start;
+	/* the foot of every page stays above the phone bar (PhoneBar.vue) */
+	box-sizing: border-box;
+	padding-block-end: var(--social-phone-bar-space, 0px);
 	/* What the browser animates. Without a name of its own the only thing
 	   there is to animate is `root`, which is a picture of the whole window --
 	   so the sidebar, the header and the search box all slid across with the

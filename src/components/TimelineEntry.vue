@@ -18,42 +18,49 @@
 		:style="entryStyle"
 		:data-status-id="entryContent?.id"
 		tabindex="-1">
+		<!-- who did it, with what they did as a disc on the face's corner;
+		     a card for several people shows the disc alone here and their
+		     faces beside the words -->
+		<span v-if="isNotification" class="notification__lead" :class="{ 'notification__lead--group': groupedAccounts.length > 1 }">
+			<ActorAvatar v-if="groupedAccounts.length <= 1" :actor="notification.account" :size="avatarSize" />
+			<span class="notification__type" :class="'notification__type--' + typeTone">
+				<Heart v-if="notification.type === 'favourite'" :size="typeIconSize" />
+				<Repeat v-if="notification.type === 'reblog'" :size="typeIconSize" />
+				<AccountPlusOutline v-if="notification.type === 'follow'" :size="typeIconSize" />
+				<AccountQuestion v-if="notification.type === 'follow_request'" :size="typeIconSize" />
+				<Lock v-if="isDirectMessage" :size="typeIconSize" />
+				<At v-else-if="notification.type === 'mention'" :size="typeIconSize" />
+				<MessageOutline v-if="notification.type === 'status'" :size="typeIconSize" />
+				<MessagePlusOutline v-if="notification.type === 'update'" :size="typeIconSize" />
+				<Poll v-if="notification.type === 'poll'" :size="typeIconSize" />
+				<Heart v-if="notification.type === 'bluesky:repost_liked'" :size="typeIconSize" />
+				<Repeat v-if="notification.type === 'bluesky:repost_reposted'" :size="typeIconSize" />
+				<CheckDecagram v-if="notification.type === 'bluesky:verified'" :size="typeIconSize" />
+				<CheckDecagramOutline v-if="notification.type === 'bluesky:unverified'" :size="typeIconSize" />
+				<EmoticonHappyOutline v-if="notification.type === 'story:react'" :size="typeIconSize" />
+				<CommentTextOutline v-if="notification.type === 'story:comment'" :size="typeIconSize" />
+				<AccountTagOutline v-if="notification.type === 'tagged'" :size="typeIconSize" />
+				<ShieldAlertOutline v-if="notification.type === 'moderation_warning'" :size="typeIconSize" />
+				<AccountMultipleRemoveOutline v-if="notification.type === 'severed_relationships'" :size="typeIconSize" />
+				<AccountPlusOutline v-if="notification.type === 'bluesky:starterpack_joined'" :size="typeIconSize" />
+			</span>
+		</span>
 		<div v-if="isNotification" class="notification__header">
 			<span class="notification__summary">
-				<!-- one face, or the first few of the several this card stands
-				     for, overlapping so a row of nine cannot push the words off
+				<!-- the first few of the several this card stands for,
+				     overlapping so a row of nine cannot push the words off
 				     the card -->
 				<span v-if="groupedAccounts.length > 1" class="notification__faces">
 					<ActorAvatar
 						v-for="account in groupedAccounts"
 						:key="account.id || account.acct"
 						:actor="account"
-						:size="24"
+						:size="GROUP_FACE"
 						:link="false" />
 				</span>
-				<ActorAvatar v-else :actor="notification.account" :size="24" />
 				<BlueskyBadge v-if="groupedAccounts.length <= 1 && isBlueskyAccount(notification.account)" />
 				<VerifiedBadge v-if="groupedAccounts.length <= 1" :account="notification.account" />
-				<Heart v-if="notification.type === 'favourite'" :size="16" />
-				<Repeat v-if="notification.type === 'reblog'" :size="16" />
-				<AccountPlusOutline v-if="notification.type === 'follow'" :size="16" />
-				<AccountQuestion v-if="notification.type === 'follow_request'" :size="16" />
-				<Lock v-if="isDirectMessage" :size="16" />
-				<At v-else-if="notification.type === 'mention'" :size="16" />
-				<MessageOutline v-if="notification.type === 'status'" :size="16" />
-				<MessagePlusOutline v-if="notification.type === 'update'" :size="16" />
-				<Poll v-if="notification.type === 'poll'" :size="16" />
-				<Heart v-if="notification.type === 'bluesky:repost_liked'" :size="16" />
-				<Repeat v-if="notification.type === 'bluesky:repost_reposted'" :size="16" />
-				<CheckDecagram v-if="notification.type === 'bluesky:verified'" :size="16" />
-				<CheckDecagramOutline v-if="notification.type === 'bluesky:unverified'" :size="16" />
-				<EmoticonHappyOutline v-if="notification.type === 'story:react'" :size="16" />
-				<CommentTextOutline v-if="notification.type === 'story:comment'" :size="16" />
-				<AccountTagOutline v-if="notification.type === 'tagged'" :size="16" />
-				<ShieldAlertOutline v-if="notification.type === 'moderation_warning'" :size="16" />
-				<AccountMultipleRemoveOutline v-if="notification.type === 'severed_relationships'" :size="16" />
-				<AccountPlusOutline v-if="notification.type === 'bluesky:starterpack_joined'" :size="16" />
-				{{ actionSummary }}
+				<span class="notification__text">{{ actionSummary }}</span>
 			</span>
 			<span class="notification__details">
 				<!-- what the badge was counting, said on the card itself: the
@@ -154,10 +161,11 @@
 					:size="avatarSize" />
 				<TimelinePost
 					class="entry__content"
+					:class="{ notification__own: isOwnPost }"
 					:item="entryContent"
 					:type="type"
 					:postHref="postHref"
-					:hideAuthor="hideAuthor"
+					:hideAuthor="hideAuthor || isOwnPost"
 					:embeddedActions="embeddedActions">
 					<template #profileActions>
 						<slot name="profileActions" />
@@ -210,6 +218,7 @@ import { interestReason } from '../utils/interestReason.js'
 import { onTick } from '../services/clock.js'
 import { isPhone, onPhoneChange } from '../services/phone.js'
 import { mapStores } from 'pinia'
+import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 
@@ -217,6 +226,20 @@ import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 const PHONE_AVATAR = 36
 /** The face beside a post in a list, sized so it lines up with the name. */
 const LIST_AVATAR = 40
+/** each face of a card that stands for several people */
+const GROUP_FACE = 28
+
+/** the type disc's colour family, by notification type; the rest are 'primary' */
+const TYPE_TONES = {
+	favourite: 'like',
+	'bluesky:repost_liked': 'like',
+	'story:react': 'like',
+	reblog: 'boost',
+	'bluesky:repost_reposted': 'boost',
+	moderation_warning: 'warning',
+	severed_relationships: 'warning',
+	'bluesky:unverified': 'warning',
+}
 
 /** how many levels of a conversation are indented before the column runs out */
 const MAX_INDENT = 4
@@ -369,6 +392,7 @@ export default {
 			 */
 			isPhone: isPhone(),
 			MAX_INDENT,
+			GROUP_FACE,
 			/** re-read from the shared clock, so the wording stays true */
 			now: Date.now(),
 			/** unsubscribe from the phone-width watch and the shared clock */
@@ -404,7 +428,7 @@ export default {
 			return Object.keys(style).length > 0 ? style : undefined
 		},
 
-		...mapStores(useSettingsStore, useTimelineStore),
+		...mapStores(useAccountStore, useSettingsStore, useTimelineStore),
 
 		/**
 		 * Whether the card offers to mute its thread: a mention (a reply
@@ -524,6 +548,38 @@ export default {
 		 */
 		actionSummary() {
 			return notificationSummary(this.notification)
+		},
+
+		/**
+		 * The colour family of the type disc: likes red, boosts green,
+		 * warnings amber, and everything else the theme's colour.
+		 *
+		 * @return {string}
+		 */
+		typeTone() {
+			return TYPE_TONES[this.notification.type] ?? 'primary'
+		},
+
+		/** @return {number} the type icon: small on a face's corner, larger standing alone */
+		typeIconSize() {
+			return this.groupedAccounts.length > 1 ? 16 : 12
+		},
+
+		/**
+		 * Whether the post the card is about is the reader's own. Its author
+		 * line would only repeat the reader's name, so it is left out and the
+		 * post is shown as a quiet excerpt.
+		 *
+		 * @return {boolean}
+		 */
+		isOwnPost() {
+			const author = this.isNotification ? this.entryContent?.account : undefined
+			const me = this.accountStore.currentAccount
+			if (!author || !me) {
+				return false
+			}
+
+			return (author.id !== undefined && author.id === me.id) || author.acct === me.acct
 		},
 	},
 
@@ -706,34 +762,110 @@ export default {
 	}
 }
 
-/* the faces of a card that stands for several people, overlapping */
-.notification__faces {
-	display: flex;
-	align-items: center;
+/*
+ * A notification is two columns: the face, with what happened as a disc on
+ * its corner, and beside it the summary line over what it is about. The face
+ * spans both rows, so the words start level with its top and the excerpt
+ * hangs under the words rather than under the face.
+ */
+.timeline-entry.notification {
+	--notification-face: 40px;
+	// the colour behind the row, so a ring reads as a gap between two faces
+	--notification-ring: var(--color-main-background);
+	display: grid;
+	grid-template-columns: var(--notification-face) minmax(0, 1fr);
+	grid-template-rows: auto 1fr;
+	column-gap: 12px;
 
-	> * + * {
-		// each face tucks under the one before it, and its own ring keeps the
-		// edge readable against the one it covers
-		margin-inline-start: -8px;
-		border-radius: 50%;
-		box-shadow: 0 0 0 2px var(--color-main-background);
+	&:hover {
+		--notification-ring: var(--color-background-hover);
+	}
+
+	> * {
+		grid-column: 2;
+	}
+
+	> .notification__lead {
+		grid-column: 1;
+		grid-row: 1 / span 2;
+	}
+
+	@include layout.below(layout.$phone) {
+		--notification-face: 36px;
 	}
 }
 
 .notification {
+	&__lead {
+		position: relative;
+		display: flex;
+		justify-content: center;
+		align-self: start;
+		inline-size: var(--notification-face);
+		block-size: var(--notification-face);
+	}
+
+	// a card for several people: the disc stands alone, level with the faces
+	&__lead--group {
+		block-size: auto;
+	}
+
+	&__type {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
+		inline-size: 20px;
+		block-size: 20px;
+		border-radius: 50%;
+		background: var(--notification-tone);
+		color: var(--notification-tone-text);
+		box-shadow: 0 0 0 2px var(--notification-ring);
+		--notification-tone: var(--color-primary-element);
+		--notification-tone-text: var(--color-primary-element-text);
+
+		// the element colours, not --color-error and friends: those are pale
+		// backgrounds from Nextcloud 32 on. The icon takes the page colour,
+		// which is the contrasting one in both themes
+		&--like {
+			--notification-tone: var(--color-element-error, var(--color-error));
+			--notification-tone-text: var(--color-main-background);
+		}
+
+		&--boost {
+			--notification-tone: var(--color-element-success, var(--color-success));
+			--notification-tone-text: var(--color-main-background);
+		}
+
+		&--warning {
+			--notification-tone: var(--color-element-warning, var(--color-warning));
+			--notification-tone-text: var(--color-main-background);
+		}
+
+		.material-design-icon {
+			display: flex;
+		}
+	}
+
+	// on a face: its bottom end corner, reaching a little past the edge
+	&__lead:not(.notification__lead--group) &__type {
+		position: absolute;
+		inset-block-end: -3px;
+		inset-inline-end: -5px;
+	}
+
+	&__lead--group &__type {
+		inline-size: 28px;
+		block-size: 28px;
+	}
+
+	// the age and the menu stay on the first line when the words wrap
 	&__header {
 		display: flex;
 		gap: 8px;
-		align-items: center;
-		margin-bottom: 6px;
-	}
-
-	// what the notification is about hangs under the summary's words rather
-	// than under the face, the way a quoted line does: the face column (24px)
-	// and the gap beside it (12px)
-	> .wrapper,
-	> .user-entry {
-		margin-inline-start: 36px;
+		align-items: flex-start;
+		min-height: 20px;
+		margin-bottom: 2px;
 	}
 
 	// the account a follow is about is a line in the row, not a card of its own
@@ -748,22 +880,53 @@ export default {
 	&__summary {
 		flex-grow: 1;
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		// the badge sits over the face's corner and reaches past it, so the
-		// words start clear of the badge rather than under it
-		gap: 12px;
-		color: var(--color-text-lighter);
-		font-size: 13px;
-		position: relative;
+		gap: 4px 8px;
+		min-width: 0;
+		color: var(--color-main-text);
+		font-size: 14px;
+		line-height: 20px;
+	}
 
-		.material-design-icon {
-			position: absolute;
-			top: 12px;
-			inset-inline-start: 14px;
-			padding: 2px;
-			background: var(--color-main-background);
+	&__text {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	/* the faces of a card that stands for several people, on a line of
+	   their own above the words: each tucks a little under the one before
+	   it, and a ring in the row's colour keeps one set of initials from
+	   running into the next */
+	&__faces {
+		display: flex;
+		flex-basis: 100%;
+		align-items: center;
+
+		> * {
 			border-radius: 50%;
-			border: 1px solid var(--color-background-dark);
+			box-shadow: 0 0 0 2px var(--notification-ring);
+		}
+
+		> * + * {
+			margin-inline-start: -4px;
+		}
+	}
+
+	// the reader's own post: what was liked or boosted, as a quiet excerpt
+	// under the line that says so, with no author line repeating their name
+	:deep(.notification__own) {
+		.post-header {
+			display: none;
+		}
+
+		.post-message {
+			display: -webkit-box;
+			overflow: hidden;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 3;
+			line-clamp: 3;
+			color: var(--color-text-maxcontrast);
 		}
 	}
 
@@ -771,7 +934,14 @@ export default {
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		min-height: 20px;
 		font-size: 12px;
+
+		// the menu's button is taller than the line it sits on, and is
+		// centred on it rather than pushing the excerpt down
+		.notification__menu {
+			margin-block: calc((20px - var(--default-clickable-area, 34px)) / 2);
+		}
 
 		/* the word rather than a dot: a dot has to be learnt, and there is
 		   room for three letters beside a relative timestamp */
@@ -801,7 +971,6 @@ export default {
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 4px 12px;
-		margin-inline-start: 32px;
 		color: var(--color-text-maxcontrast);
 	}
 

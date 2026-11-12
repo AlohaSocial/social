@@ -103,7 +103,8 @@ export default {
 .mini-player {
 	position: fixed;
 	inset-inline-end: 16px;
-	inset-block-end: 16px;
+	/* above the phone bar, where there is one */
+	inset-block-end: calc(16px + var(--social-phone-bar-space, 0px));
 	z-index: 2000;
 	width: min(360px, calc(100vw - 32px));
 	border-radius: var(--border-radius-large, 12px);

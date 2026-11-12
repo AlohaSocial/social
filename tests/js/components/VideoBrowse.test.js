@@ -297,7 +297,9 @@ describe('the Videos page', () => {
 
 	it('draws placeholder cards while the first page is on its way', () => {
 		wrapper = mountBrowse({ loading: true })
-		expect(wrapper.find('.video-browse__bone').exists()).toBe(true)
+		const skeleton = wrapper.findComponent({ name: 'TimelineSkeleton' })
+		expect(skeleton.props()).toMatchObject({ variant: 'grid', shape: 'video', count: 8 })
+		expect(skeleton.findAll('.skeleton__thumb')).toHaveLength(8)
 	})
 
 	describe('the keyboard', () => {

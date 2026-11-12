@@ -29,6 +29,25 @@ vi.mock('../../src/components/ReactionPicker.vue', async () => {
 	return { __esModule: true, default: { name: 'ReactionPicker', props: ['firstAsk'], render: () => h('div', { class: 'reaction-picker-chunk' }) } }
 })
 
+// the same for the phone bar's chunk, with the screen width under the test's control
+const phoneBar = vi.hoisted(() => ({ loads: 0, phone: false, change: null }))
+vi.mock('../../src/components/PhoneBar.vue', async () => {
+	phoneBar.loads++
+	const { h } = await import('vue')
+
+	return { __esModule: true, default: { name: 'PhoneBar', render: () => h('nav', { class: 'phone-bar-chunk' }) } }
+})
+vi.mock('../../src/services/phone.js', () => ({
+	PHONE_WIDTH: 600,
+	isPhone: () => phoneBar.phone,
+	onPhoneChange: (callback) => {
+		phoneBar.change = callback
+		return () => {
+			phoneBar.change = null
+		}
+	},
+}))
+
 vi.hoisted(() => {
 	document.head.dataset.user = 'alice'
 	document.head.dataset.userDisplayname = 'Alice'
@@ -278,6 +297,36 @@ describe('App', () => {
 		expect(wrapper.findComponent({ name: 'ReactionPicker' }).props('firstAsk').react).toBe(ask.react)
 	})
 
+	it('fetches the phone bar only once the screen is phone-sized', async () => {
+		phoneBar.phone = false
+		const wrapper = mountApp()
+		await flushPromises()
+
+		expect(phoneBar.loads).toBe(0)
+		expect(wrapper.find('.phone-bar-chunk').exists()).toBe(false)
+
+		phoneBar.change(true)
+		await flushPromises()
+
+		expect(phoneBar.loads).toBe(1)
+		expect(wrapper.find('.phone-bar-chunk').exists()).toBe(true)
+
+		phoneBar.change(false)
+		await nextTick()
+
+		expect(wrapper.find('.phone-bar-chunk').exists()).toBe(false)
+	})
+
+	it('draws no phone bar for a visitor, even on a phone', async () => {
+		phoneBar.phone = true
+		setServerData({ public: true })
+		const wrapper = mountApp()
+		await flushPromises()
+
+		expect(wrapper.find('.phone-bar-chunk').exists()).toBe(false)
+		phoneBar.phone = false
+	})
+
 	it('imports the server data and loads the current account', () => {
 		mountApp()
 		expect(settingsStore.serverData).toEqual(baseServerData)
@@ -443,6 +492,74 @@ describe('App', () => {
 			route.value = { name: 'timeline', params: { type: 'federated' }, fullPath: '/timeline/federated' }
 			await nextTick()
 			expect(timelineStore.searchQuery).toBe('')
+		})
+	})
+
+	describe('while a page is being waited for', () => {
+		let hooks
+
+		beforeEach(() => {
+			vi.useFakeTimers()
+			hooks = {}
+			router = {
+				push: vi.fn(),
+				beforeEach: vi.fn((hook) => {
+					hooks.before = hook
+					return () => {}
+				}),
+				beforeResolve: vi.fn((hook) => {
+					hooks.resolve = hook
+					return () => {}
+				}),
+			}
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		const skeleton = (wrapper) => wrapper.findComponent({ name: 'TimelineSkeleton' })
+
+		async function startNavigation(wrapper, to) {
+			hooks.before(to, route.value, () => {})
+			vi.advanceTimersByTime(200)
+			await nextTick()
+			// the placeholder is an async chunk
+			await vi.dynamicImportSettled()
+			await nextTick()
+		}
+
+		it('draws the placeholder the route being opened names, as a whole page', async () => {
+			const wrapper = mountApp()
+			await startNavigation(wrapper, { name: 'timeline', params: { type: 'videos' }, meta: { skeleton: { variant: 'grid', shape: 'video' } } })
+
+			expect(skeleton(wrapper).props()).toMatchObject({ variant: 'grid', shape: 'video', standalone: true })
+			expect(skeleton(wrapper).classes()).toContain('social__pending')
+		})
+
+		// Discover opened behind three post cards before its map appeared
+		it('draws the neutral page for a route that names none', async () => {
+			const wrapper = mountApp()
+			await startNavigation(wrapper, { name: 'discover', params: {}, meta: {} })
+
+			expect(skeleton(wrapper).props('variant')).toBe('page')
+			expect(skeleton(wrapper).find('.skeleton__row').exists()).toBe(false)
+		})
+
+		it('draws nothing for a page that arrives quickly, and goes when it lands', async () => {
+			const wrapper = mountApp()
+			hooks.before({ name: 'discover', params: {}, meta: {} }, route.value, () => {})
+			vi.advanceTimersByTime(50)
+			await nextTick()
+			expect(skeleton(wrapper).exists()).toBe(false)
+
+			vi.advanceTimersByTime(200)
+			await nextTick()
+			expect(skeleton(wrapper).exists()).toBe(true)
+
+			hooks.resolve({ name: 'discover', params: {}, fullPath: '/discover' }, route.value)
+			await nextTick()
+			expect(skeleton(wrapper).exists()).toBe(false)
 		})
 	})
 

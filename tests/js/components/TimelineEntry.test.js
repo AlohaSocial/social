@@ -12,6 +12,7 @@ import AccountHoverCard from '../../../src/components/AccountHoverCard.vue'
 import ActorAvatar from '../../../src/components/ActorAvatar.vue'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
+import { useAccountStore } from '../../../src/store/account.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 import { shortAgo } from '../../../src/utils/relativeTime.js'
@@ -224,37 +225,38 @@ describe('TimelineEntry', () => {
 
 	describe('a notification about a post', () => {
 		it.each([
-			['favourite', 'heart-icon', 'bob@remote.example liked your post'],
-			['reblog', 'repeat-icon', 'bob@remote.example boosted your post'],
-			['mention', 'at-icon', 'bob@remote.example mentioned you'],
-			['status', 'message-outline-icon', 'bob@remote.example posted a status'],
-			['update', 'message-plus-outline-icon', 'bob@remote.example edited a status'],
-			['poll', 'poll-icon', 'bob@remote.example ended the poll'],
+			['favourite', 'heart-icon', 'Bob liked your post'],
+			['reblog', 'repeat-icon', 'Bob boosted your post'],
+			['mention', 'at-icon', 'Bob mentioned you'],
+			['status', 'message-outline-icon', 'Bob posted a status'],
+			['update', 'message-plus-outline-icon', 'Bob edited a status'],
+			['poll', 'poll-icon', 'Bob ended the poll'],
 		])('describes a %s with its icon and summary', (type, iconClass, summary) => {
 			const { wrapper } = mountEntry(notification(type), { type: 'notifications' })
 
 			expect(wrapper.classes()).toContain('notification')
 			expect(wrapper.classes()).toContain('with-header')
 			const header = wrapper.find('.notification__header')
-			expect(header.findComponent(ActorAvatar).props('actor')).toEqual(bob)
-			expect(header.find('.notification__summary').findAll('.material-design-icon')).toHaveLength(1)
-			expect(header.find('.notification__summary .material-design-icon').classes()).toContain(iconClass)
+			const lead = wrapper.find('.notification__lead')
+			expect(lead.findComponent(ActorAvatar).props('actor')).toEqual(bob)
+			expect(lead.find('.notification__type').findAll('.material-design-icon')).toHaveLength(1)
+			expect(lead.find('.notification__type .material-design-icon').classes()).toContain(iconClass)
 			expect(header.find('.notification__summary').text()).toBe(summary)
 		})
 
 		it.each([
-			['story:react', 'emoticon-happy-outline-icon', 'bob@remote.example reacted to your story', null],
-			['story:comment', 'comment-text-outline-icon', 'bob@remote.example replied to your story', null],
-			['tagged', 'account-tag-outline-icon', 'bob@remote.example tagged you in a photo', post],
+			['story:react', 'emoticon-happy-outline-icon', 'Bob reacted to your story', null],
+			['story:comment', 'comment-text-outline-icon', 'Bob replied to your story', null],
+			['tagged', 'account-tag-outline-icon', 'Bob tagged you in a photo', post],
 			['moderation_warning', 'shield-alert-outline-icon', 'A moderator of this server has acted on your account', null],
 			['severed_relationships', 'account-multiple-remove-outline-icon', 'Some of your follows were removed because a server was blocked', null],
-			['bluesky:unverified', 'check-decagram-outline-icon', 'bob@remote.example no longer verifies your account on Bluesky', null],
+			['bluesky:unverified', 'check-decagram-outline-icon', 'Bob no longer verifies your account on Bluesky', null],
 		])('describes a %s with its icon and summary', (type, iconClass, summary, status) => {
 			const { wrapper } = mountEntry(notification(type, { status }), { type: 'notifications' })
 
 			const header = wrapper.find('.notification__header')
-			expect(header.findAll('.notification__summary .material-design-icon')).toHaveLength(1)
-			expect(header.find('.notification__summary .material-design-icon').classes()).toContain(iconClass)
+			expect(wrapper.findAll('.notification__type .material-design-icon')).toHaveLength(1)
+			expect(wrapper.find('.notification__type .material-design-icon').classes()).toContain(iconClass)
 			expect(header.find('.notification__summary').text()).toBe(summary)
 		})
 
@@ -356,7 +358,7 @@ describe('TimelineEntry', () => {
 		it('previews the account a notification is about when their avatar is hovered', () => {
 			const { wrapper } = mountEntry(notification('favourite'), { type: 'notifications' })
 
-			const card = wrapper.find('.notification__header').findComponent(AccountHoverCard)
+			const card = wrapper.find('.notification__lead').findComponent(AccountHoverCard)
 
 			expect(card.exists()).toBe(true)
 			expect(card.props('handle')).toBe('bob@remote.example')
@@ -403,6 +405,118 @@ describe('TimelineEntry', () => {
 		})
 	})
 
+	describe('the face and what happened', () => {
+		afterEach(() => {
+			phone.matches = false
+			phone.listeners.clear()
+		})
+
+		it('shows one face at the list size, with the type as a disc on its corner', () => {
+			const { wrapper } = mountEntry(notification('favourite'), { type: 'notifications' })
+
+			const lead = wrapper.find('.notification__lead')
+			expect(lead.classes()).not.toContain('notification__lead--group')
+			expect(lead.findComponent(ActorAvatar).props('size')).toBe(40)
+			expect(lead.find('.notification__type').classes()).toContain('notification__type--like')
+			expect(lead.find('.notification__type .heart-icon svg').attributes('width')).toBe('12')
+		})
+
+		it('makes the face smaller on a phone, as in the feed', () => {
+			phone.matches = true
+			const { wrapper } = mountEntry(notification('favourite'), { type: 'notifications' })
+
+			expect(wrapper.find('.notification__lead').findComponent(ActorAvatar).props('size')).toBe(36)
+		})
+
+		it.each([
+			['favourite', 'like'],
+			['story:react', 'like'],
+			['reblog', 'boost'],
+			['bluesky:repost_reposted', 'boost'],
+			['moderation_warning', 'warning'],
+			['mention', 'primary'],
+			['follow', 'primary'],
+			['poll', 'primary'],
+		])('colours the disc of a %s as %s', (type, tone) => {
+			const { wrapper } = mountEntry(notification(type), { type: 'notifications' })
+
+			expect(wrapper.find('.notification__type').classes()).toContain('notification__type--' + tone)
+		})
+
+		it('gives a grouped card 28-pixel faces beside the words and the disc alone', () => {
+			const accounts = [bob, alice, { ...bob, id: '3', acct: 'carol' }]
+			const { wrapper } = mountEntry(notification('reblog', { accounts }), { type: 'notifications' })
+
+			const lead = wrapper.find('.notification__lead')
+			expect(lead.classes()).toContain('notification__lead--group')
+			expect(lead.findComponent(ActorAvatar).exists()).toBe(false)
+			expect(lead.find('.notification__type--boost .repeat-icon svg').attributes('width')).toBe('16')
+
+			const faces = wrapper.find('.notification__header .notification__faces').findAllComponents(ActorAvatar)
+			expect(faces.map((face) => face.props('size'))).toEqual([28, 28, 28])
+			expect(faces.map((face) => face.props('link'))).toEqual([false, false, false])
+		})
+
+		it('rings each grouped face and overlaps them only a little', () => {
+			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+			const faces = source.slice(source.indexOf('&__faces {'), source.indexOf('// the reader\'s own post'))
+
+			expect(faces).toContain('box-shadow: 0 0 0 2px var(--notification-ring)')
+			expect(faces).toContain('margin-inline-start: -4px')
+		})
+	})
+
+	describe('a notification about the reader\'s own post', () => {
+		function mountOwn(item) {
+			const pinia = createPinia()
+			setActivePinia(pinia)
+			useAccountStore().setOwnAccount(alice)
+			useTimelineStore().addToStatuses(storedPost)
+
+			return mount(TimelineEntry, {
+				props: { item, type: 'notifications' },
+				global: {
+					plugins: [pinia],
+					mocks: { $route: { name: 'timeline', params: { type: 'notifications' } } },
+					stubs: { TimelinePost: TimelinePostStub, UserEntry: UserEntryStub, RouterLink: RouterLinkStub, NcActions: NcActionsStub, NcActionButton: NcActionButtonStub },
+				},
+			})
+		}
+
+		it('leaves out the author line and shows the post as a quiet excerpt', () => {
+			const wrapper = mountOwn(notification('favourite'))
+			const quoted = wrapper.findComponent(TimelinePostStub)
+
+			expect(quoted.vm.$attrs.hideAuthor).toBe(true)
+			expect(quoted.classes()).toContain('notification__own')
+		})
+
+		it('keeps the author of somebody else\'s post', () => {
+			const theirs = { ...post, id: 'p2', account: bob }
+			const wrapper = mountOwn(notification('mention', { status: theirs }))
+			const quoted = wrapper.findComponent(TimelinePostStub)
+
+			expect(quoted.vm.$attrs.hideAuthor).toBe(false)
+			expect(quoted.classes()).not.toContain('notification__own')
+		})
+
+		it('keeps the author while the reader\'s own account is not known', () => {
+			const { wrapper } = mountEntry(notification('favourite'), { type: 'notifications' })
+
+			expect(wrapper.findComponent(TimelinePostStub).vm.$attrs.hideAuthor).toBe(false)
+		})
+
+		it('dims the excerpt and cuts it at three lines', () => {
+			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+			const own = source.slice(source.indexOf(':deep(.notification__own) {'))
+			const block = own.slice(0, own.indexOf('\n\t}\n'))
+
+			expect(block).toContain('display: none')
+			expect(block).toContain('-webkit-line-clamp: 3')
+			expect(block).toContain('color: var(--color-text-maxcontrast)')
+		})
+	})
+
 	describe('a private message', () => {
 		const direct = (extra = {}) => notification('mention', {
 			status: { ...post, id: 'dm1', visibility: 'direct', content: '<p>@alice psst, this is between us</p>', ...extra },
@@ -412,9 +526,9 @@ describe('TimelineEntry', () => {
 			const { wrapper } = mountEntry(direct(), { type: 'notifications' })
 
 			const header = wrapper.find('.notification__header')
-			expect(header.find('.notification__summary').text()).toBe('bob@remote.example sent you a private message')
-			expect(header.find('.notification__summary .material-design-icon').classes()).toContain('lock-icon')
-			expect(header.find('.at-icon').exists()).toBe(false)
+			expect(header.find('.notification__summary').text()).toBe('Bob sent you a private message')
+			expect(wrapper.find('.notification__type .material-design-icon').classes()).toContain('lock-icon')
+			expect(wrapper.find('.at-icon').exists()).toBe(false)
 			expect(wrapper.findComponent(TimelinePostStub).exists()).toBe(false)
 			expect(wrapper.find('.notification__direct-preview').text()).toBe('@alice psst, this is between us')
 			const open = wrapper.find('.notification__direct').findComponent(RouterLinkStub)
@@ -443,13 +557,13 @@ describe('TimelineEntry', () => {
 
 	describe('a notification about an account', () => {
 		it.each([
-			['follow', 'account-plus-outline-icon', 'bob@remote.example started to follow you'],
-			['follow_request', 'account-question-icon', 'bob@remote.example requested to follow you'],
+			['follow', 'account-plus-outline-icon', 'Bob started to follow you'],
+			['follow_request', 'account-question-icon', 'Bob requested to follow you'],
 		])('shows the %s as an account entry without a follow button', (type, iconClass, summary) => {
 			const { wrapper } = mountEntry(notification(type, { status: undefined }), { type: 'notifications' })
 
 			const header = wrapper.find('.notification__header')
-			expect(header.find('.material-design-icon').classes()).toContain(iconClass)
+			expect(wrapper.find('.notification__type .material-design-icon').classes()).toContain(iconClass)
 			expect(header.find('.notification__summary').text()).toBe(summary)
 
 			expect(wrapper.findComponent(UserEntryStub).props()).toEqual({ item: bob, displayFollowButton: false })
@@ -467,8 +581,8 @@ describe('TimelineEntry', () => {
 			const { wrapper } = mountEntry(notification('something.new'), { type: 'notifications' })
 
 			const header = wrapper.find('.notification__header')
-			expect(header.findComponent(ActorAvatar).props('actor')).toEqual(bob)
-			expect(header.find('.material-design-icon').exists()).toBe(false)
+			expect(wrapper.find('.notification__lead').findComponent(ActorAvatar).props('actor')).toEqual(bob)
+			expect(wrapper.find('.notification__type .material-design-icon').exists()).toBe(false)
 			expect(header.find('.notification__summary').text()).toBe('')
 			expect(wrapper.findComponent(TimelinePostStub).props('item')).toEqual(storedPost)
 		})

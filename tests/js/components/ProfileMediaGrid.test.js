@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ProfileMediaGrid from '../../../src/components/ProfileMediaGrid.vue'
 
@@ -234,5 +235,44 @@ describe('ProfileMediaGrid', () => {
 			grid().showVideoFrame({ target: video })
 			expect(video.currentTime).toBe(1)
 		})
+	})
+})
+
+describe('while the grid loads', () => {
+	const mountGrid = (props) => mount(ProfileMediaGrid, {
+		props: { account: 'alice', ...props },
+		global: { stubs: { RouterLink: RouterLinkStub, NcLoadingIcon: { name: 'NcLoadingIcon', template: '<span class="loading-stub" />' } } },
+	})
+	const picture = {
+		id: 's1',
+		account: { acct: 'alice' },
+		media_attachments: [{ id: 'm1', type: 'image', preview_url: 'https://cloud.example.org/p.jpg', url: 'https://cloud.example.org/p.jpg' }],
+	}
+
+	it('draws squares where the first tiles will land, and no spinner', () => {
+		vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} })
+		const wrapper = mountGrid({ posts: [], loading: true })
+
+		const skeleton = wrapper.findComponent({ name: 'TimelineSkeleton' })
+		expect(skeleton.exists()).toBe(true)
+		expect(skeleton.props('variant')).toBe('grid')
+		expect(skeleton.props('shape')).toBe('square')
+		expect(wrapper.find('.loading-stub').exists()).toBe(false)
+	})
+
+	it('keeps the spinner for a later page, under the tiles already there', () => {
+		vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} })
+		const wrapper = mountGrid({ posts: [picture], loading: true })
+
+		expect(wrapper.findComponent({ name: 'TimelineSkeleton' }).exists()).toBe(false)
+		expect(wrapper.find('.loading-stub').exists()).toBe(true)
+	})
+
+	it('draws neither once the page is in', () => {
+		vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} })
+		const wrapper = mountGrid({ posts: [], loading: false })
+
+		expect(wrapper.findComponent({ name: 'TimelineSkeleton' }).exists()).toBe(false)
+		expect(wrapper.find('.loading-stub').exists()).toBe(false)
 	})
 })

@@ -1,6 +1,6 @@
 # User guide
 
-**Reviewed against:** Aloha Social **0.26.297** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.298** on **2026-10-27**.
 
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
@@ -184,8 +184,9 @@ account for Aloha Social only cannot invite people.
 
 ## Writing a post
 
-**New post** at the top of the sidebar, the compact post field on a feed or
-profile, or `n` opens the shared composer. The compact field sends a simple
+**New post** at the top of the sidebar (the **+** in the bar at the bottom on
+a phone), the compact post field on a feed or profile, or `n` opens the shared
+composer. The compact field sends a simple
 text post directly; expand it to open the full popup for attachments, polls,
 events, warnings, scheduling and other options. Replies use the same compact
 entry and popup with the reply context. An empty composer greets you by first
@@ -417,7 +418,15 @@ of the post, *Settings* — in front of the app's name, so the history and a
 screen reader can tell the pages apart. A link to a page that does not exist
 says *Page not found* and offers the way back to your feed.
 
-The sidebar is the map:
+The sidebar is the map. On a phone it folds away behind the button at the
+top left, and a bar along the bottom of the screen holds the four places you
+go most: **My Feed**, **Discover**, **Activities** and **Messages** (your
+direct messages), each with the same badge as in the sidebar, and a **+** in
+the middle that opens **New post**. The page you are on is highlighted. The
+bar slides away while you scroll down and comes back as soon as you scroll up
+(without the slide when your device asks for less motion); everything else is
+in the sidebar.
+
 
 - **My Feed**, **Local**, **Global** — a switcher above the posts. My Feed is
   what the people and hashtags you follow post; Local is every public post
@@ -478,6 +487,13 @@ The sidebar is the map:
   this server knows how long it is and how it is shaped, which it learns
   from the other server or by measuring the file when it keeps a copy. Where
   there are no shorts yet, Shorts says so.
+  On a phone the player fills the screen between Nextcloud's header and the
+  bar at the bottom: the switch of whose videos floats over the top of the
+  video beside the **+** for a new short, the like, sound and next buttons
+  stand in a column on the right, and the caption keeps to two lines —
+  **Show more** opens the whole of it in a sheet from the bottom, with
+  **Open the post** under it; **Close** or Escape puts it away. Swipe up or
+  down to move, tap to pause.
   The switch in the top corner picks whose videos (**My Feed**, **For you**,
   **Local** or **Global**); it opens on For you once your reading has taught
   it something, and on My Feed before that. It plays
@@ -523,7 +539,10 @@ The sidebar is the map:
   down its edge, and a **New** heading separates them from **Earlier** where
   the page holds both. Each activity is a row like a post in My Feed: who did
   what and how long ago (*3h*, *2w*), with the post or account it is about
-  underneath. A private message is not laid out there beside the public
+  underneath. People are named by their display name, and a small coloured
+  disc on their picture says what happened (a heart for a like, arrows for a
+  boost). When the post is your own, it shows as a short, dimmed excerpt
+  without your name above it. A private message is not laid out there beside the public
   mentions: its row says *sent you a private message* with a lock, shows its
   first words (or its content warning), and **Open the conversation** takes
   you to Direct messages.
