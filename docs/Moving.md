@@ -39,14 +39,14 @@ Three steps, two of them here.
 1. **Make your account here**, on the setup screen. On its third step,
    *Already somewhere else?*, type the handle of your old account —
    `@you@mastodon.example` — and press **Move here**. You can do the same
-   later, at the top of the **Migration** page, where you are first shown
+   later, under **Bring an account here** on the **Migration** page, where you are first shown
    who that account is and what its server lets us read.
 
    What happens: this account is marked as also being the old one (the
    `alsoKnownAs` the old server will ask for), and in the background everyone
    the old account follows is followed from here and its public posts are
    written here as yours, dated when you wrote them, with their pictures.
-   Nothing is sent to anybody. The list on the Migration page shows where the
+   Nothing is sent to anybody. **Your imports** on the Migration page shows where the
    run has got to. Posts you write on the old account after that are not
    picked up by anything: **Copy newer posts**, under the finished run, runs
    the copy again and brings over only what is new.
@@ -83,7 +83,7 @@ one; the thirty days between moves apply there as everywhere.
    On Mastodon: *Preferences → Account → Moving from a different account*,
    with your handle here.
 
-2. **Here, in Migration → Move your account away**, type the new
+2. **Here, in Migration → Leave this server**, type the new
    account's handle, type your own handle to confirm, and give your password
    when asked. Every server that knows you is told to follow the new account
    instead; this account is marked as moved, shows where you went, and refuses
@@ -108,8 +108,8 @@ sentences are listed in the [API reference](API.md#migration-error-codes).
 If this server puts you on Bluesky too, your Bluesky account is a second
 account of the same person, and it can move on its own.
 
-**Moving it to another Bluesky server.** In *Migration → Move
-your Bluesky account away*, name the server, the handle you want there (one
+**Moving it to another Bluesky server.** In *Migration → Leave this server →
+Move your Bluesky account away*, name the server, the handle you want there (one
 ending in a domain that server gives out), an e-mail address and a password
 for the account there. The account is made there at once; your posts,
 pictures and settings are copied in the background; then your account is
@@ -150,8 +150,8 @@ choice as `--bluesky`.
 ## If this server goes away
 
 **On the fediverse**, an account on a server that is gone cannot be moved:
-the old server has to send the move. Take the export from **Settings →
-Migration** while the server runs; its `following_accounts.csv` brings your
+the old server has to send the move. Take the export from **Migration →
+Keep a copy** while the server runs; its `following_accounts.csv` brings your
 follows to a new account anywhere, and the archive keeps your posts.
 
 **On Bluesky** your account is a DID, `did:plc:…`, registered with the PLC

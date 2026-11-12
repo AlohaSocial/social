@@ -7,7 +7,7 @@ This page documents the commands the app registers in
 the app's own base class, which extends Symfony's `Command` — nothing here
 reaches into the server's private `core/`. That base class declares the generic
 `--output plain|json|json_pretty` option, so the option exists on all of them,
-but only `social:timeline` reads it (see below).
+but only `social:debug:timeline` reads it (see below).
 
 ---
 
@@ -227,152 +227,7 @@ read, or when something was asked for and none of it could be followed.
 
 ---
 
-## Post / Note Management
-
-### `social:note:create`
-
-Create a note (post) as a given user and federate it.
-
-```
-php occ social:note:create [-r|--replyTo REPLYTO] [-t|--to TO] [-y|--type TYPE] [-g|--hashtag HASHTAG] <user_id> <content>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `user_id` | Yes | Nextcloud user ID of the author |
-| `content` | Yes | Content of the post |
-
-| Option | Value | Description |
-|--------|-------|-------------|
-| `-r`, `--replyTo` | optional | Id of the post this one replies to |
-| `-t`, `--to` | optional | A single mentioned account |
-| `-y`, `--type` | optional | Visibility: `public`, `unlisted`, `followers` (Mastodon's `private` is accepted as a synonym) or `direct`. Anything else — including omitting the option — becomes **`direct`**, the most restrictive option, because `Post::setType()` maps a value it does not know through `Stream::visibilityFromClient()`. Note the option's own `--help` text still says "public (default)", which is not what happens. |
-| `-g`, `--hashtag` | optional | A single hashtag, without the leading `#` |
-
-`--to` and `--hashtag` each accept only one value. In addition,
-`PostService::fixRecipientAndHashtags()` scans the
-content for `@mentions` and `#hashtags` and adds those too.
-
-Prints the resulting activity as pretty JSON followed by `token: <request token>`
-(written with `echo`, so `--output json` does not change it).
-
----
-
-### `social:note:boost`
-
-Boost (`Announce`) a note, or undo a boost.
-
-```
-php occ social:note:boost [--unboost] <user_id> <note_id>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `user_id` | Yes | Nextcloud user ID boosting the note |
-| `note_id` | Yes | Id of the note |
-
-| Option | Value | Description |
-|--------|-------|-------------|
-| `--unboost` | none | Undo the boost instead of creating one |
-
-Prints the activity as pretty JSON plus `token: <request token>`.
-
----
-
-### `social:note:like`
-
-Like a note, or undo a like.
-
-```
-php occ social:note:like [--unlike] <user_id> <note_id>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `user_id` | Yes | Nextcloud user ID liking the note |
-| `note_id` | Yes | Id of the note |
-
-| Option | Value | Description |
-|--------|-------|-------------|
-| `--unlike` | none | Undo the like instead of creating one |
-
-Prints the activity as pretty JSON plus `token: <request token>`.
-
----
-
 ## Timeline & Stream
-
-### `social:timeline`
-
-Print a timeline as seen by a given local viewer.
-
-```
-php occ social:timeline [--local] [--min_id MIN] [--max_id MAX] [--since SINCE] [--limit N] [--account ACCOUNT] [--crop N] <userId> <timeline>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `userId` | Yes | Nextcloud user whose view is used. Fails with `Unknown user` if unknown. |
-| `timeline` | Yes | See the table of supported values below |
-
-| Option | Value | Default | Description |
-|--------|-------|---------|-------------|
-| `--local` | none | off | Restrict to local content |
-| `--min_id` | required | `0` | Pagination bound: a status id (`nid`); rows newer than it |
-| `--max_id` | required | `0` | Pagination bound: a status id (`nid`); rows older than it |
-| `--since` | required | `0` | Pagination bound: a status id (`nid`); rows newer than it |
-| `--limit` | required | `5` | Number of items |
-| `--account` | required | `''` | A **local** account, resolved with `CacheActorService::getFromLocalAccount()`; used as the account filter |
-| `--crop` | required | `0` | Truncate the printed content to N characters (`0` = no cropping) |
-
-The three bounds are taken as the decimal strings they are typed as, so a status id wider than a PHP integer is not rounded; one that is not a decimal integer fails with `--<option> must be a status id`.
-
-Supported `timeline` values (the `switch` in `StreamRequest::getTimeline()`):
-
-| Value | Meaning |
-|-------|---------|
-| `home` | Own posts plus posts of followed accounts |
-| `public` | Public timeline |
-| `direct` | Direct messages |
-| `account` | Posts of one account (combine with `--account`) |
-| `favourites` | Liked posts |
-| `bookmarks` | Posts the viewer bookmarked |
-| `notifications` | Notifications (rendered in the notification format) |
-| `#<tag>` | A leading `#` selects the hashtag timeline for `<tag>` |
-
-Matching is case-insensitive. `ProbeOptions` also defines `followers` and
-`following`, but `getTimeline()` has no case for them and silently returns an
-empty list. Any other value behaves the same way.
-
-Output is a table (`Nid`, `Id`, `Source`, `Type`, `Author`, `Content`).
-`--output json` switches this command to a JSON dump of the streams.
-
----
-
-### `social:details`
-
-Print who can see one stream item and which timelines it lands on.
-
-```
-php occ social:details [--json] <streamId>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `streamId` | Yes | Id of the stream item. Fails with `Unknown item` if it does not exist. |
-
-| Option | Value | Description |
-|--------|-------|-------------|
-| `--json` | none | Dump the details object as pretty JSON |
-
-Without `--json` it prints the item id, author and type, then `Affected Timelines`
-with the `Home` viewers, the `Direct` viewers, and the `Public` / `Federated` flags.
-This command uses its own `--json` flag; the inherited `--output` option is ignored.
-
-Note the command name is `social:details`, not `social:stream:details`, even though
-the class is `OCA\Social\Command\StreamDetails`.
-
----
 
 ### `social:stream:prune`
 
@@ -779,92 +634,6 @@ table is read in pages of 1000 rows until `--limit` matching rows are found.
 
 The command prints how many rows matched, across how many delivery tokens
 and with what spread of attempt counts, and asks before it changes anything.
-
----
-
-## Development
-
-### `social:benchmark`
-
-Seeds a plausible amount of content and times the queries behind the timelines, because a query's cost cannot be judged on the couple of dozen rows a development instance holds. **For development instances only** — it writes thousands of rows.
-
-```
-php occ social:benchmark [--actors=200] [--notes=5000] [--follows=150] [--followers=0] [--viewer=USER]
-                         [--seed-only] [--time-only] [--runs=3] [--output=json|json_pretty]
-                         [--fail-over=MS] [--threshold=PROBE[@LIMIT]=MS ...]
-                         [--baseline=FILE] [--baseline-factor=3] [--clean] [-f|--force]
-```
-
-| Option | Value | Description |
-|--------|-------|-------------|
-| `--actors` | int (200) | Remote actors to seed |
-| `--notes` | int (5000) | Public notes to seed, five seconds apart going back from now |
-| `--follows` | int (150) | How many of those actors the viewer follows, which is what the home timeline joins through |
-| `--followers` | int (0) | How many of those actors follow the viewer **back**, which is what delivery reads: one queue row per distinct inbox when the viewer posts. An instance seeded without it measures reads and says nothing about writes |
-| `--viewer` | username | The local account the timelines are read as; the first local actor by default. It needs a Social account (`social:account:create`) |
-| `--seed-only` | none | Write the rows without timing anything |
-| `--time-only` | none | Time what is already seeded |
-| `--runs` | int (3) | Timed runs of each probe after one warm-up run; the median is reported |
-| `--fail-over` | ms | A ceiling for every probe that has no `--threshold` of its own |
-| `--threshold` | `PROBE=MS` or `PROBE@LIMIT=MS` | A ceiling for one probe, at every page size or at one (`home=150`, `home@20=120`). Repeatable |
-| `--baseline` | file | A JSON file of earlier timings, keyed by database (`pgsql`, `mysql`, `sqlite`) and then by `probe@limit`; other top-level keys are ignored, so the file can say how it was measured |
-| `--baseline-factor` | number (3) | How many times its baseline entry a probe may take |
-| `--clean` | none | Delete everything the command wrote and nothing else |
-| `-f`, `--force` | none | Seed without asking (required with `--no-interaction`) |
-
-**What is seeded.** Every note is public, by one of the seeded actors in turn,
-and says one of thirteen topic words. One note in ten carries a picture and one
-in twenty-five a video — the share of media a real timeline has, so that the
-Photos and Videos probes measure a page narrowed out of mostly text rather than
-an empty answer or the home timeline again. One note in twenty mentions the
-viewer and comes with the notification the inbox would have written; one in four
-carries one of twenty hashtags. The notes' recipient rows (public collection,
-author, the author's followers, and the viewer when mentioned) carry the note's
-nid, as the home timeline's page query reads it, and the hashtag rows and the
-words of the search index are written with them. The tables are then analysed
-(`ANALYZE`), so that the plans timed are the ones a live instance gets rather
-than ones made from the statistics of the tables before the seed.
-
-Seeding writes **multi-row `INSERT`s directly**, not through the model layer: a
-`Note` built and saved one at a time is three statements and a transaction per
-row, about 400 rows a second, which makes ten million posts a seven-hour wait —
-so nobody ever seeded enough to find out what the queries cost. The rows are
-still *shaped* like real ones (the prim hashes, the recipient rows, the follower
-collections), because a query plan is only worth measuring against rows the
-planner sees the way it sees real data. The cost is that a column added to
-`social_stream` later is one this command forgets to write; that is the right
-trade for a development-only command and would be the wrong one anywhere else.
-
-**What is timed.** Nine probes, each at a page of 20 and of 50 (the largest
-page a client may ask for): `home`, `public`, `direct`, `notifications`,
-`photos` and `videos` (the home timeline narrowed as the web client's Photos
-and Videos pages narrow it), `hashtag` (the probed tag, `benchtag0`), `account`
-(the first seeded actor's profile) and `search` (the word `harbour`). Each is
-read once to warm the caches and then `--runs` times; the median is the number.
-
-**Limits.** A probe's ceiling is its `--threshold`, else `--fail-over`; its
-baseline allowance is `--baseline-factor` times its `--baseline` entry. It is
-held to the larger of the two, so a two-millisecond baseline does not fail on a
-shared runner's noise and a probe that was always slower than its ceiling only
-fails when it gets that much slower again. A probe with neither has no limit.
-Any probe over its limit makes the command exit 1 and name it. Every option is
-checked before anything is seeded.
-
-`--output=json` (or `json_pretty`) prints one JSON document on stdout — each
-probe's median, rows, limit and verdict, the database, what was seeded, and the
-two switches that decide which query answers (`search_index_ready`,
-`dest_nid_filled`) — and sends the progress lines to stderr, so the output can
-be redirected into a file. `.github/workflows/perf-nightly.yml` runs it that way
-every night on MySQL and PostgreSQL with 100,000 notes, against the baseline in
-`tests/perf/benchmark-baseline.json`, and keeps each night's report as an
-artifact.
-
-Seeding says how many rows it is about to write and asks before writing any of
-them; under `--no-interaction` it refuses unless `--force` is given, rather than
-seeding a production database because nobody was there to say no. `--clean` and
-`--time-only` write nothing and do not ask.
-
-Every row it writes carries `benchmark.invalid` in its id, which is what `--clean` matches on.
 
 ---
 
@@ -1636,29 +1405,35 @@ the reason and exits with 1.
 
 ### `social:check:install`
 
-Check the integrity of the installation, or regenerate the stream index.
+Run the setup checks without changing anything. `--repair` fixes what can be
+fixed, and `--index` rebuilds the timeline index.
 
 ```
-php occ social:check:install [--index] [--offline] [-f|--force]
+php occ social:check:install [--repair] [--config] [--offline] [--index] [-f|--force]
 ```
 
 | Option | Value | Description |
 |--------|-------|-------------|
-| `--index` | none | Regenerate the stream index instead of running the checks |
-| `--offline` | none | Leave out the WebFinger probe, the one check that goes out on the network |
+| `--repair` | none | Remove the follows and the notes whose account is no longer cached, and give every local account the self-follow its Home timeline needs. Without it they are only counted |
+| `--config` | none | Print the app configuration as pretty JSON after the checks |
+| `--offline` | none | Leave out the WebFinger and client API probes, the two checks that go out on the network |
+| `--index` | none | Rebuild the timeline index from the posts instead of running the checks (asks first) |
 | `-f`, `--force` | none | Skip the confirmation of `--index` (required with `--no-interaction`) |
 
-Without `--index`:
+Without `--index`, the command:
 
-- runs `CheckService::checkInstallationStatus()`,
-- removes the follows and the notes whose accounts are no longer cached, walking both tables 200 rows at a time, and prints how many it removed,
-- runs the four checks that Administration → Overview shows (`lib/SetupChecks/`) and prints each with its severity: whether `.well-known/webfinger` answers for an account of this instance, whether the address Aloha Social builds ids from still matches the one the server reports, whether the delivery job has run lately, and whether anything in the outbound queue is stuck. A check that fails links to [Admin.md](Admin.md),
-- prints a verdict line — `all N checks passed`, or `M of N checks reported an error` — and **exits 1** when any check reported an error, so the command can stand in a deployment script
-- prints the current app configuration as pretty JSON.
+- counts the follows and the notes whose account is no longer cached, walking both tables 200 rows at a time. Without `--repair` it only prints the count, `N follows and M notes point to an account that is no longer cached`, and says that `occ social:check:install --repair` removes them. Nothing is written. With `--repair` it deletes them (`CheckService::checkInstallationStatus()`), prints how many, and makes every local account follow itself,
+- runs the checks that Administration → Overview shows (`lib/SetupChecks/`) and prints each with its severity: whether `.well-known/webfinger` answers for an account of this instance, whether the Mastodon client API answers at the root of the server, whether the address Aloha Social builds ids from still matches the one the server reports, whether the delivery job has run lately, and whether anything in the outbound queue is stuck. A check that fails links to [Admin.md](Admin.md),
+- prints a verdict line, `all N checks passed` or `M of N checks reported an error`, and **exits 1** when any check reported an error, so the command can stand in a deployment script,
+- with `--config`, prints the current app configuration as pretty JSON. Without it the configuration is not printed.
 
-The command exits `1` when any of those four reports an error, so a deployment
-script can run it. `--offline` leaves out the WebFinger probe for a machine with
-no route out; the other three read only the database and the configuration.
+`--offline` leaves out the two network probes for a machine with no route
+out; the other three read only the database and the configuration.
+
+A large count straight after restoring a backup usually means that the
+`social_cache_actor` table was restored from another moment than the rest.
+Restore the database whole instead of running `--repair`, which would delete
+the follows and posts of every account it cannot find in the cache.
 
 With `--index` the checks are skipped entirely. The command warns that the operation
 takes a while, asks `Do you confirm this operation? (y/N)`, and on confirmation
@@ -1725,6 +1500,256 @@ With `--uninstall`:
 - unsets the app configuration.
 
 The app files themselves are not removed, and the app is not disabled.
+
+---
+
+## Debugging and development
+
+These commands are for trying things by hand and for development
+instances: they post, like and boost as a user, print a timeline or the
+audience of one post, or seed test content. They live under `social:debug:`
+so that `occ list social` keeps them apart from the commands an
+administrator runs.
+
+### Former names
+
+The debugging commands had shorter names before they moved under
+`social:debug:`. The old names still work, with the same arguments and
+options, so existing scripts keep running; they are hidden from
+`occ list`.
+
+| Former name | Name now |
+|-------------|----------|
+| `social:note:create` | `social:debug:note:create` |
+| `social:note:like` | `social:debug:note:like` |
+| `social:note:boost` | `social:debug:note:boost` |
+| `social:timeline` | `social:debug:timeline` |
+| `social:details` | `social:debug:details` |
+| `social:benchmark` | `social:debug:benchmark` |
+
+---
+
+### `social:debug:note:create`
+
+Create a note (post) as a given user and federate it.
+
+```
+php occ social:debug:note:create [-r|--replyTo REPLYTO] [-t|--to TO] [-y|--type TYPE] [-g|--hashtag HASHTAG] <user_id> <content>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `user_id` | Yes | Nextcloud user ID of the author |
+| `content` | Yes | Content of the post |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `-r`, `--replyTo` | optional | Id of the post this one replies to |
+| `-t`, `--to` | optional | A single mentioned account |
+| `-y`, `--type` | optional | Visibility: `public` (the default when the option is left out), `unlisted`, `followers` (Mastodon's `private` is accepted as a synonym) or `direct`. Anything else is refused with `unknown type` and exit code `1`, before anything is posted. |
+| `-g`, `--hashtag` | optional | A single hashtag, without the leading `#` |
+
+`--to` and `--hashtag` each accept only one value. In addition,
+`PostService::fixRecipientAndHashtags()` scans the
+content for `@mentions` and `#hashtags` and adds those too.
+
+Prints the resulting activity as pretty JSON followed by `token: <request token>`.
+The inherited `--output` option does not change it.
+
+---
+
+### `social:debug:note:boost`
+
+Boost (`Announce`) a note, or undo a boost.
+
+```
+php occ social:debug:note:boost [--unboost] <user_id> <note_id>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `user_id` | Yes | Nextcloud user ID boosting the note |
+| `note_id` | Yes | Id of the note |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--unboost` | none | Undo the boost instead of creating one |
+
+Prints the activity as pretty JSON plus `token: <request token>`.
+
+---
+
+### `social:debug:note:like`
+
+Like a note, or undo a like.
+
+```
+php occ social:debug:note:like [--unlike] <user_id> <note_id>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `user_id` | Yes | Nextcloud user ID liking the note |
+| `note_id` | Yes | Id of the note |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--unlike` | none | Undo the like instead of creating one |
+
+Prints the activity as pretty JSON plus `token: <request token>`.
+
+---
+
+### `social:debug:timeline`
+
+Print a timeline as seen by a given local viewer.
+
+```
+php occ social:debug:timeline [--local] [--min_id MIN] [--max_id MAX] [--since SINCE] [--limit N] [--account ACCOUNT] [--crop N] <userId> <timeline>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `userId` | Yes | Nextcloud user whose view is used. Fails with `Unknown user` if unknown. |
+| `timeline` | Yes | See the table of supported values below |
+
+| Option | Value | Default | Description |
+|--------|-------|---------|-------------|
+| `--local` | none | off | Restrict to local content |
+| `--min_id` | required | `0` | Pagination bound: a status id (`nid`); rows newer than it |
+| `--max_id` | required | `0` | Pagination bound: a status id (`nid`); rows older than it |
+| `--since` | required | `0` | Pagination bound: a status id (`nid`); rows newer than it |
+| `--limit` | required | `5` | Number of items |
+| `--account` | required | `''` | A **local** account, resolved with `CacheActorService::getFromLocalAccount()`; used as the account filter |
+| `--crop` | required | `0` | Truncate the printed content to N characters (`0` = no cropping) |
+
+The three bounds are taken as the decimal strings they are typed as, so a status id wider than a PHP integer is not rounded; one that is not a decimal integer fails with `--<option> must be a status id`.
+
+Supported `timeline` values (the `switch` in `StreamRequest::getTimeline()`):
+
+| Value | Meaning |
+|-------|---------|
+| `home` | Own posts plus posts of followed accounts |
+| `public` | Public timeline |
+| `direct` | Direct messages |
+| `account` | Posts of one account (combine with `--account`) |
+| `favourites` | Liked posts |
+| `bookmarks` | Posts the viewer bookmarked |
+| `notifications` | Notifications (rendered in the notification format) |
+| `#<tag>` | A leading `#` selects the hashtag timeline for `<tag>` |
+
+Matching is case-insensitive. `ProbeOptions` also defines `followers` and
+`following`, but `getTimeline()` has no case for them and silently returns an
+empty list. Any other value behaves the same way.
+
+Output is a table (`Nid`, `Id`, `Source`, `Type`, `Author`, `Content`).
+`--output json` switches this command to a JSON dump of the streams.
+
+---
+
+### `social:debug:details`
+
+Print who can see one stream item and which timelines it lands on.
+
+```
+php occ social:debug:details [--json] <streamId>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `streamId` | Yes | Id of the stream item. Fails with `Unknown item` if it does not exist. |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--json` | none | Dump the details object as pretty JSON |
+
+Without `--json` it prints the item id, author and type, then `Affected Timelines`
+with the `Home` viewers, the `Direct` viewers, and the `Public` / `Federated` flags.
+This command uses its own `--json` flag; the inherited `--output` option is ignored.
+
+---
+
+### `social:debug:benchmark`
+
+Seeds a plausible amount of content and times the queries behind the timelines, because a query's cost cannot be judged on the couple of dozen rows a development instance holds. **For development instances only** — it writes thousands of rows.
+
+```
+php occ social:debug:benchmark [--actors=200] [--notes=5000] [--follows=150] [--followers=0] [--viewer=USER]
+                         [--seed-only] [--time-only] [--runs=3] [--output=json|json_pretty]
+                         [--fail-over=MS] [--threshold=PROBE[@LIMIT]=MS ...]
+                         [--baseline=FILE] [--baseline-factor=3] [--clean] [-f|--force]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--actors` | int (200) | Remote actors to seed |
+| `--notes` | int (5000) | Public notes to seed, five seconds apart going back from now |
+| `--follows` | int (150) | How many of those actors the viewer follows, which is what the home timeline joins through |
+| `--followers` | int (0) | How many of those actors follow the viewer **back**, which is what delivery reads: one queue row per distinct inbox when the viewer posts. An instance seeded without it measures reads and says nothing about writes |
+| `--viewer` | username | The local account the timelines are read as; the first local actor by default. It needs a Social account (`social:account:create`) |
+| `--seed-only` | none | Write the rows without timing anything |
+| `--time-only` | none | Time what is already seeded |
+| `--runs` | int (3) | Timed runs of each probe after one warm-up run; the median is reported |
+| `--fail-over` | ms | A ceiling for every probe that has no `--threshold` of its own |
+| `--threshold` | `PROBE=MS` or `PROBE@LIMIT=MS` | A ceiling for one probe, at every page size or at one (`home=150`, `home@20=120`). Repeatable |
+| `--baseline` | file | A JSON file of earlier timings, keyed by database (`pgsql`, `mysql`, `sqlite`) and then by `probe@limit`; other top-level keys are ignored, so the file can say how it was measured |
+| `--baseline-factor` | number (3) | How many times its baseline entry a probe may take |
+| `--clean` | none | Delete everything the command wrote and nothing else |
+| `-f`, `--force` | none | Seed without asking (required with `--no-interaction`) |
+
+**What is seeded.** Every note is public, by one of the seeded actors in turn,
+and says one of thirteen topic words. One note in ten carries a picture and one
+in twenty-five a video — the share of media a real timeline has, so that the
+Photos and Videos probes measure a page narrowed out of mostly text rather than
+an empty answer or the home timeline again. One note in twenty mentions the
+viewer and comes with the notification the inbox would have written; one in four
+carries one of twenty hashtags. The notes' recipient rows (public collection,
+author, the author's followers, and the viewer when mentioned) carry the note's
+nid, as the home timeline's page query reads it, and the hashtag rows and the
+words of the search index are written with them. The tables are then analysed
+(`ANALYZE`), so that the plans timed are the ones a live instance gets rather
+than ones made from the statistics of the tables before the seed.
+
+Seeding writes **multi-row `INSERT`s directly**, not through the model layer: a
+`Note` built and saved one at a time is three statements and a transaction per
+row, about 400 rows a second, which makes ten million posts a seven-hour wait —
+so nobody ever seeded enough to find out what the queries cost. The rows are
+still *shaped* like real ones (the prim hashes, the recipient rows, the follower
+collections), because a query plan is only worth measuring against rows the
+planner sees the way it sees real data. The cost is that a column added to
+`social_stream` later is one this command forgets to write; that is the right
+trade for a development-only command and would be the wrong one anywhere else.
+
+**What is timed.** Nine probes, each at a page of 20 and of 50 (the largest
+page a client may ask for): `home`, `public`, `direct`, `notifications`,
+`photos` and `videos` (the home timeline narrowed as the web client's Photos
+and Videos pages narrow it), `hashtag` (the probed tag, `benchtag0`), `account`
+(the first seeded actor's profile) and `search` (the word `harbour`). Each is
+read once to warm the caches and then `--runs` times; the median is the number.
+
+**Limits.** A probe's ceiling is its `--threshold`, else `--fail-over`; its
+baseline allowance is `--baseline-factor` times its `--baseline` entry. It is
+held to the larger of the two, so a two-millisecond baseline does not fail on a
+shared runner's noise and a probe that was always slower than its ceiling only
+fails when it gets that much slower again. A probe with neither has no limit.
+Any probe over its limit makes the command exit 1 and name it. Every option is
+checked before anything is seeded.
+
+`--output=json` (or `json_pretty`) prints one JSON document on stdout — each
+probe's median, rows, limit and verdict, the database, what was seeded, and the
+two switches that decide which query answers (`search_index_ready`,
+`dest_nid_filled`) — and sends the progress lines to stderr, so the output can
+be redirected into a file. `.github/workflows/perf-nightly.yml` runs it that way
+every night on MySQL and PostgreSQL with 100,000 notes, against the baseline in
+`tests/perf/benchmark-baseline.json`, and keeps each night's report as an
+artifact.
+
+Seeding says how many rows it is about to write and asks before writing any of
+them; under `--no-interaction` it refuses unless `--force` is given, rather than
+seeding a production database because nobody was there to say no. `--clean` and
+`--time-only` write nothing and do not ask.
+
+Every row it writes carries `benchmark.invalid` in its id, which is what `--clean` matches on.
 
 ---
 

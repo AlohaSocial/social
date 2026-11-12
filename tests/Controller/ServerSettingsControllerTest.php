@@ -90,15 +90,34 @@ class ServerSettingsControllerTest extends TestCase {
 
 	public function testWhatTheCardSentReachesTheServiceUnchanged(): void {
 		$this->serverSettingsService->expects($this->once())->method('save')
-			->with('admin@instance.example', 'a friendly place', 20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, 'admin', true)
+			->with(20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, true)
+			->willReturn(['max_size' => 20]);
+
+		$response = $this->controller->save(20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, true);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['max_size' => 20], $response->getData());
+	}
+
+	public function testTheAboutCardReachesTheServiceUnchanged(): void {
+		$this->serverSettingsService->expects($this->once())->method('saveAbout')
+			->with('a friendly place', 'admin@instance.example', 'admin')
 			->willReturn(['contact_email' => 'admin@instance.example']);
 
-		$response = $this->controller->save(
-			'admin@instance.example', 'a friendly place', 20, 4096, 0, 85, true, 720, true, '360,720', 0, 'hide_all', 0, true, true, false, 'admin', true
-		);
+		$response = $this->controller->saveAbout('a friendly place', 'admin@instance.example', 'admin');
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame(['contact_email' => 'admin@instance.example'], $response->getData());
+	}
+
+	public function testARefusedAboutFieldIsAnUnprocessableEntity(): void {
+		$this->serverSettingsService->method('saveAbout')
+			->willThrowException(new SettingRefusedException('contact_email is not an email address', 'setting-not-email', null, ['field' => 'contact_email']));
+
+		$response = $this->controller->saveAbout(contactEmail: 'nobody');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('contact_email', $response->getData()['field']);
 	}
 
 	/**
@@ -128,20 +147,21 @@ class ServerSettingsControllerTest extends TestCase {
 	 * for the whole instance.
 	 */
 	public function testTheRouteIsNotOneADelegateCanReach(): void {
-		$method = new \ReflectionMethod(ServerSettingsController::class, 'save');
-
-		foreach ([AuthorizedAdminSetting::class, NoAdminRequired::class, PublicPage::class] as $attribute) {
-			$this->assertSame(
-				[], $method->getAttributes($attribute),
-				$attribute . ' would let somebody who is not an administrator write these'
-			);
+		foreach (['save', 'saveAbout'] as $name) {
+			$method = new \ReflectionMethod(ServerSettingsController::class, $name);
+			foreach ([AuthorizedAdminSetting::class, NoAdminRequired::class, PublicPage::class] as $attribute) {
+				$this->assertSame(
+					[], $method->getAttributes($attribute),
+					$attribute . ' would let somebody who is not an administrator write these'
+				);
+			}
 		}
 	}
 
 	/** The defaults are the app's own, so an older card cannot blank a field. */
 	public function testTheDefaultsAreWhatTheAppShipsWith(): void {
 		$this->serverSettingsService->expects($this->once())->method('save')
-			->with('', '', 10, 2048, 0, 85, false, 1080, false, '360,720,1080', 0, 'default', 300, false, false, false)
+			->with(10, 2048, 0, 85, false, 1080, false, '360,720,1080', 0, 'default', 300, false, false, false)
 			->willReturn([]);
 
 		$this->controller->save();

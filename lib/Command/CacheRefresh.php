@@ -37,7 +37,7 @@ class CacheRefresh extends SocialCommand {
 	protected function configure() {
 		parent::configure();
 		$this->setName('social:cache:refresh')
-			->setDescription('Update the cache')
+			->setDescription('Refresh the cached accounts, documents and hashtags now instead of waiting for the cron')
 			->addOption('force', 'f', InputOption::VALUE_NONE, 'enforce update of cached account')
 			->addOption(
 				'rotate-keys', '', InputOption::VALUE_NONE,

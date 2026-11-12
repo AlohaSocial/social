@@ -12,8 +12,10 @@ namespace OCA\Social\Service;
 use OCA\Social\Atproto\Move\FollowFrom;
 use OCA\Social\Cron\RunImport;
 use OCA\Social\Db\ImportsRequest;
+use OCA\Social\Exceptions\AccountNotSetUpException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\MoveErrorException;
+use OCA\Social\Exceptions\RefusalException;
 use OCA\Social\Model\ImportJob;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\IAppData;
@@ -53,6 +55,10 @@ class ImportQueueService {
 	private const PROGRESS_SECONDS = 2;
 	/** How many failed entries a report keeps by name; the count is kept whole. */
 	public const REPORT_FAILURES = 50;
+	/** The code of a run that failed for a reason the person cannot act on. */
+	public const FAILED = 'import-failed';
+	/** The code of a run whose kept upload could not be read back. */
+	public const FILE_MISSING = 'import-file-missing';
 
 	public function __construct(
 		private ImportsRequest $importsRequest,
@@ -129,8 +135,8 @@ class ImportQueueService {
 	 * Runs one queued import to its end, whatever that is, and records it.
 	 *
 	 * A row that is not queued is left alone: the job ran already, or
-	 * somebody dismissed it. A failure is a status and a reason on the row,
-	 * never an exception out of a cron job.
+	 * somebody dismissed it. A failure is a status and a code on the row
+	 * (failureOf()), never an exception out of a cron job.
 	 */
 	public function run(int $id): void {
 		$job = $this->importsRequest->getById($id);
@@ -149,11 +155,28 @@ class ImportQueueService {
 				'import' => $id, 'kind' => $job->getKind(), 'user' => $job->getUserId(), 'exception' => $e,
 			]);
 			$job->setStatus(ImportJob::STATUS_FAILED);
-			$job->setReport(array_merge($job->getReport(), ['error' => $e->getMessage()]));
+			$job->setReport(array_merge($job->getReport(), self::failureOf($e, $e instanceof NotFoundException ? self::FILE_MISSING : self::FAILED)));
 		} finally {
 			$this->forget($job);
 			$this->importsRequest->update($job);
 		}
+	}
+
+	/**
+	 * What the row keeps about a failed run: a stable code the page explains
+	 * in the person's language, and the English sentence of a refusal for its
+	 * details. Any other exception is logged and kept as `$otherwise` alone:
+	 * its message is written for whoever reads the log, and may name paths or
+	 * queries.
+	 *
+	 * @return array{code: string, error?: string}
+	 */
+	public static function failureOf(Throwable $e, string $otherwise = self::FAILED): array {
+		if ($e instanceof RefusalException || $e instanceof AccountNotSetUpException) {
+			return ['code' => $e->errorCode, 'error' => $e->getMessage()];
+		}
+
+		return ['code' => $otherwise];
 	}
 
 	private function execute(ImportJob $job): void {
@@ -287,7 +310,7 @@ class ImportQueueService {
 	/** The kept upload, read whole: the CSV and JSON lists are small. */
 	private function contents(ImportJob $job): string {
 		if ($job->getFile() === '') {
-			throw new InvalidResourceException('this import has no file to read');
+			throw new MoveErrorException('this import has no file to read', self::FILE_MISSING);
 		}
 
 		return $this->folder()->getFile($job->getFile())->getContent();
@@ -299,7 +322,7 @@ class ImportQueueService {
 	 */
 	private function temporaryCopy(ImportJob $job): string {
 		if ($job->getFile() === '') {
-			throw new InvalidResourceException('this import has no file to read');
+			throw new MoveErrorException('this import has no file to read', self::FILE_MISSING);
 		}
 
 		$extension = pathinfo($job->getFile(), PATHINFO_EXTENSION);
@@ -311,7 +334,7 @@ class ImportQueueService {
 		$source = $this->folder()->getFile($job->getFile())->read();
 		$target = fopen($path, 'wb');
 		if ($source === false || $target === false) {
-			throw new InvalidResourceException('the kept upload could not be read');
+			throw new MoveErrorException('the kept upload could not be read', self::FILE_MISSING);
 		}
 		try {
 			stream_copy_to_stream($source, $target);

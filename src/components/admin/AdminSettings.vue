@@ -135,7 +135,8 @@ import IconAttention from 'vue-material-design-icons/BellAlertOutline.vue'
 import IconBackground from 'vue-material-design-icons/TimerCogOutline.vue'
 import IconBlocklist from 'vue-material-design-icons/PlaylistRemove.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
-import IconDiscover from 'vue-material-design-icons/InformationOutline.vue'
+import IconAbout from 'vue-material-design-icons/InformationOutline.vue'
+import IconDiscover from 'vue-material-design-icons/Compass.vue'
 import IconEmoji from 'vue-material-design-icons/EmoticonOutline.vue'
 import IconExplore from 'vue-material-design-icons/CompassOutline.vue'
 import IconExternal from 'vue-material-design-icons/AccountPlusOutline.vue'
@@ -152,7 +153,6 @@ import IconRelays from 'vue-material-design-icons/AccessPointNetwork.vue'
 import IconReports from 'vue-material-design-icons/FlagOutline.vue'
 import IconRetention from 'vue-material-design-icons/DeleteClockOutline.vue'
 import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
-import IconRules from 'vue-material-design-icons/FormatListChecks.vue'
 import IconSearch from 'vue-material-design-icons/Magnify.vue'
 import IconServer from 'vue-material-design-icons/ServerOutline.vue'
 import IconServerSettings from 'vue-material-design-icons/CogOutline.vue'
@@ -161,6 +161,7 @@ import IconTrends from 'vue-material-design-icons/TrendingUp.vue'
 import IconVerified from 'vue-material-design-icons/CheckDecagramOutline.vue'
 import { currentSection, scrollToSection, watchSections } from '../../services/sectionRail.js'
 import { matchesQuery } from '../../services/settingsSearch.js'
+import AboutSection from './AboutSection.vue'
 import AccessSection from './AccessSection.vue'
 import AccountsSection from './AccountsSection.vue'
 import ActivitySection from './ActivitySection.vue'
@@ -182,7 +183,6 @@ import RelaysSection from './RelaysSection.vue'
 import ReportsSection from './ReportsSection.vue'
 import RetentionSection from './RetentionSection.vue'
 import ReviewSection from './ReviewSection.vue'
-import RulesSection from './RulesSection.vue'
 import SectionsSection from './SectionsSection.vue'
 import ServerSection from './ServerSection.vue'
 import StorageSection from './StorageSection.vue'
@@ -230,6 +230,8 @@ const NOTHING = {
 	bluesky: null,
 	/** @type {?{missing: string[], signUp: boolean}} what the "ready to be public" check asks for, null when it asks nothing; administrators only */
 	publicBasics: null,
+	/** @type {{name: string, privacy_policy_url: string, legal_notice_url: string}} what the About card shows from Theming */
+	about: { name: '', privacy_policy_url: '', legal_notice_url: '' },
 	federation: {
 		waiting: 0,
 		running: 0,
@@ -267,6 +269,7 @@ export default {
 	name: 'AdminSettings',
 
 	components: {
+		AboutSection,
 		AccessSection,
 		AccountsSection,
 		ActivitySection,
@@ -290,6 +293,7 @@ export default {
 		IconBackground,
 		IconBlocklist,
 		IconBluesky,
+		IconAbout,
 		IconDiscover,
 		IconEmoji,
 		IconExplore,
@@ -307,7 +311,6 @@ export default {
 		IconReports,
 		IconRetention,
 		IconReview,
-		IconRules,
 		IconSearch,
 		IconServer,
 		IconServerSettings,
@@ -321,7 +324,6 @@ export default {
 		ReportsSection,
 		RetentionSection,
 		ReviewSection,
-		RulesSection,
 		SectionsSection,
 		ServerSection,
 		StorageSection,
@@ -361,15 +363,6 @@ export default {
 			const retrying = federation.atRisk > 0 ? 0 : federation.failing
 			const basics = this.state.publicBasics
 			const missing = basics?.missing ?? []
-			// the contact is on the Server card; the privacy policy and legal notice links are set in Theming, off this page
-			const basicsSection = !missing.includes('contact') && missing.includes('rules') ? 'rules' : 'server'
-			const basicNames = {
-				contact: t('social', 'a contact'),
-				rules: t('social', 'server rules'),
-				privacy_policy: t('social', 'a privacy policy link (in Theming)'),
-				legal_notice: t('social', 'a legal notice link (in Theming)'),
-			}
-			const basicsList = missing.map((basic) => basicNames[basic] ?? basicNames.legal_notice).join(', ')
 
 			return [
 				{
@@ -408,11 +401,12 @@ export default {
 					count: awaiting,
 					text: n('social', 'registration waiting for approval', 'registrations waiting for approval', awaiting),
 				},
+				// the About this server card says which, one line each
 				{
-					section: basicsSection,
+					section: 'about',
 					type: basics?.signUp ? 'warning' : 'info',
 					count: missing.length,
-					text: n('social', 'thing a public server should show is missing: {list}', 'things a public server should show are missing: {list}', missing.length, { list: basicsList }),
+					text: n('social', 'thing a public server should show is missing', 'things a public server should show are missing', missing.length),
 				},
 				{
 					section: 'federation',
@@ -501,15 +495,6 @@ export default {
 					lede: t('social', 'Files this server will not store, wherever they come from, so a removed picture cannot simply be posted again.'),
 					keywords: t('social', 'image file checksum hash block'),
 				},
-				{
-					id: 'rules',
-					group: 'moderation',
-					icon: 'IconRules',
-					component: 'RulesSection',
-					title: t('social', 'Server rules'),
-					lede: t('social', 'The rules shown to somebody deciding whether to join. One per line.'),
-					keywords: t('social', 'code of conduct terms'),
-				},
 				...(state.external
 					? [
 							{
@@ -552,8 +537,8 @@ export default {
 					group: 'explore',
 					icon: 'IconDiscover',
 					component: 'DiscoverSection',
-					title: t('social', 'About this server'),
-					lede: t('social', 'A few subjects, each a handful of hashtags, shown at the top of Explore so a newcomer sees what this server is about.'),
+					title: t('social', 'Topics on Discover'),
+					lede: t('social', 'A few subjects, each a handful of hashtags, shown at the top of Discover so a newcomer sees what this server is about.'),
 					keywords: t('social', 'explore topics hashtags discover'),
 				},
 				{
@@ -668,6 +653,16 @@ export default {
 					lede: t('social', 'Posts, follows and likes on their way to other servers, and the ones that keep failing.'),
 					keywords: t('social', 'federation health queue failing'),
 				},
+				{
+					id: 'about',
+					group: 'server',
+					icon: 'IconAbout',
+					component: 'AboutSection',
+					props: { settings: state.server, about: state.about, missing: state.publicBasics?.missing ?? [] },
+					title: t('social', 'About this server'),
+					lede: t('social', 'The name, description, contact and rules the About this server page shows, and the privacy policy and legal notice it links to.'),
+					keywords: t('social', 'rules code of conduct terms contact email description privacy legal notice imprint name'),
+				},
 				...(administrator
 					? [{
 							id: 'server',
@@ -676,8 +671,8 @@ export default {
 							component: 'ServerSection',
 							props: { settings: state.server },
 							title: t('social', 'Server settings'),
-							lede: t('social', 'Contact details, upload and video limits, and how strict this server is with other servers.'),
-							keywords: t('social', 'contact email upload size video transcode secure mode certificate'),
+							lede: t('social', 'Upload and video limits, and how strict this server is with other servers.'),
+							keywords: t('social', 'upload size video transcode secure mode certificate'),
 						}]
 					: []),
 				{
@@ -732,7 +727,7 @@ export default {
 					id: 'moderation',
 					icon: 'IconModeration',
 					title: t('social', 'Moderation'),
-					description: t('social', 'Reports, posts held for review, accounts and the rules.'),
+					description: t('social', 'Reports, posts held for review, and accounts.'),
 				},
 				{
 					id: 'registration',
@@ -743,8 +738,8 @@ export default {
 				{
 					id: 'explore',
 					icon: 'IconExplore',
-					title: t('social', 'Explore and features'),
-					description: t('social', 'What people find on Explore, and what the app offers them.'),
+					title: t('social', 'Discover and features'),
+					description: t('social', 'What people find on Discover, and what the app offers them.'),
 				},
 				{
 					id: 'federation',
@@ -756,7 +751,7 @@ export default {
 					id: 'server',
 					icon: 'IconServer',
 					title: t('social', 'Server'),
-					description: t('social', 'Limits, retention, storage and background jobs.'),
+					description: t('social', 'What this server says about itself, its limits, retention, storage and background jobs.'),
 				},
 			]
 				.map((group) => {

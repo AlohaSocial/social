@@ -4,11 +4,11 @@
 -->
 # Performance and scalability
 
-**Reviewed against:** Aloha Social **0.26.296** on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.297** on **2026-10-27**; source
 branch `main` at `33935993`. The latest successful repeatable benchmark
 available that day is the [Nightly performance run 40426921866](https://github.com/AlohaSocial/social/actions/runs/40426921866).
 It ran the benchmark from `main` commit `2ab03f1` (app **0.26.278**), so it is
-behind this checkout. No benchmark of 0.26.296 itself was available
+behind this checkout. No benchmark of 0.26.297 itself was available
 at review time.
 
 ## Latest CI query snapshot
@@ -38,7 +38,7 @@ of real media, follow graphs, blocks, retention or database hardware.
 
 ## What the benchmark covers
 
-`occ social:benchmark` seeds plausible actors, posts, recipients, hashtags,
+`occ social:debug:benchmark` seeds plausible actors, posts, recipients, hashtags,
 notifications and search terms, runs an `ANALYZE`, then times the query and
 hydration path for each probe. The [nightly workflow](../.github/workflows/perf-nightly.yml)
 runs it on both supported CI database families and keeps the JSON reports as
@@ -57,10 +57,10 @@ and is not suitable for a production instance. The command and cleanup options
 are documented in [OCC-Commands.md](OCC-Commands.md#socialbenchmark).
 
 ```sh
-php occ social:benchmark --viewer=admin --actors=2000 --notes=100000 \
+php occ social:debug:benchmark --viewer=admin --actors=2000 --notes=100000 \
   --follows=300 --seed-only --force --no-interaction
-php occ social:benchmark --viewer=admin --time-only --runs=5 --output=json_pretty
-php occ social:benchmark --clean --force --no-interaction
+php occ social:debug:benchmark --viewer=admin --time-only --runs=5 --output=json_pretty
+php occ social:debug:benchmark --clean --force --no-interaction
 ```
 
 Record the Social commit, Nextcloud version, PHP version, database version,

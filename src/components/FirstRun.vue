@@ -138,7 +138,7 @@
 				</h2>
 				<p class="first-run__lead">
 					{{ t('social', 'If you have an account on Mastodon or another server, type its address. Everyone it follows is followed from here and its public posts are brought along, in the background. Moving your followers over as well is the last step, done on your old server; the Migration page tells you how.') }}
-					<router-link class="first-run__link" :to="{ name: 'migration' }">
+					<router-link class="first-run__link" :to="{ name: 'migration', hash: '#bring' }">
 						{{ t('social', 'Open Migration') }}
 					</router-link>
 				</p>
@@ -188,7 +188,7 @@
 				</div>
 				<p class="first-run__hint">
 					{{ t('social', 'On Mastodon: Preferences → Import and export → Data export → Follows (CSV). Moving your followers over as well is on the Migration page — that one is a one-way move, so it is not a button here.') }}
-					<router-link class="first-run__link" :to="{ name: 'migration' }">
+					<router-link class="first-run__link" :to="{ name: 'migration', hash: '#bring' }">
 						{{ t('social', 'Open Migration') }}
 					</router-link>
 				</p>
@@ -204,6 +204,7 @@
 						? t('social', 'Your feed fills up as the people you follow post. Meanwhile, say hello — a first post is how people find out you are here.')
 						: t('social', 'You have not followed anyone yet, and that is fine: Discover is always a click away in the sidebar. Say hello in the meantime — a first post is how people find out you are here.') }}
 				</p>
+				<UseInAppCard class="first-run__apps" />
 			</div>
 		</Transition>
 
@@ -237,7 +238,8 @@
  *
  * The account was made a moment ago by the server, and the reader has three
  * questions the old banner did not answer: what is my address, who do I
- * follow, and can I bring what I had. Four short steps, each skippable,
+ * follow, and can I bring what I had. The last step adds how to use the
+ * account from a phone app. Four short steps, each skippable,
  * and it is gone for good once closed -- `firstrun` is true on exactly one
  * page load, the one right after the actor was created.
  *
@@ -264,6 +266,7 @@ import IconPencil from 'vue-material-design-icons/Pencil.vue'
 import IconUpload from 'vue-material-design-icons/Upload.vue'
 import ActorAvatar from './ActorAvatar.vue'
 import AlohaScene from './illustrations/AlohaScene.vue'
+import UseInAppCard from './UseInAppCard.vue'
 import eventBus from '../services/eventBus.js'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
@@ -293,6 +296,7 @@ export default {
 		NcButton,
 		NcLoadingIcon,
 		NcTextField,
+		UseInAppCard,
 	},
 
 	emits: ['done'],
@@ -695,6 +699,10 @@ export default {
 		margin: 0;
 		color: var(--color-text-maxcontrast);
 		line-height: 1.6;
+	}
+
+	&__apps {
+		margin-top: 8px;
 	}
 
 	/* the picture beside its sentence, and above it on a phone */

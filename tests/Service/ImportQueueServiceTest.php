@@ -23,12 +23,14 @@ use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\IAppData;
+use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\ITempManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -88,7 +90,11 @@ class ImportQueueServiceTest extends TestCase {
 			$this->writes[] = clone $job;
 		});
 
-		$this->service = new ImportQueueService(
+		$this->service = $this->serviceWith(new NullLogger());
+	}
+
+	private function serviceWith(LoggerInterface $logger): ImportQueueService {
+		return new ImportQueueService(
 			$this->importsRequest,
 			$this->appData,
 			$this->jobList,
@@ -97,7 +103,7 @@ class ImportQueueServiceTest extends TestCase {
 			$this->postImportService,
 			$this->moveInService,
 			$this->accountService,
-			new NullLogger(),
+			$logger,
 			$this->followFrom,
 		);
 	}
@@ -249,17 +255,70 @@ class ImportQueueServiceTest extends TestCase {
 		$this->assertSame([], $this->writes);
 	}
 
-	/** A failure is a status and a reason on the row, never an exception out of a cron job. */
-	public function testAFailedRunIsRecordedWithItsReasonAndTheUploadStillDeleted(): void {
+	/**
+	 * A failure is a status and a code on the row, never an exception out of
+	 * a cron job. The exception's own message is for the log: the page would
+	 * show it, and it can name a table or a path.
+	 */
+	public function testAFailedRunIsRecordedWithACodeAndTheUploadStillDeleted(): void {
 		$job = $this->queuedRow(ImportJob::KIND_BLOCKS, 'b.csv');
 		$this->kept['b.csv'] = "carol@remote.example\n";
-		$this->migrationService->method('importBlocks')->willThrowException(new \RuntimeException('database went away'));
+		$this->migrationService->method('importBlocks')->willThrowException(new \RuntimeException('SQLSTATE[HY000]: database went away'));
+		$logged = [];
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->method('warning')->willReturnCallback(function (string $message, array $context) use (&$logged): void {
+			$logged[] = $context['exception'] ?? null;
+		});
+		$this->service = $this->serviceWith($logger);
 
 		$this->service->run(42);
 
 		$this->assertSame(ImportJob::STATUS_FAILED, $job->getStatus());
-		$this->assertSame('database went away', $job->getReport()['error']);
+		$this->assertSame(['code' => ImportQueueService::FAILED], $job->getReport());
+		$this->assertCount(1, $logged);
+		$this->assertInstanceOf(\RuntimeException::class, $logged[0]);
 		$this->assertSame(['b.csv'], $this->deleted);
+	}
+
+	/** A refusal keeps its own code, and its English sentence for the details. */
+	public function testARefusedRunKeepsTheRefusalsCodeAndSentence(): void {
+		$job = $this->queuedRow(ImportJob::KIND_POSTS, 'a.zip', ['fetch_media' => false]);
+		$this->kept['a.zip'] = 'PK zip bytes';
+		$temp = tempnam(sys_get_temp_dir(), 'social-import-copy');
+		$this->tempManager->method('getTemporaryFile')->willReturn($temp);
+		$this->accountService->method('getActorFromUserId')->willReturn(new Person());
+		$this->postImportService->method('import')->willThrowException(
+			new MoveErrorException('this archive has no outbox.json', 'export-not-posts')
+		);
+
+		$this->service->run(42);
+		@unlink((string)$temp);
+
+		$this->assertSame(ImportJob::STATUS_FAILED, $job->getStatus());
+		$this->assertSame(['code' => 'export-not-posts', 'error' => 'this archive has no outbox.json'], $job->getReport());
+	}
+
+	/** An upload appdata has lost is something the person can fix by uploading it again. */
+	public function testARunWhoseUploadIsGoneSaysSo(): void {
+		$job = $this->queuedRow(ImportJob::KIND_FOLLOWS, 'gone.csv');
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('getFile')->willThrowException(new NotFoundException('gone.csv'));
+		$appData = $this->createMock(IAppData::class);
+		$appData->method('getFolder')->willReturn($folder);
+		$this->appData = $appData;
+		$this->service = $this->serviceWith(new NullLogger());
+
+		$this->service->run(42);
+
+		$this->assertSame(['code' => ImportQueueService::FILE_MISSING], $job->getReport());
+	}
+
+	public function testFailureOfKeepsOnlyARefusalsSentence(): void {
+		$this->assertSame(
+			['code' => 'account-not-found', 'error' => 'no account answers to x'],
+			ImportQueueService::failureOf(new MoveErrorException('no account answers to x', 'account-not-found'))
+		);
+		$this->assertSame(['code' => 'move-failed'], ImportQueueService::failureOf(new \LogicException('/var/www/secret'), 'move-failed'));
 	}
 
 	/**

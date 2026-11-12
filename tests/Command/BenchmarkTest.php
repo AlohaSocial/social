@@ -31,7 +31,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
 /**
- * `occ social:benchmark`: what it seeds, what each probe asks, and how a
+ * `occ social:debug:benchmark`: what it seeds, what each probe asks, and how a
  * timing is held to its limit.
  *
  * The rows are caught on their way to the database and the timings are

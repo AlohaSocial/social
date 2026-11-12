@@ -371,7 +371,7 @@ class DocumentationTest extends TestCase {
 
 		foreach ($this->commandFiles() as $code) {
 			$name = $this->commandNameOf($code);
-			if ($name === null) {
+			if ($name === null || $this->isHiddenCommand($code)) {
 				continue;
 			}
 
@@ -402,7 +402,7 @@ class DocumentationTest extends TestCase {
 
 		foreach ($this->commandFiles() as $code) {
 			$name = $this->commandNameOf($code);
-			if ($name === null) {
+			if ($name === null || $this->isHiddenCommand($code)) {
 				continue;
 			}
 
@@ -931,18 +931,22 @@ class DocumentationTest extends TestCase {
 				continue;
 			}
 
-			$classes[] = 'OCA\\Social\\Command\\' . basename($file, '.php');
+			$namespace = basename(dirname($file)) === 'Alias' ? 'OCA\\Social\\Command\\Alias\\' : 'OCA\\Social\\Command\\';
+			$classes[] = $namespace . basename($file, '.php');
 		}
 
 		return $this->normalise($classes);
 	}
 
-	/** Command names passed to setName() in lib/Command/, sorted. */
+	/**
+	 * The names of the commands `occ list` shows, sorted. A hidden one is an
+	 * old name kept for scripts, listed in the doc's table of former names.
+	 */
 	private function registeredCommandNames(): array {
 		$names = [];
 		foreach ($this->commandFiles() as $code) {
 			$name = $this->commandNameOf($code);
-			if ($name !== null) {
+			if ($name !== null && !$this->isHiddenCommand($code)) {
 				$names[] = $name;
 			}
 		}
@@ -968,7 +972,7 @@ class DocumentationTest extends TestCase {
 
 	/** @return array<string, string> file path => file contents */
 	private function commandFiles(): array {
-		$files = glob(__DIR__ . '/../lib/Command/*.php');
+		$files = array_merge(glob(__DIR__ . '/../lib/Command/*.php') ?: [], glob(__DIR__ . '/../lib/Command/Alias/*.php') ?: []);
 		$this->assertNotEmpty($files, 'No command classes found in lib/Command/.');
 
 		$contents = [];
@@ -985,6 +989,10 @@ class DocumentationTest extends TestCase {
 		}
 
 		return $match[1];
+	}
+
+	private function isHiddenCommand(string $code): bool {
+		return str_contains($code, 'setHidden(true)');
 	}
 
 	/**

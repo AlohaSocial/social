@@ -21,7 +21,7 @@ use OCP\Server;
  * interrupted run leaves every timeline empty.
  */
 class CheckInstallTest extends CommandTestCase {
-	public function testPlainRunReportsTheConfigurationAndAgreesWithItsOwnVerdict(): void {
+	public function testPlainRunChangesNothingAndAgreesWithItsOwnVerdict(): void {
 		// `--offline` because the probe goes out on the network, which a test
 		// instance cannot answer. Which checks pass here is not this test's
 		// business — a test instance is not set up for federation — so what it
@@ -33,11 +33,24 @@ class CheckInstallTest extends CommandTestCase {
 		$display = $tester->getDisplay();
 
 		$this->assertStringContainsString('the WebFinger probe was not run', $display);
-		$this->assertStringContainsString('invalid followers removed', $display);
-		$this->assertStringContainsString('Your current configuration', $display);
+		$this->assertStringNotContainsString('removed', $display);
+		$this->assertStringNotContainsString('Your current configuration', $display);
+		$this->assertTrue(
+			str_contains($display, 'no follows or notes point to an account that is no longer cached')
+				|| str_contains($display, '--repair removes them; nothing was changed'),
+			$display
+		);
 
 		$passed = str_contains($display, substr(CheckInstall::VERDICT_OK, 0, strpos(CheckInstall::VERDICT_OK, '%')));
 		$this->assertSame($passed ? 0 : 1, $code, $display);
+	}
+
+	public function testTheConfigurationIsPrintedOnlyWhenAskedFor(): void {
+		$tester = $this->tester(CheckInstall::class);
+
+		$this->runNonInteractive($tester, ['--offline' => true, '--config' => true]);
+
+		$this->assertStringContainsString('Your current configuration', $tester->getDisplay());
 	}
 
 	public function testTheAdviceItPrintsNamesACommandThatExists(): void {

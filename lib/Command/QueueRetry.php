@@ -35,7 +35,7 @@ use Symfony\Component\Console\Question\ConfirmationQuestion;
  * for a week after they were abandoned, and this is what puts them back.
  *
  * It reads and writes the queue tables directly rather than through the queue
- * services, in the same way `social:benchmark` does — the services have no
+ * services, in the same way `social:debug:benchmark` does — the services have no
  * "reset this row" operation, and inventing one for a maintenance command
  * would put a footgun in the delivery path.
  */

@@ -19,6 +19,7 @@ const COMPLETE = {
 	contact: { email: 'mods@cloud.example', account: { username: 'carol', display_name: 'Carol' } },
 	privacy_policy_url: 'https://cloud.example/privacy',
 	legal_notice_url: 'https://cloud.example/imprint',
+	apps: { mastodon: 'cloud.example', bluesky: '' },
 }
 
 /**
@@ -62,6 +63,15 @@ describe('the About page', () => {
 		expect(wrapper.text()).toContain('The administrators have not written any rules yet.')
 		expect(wrapper.text()).toContain('No contact has been given.')
 		expect(wrapper.text()).not.toContain('Legal')
+	})
+
+	it('says how to use the server from an app, with the addresses it was handed', async () => {
+		const wrapper = await mountAbout(COMPLETE)
+
+		const section = wrapper.find('section[aria-labelledby="about-apps"]')
+		expect(section.find('h2').text()).toBe('Use it in an app')
+		expect(section.find('.use-in-app__code').text()).toBe('cloud.example')
+		expect(axios.get).toHaveBeenCalledTimes(1)
 	})
 
 	it('says so when the page cannot be loaded', async () => {

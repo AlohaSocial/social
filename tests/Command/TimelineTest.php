@@ -25,7 +25,7 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 
 /**
- * `occ social:timeline` pages with nids. A nid wider than a PHP int reaches
+ * `occ social:debug:timeline` pages with nids. A nid wider than a PHP int reaches
  * the query as the string it was typed as; `intval()` clamped it to
  * PHP_INT_MAX, which is a different page.
  *

@@ -58,7 +58,7 @@ class NoteCreate extends SocialCommand {
 	#[\Override]
 	protected function configure() {
 		parent::configure();
-		$this->setName('social:note:create')
+		$this->setName('social:debug:note:create')
 			->addOption(
 				'replyTo', 'r', InputOption::VALUE_OPTIONAL, 'in reply to an existing thread'
 			)
@@ -75,7 +75,7 @@ class NoteCreate extends SocialCommand {
 			)
 			->addArgument('user_id', InputArgument::REQUIRED, 'userId of the author')
 			->addArgument('content', InputArgument::REQUIRED, 'content of the post')
-			->setDescription('Create a new note');
+			->setDescription('Post as a user from the command line (for testing)');
 	}
 
 	/**

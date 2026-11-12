@@ -10,13 +10,16 @@ import { showError, showSuccess } from '../../../src/services/toast.js'
 
 import Migration from '../../../src/components/MigrationSettings.vue'
 import BlueskyMoveAway from '../../../src/components/BlueskyMoveAway.vue'
+import BlueskyMoveIn from '../../../src/components/BlueskyMoveIn.vue'
 import { confirmPassword } from '../../../src/services/externalApi.js'
+import { loadState } from '@nextcloud/initial-state'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }))
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 vi.mock('../../../src/services/externalApi.js', () => ({ confirmPassword: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@nextcloud/initial-state', () => ({ loadState: vi.fn((app, key, fallback) => fallback) }))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -78,13 +81,134 @@ describe('Migration', () => {
 
 		expect(wrapper.text()).toContain('Export your data')
 		expect(wrapper.text()).toContain('Import an archive')
-		expect(wrapper.text()).toContain('Coming from another network')
+		expect(wrapper.text()).toContain('Bring your follows with you')
 	})
 
-	it('holds the card that moves the Bluesky account away', () => {
-		const wrapper = mountPage()
+	describe('the three choices', () => {
+		const choiceButtons = (wrapper) => wrapper.findAll('.migration__choice')
+		const section = (wrapper, id) => wrapper.find('#migration-' + id)
 
-		expect(wrapper.findComponent(BlueskyMoveAway).exists()).toBe(true)
+		afterEach(() => {
+			window.location.hash = ''
+		})
+
+		it('opens on the three choices, with none of their steps shown yet', async () => {
+			const wrapper = mountPage()
+			await flushPromises()
+
+			expect(choiceButtons(wrapper).map((b) => b.find('.migration__choice-title').text()))
+				.toEqual(['Bring an account here', 'Keep a copy', 'Leave this server'])
+			for (const id of ['bring', 'copy', 'leave']) {
+				expect(section(wrapper, id).isVisible()).toBe(false)
+			}
+			expect(choiceButtons(wrapper).every((b) => b.attributes('aria-pressed') === 'false')).toBe(true)
+		})
+
+		it('shows only the steps of the choice picked, and puts it in the address', async () => {
+			const replace = vi.fn().mockResolvedValue(undefined)
+			const wrapper = mount(Migration, { attachTo: document.body, global: { mocks: { $router: { replace }, $route: { hash: '' } } } })
+			await flushPromises()
+
+			await choiceButtons(wrapper).at(1).trigger('click')
+
+			expect(section(wrapper, 'copy').isVisible()).toBe(true)
+			expect(section(wrapper, 'bring').isVisible()).toBe(false)
+			expect(section(wrapper, 'leave').isVisible()).toBe(false)
+			expect(choiceButtons(wrapper).at(1).attributes('aria-pressed')).toBe('true')
+			expect(replace).toHaveBeenCalledWith({ hash: '#copy' })
+		})
+
+		it('opens the choice the address names', async () => {
+			const wrapper = mount(Migration, { attachTo: document.body, global: { mocks: { $route: { hash: '#leave' } } } })
+			await flushPromises()
+
+			expect(section(wrapper, 'leave').isVisible()).toBe(true)
+			expect(section(wrapper, 'bring').isVisible()).toBe(false)
+		})
+
+		it('ignores a hash that names no choice', async () => {
+			window.location.hash = '#nothing'
+			const wrapper = mountPage()
+			await flushPromises()
+
+			expect(['bring', 'copy', 'leave'].some((id) => section(wrapper, id).isVisible())).toBe(false)
+		})
+
+		it('opens on bringing an account while an import runs', async () => {
+			axios.get.mockImplementation((url) => Promise.resolve({
+				data: url.endsWith('/migration/imports') ? { imports: [job('follows', 'running')] } : { aliases: [] },
+			}))
+			const wrapper = mountPage()
+			await flushPromises()
+
+			expect(section(wrapper, 'bring').isVisible()).toBe(true)
+		})
+
+		it('opens on bringing an account when the old server sent the person back with a failed finish', async () => {
+			axios.get.mockImplementation((url) => Promise.resolve({
+				data: url.endsWith('/migration/move-in/finish')
+					? { status: 'failed', acct: 'alice@old.example', code: 'move-confirm-expired' }
+					: { aliases: [], imports: [] },
+			}))
+			const wrapper = mountPage()
+			await flushPromises()
+
+			expect(section(wrapper, 'bring').isVisible()).toBe(true)
+		})
+
+		it('opens on leaving when the account has moved away', async () => {
+			axios.get.mockImplementation((url) => Promise.resolve({
+				data: url.endsWith('/migration/move') ? { moved_to: 'https://new.example/users/alice', moved_at: 1767225600, can_move_at: 0 } : { aliases: [], imports: [] },
+			}))
+			const wrapper = mountPage()
+			await flushPromises()
+
+			expect(section(wrapper, 'leave').isVisible()).toBe(true)
+			expect(section(wrapper, 'leave').text()).toContain('This account moved to https://new.example/users/alice')
+		})
+
+		it('keeps the explanations behind a How this works disclosure, and every control in view', async () => {
+			const wrapper = mountPage()
+			await flushPromises()
+
+			const how = wrapper.findAll('details.migration__how')
+			expect(how.length).toBeGreaterThan(5)
+			expect(how.every((d) => d.find('summary').text() !== '')).toBe(true)
+			expect(how.some((d) => d.text().includes('a move carries the followers, never the content'))).toBe(true)
+			// the settings stay outside the disclosures
+			expect(wrapper.find('details .migration__media-switch').exists()).toBe(false)
+			expect(wrapper.find('details input[type="file"]').exists()).toBe(false)
+		})
+
+		it('speaks of servers being connected rather than of the protocol', () => {
+			const wrapper = mountPage()
+
+			expect(wrapper.text()).not.toMatch(/ActivityPub|fediverse/i)
+		})
+	})
+
+	describe('Bluesky', () => {
+		afterEach(() => {
+			loadState.mockImplementation((app, key, fallback) => fallback)
+		})
+
+		it('leaves Bluesky out entirely when it is off', () => {
+			const wrapper = mountPage()
+
+			expect(wrapper.findComponent(BlueskyMoveAway).exists()).toBe(false)
+			expect(wrapper.findComponent(BlueskyMoveIn).exists()).toBe(false)
+			expect(wrapper.text()).not.toContain('Bluesky')
+		})
+
+		it('holds the Bluesky cards and names the way in when it is on', () => {
+			loadState.mockImplementation((app, key, fallback) => (key === 'serverData' ? { bluesky: { enabled: true } } : fallback))
+			const wrapper = mountPage()
+
+			expect(wrapper.find('#migration-leave').findComponent(BlueskyMoveAway).exists()).toBe(true)
+			expect(wrapper.find('#migration-bring').findComponent(BlueskyMoveIn).exists()).toBe(true)
+			expect(wrapper.find('.migration__where').text()).toContain('Bring your Bluesky account here on this page')
+			expect(wrapper.text()).not.toContain('Bring your Bluesky account here below')
+		})
 	})
 
 	/**
@@ -122,7 +246,7 @@ describe('Migration', () => {
 		URL.revokeObjectURL = vi.fn()
 
 		const wrapper = mountPage()
-		await wrapper.find('.migration__card:not(.migration__card--lead) button').trigger('click')
+		await wrapper.find('.migration__export-button').trigger('click')
 		await flushPromises()
 
 		expect(axios.get).toHaveBeenCalledWith(`${API}/migration/export`, { responseType: 'blob' })
@@ -136,7 +260,7 @@ describe('Migration', () => {
 		axios.get.mockRejectedValue(new Error('no room on the disk'))
 
 		const wrapper = mountPage()
-		await wrapper.find('.migration__card:not(.migration__card--lead) button').trigger('click')
+		await wrapper.find('.migration__export-button').trigger('click')
 		await flushPromises()
 
 		expect(showError).toHaveBeenCalledWith('Could not export your data')
@@ -402,7 +526,7 @@ describe('Migration', () => {
 				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, {})] } })
 			}
 			if (url.endsWith('/migration/move-in/finish')) {
-				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, error: 'the old server refused the move: this account moved on 2026-10-01' } })
+				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, code: 'old-server-refused', error: 'the old server refused the move: this account moved on 2026-10-01' } })
 			}
 			return Promise.resolve({ data: { aliases: [], handle: '@alice@cloud.example' } })
 		})
@@ -410,8 +534,29 @@ describe('Migration', () => {
 		const wrapper = mountPage()
 		await flushPromises()
 
-		expect(wrapper.find('.migration__finish-error').text()).toContain('this account moved on 2026-10-01')
+		const failure = wrapper.find('.migration__finish-error')
+		expect(failure.find('[role="alert"]').text()).toBe('The old server did not let this one finish the move. Try again later, or finish the move there.')
+		expect(failure.find('details').text()).toContain('this account moved on 2026-10-01')
 		expect(buttonNamed(wrapper, 'Finish the move from here')).toBeTruthy()
+	})
+
+	it('explains a finish that failed for a reason kept only in the log in general terms', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, {})] } })
+			}
+			if (url.endsWith('/migration/move-in/finish')) {
+				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, code: 'move-failed', error: '' } })
+			}
+			return Promise.resolve({ data: { aliases: [], handle: '@alice@cloud.example' } })
+		})
+
+		const wrapper = mountPage()
+		await flushPromises()
+
+		const failure = wrapper.find('.migration__finish-error')
+		expect(failure.text()).toContain('Something went wrong on the way.')
+		expect(failure.find('details').exists()).toBe(false)
 	})
 
 	it('says in plain words when the old account cannot be found, with the server\'s words behind the details', async () => {
@@ -548,15 +693,44 @@ describe('Migration', () => {
 		expect(axios.post.mock.calls[0][1].get('fetch_media')).toBe('0')
 	})
 
-	it('shows the reason when a run failed', async () => {
-		serverQueues('posts', job('posts', 'failed', {}, { error: 'this archive has no outbox.json' }))
+	it('explains a failed run by its code, with the server\'s sentence behind the details', async () => {
+		serverQueues('posts', job('posts', 'failed', {}, { code: 'export-not-posts', error: 'this archive has no outbox.json' }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'posts', 'outbox.json')
 		await vi.runOnlyPendingTimersAsync()
 		await flushPromises()
 
-		expect(wrapper.findAll('.migration__result').at(-1).text()).toContain('this archive has no outbox.json')
+		const result = wrapper.findAll('.migration__result').at(-1)
+		expect(result.find('p').text()).toBe('That archive holds no posts. Pick the export of your posts from your old server.')
+		expect(result.find('details').text()).toContain('this archive has no outbox.json')
+		expect(result.text()).not.toContain('Failed:')
+	})
+
+	it('explains a run that failed on the server without showing what went wrong there', async () => {
+		serverQueues('follows', job('follows', 'failed', {}, { code: 'import-failed' }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'follows', 'following_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		const result = wrapper.findAll('.migration__result').at(-1)
+		expect(result.text()).toBe('The import stopped because of a problem on this server. Try again; if it happens again, ask your administrator.')
+		expect(result.find('details').exists()).toBe(false)
+	})
+
+	it('keeps what a run failed before it had a code behind the details', async () => {
+		serverQueues('posts', job('posts', 'failed', {}, { error: 'database went away' }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'posts', 'outbox.json')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		const result = wrapper.findAll('.migration__result').at(-1)
+		expect(result.find('p').text()).toContain('The import stopped because of a problem on this server.')
+		expect(result.find('details').text()).toContain('database went away')
 	})
 
 	it('says so when the export cannot be read', async () => {
@@ -584,7 +758,7 @@ describe('Migration', () => {
 	it('says where to find the file in the other networks', () => {
 		const text = mountPage().text()
 
-		for (const network of ['Mastodon', 'Pixelfed', 'GoToSocial', 'Bluesky']) {
+		for (const network of ['Mastodon', 'Pixelfed', 'GoToSocial', 'Instagram', 'Threads', 'X']) {
 			expect(text).toContain(network)
 		}
 	})

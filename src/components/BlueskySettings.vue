@@ -53,6 +53,140 @@
 					</dd>
 				</div>
 			</dl>
+			<!-- first, because signing in to an app is what most people come
+			     here for -->
+			<div v-if="bluesky.active !== false" class="bluesky-settings__pds-sign-in">
+				<h5 class="bluesky-settings__title">
+					{{ t('social', 'Sign in to the Bluesky app') }}
+				</h5>
+				<p class="bluesky-settings__hint">
+					{{ t('social', 'Enter this server as the hosting provider in the Bluesky app: {server}. Sign in as {handle} with an app password you make below. Never enter your Nextcloud password in the Bluesky app.', { server: origin, handle: '@' + bluesky.handle }) }}
+				</p>
+				<dl class="bluesky-settings__identity">
+					<div class="bluesky-settings__identity-row">
+						<dt>{{ t('social', 'Hosting provider') }}</dt>
+						<dd>
+							<code class="bluesky-settings__code">{{ origin }}</code>
+							<NcButton
+								variant="tertiary"
+								:title="blueskyCopied === 'pds' ? t('social', 'Copied') : t('social', 'Copy')"
+								:aria-label="blueskyCopied === 'pds' ? t('social', 'Copied') : t('social', 'Copy the hosting provider address')"
+								@click="copyBluesky('pds', origin)">
+								<template #icon>
+									<Check v-if="blueskyCopied === 'pds'" :size="16" />
+									<ContentCopy v-else :size="16" />
+								</template>
+							</NcButton>
+						</dd>
+					</div>
+				</dl>
+			</div>
+			<!-- what a Bluesky app signs in with: this server is its
+			     hosting provider, and the Nextcloud password is never
+			     handed to it -->
+			<div v-if="bluesky.active !== false && !appPasswordsHidden" class="bluesky-settings__app-passwords">
+				<h5 class="bluesky-settings__title">
+					{{ t('social', 'App passwords for Bluesky apps') }}
+				</h5>
+				<p class="bluesky-settings__hint">
+					{{ t('social', 'Make a separate app password for each client that signs in to this PDS with a handle and password. Each password works only with your Bluesky account here. Never enter your Nextcloud password in a client.') }}
+				</p>
+				<p v-if="appPasswordsError" class="bluesky-settings__hint">
+					{{ appPasswordsError }}
+				</p>
+				<p v-else-if="appPasswords === null" class="bluesky-settings__hint">
+					{{ t('social', 'Loading …') }}
+				</p>
+				<template v-else>
+					<div v-if="newAppPassword" class="bluesky-settings__new-password" role="status">
+						<p class="bluesky-settings__new-password-title">
+							{{ t('social', 'New app password for {name}', { name: newAppPassword.name }) }}
+						</p>
+						<p class="bluesky-settings__new-password-value">
+							<code class="bluesky-settings__code">{{ newAppPassword.password }}</code>
+							<NcButton
+								variant="tertiary"
+								:title="blueskyCopied === 'password' ? t('social', 'Copied') : t('social', 'Copy')"
+								:aria-label="blueskyCopied === 'password' ? t('social', 'Copied') : t('social', 'Copy the app password')"
+								@click="copyBluesky('password', newAppPassword.password)">
+								<template #icon>
+									<Check v-if="blueskyCopied === 'password'" :size="16" />
+									<ContentCopy v-else :size="16" />
+								</template>
+							</NcButton>
+						</p>
+						<p class="bluesky-settings__hint">
+							{{ t('social', 'Copy it now: it is not shown again.') }}
+						</p>
+						<NcButton class="bluesky-settings__new-password-done" @click="newAppPassword = null">
+							{{ t('social', 'Done') }}
+						</NcButton>
+					</div>
+					<ul v-if="appPasswords.length > 0" class="bluesky-settings__app-password-list">
+						<li v-for="appPassword in appPasswords" :key="appPassword.id" class="bluesky-settings__app-password">
+							<span class="bluesky-settings__app-password-name">{{ appPassword.name }}</span>
+							<span class="bluesky-settings__hint">
+								{{ t('social', 'Made {date}', { date: madeOn(appPassword.creation) }) }}
+								·
+								{{ appPassword.last_used > 0
+									? t('social', 'Last used {when}', { when: lastUsed(appPassword.last_used) })
+									: t('social', 'Never used') }}
+								<template v-if="appPassword.privileged">
+									· {{ t('social', 'Can read and send direct messages') }}
+								</template>
+							</span>
+							<div v-if="confirmingRevoke === appPassword.id" class="bluesky-settings__app-password-actions">
+								<p class="bluesky-settings__hint">
+									{{ t('social', 'Every app signed in with this password is signed out and cannot use it again.') }}
+								</p>
+								<NcButton
+									variant="error"
+									:disabled="revoking === appPassword.id"
+									@click="revokeAppPassword(appPassword)">
+									{{ t('social', 'Revoke it') }}
+								</NcButton>
+								<NcButton :disabled="revoking === appPassword.id" @click="confirmingRevoke = 0">
+									{{ t('social', 'Keep it') }}
+								</NcButton>
+							</div>
+							<div v-else class="bluesky-settings__app-password-actions">
+								<NcButton @click="confirmingRevoke = appPassword.id">
+									{{ t('social', 'Revoke') }}
+								</NcButton>
+							</div>
+						</li>
+					</ul>
+					<div class="bluesky-settings__app-password-create">
+						<div class="bluesky-settings__app-password-input">
+							<NcTextField
+								v-model="appPasswordName"
+								class="bluesky-settings__app-password-field"
+								:label="t('social', 'Name of the new app password')"
+								:placeholder="t('social', 'The app it is for')"
+								:error="appPasswordNameError !== null"
+								maxlength="64"
+								:showTrailingButton="false"
+								@update:modelValue="appPasswordNameError = null"
+								@keydown.enter.prevent="createAppPassword" />
+							<ServerError v-if="appPasswordNameError" :error="appPasswordNameError" />
+						</div>
+						<!-- Bluesky's own privileged app passwords: only an app
+						     signed in with one reaches the direct messages -->
+						<NcCheckboxRadioSwitch v-model="appPasswordPrivileged" class="bluesky-settings__app-password-privileged">
+							{{ t('social', 'Allow direct messages') }}
+						</NcCheckboxRadioSwitch>
+						<NcButton
+							:disabled="appPasswordName.trim() === '' || makingAppPassword"
+							@click="createAppPassword">
+							<template #icon>
+								<NcLoadingIcon v-if="makingAppPassword" :size="20" />
+								<KeyOutline v-else :size="20" />
+							</template>
+							{{ t('social', 'Make an app password') }}
+						</NcButton>
+					</div>
+				</template>
+			</div>
 			<!-- pending: the directory has not taken the identity yet, so
 			     there is nothing on Bluesky to switch off -->
 			<p v-if="bluesky.state === 'pending'" class="bluesky-settings__hint">
@@ -166,7 +300,7 @@
 				</NcButton>
 				<p class="bluesky-settings__hint">
 					{{ t('social', 'Your posts, pictures and the history of your Bluesky identifier, in the files Bluesky tools read, with a guide to moving the account even if this server is gone. The archive from the Migration page holds the same files.') }}
-					<router-link :to="{ name: 'migration' }">
+					<router-link :to="{ name: 'migration', hash: '#copy' }">
 						{{ t('social', 'Open Migration') }}
 					</router-link>
 				</p>
@@ -311,138 +445,6 @@
 						</template>
 						{{ t('social', 'Check and use it') }}
 					</NcButton>
-				</template>
-			</div>
-			<div v-if="bluesky.active !== false" class="bluesky-settings__pds-sign-in">
-				<h5 class="bluesky-settings__title">
-					{{ t('social', 'Sign in to the Bluesky app') }}
-				</h5>
-				<p class="bluesky-settings__hint">
-					{{ t('social', 'Enter this server as the hosting provider in the Bluesky app: {server}. Sign in as {handle} with an app password you make below. Never enter your Nextcloud password in the Bluesky app.', { server: origin, handle: '@' + bluesky.handle }) }}
-				</p>
-				<dl class="bluesky-settings__identity">
-					<div class="bluesky-settings__identity-row">
-						<dt>{{ t('social', 'Hosting provider') }}</dt>
-						<dd>
-							<code class="bluesky-settings__code">{{ origin }}</code>
-							<NcButton
-								variant="tertiary"
-								:title="blueskyCopied === 'pds' ? t('social', 'Copied') : t('social', 'Copy')"
-								:aria-label="blueskyCopied === 'pds' ? t('social', 'Copied') : t('social', 'Copy the hosting provider address')"
-								@click="copyBluesky('pds', origin)">
-								<template #icon>
-									<Check v-if="blueskyCopied === 'pds'" :size="16" />
-									<ContentCopy v-else :size="16" />
-								</template>
-							</NcButton>
-						</dd>
-					</div>
-				</dl>
-			</div>
-			<!-- what a Bluesky app signs in with: this server is its
-			     hosting provider, and the Nextcloud password is never
-			     handed to it -->
-			<div v-if="bluesky.active !== false && !appPasswordsHidden" class="bluesky-settings__app-passwords">
-				<h5 class="bluesky-settings__title">
-					{{ t('social', 'App passwords for Bluesky apps') }}
-				</h5>
-				<p class="bluesky-settings__hint">
-					{{ t('social', 'Make a separate app password for each client that signs in to this PDS with a handle and password. Each password works only with your Bluesky account here. Never enter your Nextcloud password in a client.') }}
-				</p>
-				<p v-if="appPasswordsError" class="bluesky-settings__hint">
-					{{ appPasswordsError }}
-				</p>
-				<p v-else-if="appPasswords === null" class="bluesky-settings__hint">
-					{{ t('social', 'Loading …') }}
-				</p>
-				<template v-else>
-					<div v-if="newAppPassword" class="bluesky-settings__new-password" role="status">
-						<p class="bluesky-settings__new-password-title">
-							{{ t('social', 'New app password for {name}', { name: newAppPassword.name }) }}
-						</p>
-						<p class="bluesky-settings__new-password-value">
-							<code class="bluesky-settings__code">{{ newAppPassword.password }}</code>
-							<NcButton
-								variant="tertiary"
-								:title="blueskyCopied === 'password' ? t('social', 'Copied') : t('social', 'Copy')"
-								:aria-label="blueskyCopied === 'password' ? t('social', 'Copied') : t('social', 'Copy the app password')"
-								@click="copyBluesky('password', newAppPassword.password)">
-								<template #icon>
-									<Check v-if="blueskyCopied === 'password'" :size="16" />
-									<ContentCopy v-else :size="16" />
-								</template>
-							</NcButton>
-						</p>
-						<p class="bluesky-settings__hint">
-							{{ t('social', 'Copy it now: it is not shown again.') }}
-						</p>
-						<NcButton class="bluesky-settings__new-password-done" @click="newAppPassword = null">
-							{{ t('social', 'Done') }}
-						</NcButton>
-					</div>
-					<ul v-if="appPasswords.length > 0" class="bluesky-settings__app-password-list">
-						<li v-for="appPassword in appPasswords" :key="appPassword.id" class="bluesky-settings__app-password">
-							<span class="bluesky-settings__app-password-name">{{ appPassword.name }}</span>
-							<span class="bluesky-settings__hint">
-								{{ t('social', 'Made {date}', { date: madeOn(appPassword.creation) }) }}
-								·
-								{{ appPassword.last_used > 0
-									? t('social', 'Last used {when}', { when: lastUsed(appPassword.last_used) })
-									: t('social', 'Never used') }}
-								<template v-if="appPassword.privileged">
-									· {{ t('social', 'Can read and send direct messages') }}
-								</template>
-							</span>
-							<div v-if="confirmingRevoke === appPassword.id" class="bluesky-settings__app-password-actions">
-								<p class="bluesky-settings__hint">
-									{{ t('social', 'Every app signed in with this password is signed out and cannot use it again.') }}
-								</p>
-								<NcButton
-									variant="error"
-									:disabled="revoking === appPassword.id"
-									@click="revokeAppPassword(appPassword)">
-									{{ t('social', 'Revoke it') }}
-								</NcButton>
-								<NcButton :disabled="revoking === appPassword.id" @click="confirmingRevoke = 0">
-									{{ t('social', 'Keep it') }}
-								</NcButton>
-							</div>
-							<div v-else class="bluesky-settings__app-password-actions">
-								<NcButton @click="confirmingRevoke = appPassword.id">
-									{{ t('social', 'Revoke') }}
-								</NcButton>
-							</div>
-						</li>
-					</ul>
-					<div class="bluesky-settings__app-password-create">
-						<div class="bluesky-settings__app-password-input">
-							<NcTextField
-								v-model="appPasswordName"
-								class="bluesky-settings__app-password-field"
-								:label="t('social', 'Name of the new app password')"
-								:placeholder="t('social', 'The app it is for')"
-								:error="appPasswordNameError !== null"
-								maxlength="64"
-								:showTrailingButton="false"
-								@update:modelValue="appPasswordNameError = null"
-								@keydown.enter.prevent="createAppPassword" />
-							<ServerError v-if="appPasswordNameError" :error="appPasswordNameError" />
-						</div>
-						<!-- Bluesky's own privileged app passwords: only an app
-						     signed in with one reaches the direct messages -->
-						<NcCheckboxRadioSwitch v-model="appPasswordPrivileged" class="bluesky-settings__app-password-privileged">
-							{{ t('social', 'Allow direct messages') }}
-						</NcCheckboxRadioSwitch>
-						<NcButton
-							:disabled="appPasswordName.trim() === '' || makingAppPassword"
-							@click="createAppPassword">
-							<template #icon>
-								<NcLoadingIcon v-if="makingAppPassword" :size="20" />
-								<KeyOutline v-else :size="20" />
-							</template>
-							{{ t('social', 'Make an app password') }}
-						</NcButton>
-					</div>
 				</template>
 			</div>
 			<!-- a Bluesky app that signed in through the OAuth consent

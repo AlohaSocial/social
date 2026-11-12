@@ -111,8 +111,8 @@
 			     that what somebody chose to follow can never be pushed out of
 			     their own sidebar by what happens to be busy today.
 
-			     The compass marks this as a place to explore, and distinguishes it
-			     from the individual lists and tags nested beneath it. -->
+			     The binoculars mark this as a place to explore, apart from
+			     Discover's compass and from the lists and tags nested beneath it. -->
 			<NcAppNavigationItem
 				v-if="exploreTotal > 0"
 				ref="exploreItem"
@@ -122,7 +122,7 @@
 				:open="exploreOpen"
 				@update:open="onExploreToggle">
 				<template #icon>
-					<IconCompass :size="20" />
+					<IconBinoculars :size="20" />
 				</template>
 				<!-- Followed tags, trending tags and lists were one
 				     undifferentiated column, so which kind a row was had to be read
@@ -390,6 +390,7 @@ import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 import { defineAsyncComponent } from 'vue'
 
 import IconHome from 'vue-material-design-icons/Home.vue'
+import IconBinoculars from 'vue-material-design-icons/Binoculars.vue'
 import IconCompass from 'vue-material-design-icons/Compass.vue'
 import IconImageMultiple from 'vue-material-design-icons/ImageMultiple.vue'
 import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultiple.vue'
@@ -494,6 +495,7 @@ export default {
 		IconAccountGroup,
 		IconFormatListBulleted,
 		IconBluesky,
+		IconBinoculars,
 		IconCompass,
 		IconCancel,
 		IconInformationOutline,

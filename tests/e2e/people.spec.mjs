@@ -166,7 +166,7 @@ test.describe('other people, in a browser', () => {
 	test('an account and a hashtag can be searched for', async ({ page }) => {
 		const tag = process.env.E2E_HASHTAG ?? 'alohasearch'
 		const known = await (await me.get(`${APP}/api/v2/search?q=${encodeURIComponent(`#${tag}`)}`)).json()
-		test.skip(known.hashtags.length === 0 && !process.env.CI, `seed #${tag} with occ social:note:create and occ social:cache:refresh, as the workflow does`)
+		test.skip(known.hashtags.length === 0 && !process.env.CI, `seed #${tag} with occ social:debug:note:create and occ social:cache:refresh, as the workflow does`)
 
 		await openApp(page)
 		const search = page.getByRole('searchbox', { name: 'Search …' })

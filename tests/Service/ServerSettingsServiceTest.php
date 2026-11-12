@@ -60,10 +60,12 @@ class ServerSettingsServiceTest extends TestCase {
 
 	/** A call that should be taken, so a test can change one field of it. */
 	private function save(array $overrides = []): array {
+		$about = array_intersect_key($overrides, ['extendedDescription' => true, 'contactEmail' => true, 'contactAccount' => true]);
+		if ($about !== []) {
+			return $this->saveAbout($about);
+		}
+
 		$values = array_merge([
-			'contactEmail' => 'admin@instance.example',
-			'contactAccount' => '',
-			'extendedDescription' => 'a friendly place',
 			'maxSize' => 20,
 			'maxVideoSize' => 4096,
 			'imageMaxEdge' => 0,
@@ -84,7 +86,17 @@ class ServerSettingsServiceTest extends TestCase {
 		return $this->service->save(...$values);
 	}
 
+	/** An About card call that should be taken, with one field changed. */
+	private function saveAbout(array $overrides = []): array {
+		return $this->service->saveAbout(...array_merge([
+			'extendedDescription' => 'a friendly place',
+			'contactEmail' => 'admin@instance.example',
+			'contactAccount' => '',
+		], $overrides));
+	}
+
 	public function testWhatWasSavedIsWhatIsReadBack(): void {
+		$this->saveAbout();
 		$this->save(['secureMode' => true]);
 
 		$this->assertSame([
@@ -239,11 +251,28 @@ class ServerSettingsServiceTest extends TestCase {
 	 */
 	public function testARefusalWritesNothingAtAll(): void {
 		try {
-			$this->save(['contactEmail' => 'admin@instance.example', 'maxSize' => 0]);
+			$this->save(['maxSize' => 0]);
 			$this->fail('an impossible upload ceiling was accepted');
 		} catch (InvalidArgumentException $e) {
 			$this->assertSame([], $this->stored);
 		}
+
+		try {
+			$this->saveAbout(['contactEmail' => 'admin@instance.example', 'extendedDescription' => str_repeat('x', ServerSettingsService::MAX_DESCRIPTION + 1)]);
+			$this->fail('a description past the ceiling was accepted');
+		} catch (InvalidArgumentException $e) {
+			$this->assertSame([], $this->stored);
+		}
+	}
+
+	/** The two cards write apart, so saving one never resets the other. */
+	public function testEachCardWritesOnlyItsOwnKeys(): void {
+		$this->saveAbout();
+		$this->assertSame(ServerSettingsService::ABOUT_KEYS, array_keys($this->stored));
+
+		$this->stored = [];
+		$this->save();
+		$this->assertSame([], array_intersect(ServerSettingsService::ABOUT_KEYS, array_keys($this->stored)));
 	}
 
 	/** Zero is not out of range here; it is what turns the throttle off. */

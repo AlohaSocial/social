@@ -46,7 +46,7 @@ class AccountFollowing extends SocialCommand {
 			->addArgument('account', InputArgument::REQUIRED, 'Account to follow')
 			->addOption('local', '', InputOption::VALUE_NONE, 'account is local')
 			->addOption('unfollow', '', InputOption::VALUE_NONE, 'unfollow')
-			->setDescription('Following a new account');
+			->setDescription('Make a local account follow another account, or unfollow it with --unfollow');
 	}
 
 	/**

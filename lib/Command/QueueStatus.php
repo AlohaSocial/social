@@ -38,7 +38,7 @@ class QueueStatus extends SocialCommand {
 			->addOption(
 				'token', 't', InputOption::VALUE_OPTIONAL, 'token of a request'
 			)
-			->setDescription('Return status on the request queue');
+			->setDescription('Show what the outbound delivery queue holds and what it gave up on, or the deliveries of one --token');
 	}
 
 	/**

@@ -23,7 +23,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 
 /**
- * The Server card of the Social settings page.
+ * The Server and About this server cards of the Social settings page.
  *
  * Administrators only, and not by accident: this controller carries none of
  * the relaxing attributes, so the server dispatches it for an administrator
@@ -44,10 +44,29 @@ class ServerSettingsController extends Controller {
 	}
 
 	/**
-	 * Writes every setting on the card, or none of them.
+	 * The About this server card: the description, the contact address and
+	 * the contact account, all or none.
 	 *
+	 * @param string $extendedDescription what this server is, shown on the About page and to Mastodon apps
 	 * @param string $contactEmail empty, or an address
 	 * @param string $contactAccount the preferred username of a local Social account, or empty to clear
+	 */
+	#[FrontpageRoute(verb: 'POST', url: '/admin/about')]
+	public function saveAbout(
+		string $extendedDescription = '',
+		string $contactEmail = '',
+		string $contactAccount = '',
+	): DataResponse {
+		try {
+			return new DataResponse($this->serverSettingsService->saveAbout($extendedDescription, $contactEmail, $contactAccount));
+		} catch (InvalidArgumentException $e) {
+			return $this->refused($e);
+		}
+	}
+
+	/**
+	 * Writes every setting on the Server card, or none of them.
+	 *
 	 * @param int $maxSize megabytes an attachment may have
 	 * @param int $maxVideoSize megabytes a video may have
 	 * @param int $imageMaxEdge longest edge a stored picture may have; 0 keeps every upload as it arrived
@@ -66,8 +85,6 @@ class ServerSettingsController extends Controller {
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/admin/server')]
 	public function save(
-		string $contactEmail = '',
-		string $extendedDescription = '',
 		int $maxSize = 10,
 		int $maxVideoSize = 2048,
 		int $imageMaxEdge = 0,
@@ -82,13 +99,10 @@ class ServerSettingsController extends Controller {
 		bool $secureMode = false,
 		bool $publishBlocks = false,
 		bool $allowSelfSigned = false,
-		string $contactAccount = '',
 		bool $hideCounts = false,
 	): DataResponse {
 		try {
 			return new DataResponse($this->serverSettingsService->save(
-				$contactEmail,
-				$extendedDescription,
 				$maxSize,
 				$maxVideoSize,
 				$imageMaxEdge,
@@ -103,15 +117,19 @@ class ServerSettingsController extends Controller {
 				$secureMode,
 				$publishBlocks,
 				$allowSelfSigned,
-				$contactAccount,
 				$hideCounts,
 			));
 		} catch (InvalidArgumentException $e) {
-			return new DataResponse(
-				$e instanceof SettingRefusedException ? $e->toArray() : ['error' => $e->getMessage()],
-				Http::STATUS_UNPROCESSABLE_ENTITY
-			);
+			return $this->refused($e);
 		}
+	}
+
+	/** A refused setting: a 422 naming the field, so the card can say which. */
+	private function refused(InvalidArgumentException $e): DataResponse {
+		return new DataResponse(
+			$e instanceof SettingRefusedException ? $e->toArray() : ['error' => $e->getMessage()],
+			Http::STATUS_UNPROCESSABLE_ENTITY
+		);
 	}
 
 	/**

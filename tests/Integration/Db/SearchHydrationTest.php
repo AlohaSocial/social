@@ -34,7 +34,7 @@ use PHPUnit\Framework\TestCase;
  * that product with every column of the post attached: a page of twenty was
  * 30,000 wide rows sorted on disk for an account following 300 others, and
  * 0.6 s on PostgreSQL whatever the size of the instance (`occ
- * social:benchmark`, 20,000 notes). What is pinned here is the shape that
+ * social:debug:benchmark`, 20,000 notes). What is pinned here is the shape that
  * keeps the follows out of the read of the posts, and that the visibility
  * the one query enforced still holds.
  */

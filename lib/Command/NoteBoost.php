@@ -38,11 +38,11 @@ class NoteBoost extends SocialCommand {
 	#[\Override]
 	protected function configure() {
 		parent::configure();
-		$this->setName('social:note:boost')
+		$this->setName('social:debug:note:boost')
 			->addArgument('user_id', InputArgument::REQUIRED, 'userId of the author')
 			->addArgument('note_id', InputArgument::REQUIRED, 'Note to boost')
 			->addOption('unboost', '', InputOption::VALUE_NONE, 'Unboost')
-			->setDescription('Boost a note');
+			->setDescription('Boost or unboost a post as a user (for testing)');
 	}
 
 	/**

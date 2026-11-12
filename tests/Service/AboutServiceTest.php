@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
+use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AboutService;
+use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceService;
 use OCP\IAppConfig;
@@ -26,6 +29,9 @@ class AboutServiceTest extends TestCase {
 	/** @var array<array{id: string, text: string}> */
 	private array $rules = [];
 	private ?Person $contact = null;
+	private bool $clientApiAtRoot = false;
+	/** the confirmed Nextcloud address, '' while there is none */
+	private string $cloudAuthority = 'cloud.example';
 
 	private function service(): AboutService {
 		$config = $this->createStub(ConfigService::class);
@@ -33,6 +39,9 @@ class AboutServiceTest extends TestCase {
 		$defaults = [ConfigService::SOCIAL_ACCESS_TYPE => 'all_but', ConfigService::SOCIAL_ACCESS_LIST => '[]'];
 		$config->method('getAppValue')->willReturnCallback(fn (string $key): string => $this->app[$key] ?? $defaults[$key] ?? '');
 		$config->method('getAppValueBool')->willReturnCallback(fn (string $key): bool => ($this->app[$key] ?? '0') === '1');
+		$config->method('getCloudAuthority')->willReturnCallback(
+			fn (): string => $this->cloudAuthority !== '' ? $this->cloudAuthority : throw new SocialAppConfigException()
+		);
 
 		$instance = $this->createStub(InstanceService::class);
 		$instance->method('rules')->willReturnCallback(fn (): array => $this->rules);
@@ -47,7 +56,13 @@ class AboutServiceTest extends TestCase {
 			fn (string $app, string $key, string $default = ''): string => $app === 'theming' ? ($this->theming[$key] ?? $default) : $default
 		);
 
-		return new AboutService($config, $instance, $actors, $appConfig);
+		$check = $this->createStub(CheckService::class);
+		$check->method('clientApiRootIsKnownGood')->willReturnCallback(fn (): bool => $this->clientApiAtRoot);
+
+		$atproto = new AtprotoConfig($config);
+		$config->method('getCloudUrl')->willReturnCallback(fn (): string => 'https://' . $this->cloudAuthority);
+
+		return new AboutService($config, $instance, $actors, $appConfig, $check, $atproto);
 	}
 
 	private function complete(): void {
@@ -72,6 +87,7 @@ class AboutServiceTest extends TestCase {
 			'contact' => ['email' => 'moderators@cloud.example', 'account' => ['username' => 'carol', 'display_name' => 'Carol']],
 			'privacy_policy_url' => 'https://cloud.example/privacy',
 			'legal_notice_url' => 'https://cloud.example/imprint',
+			'apps' => ['mastodon' => '', 'bluesky' => ''],
 		], $this->service()->about());
 		$this->assertSame([], $this->service()->missingBasics());
 	}
@@ -121,5 +137,31 @@ class AboutServiceTest extends TestCase {
 
 		$this->app[ConfigService::SOCIAL_EXTERNAL_ENABLED] = '1';
 		$this->assertTrue($this->service()->isOpenForSignUp());
+	}
+
+	public function testNoAppAddressBeforeTheServerIsSetUpForApps(): void {
+		$this->assertSame(['mastodon' => '', 'bluesky' => ''], $this->service()->appAddresses());
+	}
+
+	/** a Mastodon app builds `https://<domain>/api/v1/...`, so only a working root rewrite earns the domain */
+	public function testTheDomainIsOfferedToMastodonAppsOnceTheClientApiAnswersAtTheRoot(): void {
+		$this->clientApiAtRoot = true;
+		$this->cloudAuthority = 'cloud.example:8443';
+
+		$this->assertSame(['mastodon' => 'cloud.example:8443', 'bluesky' => ''], $this->service()->appAddresses());
+	}
+
+	public function testBlueskyAppsAreGivenTheHostingProviderWhileBlueskyIsOn(): void {
+		$this->app[ConfigService::ATPROTO_ENABLED] = '1';
+
+		$this->assertSame(['mastodon' => '', 'bluesky' => 'https://cloud.example'], $this->service()->appAddresses());
+	}
+
+	public function testNoAddressWhileTheServerHasNoneConfirmed(): void {
+		$this->clientApiAtRoot = true;
+		$this->app[ConfigService::ATPROTO_ENABLED] = '1';
+		$this->cloudAuthority = '';
+
+		$this->assertSame(['mastodon' => '', 'bluesky' => ''], $this->service()->appAddresses());
 	}
 }

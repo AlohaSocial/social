@@ -32,8 +32,11 @@ const stranger = { id: '9', acct: 'zed@remote.example', username: 'zed', display
 const pack = { id: 'fediverse', name: 'The fediverse', description: 'The projects this app talks to', size: 4, accounts: [] }
 
 /** what the server answers the lookups with */
-function serverHas({ suggestions = [], packs = [], identity = null } = {}) {
+function serverHas({ suggestions = [], packs = [], identity = null, apps = { mastodon: '', bluesky: '' } } = {}) {
 	axios.get.mockImplementation((url) => {
+		if (url.endsWith('/about/info')) {
+			return Promise.resolve({ data: { apps } })
+		}
 		if (url.endsWith('/api/v1/social/bluesky/identity')) {
 			return identity === null ? Promise.reject(new Error('no identity')) : Promise.resolve({ data: identity })
 		}
@@ -289,6 +292,17 @@ describe('FirstRun', () => {
 		expect(emit).toHaveBeenCalledWith('shortcut:compose')
 	})
 
+	it('ends with how to use the account from a phone app', async () => {
+		serverHas({ apps: { mastodon: 'cloud.example.org', bluesky: '' } })
+		const wrapper = await mountFirstRun()
+		await next(wrapper)
+		await next(wrapper)
+		await next(wrapper)
+
+		expect(wrapper.find('.first-run__apps h3').text()).toBe('Use it in an app')
+		expect(wrapper.find('.first-run__apps .use-in-app__code').text()).toBe('cloud.example.org')
+	})
+
 	it('can be skipped at any point, without touching the composer', async () => {
 		serverHas()
 		const emit = vi.spyOn(eventBus, 'emit')
@@ -369,7 +383,7 @@ describe('FirstRun', () => {
 		const links = wrapper.findAllComponents(RouterLinkStub)
 		expect(links).toHaveLength(2)
 		for (const link of links) {
-			expect(link.props('to')).toEqual({ name: 'migration' })
+			expect(link.props('to')).toEqual({ name: 'migration', hash: '#bring' })
 			expect(link.text()).toBe('Open Migration')
 		}
 		expect(wrapper.text()).not.toContain('Settings → Migration')

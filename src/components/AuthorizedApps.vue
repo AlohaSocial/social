@@ -8,9 +8,12 @@
 			{{ t('social', 'Loading …') }}
 		</p>
 
-		<p v-else-if="apps.length === 0" class="apps__hint">
-			{{ t('social', 'No app has been signed in to this account. Apps appear here when you sign in to one with your Aloha Social account.') }}
-		</p>
+		<template v-else-if="apps.length === 0">
+			<p class="apps__hint">
+				{{ t('social', 'No app has been signed in to this account. Apps appear here when you sign in to one with your Aloha Social account.') }}
+			</p>
+			<UseInAppCard />
+		</template>
 
 		<ul v-else class="apps__list">
 			<li v-for="app in apps" :key="app.id" class="apps__item">
@@ -78,6 +81,7 @@ import { generateUrl } from '@nextcloud/router'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import IconCellphoneLink from 'vue-material-design-icons/CellphoneLink.vue'
+import UseInAppCard from './UseInAppCard.vue'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
 import { fullDateTime } from '../utils/relativeTime.js'
@@ -100,6 +104,7 @@ export default {
 	components: {
 		IconCellphoneLink,
 		NcButton,
+		UseInAppCard,
 	},
 
 	data() {
@@ -179,6 +184,7 @@ export default {
 <style scoped lang="scss">
 .apps__hint {
 	color: var(--color-text-maxcontrast);
+	margin-block-end: 12px;
 }
 
 .apps__list {

@@ -555,7 +555,7 @@ class PostImportService {
 	 */
 	private function openArchive(string $path): ?ZipArchive {
 		if (!is_file($path)) {
-			throw new InvalidResourceException('there is no such file');
+			throw new MoveErrorException('there is no such file', 'export-unreadable');
 		}
 
 		$zip = new ZipArchive();
@@ -590,9 +590,10 @@ class PostImportService {
 				// report "nothing imported" about an archive that is perfectly
 				// valid and simply not the one to ask for.
 				if ($this->peerTubeHasNoFiles($zip)) {
-					throw new InvalidResourceException(
+					throw new MoveErrorException(
 						'this PeerTube export was taken without its video files, so there is'
-						. ' nothing to bring over — ask for the export again with the videos included'
+						. ' nothing to bring over — ask for the export again with the videos included',
+						'export-peertube-no-videos'
 					);
 				}
 
@@ -614,24 +615,24 @@ class PostImportService {
 					return ['format' => self::FORMAT_INSTAGRAM, 'items' => $instagram];
 				}
 
-				throw new InvalidResourceException($this->whyNotAnExport($zip));
+				throw $this->whyNotAnExport($zip);
 			}
 		} else {
 			$contents = file_get_contents($path);
 			if ($contents === false) {
-				throw new InvalidResourceException('the file could not be read');
+				throw new MoveErrorException('the file could not be read', 'export-unreadable');
 			}
 		}
 
 		$decoded = json_decode($contents, true);
 		if (!is_array($decoded)) {
-			throw new InvalidResourceException('this file is not the JSON an export is written in');
+			throw new MoveErrorException('this file is not the JSON an export is written in', 'export-unreadable');
 		}
 
 		// an OrderedCollection, ours and Mastodon's; a bare array, Pixelfed's
 		$items = $decoded['orderedItems'] ?? $decoded['items'] ?? $decoded['data'] ?? $decoded;
 		if (!is_array($items)) {
-			throw new InvalidResourceException('this export names no posts');
+			throw new MoveErrorException('this export names no posts', 'export-unreadable');
 		}
 
 		return ['format' => self::FORMAT_ACTIVITYPUB, 'items' => array_values($items)];
@@ -755,16 +756,19 @@ class PostImportService {
 	 * the one they can open. Being told "ask for JSON" is the difference
 	 * between a two-minute fix and giving up.
 	 */
-	private function whyNotAnExport(ZipArchive $zip): string {
+	private function whyNotAnExport(ZipArchive $zip): MoveErrorException {
 		for ($i = 0; $i < $zip->numFiles; $i++) {
 			$name = (string)$zip->getNameIndex($i);
 			if (str_contains($name, 'content/posts_') && str_ends_with($name, '.html')) {
-				return 'this is Instagram\'s HTML download, which holds the pages and not the posts'
-					. ' — ask Instagram for the same export in JSON and import that';
+				return new MoveErrorException(
+					'this is Instagram\'s HTML download, which holds the pages and not the posts'
+					. ' — ask Instagram for the same export in JSON and import that',
+					'export-instagram-html'
+				);
 			}
 		}
 
-		return 'this archive has no outbox.json — it is not an export of an account\'s posts';
+		return new MoveErrorException('this archive has no outbox.json — it is not an export of an account\'s posts', 'export-not-posts');
 	}
 
 	/**
