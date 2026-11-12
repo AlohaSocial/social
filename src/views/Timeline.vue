@@ -42,27 +42,25 @@
 			{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
 		</InfoCard>
 
-		<div
+		<PageHeader
 			class="timeline-heading-row"
-			:class="{ 'timeline-heading-row--tag': type === 'tags' }"
-			:style="tagStyle">
-			<!-- the page had no heading at all outside tags and notifications, so
-			     there was nothing to land on and nothing to say where you were -->
-			<h1 class="timeline-heading" :class="{ 'hidden-visually': !headingIsVisible }">
-				{{ heading }}
-			</h1>
-
-			<TimelineSwitcher
-				v-if="type === 'photos'"
-				:options="photoLayouts"
-				:value="selectedPhotoLayout"
-				:label="t('social', 'Photo feed layout')"
-				@update:value="choosePhotoLayout" />
-			<HashtagFollowButton
-				v-if="type === 'tags' && !followedTagsOnly"
-				:tag="String($route.params.tag)"
-				@changed="onHashtagFollowChanged" />
-		</div>
+			:class="{ 'timeline-heading-row--tag': type === 'tags', 'timeline-heading-row--compact': !headingIsVisible }"
+			:style="tagStyle"
+			:title="heading"
+			:hideTitle="!headingIsVisible">
+			<template v-if="type === 'photos' || (type === 'tags' && !followedTagsOnly)" #actions>
+				<TimelineSwitcher
+					v-if="type === 'photos'"
+					:options="photoLayouts"
+					:value="selectedPhotoLayout"
+					:label="t('social', 'Photo feed layout')"
+					@update:value="choosePhotoLayout" />
+				<HashtagFollowButton
+					v-if="type === 'tags' && !followedTagsOnly"
+					:tag="String($route.params.tag)"
+					@changed="onHashtagFollowChanged" />
+			</template>
+		</PageHeader>
 		<Composer
 			v-if="hasCompactComposer && !timelineStore.composerDisplayStatus"
 			oneLine
@@ -189,6 +187,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import { defineAsyncComponent } from 'vue'
 import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import IconAccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
@@ -251,6 +250,7 @@ const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "compose
 export default {
 	name: 'Timeline',
 	components: {
+		PageHeader,
 		Composer,
 		Announcements,
 		IconCheckAll,
@@ -1103,19 +1103,11 @@ export default {
 }
 
 .timeline-heading-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: calc(var(--default-grid-baseline) * 2);
-	margin-inline-end: calc(var(--default-grid-baseline) * 2);
+	margin-inline: calc(var(--default-grid-baseline) * 2);
 }
 
-.timeline-heading {
-	font-size: 20px;
-	font-weight: 700;
-	margin: calc(var(--default-grid-baseline) * 3) calc(var(--default-grid-baseline) * 2);
-	color: var(--color-text-lighter);
-	letter-spacing: -.01em;
+.timeline-heading-row--compact {
+	margin-block-end: 0;
 }
 
 /*
@@ -1129,29 +1121,20 @@ export default {
 .timeline-heading-row--tag {
 	border-block-end: 2px solid var(--tag-colour, var(--color-border));
 	margin-block-end: calc(var(--default-grid-baseline) * 2);
-
-	.timeline-heading {
-		color: var(--tag-colour, var(--color-text-lighter));
-	}
+	--social-page-title-color: var(--tag-colour, var(--color-main-text));
 }
 
 /* the same hue, at the lightness that comes forward on a dark surface */
 @media (prefers-color-scheme: dark) {
 	.timeline-heading-row--tag {
 		border-block-end-color: var(--tag-colour-dark, var(--color-border));
-
-		.timeline-heading {
-			color: var(--tag-colour-dark, var(--color-text-lighter));
-		}
+		--social-page-title-color: var(--tag-colour-dark, var(--color-main-text));
 	}
 }
 
 [data-themes*='dark'] .timeline-heading-row--tag {
 	border-block-end-color: var(--tag-colour-dark, var(--color-border));
-
-	.timeline-heading {
-		color: var(--tag-colour-dark, var(--color-text-lighter));
-	}
+	--social-page-title-color: var(--tag-colour-dark, var(--color-main-text));
 }
 
 .policy-notice {

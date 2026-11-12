@@ -2700,6 +2700,8 @@ object": the row stays, its content does not.
 
 The user interface is a **Vue 3** front end using Vue Router, Pinia, `@nextcloud/vue` components, `@nextcloud/axios`, DOMPurify (via `src/utils/sanitizeHtml.js`), and the Twemoji pictures of `@discordapp/twemoji`, which the build copies into `img/twemoji/`.
 
+Standalone pages use `src/components/PageHeader.vue` for their title, optional description and actions. The header reserves space for Nextcloud's collapsed navigation toggle where it starts the page. Timeline headings share its typography, while profile and full-screen media layouts retain their dedicated headers.
+
 ### Entry bundles
 
 `webpack.common.js` defines these entries; the Nextcloud webpack preset prefixes the output with the app id, so they land in `js/` as:

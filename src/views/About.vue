@@ -4,7 +4,7 @@
 -->
 <template>
 	<div class="about">
-		<h1>{{ t('social', 'About this server') }}</h1>
+		<PageHeader :title="t('social', 'About this server')" clearNavigation />
 
 		<NcLoadingIcon v-if="loading" :size="32" />
 		<NcNoteCard v-else-if="failed" type="error">
@@ -78,6 +78,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
@@ -95,6 +96,7 @@ export default {
 	name: 'About',
 
 	components: {
+		PageHeader,
 		NcLoadingIcon,
 		NcNoteCard,
 		UseInAppCard,

@@ -4,10 +4,10 @@
 -->
 <template>
 	<div class="stats">
-		<h1>{{ t('social', 'Statistics') }}</h1>
-		<p class="stats__hint">
-			{{ t('social', 'What you have posted here, and what came back. Counted from this server when you opened the page, so it is never a stale number.') }}
-		</p>
+		<PageHeader
+			:title="t('social', 'Statistics')"
+			:description="t('social', 'What you have posted here, and what came back. Counted from this server when you opened the page, so it is never a stale number.')"
+			clearNavigation />
 
 		<!-- the window these numbers were counted over, and what to do with
 		     them once they are on screen -->
@@ -45,7 +45,7 @@
 
 		<div v-else-if="error" class="stats__error" role="alert">
 			<p>{{ error }}</p>
-			<NcButton variant="primary" @click="load">
+			<NcButton variant="primary" @click="load()">
 				<template #icon>
 					<IconRefresh :size="20" />
 				</template>
@@ -792,6 +792,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { getCurrentUser } from '@nextcloud/auth'
@@ -877,6 +878,7 @@ export default {
 	name: 'Statistics',
 
 	components: {
+		PageHeader,
 		IconAccountGroup,
 		IconCalendar,
 		IconClock,
@@ -902,6 +904,7 @@ export default {
 	data() {
 		return {
 			loading: true,
+			loadRequest: 0,
 			error: '',
 			/** what the per-post list is ordered by */
 			sort: 'date',
@@ -1666,18 +1669,25 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async load(fresh = false) {
+			const request = ++this.loadRequest
 			this.loading = true
 			this.error = ''
 			try {
 				const response = await axios.get(generateUrl('apps/social/api/v1/statistics'), {
 					params: { days: this.days, fresh },
 				})
-				this.stats = response.data
+				if (request === this.loadRequest) {
+					this.stats = response.data
+				}
 			} catch (error) {
-				logger.error('could not load the statistics', { error })
-				this.error = t('social', 'Could not work out your statistics.')
+				if (request === this.loadRequest) {
+					logger.error('could not load the statistics', { error })
+					this.error = t('social', 'Could not work out your statistics.')
+				}
 			} finally {
-				this.loading = false
+				if (request === this.loadRequest) {
+					this.loading = false
+				}
 			}
 		},
 
@@ -1690,12 +1700,13 @@ export default {
 		 */
 		async download() {
 			this.downloading = true
+			const name = this.exportName
 			try {
 				const response = await axios.get(this.exportUrl, { responseType: 'blob' })
 				const url = URL.createObjectURL(response.data)
 				const link = document.createElement('a')
 				link.href = url
-				link.download = this.exportName
+				link.download = name
 				document.body.appendChild(link)
 				link.click()
 				link.remove()
@@ -2121,14 +2132,6 @@ export default {
 	margin: 15px auto;
 	padding: 0 10px;
 
-	h1 {
-		margin-bottom: 8px;
-	}
-}
-
-.stats__hint {
-	margin-bottom: 16px;
-	color: var(--color-text-maxcontrast);
 }
 
 .stats__loading {

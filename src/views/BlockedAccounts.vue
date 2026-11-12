@@ -4,12 +4,10 @@
 -->
 <template>
 	<div class="social__blocked">
-		<h2 class="social__blocked-title">
-			{{ t('social', 'Blocking') }}
-		</h2>
-		<p class="social__blocked-lede">
-			{{ t('social', 'Everything you have decided not to read, in one place: the accounts you have blocked or muted, the servers you have hidden, the words you would rather not see — and the senders your notification settings are holding back, waiting on you.') }}
-		</p>
+		<PageHeader
+			:title="t('social', 'Blocking')"
+			:description="t('social', 'Everything you have decided not to read, in one place: the accounts you have blocked or muted, the servers you have hidden, the words you would rather not see — and the senders your notification settings are holding back, waiting on you.')"
+			clearNavigation />
 
 		<!-- One card per decision, all of them the same shape: what it is, one
 		     line saying what it does, then the list. They used to be four runs
@@ -296,6 +294,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError } from '../services/toast.js'
@@ -327,6 +326,7 @@ import { useServerData } from '../composables/useServerData.js'
 export default {
 	name: 'BlockedAccounts',
 	components: {
+		PageHeader,
 		AccountCancelOutline,
 		ActorAvatar,
 		BlueskyLabelersSettings,
@@ -589,15 +589,6 @@ export default {
 	max-width: var(--social-column);
 	margin: 15px auto;
 	padding: 0 10px;
-}
-
-.social__blocked-title {
-	margin-bottom: 4px;
-}
-
-.social__blocked-lede {
-	margin-bottom: 18px;
-	color: var(--color-text-maxcontrast);
 }
 
 /* One card per decision. A card rather than a heading and a rule because

@@ -4,28 +4,25 @@
 -->
 <template>
 	<div class="settings">
-		<header class="settings__header">
-			<div class="settings__header-text">
-				<h1 class="settings__heading">
-					{{ t('social', 'Settings') }}
-				</h1>
-				<p class="settings__lede">
-					{{ t('social', 'Changes are saved as you make them.') }}
-				</p>
-			</div>
-			<NcTextField
-				v-model="query"
-				class="settings__search"
-				type="search"
-				:label="t('social', 'Find a setting')"
-				trailingButtonIcon="close"
-				:showTrailingButton="query !== ''"
-				@trailingButtonClick="query = ''">
-				<template #icon>
-					<IconSearch :size="20" />
-				</template>
-			</NcTextField>
-		</header>
+		<PageHeader
+			:title="t('social', 'Settings')"
+			:description="t('social', 'Changes are saved as you make them.')"
+			clearNavigation>
+			<template #actions>
+				<NcTextField
+					v-model="query"
+					class="settings__search"
+					type="search"
+					:label="t('social', 'Find a setting')"
+					trailingButtonIcon="close"
+					:showTrailingButton="query !== ''"
+					@trailingButtonClick="query = ''">
+					<template #icon>
+						<IconSearch :size="20" />
+					</template>
+				</NcTextField>
+			</template>
+		</PageHeader>
 
 		<div class="settings__body">
 			<!-- The groups, with the sections of the open one under it. On a
@@ -125,6 +122,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import ArchivedPosts from '../components/ArchivedPosts.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
@@ -221,6 +219,7 @@ export default {
 	name: 'Settings',
 
 	components: {
+		PageHeader,
 		AccountSettings,
 		ProfileLayoutSettings,
 		ArchivedPosts,
@@ -807,33 +806,12 @@ $gutter: calc(var(--default-grid-baseline) * 4);
 
 .settings {
 	padding: $gutter;
-	// Nextcloud puts its navigation toggle at the top left corner of the app
-	// content, over whatever starts there; the heading used to sit under it
-	padding-block-start: calc(var(--default-grid-baseline) * 12);
 	max-width: 1120px;
 	margin-inline: auto;
 
-	&__header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: calc(var(--default-grid-baseline) * 4);
-		margin-block-end: calc(var(--default-grid-baseline) * 6);
-	}
-
-	&__heading {
-		margin: 0;
-	}
-
-	&__lede {
-		margin: 4px 0 0;
-		color: var(--color-text-maxcontrast);
-	}
-
 	&__search {
 		flex: 0 1 320px;
-		min-width: 220px;
+		min-width: min(220px, 100%);
 	}
 
 	&__body {

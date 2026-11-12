@@ -259,6 +259,6 @@ test.describe('Aloha Social, in a browser', () => {
 
 		await list.click()
 		await expect(page).toHaveURL(/timeline\/list\/\d+/)
-		await expect(page.locator('h1.timeline-heading')).toHaveText(group)
+		await expect(page.locator('.timeline-heading-row h1')).toHaveText(group)
 	})
 })

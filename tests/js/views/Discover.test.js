@@ -104,7 +104,7 @@ describe('Discover', () => {
 	})
 
 	it('is headed by its one h1, with its sections one level below', () => {
-		const wrapper = mount(Discover, { shallow: true, global: { plugins: [createPinia()] } })
+		const wrapper = mount(Discover, { shallow: true, global: { plugins: [createPinia()], stubs: { PageHeader: false } } })
 
 		expect(wrapper.find('h1').text()).toBe('Discover')
 		expect(wrapper.findAll('h1')).toHaveLength(1)

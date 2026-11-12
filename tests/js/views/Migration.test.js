@@ -23,7 +23,7 @@ describe('the Migration page', () => {
 		const wrapper = mount(Migration)
 		await flushPromises()
 
-		expect(wrapper.find('h2').text()).toBe('Migration')
+		expect(wrapper.find('h1').text()).toBe('Migration')
 		expect(wrapper.findComponent(MigrationSettings).exists()).toBe(true)
 	})
 

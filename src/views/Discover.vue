@@ -4,9 +4,7 @@
 -->
 <template>
 	<div class="discover">
-		<h1 class="discover__heading">
-			{{ t('social', 'Discover') }}
-		</h1>
+		<PageHeader :title="t('social', 'Discover')" clearNavigation />
 
 		<!-- the same control the timelines and a profile are switched with:
 		     four lists of one screen, chosen while reading rather than
@@ -213,6 +211,7 @@
 </template>
 
 <script>
+import PageHeader from '../components/PageHeader.vue'
 import AccountMultipleOutline from 'vue-material-design-icons/AccountMultipleOutline.vue'
 import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
 import Compass from 'vue-material-design-icons/Compass.vue'
@@ -265,6 +264,7 @@ export default {
 	name: 'Discover',
 
 	components: {
+		PageHeader,
 		AccountMultipleOutline,
 		BlueskySuggestions,
 		BlueskyTrends,
@@ -629,10 +629,6 @@ export default {
 	padding: calc(var(--default-grid-baseline) * 4);
 	max-width: 1000px;
 	margin-inline: auto;
-
-	&__heading {
-		margin-bottom: calc(var(--default-grid-baseline) * 2);
-	}
 
 	&__error {
 		display: flex;

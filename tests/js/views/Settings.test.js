@@ -95,7 +95,7 @@ describe('Settings', () => {
 		const wrapper = await mountSettings()
 
 		// the page's one h1, which is what a screen reader jumps to
-		expect(wrapper.find('h1.settings__heading').text()).toBe('Settings')
+		expect(wrapper.find('h1').text()).toBe('Settings')
 		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Notifications', 'Your posts', 'Apps and account', 'Help'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Profile and privacy')
 		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Public profile layout', 'Who may send you direct messages', 'Featured hashtags', 'Portfolio'])
