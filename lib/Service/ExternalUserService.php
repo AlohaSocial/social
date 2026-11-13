@@ -168,6 +168,19 @@ class ExternalUserService {
 		return $this->isEnabled() && $this->count() < $this->maxAccounts();
 	}
 
+	/**
+	 * Whether somebody without an invitation may sign up right now: what the
+	 * instance entity, NodeInfo and the Aloha Directory heartbeat all report.
+	 */
+	public function acceptsPublicRegistrations(): bool {
+		return $this->hasRoom() && $this->mode() !== self::MODE_INVITE;
+	}
+
+	/** How many more accounts may be created before the limit is reached. */
+	public function freeAccounts(): int {
+		return $this->isEnabled() ? max(0, $this->maxAccounts() - $this->count()) : 0;
+	}
+
 	public function isExternal(?IUser $user): bool {
 		return ExternalUserBackend::isExternal($user);
 	}

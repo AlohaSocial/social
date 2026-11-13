@@ -75,6 +75,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->users->method('mode')->willReturnCallback(fn (): string => $this->mode);
 		$this->users->method('verifiesEmail')->willReturnCallback(fn (): bool => $this->verify);
 		$this->users->method('hasRoom')->willReturnCallback(fn (): bool => $this->room);
+		$this->users->method('acceptsPublicRegistrations')->willReturnCallback(fn (): bool => $this->room && $this->mode !== ExternalUserService::MODE_INVITE);
 		$this->users->method('isEnabled')->willReturn(true);
 		$this->users->method('minimumAge')->willReturn(16);
 		$this->users->method('requiresSignupNoticeAcceptance')->willReturnCallback(fn (): bool => $this->noticeRequired);

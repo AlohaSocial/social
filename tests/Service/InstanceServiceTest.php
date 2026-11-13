@@ -20,6 +20,7 @@ use OCA\Social\Model\Instance;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\ExternalUserService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\TranslationService;
@@ -45,6 +46,9 @@ class InstanceServiceTest extends TestCase {
 	private CacheDocumentService|Stub $cacheDocumentService;
 	private InstanceService $service;
 	private VapidService|Stub $vapidService;
+	private ExternalUserService|Stub $externalUserService;
+	private bool $signupsOpen = false;
+	private string $signupMode = ExternalUserService::MODE_APPROVAL;
 
 	protected function setUp(): void {
 		$this->instancesRequest = $this->createMock(InstancesRequest::class);
@@ -58,11 +62,17 @@ class InstanceServiceTest extends TestCase {
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->vapidService = $this->createStub(VapidService::class);
 		$this->vapidService->method('publicKey')->willReturn('instance-vapid-key');
+		$this->externalUserService = $this->createStub(ExternalUserService::class);
+		$this->externalUserService->method('acceptsPublicRegistrations')->willReturnCallback(fn (): bool => $this->signupsOpen);
+		$this->externalUserService->method('mode')->willReturnCallback(fn (): string => $this->signupMode);
+		$this->externalUserService->method('usersMayInvite')->willReturn(false);
 
 		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('imagePath')->willReturn('/apps/social/img/social.svg');
 		$urlGenerator->method('getAbsoluteURL')
 			->willReturnCallback(static fn (string $path): string => 'https://cloud.example.org' . $path);
+		$urlGenerator->method('linkToRouteAbsolute')
+			->willReturnCallback(static fn (string $route): string => $route === 'social.Signup.page' ? 'https://cloud.example.org/apps/social/signup' : 'https://cloud.example.org/apps/social/');
 
 		$this->service = new InstanceService(
 			$this->instancesRequest,
@@ -75,6 +85,7 @@ class InstanceServiceTest extends TestCase {
 			$this->translationService,
 			$this->accountService,
 			$this->vapidService,
+			$this->externalUserService,
 		);
 	}
 
@@ -433,8 +444,29 @@ class InstanceServiceTest extends TestCase {
 		$this->assertIsObject($v2->configuration);
 		$this->assertIsObject($v2->registrations);
 		$this->assertFalse($v2->registrations->enabled);
+		$this->assertNull($v2->registrations->url);
 		$this->assertIsObject($v2->contact);
 		$this->assertSame(3, $v2->usage->users->active_month);
+	}
+
+	/**
+	 * The Social-only sign-up, which the Aloha Directory compares with the
+	 * heartbeat: open, with or without approval, and where to go to register.
+	 */
+	public function testRegistrationsReportTheSocialSignup(): void {
+		$this->theming([]);
+		$this->signupsOpen = true;
+
+		$instance = $this->service->createLocal();
+		$this->assertTrue($instance->isRegistrations());
+		$this->assertTrue($instance->isApprovalRequired());
+		$v2 = json_decode((string)json_encode($instance->asV2()), false);
+		$this->assertTrue($v2->registrations->enabled);
+		$this->assertTrue($v2->registrations->approval_required);
+		$this->assertSame('https://cloud.example.org/apps/social/signup', $v2->registrations->url);
+
+		$this->signupMode = ExternalUserService::MODE_OPEN;
+		$this->assertFalse($this->service->createLocal()->isApprovalRequired());
 	}
 
 	public function testTheDescriptionIsTheOneWrittenForThisInstance(): void {

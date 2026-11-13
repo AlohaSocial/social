@@ -117,8 +117,7 @@ class ExternalSignupService {
 
 	/** Whether somebody without an invitation may start a Social-only signup. */
 	public function acceptsPublicRegistrations(): bool {
-		return $this->externalUserService->hasRoom()
-			&& $this->externalUserService->mode() !== ExternalUserService::MODE_INVITE;
+		return $this->externalUserService->acceptsPublicRegistrations();
 	}
 
 	public function requiresRegistrationApproval(): bool {
