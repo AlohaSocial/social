@@ -79,6 +79,7 @@ class ExternalSignupService {
 		private LoggerInterface $logger,
 		private ConfigService $configService,
 		private SignupMailLimiter $mailLimiter,
+		private SignupChallengeService $challengeService,
 	) {
 	}
 
@@ -110,6 +111,7 @@ class ExternalSignupService {
 			'signupNotice' => $signupNotice,
 			'signupNoticeRequired' => $this->externalUserService->requiresSignupNoticeAcceptance(),
 			'signupNoticeVersion' => hash('sha256', $signupNotice),
+			'proofOfWork' => $invite === null && $this->externalUserService->requiresProofOfWork(),
 			'domain' => $this->addressHost(),
 			'bluesky' => $this->bluesky(),
 			'loginUrl' => $this->urlGenerator->linkToRoute('core.login.showLoginForm'),
@@ -174,6 +176,10 @@ class ExternalSignupService {
 	 * A filled-in honeypot is answered as if the registration had worked and
 	 * nothing is stored: a bot learns nothing from the answer.
 	 *
+	 * Without a valid invitation, and unless the administrator switched it
+	 * off, the registration carries the answer to a challenge of
+	 * `SignupChallengeService`, which it uses up whatever comes of it.
+	 *
 	 * The form is public, so it does not say whether an email address is
 	 * somebody's here, or whether a username is a Nextcloud login that has no
 	 * account of its own: either is answered as a new registration is, with
@@ -200,6 +206,8 @@ class ExternalSignupService {
 		string $remoteAddress,
 		bool $acceptsSignupNotice = false,
 		string $signupNoticeVersion = '',
+		string $challenge = '',
+		string $nonce = '',
 	): array {
 		if ($honeypot !== '') {
 			$this->logger->info('[ExternalSignupService] dropped a registration that filled in the honeypot');
@@ -211,6 +219,10 @@ class ExternalSignupService {
 		$mode = $this->externalUserService->mode();
 		if (!$this->externalUserService->hasRoom() || ($mode === ExternalUserService::MODE_INVITE && $invite === null)) {
 			throw new ExternalUserException($this->closedReason($mode, $inviteToken !== ''));
+		}
+		if ($invite === null && $this->externalUserService->requiresProofOfWork()
+			&& !$this->challengeService->verify($challenge, $nonce)) {
+			throw new ExternalUserException($this->l10n->t('The check of this browser did not succeed. Please try again.'), 'challenge');
 		}
 
 		$ipHash = $this->ipHash($remoteAddress);

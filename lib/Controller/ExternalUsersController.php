@@ -62,6 +62,8 @@ class ExternalUsersController extends Controller {
 	 * @param int $quota megabytes of media each may upload; 0 is no quota
 	 * @param string $mode open, invite or approval
 	 * @param array<array-key, mixed> $reserved handles nobody may register
+	 * @param bool $proofOfWork whether a registration without an invitation carries a proof of work
+	 * @param int $proofOfWorkBits the leading zero bits it has to reach
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/admin/external')]
 	public function save(
@@ -75,10 +77,13 @@ class ExternalUsersController extends Controller {
 		bool $userInvites = false,
 		string $signupNotice = '',
 		bool $signupNoticeRequired = false,
+		bool $proofOfWork = true,
+		int $proofOfWorkBits = 20,
 	): DataResponse {
 		try {
 			return new DataResponse($this->externalUserService->saveSettings(
 				$enabled, $max, $quota, $mode, $verifyEmail, $minAge, array_values(array_map('strval', $reserved)), $userInvites, $signupNotice, $signupNoticeRequired,
+				$proofOfWork, $proofOfWorkBits,
 			));
 		} catch (InvalidArgumentException $e) {
 			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);

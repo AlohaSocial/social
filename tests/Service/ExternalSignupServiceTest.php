@@ -19,6 +19,7 @@ use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\ExternalUserService;
 use OCA\Social\Service\InstanceService;
+use OCA\Social\Service\SignupChallengeService;
 use OCA\Social\Service\SignupMailLimiter;
 use OCA\Social\Tests\Helper\FrozenClock;
 use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
@@ -55,6 +56,7 @@ class ExternalSignupServiceTest extends TestCase {
 	private bool $room = true;
 	private bool $twoFactorRequired = false;
 	private bool $noticeRequired = false;
+	private bool $proofOfWork = false;
 	private bool $bluesky = false;
 	private ?string $blueskyHost = 'social.example';
 	/** the social address, or null while none can be worked out */
@@ -77,6 +79,8 @@ class ExternalSignupServiceTest extends TestCase {
 	/** the table `SignupMailLimiter` keeps its claims in */
 	private InMemoryDurableCacheRequest $mailTable;
 	private FrozenClock $mailClock;
+	/** the challenges of the service service() made last */
+	private SignupChallengeService $challenges;
 
 	protected function setUp(): void {
 		$this->mailTable = new InMemoryDurableCacheRequest();
@@ -89,6 +93,8 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->users->method('isEnabled')->willReturn(true);
 		$this->users->method('minimumAge')->willReturn(16);
 		$this->users->method('requiresSignupNoticeAcceptance')->willReturnCallback(fn (): bool => $this->noticeRequired);
+		$this->users->method('requiresProofOfWork')->willReturnCallback(fn (): bool => $this->proofOfWork);
+		$this->users->method('proofOfWorkBits')->willReturn(12);
 		$this->users->method('assertHandleAvailable')->willReturnArgument(0);
 		$this->users->method('assertEmailAvailable')->willReturnArgument(0);
 		$this->users->method('assertHandleOpen')->willReturnArgument(0);
@@ -174,6 +180,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$systemConfig = $this->createStub(IConfig::class);
 		$systemConfig->method('getSystemValueString')->willReturn('instance-secret');
 		$mailLimiter = new SignupMailLimiter(new DurableCache($cacheFactory, $this->mailTable, $this->mailClock), $systemConfig);
+		$this->challenges = new SignupChallengeService($this->users, new DurableCache($cacheFactory, $this->mailTable, $this->mailClock), $random, $systemConfig, $this->mailClock);
 
 		return new ExternalSignupService(
 			$this->users,
@@ -194,6 +201,7 @@ class ExternalSignupServiceTest extends TestCase {
 			new NullLogger(),
 			$config,
 			$mailLimiter,
+			$this->challenges,
 		);
 	}
 
@@ -472,6 +480,45 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->mailWorks = true;
 		$this->submit();
 		$this->assertSame([['You already have an account', 'alice@example.org']], $this->sent);
+	}
+
+	public function testWithTheProofOfWorkOnARegistrationWithoutItIsRefusedAndNothingStored(): void {
+		$this->proofOfWork = true;
+		$this->signups->expects($this->never())->method('create');
+		$this->signups->expects($this->never())->method('createPlaceholder');
+		$this->signups->expects($this->never())->method('countFromIpSince');
+
+		try {
+			$this->submit();
+			$this->fail('accepted without a proof of work');
+		} catch (ExternalUserException $e) {
+			$this->assertSame('challenge', $e->getField());
+		}
+		$this->assertSame([], $this->sent);
+		$this->assertTrue($this->service()->pageState()['proofOfWork']);
+	}
+
+	public function testASolvedChallengeAdmitsOneRegistration(): void {
+		$this->proofOfWork = true;
+		$service = $this->service();
+		$challenge = $this->challenges->issue()['challenge'];
+		$nonce = SignupChallengeServiceTest::solve($challenge, 12);
+		$version = $service->pageState()['signupNoticeVersion'];
+
+		$answer = $service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $version, $challenge, $nonce);
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $answer);
+
+		$this->expectExceptionObject(new ExternalUserException('The check of this browser did not succeed. Please try again.', 'challenge'));
+		$service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $version, $challenge, $nonce);
+	}
+
+	/** An invitation is admission enough. */
+	public function testAnInvitationNeedsNoProofOfWork(): void {
+		$this->proofOfWork = true;
+		$this->invites->method('consume')->willReturn(true);
+
+		$this->assertFalse($this->service()->pageState('good')['proofOfWork']);
+		$this->assertSame('verify', $this->submit('good')['state']);
 	}
 
 	public function testOneAddressCannotRegisterWithoutEnd(): void {

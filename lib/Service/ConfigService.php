@@ -528,7 +528,9 @@ class ConfigService {
 	 * (0 is no quota), how a registration is admitted (`open`, `invite` or
 	 * `approval`), whether its email has to be confirmed first, the minimum
 	 * age a person must confirm (0 asks nothing), handles nobody may register
-	 * (a JSON list) and whether existing users may send invitations.
+	 * (a JSON list), whether existing users may send invitations, and whether
+	 * the form asks for a proof of work and of how many bits
+	 * (`SignupChallengeService`).
 	 */
 	public const SOCIAL_EXTERNAL_ENABLED = 'external_enabled';
 	public const SOCIAL_EXTERNAL_MAX = 'external_max';
@@ -540,6 +542,8 @@ class ConfigService {
 	public const SOCIAL_EXTERNAL_USER_INVITES = 'external_user_invites';
 	public const SOCIAL_EXTERNAL_SIGNUP_NOTICE = 'external_signup_notice';
 	public const SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED = 'external_signup_notice_required';
+	public const SOCIAL_EXTERNAL_PROOF_OF_WORK = 'external_signup_pow';
+	public const SOCIAL_EXTERNAL_PROOF_OF_WORK_BITS = 'external_signup_pow_bits';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_VERSION = 'external_signup_notice_version';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED = 'external_signup_notice_accepted';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT = 'external_signup_notice_snapshot';
@@ -699,6 +703,8 @@ class ConfigService {
 		self::SOCIAL_EXTERNAL_USER_INVITES => '0',
 		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE => '',
 		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED => '0',
+		self::SOCIAL_EXTERNAL_PROOF_OF_WORK => '1',
+		self::SOCIAL_EXTERNAL_PROOF_OF_WORK_BITS => '20',
 	];
 
 	public array $accessTypeList = [

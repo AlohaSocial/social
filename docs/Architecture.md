@@ -4582,7 +4582,30 @@ without a `+tag`, without Gmail's dots); the claims are `DurableCache` table
 rows (`addShared()`), so neither a missing nor an evicting memcache resets
 them. A held-back mail is answered as a sent one, and a held-back
 confirmation link stores no registration, only the placeholder row the
-per-address limit counts. A pending registration reserves its handle and its email; the
+per-address limit counts.
+
+**Proof of work.** With `external_signup_pow` on, the default, a
+registration without a valid invitation carries the answer to a hashcash
+challenge (`SignupChallengeService`). `GET /signup/challenge` issues
+`<expires>.<bits>.<id>.<mac>`: 20 minutes of validity, the administrator's
+difficulty (`external_signup_pow_bits`, 12 to 24, default 20), a random id
+and an HMAC over them and the form's name, keyed with the instance secret,
+so nothing is stored when one is issued and neither the expiry nor the
+difficulty can be lowered. The page fetches one when the form is shown and
+solves it in a Web Worker (`src/workers/proofOfWork.worker.js`, chunk
+`signup-pow`) while the person types: it looks for a base-36 nonce for which
+SHA-256 of the challenge followed by the nonce starts with that many zero
+bits. `src/utils/proofOfWork.js` computes SHA-256 itself, with the whole
+blocks of the challenge hashed once, because SubtleCrypto exists only in a
+secure context and costs a promise per hash; about a million hashes a second
+on a computer. Where no worker starts, the same solver runs on the page in
+batches. `ExternalSignupService::submit()` checks the answer after the
+honeypot and before the per-address count: one HMAC, one hash, and a claim of
+the id in the `DurableCache` table, so a challenge is accepted once. A
+missing, wrong, expired or reused answer is a 422 on the field `challenge`,
+and the page fetches a new challenge after every answer. The signup page's
+CSP adds `worker-src 'self'`. Mastodon's `POST /api/v1/accounts` makes no
+account here, so the form is the only way in that needs it. A pending registration reserves its handle and its email; the
 unconfirmed ones are forgotten by `Cron\ExternalSignups` after a day. Email
 domains on the access block list are refused, as they are for every account.
 
@@ -4710,6 +4733,7 @@ The administration section (`AlohaDirectoryController`, `AlohaDirectorySection.v
 - **For you learns only from what the reader may read, and shows it to nobody else.** A signal names a post by id and nothing else; the hashtags are read from the stored post through the same visibility, block and mute filter the timelines use (`StreamRequest::getVisibleByNids()`), because the interests it produces are shown back on the reader's settings page — a signal naming a stranger's followers-only post would otherwise put that post's hashtags there. No raw signal is kept, nothing is federated, and every route is the viewer's own. Learning is **off by default** for a reader who has not chosen (`interests_default` is `0`, and `Version1000Date20261108400000` removes a stored `1` that the For you card used to save with its other values), so it is opted into under Settings → For You; a reader who turns it on is shown a one-time notice in the web interface, and turning it off keeps the learned rows, which the feed goes on ranking with. An administrator may make learning the default for readers who have not chosen
 
 - **The registration form cannot be used to flood an inbox** — every mail the public form sends to the address typed into it is counted against that recipient, not only against the sender's IP address, which somebody with many addresses could rotate: one notice per address every 6 hours and 3 form mails per address a day (`SignupMailLimiter`, keyed by an HMAC of the normalised address and kept in the `DurableCache` table). The answer to the form is the same whether a mail went or not, so the limit tells nobody whether an address is registered. See [External users](#external-users).
+- **Open registration costs a proof of work** — unless an administrator switches it off, a registration without an invitation carries the answer to a signed, single-use hashcash challenge that the browser solves in a Web Worker (`SignupChallengeService`, about a million SHA-256 hashes at the default 20 bits). No captcha service or other third party is involved, and checking an answer costs the server one HMAC and one hash. It raises the price of mass registration; it does not stop an attacker with enough computers. See [External users](#external-users).
 - **External users reach Aloha Social only** — every controller of every app is checked against `ExternalScope`'s allowlist by a global middleware before it runs, and WebDAV by `ExternalDavGuard` and `ExternalDavListener`; hiding the menus is not what keeps them out. See [External users](#external-users).
 
 **Known gaps — these are real and deliberate to record**

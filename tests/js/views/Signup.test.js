@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { createHash } from 'node:crypto'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { leadingZeroBits } from '../../../src/utils/proofOfWork.js'
 
-const { post } = vi.hoisted(() => ({ post: vi.fn() }))
-vi.mock('@nextcloud/axios', () => ({ default: { post } }))
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
+vi.mock('@nextcloud/axios', () => ({ default: { get, post } }))
 const { state } = vi.hoisted(() => ({ state: { value: {} } }))
 vi.mock('@nextcloud/initial-state', () => ({
 	loadState: (app, key, fallback) => (app === 'social' && key === 'signup') ? state.value : fallback,
@@ -51,6 +53,57 @@ function button(wrapper, text) {
 describe('the registration page', () => {
 	beforeEach(() => {
 		post.mockReset()
+		get.mockReset()
+	})
+
+	it('solves the proof of work while the form is filled in and sends its answer', async () => {
+		get.mockResolvedValue({ data: { challenge: 'challenge-1', bits: 8, expires: 0 } })
+		post.mockResolvedValue({ data: { state: 'verify', handle: 'alice' } })
+		const wrapper = await page({ ...OPEN, proofOfWork: true })
+		expect(get).not.toHaveBeenCalled()
+		await continueToForm(wrapper)
+		expect(get).toHaveBeenCalledWith('/index.php/apps/social/signup/challenge')
+
+		await wrapper.find('form').trigger('submit')
+		await vi.waitFor(() => expect(post).toHaveBeenCalled())
+
+		const sent = post.mock.calls[0][1]
+		expect(sent.challenge).toBe('challenge-1')
+		const digest = createHash('sha256').update('challenge-1' + sent.nonce).digest()
+		expect(leadingZeroBits(new Uint8Array(digest))).toBeGreaterThanOrEqual(8)
+	})
+
+	it('starts a new proof of work after a refusal, since the challenge is used up', async () => {
+		get.mockResolvedValueOnce({ data: { challenge: 'first', bits: 4, expires: 0 } })
+			.mockResolvedValueOnce({ data: { challenge: 'second', bits: 4, expires: 0 } })
+		post.mockRejectedValue({ response: { status: 422, data: { message: 'This username is already taken.', field: 'handle' } } })
+		const wrapper = await page({ ...OPEN, proofOfWork: true })
+		await continueToForm(wrapper)
+		await wrapper.find('form').trigger('submit')
+		await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+
+		expect(post.mock.calls[0][1].challenge).toBe('first')
+		expect(wrapper.text()).toContain('This username is already taken.')
+	})
+
+	it('says so when no challenge could be had, and sends nothing', async () => {
+		get.mockRejectedValue(new Error('offline'))
+		const wrapper = await page({ ...OPEN, proofOfWork: true })
+		await continueToForm(wrapper)
+		await wrapper.find('form').trigger('submit')
+		await flushPromises()
+
+		expect(post).not.toHaveBeenCalled()
+		expect(wrapper.text()).toContain('The check of this browser did not succeed. Please try again.')
+	})
+
+	it('shows how far along the puzzle is while a sent form waits for it', async () => {
+		const wrapper = await page(OPEN)
+		await continueToForm(wrapper)
+		Object.assign(wrapper.vm, { solving: true, powBits: 20, powAttempts: 2 ** 20 })
+		await wrapper.vm.$nextTick()
+
+		expect(wrapper.find('[role="status"]').text()).toBe('Your browser is solving a small puzzle that keeps automated registrations out: 63%')
 	})
 
 	it('says why it is closed and offers the way back', async () => {

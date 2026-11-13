@@ -18,6 +18,7 @@ use OCA\Social\Service\ExternalAdminState;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\ExternalTwoFactorService;
 use OCA\Social\Service\ExternalUserService;
+use OCA\Social\Service\SignupChallengeService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -44,13 +45,13 @@ class ExternalControllersTest extends TestCase {
 		return $session;
 	}
 
-	private function signup(ExternalSignupService $service, ?IUser $viewer = null, ?IInitialState $state = null): SignupController {
+	private function signup(ExternalSignupService $service, ?IUser $viewer = null, ?IInitialState $state = null, ?SignupChallengeService $challenges = null): SignupController {
 		$request = $this->createStub(IRequest::class);
 		$request->method('getRemoteAddress')->willReturn('192.0.2.7');
 		$url = $this->createStub(IURLGenerator::class);
 		$url->method('linkToRoute')->willReturn('/apps/social/');
 
-		return new SignupController($request, $service, $state ?? $this->createStub(IInitialState::class), $this->session($viewer), $url);
+		return new SignupController($request, $service, $state ?? $this->createStub(IInitialState::class), $this->session($viewer), $url, $challenges ?? $this->createStub(SignupChallengeService::class));
 	}
 
 	/** @return list<string> the attribute class names on a method */
@@ -76,6 +77,17 @@ class ExternalControllersTest extends TestCase {
 		$this->assertSame('signup', $response->getTemplateName());
 		$this->assertSame(TemplateResponse::RENDER_AS_GUEST, $response->getRenderAs());
 		$this->assertSame(['signup' => ['open' => true]], $provided);
+		// the proof of work is solved in a Web Worker loaded from this server
+		$this->assertStringContainsString("worker-src 'self'", $response->getContentSecurityPolicy()->buildPolicy());
+	}
+
+	public function testAChallengeIsIssuedToAVisitorAndNotToSomebodyLoggedIn(): void {
+		$challenges = $this->createStub(SignupChallengeService::class);
+		$challenges->method('issue')->willReturn(['challenge' => 'c', 'bits' => 20, 'expires' => 5]);
+		$service = $this->createStub(ExternalSignupService::class);
+
+		$this->assertSame(['challenge' => 'c', 'bits' => 20, 'expires' => 5], $this->signup($service, null, null, $challenges)->challenge()->getData());
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->signup($service, $this->createStub(IUser::class), null, $challenges)->challenge()->getStatus());
 	}
 
 	public function testSomebodyLoggedInIsSentToSocialAndCannotRegister(): void {
@@ -90,10 +102,10 @@ class ExternalControllersTest extends TestCase {
 	public function testARegistrationIsHandedOverWithTheAddressItCameFrom(): void {
 		$service = $this->createMock(ExternalSignupService::class);
 		$service->expects($this->once())->method('submit')
-			->with('alice', 'a@example.org', 'secret123', true, true, 'inv', '', '192.0.2.7')
+			->with('alice', 'a@example.org', 'secret123', true, true, 'inv', '', '192.0.2.7', false, '', 'the-challenge', 'n0nce')
 			->willReturn(['state' => 'verify', 'handle' => 'alice']);
 
-		$response = $this->signup($service)->submit('alice', 'a@example.org', 'secret123', true, true, 'inv', '');
+		$response = $this->signup($service)->submit('alice', 'a@example.org', 'secret123', true, true, 'inv', '', false, '', 'the-challenge', 'n0nce');
 
 		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $response->getData());
 	}
@@ -124,9 +136,10 @@ class ExternalControllersTest extends TestCase {
 	}
 
 	public function testTheRegistrationRoutesArePublicAndRateLimited(): void {
-		foreach (['page', 'submit', 'verify'] as $method) {
+		foreach (['page', 'submit', 'verify', 'challenge'] as $method) {
 			$this->assertContains(PublicPage::class, self::attributes(SignupController::class, $method), $method);
 		}
+		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'challenge'));
 		// the form is posted with the guest page's CSRF token
 		$this->assertNotContains(NoCSRFRequired::class, self::attributes(SignupController::class, 'submit'));
 		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'submit'));

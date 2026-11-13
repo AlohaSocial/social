@@ -106,6 +106,7 @@ class RouteAuthMatrixTest extends TestCase {
 		'SignupController::page' => 'signup form',
 		'SignupController::submit' => 'signup form submission, CSRF checked',
 		'SignupController::verify' => 'email verification link',
+		'SignupController::challenge' => 'signed proof-of-work challenge for the signup form, stores nothing, rate limited',
 		'SocialPubController::collections' => 'public collections page',
 		'SocialPubController::portfolio' => 'public portfolio page',
 		'SocialPubController::embedPost' => 'public post embed, limited to local public posts and an isolated CSP',

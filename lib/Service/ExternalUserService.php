@@ -59,6 +59,9 @@ class ExternalUserService {
 	public const MAX_QUOTA_MB = 10485760;
 	public const MAX_MIN_AGE = 99;
 	public const HANDLE_MAX_LENGTH = 64;
+	/** The range of the proof-of-work difficulty, in leading zero bits. */
+	public const MIN_PROOF_OF_WORK_BITS = 12;
+	public const MAX_PROOF_OF_WORK_BITS = 24;
 
 	/**
 	 * Lower case letters, digits and underscore, with dot and dash inside:
@@ -130,6 +133,16 @@ class ExternalUserService {
 
 	public function usersMayInvite(): bool {
 		return $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES) === '1';
+	}
+
+	/** Whether a registration without an invitation has to carry a proof of work. */
+	public function requiresProofOfWork(): bool {
+		return $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_PROOF_OF_WORK) !== '0';
+	}
+
+	/** The leading zero bits a proof of work has to reach. */
+	public function proofOfWorkBits(): int {
+		return min(self::MAX_PROOF_OF_WORK_BITS, max(self::MIN_PROOF_OF_WORK_BITS, $this->configService->getAppValueInt(ConfigService::SOCIAL_EXTERNAL_PROOF_OF_WORK_BITS)));
 	}
 
 	public function requiresSignupNoticeAcceptance(): bool {
@@ -208,6 +221,8 @@ class ExternalUserService {
 			'userInvites' => $this->usersMayInvite(),
 			'signupNotice' => $this->signupNotice(),
 			'signupNoticeRequired' => $this->requiresSignupNoticeAcceptance(),
+			'proofOfWork' => $this->requiresProofOfWork(),
+			'proofOfWorkBits' => $this->proofOfWorkBits(),
 			'count' => $this->count(),
 			'awaitingApproval' => $this->signupsRequest->countAwaitingApproval(),
 			// Social restricted to groups that leave the externals out: they
@@ -235,6 +250,8 @@ class ExternalUserService {
 		bool $userInvites,
 		string $signupNotice = '',
 		bool $signupNoticeRequired = false,
+		bool $proofOfWork = true,
+		int $proofOfWorkBits = 20,
 	): array {
 		if ($max < 0 || $max > self::MAX_ACCOUNTS) {
 			throw new InvalidArgumentException('max must be between 0 and ' . self::MAX_ACCOUNTS);
@@ -250,6 +267,9 @@ class ExternalUserService {
 		}
 		if (mb_strlen($signupNotice) > 4000) {
 			throw new InvalidArgumentException('signupNotice must be at most 4000 characters');
+		}
+		if ($proofOfWorkBits < self::MIN_PROOF_OF_WORK_BITS || $proofOfWorkBits > self::MAX_PROOF_OF_WORK_BITS) {
+			throw new InvalidArgumentException('proofOfWorkBits must be between ' . self::MIN_PROOF_OF_WORK_BITS . ' and ' . self::MAX_PROOF_OF_WORK_BITS);
 		}
 
 		$handles = [];
@@ -270,6 +290,8 @@ class ExternalUserService {
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES, $userInvites ? '1' : '0');
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE, trim($signupNotice));
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED, $signupNoticeRequired ? '1' : '0');
+		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_PROOF_OF_WORK, $proofOfWork ? '1' : '0');
+		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_PROOF_OF_WORK_BITS, (string)$proofOfWorkBits);
 
 		if ($enabled) {
 			$this->includeExternalsInRestriction();

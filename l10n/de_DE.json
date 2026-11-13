@@ -1,5 +1,11 @@
 { "translations": {
     "Aloha Social" : "Aloha Social",
+    "Make the browser solve a puzzle before registering" : "Den Browser vor der Registrierung ein Rätsel lösen lassen",
+    "A proof of work the browser computes while the form is filled in. It makes automated registrations slower and more costly, without a captcha or any third-party service. Registrations with an invitation link skip it." : "Ein Arbeitsnachweis, den der Browser berechnet, während das Formular ausgefüllt wird. Er macht automatisierte Registrierungen langsamer und teurer, ohne Captcha und ohne Dienste Dritter. Registrierungen mit einem Einladungslink überspringen ihn.",
+    "Puzzle difficulty (12 to 24)" : "Schwierigkeit des Rätsels (12 bis 24)",
+    "Each step doubles the work. At 20 a computer needs about a second and a phone a few seconds." : "Jede Stufe verdoppelt die Arbeit. Bei 20 braucht ein Computer etwa eine Sekunde und ein Smartphone einige Sekunden.",
+    "Your browser is solving a small puzzle that keeps automated registrations out: {progress}%" : "Ihr Browser löst ein kleines Rätsel, das automatisierte Registrierungen abhält: {progress} %",
+    "The check of this browser did not succeed. Please try again." : "Die Prüfung dieses Browsers ist nicht gelungen. Bitte versuchen Sie es erneut.",
     "Play" : "Abspielen",
     "Pause" : "Pausieren",
     "{account} mentioned you" : "{account} hat Sie erwähnt",

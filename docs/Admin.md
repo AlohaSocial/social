@@ -1046,6 +1046,25 @@ hours. These
 settings provide an audit trail, not legal advice or a guarantee that a notice
 is sufficient for a particular jurisdiction. The operator remains responsible
 for local policies and any consent required.
+*Make the browser solve a puzzle before registering*, on by default, asks
+for a proof of work with every registration that does not come with an
+invitation link: when the form opens, the browser is given a puzzle and
+works at it in the background (a Web Worker) while the person types, and the
+registration carries the answer. Nothing is sent to a third party, unlike a
+captcha service. Each answer is accepted once and for 20 minutes. It makes
+every registration cost some seconds of computation, which a person filling
+in the form hardly notices and a script registering thousands of accounts
+pays thousands of times; it does not stop a determined attacker with enough
+computers. It is on in approval mode too: there, automated registrations
+would otherwise fill the approval queue, which stops taking registrations at
+1000, and send a confirmation email each. *Difficulty* is in bits, 12 to 24,
+and every step doubles the work: at the default of 20 a computer needs about
+a second and a phone a few seconds, now and then more than ten, which mostly
+passes while the form is filled in. The page is allowed to start a worker
+from this server's own scripts (`worker-src 'self'`); where a browser cannot
+start one, the puzzle is solved on the page itself. Raise it when automated registrations get through, lower it
+when people give up waiting.
+
 *Usernames nobody may register* adds to a built-in list (`admin`, `root`,
 `support`, `social`, `postmaster` and similar). Email domains on the access
 block list are refused here as they are for every account.
@@ -1490,6 +1509,8 @@ Set from the External users cards; these are the keys they write.
 | `external_reserved` | `[]` | Usernames nobody may register, as a JSON array, on top of the built-in ones. |
 | `external_user_invites` | `0` | Whether every user may send invitation links. |
 | `external_signup_notice` | *(empty)* | The additional registration and privacy information shown on the introduction page and beside the form, as plain text. Empty shows the translated template text. |
+| `external_signup_pow` | `1` | Whether a registration without an invitation has to carry a proof of work that the browser computes. `0` switches it off. |
+| `external_signup_pow_bits` | `20` | The difficulty of that proof of work, in leading zero bits of a SHA-256 hash, `12` to `24`. Each step doubles the work. |
 | `external_signup_notice_required` | `0` | Whether registering requires ticking that the notice was read. With it on, the notice's version, the time and the text as accepted are recorded with the account (the per-account keys below). |
 
 ### Aloha Directory

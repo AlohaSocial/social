@@ -36,6 +36,8 @@ function external(overrides = {}) {
 			userInvites: false,
 			signupNotice: '',
 			signupNoticeRequired: false,
+			proofOfWork: true,
+			proofOfWorkBits: 20,
 			count: 3,
 			awaitingApproval: 1,
 			restricted: false,
@@ -78,8 +80,26 @@ describe('the External users cards', () => {
 			userInvites: false,
 			signupNotice: '',
 			signupNoticeRequired: false,
+			proofOfWork: true,
+			proofOfWorkBits: 20,
 		})
 		expect(wrapper.emitted('changed')).toHaveLength(1)
+	})
+
+	it('offers the proof-of-work difficulty only while the proof of work is on', async () => {
+		axios.post.mockResolvedValue({ data: external().settings })
+		const wrapper = mount(ExternalUsersSection, { props: { external: external() } })
+		expect(wrapper.text()).toContain('Make the browser solve a puzzle before registering')
+		expect(wrapper.find('.external__difficulty').exists()).toBe(true)
+
+		wrapper.vm.form.proofOfWork = false
+		wrapper.vm.form.proofOfWorkBits = '22'
+		await wrapper.vm.$nextTick()
+		expect(wrapper.find('.external__difficulty').exists()).toBe(false)
+		await wrapper.find('form').trigger('submit')
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(ADMIN, expect.objectContaining({ proofOfWork: false, proofOfWorkBits: 22 }))
 	})
 
 	it('warns when Aloha Social is restricted to groups that leave external users out', () => {
