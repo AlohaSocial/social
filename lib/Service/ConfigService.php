@@ -583,6 +583,8 @@ class ConfigService {
 	public const ATPROTO_DELETE_RECENT_CURSOR = 'atproto_delete_recent_cursor';
 	public const ATPROTO_DETACH_CURSOR = 'atproto_detach_cursor';
 	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
+	/** where reports to that service are sent; empty for the endpoint its DID document names */
+	public const ATPROTO_MODERATION_ENDPOINT = 'atproto_moderation_endpoint';
 	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
 	public const ATPROTO_VIDEO_SERVICE_DID = 'atproto_video_service_did';
 	/** the Bluesky apps (client IDs) whose own name and logo the consent page shows */
@@ -617,6 +619,7 @@ class ConfigService {
 		self::ATPROTO_DELETE_RECENT_CURSOR => '0',
 		self::ATPROTO_DETACH_CURSOR => '0',
 		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
+		self::ATPROTO_MODERATION_ENDPOINT => '',
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
 		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
 		self::ATPROTO_OAUTH_TRUSTED => '[]',

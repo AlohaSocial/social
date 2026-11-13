@@ -66,10 +66,11 @@ class BlueskyReporter {
 			return '';
 		}
 		$moderation = $this->config->moderationDid();
+		$configured = $this->config->moderationEndpoint();
 		try {
-			$endpoint = $this->endpointOf($moderation);
+			$endpoint = $configured !== '' ? $configured : $this->endpointOf($moderation);
 			if ($endpoint === '') {
-				$this->logger->warning('Bluesky moderation service names no endpoint', ['did' => $moderation]);
+				$this->logger->warning('Bluesky moderation service names no https endpoint', ['did' => $moderation]);
 
 				return '';
 			}
@@ -81,7 +82,7 @@ class BlueskyReporter {
 				'timeout' => self::TIMEOUT,
 				'json_headers' => false,
 				'accept_errors' => true,
-				'allow_local_address' => !str_starts_with($endpoint, 'https://'),
+				'allow_local_address' => $configured !== '' && !str_starts_with($endpoint, 'https://'),
 			], $contentType, $status);
 		} catch (Throwable $e) {
 			$this->logger->warning('Report not passed on to Bluesky', ['report' => $report->getId(), 'exception' => $e]);
@@ -140,11 +141,18 @@ class BlueskyReporter {
 		}
 	}
 
+	/**
+	 * The `#atproto_labeler` endpoint the DID document names, '' when it
+	 * names none or one that is not https. Whoever controls the document
+	 * chooses this address, so it is reached like any other remote one.
+	 */
 	private function endpointOf(string $did): string {
 		$document = $this->plc->document($did) ?? [];
 		foreach (is_array($document['service'] ?? null) ? $document['service'] : [] as $service) {
 			if (is_array($service) && ($service['id'] ?? '') === '#atproto_labeler') {
-				return rtrim((string)($service['serviceEndpoint'] ?? ''), '/');
+				$endpoint = rtrim((string)($service['serviceEndpoint'] ?? ''), '/');
+
+				return str_starts_with($endpoint, 'https://') ? $endpoint : '';
 			}
 		}
 

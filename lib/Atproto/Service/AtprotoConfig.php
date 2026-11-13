@@ -84,6 +84,14 @@ class AtprotoConfig {
 		return $this->configService->getAppValue(ConfigService::ATPROTO_MODERATION_DID);
 	}
 
+	/**
+	 * Where reports to that service go when the administrator names it, ''
+	 * for the `#atproto_labeler` endpoint of its DID document.
+	 */
+	public function moderationEndpoint(): string {
+		return rtrim(trim($this->configService->getAppValue(ConfigService::ATPROTO_MODERATION_ENDPOINT)), '/');
+	}
+
 	/** The DID of that AppView: the audience of the service-auth tokens. */
 	public function appViewDid(): string {
 		return $this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW_DID);

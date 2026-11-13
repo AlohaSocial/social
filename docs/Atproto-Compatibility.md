@@ -182,6 +182,7 @@ runtime bookkeeping and should not be edited manually.
 | `atproto_relays` | Configured relay endpoints used for repository synchronization. |
 | `atproto_plc_directory` | PLC directory endpoint used for DID operations. |
 | `atproto_chat` | Configured Bluesky Chat service endpoint. |
+| `atproto_moderation_endpoint` | Where forwarded reports go; empty for the `https` labeler endpoint of `atproto_moderation_did`'s DID document. Only this configured endpoint may be on the local network. |
 | `atproto_jetstream` | Optional Jetstream source for remote repository events. |
 | `atproto_jetstream_cursor` | Last consumed Jetstream cursor; internal listener state. |
 | `atproto_jetstream_status` | Listener health/status state; internal bookkeeping. |

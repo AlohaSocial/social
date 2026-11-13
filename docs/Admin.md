@@ -735,7 +735,11 @@ from, and one that people here follow is removed with its posts — the
 Bluesky counterpart of a domain block. Reports people file about Bluesky
 accounts with *forward* ticked go to Bluesky's moderation service
 (`atproto_moderation_did`, Bluesky's own by default), sent by this server, not
-in the reporter's name.
+in the reporter's name. They are sent to the `#atproto_labeler` endpoint that
+service's DID document names, which has to be `https` and a public address;
+set `atproto_moderation_endpoint` (`occ config:app:set social
+atproto_moderation_endpoint --value http://ozone.internal:3000`) to send them
+somewhere else, such as a moderation service on the local network.
 
 **Video.** A video posted here goes to Bluesky as a Bluesky video: it is sent
 to Bluesky's video service (`atproto_video_service`, `https://video.bsky.app`

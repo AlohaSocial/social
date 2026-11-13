@@ -45,20 +45,7 @@ class BlueskyReporterTest extends TestCase {
 	private PrivateKey $serviceKey;
 
 	protected function setUp(): void {
-		$config = $this->createMock(AtprotoConfig::class);
-		$config->method('isEnabled')->willReturn(true);
-		$config->method('moderationDid')->willReturn(self::MOD);
-		$config->method('serviceDid')->willReturn('did:web:social.test');
 		$this->serviceKey = PrivateKey::generate(Curve::K256);
-		$keys = $this->createMock(InstanceKeyService::class);
-		$keys->method('serviceKey')->willReturn($this->serviceKey);
-		$time = $this->createMock(ITimeFactory::class);
-		$time->method('getTime')->willReturn(1760000000);
-		$plc = $this->createMock(PlcClient::class);
-		$plc->method('document')->with(self::MOD)->willReturn(['service' => [
-			['id' => '#atproto_pds', 'serviceEndpoint' => 'https://pds.example'],
-			['id' => '#atproto_labeler', 'type' => 'AtprotoLabeler', 'serviceEndpoint' => 'https://mod.bsky.app/'],
-		]]);
 		$this->refs = $this->createMock(PostRefs::class);
 		$this->curl = $this->createMock(CurlService::class);
 		$this->streams = $this->createMock(StreamRequest::class);
@@ -68,7 +55,26 @@ class BlueskyReporterTest extends TestCase {
 
 			return $note;
 		});
-		$this->reporter = new BlueskyReporter($config, $keys, new ServiceAuth($time, $this->createStub(AtprotoOAuthRequest::class)), $plc, $this->refs, $this->streams, $this->curl, new NullLogger());
+		$this->reporter = $this->reporter('https://mod.bsky.app/');
+	}
+
+	private function reporter(string $labeler, string $configured = ''): BlueskyReporter {
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(true);
+		$config->method('moderationDid')->willReturn(self::MOD);
+		$config->method('moderationEndpoint')->willReturn($configured);
+		$config->method('serviceDid')->willReturn('did:web:social.test');
+		$keys = $this->createMock(InstanceKeyService::class);
+		$keys->method('serviceKey')->willReturn($this->serviceKey);
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturn(1760000000);
+		$plc = $this->createMock(PlcClient::class);
+		$plc->method('document')->with(self::MOD)->willReturn(['service' => [
+			['id' => '#atproto_pds', 'serviceEndpoint' => 'https://pds.example'],
+			['id' => '#atproto_labeler', 'type' => 'AtprotoLabeler', 'serviceEndpoint' => $labeler],
+		]]);
+
+		return new BlueskyReporter($config, $keys, new ServiceAuth($time, $this->createStub(AtprotoOAuthRequest::class)), $plc, $this->refs, $this->streams, $this->curl, new NullLogger());
 	}
 
 	public function testAReportGoesToTheModerationServiceInTheInstancesNameNotTheReporters(): void {
@@ -85,6 +91,7 @@ class BlueskyReporterTest extends TestCase {
 			$this->assertSame(['$type' => 'com.atproto.repo.strongRef', 'uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3k', 'cid' => 'bafyreicid'], $body['subject']);
 			$this->assertSame('buy now', $body['reason']);
 			$this->assertTrue($options['accept_errors']);
+			$this->assertFalse($options['allow_local_address'], 'an endpoint from a DID document is held to the SSRF guard');
 
 			return true;
 		}))->willReturnCallback(static function (string $m, string $u, array $o, &$ct, &$status): string {
@@ -110,6 +117,43 @@ class BlueskyReporterTest extends TestCase {
 			return '{"error":"AuthRequired"}';
 		});
 		$this->assertSame('', $this->reporter->report($report, $this->bob()));
+	}
+
+	public function testAnEndpointADidDocumentNamesOverPlainHttpIsNotReported(): void {
+		$this->refs->method('strongRef')->willReturn(null);
+		$this->curl->expects($this->never())->method('doRequest');
+
+		$this->assertSame('', $this->reporter('http://10.0.0.5:8080')->report($this->report([]), $this->bob()));
+	}
+
+	public function testOnlyAnEndpointTheAdministratorConfiguredMayBeLocal(): void {
+		$this->refs->method('strongRef')->willReturn(null);
+		$this->curl->expects($this->once())->method('doRequest')->with(
+			'post',
+			'http://127.0.0.1:2587/xrpc/com.atproto.moderation.createReport',
+			$this->callback(static fn (array $options): bool => $options['allow_local_address'] === true),
+		)->willReturnCallback(static function (string $m, string $u, array $o, &$ct, &$status): string {
+			$status = 200;
+
+			return '{"id":7}';
+		});
+
+		$this->assertSame('7', $this->reporter('http://10.0.0.5:8080', 'http://127.0.0.1:2587')->report($this->report([]), $this->bob()));
+	}
+
+	public function testAConfiguredHttpsEndpointStaysUnderTheSsrfGuard(): void {
+		$this->refs->method('strongRef')->willReturn(null);
+		$this->curl->expects($this->once())->method('doRequest')->with(
+			'post',
+			'https://ozone.example/xrpc/com.atproto.moderation.createReport',
+			$this->callback(static fn (array $options): bool => $options['allow_local_address'] === false),
+		)->willReturnCallback(static function (string $m, string $u, array $o, &$ct, &$status): string {
+			$status = 200;
+
+			return '{"id":8}';
+		});
+
+		$this->assertSame('8', $this->reporter('https://mod.bsky.app', 'https://ozone.example')->report($this->report([]), $this->bob()));
 	}
 
 	public function testOnlyLocalReportsAboutBlueskyAccountsGo(): void {
