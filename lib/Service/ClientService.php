@@ -197,6 +197,29 @@ class ClientService {
 	}
 
 	/**
+	 * Whether granting these scopes takes the account's password first:
+	 * `write:migration`, which lets the holder move the account away, and any
+	 * `admin` scope (`admin:read`, `admin:write` and their sub-scopes), which
+	 * lets it use the administration API as an administrator.
+	 *
+	 * @param string[] $scopes
+	 */
+	public static function needsPasswordConfirmation(array $scopes): bool {
+		foreach ($scopes as $scope) {
+			if ($scope === MoveFinishService::SCOPE || self::isAdminScope((string)$scope)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** `admin`, `admin:read`, `admin:write:accounts` and the like. */
+	public static function isAdminScope(string $scope): bool {
+		return $scope === 'admin' || str_starts_with($scope, 'admin:');
+	}
+
+	/**
 	 * A client registration for a PeerTube app, made on the spot.
 	 *
 	 * PeerTube's `/oauth-clients/local` hands out **one** pair per instance,

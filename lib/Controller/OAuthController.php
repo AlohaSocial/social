@@ -31,7 +31,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DeviceAuthorizationService;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\InstanceService;
-use OCA\Social\Service\MoveFinishService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -274,10 +273,12 @@ class OAuthController extends Controller {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
 			$client = $this->clientService->getFromClientId($client_id);
 			// RFC 8628 §3.5: a token that moves the account away goes to the
-			// move-in callback only, never to whoever polls with a device code
-			if (in_array(MoveFinishService::SCOPE, $client->getScopesFromString($scope), true)) {
+			// move-in callback only, never to whoever polls with a device code;
+			// and the device consent has no password step for the scopes that
+			// need one
+			if (ClientService::needsPasswordConfirmation($client->getScopesFromString($scope))) {
 				return new DataResponse(
-					['error' => 'invalid_scope', 'error_description' => MoveFinishService::SCOPE . ' is not granted to a device'],
+					['error' => 'invalid_scope', 'error_description' => 'write:migration and admin scopes are not granted to a device'],
 					Http::STATUS_BAD_REQUEST
 				);
 			}
@@ -759,14 +760,17 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The consent to `write:migration`, which lets another Aloha Social
-	 * server move the account there: the same grant as `authorizing()`,
-	 * behind Nextcloud's password confirmation, as the Move button is.
+	 * The consent to the scopes that need the password
+	 * (`ClientService::needsPasswordConfirmation()`): `write:migration`,
+	 * which lets another Aloha Social server move the account there, and the
+	 * `admin` scopes, which let an application use the administration API.
+	 * The same grant as `authorizing()`, behind Nextcloud's password
+	 * confirmation, as the Move button is.
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
-	#[FrontpageRoute(verb: 'POST', url: '/oauth/authorize/move')]
-	public function authorizingMove(
+	#[FrontpageRoute(verb: 'POST', url: '/oauth/authorize/confirmed')]
+	public function authorizingConfirmed(
 		string $client_id,
 		string $redirect_uri = '',
 		string $response_type = '',
@@ -781,7 +785,7 @@ class OAuthController extends Controller {
 	/**
 	 * Issues an authorization code for the signed-in account.
 	 *
-	 * @param bool $passwordConfirmed whether the request came through the password-confirmed route, the only one that grants `write:migration`
+	 * @param bool $passwordConfirmed whether the request came through the password-confirmed route, the only one that grants `write:migration` and the `admin` scopes
 	 */
 	private function grantCode(
 		string $client_id,
@@ -808,8 +812,8 @@ class OAuthController extends Controller {
 			}
 
 			$this->clientService->confirmData($client, ['app_scopes' => $scope, 'redirect_uri' => $redirect_uri]);
-			if (!$passwordConfirmed && in_array(MoveFinishService::SCOPE, $client->getScopesFromString($scope), true)) {
-				throw new ClientException(MoveFinishService::SCOPE . ' is granted only after the password is confirmed');
+			if (!$passwordConfirmed && ClientService::needsPasswordConfirmation($client->getScopesFromString($scope))) {
+				throw new ClientException('write:migration and admin scopes are granted only after the password is confirmed');
 			}
 
 			// no code without an account: a token names the account it acts as

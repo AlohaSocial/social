@@ -1801,7 +1801,7 @@ class OAuthControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorize('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizing('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
-		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizingMove('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizingConfirmed('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizing('client-1', 'https://evil.example/cb', 'code', 'read write:migration')->getStatus());
 		$this->assertCount(0, $authorized);
 	}
@@ -1837,17 +1837,72 @@ class OAuthControllerTest extends TestCase {
 		$this->assertStringContainsString('password', $unconfirmed->getData()['error']);
 		$this->assertCount(0, $authorized);
 
-		$granted = $controller->authorizingMove('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
+		$granted = $controller->authorizingConfirmed('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
 		$this->assertInstanceOf(RedirectResponse::class, $granted);
 		$this->assertStringStartsWith(self::MOVE_IN_CALLBACK . '?code=', $granted->getRedirectURL());
 		$this->assertStringEndsWith('&state=s1', $granted->getRedirectURL());
 		$this->assertSame([['write:migration']], $authorized->getArrayCopy());
 	}
 
-	public function testOnlyTheMoveConsentAsksForThePassword(): void {
+	/**
+	 * An `admin` scope lets the application use the administration API as
+	 * the account, so the plain consent refuses it and only the
+	 * password-confirmed one grants it.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function adminScopes(): array {
+		return [
+			'admin:read' => ['admin:read'],
+			'admin:write' => ['admin:write'],
+			'a sub-scope' => ['admin:write:accounts'],
+			'the broad prefix' => ['admin'],
+			'beside ordinary ones' => ['read write admin:read:reports'],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('adminScopes')]
+	public function testAdminScopesAreGrantedOnlyBehindThePassword(string $scope): void {
+		$this->loggedIn('alice');
+		$authorized = new ArrayObject();
+		$registered = array_values(array_unique(array_merge(['read', 'write'], explode(' ', $scope))));
+		$controller = $this->controllerWith($this->storedRegistration($registered, ['https://admin.example/cb'], $authorized));
+
+		$unconfirmed = $controller->authorizing('client-1', 'https://admin.example/cb', 'code', $scope, 's1');
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $unconfirmed->getStatus());
+		$this->assertStringContainsString('password', $unconfirmed->getData()['error']);
+		$this->assertCount(0, $authorized);
+
+		$granted = $controller->authorizingConfirmed('client-1', 'https://admin.example/cb', 'code', $scope, 's1');
+		$this->assertInstanceOf(RedirectResponse::class, $granted);
+		$this->assertStringStartsWith('https://admin.example/cb?code=', $granted->getRedirectURL());
+		$this->assertSame([explode(' ', $scope)], $authorized->getArrayCopy());
+	}
+
+	public function testOrdinaryScopesNeedNoPassword(): void {
+		$this->loggedIn('alice');
+		$authorized = new ArrayObject();
+		$controller = $this->controllerWith($this->storedRegistration(['read', 'write', 'follow', 'push'], ['https://app.example/cb'], $authorized));
+
+		$this->assertInstanceOf(RedirectResponse::class, $controller->authorizing('client-1', 'https://app.example/cb', 'code', 'read write follow push'));
+		$this->assertCount(1, $authorized);
+	}
+
+	public function testTheDeviceFlowNeverHandsOutAnAdminScope(): void {
+		$devices = $this->createMock(DeviceAuthorizationService::class);
+		$devices->expects($this->never())->method('create');
+		$controller = $this->controllerWith($this->storedRegistration(['read', 'admin:read'], ['https://admin.example/cb']), $devices);
+
+		$response = $controller->deviceAuthorization('client-1', 'read admin:read');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_scope', $response->getData()['error']);
+	}
+
+	public function testOnlyTheConfirmedConsentAsksForThePassword(): void {
 		$attribute = \OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired::class;
 
-		$this->assertNotSame([], (new \ReflectionMethod(OAuthController::class, 'authorizingMove'))->getAttributes($attribute));
+		$this->assertNotSame([], (new \ReflectionMethod(OAuthController::class, 'authorizingConfirmed'))->getAttributes($attribute));
 		$this->assertSame([], (new \ReflectionMethod(OAuthController::class, 'authorizing'))->getAttributes($attribute));
 	}
 }

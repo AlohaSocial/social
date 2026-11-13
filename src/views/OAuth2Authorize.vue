@@ -197,6 +197,9 @@
 			<NcNoteCard v-if="movesAccount" type="error">
 				{{ t('social', 'This lets {target} move your account there: your followers are sent to the new account and this one is marked as moved. Authorize it only if you are moving to {target} yourself. You will be asked for your password.', { target: redirectTarget }) }}
 			</NcNoteCard>
+			<NcNoteCard v-if="administers" type="error">
+				{{ t('social', 'This application asks to administer this server as you: to see and act on accounts, reports and blocks wherever your account is an administrator. Because that is more than any ordinary app needs, you will be asked for your password.') }}
+			</NcNoteCard>
 
 			<h2>{{ t('social', 'This application will be able to:') }}</h2>
 			<ul v-if="permissions.length > 0" class="scopes">
@@ -302,6 +305,16 @@ import { confirmPassword } from '../services/externalApi.js'
 const OUT_OF_BAND = 'urn:ietf:wg:oauth:2.0:oob'
 // MoveFinishService::SCOPE: another Aloha Social server finishing a move here
 const MIGRATION_SCOPE = 'write:migration'
+
+/**
+ * ClientService::isAdminScope()
+ *
+ * @param {string} scope one of the scopes being asked for
+ * @return {boolean} whether it is `admin` or one of its sub-scopes
+ */
+function isAdminScope(scope) {
+	return scope === 'admin' || scope.startsWith('admin:')
+}
 export default {
 	name: 'OAuth2Authorize',
 	components: {
@@ -398,6 +411,8 @@ export default {
 				'write:statuses': t('social', 'Publish, edit and delete posts as you'),
 				'write:stories': t('social', 'Publish and delete 24-hour shorts as you'),
 				'write:migration': t('social', 'Move your account to another server, taking your followers with it'),
+				'admin:read': t('social', 'Read the administration data of this server: accounts, reports and blocks'),
+				'admin:write': t('social', 'Moderate and administer this server as you'),
 				atproto: t('social', 'Know which account you are'),
 				'transition:generic': t('social', 'Post, like, follow, upload and read as you, everywhere on Bluesky'),
 				'transition:email': t('social', 'See your e-mail address'),
@@ -416,6 +431,16 @@ export default {
 		/** @return {boolean} whether granting this lets the application move the account away */
 		movesAccount() {
 			return !this.device && this.scopes.includes(MIGRATION_SCOPE)
+		},
+
+		/** @return {boolean} whether granting this lets the application use the administration API */
+		administers() {
+			return !this.device && this.scopes.some(isAdminScope)
+		},
+
+		/** @return {boolean} whether the consent goes through the password confirmation */
+		needsPassword() {
+			return this.movesAccount || this.administers
 		},
 
 		deviceUrl() {
@@ -518,14 +543,15 @@ export default {
 		},
 
 		/**
-		 * A grant that lets the application move the account away goes to
-		 * its own route, which Nextcloud holds behind the password: asked
-		 * for here first, so the form arrives confirmed.
+		 * A grant that lets the application move the account away or
+		 * administer the server goes to its own route, which Nextcloud holds
+		 * behind the password: asked for here first, so the form arrives
+		 * confirmed.
 		 *
 		 * @param {SubmitEvent} event the consent form's submission
 		 */
 		async onSubmit(event) {
-			if (!this.movesAccount) {
+			if (!this.needsPassword) {
 				return
 			}
 			event.preventDefault()
@@ -534,7 +560,7 @@ export default {
 			} catch {
 				return
 			}
-			this.submitTo(/** @type {HTMLFormElement} */ (event.currentTarget), generateUrl('/apps/social/oauth/authorize/move') + window.location.search)
+			this.submitTo(/** @type {HTMLFormElement} */ (event.currentTarget), generateUrl('/apps/social/oauth/authorize/confirmed') + window.location.search)
 		},
 
 		/**

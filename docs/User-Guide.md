@@ -1157,7 +1157,10 @@ hand, it is picked up as one.
   out at once — Mastodon apps and Bluesky apps that signed in through the
   browser — and stops their push notifications; each asks you to sign in
   again. Your Nextcloud sessions and app passwords, and your Bluesky app
-  passwords, are not affected by this.
+  passwords, are not affected by this. An app that asks to administer the
+  server — a moderation tool asking for an `admin` permission — is told yes
+  only after you enter your password on the sign-in page, which says so
+  before you agree.
 - **Export and migration.** The whole move, in order, is one page:
   [Moving.md](Moving.md). **Migration** (in the account menu at the foot of
   the sidebar, a page of its own) opens with three choices, and each shows

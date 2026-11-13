@@ -64,6 +64,9 @@ the push provider. Nextcloud's own notification channel is a separate feature.
   advertises the actual availability of Social's web registration flow.
   As in Mastodon, changing or resetting the password revokes every OAuth
   token of the account; the change itself is made in Nextcloud.
+- Consent to an `admin:*` scope (or `write:migration`) takes the account's
+  password, through Nextcloud's password confirmation; Mastodon asks for no
+  password there. The device flow does not grant these scopes at all.
 - Mastodon-specific endpoints may be absent or return a documented partial
   result. `API.md` is the source of truth for the current route surface; a
   route being registered does not guarantee identical Mastodon semantics.
