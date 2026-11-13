@@ -50,6 +50,7 @@ class StreamRequest extends StreamRequestBuilder {
 	use StreamSearch;
 	use StreamThreads;
 	use StreamStatistics;
+	use StreamTrendBuckets;
 	use StreamDeletion;
 
 	/** replies other people wrote to this account's posts */
@@ -304,6 +305,11 @@ class StreamRequest extends StreamRequestBuilder {
 		}
 
 		$qb = $this->getStreamUpdateSql();
+
+		// an edit can change the tags, the audience and the time a trend
+		// counts by: the hour the post was in and the hour it is in now
+		$this->markTrendHoursOf(array_filter([$qb->prim($stream->getId())]));
+		$this->markTrendHour($stream->getPublishedTime());
 
 		$qb->set('to', $qb->createNamedParameter($stream->getTo()));
 		$qb->set(

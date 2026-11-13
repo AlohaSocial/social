@@ -63,6 +63,7 @@ trait StreamDeletion {
 			$qb->limitToType($type);
 		}
 
+		$this->markTrendHoursOf([$prim]);
 		$deleted = $qb->executeStatement();
 		if ($type !== '' && $deleted === 0) {
 			// a guarded delete that matched nothing: the post is of another
@@ -91,6 +92,7 @@ trait StreamDeletion {
 				return;
 			}
 
+			$this->markTrendHoursOf($prims);
 			$this->deleteRelatedTo($prims);
 
 			$qb = $this->getStreamDeleteSql();
@@ -208,6 +210,7 @@ trait StreamDeletion {
 			return;
 		}
 
+		$this->markTrendHoursOf($prims);
 		$qb = $this->getStreamDeleteSql();
 		$qb->andWhere($qb->expr()->in(
 			'id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)

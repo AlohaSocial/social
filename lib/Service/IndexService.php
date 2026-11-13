@@ -71,6 +71,8 @@ class IndexService {
 				$stream = $streams[$row['nid']] ?? $this->streamRequest->getStream($row['id_prim']);
 				$this->streamDestRequest->generateStreamDest($stream);
 				$this->streamTagsRequest->generateStreamTags($stream);
+				// a repaired tag row changes what its hour's trend bucket counts
+				$this->streamRequest->markTrendHour($stream->getPublishedTime());
 				$processed++;
 			} catch (StreamNotFoundException $e) {
 				// deleted since the page was read: nothing left to index

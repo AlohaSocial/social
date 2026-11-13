@@ -417,6 +417,15 @@ the `BackfillStreamPostFields` repair step has run on the instance. A row it
 cannot write is logged (`cannot digest the source of a stored post`) and passed
 over; it still reads correctly, only slower.
 
+### Hashtag trends after an upgrade
+
+The trending hashtags are counted from hourly tallies per hashtag rather than
+from every post of the last ten days. The first background run after the
+upgrade that introduced them builds the tallies of the current ten days in one
+pass, which costs what a single trends update used to cost; every later run
+recounts only the hours that changed. Nothing needs doing, and the trends read
+the same numbers as before.
+
 ### Posts the index repairs skipped
 
 Two background jobs walk the posts an older version stored, oldest first, from

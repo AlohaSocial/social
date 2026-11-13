@@ -88,6 +88,8 @@ class CoreRequestBuilder {
 	public const TABLE_TEAMS = 'social_team';
 	public const TABLE_TEAM_POSTS = 'social_team_post';
 	public const TABLE_TREND_REVIEW = 'social_trend_review';
+	public const TABLE_TAG_HOURS = 'social_tag_hour';
+	public const TABLE_TAG_HOURS_DIRTY = 'social_tag_dirty';
 	public const TABLE_RELAYS = 'social_relay';
 	public const TABLE_QUOTE_GRANTS = 'social_quote_grant';
 	public const TABLE_CHANNELS = 'social_channel';
@@ -485,6 +487,8 @@ class CoreRequestBuilder {
 			'moderator',
 			'creation'
 		],
+		self::TABLE_TAG_HOURS => ['hashtag', 'hour_start', 'uses'],
+		self::TABLE_TAG_HOURS_DIRTY => ['hour_start'],
 		self::TABLE_RELAYS => [
 			'id',
 			'actor_id',

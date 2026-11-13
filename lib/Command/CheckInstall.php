@@ -297,6 +297,8 @@ class CheckInstall extends SocialCommand {
 					$stream = $this->streamRequest->getStream((string)$row['id_prim']);
 					$this->streamDestRequest->generateStreamDest($stream);
 					$this->streamTagsRequest->generateStreamTags($stream);
+					// a repaired tag row changes what its hour's trend bucket counts
+					$this->streamRequest->markTrendHour($stream->getPublishedTime());
 				} catch (Exception $e) {
 					$failed++;
 					if (count($errors) < self::INDEX_ERRORS_SHOWN) {
