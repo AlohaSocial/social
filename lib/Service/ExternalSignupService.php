@@ -15,6 +15,7 @@ use OCA\Social\Db\ExternalInvitesRequest;
 use OCA\Social\Db\ExternalSignupsRequest;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Exceptions\SocialAppConfigException;
+use OCA\Social\Security\ClientAddress;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\HintException;
@@ -559,12 +560,12 @@ class ExternalSignupService {
 	}
 
 	/**
-	 * The address a registration came from, hashed with this instance's
-	 * secret: enough to count registrations per address, not enough to say
-	 * which address it was.
+	 * The address a registration came from, as `ClientAddress` counts it,
+	 * hashed with this instance's secret: enough to count registrations per
+	 * address, not enough to say which address it was.
 	 */
 	private function ipHash(string $remoteAddress): string {
-		return hash('sha256', $remoteAddress . '|' . $this->config->getSystemValueString('secret', ''));
+		return hash('sha256', ClientAddress::bucket($remoteAddress) . '|' . $this->config->getSystemValueString('secret', ''));
 	}
 
 	private function domain(): string {

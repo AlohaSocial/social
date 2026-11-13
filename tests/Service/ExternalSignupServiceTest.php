@@ -521,6 +521,23 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->assertSame('verify', $this->submit('good')['state']);
 	}
 
+	public function testRegistrationsAreCountedPerIpv4AddressAndPerIpv6Slash64(): void {
+		$hashes = [];
+		$this->signups->method('countFromIpSince')->willReturnCallback(function (string $hash) use (&$hashes): int {
+			$hashes[] = $hash;
+
+			return 0;
+		});
+		$service = $this->service();
+		$version = $service->pageState()['signupNoticeVersion'];
+		foreach (['2001:db8:1:2::1', '2001:db8:1:2:ffff::9', '2001:db8:1:3::1', '192.0.2.1', '192.0.2.2'] as $i => $address) {
+			$service->submit('alice', 'user' . $i . '@example.org', 'long enough', true, true, '', '', $address, false, $version);
+		}
+
+		$this->assertSame($hashes[0], $hashes[1]);
+		$this->assertCount(4, array_unique($hashes));
+	}
+
 	public function testOneAddressCannotRegisterWithoutEnd(): void {
 		$this->signups->method('countFromIpSince')->willReturn(ExternalSignupService::PER_IP_PER_HOUR);
 		$this->signups->expects($this->never())->method('create');
