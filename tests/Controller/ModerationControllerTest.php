@@ -12,11 +12,13 @@ namespace OCA\Social\Tests\Controller;
 use OCA\Social\Controller\ModerationController;
 use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Db\MediaBlocksRequest;
+use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Model\Client\AdminDomainBlock;
+use OCA\Social\Model\Gif;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\Strike;
 use OCA\Social\Service\AccountService;
@@ -26,6 +28,7 @@ use OCA\Social\Service\BlocklistSubscriptionService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\FediverseService;
+use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostReviewService;
@@ -60,7 +63,10 @@ class ModerationControllerTest extends TestCase {
 	private BlocklistImportService|Stub $blocklistImportService;
 	private BlocklistSubscriptionService|Stub $blocklistSubscriptionService;
 	private AccountService|Stub $accountService;
+	private GifService|MockObject $gifService;
 	private ModerationController $controller;
+	/** @var array<string, mixed>|null the `picture` upload the request carries */
+	private ?array $upload = null;
 
 	/** The arguments the account page was asked for. */
 	private array $accountQuery = [];
@@ -91,8 +97,13 @@ class ModerationControllerTest extends TestCase {
 
 		$this->blocklistImportService = $this->createStub(BlocklistImportService::class);
 		$this->blocklistSubscriptionService = $this->createStub(BlocklistSubscriptionService::class);
+		$this->gifService = $this->createMock(GifService::class);
+		$request = $this->createStub(IRequest::class);
+		$request->method('getUploadedFile')->willReturnCallback(
+			fn (string $key): ?array => ($key === 'picture') ? $this->upload : null
+		);
 		$this->controller = new ModerationController(
-			$this->createStub(IRequest::class),
+			$request,
 			$this->reportService,
 			$this->fediverseService,
 			$this->configService,
@@ -107,7 +118,8 @@ class ModerationControllerTest extends TestCase {
 			$this->emojiService,
 			$this->userSession,
 			$this->blocklistImportService,
-			$this->blocklistSubscriptionService
+			$this->blocklistSubscriptionService,
+			$this->gifService
 		);
 
 		$this->adminApiService->method('accountPage')->willReturnCallback(
@@ -779,5 +791,54 @@ class ModerationControllerTest extends TestCase {
 			Http::STATUS_UNPROCESSABLE_ENTITY,
 			$this->controller->discoverCategoryAdd('One more', '#more')->getStatus()
 		);
+	}
+
+	public function testTheGifLibraryIsTheInstancesOwnPictures(): void {
+		$gif = (new Gif('high-five', 'high-five.gif', 'image/gif', 'high five'))->setUrl('https://cloud.example/gif/high-five');
+		$this->gifService->method('all')->willReturn([$gif]);
+
+		$this->assertSame(['gifs' => [$gif]], $this->controller->gifs()->getData());
+	}
+
+	/** The upload goes to the service the command calls, so the checks are the command's. */
+	public function testAGifIsAddedFromTheUploadThroughTheCommandsService(): void {
+		$this->upload = ['tmp_name' => '/tmp/php123', 'error' => UPLOAD_ERR_OK, 'name' => 'x.gif'];
+		$this->gifService->expects($this->once())->method('add')
+			->with('high-five', '/tmp/php123', 'high five')
+			->willReturn(new Gif('high-five', 'high-five.gif', 'image/gif'));
+		$this->gifService->method('all')->willReturn([]);
+
+		$response = $this->controller->gifAdd('high-five', 'high five');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['gifs' => []], $response->getData());
+	}
+
+	public function testWhatTheServiceRefusesIsA422ThatSaysWhy(): void {
+		$this->upload = ['tmp_name' => '/tmp/php123', 'error' => UPLOAD_ERR_OK];
+		$this->gifService->method('add')
+			->willThrowException(new InvalidActionException('a library picture has to be a GIF, an animated WebP or an MP4'));
+
+		$response = $this->controller->gifAdd('still', '');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('a library picture has to be a GIF, an animated WebP or an MP4', $response->getData()['error']);
+	}
+
+	public function testAGifNeedsAPictureThatArrivedWhole(): void {
+		$this->gifService->expects($this->never())->method('add');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->gifAdd('high-five')->getStatus());
+
+		$this->upload = ['tmp_name' => '/tmp/php123', 'error' => UPLOAD_ERR_INI_SIZE];
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->gifAdd('high-five')->getStatus());
+	}
+
+	public function testAGifIsRemovedByItsSlugAndAnUnknownOneIsA404(): void {
+		$this->gifService->method('remove')->willReturnCallback(static fn (string $slug): bool => $slug === 'high-five');
+		$this->gifService->method('all')->willReturn([]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->gifRemove('high-five')->getStatus());
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller->gifRemove('never')->getStatus());
 	}
 }

@@ -804,7 +804,7 @@ administrator came to do, and one group is shown at a time:
 | **Overview** | Needs attention, Activity here |
 | **Moderation** | Reports, Posts waiting for review, Accounts, Verified accounts, Refused pictures |
 | **Sign-ups** | Who may sign up, Waiting and invited, External accounts (only when the server sends them, see [External users](#external-users)) |
-| **Discover and features** | Topics on Discover, What may trend, Custom emoji, Announcements, Features, For you |
+| **Discover and features** | Topics on Discover, What may trend, Custom emoji, GIF library, Announcements, Features, For you |
 | **Federation** | Allowed and blocked servers, Block lists, Relays, Deliveries |
 | **Server** | About this server, Server settings, Retention, Storage, Background jobs |
 
@@ -890,6 +890,13 @@ Federation health widget to `#federation`.
   `:shortcode:`. They travel with the post, so somebody on another server sees
   them too. The upload goes through the same code `occ social:emoji` uses, so
   what is refused here is exactly what the command refuses.
+- **GIF library** — this server's own pictures in the composer's GIF picker,
+  offered to everybody before the animated emoji: list them, add one (a name,
+  what people search for, and a GIF, animated WebP or MP4 of at most 8 MiB) and
+  remove one. Adding under a name already in the library replaces it; removing
+  one leaves posts that attached it as they are. The upload goes through the
+  same code `occ social:gif add` uses, with the same checks. Open to delegates,
+  as Custom emoji is.
 - **About this server** (in the **Server** group) — everything the user-facing
   **About this server** page in the account menu shows, in one place:
   - the **name**, which is Theming's, shown with a link to Theming;

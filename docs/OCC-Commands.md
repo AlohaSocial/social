@@ -1270,9 +1270,9 @@ is what the Files picker beside it is already for. The metadata is stripped the
 way every other upload's is, because these end up attached to posts that leave
 this instance.
 
-**Why there is no upload form.** This is a small set curated for a whole
-instance rather than something every reader adds to, and the files an
-administrator wants in it are already on a machine they have a shell on.
+**The same from the admin page.** The **GIF library** card of the Aloha
+Social settings lists, adds (by upload) and removes the same pictures through
+the same `GifService`, so a file this command refuses is refused there too.
 
 **Why there is no Giphy or Tenor.** Both would mean every composer on the
 instance talking to a third party: the search terms people type go there, and

@@ -103,10 +103,11 @@ const PAGE = 24
 /**
  * The instance's shared picture library, as a grid in the composer.
  *
- * The pictures are ones an administrator put there (`occ social:gif add`), so
- * this is the same set for everybody on the instance — which is what makes it
- * the same joke in the same team rather than one person's collection, and is
- * the whole reason it is not simply the Files picker that sits beside it.
+ * The pictures are ones an administrator put there (the GIF library card of
+ * the admin page, or `occ social:gif add`), so this is the same set for
+ * everybody on the instance — which is what makes it the same joke in the
+ * same team rather than one person's collection, and is the whole reason it
+ * is not simply the Files picker that sits beside it.
  *
  * Choosing one does not download and re-upload it: the server copies the
  * library file into an attachment, through the same path an upload takes. See

@@ -145,6 +145,7 @@ import IconExternalRequests from 'vue-material-design-icons/AccountClockOutline.
 import IconFederation from 'vue-material-design-icons/Earth.vue'
 import IconFederationHealth from 'vue-material-design-icons/SendCheckOutline.vue'
 import IconFeatures from 'vue-material-design-icons/ViewGridOutline.vue'
+import IconGifs from 'vue-material-design-icons/FileGifBox.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
 import IconMedia from 'vue-material-design-icons/ImageOffOutline.vue'
 import IconModeration from 'vue-material-design-icons/ShieldAccountOutline.vue'
@@ -179,6 +180,7 @@ import ExternalAccountsSection from './ExternalAccountsSection.vue'
 import ExternalRequestsSection from './ExternalRequestsSection.vue'
 import ExternalUsersSection from './ExternalUsersSection.vue'
 import FederationSection from './FederationSection.vue'
+import GifSection from './GifSection.vue'
 import InterestsSection from './InterestsSection.vue'
 import MediaBlocksSection from './MediaBlocksSection.vue'
 import RelaysSection from './RelaysSection.vue'
@@ -289,6 +291,7 @@ export default {
 		ExternalRequestsSection,
 		ExternalUsersSection,
 		FederationSection,
+		GifSection,
 		IconAccess,
 		IconAccounts,
 		IconActivity,
@@ -308,6 +311,7 @@ export default {
 		IconFederation,
 		IconFederationHealth,
 		IconFeatures,
+		IconGifs,
 		IconInterests,
 		IconMedia,
 		IconModeration,
@@ -571,6 +575,15 @@ export default {
 					component: 'EmojiSection',
 					title: t('social', 'Custom emoji'),
 					lede: t('social', 'Pictures people here can put in a post as :shortcode:. Other servers see them too.'),
+				},
+				{
+					id: 'gifs',
+					group: 'explore',
+					icon: 'IconGifs',
+					component: 'GifSection',
+					title: t('social', 'GIF library'),
+					lede: t('social', 'This server\'s own pictures in the GIF picker of the composer, offered to everybody before the animated emoji.'),
+					keywords: t('social', 'gif animated picture picker composer'),
 				},
 				{
 					id: 'announcements',

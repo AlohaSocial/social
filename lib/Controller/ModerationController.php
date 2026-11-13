@@ -15,6 +15,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Db\MediaBlocksRequest;
 use OCA\Social\Db\TrendReviewRequest;
+use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
@@ -29,6 +30,7 @@ use OCA\Social\Service\BlocklistSubscriptionService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\FediverseService;
+use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostReviewService;
@@ -85,6 +87,7 @@ class ModerationController extends Controller {
 		private IUserSession $userSession,
 		private BlocklistImportService $blocklistImportService,
 		private BlocklistSubscriptionService $blocklistSubscriptionService,
+		private GifService $gifService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -891,6 +894,63 @@ class ModerationController extends Controller {
 		}
 
 		return $this->emojis();
+	}
+
+	/**
+	 * The instance's own GIF library — what the composer's picker offers
+	 * before the animated emoji — which was `occ`-only until now. The pack
+	 * every instance has is not part of it.
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	#[FrontpageRoute(verb: 'GET', url: '/moderation/gifs')]
+	public function gifs(): DataResponse {
+		return new DataResponse(['gifs' => $this->gifService->all()]);
+	}
+
+	/**
+	 * Adds one from an uploaded picture, replacing whatever the slug named.
+	 *
+	 * The upload is handed to the same service `occ social:gif add` calls, so
+	 * the checks on the slug, the size and the format are the command's.
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	#[FrontpageRoute(verb: 'POST', url: '/moderation/gifs')]
+	public function gifAdd(string $slug = '', string $title = ''): DataResponse {
+		$upload = $this->request->getUploadedFile('picture');
+		if (!is_array($upload) || ($upload['tmp_name'] ?? '') === '') {
+			return new DataResponse(
+				['error' => 'a picture is needed'], Http::STATUS_UNPROCESSABLE_ENTITY
+			);
+		}
+		if (($upload['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+			return new DataResponse(
+				['error' => 'the picture did not arrive whole; it may be larger than this server accepts'],
+				Http::STATUS_UNPROCESSABLE_ENTITY
+			);
+		}
+
+		try {
+			$this->gifService->add($slug, (string)$upload['tmp_name'], $title);
+		} catch (InvalidActionException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return $this->gifs();
+	}
+
+	/**
+	 * Takes one out of the library. Posts that attached it keep their copy.
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	#[FrontpageRoute(verb: 'DELETE', url: '/moderation/gifs')]
+	public function gifRemove(string $slug = ''): DataResponse {
+		if (!$this->gifService->remove($slug)) {
+			return new DataResponse(
+				['error' => 'there is no library picture with that name'], Http::STATUS_NOT_FOUND
+			);
+		}
+
+		return $this->gifs();
 	}
 
 	/**

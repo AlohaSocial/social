@@ -19,11 +19,9 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * The shared pictures this instance offers in the composer.
  *
- * An administrator fills the library from the command line, the way custom
- * emoji are added. There is no upload form, deliberately: this is a small set
- * curated for a whole instance, not something every reader adds to, and the
- * files an administrator wants in it are already on a machine they have a
- * shell on.
+ * A small set curated for a whole instance, not something every reader adds
+ * to. An administrator fills it from here or from the GIF library card of the
+ * admin page, which calls the same `GifService`.
  */
 class Gif extends SocialCommand {
 	public function __construct(

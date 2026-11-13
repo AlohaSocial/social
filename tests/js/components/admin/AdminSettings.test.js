@@ -158,7 +158,7 @@ describe('the administration page', () => {
 		expect(seen).toEqual({
 			Overview: ['Needs attention', 'Activity here'],
 			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Verified accounts', 'Refused pictures'],
-			'Discover and features': ['Topics on Discover', 'What may trend', 'Custom emoji', 'Announcements', 'Features'],
+			'Discover and features': ['Topics on Discover', 'What may trend', 'Custom emoji', 'GIF library', 'Announcements', 'Features'],
 			Federation: ['Allowed and blocked servers', 'Block lists', 'Relays', 'Deliveries'],
 			Server: ['About this server', 'Server settings', 'Retention', 'Storage', 'Background jobs'],
 		})
@@ -196,7 +196,7 @@ describe('the administration page', () => {
 		expect(all).not.toContain('Features')
 		// the rules are the moderators' to keep, inside the About card
 		expect(all).toContain('About this server')
-		expect(all).toHaveLength(17)
+		expect(all).toHaveLength(18)
 	})
 
 	/**
