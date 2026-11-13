@@ -192,7 +192,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_instance` | Known federated instances (version, metadata) |
 | `social_req_queue` | Outbound ActivityPub delivery queue, indexed for the drain's own sort on `(status, priority, tries, last)` |
 | `social_host_breaker` | The delivery circuit breaker: one row per peer that failed within the last hour, with its consecutive failures and the moment it is worth asking again, in unix seconds. Read once per drain by `ActivityService` and by `StreamQueueService` (`HostBreaker`), so a row addressed to a dead peer is held back without spending a timeout; cleared when the peer answers, forgotten an hour after its last failure (`Cron\Queue`) |
-| `social_stream` | Core content table: posts, notes, activities. Nine JSON-in-TEXT columns (`to_array`, `cc`, `bcc`, `hashtags`, `tags`, `details`, `instances`, `attachments`, `cache`) beside the scalar ones; `source` holds the ActivityPub wire object verbatim, and `archived` — a post its author has put away. `count_replies`, `count_likes`, `count_boosts` and `count_dislikes` (INTEGER, default 0) are the post's counters, written only by `StreamRequest::recount()` and laid over the matching `details` keys on read. `poll_ends_at` (BIGINT, indexed, NULL on everything but a poll with an end) is a poll's `endTime` as a Unix time, copied out on every save and edit, so the closed-poll sweep reads exactly the polls that closed in its window, earliest first. `poll_ends_at` (BIGINT, indexed, NULL on everything but a poll with an end) is a poll's `endTime` as a Unix time, copied out on every save and edit, so the closed-poll sweep reads exactly the polls that closed in its window, earliest first. `author_host` (VARCHAR 191, indexed) is the lower-cased host of `attributed_to`, written on every save and author rewrite and backfilled by `Cron\StreamAuthorHosts`; NULL on a row the job has not reached, `''` for an id with no host. `root_prim` (VARCHAR 32, indexed) is the prim of the root of a direct message's thread, written when the message is stored (`ConversationsRequest::storeRoot()`) and backfilled by `Cron\ThreadRoots`; NULL on every other post and on a direct message the job has not reached. `sanitized` (SMALLINT, default 0, `Version1000Date20261110000002`) is the `HtmlSanitizer::version()` the stored `content` was sanitized under: `StreamRequest` sanitizes `content` on every insert and update and stamps it, and 0 is a row written before the column |
+| `social_stream` | Core content table: posts, notes, activities. Nine JSON-in-TEXT columns (`to_array`, `cc`, `bcc`, `hashtags`, `tags`, `details`, `instances`, `attachments`, `cache`) beside the scalar ones; `source` holds the ActivityPub wire object verbatim, and `archived` — a post its author has put away. `count_replies`, `count_likes`, `count_boosts` and `count_dislikes` (INTEGER, default 0) are the post's counters, written only by `StreamRequest::recount()` and laid over the matching `details` keys on read. `poll_ends_at` (BIGINT, indexed, NULL on everything but a poll with an end) is a poll's `endTime` as a Unix time, copied out on every save and edit, so the closed-poll sweep reads exactly the polls that closed in its window, earliest first. `poll_ends_at` (BIGINT, indexed, NULL on everything but a poll with an end) is a poll's `endTime` as a Unix time, copied out on every save and edit, so the closed-poll sweep reads exactly the polls that closed in its window, earliest first. `author_host` (VARCHAR 191, indexed) is the lower-cased host of `attributed_to`, written on every save and author rewrite and backfilled by `Cron\StreamAuthorHosts`; NULL on a row the job has not reached, `''` for an id with no host. `root_prim` (VARCHAR 32, indexed) is the prim of the root of a direct message's thread, written when the message is stored (`ConversationsRequest::storeRoot()`) and backfilled by `Cron\ThreadRoots`; NULL on every other post and on a direct message the job has not reached. `sanitized` (SMALLINT, default 0, `Version1000Date20261110000002`) is the `HtmlSanitizer::version()` the stored `content` was sanitized under: `StreamRequest` sanitizes `content` on every insert and update and stamps it, and 0 is a row written before the column `source_digest` (TEXT, NULL until written, `Version1000Date20261113200001`) is what a read takes out of `source` beside the columns — the post's custom emoji and the like, share and reply totals its origin stated — as a small JSON object (`Stream::sourceDigestOf()`), written by `setPostFields()` on every insert and update with `source` and backfilled by `Cron\SourceDigests`; a row that has one is read without decoding `source`, a row that has none (NULL) is read out of `source` as before |
 | `social_discover_cat` | The subjects an instance says Explore is about: a name and the hashtags it means, in the order an administrator put them in |
 | `social_trend_review` | What a moderator has decided about something that is trending: one row per rejected (or approved) tag, link or status |
 | `social_relay` | The relays this instance subscribes to: one row per subscription, with the `Follow` it sent, the inbox to deliver to and whether the relay answered |
@@ -2693,6 +2693,34 @@ Measured with `occ social:debug:benchmark` on 20 000 notes: the home timeline we
 from 219 ms to 89 ms and the public timeline from 121 ms to 29 ms, returning
 the same rows in the same order.
 
+The second query has no `DISTINCT` at all, and neither has any other read of
+whole posts (`StreamRequestBuilder::getStreamSelectSql()`): over TEXT columns it
+makes the database build a temporary table of every matching row (on disk on
+MySQL and MariaDB) even for a read by primary key. The author and the boosted
+post are joined on unique keys and cannot repeat a post; the joins that can
+repeat it with identical columns — the recipient rows of `limitToViewer()`, the
+expiry rows of `filterHiddenActors()` — are deduplicated by nid in
+`getStreamsFromRequest()`, and a read that pages over them (the quotes of a
+post, a level of a thread, the replies read as a viewer) chooses its page with
+`getStreamNidsSelectSql()` first and reads the rows with `streamsInPageOrder()`.
+What is left — two raced document rows of one avatar, an action row on a boost
+and on the post it boosts — differs in a selected column, which a `DISTINCT`
+never collapsed either.
+
+The row reads of the client-format timelines (home, tags, public, lists,
+notifications, favourites and bookmarks, trending statuses) are also
+**narrow** (`SocialCrossQueryBuilder::setNarrowStreamRead()`): a post's
+`source` is selected only for a row without a `source_digest` and for the types
+whose model reads the wire object itself (`Stream::TYPES_READING_SOURCE`:
+`Question` for its poll, `Playlist` for its list), for the post and for the
+boosted post alike, and the authors' `public_key` is not selected, since only
+their ActivityPub export carries it. The authors' `source` still is: the
+account entity's header, fields, emoji and flags are read out of it. A post
+read narrow is marked (`Stream::isSourceOmitted()`) and `StreamRequest::update()`
+refuses it, so a copy without its wire object can never be written back over
+the stored one. An ActivityPub-format read is never narrow, as its export
+carries `source` and the author's key.
+
 The status a row *points at* — the post a boost repeats, the post a notification
 is about — is joined by `SocialCrossQueryBuilder::leftJoinObjectStatus()`, and
 that join carries the viewer bound of its own: addressed to the public
@@ -4277,6 +4305,7 @@ $context->registerEventListener(PostPublishedEvent::class, MyListener::class);
 | Background Jobs | `Cron\AtprotoSync` | `appinfo/info.xml` | 2-minute interval, only while Bluesky is on: reads the newest page of each due watch (`social_atproto_watch`) from the public AppView and stores what is new, then asks the AppView's notifications for each due local account (`social_atproto_notify_cursor`); both within the request ceiling, both backed off after empty reads |
 | Background Jobs | `Cron\AtprotoVideo` | `appinfo/info.xml` | 1-minute interval, only while Bluesky is on and a video service is set: sends up to three queued videos to Bluesky's video service in their accounts' names, asks after the jobs being made, and publishes each post whose video has ended — with the video, or as a link (`social_atproto_video`) |
 | Background Jobs | `Cron\Resanitize` | `appinfo/info.xml` | 5-minute interval: up to 10,000 stored posts and as many cached bios brought up to the current `HtmlSanitizer::version()` (`SanitizerUpgrade`), walking each table once per version by `nid` from a cursor in the app config, so their reads skip the sanitizer; idle once both walks reached the end — see **HTML sanitisation** under Security |
+| Background Jobs | `Cron\SourceDigests` | `appinfo/info.xml` | 5-minute interval: up to 10,000 stored posts given the `source_digest` their reads use (`SourceDigestBackfill`), walking `social_stream` once by `nid` from `source_digest_walk` in the app config; it waits for `BackfillStreamPostFields`, because a row with a digest is read without the fallback that fills the five post columns out of `source`, and is idle once the walk reached the end |
 | Background Jobs | `Cron\FillFollowedTags` | `appinfo/info.xml` | 15-minute interval: reads the new posts with ten of the hashtags people here follow from every network (`FollowedTagsFill`), the ones read longest ago first — see **Hashtags and searches beyond this server** |
 | Background Jobs | `Cron\Transcode` | `appinfo/info.xml` | 15-minute interval, one video per run: re-encodes a stored video that is not an H.264 MP4 into one (`video_transcode`), the sweep behind `Cron\TranscodeBeforeDelivery`, which converts the video a held post is waiting on; a no-op without ffmpeg |
 | Background Jobs | `Cron\VideoPosters` | `appinfo/info.xml` | 15-minute interval: makes the poster frames of up to five stored videos that have none (`VideoPosterBackfill`), in nid order from the `poster_backfill_cursor` app setting, each video once, and rewrites the attachment copies of the posts carrying each; does nothing while the server has no ffmpeg, so the cursor waits for it |

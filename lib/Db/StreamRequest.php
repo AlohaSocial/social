@@ -298,6 +298,11 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	public function update(Stream $stream, bool $generateDest = false): void {
+		if ($stream->isSourceOmitted()) {
+			// a narrow read's copy: writing it back would empty `source`
+			throw new \LogicException('a post read without its source cannot be written back: ' . $stream->getId());
+		}
+
 		$qb = $this->getStreamUpdateSql();
 
 		$qb->set('to', $qb->createNamedParameter($stream->getTo()));
@@ -539,20 +544,21 @@ class StreamRequest extends StreamRequestBuilder {
 			return [];
 		}
 
-		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
-		$qb->andWhere($qb->expr()->eq('s.quote', $qb->createNamedParameter($objectId)));
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-		$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
-		$qb->leftJoinStreamAction('sa');
+		// a post matches several of the viewer's recipient rows, so the page
+		// is chosen by nid first and its rows are read afterwards
+		$page = $this->getStreamNidsSelectSql();
+		$page->andWhere($page->expr()->eq('s.quote', $page->createNamedParameter($objectId)));
+		$page->joinCacheActors('ca', 's.attributed_to_prim');
+		$page->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
 
 		if ($maxId > 0) {
-			$qb->andWhere($qb->expr()->lt('s.nid', $qb->createNamedParameter($maxId)));
+			$page->andWhere($page->expr()->lt('s.nid', $page->createNamedParameter($maxId)));
 		}
 
-		$qb->orderBy('s.nid', 'desc');
-		$qb->setMaxResults(max(1, min($limit, 40)));
+		$page->orderBy('s.nid', 'desc');
+		$page->setMaxResults(max(1, min($limit, 40)));
 
-		return $this->getStreamsFromRequest($qb);
+		return $this->streamsInPageOrder($this->getNidsFromRequest($page), ACore::FORMAT_LOCAL, true);
 	}
 
 	/**
@@ -1280,6 +1286,8 @@ class StreamRequest extends StreamRequestBuilder {
 			'quote_authorization' => [$stream->getQuoteAuthorization(), IQueryBuilder::PARAM_STR],
 			'quote_policy' => [$stream->getQuotePolicy(), IQueryBuilder::PARAM_STR],
 			'updated' => [$this->updatedAsDate($stream->getUpdated()), IQueryBuilder::PARAM_DATE],
+			// written wherever `source` is, so the two cannot disagree
+			'source_digest' => [Stream::sourceDigestOf($stream->getSource()), IQueryBuilder::PARAM_STR],
 		];
 
 		foreach ($values as $column => [$value, $type]) {

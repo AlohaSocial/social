@@ -48,7 +48,7 @@ class BackfillStreamPostFields implements IRepairStep {
 	/** Rows read per round trip. */
 	private const CHUNK = 500;
 
-	private const MARKER = 'migration_stream_post_fields_backfilled';
+	public const MARKER = 'migration_stream_post_fields_backfilled';
 
 	/** The columns this step fills, and the row keys they arrive under. */
 	private const COLUMNS = ['tags', 'language', 'updated', 'quote', 'quote_authorization'];

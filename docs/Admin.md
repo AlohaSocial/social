@@ -405,6 +405,18 @@ settings, and does nothing once both walks have reached the end. A row it
 cannot rewrite is logged (`cannot bring a stored text up to the current
 sanitizer`) and passed over; it still reads correctly, only slower.
 
+### Reading posts without their wire object
+
+A timeline reads a post's emoji and the counts its server stated from a small
+digest stored beside the post rather than from the whole ActivityPub document
+it arrived as. Posts stored before the digest existed are read from the
+document as before until `Cron\SourceDigests` has given them one: every five
+minutes it takes up to 10,000 posts, walking the table once from a cursor in the
+app settings (`source_digest_walk`, `done` once finished). It starts only after
+the `BackfillStreamPostFields` repair step has run on the instance. A row it
+cannot write is logged (`cannot digest the source of a stored post`) and passed
+over; it still reads correctly, only slower.
+
 ### Posts the index repairs skipped
 
 Two background jobs walk the posts an older version stored, oldest first, from

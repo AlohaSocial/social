@@ -831,6 +831,7 @@ class CoreRequestBuilder {
 			'hashtags',
 			'details',
 			'source',
+			'source_digest',
 			'instances',
 			'attachments',
 			'media_kind',

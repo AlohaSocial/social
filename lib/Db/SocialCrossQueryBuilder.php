@@ -25,6 +25,60 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  * @package OCA\Social\Db
  */
 class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
+	private bool $narrowStreamRead = false;
+
+	/**
+	 * Reads the posts of this query without what a client-format export of
+	 * them never uses: a post's `source` (the whole wire object, read for the
+	 * types in `Stream::TYPES_READING_SOURCE` and for a row `source_digest`
+	 * has not reached yet) and its authors' `public_key`, which only their
+	 * ActivityPub export carries. The posts come back marked
+	 * (`Stream::isSourceOmitted()`), so none of them can be written back.
+	 *
+	 * Set before the joins are added, which read it.
+	 */
+	public function setNarrowStreamRead(bool $narrow): void {
+		$this->narrowStreamRead = $narrow;
+	}
+
+	public function isNarrowStreamRead(): bool {
+		return $this->narrowStreamRead;
+	}
+
+	/**
+	 * Selects the `source` of the posts under `$alias` as `$as`, or, in a
+	 * narrow read, only for the rows that still need it and `''` for the rest.
+	 */
+	public function selectStreamSource(string $alias, string $as): void {
+		if (!$this->narrowStreamRead) {
+			$this->selectAlias($alias . '.source', $as);
+
+			return;
+		}
+
+		$expr = $this->expr();
+		$needed = $expr->isNull($alias . '.source_digest') . ' OR ' . $expr->in(
+			$alias . '.type',
+			$this->createNamedParameter(Stream::TYPES_READING_SOURCE, IQueryBuilder::PARAM_STR_ARRAY)
+		);
+		$this->selectAlias(
+			$this->createFunction('CASE WHEN ' . $needed . ' THEN ' . $alias . ".source ELSE '' END"),
+			$as
+		);
+	}
+
+	/**
+	 * Whether a narrow read left the `source` of this post row out, by the
+	 * rule `selectStreamSource()` applies.
+	 *
+	 * @param array<string, mixed> $row the post's columns, unprefixed
+	 */
+	public function omitsSourceOf(array $row): bool {
+		return $this->narrowStreamRead
+			&& ($row['source_digest'] ?? null) !== null
+			&& !in_array((string)($row['type'] ?? ''), Stream::TYPES_READING_SOURCE, true);
+	}
+
 	/**
 	 * @param string $aliasDest
 	 * @param string $aliasFollowing
@@ -159,7 +213,6 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 			->selectAlias($pf . '.preferred_username', 'ca_preferred_username')
 			->selectAlias($pf . '.name', 'ca_name')
 			->selectAlias($pf . '.summary', 'ca_summary')
-			->selectAlias($pf . '.public_key', 'ca_public_key')
 			->selectAlias($pf . '.source', 'ca_source')
 			->selectAlias($pf . '.details', 'ca_details')
 			->selectAlias($pf . '.creation', 'ca_creation')
@@ -171,6 +224,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 			->selectAlias($pf . '.count_followers', 'ca_count_followers')
 			->selectAlias($pf . '.count_following', 'ca_count_following')
 			->selectAlias($pf . '.count_posts', 'ca_count_posts');
+		if (!$this->narrowStreamRead) {
+			$this->selectAlias($pf . '.public_key', 'ca_public_key');
+		}
 
 		$this->leftJoinCacheDocuments('icon_id', $pf, 'ca_cd_', 'cacd');
 	}
@@ -208,6 +264,7 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 		$stream = (($new['type'] ?? '') === Question::TYPE) ? new Question() : new Stream();
 		$stream->importFromDatabase($new);
 		$stream->setExportFormat($exportFormat);
+		$stream->setSourceOmitted($this->omitsSourceOf($new));
 
 		$actor = $this->parseLeftJoinCacheActors($data, $prefix . 'ca_', $exportFormat);
 		$stream->setActor($actor);
@@ -348,6 +405,10 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 		$pf = (($alias === '') ? $this->getDefaultSelectAlias() : $alias) . '.';
 
 		foreach (CoreRequestBuilder::$tables[CoreRequestBuilder::TABLE_STREAM] as $field) {
+			if ($field === 'source') {
+				$this->selectStreamSource($leftAlias, 'os_source');
+				continue;
+			}
 			$this->selectAlias($leftAlias . '.' . $field, 'os_' . $field);
 		}
 
@@ -458,6 +519,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 		$pf = (($alias === '') ? $this->getDefaultSelectAlias() : $alias);
 
 		foreach (CoreRequestBuilder::$tables[CoreRequestBuilder::TABLE_CACHE_ACTORS] as $field) {
+			if ($field === 'public_key' && $this->narrowStreamRead) {
+				continue;
+			}
 			$this->selectAlias($leftAlias . '.' . $field, $prefix . 'ca_' . $field);
 		}
 		// not in the table's column list, which also serves its writes; the

@@ -40,15 +40,24 @@ trait StreamThreads {
 			throw new StreamNotFoundException();
 		};
 
+		if ($asViewer) {
+			// a reply matches several of the viewer's recipient rows, so the
+			// page is chosen by nid first and its rows are read afterwards;
+			// the order column is selected for the DISTINCT to sort on
+			$page = $this->getStreamNidsSelectSql();
+			$page->addSelect('s.published_time');
+			$page->limitToInReplyTo($id);
+			$page->limitPaginate($since, $limit);
+			$page->joinCacheActors('ca', 's.attributed_to_prim');
+			$page->limitToViewer('sd', 'f', true);
+
+			return $this->streamsInPageOrder($this->getNidsFromRequest($page), ACore::FORMAT_ACTIVITYPUB, true);
+		}
+
 		$qb = $this->getStreamSelectSql();
 		$qb->limitToInReplyTo($id);
 		$qb->limitPaginate($since, $limit);
-
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-		if ($asViewer) {
-			$qb->limitToViewer('sd', 'f', true);
-			$qb->leftJoinStreamAction();
-		}
 
 		return $this->getStreamsFromRequest($qb);
 	}
@@ -243,27 +252,31 @@ trait StreamThreads {
 	 * @return Stream[]
 	 */
 	protected function getRepliesTo(array $ids, int $limit, string $sort = 'oldest'): array {
-		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
+		// a reply matches several of the viewer's recipient rows, so the page
+		// is chosen by nid first, with the order column selected for the
+		// DISTINCT to sort on, and its rows are read afterwards
+		$page = $this->getStreamNidsSelectSql();
+		$page->addSelect('s.published_time');
 
-		$qb->filterType(SocialAppNotification::TYPE);
+		$page->filterType(SocialAppNotification::TYPE);
 		// direct messages included, as `getStreamById()` and the ancestor walk
 		// both include them: a DM's recipient row is keyed on the viewer's own
 		// id, so without this the descendants of a direct thread could never
 		// match and a client was handed the ancestors and nothing else
-		$qb->limitToViewer('sd', 'f', true, true);
-		$qb->limitToDBFieldArray(
+		$page->limitToViewer('sd', 'f', true, true);
+		$page->limitToDBFieldArray(
 			'in_reply_to_prim',
-			array_map(static fn (string $id): string => $qb->prim($id), $ids)
+			array_map(static fn (string $id): string => $page->prim($id), $ids)
 		);
 		// a thread is read by anyone, logged in or not, and every row comes
 		// back fully hydrated: the context of a post that thousands replied to
 		// is not something to hand to PHP whole
-		$qb->setMaxResults($limit);
-		$qb->orderBy('s.published_time', $sort === 'newest' ? 'desc' : 'asc');
+		$page->setMaxResults($limit);
+		$page->orderBy('s.published_time', $sort === 'newest' ? 'desc' : 'asc');
 
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
+		$page->joinCacheActors('ca', 's.attributed_to_prim');
 
-		return $this->getStreamsFromRequest($qb);
+		return $this->streamsInPageOrder($this->getNidsFromRequest($page), ACore::FORMAT_LOCAL, false);
 	}
 
 	/**

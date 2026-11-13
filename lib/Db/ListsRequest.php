@@ -484,7 +484,7 @@ class ListsRequest extends ListsRequestBuilder {
 	 * @return Stream[]
 	 */
 	protected function streamsByNids(array $nids, ProbeOptions $options): array {
-		$qb = $this->getStreamSelectSql($options->getFormat());
+		$qb = $this->getStreamSelectSql($options->getFormat(), false, true);
 		$qb->andWhere(
 			$qb->expr()->in('s.nid', $qb->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY))
 		);

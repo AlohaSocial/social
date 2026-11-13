@@ -26,6 +26,18 @@ class FakeExpressionBuilder {
 		return $x . ' > ' . $y;
 	}
 
+	public function gte($x, $y, $type = null): string {
+		return $x . ' >= ' . $y;
+	}
+
+	public function lt($x, $y, $type = null): string {
+		return $x . ' < ' . $y;
+	}
+
+	public function isNull($x): string {
+		return $x . ' IS NULL';
+	}
+
 	public function like($x, $y, $type = null): string {
 		return $x . ' LIKE ' . $y;
 	}

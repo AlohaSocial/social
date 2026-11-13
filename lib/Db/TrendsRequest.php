@@ -217,7 +217,7 @@ class TrendsRequest extends TrendsRequestBuilder {
 			return [];
 		}
 
-		$qb = $this->getStreamSelectSql(Stream::FORMAT_LOCAL);
+		$qb = $this->getStreamSelectSql(Stream::FORMAT_LOCAL, false, true);
 		$qb->andWhere(
 			$qb->expr()->in('s.nid', $qb->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY))
 		);
