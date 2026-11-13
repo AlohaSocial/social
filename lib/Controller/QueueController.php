@@ -208,10 +208,11 @@ class QueueController extends Controller {
 	 * before the drain started.
 	 */
 	protected function handBack(RequestQueue $request, Throwable $e): void {
+		$token = AsyncRequestSigner::fingerprint($request->getToken());
 		$this->logger->warning(
-			'[QueueController] delivery of ' . $request->getToken() . ' failed: '
+			'[QueueController] delivery of ' . $token . ' failed: '
 			. get_class($e) . ' ' . $e->getMessage(),
-			['exception' => $e, 'token' => $request->getToken()]
+			['exception' => $e, 'token' => $token]
 		);
 
 		try {
@@ -219,8 +220,8 @@ class QueueController extends Controller {
 		} catch (Throwable $dbError) {
 			// the database is what just failed; the stale reaper is the backstop
 			$this->logger->warning(
-				'[QueueController] cannot return ' . $request->getToken() . ' to standby',
-				['exception' => $dbError, 'token' => $request->getToken()]
+				'[QueueController] cannot return ' . $token . ' to standby',
+				['exception' => $dbError, 'token' => $token]
 			);
 		}
 	}

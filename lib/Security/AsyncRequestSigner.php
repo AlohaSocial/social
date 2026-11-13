@@ -41,6 +41,14 @@ class AsyncRequestSigner {
 	) {
 	}
 
+	/**
+	 * What a log line names a queue token by: enough to match a row, not
+	 * the token itself.
+	 */
+	public static function fingerprint(string $token): string {
+		return substr(hash('sha256', $token), 0, 8);
+	}
+
 	public function sign(string $token, int $round = 0): string {
 		$at = $this->time->getTime();
 

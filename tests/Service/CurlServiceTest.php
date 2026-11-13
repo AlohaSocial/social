@@ -909,7 +909,7 @@ class CurlServiceTest extends TestCase {
 
 		$service->asyncWithToken('tok-1');
 
-		$this->assertSame(substr(hash('sha256', 'tok-1'), 0, 8), $logged['token']);
+		$this->assertSame(AsyncRequestSigner::fingerprint('tok-1'), $logged['token']);
 		$this->assertStringNotContainsString('tok-1', json_encode($logged['token']));
 	}
 

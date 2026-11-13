@@ -41,6 +41,7 @@ use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\LinkedDataSignature;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
@@ -541,6 +542,26 @@ class ActivityServiceTest extends TestCase {
 		$this->service->releaseDeferredDeliveries();
 
 		$this->assertSame(1, $starts);
+	}
+
+	public function testADeferredDeliveryThatFailsLogsOnlyAFingerprintOfTheToken(): void {
+		$this->requestQueueService->method('generateRequestQueue')->willReturn(self::TOKEN);
+		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new \RuntimeException('the database is gone'));
+		$logged = [];
+		$this->logger->expects($this->once())->method('notice')
+			->willReturnCallback(static function (string $message, array $context) use (&$logged): void {
+				$logged = $context;
+			});
+		$like = new Like();
+		$like->setActorId(self::ALICE_ID);
+		$like->addInstancePath(new InstancePath(self::BOB_INBOX, InstancePath::TYPE_INBOX, InstancePath::PRIORITY_HIGH));
+
+		$this->service->beginDeferredDeliveries();
+		$this->service->request($like);
+		$this->service->releaseDeferredDeliveries();
+
+		$this->assertSame(AsyncRequestSigner::fingerprint(self::TOKEN), $logged['token']);
+		$this->assertStringNotContainsString(self::TOKEN, (string)json_encode($logged['token']));
 	}
 
 	// --- relays -----------------------------------------------------------

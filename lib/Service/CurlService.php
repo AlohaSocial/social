@@ -381,9 +381,7 @@ class CurlService {
 			]);
 		} catch (RequestResultNotJsonException $e) {
 		} catch (Exception $e) {
-			// the token names a queue the route will deliver; the log gets a
-			// fingerprint of it, enough to match a row, not enough to call
-			$this->logger->error('Cannot initiate AsyncWithToken', ['token' => substr(hash('sha256', $token), 0, 8), 'exception' => $e]);
+			$this->logger->error('Cannot initiate AsyncWithToken', ['token' => AsyncRequestSigner::fingerprint($token), 'exception' => $e]);
 		}
 	}
 
