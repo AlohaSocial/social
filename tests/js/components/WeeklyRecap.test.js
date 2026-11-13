@@ -95,13 +95,13 @@ describe('WeeklyRecap', () => {
 		it('offers a way into the local timeline instead', async () => {
 			const wrapper = await mountRecap({ enabled: true, this_week: 0, last_week: 4 })
 
-			expect(wrapper.text()).toContain('See what your colleagues shared')
+			expect(wrapper.text()).toContain('See what people on your Nextcloud shared')
 		})
 
 		it('offers no such thing when the reader did post', async () => {
 			const wrapper = await mountRecap({ enabled: true, this_week: 2, last_week: 4 })
 
-			expect(wrapper.text()).not.toContain('See what your colleagues shared')
+			expect(wrapper.text()).not.toContain('See what people on your Nextcloud shared')
 		})
 	})
 

@@ -1219,7 +1219,7 @@ administrator turns it on:
   post at all — and on an instance that hands accounts to strangers, the
   cheapest thing that can be done about it is that the first thing they write
   is seen by a person. **Off by default**: on the ordinary instance, whose
-  accounts are colleagues an administrator created, it held every new person's
+  accounts are people an administrator created, it held every new person's
   first post and made their first five minutes look broken — the composer
   closed, the post did not appear, and it existed only in a panel nobody had
   opened yet. Turn it on where registration is open.
