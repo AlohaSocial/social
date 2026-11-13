@@ -1,0 +1,10 @@
+{
+    "payload": "eyJlbnRyaWVzIjpbeyJjYXBhYmlsaXRpZXMiOlsiYWNjb3VudHMiLCJoYXNodGFncyJdLCJkb21haW4iOiJzdWNoZS5leGFtcGxlLm9yZyIsImtpbmQiOiJhbG9oYSIsImxhbmd1YWdlcyI6WyJkZSJdLCJ3ZWlnaHQiOjF9LHsiY2FwYWJpbGl0aWVzIjpbImFjY291bnRzIl0sImRvbWFpbiI6InNlYXJjaC5leGFtcGxlLm5ldCIsImtpbmQiOiJhbG9oYSIsImxhbmd1YWdlcyI6WyJlbiIsImZyIl0sIndlaWdodCI6Mn0seyJjYXBhYmlsaXRpZXMiOlsiaGFzaHRhZ3MiXSwiZG9tYWluIjoidGFncy1vbmx5LmV4YW1wbGUubmV0Iiwia2luZCI6ImFsb2hhIiwibGFuZ3VhZ2VzIjpbImRlIl0sIndlaWdodCI6MX0seyJjYXBhYmlsaXRpZXMiOlsiYWNjb3VudHMiXSwiZG9tYWluIjoiY2xvdWQuZXhhbXBsZS5jb20iLCJraW5kIjoiYWxvaGEiLCJsYW5ndWFnZXMiOlsiZW4iXSwid2VpZ2h0IjoxfSx7ImNhcGFiaWxpdGllcyI6WyJhY2NvdW50cyJdLCJraW5kIjoiYXRwcm90b19hcHB2aWV3IiwidXJsIjoiaHR0cHM6Ly9wdWJsaWMuYXBpLmJza3kuYXBwIn1dLCJleHBpcmVzX2F0IjoiMjAyNi0xMi0xM1QxMjowMDowMFoiLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTEzVDEyOjAwOjAwWiIsImxpc3QiOiJzZWFyY2giLCJzZXJpYWwiOjE3OTQ1ODYwMDEsInZlcnNpb24iOjF9",
+    "signatures": [
+        {
+            "kid": "test-list",
+            "alg": "Ed25519",
+            "sig": "cxqLLFfcAQhusZCrs37PlEtNfMKrYqYA61Cmq7TyfWqsBQ3JZyN6FID9yQrbNYKxDxXJYOmZ-UEt2-aFxfjXDw"
+        }
+    ]
+}

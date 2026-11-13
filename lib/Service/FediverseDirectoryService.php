@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\AlohaDirectory\DirectoryLists;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\InstanceStatsRequest;
@@ -188,6 +189,7 @@ class FediverseDirectoryService {
 		private LoggerInterface $logger,
 		ICacheFactory $cacheFactory,
 		private ?BlueskySearch $bluesky = null,
+		private ?DirectoryLists $alohaLists = null,
 	) {
 		$this->cache = $cacheFactory->createDistributed('social.directories');
 	}
@@ -204,14 +206,16 @@ class FediverseDirectoryService {
 			$this->configService->getCloudHost()
 		)];
 
-		foreach ($this->configured() ?? self::BUILTIN as $entry) {
+		$configured = $this->configured();
+		$curated = $configured === null ? $this->curatedSources() : [];
+		foreach ($configured ?? ($curated === [] ? self::BUILTIN : []) as $entry) {
 			$source = $this->fromDefinition(is_array($entry) ? $entry : []);
 			if ($source !== null) {
 				$sources[] = $source;
 			}
 		}
 
-		foreach ([...$this->peerSources(), ...$this->discoveredSources()] as $source) {
+		foreach ([...$curated, ...$this->peerSources($curated !== []), ...$this->discoveredSources($curated !== [])] as $source) {
 			$sources[] = $source;
 		}
 		if ($this->bluesky !== null && $this->bluesky->isCandidate('a.b')) {
@@ -239,8 +243,8 @@ class FediverseDirectoryService {
 	 *
 	 * @return DirectorySource[]
 	 */
-	private function peerSources(): array {
-		$wanted = $this->peersWanted();
+	private function peerSources(bool $curatedInUse = false): array {
+		$wanted = $this->peersWanted($curatedInUse);
 		if ($wanted < 1) {
 			return [];
 		}
@@ -268,14 +272,49 @@ class FediverseDirectoryService {
 		return $sources;
 	}
 
-	private function peersWanted(): int {
+	/** Off by default while curated providers are asked, unless the administrator set a number. */
+	private function peersWanted(bool $curatedInUse = false): int {
 		$raw = trim((string)$this->configService->getAppValue(self::CONFIG_PEERS));
+		if ($raw === '') {
+			return $curatedInUse ? 0 : self::PEERS_DEFAULT;
+		}
 
-		return ($raw === '') ? self::PEERS_DEFAULT : (int)$raw;
+		return (int)$raw;
 	}
 
-	private function discoveryWanted(): bool {
-		return trim((string)$this->configService->getAppValue(self::CONFIG_DISCOVERY)) !== '0';
+	/** Off by default while curated providers are asked, unless the administrator turned it on. */
+	private function discoveryWanted(bool $curatedInUse = false): bool {
+		$raw = trim((string)$this->configService->getAppValue(self::CONFIG_DISCOVERY));
+		if ($raw === '') {
+			return !$curatedInUse;
+		}
+
+		return $raw !== '0';
+	}
+
+	/**
+	 * The search providers of the Aloha Directory's signed `search.json`.
+	 *
+	 * Each is an Aloha server, which serves the Mastodon directory and lookup
+	 * this asks a Mastodon-kind source with. They replace the built-in sources
+	 * while the administrator configured none, so that searches spread over
+	 * servers the curators accepted rather than land on the same few large ones.
+	 *
+	 * @return DirectorySource[]
+	 */
+	private function curatedSources(): array {
+		if ($this->alohaLists === null) {
+			return [];
+		}
+
+		$sources = [];
+		foreach ($this->alohaLists->curatedSearchProviders($this->configService->getCloudHost()) as $provider) {
+			if ($this->allowed($provider['domain'])) {
+				$sources[] = new DirectorySource($provider['domain'], DirectorySource::KIND_MASTODON, $provider['domain'], DirectorySource::ORIGIN_CURATED);
+			}
+		}
+
+		return $sources;
 	}
 
 	/**
@@ -289,8 +328,8 @@ class FediverseDirectoryService {
 	 *
 	 * @return DirectorySource[]
 	 */
-	private function discoveredSources(): array {
-		if (!$this->discoveryWanted()) {
+	private function discoveredSources(bool $curatedInUse = false): array {
+		if (!$this->discoveryWanted($curatedInUse)) {
 			return [];
 		}
 
@@ -323,12 +362,13 @@ class FediverseDirectoryService {
 	public function refresh(): void {
 		$known = $this->known();
 		$now = time();
+		$curatedInUse = $this->configured() === null && $this->curatedSources() !== [];
 
-		if ($this->discoveryWanted() && $now - $known['discovered']['fetched'] >= self::DISCOVERY_TTL) {
+		if ($this->discoveryWanted($curatedInUse) && $now - $known['discovered']['fetched'] >= self::DISCOVERY_TTL) {
 			$known['discovered'] = ['fetched' => $now, 'servers' => $this->fetchServerList()];
 		}
 
-		$wanted = $this->peersWanted();
+		$wanted = $this->peersWanted($curatedInUse);
 		$found = 0;
 		$lookups = 0;
 		foreach (($wanted < 1) ? [] : array_keys($this->instanceStatsRequest->remoteHostCounts()) as $host) {

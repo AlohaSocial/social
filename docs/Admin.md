@@ -1083,6 +1083,49 @@ book. See [Architecture.md](Architecture.md#external-users) for how.
 `occ social:reset` refuses to run while external accounts exist: their logins
 are rows of this app.
 
+## Aloha Directory
+
+The [Aloha Directory](https://directory.aloha.social) is where the Aloha apps
+find a server to suggest to people who sign up. Curators review every server
+before it is listed and check it every hour afterwards. Taking part is
+optional; reading its lists is on by default.
+
+**Being listed.** Under *Administration → Aloha Social → Sign-ups → Aloha
+Directory*:
+
+1. Open sign-ups under *Who may sign up*, openly or with approval. A server that
+   takes invitations only is not listed.
+2. Fill in the profile: the operator, where the server is, the moderation
+   commitments and the storage per account. Empty fields use what the server
+   already says about itself; the rules come from *About this server*.
+3. Press *Ask to be listed*. The server creates a key used only for the
+   directory and serves a challenge at `/.well-known/aloha-directory`, which the
+   directory fetches over HTTPS together with NodeInfo. The page shows the
+   outcome within a minute.
+
+The directory reaches the server at its Nextcloud address. It needs
+`/.well-known/aloha-directory`, `/.well-known/nodeinfo`, `/status.php` and
+`/api/v2/instance` at the root of that host: the web server rules in
+`contrib/webserver` forward the last one.
+
+Afterwards a background job sends a heartbeat every hour: whether sign-ups
+are open, how many free accounts there are (at most the number you set), how
+long the approval queue is and whether deliveries are moving, and the number
+of accounts unless the counts are hidden (`hide_instance_counts`). The
+directory publishes only rough figures ("plenty of places"). Questions from the curators
+and complaints they share appear in the section, where you can answer them.
+*Leave the directory* withdraws the server.
+
+**Search.** When people look for somebody to follow, the server asks up to four
+search providers the curators accepted, from the signed `search.json`, instead
+of a fixed list of large servers. Providers sharing the server's language come
+first. Turn this off in the same section, or name your own sources in the
+`directories` app value.
+
+**Lists are only used when they verify.** Every list is signed. The server
+checks the signature against the directory's root key and refuses an older list
+than the one it has. It reads nothing while no root key is configured.
+
 ## Moderating
 
 Reports arrive from two directions: a local user reporting somebody through a
@@ -1387,6 +1430,17 @@ Set from the External users cards; these are the keys they write.
 | `external_user_invites` | `0` | Whether every user may send invitation links. |
 | `external_signup_notice` | *(empty)* | The additional registration and privacy information shown on the introduction page and beside the form, as plain text. Empty shows the translated template text. |
 | `external_signup_notice_required` | `0` | Whether registering requires ticking that the notice was read. With it on, the notice's version, the time and the text as accepted are recorded with the account (the per-account keys below). |
+
+### Aloha Directory
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `directory_advertise` | `0` | Whether the server takes part: heartbeats are sent while it is on. Set by *Ask to be listed* and *Leave the directory*. |
+| `directory_advertised_accounts` | *(empty)* | The most free accounts the heartbeat reports. Empty reports all of them. |
+| `directory_aloha_list` | `1` | Whether search asks the curated providers of `search.json`. |
+| `directory_list_mirror` | *(empty)* | An `https://` address to read the lists from instead of the directory. |
+| `directory_url` | `https://directory.aloha.social` | The directory itself; change it only for a staging directory. |
+| `directory_root_keys` | *(empty)* | A JSON object of root key ids and base64url public keys, used instead of the keys the app pins. For a staging directory. |
 
 ### Per account
 

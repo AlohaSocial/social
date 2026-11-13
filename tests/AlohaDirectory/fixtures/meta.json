@@ -1,0 +1,7 @@
+{
+    "root_public": "mh1mfrefjHKx8Vi7hYNdjaIUuKATp9MqFRKgaUz8A-s",
+    "list_public": "xvdWlr2eS_cdz5rb9AcGeM7KoijAQi0FOt0zBqTQBCA",
+    "server_secret": "VQUgwkNl+eTGIuJ7WAuRy2L22Vqtvoy9EGZ2MpKr8icmJBYDmyiCWi9Qd/Ju2R3xQUZqvLls6ptrGm10dVoD7A==",
+    "server_key_id": "gQswqQNc82CZMWoGWmxpN6LnN1G5092Z2F-aiTGlvGI",
+    "body": "{\"domain\":\"cloud.example.com\"}"
+}

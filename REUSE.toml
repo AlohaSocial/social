@@ -66,6 +66,14 @@ SPDX-FileCopyrightText = "2019 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 [[annotations]]
+# Lists and keys signed with the Aloha Directory's own code, which pin the
+# verifier in lib/AlohaDirectory to what the directory publishes.
+path = "tests/AlohaDirectory/fixtures/*.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Aloha Social contributors"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
 path = ["tests/Federation/fixtures/*.json", "tests/Federation/golden/*.json", "tests/Federation/signatures/*.json", "tests/Atproto/Reader/Jetstream/fixtures/*.json", "tests/Atproto/Identity/fixtures/*.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Nextcloud GmbH and Nextcloud contributors"

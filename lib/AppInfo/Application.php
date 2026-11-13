@@ -69,6 +69,7 @@ use OCA\Social\SetupChecks\UploadLimitsAgree;
 use OCA\Social\SetupChecks\VideoConverter;
 use OCA\Social\SetupChecks\WebFingerReachable;
 use OCA\Social\UserMigration\SocialMigrator;
+use OCA\Social\WellKnown\AlohaDirectoryHandler;
 use OCA\Social\WellKnown\WebfingerHandler;
 use OCP\Accounts\UserUpdatedEvent;
 use OCP\AppFramework\App;
@@ -135,6 +136,7 @@ class Application extends App implements IBootstrap {
 		$context->registerSearchProvider(UnifiedSearchProvider::class);
 		$context->registerReferenceProvider(PostReferenceProvider::class);
 		$context->registerWellKnownHandler(WebfingerHandler::class);
+		$context->registerWellKnownHandler(AlohaDirectoryHandler::class);
 		$context->registerEventListener(BeforeTemplateRenderedEvent::class, ProfileSectionListener::class);
 		$context->registerEventListener(UserUpdatedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserChangedEvent::class, UserAccountListener::class);

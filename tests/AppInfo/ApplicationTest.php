@@ -51,6 +51,7 @@ use OCA\Social\Service\IRecommendationSignalEvents;
 use OCA\Social\Service\IRecommendationSignalRecorder;
 use OCA\Social\Service\RecommendationSignalService;
 use OCA\Social\UserMigration\SocialMigrator;
+use OCA\Social\WellKnown\AlohaDirectoryHandler;
 use OCA\Social\WellKnown\WebfingerHandler;
 use OCP\Accounts\UserUpdatedEvent;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -89,7 +90,11 @@ class ApplicationTest extends TestCase {
 	public function testRegisterWiresUpEveryIntegrationPoint(): void {
 		$context = $this->createMock(IRegistrationContext::class);
 		$context->expects($this->once())->method('registerSearchProvider')->with(UnifiedSearchProvider::class);
-		$context->expects($this->once())->method('registerWellKnownHandler')->with(WebfingerHandler::class);
+		$wellKnown = [];
+		$context->expects($this->exactly(2))->method('registerWellKnownHandler')
+			->willReturnCallback(static function (string $handler) use (&$wellKnown): void {
+				$wellKnown[] = $handler;
+			});
 		$context->expects($this->once())->method('registerNotifierService')->with(Notifier::class);
 		// without this one an account export silently leaves out the whole app
 		$context->expects($this->once())->method('registerUserMigrator')->with(SocialMigrator::class);
@@ -122,6 +127,7 @@ class ApplicationTest extends TestCase {
 			});
 
 		$this->application()->register($context);
+		$this->assertSame([WebfingerHandler::class, AlohaDirectoryHandler::class], $wellKnown);
 		$this->assertSame([
 			IRecommendationSignalEvents::class => RecommendationSignalService::class,
 			IRecommendationSignalRecorder::class => RecommendationSignalService::class,
