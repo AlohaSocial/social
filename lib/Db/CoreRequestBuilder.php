@@ -71,6 +71,7 @@ class CoreRequestBuilder {
 	public const TABLE_REACTIONS = 'social_reaction';
 	public const TABLE_REQUEST_QUEUE = 'social_req_queue';
 	public const TABLE_SEARCH_TERMS = 'social_search_term';
+	public const TABLE_SERVER_BLOCKS = 'social_server_block';
 	public const TABLE_HOST_BREAKER = 'social_host_breaker';
 	public const TABLE_POST_HOLD = 'social_post_hold';
 	public const TABLE_RECOMMENDATION_DISCOVERY = 'social_rec_discovery';
@@ -688,6 +689,13 @@ class CoreRequestBuilder {
 			'name',
 			'hashtags',
 			'position',
+			'creation'
+		],
+		self::TABLE_SERVER_BLOCKS => [
+			'id',
+			'domain',
+			'private_comment',
+			'public_comment',
 			'creation'
 		],
 		self::TABLE_MEDIA_BLOCKS => [

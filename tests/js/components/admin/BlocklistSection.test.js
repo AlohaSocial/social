@@ -97,12 +97,13 @@ describe('the block list section', () => {
 		await wrapper.vm.read({ target: { files: [{ size: 40, text: async () => 'one.example\n' }] } })
 		await flushPromises()
 
-		axios.post.mockResolvedValue({ data: { blocked: 1, silenced: 0, list: ['one.example'] } })
+		const blocks = [{ domain: 'one.example', severity: 'suspend', private_comment: null, public_comment: null }]
+		axios.post.mockResolvedValue({ data: { blocked: 1, silenced: 0, list: ['one.example'], blocks } })
 		await wrapper.find('.blocklist__preview button').trigger('click')
 		await flushPromises()
 
 		expect(axios.post).toHaveBeenLastCalledWith(`${BLOCKLIST}/import`, { csv: 'one.example\n' })
-		expect(wrapper.emitted('changed').at(-1)).toEqual([['one.example']])
+		expect(wrapper.emitted('changed').at(-1)).toEqual([['one.example'], blocks])
 	})
 
 	/** A row that names no server stops the whole file, as the command does. */

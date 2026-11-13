@@ -15,9 +15,11 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Db\MediaBlocksRequest;
 use OCA\Social\Db\TrendReviewRequest;
+use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\Client\AdminAccount;
+use OCA\Social\Model\Client\AdminDomainBlock;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\Strike;
 use OCA\Social\Service\AccountService;
@@ -550,25 +552,104 @@ class ModerationController extends Controller {
 		return new DataResponse($this->mediaBlockPage());
 	}
 
+	/**
+	 * Adds an instance to the access list.
+	 *
+	 * On a block list it is blocked or silenced, with the reasons for it,
+	 * through the same service `POST /api/v1/admin/domain_blocks` uses; on an
+	 * allow list it is allowed, and the severity and reasons mean nothing.
+	 *
+	 * @param string $severity 'suspend' (the default) or 'silence'
+	 * @param string $privateComment the reason the moderators keep
+	 * @param string $publicComment the reason the published list shows
+	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/fediverse/add')]
-	public function fediverseAdd(string $address): DataResponse {
+	public function fediverseAdd(
+		string $address,
+		string $severity = '',
+		string $privateComment = '',
+		string $publicComment = '',
+	): DataResponse {
 		$address = strtolower(trim($address));
 		if ($address === '' || !preg_match('/^[a-z0-9.:\[\]-]+$/', $address)) {
 			return new DataResponse(['error' => 'invalid address'], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 
-		$this->fediverseService->addAddress($address);
+		if (!$this->isBlockList()) {
+			$this->fediverseService->addAddress($address);
 
-		return new DataResponse(['list' => $this->fediverseService->getListedAddresses()]);
+			return new DataResponse($this->accessState());
+		}
+
+		try {
+			$this->adminApiService->blockDomain(
+				$address,
+				$severity,
+				($privateComment === '') ? null : $privateComment,
+				($publicComment === '') ? null : $publicComment,
+			);
+		} catch (InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse($this->accessState());
 	}
 
+	/**
+	 * Switches a blocked instance between blocked and silenced, and rewrites
+	 * its reasons; an empty reason clears it.
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	#[FrontpageRoute(verb: 'POST', url: '/moderation/fediverse/update')]
+	public function fediverseUpdate(
+		string $address,
+		string $severity = '',
+		?string $privateComment = null,
+		?string $publicComment = null,
+	): DataResponse {
+		try {
+			$this->adminApiService->updateDomainBlock(
+				strtolower(trim($address)), $severity, $privateComment, $publicComment
+			);
+		} catch (ItemNotFoundException $e) {
+			return new DataResponse(['error' => 'that instance is not on the list'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse($this->accessState());
+	}
+
+	/** Takes an instance off the list, at whichever tier it is held. */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/fediverse/remove')]
 	public function fediverseRemove(string $address): DataResponse {
-		$this->fediverseService->removeAddress(strtolower(trim($address)));
+		$address = strtolower(trim($address));
+		$this->fediverseService->removeAddress($address);
+		if ($this->isBlockList()) {
+			$this->fediverseService->unsilenceAddress($address);
+		}
 
-		return new DataResponse(['list' => $this->fediverseService->getListedAddresses()]);
+		return new DataResponse($this->accessState());
+	}
+
+	/** Whether the access list is a block list rather than an allow list. */
+	private function isBlockList(): bool {
+		return $this->fediverseService->getAccessType() === 'all_but';
+	}
+
+	/**
+	 * The access list as the page draws it: the addresses, and on a block
+	 * list each entry with its tier and reasons.
+	 *
+	 * @return array{list: array, blocks: list<AdminDomainBlock>}
+	 */
+	private function accessState(): array {
+		return [
+			'list' => $this->fediverseService->getListedAddresses(),
+			'blocks' => $this->isBlockList() ? array_values($this->adminApiService->domainBlocks()) : [],
+		];
 	}
 
 	/**
@@ -614,15 +695,12 @@ class ModerationController extends Controller {
 				);
 			}
 
-			$applied = $this->blocklistImportService->apply($read['entries']);
+			$applied = $this->blocklistImportService->apply($read['entries'], false, $read['comments']);
 		} catch (InvalidArgumentException $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 
-		return new DataResponse($applied + [
-			'list' => $this->fediverseService->getListedAddresses(),
-			'silenced' => $applied['silenced'],
-		]);
+		return new DataResponse($applied + $this->accessState());
 	}
 
 	/** The published lists this instance follows, and what each last did. */
@@ -664,8 +742,7 @@ class ModerationController extends Controller {
 		return new DataResponse([
 			'result' => $result,
 			'sources' => $this->blocklistSubscriptionService->sources(),
-			'list' => $this->fediverseService->getListedAddresses(),
-		]);
+		] + $this->accessState());
 	}
 
 	/**
@@ -723,7 +800,7 @@ class ModerationController extends Controller {
 			return new DataResponse(['error' => 'invalid access type'], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 
-		return new DataResponse(['accessType' => $this->fediverseService->getAccessType()]);
+		return new DataResponse(['accessType' => $this->fediverseService->getAccessType()] + $this->accessState());
 	}
 
 	// What may trend, what the instance's emoji are, and what its rules say

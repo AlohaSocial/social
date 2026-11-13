@@ -1287,10 +1287,24 @@ holds them, and that is routinely not the host the post came from: a post on
 a CDN is common besides. Those hosts are judged as the instance that named
 them, because nobody can list the buckets another server keeps its pictures
 in. Judging them on their own refused every picture from every allowed
-instance, so allow-list mode federated text and nothing else. An instance that is a nuisance
-rather than a menace can be *silenced* instead with `occ social:fediverse
-silence`: its accounts leave the public timelines and stay readable for the
-people who follow them.
+instance, so allow-list mode federated text and nothing else.
+
+In block-list mode an instance that is a nuisance rather than a menace can be
+**silenced** instead of blocked: its accounts leave the public timelines and
+stay readable for the people who follow them, and nothing is deleted. The
+*Add instance* form asks which (*Block* or *Silence*), and an entry already on
+the list can be switched with its **Edit** button; `occ social:fediverse
+silence` does the same from a shell. Each entry may carry two reasons:
+a **note for moderators**, which only the people who may open this page and
+the Mastodon admin API see, and a **reason shown publicly**, which
+`/api/v1/instance/domain_blocks` gives as `comment` when the server publishes
+its list (*Publish the list of blocked instances* on the Server card,
+`publish_blocks`). Both are kept in `social_server_block` beside the domain, at
+most 1000 characters each, and go when the instance is taken off both lists —
+blocking it again later starts without a reason. A list imported as a CSV
+brings the reasons in its `#public_comment` column (the one Mastodon's export
+writes) for the instances the import adds; one already listed keeps what was
+written here.
 
 ---
 
@@ -1398,7 +1412,7 @@ both validate the ranges given here, and every one can be set with `occ`.
 | `atproto_opaque_mb` | `50` | The same cap in megabytes: the total size of those records, as stored. `0` is no limit. |
 | `domain_media_quota` | `0` | How many megabytes of media **one other server** may keep here. Every picture on a post somebody here follows is fetched and cached, and nothing bounded that by where it came from: one server posting large images at a high rate fills the disk of every instance that follows anybody on it. The server is the host of the file's own address (its `url`), which for a Mastodon instance is often a separate media host. Counted from the figure the daily storage walk takes, plus successfully cached bytes from that host since — rejected or unreadable downloads do not spend quota. The figure is up to a day coarse and errs towards refusing early. Off by default, because an instance that has been federating for a year and acquires a quota on upgrade would start refusing the pictures of the servers it talks to most. Who is holding what is under **Administration → Aloha Social → Storage**. |
 | `secure_mode` | `0` | Refuse ActivityPub fetches that are not signed. Mastodon's secure mode. Turning it on makes this instance invisible to every peer that does not sign what it asks for, and to every anonymous reader; it is a decision about who to federate with, not a hardening step to apply by default. |
-| `publish_blocks` | `0` | Publish the deny list on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
+| `publish_blocks` | `0` | Publish the blocked and silenced instances, with their public reasons, on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
 | `allow_self_signed` | `0` | Accept peers whose certificates do not check out. **Development only**: on a server anybody else uses, this hands every federated request to whoever can answer for the address. |
 | `hide_instance_counts` | `0` | Keep the number of accounts and posts out of the public instance metadata, which anybody can read without logging in and fediverse crawlers collect: `/api/v1/instance` and `/api/v2/instance` then report `0`, NodeInfo leaves `usage.users.total` and `usage.localPosts` out, and `/api/v1/instance/activity` reports `0` posts a week. Either way the account count is the accounts of this app — local accounts that are not deleted or suspended — never every Nextcloud user. Set from the Server card. |
 | `stories` | `1` | Whether this instance offers Shorts — a picture or a video that is gone in a day. Off, the bar goes from the timeline and nothing new is taken; what was posted expires as it would have. Set from the Sections card. |

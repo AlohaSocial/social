@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use InvalidArgumentException;
+use OCA\Social\Db\ServerBlockRequest;
+use OCA\Social\Model\Client\AdminDomainBlock;
 
 /**
  * Reading a published block list, and applying it.
@@ -57,8 +59,15 @@ class BlocklistImportService {
 	/** What a CSV calls its domain column, where it names one. */
 	private const DOMAIN_HEADERS = ['#domain', 'domain', 'host', 'hostname'];
 
+	/** What a CSV with a header row calls its severity column. */
+	private const SEVERITY_HEADERS = ['#severity', 'severity'];
+
+	/** What it calls the reason it publishes; Mastodon's export writes `#public_comment`. */
+	private const COMMENT_HEADERS = ['#public_comment', 'public_comment', '#comment', 'comment'];
+
 	public function __construct(
 		private FediverseService $fediverseService,
+		private ServerBlockRequest $serverBlockRequest,
 	) {
 	}
 
@@ -68,10 +77,12 @@ class BlocklistImportService {
 	 * @param string $body the list as it was uploaded or fetched
 	 * @param string $format one of the FORMAT_* constants
 	 *
-	 * @return array{entries: array<string, string>, rejected: string[], skipped: int}
-	 *                                                                                 `entries` is domain => severity in the order they were read;
-	 *                                                                                 `rejected` names the rows that describe no instance this list may
-	 *                                                                                 hold; `skipped` counts the rows that asked for nothing to be done
+	 * @return array{entries: array<string, string>, comments: array<string, string>, rejected: string[], skipped: int}
+	 *                                                                                                                  `entries` is domain => severity in the order they were read;
+	 *                                                                                                                  `comments` is domain => the public reason the list gives, for
+	 *                                                                                                                  the entries that give one; `rejected` names the rows that
+	 *                                                                                                                  describe no instance this list may hold; `skipped` counts the
+	 *                                                                                                                  rows that asked for nothing to be done
 	 *
 	 * @throws InvalidArgumentException the list is too big, or is not that format
 	 */
@@ -89,9 +100,10 @@ class BlocklistImportService {
 		};
 
 		$entries = [];
+		$comments = [];
 		$rejected = [];
 		$skipped = 0;
-		foreach ($rows as [$domain, $severity]) {
+		foreach ($rows as [$domain, $severity, $comment]) {
 			$domain = rtrim(strtolower(trim($domain)), '.');
 			if ($domain === '' || str_starts_with($domain, '#')) {
 				continue;
@@ -114,6 +126,10 @@ class BlocklistImportService {
 			// correction
 			if (!isset($entries[$domain])) {
 				$entries[$domain] = $severity;
+				$comment = mb_substr(trim($comment), 0, AdminDomainBlock::MAX_COMMENT);
+				if ($comment !== '') {
+					$comments[$domain] = $comment;
+				}
 			}
 
 			if (count($entries) > self::MAX_DOMAINS) {
@@ -123,20 +139,30 @@ class BlocklistImportService {
 			}
 		}
 
-		return ['entries' => $entries, 'rejected' => array_values(array_unique($rejected)), 'skipped' => $skipped];
+		return [
+			'entries' => $entries,
+			'comments' => $comments,
+			'rejected' => array_values(array_unique($rejected)),
+			'skipped' => $skipped,
+		];
 	}
 
 	/**
 	 * Applies what a list says, or counts what applying it would do.
 	 *
+	 * The public reasons a list gives are recorded for the domains this
+	 * import blocks or silences, and for no other: a domain that was listed
+	 * already keeps the reasons a moderator gave it here.
+	 *
 	 * @param array<string, string> $entries domain => severity, as parse() returns
 	 * @param bool $dryRun whether to count without changing anything
+	 * @param array<string, string> $comments domain => public reason, as parse() returns
 	 *
 	 * @return array{blocked: int, silenced: int, alreadyBlocked: int, alreadySilenced: int}
 	 *
 	 * @throws InvalidArgumentException this server is running an allow list
 	 */
-	public function apply(array $entries, bool $dryRun = false): array {
+	public function apply(array $entries, bool $dryRun = false, array $comments = []): array {
 		if ($this->fediverseService->getAccessType() !== 'all_but') {
 			throw new InvalidArgumentException('a block list cannot be imported into an allow list');
 		}
@@ -185,6 +211,14 @@ class BlocklistImportService {
 			$blocked = $this->fediverseService->addAddresses($toBlock);
 		}
 
+		if (!$dryRun) {
+			foreach (array_merge($toSilence, $toBlock) as $domain) {
+				if (($comments[$domain] ?? '') !== '') {
+					$this->serverBlockRequest->save(FediverseService::normalizeHost($domain), null, $comments[$domain]);
+				}
+			}
+		}
+
 		return [
 			'blocked' => $blocked,
 			'silenced' => $silenced,
@@ -220,7 +254,7 @@ class BlocklistImportService {
 	/**
 	 * @param string $body the JSON Mastodon answers with
 	 *
-	 * @return array<array{0: string, 1: string}> domain and severity, in order
+	 * @return array<array{0: string, 1: string, 2: string}> domain, severity and public reason, in order
 	 *
 	 * @throws InvalidArgumentException it is not that
 	 */
@@ -243,16 +277,25 @@ class BlocklistImportService {
 				continue;
 			}
 
-			$rows[] = [$domain, $this->severityOf((string)($entry['severity'] ?? ''))];
+			$rows[] = [
+				$domain,
+				$this->severityOf((string)($entry['severity'] ?? '')),
+				is_string($entry['comment'] ?? null) ? $entry['comment'] : '',
+			];
 		}
 
 		return $rows;
 	}
 
 	/**
+	 * A CSV with a header row is read by the names of its columns, so
+	 * Mastodon's export — `#domain,#severity,#reject_media,#reject_reports,
+	 * #public_comment,#obfuscate` — gives its reasons too; one without is a
+	 * domain and, optionally, a severity.
+	 *
 	 * @param string $body the CSV as it was uploaded
 	 *
-	 * @return array<array{0: string, 1: string}> domain and severity, in order
+	 * @return array<array{0: string, 1: string, 2: string}> domain, severity and public reason, in order
 	 */
 	private function rowsFromCsv(string $body): array {
 		$handle = fopen('php://temp', 'r+');
@@ -265,33 +308,70 @@ class BlocklistImportService {
 
 		$rows = [];
 		$first = true;
+		$columns = ['domain' => 0, 'severity' => 1, 'comment' => null];
 		while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
 			// a blank line comes back as one null field
 			if ($row === [null]) {
 				continue;
 			}
 
-			$domain = trim($row[0] ?? '');
 			if ($first) {
-				$domain = preg_replace('/^\xEF\xBB\xBF/', '', $domain) ?? $domain;
 				$first = false;
-				if (in_array(strtolower($domain), self::DOMAIN_HEADERS, true)) {
+				$row[0] = preg_replace('/^\xEF\xBB\xBF/', '', $row[0] ?? '') ?? '';
+				$names = array_map(static fn (?string $cell): string => strtolower(trim((string)$cell)), $row);
+				if (array_intersect($names, self::DOMAIN_HEADERS) !== []) {
+					$columns = $this->columnsOf($row);
+
 					continue;
 				}
 			}
 
+			$domain = trim((string)($row[$columns['domain']] ?? ''));
+
 			// a list with no severity column is a list of blocks, which is
 			// what a bare one-domain-per-line file has always meant here
-			$severity = array_key_exists(1, $row)
-				? $this->severityOf(trim((string)$row[1]))
+			$severity = ($columns['severity'] !== null && array_key_exists($columns['severity'], $row))
+				? $this->severityOf(trim((string)$row[$columns['severity']]))
 				: self::SEVERITY_SUSPEND;
 
-			$rows[] = [$domain, $severity];
+			$comment = ($columns['comment'] !== null) ? (string)($row[$columns['comment']] ?? '') : '';
+
+			$rows[] = [$domain, $severity, $comment];
 		}
 
 		fclose($handle);
 
 		return $rows;
+	}
+
+	/**
+	 * Where a header row puts the columns this reads.
+	 *
+	 * @param array<int, string|null> $header
+	 *
+	 * @return array{domain: int, severity: int|null, comment: int|null}
+	 */
+	private function columnsOf(array $header): array {
+		$columns = ['domain' => 0, 'severity' => null, 'comment' => null];
+		foreach ($header as $index => $name) {
+			$name = strtolower(trim((string)$name));
+			if (in_array($name, self::DOMAIN_HEADERS, true)) {
+				$columns['domain'] = $index;
+			} elseif (in_array($name, self::SEVERITY_HEADERS, true)) {
+				$columns['severity'] = $index;
+			} elseif (in_array($name, self::COMMENT_HEADERS, true) && $columns['comment'] === null) {
+				$columns['comment'] = $index;
+			}
+		}
+
+		// a header that names no severity column still reads the second
+		// column as one, as a headerless file does, unless it is another
+		// column this reads
+		if ($columns['severity'] === null && !in_array(1, [$columns['domain'], $columns['comment']], true)) {
+			$columns['severity'] = 1;
+		}
+
+		return $columns;
 	}
 
 	/**

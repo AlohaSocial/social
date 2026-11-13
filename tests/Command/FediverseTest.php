@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Command;
 
 use OCA\Social\Command\Fediverse;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Service\BlocklistImportService;
 use OCA\Social\Service\FediverseService;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -27,7 +28,7 @@ class FediverseTest extends TestCase {
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->command = new Fediverse(
 			$this->fediverseService,
-			new BlocklistImportService($this->fediverseService),
+			new BlocklistImportService($this->fediverseService, $this->createStub(ServerBlockRequest::class)),
 		);
 		$this->tester = new CommandTester($this->command);
 		$csvPath = tempnam(sys_get_temp_dir(), 'social-fediverse-');

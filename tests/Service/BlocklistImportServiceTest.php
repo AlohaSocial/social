@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use InvalidArgumentException;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Service\BlocklistImportService;
 use OCA\Social\Service\FediverseService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -20,12 +21,14 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class BlocklistImportServiceTest extends TestCase {
 	private FediverseService|MockObject $fediverseService;
+	private ServerBlockRequest|MockObject $serverBlockRequest;
 	private BlocklistImportService $service;
 
 	protected function setUp(): void {
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->fediverseService->method('getAccessType')->willReturn('all_but');
-		$this->service = new BlocklistImportService($this->fediverseService);
+		$this->serverBlockRequest = $this->createMock(ServerBlockRequest::class);
+		$this->service = new BlocklistImportService($this->fediverseService, $this->serverBlockRequest);
 	}
 
 	/**
@@ -223,6 +226,74 @@ class BlocklistImportServiceTest extends TestCase {
 		$this->assertSame(1, $applied['alreadySilenced']);
 	}
 
+	/** Mastodon's export names its columns, and the public reason is one of them. */
+	public function testAMastodonExportCarriesItsPublicReasons(): void {
+		$read = $this->service->parse(
+			"#domain,#severity,#reject_media,#reject_reports,#public_comment,#obfuscate\n"
+			. "blocked.example,suspend,true,true,\"Spam, mostly\",false\n"
+			. "limited.example,silence,false,false,,false\n",
+			BlocklistImportService::FORMAT_CSV
+		);
+
+		$this->assertSame([
+			'blocked.example' => BlocklistImportService::SEVERITY_SUSPEND,
+			'limited.example' => BlocklistImportService::SEVERITY_SILENCE,
+		], $read['entries']);
+		$this->assertSame(['blocked.example' => 'Spam, mostly'], $read['comments']);
+	}
+
+	/** The columns are found by name, whatever order a list writes them in. */
+	public function testTheColumnsOfAHeaderRowAreReadByName(): void {
+		$read = $this->service->parse(
+			"#severity,#public_comment,#domain\nsilence,noisy,limited.example\n",
+			BlocklistImportService::FORMAT_CSV
+		);
+
+		$this->assertSame(['limited.example' => BlocklistImportService::SEVERITY_SILENCE], $read['entries']);
+		$this->assertSame(['limited.example' => 'noisy'], $read['comments']);
+	}
+
+	public function testAMastodonListGivesItsCommentAsTheReason(): void {
+		$read = $this->service->parse(
+			'[{"domain":"blocked.example","severity":"suspend","comment":"spam"}]',
+			BlocklistImportService::FORMAT_MASTODON
+		);
+
+		$this->assertSame(['blocked.example' => 'spam'], $read['comments']);
+	}
+
+	/**
+	 * The reasons a list gives are recorded for what the import adds, and a
+	 * domain that was listed already keeps the reason a moderator gave it.
+	 */
+	public function testApplyingRecordsTheReasonsOfWhatItAddsOnly(): void {
+		$this->fediverseService->method('exactlyListedHosts')->willReturn(['known.example' => true]);
+		$this->fediverseService->method('addAddresses')->willReturn(1);
+		$saved = [];
+		$this->serverBlockRequest->method('save')->willReturnCallback(
+			function (string $domain, ?string $private, ?string $public) use (&$saved): void {
+				$saved[] = [$domain, $private, $public];
+			}
+		);
+
+		$this->service->apply([
+			'blocked.example' => BlocklistImportService::SEVERITY_SUSPEND,
+			'known.example' => BlocklistImportService::SEVERITY_SUSPEND,
+			'limited.example' => BlocklistImportService::SEVERITY_SILENCE,
+		], false, ['blocked.example' => 'spam', 'known.example' => 'from the list', 'limited.example' => 'noise']);
+
+		$this->assertSame([
+			['limited.example', null, 'noise'],
+			['blocked.example', null, 'spam'],
+		], $saved);
+	}
+
+	public function testADryRunRecordsNoReason(): void {
+		$this->serverBlockRequest->expects($this->never())->method('save');
+
+		$this->service->apply(['blocked.example' => BlocklistImportService::SEVERITY_SUSPEND], true, ['blocked.example' => 'spam']);
+	}
+
 	/**
 	 * An allow list is the list of servers this one talks to. Importing
 	 * somebody's block list into it would be the exact opposite of what it
@@ -231,7 +302,7 @@ class BlocklistImportServiceTest extends TestCase {
 	public function testABlockListCannotBeImportedIntoAnAllowList(): void {
 		$fediverse = $this->createMock(FediverseService::class);
 		$fediverse->method('getAccessType')->willReturn('none_but');
-		$service = new BlocklistImportService($fediverse);
+		$service = new BlocklistImportService($fediverse, $this->createStub(ServerBlockRequest::class));
 		$fediverse->expects($this->never())->method('addAddresses');
 
 		$this->expectException(InvalidArgumentException::class);

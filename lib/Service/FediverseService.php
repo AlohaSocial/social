@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use Exception;
 use OCA\Social\Cron\DomainPurge;
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCP\BackgroundJob\IJobList;
@@ -28,6 +29,7 @@ class FediverseService {
 		private CacheActorsRequest $cacheActorsRequest,
 		private IJobList $jobList,
 		private AuditService $auditService,
+		private ServerBlockRequest $serverBlockRequest,
 	) {
 	}
 
@@ -343,6 +345,7 @@ class FediverseService {
 		$this->configService->setAppValue(
 			ConfigService::SOCIAL_SILENCED_LIST, (string)json_encode($list)
 		);
+		$this->forgetUnlisted([$host]);
 	}
 
 	/**
@@ -382,7 +385,9 @@ class FediverseService {
 	 *
 	 */
 	public function resetAddresses() {
+		$listed = array_map('strval', $this->getListedAddresses());
 		$this->configService->setAppValue(ConfigService::SOCIAL_ACCESS_LIST, '[]');
+		$this->forgetUnlisted($listed);
 	}
 
 	/**
@@ -482,6 +487,31 @@ class FediverseService {
 
 		if (count($list) !== count($listed)) {
 			$this->auditService->accessListChanged($address, false, $this->isBlockList());
+		}
+		$this->forgetUnlisted([$address]);
+	}
+
+	/**
+	 * Drops the recorded reasons of the domains that are now on neither the
+	 * access list nor the silenced list, so a domain blocked again later does
+	 * not come back with the reason of an earlier block.
+	 *
+	 * @param string[] $addresses
+	 */
+	private function forgetUnlisted(array $addresses): void {
+		$listed = $this->exactlyListedHosts();
+		$silenced = $this->silencedHosts();
+
+		$gone = [];
+		foreach ($addresses as $address) {
+			$host = self::normalizeHost($address);
+			if ($host !== '' && !isset($listed[$host]) && !isset($silenced[$host])) {
+				$gone[] = $host;
+			}
+		}
+
+		if ($gone !== []) {
+			$this->serverBlockRequest->delete($gone);
 		}
 	}
 

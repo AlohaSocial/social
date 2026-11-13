@@ -575,6 +575,30 @@ class AdminApiControllerTest extends TestCase {
 		$this->assertSame('silence', $response->getData()->getSeverity());
 	}
 
+	/** Mastodon's two comments reach the service as they were sent, and an absent one as null. */
+	public function testTheReasonsOfABlockArePassedOn(): void {
+		$this->adminApiService->expects($this->once())
+			->method('blockDomain')
+			->with('evil.example', 'suspend', 'ticket 42', null)
+			->willReturn(new AdminDomainBlock('evil.example', AdminDomainBlock::SEVERITY, 'ticket 42'));
+
+		$response = $this->controller()->domainBlockCreate('evil.example', 'suspend', 'ticket 42');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('ticket 42', $response->getData()->jsonSerialize()['private_comment']);
+	}
+
+	public function testAnUpdateCanRewriteTheReasonsAlone(): void {
+		$this->adminApiService->expects($this->once())
+			->method('updateDomainBlock')
+			->with('evil.example', '', null, 'Spam')
+			->willReturn(new AdminDomainBlock('evil.example', AdminDomainBlock::SEVERITY, null, 'Spam'));
+
+		$response = $this->controller()->domainBlockUpdate('evil.example', '', null, 'Spam');
+
+		$this->assertSame('Spam', $response->getData()->getPublicComment());
+	}
+
 	/** The caller's address as the middleware sees it, so a block cannot shut the caller out. */
 	public function testAnIpBlockIsCheckedAgainstTheCallersOwnAddress(): void {
 		$this->request->method('getRemoteAddress')->willReturn('203.0.113.7');

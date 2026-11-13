@@ -214,6 +214,7 @@ const NOTHING = {
 	server: null,
 	accessType: 'all_but',
 	accessList: [],
+	accessBlocks: [],
 	retentionDays: 0,
 	storage: null,
 	/** @type {?{days: number, sizeMb: number, lastPurge: ?object}} the media cache limits */
@@ -609,7 +610,7 @@ export default {
 					group: 'federation',
 					icon: 'IconAccess',
 					component: 'AccessSection',
-					props: { accessType: state.accessType, addresses: state.accessList },
+					props: { accessType: state.accessType, addresses: state.accessList, blocks: state.accessBlocks ?? [] },
 					title: t('social', 'Allowed and blocked servers'),
 					lede: t('social', 'Federate with every server except the ones listed, or only with the ones listed.'),
 					keywords: t('social', 'fediverse access blocklist allowlist defederate domain instance'),
@@ -931,10 +932,14 @@ export default {
 		 * rather than left showing what it read when the page opened.
 		 *
 		 * @param {string[]|undefined} list the addresses now on it
+		 * @param {object[]|undefined} blocks each entry with its tier and reasons
 		 */
-		onListChanged(list) {
+		onListChanged(list, blocks) {
 			if (Array.isArray(list)) {
 				this.state = { ...this.state, accessList: list }
+			}
+			if (Array.isArray(blocks)) {
+				this.state = { ...this.state, accessBlocks: blocks }
 			}
 		},
 

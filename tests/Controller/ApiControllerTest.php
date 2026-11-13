@@ -33,6 +33,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\ActorRelation;
+use OCA\Social\Model\Client\AdminDomainBlock;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Client\ScheduledStatus;
@@ -6177,13 +6178,21 @@ class ApiControllerTest extends TestCase {
 
 	public function testWithTheOptInTheBlockListIsPublished(): void {
 		$this->appValues[ConfigService::SOCIAL_PUBLISH_BLOCKS] = '1';
-		$this->blockedInstances = ['evil.example'];
+		$this->adminApiService->method('domainBlocks')->willReturn([
+			new AdminDomainBlock('evil.example'),
+			new AdminDomainBlock('loud.example', AdminDomainBlock::SEVERITY_SILENCE, 'ticket 42', 'Spam'),
+		]);
 
 		$this->assertSame([[
 			'domain' => 'evil.example',
 			'digest' => hash('sha256', 'evil.example'),
 			'severity' => 'suspend',
 			'comment' => '',
+		], [
+			'domain' => 'loud.example',
+			'digest' => hash('sha256', 'loud.example'),
+			'severity' => 'silence',
+			'comment' => 'Spam',
 		]], $this->controller()->instanceDomainBlocks()->getData());
 	}
 

@@ -16,6 +16,7 @@ use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
+use OCA\Social\Model\Client\AdminDomainBlock;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\Strike;
 use OCA\Social\Service\AccountService;
@@ -48,7 +49,7 @@ class ModerationControllerTest extends TestCase {
 	private FediverseService|MockObject $fediverseService;
 	private ConfigService|MockObject $configService;
 	private ModerationService|MockObject $moderationService;
-	private AdminApiService|Stub $adminApiService;
+	private AdminApiService|MockObject $adminApiService;
 	private PostReviewService|Stub $postReviewService;
 	private MediaBlocksRequest|MockObject $mediaBlocksRequest;
 	private DiscoverCategoriesRequest|MockObject $discoverCategoriesRequest;
@@ -75,7 +76,7 @@ class ModerationControllerTest extends TestCase {
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->adminApiService = $this->createStub(AdminApiService::class);
+		$this->adminApiService = $this->createMock(AdminApiService::class);
 		$this->postReviewService = $this->createStub(PostReviewService::class);
 		$this->mediaBlocksRequest = $this->createMock(MediaBlocksRequest::class);
 		$this->discoverCategoriesRequest = $this->createMock(DiscoverCategoriesRequest::class);
@@ -206,17 +207,19 @@ class ModerationControllerTest extends TestCase {
 	}
 
 	public function testFediverseAddNormalisesAndReturnsTheList(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('none_but');
 		$this->fediverseService->expects($this->once())->method('addAddress')->with('evil.example');
 		$this->fediverseService->method('getListedAddresses')->willReturn(['evil.example']);
 
 		$response = $this->controller->fediverseAdd('  EVIL.example ');
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame(['list' => ['evil.example']], $response->getData());
+		$this->assertSame(['list' => ['evil.example'], 'blocks' => []], $response->getData());
 	}
 
 	public function testFediverseAddRefusesAnInvalidAddress(): void {
 		$this->fediverseService->expects($this->never())->method('addAddress');
+		$this->adminApiService->expects($this->never())->method('blockDomain');
 
 		$this->assertSame(
 			Http::STATUS_UNPROCESSABLE_ENTITY,
@@ -228,13 +231,77 @@ class ModerationControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * On a block list the page blocks or silences through the service the
+	 * Mastodon admin API uses, with the reasons, and answers every entry.
+	 */
+	public function testOnABlockListAnInstanceIsAddedAtItsTierWithItsReasons(): void {
+		$block = new AdminDomainBlock('loud.example', AdminDomainBlock::SEVERITY_SILENCE, null, 'Spam');
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->fediverseService->method('getListedAddresses')->willReturn([]);
+		$this->fediverseService->expects($this->never())->method('addAddress');
+		$this->adminApiService->expects($this->once())->method('blockDomain')
+			->with('loud.example', 'silence', null, 'Spam')
+			->willReturn($block);
+		$this->adminApiService->method('domainBlocks')->willReturn([$block]);
+
+		$response = $this->controller->fediverseAdd('Loud.example', 'silence', '', 'Spam');
+
+		$this->assertSame(['list' => [], 'blocks' => [$block]], $response->getData());
+	}
+
+	public function testATierOrAReasonTheServiceRefusesIsA422(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->adminApiService->method('blockDomain')
+			->willThrowException(new \InvalidArgumentException('a reason is at most 1000 characters'));
+
+		$response = $this->controller->fediverseAdd('evil.example', 'suspend', str_repeat('x', 1001));
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('a reason is at most 1000 characters', $response->getData()['error']);
+	}
+
+	public function testAnEntryCanBeSwitchedAndItsReasonsRewritten(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->adminApiService->expects($this->once())->method('updateDomainBlock')
+			->with('evil.example', 'silence', '', 'Spam')
+			->willReturn(new AdminDomainBlock('evil.example'));
+
+		$response = $this->controller->fediverseUpdate(' Evil.example', 'silence', '', 'Spam');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+	}
+
+	public function testSwitchingAnInstanceThatIsNotListedIsA404(): void {
+		$this->adminApiService->method('updateDomainBlock')
+			->willThrowException(new \OCA\Social\Exceptions\ItemNotFoundException('Record not found'));
+
+		$this->assertSame(
+			Http::STATUS_NOT_FOUND,
+			$this->controller->fediverseUpdate('never.example', 'silence')->getStatus()
+		);
+	}
+
 	public function testFediverseRemoveReturnsTheRemainingList(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('none_but');
 		$this->fediverseService->expects($this->once())->method('removeAddress')->with('evil.example');
+		$this->fediverseService->expects($this->never())->method('unsilenceAddress');
 		$this->fediverseService->method('getListedAddresses')->willReturn([]);
 
 		$response = $this->controller->fediverseRemove('evil.example');
 
-		$this->assertSame(['list' => []], $response->getData());
+		$this->assertSame(['list' => [], 'blocks' => []], $response->getData());
+	}
+
+	/** A silenced instance is on the list the page shows, so removing it lifts the silence. */
+	public function testOnABlockListRemovingLiftsEitherTier(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->fediverseService->expects($this->once())->method('removeAddress')->with('loud.example');
+		$this->fediverseService->expects($this->once())->method('unsilenceAddress')->with('loud.example');
+		$this->fediverseService->method('getListedAddresses')->willReturn([]);
+		$this->adminApiService->method('domainBlocks')->willReturn([]);
+
+		$this->controller->fediverseRemove('Loud.example');
 	}
 
 	public function testRetentionStoresTheConfiguredPeriod(): void {
@@ -302,7 +369,7 @@ class ModerationControllerTest extends TestCase {
 
 		$response = $this->controller->fediverseAccess('none_but');
 
-		$this->assertSame(['accessType' => 'none_but'], $response->getData());
+		$this->assertSame(['accessType' => 'none_but', 'list' => [], 'blocks' => []], $response->getData());
 	}
 
 	private function remotePerson(string $id, string $handle): Person {

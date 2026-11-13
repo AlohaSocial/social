@@ -10,8 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Settings;
 
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Model\Client\AdminDomainBlock;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\AboutService;
+use OCA\Social\Service\AdminApiService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\FediverseService;
@@ -57,6 +59,7 @@ class AdminSettingsTest extends TestCase {
 	private $sectionsService;
 	private IInitialState|Stub $initialState;
 	private AboutService|Stub $aboutService;
+	private AdminApiService|Stub $adminApiService;
 	private AdminSettings $settings;
 
 	/** Translates nothing, which is what a test needs of it. */
@@ -77,6 +80,10 @@ class AdminSettingsTest extends TestCase {
 		$this->moderationService = $this->createStub(ModerationService::class);
 		$this->initialState = $this->createStub(IInitialState::class);
 		$this->aboutService = $this->createStub(AboutService::class);
+		$this->adminApiService = $this->createStub(AdminApiService::class);
+		$this->adminApiService->method('domainBlocks')->willReturn([
+			new AdminDomainBlock('noisy.example', AdminDomainBlock::SEVERITY, 'ticket 42', 'Spam'),
+		]);
 
 		$this->serverSettingsService = $this->createStub(ServerSettingsService::class);
 		$this->serverSettingsService->method('current')->willReturn($this->serverSettings());
@@ -150,6 +157,7 @@ class AdminSettingsTest extends TestCase {
 			$this->createStub(\OCA\Social\Atproto\Service\AtprotoStatusService::class),
 			$this->createStub(\OCA\Social\Service\RecommendationPreferenceService::class),
 			$this->aboutService,
+			$this->adminApiService,
 		);
 	}
 
@@ -335,6 +343,7 @@ class AdminSettingsTest extends TestCase {
 
 		$this->assertSame('all_but', $state['accessType']);
 		$this->assertSame(['noisy.example'], $state['accessList']);
+		$this->assertSame('Spam', $state['accessBlocks'][0]->getPublicComment());
 		$this->assertSame(0, $state['retentionDays']);
 	}
 
