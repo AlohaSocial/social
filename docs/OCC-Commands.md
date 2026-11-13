@@ -1369,6 +1369,11 @@ php occ social:ip-blocks:remove <block>
 
 An unknown id or range prints an error and exits with 2.
 
+The web servers keep the IP blocks in Nextcloud's distributed cache. With a
+cache the console shares with them (Redis, Memcached) the lift applies to
+their next request; with APCu, which the console does not share, it applies
+within a minute (`AccessBlockService::IP_CACHE_TTL`).
+
 ---
 
 ## External Users

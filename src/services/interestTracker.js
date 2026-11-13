@@ -38,8 +38,12 @@ export const SKIP_BELOW = 600
 /** How recent a scroll has to be for the reader to count as scrolling. */
 export const SCROLLING_WITHIN = 1000
 
-/** How often the buffer is sent while the page stays open. */
-export const FLUSH_EVERY = 30000
+/**
+ * How often the buffer is sent while the page stays open. What is left goes
+ * as soon as the tab is hidden, the list goes away or the page is left, so
+ * this only bounds how late a reader who stays on the page is learned from.
+ */
+export const FLUSH_EVERY = 2 * 60 * 1000
 
 /** The most the server takes in one request. */
 export const BATCH_SIZE = 100

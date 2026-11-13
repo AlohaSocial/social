@@ -270,10 +270,10 @@ describe('TimelineList', () => {
 			vi.advanceTimersByTime(1500)
 			expect(refresh).toHaveBeenCalledTimes(1)
 
-			vi.advanceTimersByTime(30 * 1000)
+			vi.advanceTimersByTime(60 * 1000)
 			expect(refresh).toHaveBeenCalledTimes(1)
-			// the minute's tick, counted from when the list opened
-			vi.advanceTimersByTime(27 * 1000)
+			// the two-minute tick, counted from when the list opened
+			vi.advanceTimersByTime(57 * 1000)
 
 			expect(refresh).toHaveBeenCalledTimes(2)
 			expect(refresh).toHaveBeenLastCalledWith(['1'])

@@ -149,16 +149,14 @@ describe('Navigation', () => {
 		it('sends none of its own requests until the timeline has had its turn', async () => {
 			boot.immediate = false
 			axios.get.mockClear()
-			const fetchUnread = vi.spyOn(notificationsStore, 'fetchUnreadNotifications').mockResolvedValue(undefined)
-			const fetchRequests = vi.spyOn(notificationsStore, 'fetchPendingRequests').mockResolvedValue(undefined)
+			const fetchBadges = vi.spyOn(notificationsStore, 'fetchBadges').mockResolvedValue(undefined)
 
 			mountNavigation()
 			await flushPromises()
 
 			// trending, lists, the badge: all of them wait
 			expect(axios.get).not.toHaveBeenCalled()
-			expect(fetchUnread).not.toHaveBeenCalled()
-			expect(fetchRequests).not.toHaveBeenCalled()
+			expect(fetchBadges).not.toHaveBeenCalled()
 			expect(boot.held.length).toBeGreaterThan(0)
 
 			boot.held.forEach((release) => release())
@@ -166,8 +164,7 @@ describe('Navigation', () => {
 
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/trends/tags', expect.anything())
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/lists')
-			expect(fetchUnread).toHaveBeenCalledTimes(1)
-			expect(fetchRequests).toHaveBeenCalledTimes(1)
+			expect(fetchBadges).toHaveBeenCalledTimes(1)
 		})
 	})
 
@@ -679,7 +676,7 @@ describe('Navigation', () => {
 
 		beforeEach(async () => {
 			vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] })
-			fetches = ['fetchUnreadNotifications', 'fetchUnreadDirectMessages', 'fetchPendingRequests']
+			fetches = ['fetchBadges', 'fetchUnreadNotifications', 'fetchUnreadDirectMessages', 'fetchPendingRequests']
 				.map((name) => vi.spyOn(notificationsStore, name).mockResolvedValue(true))
 			visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
 			mountNavigation()
@@ -693,10 +690,13 @@ describe('Navigation', () => {
 			vi.useRealTimers()
 		})
 
-		it('reads all three counts once a minute while the tab is looked at', async () => {
+		it('reads all three counts once a minute while the tab is looked at, in one request', async () => {
+			const [badges, ...each] = fetches
+
 			await vi.advanceTimersByTimeAsync(2 * MINUTE)
 
-			fetches.forEach((fetch) => expect(fetch).toHaveBeenCalledTimes(2))
+			expect(badges).toHaveBeenCalledTimes(2)
+			each.forEach((fetch) => expect(fetch).not.toHaveBeenCalled())
 		})
 
 		it('asks for nothing while the tab is hidden', async () => {
@@ -783,7 +783,7 @@ describe('Navigation', () => {
 
 		beforeEach(() => {
 			vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] })
-			fetches = ['fetchUnreadNotifications', 'fetchUnreadDirectMessages', 'fetchPendingRequests']
+			fetches = ['fetchBadges']
 				.map((name) => vi.spyOn(notificationsStore, name).mockResolvedValue(true))
 			vi.mocked(onTimelinePush).mockClear()
 			vi.mocked(offTimelinePush).mockClear()
@@ -814,23 +814,18 @@ describe('Navigation', () => {
 			expect(onTimelinePush).toHaveBeenCalledWith(expect.any(Function), ['direct', 'notification'])
 		})
 
-		it('reads only the counts what arrived can change', async () => {
+		it('answers either kind of push with the one request', async () => {
 			mountNavigation()
 			await flushPromises()
-			const [unread, direct, pending] = fetches
+			const [badges] = fetches
 			const refresh = vi.mocked(onTimelinePush).mock.calls[0][0]
 
-			fetches.forEach((fetch) => fetch.mockClear())
+			badges.mockClear()
 			await refresh(['direct'])
-			expect(direct).toHaveBeenCalledTimes(1)
-			expect(unread).not.toHaveBeenCalled()
-			expect(pending).not.toHaveBeenCalled()
+			expect(badges).toHaveBeenCalledTimes(1)
 
-			fetches.forEach((fetch) => fetch.mockClear())
 			await refresh(['notification'])
-			expect(unread).toHaveBeenCalledTimes(1)
-			expect(pending).toHaveBeenCalledTimes(1)
-			expect(direct).not.toHaveBeenCalled()
+			expect(badges).toHaveBeenCalledTimes(2)
 		})
 
 		it('hands the push back when it leaves the page', async () => {

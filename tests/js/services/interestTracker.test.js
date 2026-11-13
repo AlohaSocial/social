@@ -522,14 +522,32 @@ describe('the interest tracker', () => {
 		])
 	})
 
-	it('flushes every thirty seconds', () => {
+	it('flushes every two minutes', () => {
 		track({ generation: 4 }).record(post('1'), 'open')
+		vi.advanceTimersByTime(FLUSH_EVERY - 1)
 		expect(send).not.toHaveBeenCalled()
 
-		vi.advanceTimersByTime(FLUSH_EVERY)
+		vi.advanceTimersByTime(1)
 
 		expect(send).toHaveBeenCalledWith([expect.objectContaining({ status_id: '1', kind: 'open', context: 'home', generation: 4 })], { beacon: false, legacy: false })
 		expect(tracker.pending()).toEqual([])
+		expect(FLUSH_EVERY).toBe(2 * 60 * 1000)
+	})
+
+	it('asks for nothing on a tick with nothing to send', () => {
+		track({ generation: 4 })
+
+		vi.advanceTimersByTime(5 * FLUSH_EVERY)
+
+		expect(send).not.toHaveBeenCalled()
+	})
+
+	it('sends what is waiting as soon as the tab is hidden, without waiting for the tick', () => {
+		track({ generation: 4 }).record(post('1'), 'open')
+		doc.visibilityState = 'hidden'
+		fire(doc, 'visibilitychange')
+
+		expect(send).toHaveBeenCalledWith([expect.objectContaining({ status_id: '1', kind: 'open' })], { beacon: false, legacy: false })
 	})
 
 	it('sends at most a hundred events per request', () => {

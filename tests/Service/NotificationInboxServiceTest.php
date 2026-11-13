@@ -304,6 +304,21 @@ class NotificationInboxServiceTest extends TestCase {
 		$this->assertNotSame($pending, $this->service->pendingTag($this->viewer(), 'alice'));
 	}
 
+	/** The sidebar's one tag moves with whatever moves either count's tag. */
+	public function testTheBadgeTagMovesWithEitherCount(): void {
+		$tags = [$this->service->badgeTag($this->viewer(), 'alice')];
+
+		$this->newest = '140';
+		$tags[] = $this->service->badgeTag($this->viewer(), 'alice');
+		$this->holding();
+		$tags[] = $this->service->badgeTag($this->viewer(), 'alice');
+		$this->released = ['40'];
+		$tags[] = $this->service->badgeTag($this->viewer(), 'alice');
+
+		$this->assertCount(4, array_unique($tags));
+		$this->assertSame(end($tags), $this->service->badgeTag($this->viewer(), 'alice'), 'nothing moved, nor does the tag');
+	}
+
 	/** The count's tag moves with the policy and with what was released. */
 	public function testTheUnreadStateFollowsThePolicyAndTheReleased(): void {
 		$before = $this->service->unreadState($this->viewer(), 'alice');
