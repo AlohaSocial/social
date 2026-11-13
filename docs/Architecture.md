@@ -4572,7 +4572,17 @@ and the instance's password policy), acceptance of the server rules and, when
 a minimum age is set, confirmation of it. It carries a honeypot field and two
 rate limits, 10 an hour per address on the route and 5 registrations an hour
 per address in all, and it stops taking registrations while 1000 are
-waiting. A pending registration reserves its handle and its email; the
+waiting. The mails it sends are limited per recipient as well
+(`SignupMailLimiter`): one "already have an account" or "choose another
+username" notice per address every `NOTICE_COOLDOWN` (6 hours), which a
+confirmation link also starts, and `DAILY_CAP` (3) form mails of any kind per
+address in 24 hours. The recipient is an HMAC, keyed with the instance
+secret, of the address normalised to the inbox it reaches (lower case,
+without a `+tag`, without Gmail's dots); the claims are `DurableCache` table
+rows (`addShared()`), so neither a missing nor an evicting memcache resets
+them. A held-back mail is answered as a sent one, and a held-back
+confirmation link stores no registration, only the placeholder row the
+per-address limit counts. A pending registration reserves its handle and its email; the
 unconfirmed ones are forgotten by `Cron\ExternalSignups` after a day. Email
 domains on the access block list are refused, as they are for every account.
 
@@ -4699,6 +4709,7 @@ The administration section (`AlohaDirectoryController`, `AlohaDirectorySection.v
 - **Self-signed certificates** — TLS peer verification is skipped only when the `allow_self_signed` app config value is `1`
 - **For you learns only from what the reader may read, and shows it to nobody else.** A signal names a post by id and nothing else; the hashtags are read from the stored post through the same visibility, block and mute filter the timelines use (`StreamRequest::getVisibleByNids()`), because the interests it produces are shown back on the reader's settings page — a signal naming a stranger's followers-only post would otherwise put that post's hashtags there. No raw signal is kept, nothing is federated, and every route is the viewer's own. Learning is **off by default** for a reader who has not chosen (`interests_default` is `0`, and `Version1000Date20261108400000` removes a stored `1` that the For you card used to save with its other values), so it is opted into under Settings → For You; a reader who turns it on is shown a one-time notice in the web interface, and turning it off keeps the learned rows, which the feed goes on ranking with. An administrator may make learning the default for readers who have not chosen
 
+- **The registration form cannot be used to flood an inbox** — every mail the public form sends to the address typed into it is counted against that recipient, not only against the sender's IP address, which somebody with many addresses could rotate: one notice per address every 6 hours and 3 form mails per address a day (`SignupMailLimiter`, keyed by an HMAC of the normalised address and kept in the `DurableCache` table). The answer to the form is the same whether a mail went or not, so the limit tells nobody whether an address is registered. See [External users](#external-users).
 - **External users reach Aloha Social only** — every controller of every app is checked against `ExternalScope`'s allowlist by a global middleware before it runs, and WebDAV by `ExternalDavGuard` and `ExternalDavListener`; hiding the menus is not what keeps them out. See [External users](#external-users).
 
 **Known gaps — these are real and deliberate to record**

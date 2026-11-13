@@ -78,6 +78,7 @@ class ExternalSignupService {
 		private IL10N $l10n,
 		private LoggerInterface $logger,
 		private ConfigService $configService,
+		private SignupMailLimiter $mailLimiter,
 	) {
 	}
 
@@ -180,6 +181,11 @@ class ExternalSignupService {
 	 * why nothing was made. With email confirmation off a new registration is
 	 * answered differently, and the two can be told apart.
 	 *
+	 * How often the form mails one address is limited by `SignupMailLimiter`.
+	 * A mail held back by it is answered the same as a mail sent; a held back
+	 * confirmation link stores nothing, so the address is not kept from its
+	 * owner for a day by a registration that cannot be confirmed.
+	 *
 	 * @return array{state: string, handle: string}
 	 * @throws ExternalUserException
 	 */
@@ -248,7 +254,10 @@ class ExternalSignupService {
 
 		$emailInUse = $this->externalUserService->isEmailInUse($email);
 		if ($emailInUse || $this->externalUserService->isLogin($handle)) {
-			if (!$this->sendUnavailable($email, $handle, $emailInUse)) {
+			$claim = $this->mailLimiter->claim($email, SignupMailLimiter::KIND_NOTICE);
+			if ($claim !== null && !$this->sendUnavailable($email, $handle, $emailInUse)) {
+				$this->mailLimiter->release($claim);
+
 				throw new ExternalUserException($this->l10n->t('The confirmation email could not be sent. Please try again later.'));
 			}
 			// a registration that is taken leaves a row the limits count,
@@ -260,11 +269,25 @@ class ExternalSignupService {
 			return ['state' => self::STATE_VERIFY, 'handle' => $handle];
 		}
 
+		$claim = null;
+		if ($this->externalUserService->verifiesEmail()) {
+			$claim = $this->mailLimiter->claim($email, SignupMailLimiter::KIND_VERIFICATION);
+			if ($claim === null) {
+				$this->signupsRequest->createPlaceholder($ipHash, $now);
+
+				return ['state' => self::STATE_VERIFY, 'handle' => $handle];
+			}
+		}
+
 		if ($invite !== null && !$this->invitesRequest->consume($invite['id'])) {
+			if ($claim !== null) {
+				$this->mailLimiter->release($claim);
+			}
+
 			throw new ExternalUserException($this->l10n->t('This invitation link is no longer valid.'));
 		}
 
-		if ($this->externalUserService->verifiesEmail()) {
+		if ($claim !== null) {
 			$token = $this->secureRandom->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
 			$id = $this->signupsRequest->create(
 				$handle, $email, $passwordHash, hash('sha256', $token), false, $needsApproval, $inviteId, $ipHash, $now,
@@ -272,6 +295,7 @@ class ExternalSignupService {
 			);
 			if (!$this->sendVerification($email, $handle, $token)) {
 				$this->signupsRequest->delete($id);
+				$this->mailLimiter->release($claim);
 
 				throw new ExternalUserException($this->l10n->t('The confirmation email could not be sent. Please try again later.'));
 			}

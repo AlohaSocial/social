@@ -1059,6 +1059,16 @@ registration counts towards the limit of registrations per address like any
 other. With *Confirm the email address* off a new registration is answered
 differently, so there the answers can be told apart.
 
+So that the form cannot be used to fill a stranger's inbox from many
+addresses, the mails it sends are also limited per recipient: one *You
+already have an account* or *Choose another username* per email address
+every 6 hours (a confirmation link starts the same wait), and at most 3 mails
+of any kind from the form to one address in 24 hours. The address is counted
+as its inbox receives it — case, a `+tag` and Gmail's dots do not make it
+another — and only as a hash keyed with the instance secret. A mail held back
+is answered exactly like one that was sent; a held-back confirmation link
+stores no registration, so the address is free again when the limit runs out.
+
 *Require two-factor authentication* is Nextcloud's own mandatory two-factor
 setting for the `social-external` group, the same one as in Administration →
 Security; changing it asks for your password. With it on, external users set
