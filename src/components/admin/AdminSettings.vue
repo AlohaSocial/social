@@ -161,8 +161,10 @@ import IconTrends from 'vue-material-design-icons/TrendingUp.vue'
 import IconVerified from 'vue-material-design-icons/CheckDecagramOutline.vue'
 import { currentSection, scrollToSection, watchSections } from '../../services/sectionRail.js'
 import { matchesQuery } from '../../services/settingsSearch.js'
+import IconAlohaDirectory from 'vue-material-design-icons/SignDirection.vue'
 import AboutSection from './AboutSection.vue'
 import AccessSection from './AccessSection.vue'
+import AlohaDirectorySection from './AlohaDirectorySection.vue'
 import AccountsSection from './AccountsSection.vue'
 import ActivitySection from './ActivitySection.vue'
 import AnnouncementsSection from './AnnouncementsSection.vue'
@@ -271,6 +273,7 @@ export default {
 	components: {
 		AboutSection,
 		AccessSection,
+		AlohaDirectorySection,
 		AccountsSection,
 		ActivitySection,
 		AnnouncementsSection,
@@ -288,6 +291,7 @@ export default {
 		IconAccess,
 		IconAccounts,
 		IconActivity,
+		IconAlohaDirectory,
 		IconAnnouncements,
 		IconAttention,
 		IconBackground,
@@ -529,6 +533,15 @@ export default {
 								title: t('social', 'External accounts'),
 								lede: t('social', 'The accounts people registered themselves. Promote one to make it an ordinary account of this server.'),
 								keywords: t('social', 'external users promote'),
+							},
+							{
+								id: 'aloha-directory',
+								group: 'registration',
+								icon: 'IconAlohaDirectory',
+								component: 'AlohaDirectorySection',
+								title: t('social', 'Aloha Directory'),
+								lede: t('social', 'Let the Aloha apps suggest this server to people who sign up, and search the servers the curators recommend.'),
+								keywords: t('social', 'directory listing heartbeat curators search providers servers.json search.json'),
 							},
 						]
 					: []),

@@ -474,6 +474,10 @@ class AccountApiController extends MastodonApiController {
 
 	/** Where somebody who wanted to sign up should be sent instead. */
 	private function registrationAdvice(): string {
+		$signup = $this->instanceService->getLocal()->getRegistrationsUrl();
+		if ($signup !== null) {
+			return 'Sign up for an account on this server at ' . $signup . '.';
+		}
 		if ($this->appManager->isEnabledForUser('registration')) {
 			return 'An account on this server is a Nextcloud account. Sign up at '
 				. $this->urlGenerator->getAbsoluteURL('/apps/registration/')

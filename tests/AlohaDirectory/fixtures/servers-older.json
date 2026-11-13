@@ -1,0 +1,10 @@
+{
+    "payload": "eyJlbnRyaWVzIjpbXSwiZXhwaXJlc19hdCI6IjIwMjYtMTItMTNUMTI6MDA6MDBaIiwiaXNzdWVkX2F0IjoiMjAyNi0xMS0xM1QxMjowMDowMFoiLCJsaXN0Ijoic2VydmVycyIsInNlcmlhbCI6MTc5NDUwMDAwMCwidmVyc2lvbiI6MX0",
+    "signatures": [
+        {
+            "kid": "test-list",
+            "alg": "Ed25519",
+            "sig": "eQmfPKG-OHYh1kKWT7n67q7E5VxjGhVdZpeqNakAZwUw1Z87-GBCFDdsdkCiA5UMvn9i6O2VmdQ_eHhBA6upAw"
+        }
+    ]
+}

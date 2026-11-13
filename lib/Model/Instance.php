@@ -37,6 +37,8 @@ class Instance implements IQueryRow, JsonSerializable {
 	private bool $registrations = false;
 	private bool $approvalRequired = false;
 	private bool $invitesEnabled = false;
+	/** Where to sign up in a browser, for a client that cannot create the account itself. */
+	private ?string $registrationsUrl = null;
 	private bool $translationEnabled = false;
 	private ?Person $contactAccount = null;
 	private ?string $accountPrim = null;
@@ -280,6 +282,16 @@ class Instance implements IQueryRow, JsonSerializable {
 		return $this;
 	}
 
+	public function getRegistrationsUrl(): ?string {
+		return $this->registrationsUrl;
+	}
+
+	public function setRegistrationsUrl(?string $registrationsUrl): self {
+		$this->registrationsUrl = $registrationsUrl;
+
+		return $this;
+	}
+
 	public function isInvitesEnabled(): bool {
 		return $this->invitesEnabled;
 	}
@@ -452,6 +464,7 @@ class Instance implements IQueryRow, JsonSerializable {
 				'enabled' => $this->isRegistrations(),
 				'approval_required' => $this->isApprovalRequired(),
 				'message' => null,
+				'url' => $this->getRegistrationsUrl(),
 			],
 			'contact' => (object)[
 				'email' => $this->getEmail(),

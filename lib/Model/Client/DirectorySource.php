@@ -69,6 +69,8 @@ class DirectorySource implements JsonSerializable {
 	public const ORIGIN_FEDERATION = 'federation';
 	/** Named by a directory of servers this instance asked. */
 	public const ORIGIN_DISCOVERED = 'discovered';
+	/** A search provider the curators of the Aloha Directory accepted (`search.json`). */
+	public const ORIGIN_CURATED = 'curated';
 
 	public function __construct(
 		private string $host,

@@ -1,0 +1,10 @@
+{
+    "payload": "eyJlbnRyaWVzIjpbeyJkb21haW4iOiJub3JkbGljaHQuZXhhbXBsZS5vcmciLCJsYW5ndWFnZXMiOlsiZGUiLCJlbiJdLCJuYW1lIjoiTm9yZGxpY2h0Iiwic2lnbnVwIjp7ImNhcGFjaXR5IjoicGxlbnR5Iiwic3RhdGUiOiJvcGVuIn0sInN0YXRlIjoiZmVhdHVyZWQiLCJ3ZWlnaHQiOjF9LHsiZG9tYWluIjoiY2xvdWQuZXhhbXBsZS5jb20iLCJsYW5ndWFnZXMiOlsiZW4iXSwibmFtZSI6IlRoaXMgc2VydmVyIiwic2lnbnVwIjp7ImNhcGFjaXR5Ijoic29tZSIsInN0YXRlIjoib3BlbiJ9LCJzdGF0ZSI6Imxpc3RlZCIsIndlaWdodCI6MX1dLCJleHBpcmVzX2F0IjoiMjAyNi0xMi0xM1QxMjowMDowMFoiLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTEzVDEyOjAwOjAwWiIsImxpc3QiOiJzZXJ2ZXJzIiwic2VyaWFsIjoxNzk0NTg2MDAwLCJ2ZXJzaW9uIjoxfQ",
+    "signatures": [
+        {
+            "kid": "test-list",
+            "alg": "Ed25519",
+            "sig": "VcTQok7fHWdiNAENBpA7TJ_Helu4Amrbpy4h--e7zrZTF_taUhy_DhPT4VM_IT9Wkm9hW4ABf2Jfzzq64IfWAA"
+        }
+    ]
+}

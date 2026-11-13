@@ -90,6 +90,7 @@ class InstanceService {
 		private TranslationService $translationService,
 		private AccountService $accountService,
 		private VapidService $vapidService,
+		private ExternalUserService $externalUserService,
 	) {
 	}
 
@@ -134,6 +135,7 @@ class InstanceService {
 		$cloudHost = $this->configService->getCloudHost();
 		$socialAddress = $this->configService->getSocialAddress();
 		$uri = ($socialAddress !== '') ? $socialAddress : $cloudHost;
+		$open = $this->externalUserService->acceptsPublicRegistrations();
 
 		$instance->setUri($uri)
 			->setVersion($this->appConfig->getValueString(Application::APP_ID, 'installed_version', '0.0'))
@@ -143,11 +145,13 @@ class InstanceService {
 			->setEmail($this->appConfig->getValueString(Application::APP_ID, ConfigService::CONTACT_EMAIL, ''))
 			->setImage($this->thumbnail())
 			->setLanguages([$this->defaultLanguage()])
-			// Accounts are Nextcloud users; the client API cannot create one,
-			// so a client must not offer a sign-up form for this server.
-			->setRegistrations(false)
-			->setApprovalRequired(false)
-			->setInvitesEnabled(false)
+			// The sign-up for Social-only accounts, which the Aloha Directory
+			// compares with the heartbeat. The client API cannot create the
+			// account, so v2 names the page a client sends people to instead.
+			->setRegistrations($open)
+			->setApprovalRequired($open && $this->externalUserService->mode() === ExternalUserService::MODE_APPROVAL)
+			->setInvitesEnabled($this->externalUserService->usersMayInvite())
+			->setRegistrationsUrl($open ? $this->urlGenerator->linkToRouteAbsolute('social.Signup.page') : null)
 			->setUrls($this->urls($uri))
 			->setStats($this->stats())
 			->setUsage($this->usage())

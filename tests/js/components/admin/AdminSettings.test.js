@@ -241,7 +241,7 @@ describe('the administration page', () => {
 
 		expect(groupNames(wrapper).slice(0, 3)).toEqual(['Overview', 'Moderation', 'Sign-ups'])
 		await openGroup(wrapper, 'Sign-ups')
-		expect(sectionHeadings(wrapper)).toEqual(['Who may sign up', 'Waiting and invited', 'External accounts'])
+		expect(sectionHeadings(wrapper)).toEqual(['Who may sign up', 'Waiting and invited', 'External accounts', 'Aloha Directory'])
 
 		const without = await mountPage(STATE)
 		expect(groupNames(without)).not.toContain('Sign-ups')

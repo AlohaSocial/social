@@ -1,0 +1,10 @@
+{
+    "payload": "eyJleHBpcmVzX2F0IjoiMjAyNy0xMS0xM1QxMjowMDowMFoiLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTEzVDEyOjAwOjAwWiIsImtleXMiOlt7ImFsZyI6IkVkMjU1MTkiLCJraWQiOiJ0ZXN0LWxpc3QiLCJwdWJsaWNfa2V5IjoieHZkV2xyMmVTX2NkejVyYjlBY0dlTTdLb2lqQVFpMEZPdDB6QnFUUUJDQSIsInN0YXR1cyI6ImFjdGl2ZSJ9XSwibGlzdCI6ImtleXMiLCJzZXJpYWwiOjcsInZlcnNpb24iOjF9",
+    "signatures": [
+        {
+            "kid": "test-root",
+            "alg": "Ed25519",
+            "sig": "w15tFDqEdT0v9Rc_tv054PRh0RGsxkOSEWtVyQwupXANlJiP2VgLGaLo7osTyy0y7Y8Uc8IzXSLFuYXWcqTaCg"
+        }
+    ]
+}
