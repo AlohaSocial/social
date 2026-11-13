@@ -1032,7 +1032,9 @@ administrator approves, or only the holders of an invitation link; an
 invitation admits its holder in every mode, without approval. With *Confirm
 the email address* on, which is the default, the account is made when the
 link in the confirmation email is followed, so the server needs working
-mail. The form also asks to accept the server rules (in the **About this server** section) and
+mail. With *Anybody who registers* and confirmation off, every registration
+is an account at once, made with whatever address was typed; the card shows
+a warning while the form is set that way, and leaves the choice to you. The form also asks to accept the server rules (in the **About this server** section) and
 links the privacy policy and legal notice set in Administration → Theming.
 The additional registration and privacy information box is plain text shown
 on the introduction page and beside the form. It starts with a translated

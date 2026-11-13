@@ -102,6 +102,26 @@ describe('the External users cards', () => {
 		expect(axios.post).toHaveBeenCalledWith(ADMIN, expect.objectContaining({ proofOfWork: false, proofOfWorkBits: 22 }))
 	})
 
+	it('warns while the form would admit anybody at once without confirming their address, and changes nothing', async () => {
+		const wrapper = mount(ExternalUsersSection, { props: { external: external() } })
+		expect(wrapper.find('.external__open-warning').exists()).toBe(false)
+
+		wrapper.vm.form.mode = 'open'
+		await wrapper.vm.$nextTick()
+		expect(wrapper.find('.external__open-warning').exists()).toBe(false)
+
+		wrapper.vm.form.verifyEmail = false
+		await wrapper.vm.$nextTick()
+		expect(wrapper.find('.external__open-warning').text()).toContain('without confirming an email address')
+		expect(wrapper.vm.form.verifyEmail).toBe(false)
+		expect(wrapper.vm.form.mode).toBe('open')
+		expect(axios.post).not.toHaveBeenCalled()
+
+		wrapper.vm.form.mode = 'approval'
+		await wrapper.vm.$nextTick()
+		expect(wrapper.find('.external__open-warning').exists()).toBe(false)
+	})
+
 	it('warns when Aloha Social is restricted to groups that leave external users out', () => {
 		const settings = { ...external().settings, restricted: true, restrictionIncludesExternals: false }
 		const wrapper = mount(ExternalUsersSection, { props: { external: external({ settings }) } })

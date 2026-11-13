@@ -78,6 +78,9 @@
 			<NcCheckboxRadioSwitch v-model="form.verifyEmail" type="switch">
 				{{ t('social', 'Confirm the email address before the account is made') }}
 			</NcCheckboxRadioSwitch>
+			<NcNoteCard v-if="openWithoutConfirmation" class="external__open-warning" type="warning">
+				{{ t('social', 'Anybody who registers gets an account at once, without confirming an email address. Bots can then create accounts in bulk with made-up addresses. Switch on email confirmation, or choose approval, unless you watch new accounts closely.') }}
+			</NcNoteCard>
 			<NcCheckboxRadioSwitch v-model="form.proofOfWork" type="switch">
 				{{ t('social', 'Make the browser solve a puzzle before registering') }}
 			</NcCheckboxRadioSwitch>
@@ -190,6 +193,11 @@ export default {
 		/** @return {object} the settings as they now stand */
 		settings() {
 			return this.external.settings
+		},
+
+		/** @return {boolean} whether the form as edited lets anybody in at once, unconfirmed */
+		openWithoutConfirmation() {
+			return this.form.mode === 'open' && !this.form.verifyEmail
 		},
 
 		/** @return {{enforced: boolean, everybody: boolean}} */

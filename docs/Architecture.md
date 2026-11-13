@@ -4567,6 +4567,9 @@ confirmed while the mode is `approval` joins the queue
 (`ExternalSignupsRequest::markVerified(…, true)`), even if it was sent before
 approval was switched on. With email confirmation on, which is the default, the account is made
 only when the link in the confirmation email is followed, within 24 hours.
+`open` with confirmation off makes the account on the spot; the settings card
+(`ExternalUsersSection`) warns while the form is set to that combination, and
+nothing changes it on its own.
 The form asks for the handle, the email, a password (8 characters at least,
 and the instance's password policy), acceptance of the server rules and, when
 a minimum age is set, confirmation of it. It carries a honeypot field and two

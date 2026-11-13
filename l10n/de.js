@@ -2,6 +2,7 @@ OC.L10N.register(
     "social",
     {
     "Aloha Social" : "Aloha Social",
+    "Anybody who registers gets an account at once, without confirming an email address. Bots can then create accounts in bulk with made-up addresses. Switch on email confirmation, or choose approval, unless you watch new accounts closely." : "Wer sich registriert, bekommt sofort ein Konto, ohne eine E-Mail-Adresse zu bestätigen. Bots können so massenhaft Konten mit erfundenen Adressen anlegen. Schalte die E-Mail-Bestätigung ein oder wähle die Freigabe, es sei denn, du behältst neue Konten genau im Blick.",
     "Make the browser solve a puzzle before registering" : "Den Browser vor der Registrierung ein Rätsel lösen lassen",
     "A proof of work the browser computes while the form is filled in. It makes automated registrations slower and more costly, without a captcha or any third-party service. Registrations with an invitation link skip it." : "Ein Arbeitsnachweis, den der Browser berechnet, während das Formular ausgefüllt wird. Er macht automatisierte Registrierungen langsamer und teurer, ohne Captcha und ohne Dienste Dritter. Registrierungen mit einem Einladungslink überspringen ihn.",
     "Puzzle difficulty (12 to 24)" : "Schwierigkeit des Rätsels (12 bis 24)",
