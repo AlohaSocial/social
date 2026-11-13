@@ -60,6 +60,15 @@ class DocumentService {
 	 */
 	public const ERROR_CONTENT = 4;
 
+	/** What `storeRemoteDocument()` did: stored a copy. */
+	public const STORED = 'stored';
+
+	/** Recorded why there is no copy, or forgot the row: nothing to try again. */
+	public const SETTLED = 'settled';
+
+	/** Left the row as it was: the origin could not be reached, and may be later. */
+	public const RETRY = 'retry';
+
 	/** A playlist is text and is read whole; this is the ceiling on that. */
 	private const MAX_PLAYLIST = 2 * 1024 * 1024;
 
@@ -76,7 +85,7 @@ class DocumentService {
 	 * picture larger than ten seconds of the origin's upstream -- a phone
 	 * photo from a Nextcloud on a home connection is several megabytes, and
 	 * Social stores and serves the original. The inbox leaves such a picture
-	 * for the caching run, so the caching run has to be able to finish it.
+	 * to `RemoteMediaPrefetcher`, so the prefetch has to be able to finish it.
 	 *
 	 * Below `CacheDocumentsRequest::CACHING_TIMEOUT`, so that a download
 	 * still running is never started a second time by the next pass.
@@ -119,12 +128,47 @@ class DocumentService {
 			return $document;
 		}
 
-		$mime = '';
 		$this->cacheDocumentsRequest->initCaching($document);
+		$stored = $this->storeRemoteDocument(
+			$document,
+			function (Document $document): string {
+				$mime = '';
+				$this->cacheService->saveRemoteFileToCache($document, $mime);
 
+				return $mime;
+			}
+		);
+		if ($stored === self::STORED) {
+			return $document;
+		}
+
+		throw new CacheDocumentDoesNotExistException();
+	}
+
+	/**
+	 * Stores the file of a remote document whose row is marked as being
+	 * cached, and writes down how it went: the copy and its sniffed type, or
+	 * why there is none. `$store` puts the file in place the way
+	 * `CacheDocumentService::saveRemoteFileToCache()` does -- fetching it
+	 * itself, or from bytes already downloaded -- returns the type the bytes
+	 * turned out to be, and throws what that throws.
+	 *
+	 * A failure that will fail the same way again is recorded on the row (or
+	 * the row is forgotten, when the origin says the file is gone or the
+	 * instance is blocked), so that nothing offers it again; a network or
+	 * server failure leaves the row as it was for a later try.
+	 *
+	 * @param \Closure(Document): string $store
+	 *
+	 * @return self::STORED|self::SETTLED|self::RETRY
+	 * @throws MalformedArrayException
+	 * @throws SocialAppConfigException
+	 */
+	public function storeRemoteDocument(Document $document, \Closure $store): string {
+		$mime = '';
 		try {
 			$document->setActorIcon($this->cacheDocumentsRequest->isActorIcon($document));
-			$this->cacheService->saveRemoteFileToCache($document, $mime);
+			$mime = $store($document);
 			// The mime type is sniffed from the bytes at this point and nowhere
 			// else; unpersisted, the copy is later served with no Content-Type.
 			// It replaces the type the peer declared rather than filling in for
@@ -138,7 +182,7 @@ class DocumentService {
 
 			$this->streamRequest->updateAttachments($document);
 
-			return $document;
+			return self::STORED;
 		} catch (CacheContentDecodeException $e) {
 			// A remote peer can hand us a PNG header followed by garbage, which
 			// passes the mime sniff and then fails to decode. Left unrecorded the
@@ -147,26 +191,17 @@ class DocumentService {
 				'Cannot decode document ' . json_encode($document) . ' ' . json_encode($e), 1
 			);
 			$document->setError(self::ERROR_CONTENT);
-			$this->cacheDocumentsRequest->endCaching($document);
 		} catch (CacheContentMimeTypeException $e) {
 			$this->miscService->log(
 				'Not allowed mime type ' . json_encode($document) . ' ' . json_encode($e), 1
 			);
 			$document->setMimeType($mime);
 			$document->setError(self::ERROR_MIMETYPE);
-			$this->cacheDocumentsRequest->endCaching($document);
-		} catch (NotFoundException $e) {
+		} catch (NotFoundException|NotPermittedException $e) {
 			$this->miscService->log(
 				'Cannot save cache file ' . json_encode($document) . ' ' . json_encode($e), 1
 			);
 			$document->setError(self::ERROR_PERMISSION);
-			$this->cacheDocumentsRequest->endCaching($document);
-		} catch (NotPermittedException $e) {
-			$this->miscService->log(
-				'Cannot save cache file ' . json_encode($document) . ' ' . json_encode($e), 1
-			);
-			$document->setError(self::ERROR_PERMISSION);
-			$this->cacheDocumentsRequest->endCaching($document);
 		} catch (RequestResultSizeException|CacheContentSizeException $e) {
 			// either the download was cut off at the ceiling, or what arrived
 			// turned out to be larger than this instance stores of that kind
@@ -174,23 +209,24 @@ class DocumentService {
 				'Downloaded file is too big ' . json_encode($document) . ' ' . json_encode($e), 1
 			);
 			$document->setError(self::ERROR_SIZE);
-			$this->cacheDocumentsRequest->endCaching($document);
-		} catch (RequestContentException $e) {
+		} catch (RequestContentException|UnauthorizedFediverseException $e) {
 			$this->cacheDocumentsRequest->deleteById($document->getId());
-		} catch (UnauthorizedFediverseException $e) {
-			$this->cacheDocumentsRequest->deleteById($document->getId());
-		} catch (RequestNetworkException $e) {
+
+			return self::SETTLED;
+		} catch (RequestNetworkException|RequestServerException $e) {
 			$this->cacheDocumentsRequest->endCaching($document);
-		} catch (RequestServerException $e) {
-			$this->cacheDocumentsRequest->endCaching($document);
+
+			return self::RETRY;
 		}
 
-		throw new CacheDocumentDoesNotExistException();
+		$this->cacheDocumentsRequest->endCaching($document);
+
+		return self::SETTLED;
 	}
 
 	/**
-	 * `cacheRemoteDocument()` for a caller nobody is waiting on -- the caching
-	 * run and the retry command -- with the download given
+	 * `cacheRemoteDocument()` for a caller nobody is waiting on -- the retry
+	 * command -- with the download given
 	 * `BACKGROUND_FETCH_TIMEOUT` rather than the federation default. Reaching
 	 * the origin keeps the default, so a host that is down still fails fast.
 	 *
@@ -1030,44 +1066,6 @@ class DocumentService {
 		$document->convertToMediaAttachment($this->urlGenerator);
 
 		$this->cacheDocumentsRequest->updateFocus($document);
-	}
-
-	/**
-	 * @return int
-	 * @throws Exception
-	 */
-	public function manageCacheDocuments(): int {
-		$update = $this->cacheDocumentsRequest->getNotCachedDocuments();
-
-		$count = 0;
-		foreach ($update as $item) {
-			// None of these three should reach here at all: the query asks for
-			// an *empty* `local_copy` and all three name theirs before the row
-			// is written. They are checked anyway because the cost of the
-			// invariant breaking is not symmetric -- a missed avatar is a
-			// wasted request, while a streamed file is a PeerTube video, and
-			// fetching one would spend hundreds of megabytes of disk to hand
-			// back exactly the bytes the publishing instance already streams.
-			if ($item->getLocalCopy() === Document::COPY_LOCAL_AVATAR
-				|| $item->getLocalCopy() === 'header'
-				|| $item->isStreamed()) {
-				continue;
-			}
-
-			try {
-				$this->cacheRemoteDocumentInBackground($item->getId());
-			} catch (Throwable $e) {
-				// One unusable row must never end the run: everything queued
-				// behind it would silently stop being cached, on every pass.
-				$this->miscService->log(
-					'Could not cache document ' . $item->getId() . ' - ' . $e->getMessage(), 1
-				);
-				continue;
-			}
-			$count++;
-		}
-
-		return $count;
 	}
 
 	/**

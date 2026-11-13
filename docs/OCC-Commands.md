@@ -655,7 +655,9 @@ php occ social:cache:refresh [-f|--force] [--rotate-keys]
 Steps and their output lines: local accounts deleted, local accounts regenerated,
 remote accounts created, remote accounts updated, remote accounts details updated,
 documents cached, hashtags updated. With `--rotate-keys`, `N key pairs refreshed`
-is printed first.
+is printed first. The documents step is the background media sweep of
+`Cron\Cache` (`RemoteMediaPrefetcher::prefetchPending()`): the remote files
+still waiting, newest first, several at a time, for up to 90 seconds.
 
 Rotation is the only step that is opt-in, and it is the only way to rotate a key
 pair: nothing else calls `AccountService::blindKeyRotation()`, and the cron never

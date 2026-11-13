@@ -1611,7 +1611,7 @@ occ social:ip-blocks:remove <id-or-range>     # lift one; the range completes in
 ```bash
 occ social:stream:prune             # apply retention, purge finished queue rows and old notifications
 occ social:media:purge              # apply the media cache limits now (see --help for one-off limits)
-occ social:cache:refresh            # re-fetch cached remote accounts
+occ social:cache:refresh            # re-fetch cached remote accounts and waiting remote media
 occ social:domain:purge <instance>  # remove what a now-blocked instance sent
 ```
 
@@ -1668,6 +1668,17 @@ pass held to about 60,000. A details refresh is three or more fetches, so it
 covers fewer, 30 to 90 a pass. Past those sizes the cycle stretches and the
 stalest still go first; a key that rotated in between is fetched again the
 first time a signature fails to verify.
+
+**Remote media** is fetched in the background. A post stored with attachments
+the inbox could not finish (it has ten seconds), or brought in by a remote
+timeline sync, which does not download them at all, is queued and its files
+fetched by the queue drain — `Cron\Queue` or `occ social:worker` — eight at a
+time, at most four from one server, with up to 120 seconds per wave.
+`Cron\Cache` sweeps whatever still waits, newest first, for up to 90 seconds a
+pass. A server behind the delivery circuit breaker is not asked, and one whose
+downloads failed is not asked again in the same run. Run `social:worker` if
+pictures from busy accounts appear late: without it the queue is drained every
+twelve minutes.
 
 **Plan the upgrade window on a large instance.** Three upgrade steps rewrite
 `social_stream` row by row, and they run inside `occ upgrade`, while the server

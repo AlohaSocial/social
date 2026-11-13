@@ -27,6 +27,11 @@ class StreamQueue implements JsonSerializable {
 	/** A post to fetch from its origin: `streamId` is its URL, no row holds it yet. */
 	public const TYPE_FETCH = 'Fetch';
 	public const TYPE_VERIFY = 'Signature';
+	/**
+	 * The attachments of a stored post whose files are still to be fetched:
+	 * `streamId` is the post, its documents are the rows whose parent it is.
+	 */
+	public const TYPE_MEDIA = 'Media';
 
 	public const STATUS_STANDBY = 0;
 	public const STATUS_RUNNING = 1;

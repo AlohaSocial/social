@@ -19,9 +19,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	public const CACHING_TIMEOUT = 5; // 5 min
 
 	/**
-	 * How many uncached documents one pass may take on. Each one is an
-	 * outbound HTTP request, so this is a bound on the cron slot rather than on
-	 * the work: what is left over is the next run's.
+	 * How many uncached documents one page of the background prefetch reads
+	 * (`RemoteMediaPrefetcher::prefetchPending()`). Each one is an outbound
+	 * HTTP request, so this bounds the cron slot rather than the work: what is
+	 * left over is the next run's.
 	 */
 	public const CACHE_BATCH = 50;
 
@@ -630,25 +631,27 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * @return Document[]
-	 * @throws Exception
-	 */
-	/**
-	 * The documents waiting to be fetched, at most `CACHE_BATCH` of them.
+	 * The documents waiting to be fetched, newest first, at most `$limit` of them.
 	 *
-	 * Capped because the caller does one outbound HTTP request per row, inside
-	 * a cron slot: an instance that was offline for a day, or that has just
-	 * followed a busy account, came back to a backlog it tried to fetch in a
-	 * single pass. Its two siblings — `CacheActorsRequest::getRemoteActorsToUpdateDetails()`
-	 * and `StreamQueueRequest::getStandby()` — were capped long ago and this one
-	 * was missed. The rest of the backlog is picked up on the next run, which is
-	 * what the other two do.
+	 * Capped because each row is an outbound HTTP request inside a cron slot;
+	 * what is left over is the next run's. Newest first because the newest
+	 * posts are the ones somebody is about to look at. `local_copy_prim` is
+	 * the indexed key of `local_copy` (the copy name itself is unindexed
+	 * text) and is empty exactly when the copy name is. `$before` pages on:
+	 * only documents older than that nid.
+	 *
+	 * @return Document[]
 	 */
-	public function getNotCachedDocuments(int $limit = self::CACHE_BATCH) {
+	public function getNotCachedDocuments(int $limit = self::CACHE_BATCH, int $before = 0): array {
 		$qb = $this->getCacheDocumentsSelectSql();
-		$qb->limitToDBFieldEmpty('local_copy');
+		$alias = $qb->getDefaultSelectAlias();
+		$qb->limitToDBFieldEmpty('local_copy_prim');
 		$qb->limitToCaching(self::CACHING_TIMEOUT);
 		$qb->limitToDBFieldInt('error', 0);
+		if ($before > 0) {
+			$qb->andWhere($qb->expr()->lt($alias . '.nid', $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)));
+		}
+		$qb->orderBy($alias . '.nid', 'desc');
 		if ($limit > 0) {
 			$qb->setMaxResults($limit);
 		}
@@ -661,6 +664,25 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$cursor->closeCursor();
 
 		return $documents;
+	}
+
+	/**
+	 * Marks a document as being cached, unless it no longer waits for that:
+	 * it has a copy or a recorded refusal by now, or another worker marked it
+	 * within `CACHING_TIMEOUT`. One statement, so two workers that read the
+	 * same row cannot both take it.
+	 *
+	 * @return bool whether this caller took it
+	 */
+	public function claimForCaching(Document $document): bool {
+		$qb = $this->getCacheDocumentsUpdateSql();
+		$qb->set('caching', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
+		$qb->limitToIdPrim($qb->prim($document->getId()));
+		$qb->limitToDBFieldEmpty('local_copy_prim');
+		$qb->limitToDBFieldInt('error', 0);
+		$qb->limitToCaching(self::CACHING_TIMEOUT);
+
+		return $qb->executeStatement() > 0;
 	}
 
 	/**

@@ -327,9 +327,7 @@ class CacheDocumentService {
 	 * @throws MalformedArrayException
 	 */
 	private function downloadToTemp(Document $document, string $tmpPath): void {
-		$this->assertFetchable($document->getUrl());
-
-		$max = $this->sizeLimit($document->getMediaType());
+		$max = $this->downloadPlan($document)['max'];
 		$opened = $this->openRemoteFile($document);
 		$stream = $opened['stream'];
 
@@ -354,6 +352,28 @@ class CacheDocumentService {
 		if ($copied > $max) {
 			throw new RequestResultSizeException();
 		}
+	}
+
+	/**
+	 * How the file of a remote document is to be fetched: its address, checked
+	 * to be one this app may read, the ceiling `downloadToTemp()` holds it to,
+	 * and the instance it is fetched on behalf of. For a caller that fetches
+	 * several at once (`CurlService::downloadMany()`) and hands each file to
+	 * `saveFromTempToCache()`, the second half of `saveRemoteFileToCache()`.
+	 *
+	 * @return array{url: string, max: int, on_behalf_of: string}
+	 *
+	 * @throws MalformedArrayException
+	 * @throws RequestServerException
+	 */
+	public function downloadPlan(Document $document): array {
+		$this->assertFetchable($document->getUrl());
+
+		return [
+			'url' => $document->getUrl(),
+			'max' => $this->sizeLimit($document->getMediaType()),
+			'on_behalf_of' => self::referringHost($document),
+		];
 	}
 
 	/**

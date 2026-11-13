@@ -436,7 +436,12 @@ class CacheWorkBudgetTest extends TestCase {
 		$this->assertWithinBudget($run, RemoteCountService::BATCH, 1, 3);
 	}
 
-	/** One batch of documents not yet cached, each tried and marked. */
+	/**
+	 * At most one page of documents not yet cached is tried, each claimed and
+	 * its outcome written. Every host here is unreachable, so the first wave
+	 * fails and the rest of that host's documents are not asked for in this
+	 * run: what is left is a read per page.
+	 */
 	public function testTheDocumentCacheTakesOneBatch(): void {
 		$rows = [];
 		for ($i = 0; $i < 3 * CacheDocumentsRequest::CACHE_BATCH; $i++) {
@@ -458,8 +463,8 @@ class CacheWorkBudgetTest extends TestCase {
 		);
 		$this->assertLessThanOrEqual(CacheDocumentsRequest::CACHE_BATCH, $tried);
 		$this->assertGreaterThan(0, $tried);
-		// the document read, marked as being cached and its outcome written,
-		// and the batch read once: 151 today
+		// a claim and an outcome per document tried, a read per page and the
+		// breaker read once
 		$this->assertWithinBudget($run, CacheDocumentsRequest::CACHE_BATCH, 3, 3);
 	}
 
