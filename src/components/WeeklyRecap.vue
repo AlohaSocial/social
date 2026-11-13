@@ -13,7 +13,7 @@
 			v-if="quiet"
 			variant="tertiary"
 			:to="{ name: 'timeline', params: { type: 'timeline' } }">
-			{{ t('social', 'See what your colleagues shared') }}
+			{{ t('social', 'See what people on your Nextcloud shared') }}
 		</NcButton>
 		<NcButton
 			variant="tertiary"
