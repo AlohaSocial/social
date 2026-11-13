@@ -302,6 +302,16 @@ class AvatarService {
 		if (!in_array($type, self::ALLOWED_TYPES, true)) {
 			throw new InvalidActionException('an avatar has to be a JPEG, PNG, GIF or WebP image');
 		}
+
+		// cropping and core's own store both decode every pixel, so the
+		// dimensions are read from the header first
+		$dimensions = @getimagesize($tmpPath);
+		if ($dimensions === false || $dimensions[0] < 1 || $dimensions[1] < 1) {
+			throw new InvalidActionException('the uploaded avatar is not a readable image');
+		}
+		if ($dimensions[0] * $dimensions[1] > CacheDocumentService::MAX_PIXELS) {
+			throw new InvalidActionException('the uploaded avatar has too many pixels');
+		}
 	}
 
 	/**

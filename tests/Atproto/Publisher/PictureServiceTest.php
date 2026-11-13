@@ -27,6 +27,8 @@ use OCP\IAvatarManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -60,7 +62,7 @@ class PictureServiceTest extends TestCase {
 		return self::$noise;
 	}
 
-	private function pictures(string $bytes): PictureService {
+	private function pictures(string $bytes, ?LoggerInterface $logger = null): PictureService {
 		$blobRequest = $this->createMock(AtprotoBlobRequest::class);
 		$blobRequest->method('getByDocument')->willReturnCallback(fn (string $did, string $documentId): ?BlobRef => array_values(array_filter($this->blobs, static fn (BlobRef $b): bool => $b->documentId === $documentId))[0] ?? null);
 		$blobRequest->method('get')->willReturnCallback(fn (string $did, string $cid): ?BlobRef => array_values(array_filter($this->blobs, static fn (BlobRef $b): bool => $b->cid->toString() === $cid))[0] ?? null);
@@ -93,7 +95,7 @@ class PictureServiceTest extends TestCase {
 		$container = $this->createMock(ContainerInterface::class);
 		$container->method('get')->with(AccountService::class)->willReturn($accounts);
 
-		return new PictureService($blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, $avatars, new NullLogger(), $container);
+		return new PictureService($blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, $avatars, $logger ?? new NullLogger(), $container);
 	}
 
 	private function document(): Document {
@@ -195,6 +197,30 @@ class PictureServiceTest extends TestCase {
 		$blob = $pictures->blobFor($this->identity(), new Person(), $document, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES)['blob'] ?? null;
 
 		$this->assertSame('image/jpeg', $blob?->mime, 'not the WebP blob a post may use');
+	}
+
+	/** The header of a 10000x10000 PNG: what it claims to be is a hundred megapixels. */
+	private static function hugePngHeader(): string {
+		$ihdr = 'IHDR' . pack('NN', 10000, 10000) . "\x08\x02\x00\x00\x00";
+
+		return "\x89PNG\r\n\x1a\n" . pack('N', 13) . $ihdr . pack('N', crc32($ihdr))
+			. pack('N', 0) . 'IEND' . pack('N', crc32('IEND'));
+	}
+
+	public function testAPictureWithTooManyPixelsIsNotDecodedToBeReEncoded(): void {
+		$logger = new class extends AbstractLogger {
+			/** @var string[] */
+			public array $messages = [];
+
+			public function log($level, string|\Stringable $message, array $context = []): void {
+				$this->messages[] = (string)$message;
+			}
+		};
+		$pictures = $this->pictures(self::hugePngHeader(), $logger);
+
+		$this->assertNull($pictures->blobFor($this->identity(), new Person(), $this->document(), 10));
+		$this->assertSame(['Picture has too many pixels to re-encode for Bluesky'], $logger->messages);
+		$this->assertSame([], $this->stored);
 	}
 
 	private function identity(): Identity {
