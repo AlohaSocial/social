@@ -98,6 +98,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	private array $attributedToActors = [];
 	private bool $discoverable = false;
 	private bool $indexable = false;
+	/** Mastodon's `hide_collections`, where the controller answering knows it; null otherwise */
+	private ?bool $hideCollections = null;
 	private array $profileLayout = ProfileLayout::DEFAULT;
 	private string $privacy = 'public';
 	private bool $sensitive = false;
@@ -721,6 +723,17 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 	public function isIndexable(): bool {
 		return $this->indexable;
+	}
+
+	public function getHideCollections(): ?bool {
+		return $this->hideCollections;
+	}
+
+	/** Whether the account hides its follower and following lists, for the client API to report. */
+	public function setHideCollections(?bool $hideCollections): self {
+		$this->hideCollections = $hideCollections;
+
+		return $this;
 	}
 
 	public function setIndexable(bool $indexable): self {
@@ -1850,6 +1863,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 		if ($this->getMovedTo() !== '') {
 			$result['moved'] = $this->exportMovedAccount();
+		}
+
+		if ($this->hideCollections !== null) {
+			$result['hide_collections'] = $this->hideCollections;
 		}
 
 		return array_merge(parent::exportAsLocal(), $result);

@@ -50,6 +50,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\FeedService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\HiddenCollectionsService;
 use OCA\Social\Service\ImportService;
 use OCA\Social\Service\InboxLimiter;
 use OCA\Social\Service\InstanceActorService;
@@ -121,6 +122,7 @@ class ActivityPubController extends Controller {
 		private IConfig $systemConfig,
 		ConfigService $configService,
 		LoggerInterface $logger,
+		private ?HiddenCollectionsService $hiddenCollections = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 
@@ -842,6 +844,10 @@ class ActivityPubController extends Controller {
 			// following it looped or gave up.
 			$requested = OrderedCollectionPage::requestedPage($page);
 			if ($requested > 0 || $max_id !== '') {
+				if ($this->listsHidden($actor)) {
+					return $this->hiddenListPage();
+				}
+
 				return $this->activityPubSuccess(
 					$this->followService->getFollowersPage($actor, max(1, $requested), $max_id)
 				);
@@ -882,6 +888,10 @@ class ActivityPubController extends Controller {
 
 			$requested = OrderedCollectionPage::requestedPage($page);
 			if ($requested > 0 || $max_id !== '') {
+				if ($this->listsHidden($actor)) {
+					return $this->hiddenListPage();
+				}
+
 				return $this->activityPubSuccess(
 					$this->followService->getFollowingPage($actor, max(1, $requested), $max_id)
 				);
@@ -891,6 +901,21 @@ class ActivityPubController extends Controller {
 		} catch (Exception $e) {
 			return $this->fail($e);
 		}
+	}
+
+	/**
+	 * Whether the account hides its follower and following lists. The
+	 * collection itself then carries `totalItems` and no `first`
+	 * (`FollowService::getFollowersCollection()`), and a page of it is not
+	 * served to anybody.
+	 */
+	private function listsHidden(Person $actor): bool {
+		return $this->hiddenCollections?->hidesFor($actor) === true;
+	}
+
+	/** A page of a hidden list: refused, as Mastodon refuses it. */
+	private function hiddenListPage(): DataResponse {
+		return new DataResponse(['error' => 'This account hides its followers and the accounts it follows'], Http::STATUS_FORBIDDEN);
 	}
 
 	/**

@@ -71,6 +71,11 @@ the push provider. Nextcloud's own notification channel is a separate feature.
   least once every `token_idle_days` (90), then it signs in again. A client
   that refreshes gets a new refresh token each time and must keep the newest;
   sending an old one again signs it out.
+- `hide_collections` is honoured as in Mastodon: the lists read empty to
+  others through the client API, the ActivityPub collections carry only
+  `totalItems`, and the counts stay visible. It is reported on a local
+  account's entity where the account is fetched on its own (by id, by
+  lookup, and the credentials), not on accounts embedded in other entities.
 - Consent to an `admin:*` scope (or `write:migration`) takes the account's
   password, through Nextcloud's password confirmation; Mastodon asks for no
   password there. The device flow does not grant these scopes at all.

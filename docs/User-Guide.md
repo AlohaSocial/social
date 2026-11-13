@@ -1120,6 +1120,15 @@ hand, it is picked up as one.
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
   **Approve who follows you** switch under **Settings → Profile and privacy**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.
+- **Hiding your followers and following.** **Hide my followers and following**,
+  under **Settings → Profile and privacy → Who can find and follow you**, keeps
+  the two lists to yourself: anybody else, here or on another server, sees how
+  many followers you have and how many accounts you follow, but not who they
+  are, and your profile shows the numbers without links. You are not named
+  among the "followed by" people on other profiles either. You still see your
+  own lists. It is Mastodon's `hide_collections`, so a Mastodon app can switch
+  it too. People who follow you on Bluesky can still be seen there: Bluesky
+  publishes follows openly.
 - **Reporting.** **Report** in a post's menu reports that post; **Report** in
   the menu on a profile reports the account itself. You say what is wrong —
   spam, breaking this server's rules (and which ones; offered when the server

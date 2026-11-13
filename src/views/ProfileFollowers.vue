@@ -4,43 +4,54 @@
 -->
 <template>
 	<div class="social__followers">
-		<UserEntry v-for="user in users" :key="user.id" :item="user" />
-		<div ref="sentinel" class="list-sentinel" />
-		<div v-if="loading" class="loading-indicator">
-			<NcLoadingIcon :size="24" />
-			<span>{{ t('social', 'Loading …') }}</span>
-		</div>
-		<!-- a list that could not be fetched is not a list with nobody in it,
-		     and saying "No followers yet" for a server error tells the reader
-		     something about this account that is not true -->
-		<div v-else-if="filling && users.length === 0" class="loading-indicator" role="status">
-			<NcLoadingIcon :size="24" />
-			<span>{{ t('social', 'Loading the list from this account’s network…') }}</span>
-		</div>
-		<div v-else-if="failed && users.length === 0" class="followers-error" role="alert">
-			<p class="followers-error__message">
-				{{ isFollowers
-					? t('social', 'The followers could not be loaded.')
-					: t('social', 'The followed accounts could not be loaded.') }}
-			</p>
-			<NcButton variant="primary" @click="fetchData">
-				<template #icon>
-					<Refresh :size="20" />
-				</template>
-				{{ t('social', 'Try again') }}
-			</NcButton>
-		</div>
-		<!-- a finished list with nobody in it used to be a blank panel -->
+		<!-- the counts stay on the profile; the names are the account's own -->
 		<NcEmptyContent
-			v-else-if="users.length === 0"
-			:name="isFollowers ? t('social', 'No followers yet') : t('social', 'Not following anyone yet')"
-			:description="isFollowers
-				? t('social', 'People who follow this account will show up here.')
-				: t('social', 'Accounts this account follows will show up here.')">
+			v-if="hidden"
+			:name="isFollowers ? t('social', 'This account hides its followers') : t('social', 'This account hides who it follows')"
+			:description="t('social', 'The number is on the profile, but the list is shown only to the account itself.')">
 			<template #icon>
-				<AccountMultipleOutline :size="20" />
+				<EyeOffOutline :size="20" />
 			</template>
 		</NcEmptyContent>
+		<template v-else>
+			<UserEntry v-for="user in users" :key="user.id" :item="user" />
+			<div ref="sentinel" class="list-sentinel" />
+			<div v-if="loading" class="loading-indicator">
+				<NcLoadingIcon :size="24" />
+				<span>{{ t('social', 'Loading …') }}</span>
+			</div>
+			<!-- a list that could not be fetched is not a list with nobody in it,
+		     and saying "No followers yet" for a server error tells the reader
+		     something about this account that is not true -->
+			<div v-else-if="filling && users.length === 0" class="loading-indicator" role="status">
+				<NcLoadingIcon :size="24" />
+				<span>{{ t('social', 'Loading the list from this account’s network…') }}</span>
+			</div>
+			<div v-else-if="failed && users.length === 0" class="followers-error" role="alert">
+				<p class="followers-error__message">
+					{{ isFollowers
+						? t('social', 'The followers could not be loaded.')
+						: t('social', 'The followed accounts could not be loaded.') }}
+				</p>
+				<NcButton variant="primary" @click="fetchData">
+					<template #icon>
+						<Refresh :size="20" />
+					</template>
+					{{ t('social', 'Try again') }}
+				</NcButton>
+			</div>
+			<!-- a finished list with nobody in it used to be a blank panel -->
+			<NcEmptyContent
+				v-else-if="users.length === 0"
+				:name="isFollowers ? t('social', 'No followers yet') : t('social', 'Not following anyone yet')"
+				:description="isFollowers
+					? t('social', 'People who follow this account will show up here.')
+					: t('social', 'Accounts this account follows will show up here.')">
+				<template #icon>
+					<AccountMultipleOutline :size="20" />
+				</template>
+			</NcEmptyContent>
+		</template>
 	</div>
 </template>
 
@@ -50,11 +61,13 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AccountMultipleOutline from 'vue-material-design-icons/AccountMultipleOutline.vue'
+import EyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import UserEntry from '../components/UserEntry.vue'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useServerData } from '../composables/useServerData.js'
+import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
 
 /** How long to wait before checking a queued network list again. */
@@ -66,6 +79,7 @@ export default {
 	name: 'ProfileFollowers',
 	components: {
 		AccountMultipleOutline,
+		EyeOffOutline,
 		NcButton,
 		NcEmptyContent,
 		NcLoadingIcon,
@@ -75,8 +89,9 @@ export default {
 
 	setup() {
 		const { serverData, hostname } = useServerData()
+		const { isOwnHandle } = useCurrentUser()
 
-		return { serverData, hostname }
+		return { serverData, hostname, isOwnHandle }
 	},
 
 	data() {
@@ -121,6 +136,16 @@ export default {
 
 		isFollowers() {
 			return this.$route.name === 'profile.followers'
+		},
+
+		/** @return {boolean} whether the account shows this list to nobody but itself */
+		hidden() {
+			const account = this.accountStore.getAccount(this.profileAccount)
+			if (account?.hide_collections !== true) {
+				return false
+			}
+
+			return !this.isOwnHandle(this.profileAccount)
 		},
 
 		loading() {
@@ -230,7 +255,7 @@ export default {
 			clearTimeout(this.refill)
 			this.refillAttempts = 0
 			const account = this.profileAccount
-			if (!account) {
+			if (!account || this.hidden) {
 				return
 			}
 			const followers = this.isFollowers

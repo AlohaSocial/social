@@ -196,6 +196,8 @@ class ApiControllerTest extends TestCase {
 	private \OCA\Social\Service\RemoteFetchQueue|MockObject $remoteFetchQueue;
 	private \OCA\Social\Service\FollowList\FollowListService|MockObject $followLists;
 	private BlueskyFeeds|MockObject $blueskyFeeds;
+	/** @var string[] the users whose follower and following lists are hidden */
+	private array $hidingUsers = [];
 	private \OCA\Social\Service\Counts\CountService|MockObject $counts;
 	/** what the AI switch stub answers for the viewer */
 	private bool $hidesAi = false;
@@ -504,6 +506,7 @@ class ApiControllerTest extends TestCase {
 			'remoteFetchQueue' => $this->remoteFetchQueue,
 			'followLists' => $this->followLists,
 			'blueskyFeeds' => $this->blueskyFeeds,
+			'hiddenCollections' => $this->hiddenCollections(),
 			'viewCountService' => $this->viewCountService,
 			'teamService' => $this->teamService,
 			'emojiService' => $this->emojiService,
@@ -570,6 +573,20 @@ class ApiControllerTest extends TestCase {
 
 	/** What the last timeline query read, when a test wants it to differ from the page. */
 	private ?int $timelineRows = null;
+
+	/** The real service, over a store that says the users in `$hidingUsers` hide their lists. */
+	private function hiddenCollections(): \OCA\Social\Service\HiddenCollectionsService {
+		$config = $this->createStub(ConfigService::class);
+		$config->method('getUserValue')->willReturnCallback(
+			fn (string $key, string $userId = ''): string => in_array($userId, $this->hidingUsers, true) ? '1' : ''
+		);
+		$actors = $this->createStub(\OCA\Social\Db\ActorsRequest::class);
+		$actors->method('getFromId')->willReturnCallback(
+			static fn (string $id): Person => (new Person())->setUserId(substr($id, strrpos($id, '@') + 1))
+		);
+
+		return new \OCA\Social\Service\HiddenCollectionsService($config, $actors, new \Psr\Log\NullLogger());
+	}
 
 	private function loggedInAs(string $uid = 'alice'): Person {
 		$user = $this->createStub(IUser::class);
@@ -4220,6 +4237,31 @@ class ApiControllerTest extends TestCase {
 		$actor->method('isLocal')->willReturn(true);
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->followLists->expects($this->never())->method('page');
+		$this->cacheActorService->expects($this->once())->method('probeActors')->willReturn(['f']);
+
+		$this->assertSame(['f'], $this->controller()->accountFollowers('alice')->getData());
+	}
+
+	public function testTheListsOfAnAccountThatHidesThemAreEmptyToOthers(): void {
+		$this->loggedInAs('bob');
+		$this->hidingUsers = ['alice'];
+		$actor = $this->createStub(Person::class);
+		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
+		$actor->method('isLocal')->willReturn(true);
+		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
+		$this->cacheActorService->expects($this->never())->method('probeActors');
+
+		$this->assertSame([], $this->controller()->accountFollowers('alice')->getData());
+		$this->assertSame([], $this->controller()->accountFollowing('alice')->getData());
+	}
+
+	public function testAnAccountThatHidesItsListsStillSeesThem(): void {
+		$this->loggedInAs('alice');
+		$this->hidingUsers = ['alice'];
+		$actor = $this->createStub(Person::class);
+		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
+		$actor->method('isLocal')->willReturn(true);
+		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->cacheActorService->expects($this->once())->method('probeActors')->willReturn(['f']);
 
 		$this->assertSame(['f'], $this->controller()->accountFollowers('alice')->getData());

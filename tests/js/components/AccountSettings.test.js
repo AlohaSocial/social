@@ -81,11 +81,31 @@ describe('AccountSettings', () => {
 		expect(switchFor(wrapper, 'This is an automated account').find('input').element.checked).toBe(false)
 	})
 
-	it('offers the four switches the route writes', async () => {
+	it('offers the five switches the route writes', async () => {
 		const wrapper = mountSettings()
 		await flushPromises()
 
-		expect(switches(wrapper)).toHaveLength(4)
+		expect(switches(wrapper)).toHaveLength(5)
+	})
+
+	it('shows whether the follower lists are hidden, from the account’s source', async () => {
+		axios.get.mockResolvedValue({ data: credentials({ source: { privacy: 'public', hide_collections: true } }) })
+		const wrapper = mountSettings()
+		await flushPromises()
+
+		expect(switchFor(wrapper, 'Hide my followers and following').find('input').element.checked).toBe(true)
+	})
+
+	it('saves hiding the follower lists as Mastodon’s hide_collections', async () => {
+		const wrapper = mountSettings()
+		await flushPromises()
+		axios.patch.mockResolvedValue({ data: credentials({ source: { privacy: 'private', hide_collections: true } }) })
+
+		await switchFor(wrapper, 'Hide my followers and following').find('input').setValue(true)
+		await flushPromises()
+
+		expect(axios.patch).toHaveBeenCalledTimes(1)
+		expect(axios.patch).toHaveBeenCalledWith(`${API}/accounts/update_credentials`, { hide_collections: true })
 	})
 
 	/** `private` on the wire is the audience this app calls followers-only. */

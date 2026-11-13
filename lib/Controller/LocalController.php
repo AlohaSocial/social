@@ -100,6 +100,7 @@ class LocalController extends Controller {
 		private IdentityService $atprotoIdentities,
 		private ?BlueskySearch $blueskySearch = null,
 		private ?\OCA\Social\Atproto\Profile\ProfileLinks $profileLinks = null,
+		private ?\OCA\Social\Service\HiddenCollectionsService $hiddenCollections = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -603,6 +604,9 @@ class LocalController extends Controller {
 			$actor->setCompleteDetails(true);
 			$actor->setExportFormat(ACore::FORMAT_LOCAL);
 
+			// what the profile page needs to show the counts without the lists
+			$this->hiddenCollections?->annotate($actor);
+
 			return new DataResponse($this->attachBluesky($actor), Http::STATUS_OK);
 		} catch (Exception $e) {
 			return $this->failFor($e);
@@ -705,6 +709,9 @@ class LocalController extends Controller {
 			}
 
 			$this->logger->debug('[LocalController] Actor info retrieved', ['actorId' => $actor->getId()]);
+			// what the profile page needs to show the counts without the lists
+			$this->hiddenCollections?->annotate($actor);
+
 			return new DataResponse($this->attachBluesky($actor), Http::STATUS_OK);
 		} catch (Exception $e) {
 			return $this->failFor($e);

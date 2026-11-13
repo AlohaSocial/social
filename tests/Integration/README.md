@@ -43,6 +43,10 @@ to stop.
   plaintext tokens resolve through the hashed lookup, re-authorization
   invalidates the old token, revocation works, a legacy plaintext row is
   refused and the hashing migration converts it.
+- `Api/HiddenCollectionsTest` — `hide_collections` set through
+  `update_credentials` and reported in `source`; another account and an
+  anonymous caller read the follower and following lists empty, the account
+  itself reads them full, and the counts stay on the entity.
 - `Db/PasswordChangeSignOutTest` — `IUser::setPassword()` reaches
   `PasswordUpdatedListener` through the real dispatcher: the account's token
   is refused and its authorizations are gone, while another account's

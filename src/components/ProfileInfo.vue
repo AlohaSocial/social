@@ -126,13 +126,17 @@
 						{{ postsLabel }}
 					</router-link>
 				</li>
+				<!-- an account that hides its lists keeps its counts, as on
+				     Mastodon, but they lead nowhere for anybody else -->
 				<li>
-					<router-link :to="{ name: 'profile.following', params: { account: uid } }">
+					<span v-if="listsHidden" class="user-profile__count">{{ followingLabel }}</span>
+					<router-link v-else :to="{ name: 'profile.following', params: { account: uid } }">
 						{{ followingLabel }}
 					</router-link>
 				</li>
 				<li>
-					<router-link :to="{ name: 'profile.followers', params: { account: uid } }">
+					<span v-if="listsHidden" class="user-profile__count">{{ followersLabel }}</span>
+					<router-link v-else :to="{ name: 'profile.followers', params: { account: uid } }">
 						{{ followersLabel }}
 					</router-link>
 				</li>
@@ -976,6 +980,11 @@ export default {
 
 		isOwnProfile() {
 			return this.isOwnHandle(this.uid)
+		},
+
+		/** @return {boolean} whether this account shows its follower and following lists to nobody but itself */
+		listsHidden() {
+			return this.accountInfo?.hide_collections === true && !this.isOwnProfile
 		},
 
 		/** @return {string} when a timed mute lifts, written out, or '' */
