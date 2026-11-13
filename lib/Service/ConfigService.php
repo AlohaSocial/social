@@ -103,11 +103,25 @@ class ConfigService {
 	public const SOCIAL_CACHE_ACTOR_DAYS = 'cache_actor_days';
 
 	/**
-	 * Days an OAuth token lives from the moment it was granted, however much
-	 * it is used; 0 lets a token in use live for ever, as it used to. Use
-	 * keeps a token from ageing out inside this, never past it.
+	 * Days an OAuth access token lives from the moment it was issued,
+	 * however much it is used, until its client has refreshed it once; 0 lets
+	 * a token in use live for ever. Use keeps a token from ageing out inside
+	 * this, never past it.
 	 */
 	public const SOCIAL_TOKEN_MAX_DAYS = 'token_max_days';
+
+	/**
+	 * Days an OAuth authorization may go unused — no request with its access
+	 * token, no refresh — before it is removed; at least 1.
+	 */
+	public const SOCIAL_TOKEN_IDLE_DAYS = 'token_idle_days';
+
+	/**
+	 * Hours an access token issued by a refresh lives. A client that has
+	 * refreshed once has shown it can refresh again; 0 counts such a token's
+	 * lifetime by `token_max_days` like any other.
+	 */
+	public const SOCIAL_REFRESHED_TOKEN_HOURS = 'refreshed_token_hours';
 
 	/**
 	 * Which of `Cron\Cache`'s steps the next pass begins with — bookkeeping,
@@ -652,6 +666,8 @@ class ConfigService {
 		self::SOCIAL_MEDIA_CACHE_DAYS => '30',
 		self::SOCIAL_MEDIA_CACHE_MB => '5120',
 		self::SOCIAL_TOKEN_MAX_DAYS => '365',
+		self::SOCIAL_TOKEN_IDLE_DAYS => '90',
+		self::SOCIAL_REFRESHED_TOKEN_HOURS => '24',
 		self::SOCIAL_SILENCED_LIST => '[]',
 		self::SOCIAL_BLOCKLIST_SOURCES => '[]',
 		self::SOCIAL_SECURE_MODE => '0',

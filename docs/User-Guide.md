@@ -1149,8 +1149,9 @@ hand, it is picked up as one.
 - **Authorized apps.** **Settings → Apps and account → Authorized apps** lists every app you have
   signed in to with this account — a phone client, a cross-poster, anything
   that asked — with what it may do, when you granted it and when it was last
-  used. **Sign this app out** takes the key back, and the app asks you to sign
-  in again the next time you open it. It is the page to open after losing a
+  used. An app you have not opened for 90 days is signed out by itself.
+  **Sign this app out** takes the key back, and the app asks you to sign in
+  again the next time you open it. It is the page to open after losing a
   phone, and the only page where signing an app out does not depend on still
   having the app. While nothing is signed in, it shows the *Use it in an app*
   card instead. Changing or resetting your Nextcloud password signs every app

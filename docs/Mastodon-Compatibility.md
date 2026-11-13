@@ -64,6 +64,13 @@ the push provider. Nextcloud's own notification channel is a separate feature.
   advertises the actual availability of Social's web registration flow.
   As in Mastodon, changing or resetting the password revokes every OAuth
   token of the account; the change itself is made in Nextcloud.
+- `POST /oauth/token` answers an account token with `refresh_token` and
+  `expires_in` and accepts `grant_type=refresh_token`, which Mastodon does
+  not. A client that ignores both keeps working as with Mastodon: its token
+  works for `token_max_days` (a year by default) and while it is used at
+  least once every `token_idle_days` (90), then it signs in again. A client
+  that refreshes gets a new refresh token each time and must keep the newest;
+  sending an old one again signs it out.
 - Consent to an `admin:*` scope (or `write:migration`) takes the account's
   password, through Nextcloud's password confirmation; Mastodon asks for no
   password there. The device flow does not grant these scopes at all.

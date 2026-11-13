@@ -31,8 +31,8 @@ use PHPUnit\Framework\TestCase;
  * through `ClientService` and the real tables.
  *
  * Three clocks run on one authorization: the code's ten minutes from consent,
- * the token's idle limit from its last use (`TIME_TOKEN_TTL`, 355 days), and
- * `token_max_days` from the grant however much it is used. Each is exchanged
+ * the authorization's idle limit from its last use (`token_idle_days`), and
+ * `token_max_days` from the token's issue however much it is used. Each is exchanged
  * or presented on its last good second and on the one after. `TokenLifecycleTest` covers the rest of
  * a token's life; this is only about where each one ends.
  *
@@ -53,11 +53,13 @@ class TokenExpiryTest extends TestCase {
 	private SocialClient $app;
 	private FrozenClock $clock;
 	private string $maxDays = '';
+	private string $idleDays = '';
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->clientRequest = Server::get(ClientRequest::class);
 		$this->maxDays = Server::get(ConfigService::class)->getAppValue(ConfigService::SOCIAL_TOKEN_MAX_DAYS);
+		$this->idleDays = Server::get(ConfigService::class)->getAppValue(ConfigService::SOCIAL_TOKEN_IDLE_DAYS);
 		$this->clock = $this->freezeClock(new FrozenClock(time()));
 		$this->clientService = $this->clocked(ClientService::class);
 		$this->cleanup();
@@ -78,6 +80,7 @@ class TokenExpiryTest extends TestCase {
 		$this->cleanup();
 		$this->removeCreatedUsers();
 		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_MAX_DAYS, $this->maxDays);
+		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_IDLE_DAYS, $this->idleDays);
 		$this->thawClock();
 		parent::tearDown();
 	}
@@ -99,17 +102,19 @@ class TokenExpiryTest extends TestCase {
 
 	public function testAnIdleTokenLivesItsIdleLimitToTheSecond(): void {
 		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_MAX_DAYS, '0');
-		$used = time() - 2 * ClientService::TIME_TOKEN_TTL;
+		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_IDLE_DAYS, '90');
+		$idle = 90 * 86400;
+		$used = time() - 2 * $idle;
 		$this->clock->set($used);
 		$alice = $this->signIn('te-alice', $used);
 		$bob = $this->signIn('te-bob', $used);
 
-		$this->clock->set($used + ClientService::TIME_TOKEN_TTL);
+		$this->clock->set($used + $idle);
 		$this->assertSame('te-alice', $this->clientService->getFromToken($alice)->getAuthUserId(), 'on its last second');
 
 		$this->clock->advance(1);
 		$this->assertSame('te-alice', $this->clientService->getFromToken($alice)->getAuthUserId(), 'that use was a use');
-		$this->assertRefused($bob, 'idle TIME_TOKEN_TTL and a second');
+		$this->assertRefused($bob, 'idle token_idle_days and a second');
 
 		$this->clientService->sweep();
 		$this->assertSame(['te-alice'], $this->authorizedUsers(), 'the sweep takes the idle one and leaves the used one');
@@ -133,6 +138,7 @@ class TokenExpiryTest extends TestCase {
 	#[DataProvider('grants')]
 	public function testATokenStopsOnTheSecondItsMaximumAgeIsPassed(string $grantedAt, int $days): void {
 		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_MAX_DAYS, (string)$days);
+		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_TOKEN_IDLE_DAYS, '90');
 		$granted = FrozenClock::at($grantedAt)->getTime();
 		$this->clock->set($granted);
 		$alice = $this->signIn('te-alice', $granted);
@@ -140,10 +146,10 @@ class TokenExpiryTest extends TestCase {
 		$ends = $granted + $days * 86400;
 		$this->assertSame($ends, $this->clientService->expiresAt($this->clientService->getFromToken($alice)));
 
-		// used every hundred days up to the end, so the idle limit never
+		// used every sixty days up to the end, so the idle limit never
 		// comes into it
 		for ($used = $granted; $used < $ends - 1;) {
-			$used = min($used + 100 * 86400, $ends - 1);
+			$used = min($used + 60 * 86400, $ends - 1);
 			$this->clock->set($used);
 			$this->clientService->getFromToken($alice);
 			$this->clientService->getFromToken($bob);
@@ -153,7 +159,7 @@ class TokenExpiryTest extends TestCase {
 
 		$this->clock->advance(1);
 		$this->assertRefused($bob, 'a second past its maximum age', 'the access_token has expired');
-		$this->assertSame(['te-alice'], $this->authorizedUsers(), 'the expired token is revoked');
+		$this->assertSame(['te-alice', 'te-bob'], $this->authorizedUsers(), 'an expired token with a refresh token is kept for the refresh');
 	}
 
 	/** Authorizes the app for the account as of a moment, and answers with the code. */
@@ -185,6 +191,7 @@ class TokenExpiryTest extends TestCase {
 		$qb->update(CoreRequestBuilder::TABLE_CLIENT_AUTH)
 			->set('creation', $qb->createNamedParameter(new DateTime('@' . $at), IQueryBuilder::PARAM_DATE))
 			->set('last_update', $qb->createNamedParameter(new DateTime('@' . $at), IQueryBuilder::PARAM_DATE))
+			->set('token_creation', $qb->createNamedParameter(new DateTime('@' . $at), IQueryBuilder::PARAM_DATE))
 			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
 		$qb->executeStatement();
 	}

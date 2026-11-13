@@ -493,10 +493,15 @@ to stop.
 
 - `Db/TokenExpiryTest` — the client API's OAuth lifetimes to the second on a
   frozen clock: a code exchanged on its six-hundredth second and refused on
-  the next, a token idle exactly `TIME_TOKEN_TTL` still accepted and one idle
+  the next, a token idle exactly `token_idle_days` still accepted and one idle
   a second longer refused and swept, and `token_max_days` counted from the
-  grant across a leap day, a month end and a daylight-saving change — good on
-  its last second however much it was used, revoked on the next.
+  token's issue across a leap day, a month end and a daylight-saving change —
+  good on its last second however much it was used, refused on the next and
+  kept for its refresh token.
+- `Db/RefreshTokenRotationTest` — a refresh token works once and replaces the
+  access token; presented a second time it revokes the whole authorization;
+  an access token past its lifetime is refused while its refresh token still
+  works; revoking the refresh token signs the app out.
 
 - `Atproto/LoggedInOnlyPostTest` — a Bluesky post whose author carries the
   `!no-unauthenticated` self-label, stored through `PostStore`: followers-only

@@ -44,7 +44,7 @@ class AuthorizedAppsControllerTest extends TestCase {
 			->setAuthScopes(['read', 'write'])->setAuthCreation(1757000000)
 			->setLastUpdate(1757800000)->setToken('hashed');
 		$this->clientService->method('getAuthorizationsOf')->with('alice')->willReturn([$tusky]);
-		$this->clientService->method('expiresAt')->willReturn(1757000000 + 365 * 86400);
+		$this->clientService->method('signsOutAt')->willReturn(1757000000 + 365 * 86400);
 
 		$response = $this->controller()->index();
 

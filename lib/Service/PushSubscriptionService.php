@@ -182,6 +182,31 @@ class PushSubscriptionService {
 	}
 
 	/**
+	 * Moves the subscription bound to one access token to the token that
+	 * replaced it, as a refresh does.
+	 *
+	 * @return bool whether there was one to move
+	 */
+	public function rebind(string $userId, string $token, string $newToken, string $newAccessToken): bool {
+		if (!$this->hasAny($userId)) {
+			return false;
+		}
+
+		return $this->mutate($userId, function (array &$subscriptions) use ($token, $newToken, $newAccessToken): bool {
+			foreach ($subscriptions as $id => $subscription) {
+				if (hash_equals($subscription['token'], $token)) {
+					$subscriptions[$id]['token'] = $newToken;
+					$subscriptions[$id]['accessToken'] = $newAccessToken;
+
+					return true;
+				}
+			}
+
+			return false;
+		});
+	}
+
+	/**
 	 * Removes every subscription of the account. Each one is bound to one of
 	 * its OAuth access tokens, so this is what goes with all of them.
 	 */

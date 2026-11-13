@@ -398,6 +398,17 @@ that host that has failed at least once, the abandoned ones included, goes back
 on standby with its attempts reset, at most 500 a press — and says how many it
 queued. It is limited to twenty presses an hour per administrator.
 
+### Mastodon app sign-ins after an upgrade
+
+Refresh tokens came with a lower limit on how long an unused Mastodon app
+stays signed in: 90 days (`token_idle_days`) instead of 355. Tokens issued before
+the upgrade keep working, with two differences: an app nobody has used for 90
+days is signed out by the first background run after the upgrade, and an app
+that held a token from before has no refresh token, so when `token_max_days`
+ends — a year after the grant, as before — it asks the person to sign in once
+more and receives one with the new token. To keep the old idle limit for a
+while, set `token_idle_days` to `355` before upgrading.
+
 ### Stored posts and bios after an upgrade
 
 Post bodies and the bios of cached accounts are stored already cleaned by the
@@ -1449,7 +1460,9 @@ both validate the ranges given here, and every one can be set with `occ`.
 | `rate_limit_user` | `900` | How many client API requests one **signed-in account** may make per window. The routes that fan out — search, the directories, the follow graph — carry limits of their own and Nextcloud enforces those; this is the budget for everything else, which was some three hundred routes with no limit at all. Generous on purpose: it exists to stop a scraper reading the whole instance at machine speed, not to pace an app. One budget for the whole API, not one per route. `0` switches it off, which is what an instance behind its own limiter wants. Federation, the internal queue and the routes that serve bytes (attachments, avatars, emoji, GIFs) are never counted — one public page is forty requests for pictures, and deliveries arrive in bursts from a handful of addresses. |
 | `rate_limit_anon` | `300` | The same budget for a caller with **no account**, counted per address (an IPv6 address by its /64). |
 | `rate_limit_window` | `300` | How long that window is, in seconds. |
-| `token_max_days` | `365` | How many days an OAuth token works from the moment it was granted, **however much it is used**. A token idle for a year stops working anyway; this is about one in use, which used to live for ever — every request kept it alive, so a token copied off a phone lived as long as whoever held the copy kept using it. Past it the app is signed out and the person signs in again; there are no refresh tokens. Each person sees when under **Settings → Authorized apps**. `0` lets a token in use live for ever. |
+| `token_max_days` | `365` | How many days an OAuth access token works from the moment it was issued, **however much it is used**, for an app that has never refreshed it. Almost every Mastodon app is one of those — Mastodon itself issues tokens that never expire and no refresh tokens, so the apps never learned to refresh — and for them this is how often they ask the person to sign in again; a year keeps that to once a year, as before. An app that refreshes is not affected: past this its access token is refused, it refreshes, and from then on `refreshed_token_hours` applies. Each person sees when an app signs out by itself under **Settings → Apps and account → Authorized apps**. `0` lets a token in use live for ever. |
+| `token_idle_days` | `90` | How many days an app may go **unused** — no request with its access token, no refresh — before it is signed out and its push subscription removed. Every use moves the date on, so an app in daily use never meets it; a phone in a drawer does. At least `1`. |
+| `refreshed_token_hours` | `24` | How many hours an access token works when it was issued by a **refresh**. An app that has refreshed once has shown that it renews its token by itself, so its tokens can be short-lived: a token copied off the device stops working within this, and the app does not notice. The refresh token itself is rotated on every use, and one used twice signs the app out. `0` counts these tokens by `token_max_days` like any other. |
 | `follow_limit` | `100` | How many follows **one account** may send in an hour. A compromised account, or one running a script, can fan out follows to thousands of servers from this instance's address in a few minutes — every one a signed request this instance is answerable for. An hour rather than a day because what this catches is a burst, and high enough that importing a follow list from another server still goes through. Counted from the rows, so it holds on an instance with no memcache. `0` is no limit. |
 | `atproto_opaque_records` | `10000` | How many records **one account** may keep in its Bluesky repository in collections Aloha Social has no role for — anything other than posts, likes, reposts, follows, blocks, the profile, the chat setting, lists, list items, starter packs, feed generators, gates and profile links. Apps can write such records and this server stores and publishes them as written, so without a cap one app could fill the repository and every relay copying it. A write past the cap is refused with an `InvalidRequest` error naming the limits; deleting such records stays possible. Records brought by a move are counted but never refused. `0` is no limit. |
 | `atproto_opaque_mb` | `50` | The same cap in megabytes: the total size of those records, as stored. `0` is no limit. |

@@ -1244,6 +1244,76 @@ class OAuthControllerTest extends TestCase {
 		], $response->getData());
 	}
 
+	public function testTokenAnswersACodeExchangeWithARefreshTokenAndItsLifetime(): void {
+		$client = $this->knownClient();
+		$client->setAuthScopes(['read'])->setCreation(1700000000);
+		$this->clientService->method('exchangeCode')
+			->willReturnCallback(static fn (SocialClient $c): SocialClient => $c->setToken('bearer-token')->setRefreshToken('refresh-token'));
+		$this->clientService->method('expiresIn')->willReturn(31536000);
+
+		$data = $this->controller->token(self::OOB, 'authorization_code', 'client-1', 'secret', 'auth-code-1')->getData();
+
+		$this->assertSame('refresh-token', $data['refresh_token']);
+		$this->assertSame(31536000, $data['expires_in']);
+	}
+
+	public function testTokenRefreshesWithoutARedirectUri(): void {
+		$client = $this->knownClient();
+		$client->setCreation(1700000000);
+		$confirmations = [];
+		$this->clientService->method('confirmData')->willReturnCallback(function (SocialClient $c, array $data) use (&$confirmations): void {
+			$confirmations[] = $data;
+		});
+		$this->clientService->expects($this->once())->method('refresh')
+			->with($this->identicalTo($client), 'old-refresh', 'read')
+			->willReturnCallback(static fn (SocialClient $c): SocialClient => $c->setToken('new-access')->setRefreshToken('new-refresh')->setAuthScopes(['read']));
+		$this->clientService->method('expiresIn')->willReturn(86400);
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret', '', '', '', 'old-refresh', 'read');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([
+			'access_token' => 'new-access',
+			'token_type' => 'Bearer',
+			'scope' => 'read',
+			'created_at' => 1700000000,
+			'expires_in' => 86400,
+			'refresh_token' => 'new-refresh',
+		], $response->getData());
+		$this->assertSame([['client_secret' => 'secret']], $confirmations);
+	}
+
+	public function testTokenRequiresARefreshTokenForTheRefreshGrant(): void {
+		$this->knownClient();
+		$this->clientService->expects($this->never())->method('refresh');
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_request', $response->getData()['error']);
+	}
+
+	public function testTokenAnswersASpentRefreshTokenWithInvalidGrant(): void {
+		$this->knownClient();
+		$this->clientService->method('refresh')->willThrowException(new InvalidGrantException('unknown refresh_token'));
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret', '', '', '', 'spent');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_grant', $response->getData()['error']);
+		$this->assertTrue($response->isThrottled());
+	}
+
+	public function testTokenAnswersAWiderScopeOnARefreshWithInvalidScope(): void {
+		$this->knownClient();
+		$this->clientService->method('refresh')->willThrowException(new \OCA\Social\Exceptions\InvalidScopeException('scope exceeds what was granted'));
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret', '', '', '', 'old-refresh', 'admin:write');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_scope', $response->getData()['error']);
+	}
+
 	public function testTokenRejectsUnknownClientIds(): void {
 		$this->clientService->method('getFromClientId')->willThrowException(new ClientNotFoundException());
 
@@ -1570,7 +1640,7 @@ class OAuthControllerTest extends TestCase {
 
 		$data = $this->controller->oauthMetadata()->getData();
 
-		$this->assertSame(['authorization_code', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code'], $data['grant_types_supported']);
+		$this->assertSame(['authorization_code', 'client_credentials', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'], $data['grant_types_supported']);
 		$this->assertSame(['S256'], $data['code_challenge_methods_supported']);
 		$this->assertSame(
 			['client_secret_post', 'client_secret_basic'], $data['token_endpoint_auth_methods_supported']

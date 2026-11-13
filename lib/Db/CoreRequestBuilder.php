@@ -36,6 +36,7 @@ class CoreRequestBuilder {
 	public const TABLE_CACHE_DOCUMENTS = 'social_cache_doc';
 	public const TABLE_CLIENT = 'social_client';
 	public const TABLE_CLIENT_AUTH = 'social_client_auth';
+	public const TABLE_CLIENT_REFRESH_SPENT = 'social_client_refresh_spent';
 	public const TABLE_EMOJI = 'social_emoji';
 	public const TABLE_GIFS = 'social_gif';
 	public const TABLE_FOLLOWED_TAGS = 'social_followed_tag';
@@ -722,8 +723,17 @@ class CoreRequestBuilder {
 			'scopes',
 			'code',
 			'token',
+			'refresh_token',
+			'token_creation',
+			'refresh_count',
 			'creation',
 			'last_update'
+		],
+		self::TABLE_CLIENT_REFRESH_SPENT => [
+			'id',
+			'auth_id',
+			'token',
+			'creation'
 		],
 		self::TABLE_ACCESS_BLOCKS => [
 			'id',
