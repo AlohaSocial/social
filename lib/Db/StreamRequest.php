@@ -21,6 +21,7 @@ use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Security\HtmlSanitizer;
 use OCA\Social\Service\CacheDocumentService;
@@ -183,12 +184,7 @@ class StreamRequest extends StreamRequestBuilder {
 			// stored the poll with all four fields at their defaults, so a
 			// poll never reached a hashtag timeline
 			if ($stream instanceof Note) {
-				$attachments = [];
-				foreach ($stream->getAttachments() as $item) {
-					$attachments[] = $item->asLocal(); // get attachment ready for local
-				}
-
-				$encoded = (string)json_encode($attachments, JSON_UNESCAPED_SLASHES);
+				$encoded = self::attachmentsColumn($stream->getAttachments());
 				$qb->setValue('hashtags', $qb->createNamedParameter(json_encode($stream->getHashtags())))
 					->setValue('attachments', $qb->createNamedParameter($encoded))
 					// what kind of media this is, decided once here rather than
@@ -286,6 +282,21 @@ class StreamRequest extends StreamRequestBuilder {
 		}
 	}
 
+	/**
+	 * The `attachments` column for these attachments: always the client
+	 * entity (MediaAttachment::asLocal()), with its local id and Mastodon type,
+	 * whichever format the attachments were built to be exported in. Every
+	 * read of the post, and the next edit naming its media ids, relies on it.
+	 *
+	 * @param MediaAttachment[] $attachments
+	 */
+	public static function attachmentsColumn(array $attachments): string {
+		return (string)json_encode(
+			array_map(static fn (MediaAttachment $attachment): array => $attachment->asLocal(), array_values($attachments)),
+			JSON_UNESCAPED_SLASHES
+		);
+	}
+
 	public function update(Stream $stream, bool $generateDest = false): void {
 		$qb = $this->getStreamUpdateSql();
 
@@ -326,7 +337,7 @@ class StreamRequest extends StreamRequestBuilder {
 			));
 		}
 		if ($stream instanceof Note) {
-			$encoded = (string)json_encode($stream->getAttachments(), JSON_UNESCAPED_SLASHES);
+			$encoded = self::attachmentsColumn($stream->getAttachments());
 			$qb->set('hashtags', $qb->createNamedParameter(json_encode($stream->getHashtags(), JSON_UNESCAPED_SLASHES)));
 			$qb->set('attachments', $qb->createNamedParameter($encoded));
 			$qb->set('media_kind', $qb->createNamedParameter(
