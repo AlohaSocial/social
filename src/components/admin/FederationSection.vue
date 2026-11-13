@@ -76,6 +76,9 @@
 							<th>{{ t('social', 'Deliveries given up on') }}</th>
 							<th>{{ t('social', 'Most attempts so far') }}</th>
 							<th>{{ t('social', 'Last attempt') }}</th>
+							<th v-if="administrator">
+								<span class="hidden-visually">{{ t('social', 'Actions') }}</span>
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -84,32 +87,58 @@
 							<td>{{ instance.requests }}</td>
 							<td>{{ instance.tries }} / {{ federation.maxTries }}</td>
 							<td>{{ lastAttempt(instance.last) }}</td>
+							<td v-if="administrator">
+								<span v-if="instance.host in retried" class="federation__retried">
+									{{ n('social', '%n delivery queued again', '%n deliveries queued again', retried[instance.host]) }}
+								</span>
+								<NcButton
+									v-else
+									size="small"
+									:aria-label="t('social', 'Retry deliveries to {instance}', { instance: instance.host })"
+									:disabled="retrying !== ''"
+									@click="retry(instance.host)">
+									<template v-if="retrying === instance.host" #icon>
+										<NcLoadingIcon :size="20" />
+									</template>
+									{{ t('social', 'Retry deliveries') }}
+								</NcButton>
+							</td>
 						</tr>
 					</tbody>
 				</table>
 			</div>
 
 			<p class="social-admin__hint">
-				{{ t('social', 'Once the reason is fixed, "occ social:queue:retry --instance HOST" puts them back in the queue.') }}
+				{{ administrator ? t('social', 'Once the reason is fixed, "Retry deliveries" gives every failed delivery to that instance the full run of attempts again.') : t('social', 'Once the reason is fixed, an administrator can queue them again.') }}
 			</p>
 		</template>
 	</div>
 </template>
 
 <script>
+import axios from '@nextcloud/axios'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import { federationRetryUrl } from '../../services/adminApi.js'
+import { showError, showSuccess } from '../../services/toast.js'
+import { errorOf, errorSentence } from '../../utils/serverError.js'
 
 /**
  * What the outbound queue is doing.
  *
- * Read-only, and the only section whose whole content arrives with the page:
- * the summary is one pass over the queue and there is nothing here to write.
+ * The summary arrives with the page: it is one pass over the queue. The one
+ * thing it writes is the Retry deliveries button beside an instance given up
+ * on, for an administrator, which does what `occ social:queue:retry
+ * --instance` does.
  */
 export default {
 	name: 'FederationSection',
 
 	components: {
+		NcButton,
+		NcLoadingIcon,
 		NcNoteCard,
 	},
 
@@ -119,6 +148,21 @@ export default {
 			type: Object,
 			required: true,
 		},
+
+		/** whether the viewer administers the server, which retrying needs */
+		administrator: {
+			type: Boolean,
+			default: false,
+		},
+	},
+
+	data() {
+		return {
+			/** the host being retried, or '' */
+			retrying: '',
+			/** @type {Record<string, number>} how many deliveries each retried host had queued again */
+			retried: {},
+		}
 	},
 
 	computed: {
@@ -156,6 +200,29 @@ export default {
 		n,
 
 		/**
+		 * Queues every failed delivery to one instance again.
+		 *
+		 * @param {string} host the instance
+		 * @return {Promise<void>}
+		 */
+		async retry(host) {
+			this.retrying = host
+			try {
+				const { data } = await axios.post(federationRetryUrl(), { instance: host })
+				this.retried = { ...this.retried, [host]: data.queued }
+				showSuccess(data.limited
+					? n('social', '%n delivery queued again; press again for the rest.', '%n deliveries queued again; press again for the rest.', data.queued)
+					: n('social', '%n delivery queued again.', '%n deliveries queued again.', data.queued))
+			} catch (error) {
+				showError(error?.response?.status === 429
+					? errorSentence('rate-limited')
+					: errorOf(error, t('social', 'Could not queue the deliveries again')))
+			} finally {
+				this.retrying = ''
+			}
+		},
+
+		/**
 		 * @param {number} last seconds since the epoch, or 0 for never
 		 * @return {string} the moment, in UTC to the minute
 		 */
@@ -171,5 +238,9 @@ export default {
 <style lang="scss" scoped>
 .federation__counts {
 	margin-block-end: calc(var(--default-grid-baseline) * 2);
+}
+
+.federation__retried {
+	color: var(--color-text-maxcontrast);
 }
 </style>

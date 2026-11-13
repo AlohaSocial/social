@@ -14,16 +14,19 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\SettingRefusedException;
 use OCA\Social\Service\NotificationPolicyService;
+use OCA\Social\Service\QueueRetryService;
 use OCA\Social\Service\RelayService;
 use OCA\Social\Service\ServerSettingsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 
 /**
- * The Server and About this server cards of the Social settings page.
+ * The Server and About this server cards of the Social settings page, the
+ * relays, and the Retry button of the Deliveries card.
  *
  * Administrators only, and not by accident: this controller carries none of
  * the relaxing attributes, so the server dispatches it for an administrator
@@ -39,6 +42,7 @@ class ServerSettingsController extends Controller {
 		private ServerSettingsService $serverSettingsService,
 		private RelayService $relayService,
 		private NotificationPolicyService $notificationPolicyService,
+		private QueueRetryService $queueRetryService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -197,5 +201,31 @@ class ServerSettingsController extends Controller {
 		}
 
 		return new DataResponse([], Http::STATUS_OK);
+	}
+
+	/**
+	 * Queues every failing delivery to one instance for a full run of
+	 * retries again, the ones given up on included — what `occ
+	 * social:queue:retry --instance HOST --force` does, through the same
+	 * service, and bounded by the same limit.
+	 *
+	 * A decision about the server rather than about a report, like the
+	 * relays: what goes out of the delivery queue and how often. Rate-limited,
+	 * because each press walks the queue table looking for the host's rows.
+	 *
+	 * @param string $instance the host the deliveries were for
+	 */
+	#[UserRateLimit(limit: 20, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/admin/federation/retry')]
+	public function federationRetry(string $instance = ''): DataResponse {
+		$instance = strtolower(trim($instance));
+		if ($instance === '' || preg_match('/^[a-z0-9.:\[\]-]+$/', $instance) !== 1) {
+			return new DataResponse(['error' => 'no such instance'], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(
+			['instance' => $instance] + $this->queueRetryService->retryInstance($instance),
+			Http::STATUS_OK
+		);
 	}
 }

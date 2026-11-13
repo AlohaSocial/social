@@ -662,7 +662,7 @@ export default {
 					group: 'federation',
 					icon: 'IconFederationHealth',
 					component: 'FederationSection',
-					props: { federation: state.federation },
+					props: { federation: state.federation, administrator },
 					title: t('social', 'Deliveries'),
 					lede: t('social', 'Posts, follows and likes on their way to other servers, and the ones that keep failing.'),
 					keywords: t('social', 'federation health queue failing'),

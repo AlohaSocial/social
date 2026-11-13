@@ -15,12 +15,14 @@ use OCA\Social\Exceptions\SettingRefusedException;
 use OCA\Social\Model\Client\NotificationPolicy;
 use OCA\Social\Model\Relay;
 use OCA\Social\Service\NotificationPolicyService;
+use OCA\Social\Service\QueueRetryService;
 use OCA\Social\Service\RelayService;
 use OCA\Social\Service\ServerSettingsService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\IRequest;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -40,6 +42,7 @@ class ServerSettingsControllerTest extends TestCase {
 	private ServerSettingsService|MockObject $serverSettingsService;
 	private RelayService|MockObject $relayService;
 	private NotificationPolicyService|MockObject $notificationPolicyService;
+	private QueueRetryService|MockObject $queueRetryService;
 	private ServerSettingsController $controller;
 	/** @var array<string, mixed> the parameters the request carries */
 	private array $params = [];
@@ -48,10 +51,12 @@ class ServerSettingsControllerTest extends TestCase {
 		$this->serverSettingsService = $this->createMock(ServerSettingsService::class);
 		$this->relayService = $this->createMock(RelayService::class);
 		$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class);
+		$this->queueRetryService = $this->createMock(QueueRetryService::class);
 		$request = $this->createStub(IRequest::class);
 		$request->method('getParams')->willReturnCallback(fn (): array => $this->params);
 		$this->controller = new ServerSettingsController(
-			$request, $this->serverSettingsService, $this->relayService, $this->notificationPolicyService
+			$request, $this->serverSettingsService, $this->relayService, $this->notificationPolicyService,
+			$this->queueRetryService
 		);
 	}
 
@@ -217,5 +222,32 @@ class ServerSettingsControllerTest extends TestCase {
 		$this->relayService->expects($this->once())->method('unsubscribe')->with(3)->willReturn(true);
 
 		$this->assertSame(Http::STATUS_OK, $this->controller->relayUnsubscribe(3)->getStatus());
+	}
+
+	/** The Retry button does what `occ social:queue:retry --instance` does, through the same service. */
+	public function testRetryingAnInstanceQueuesItsDeliveriesAgain(): void {
+		$this->queueRetryService->expects($this->once())->method('retryInstance')
+			->with('gone.example')
+			->willReturn(['queued' => 12, 'limited' => false]);
+
+		$response = $this->controller->federationRetry(' Gone.example ');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['instance' => 'gone.example', 'queued' => 12, 'limited' => false], $response->getData());
+	}
+
+	public function testRetryingSomethingThatIsNoHostIsRefused(): void {
+		$this->queueRetryService->expects($this->never())->method('retryInstance');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->federationRetry('')->getStatus());
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->federationRetry('a b')->getStatus());
+	}
+
+	/** Each press walks the queue table, so a moderator's click-happy afternoon is bounded. */
+	public function testRetryingIsRateLimited(): void {
+		$attributes = (new \ReflectionMethod(ServerSettingsController::class, 'federationRetry'))
+			->getAttributes(UserRateLimit::class);
+
+		$this->assertCount(1, $attributes);
 	}
 }

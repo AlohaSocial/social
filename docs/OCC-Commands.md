@@ -590,7 +590,9 @@ it was abandoned, so the queue looked healthiest exactly when a peer had been
 lost for good. The count covers the last seven days, which is how long a
 finished row is kept, and is followed by the same per-instance table under
 "given up". `occ social:queue:retry --instance HOST` puts those deliveries back
-in the queue once the reason they failed has been dealt with.
+in the queue once the reason they failed has been dealt with; the **Retry
+deliveries** button beside each of those instances on the admin page does the
+same.
 
 ---
 

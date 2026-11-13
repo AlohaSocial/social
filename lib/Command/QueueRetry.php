@@ -10,9 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Command;
 
 use OCA\Social\Db\CoreRequestBuilder;
-use OCA\Social\Model\RequestQueue;
-use OCP\DB\QueryBuilder\IQueryBuilder;
-use OCP\IDBConnection;
+use OCA\Social\Service\QueueRetryService;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -34,35 +32,12 @@ use Symfony\Component\Console\Question\ConfirmationQuestion;
  * peer that was down for three days. Those deliveries are still in the table
  * for a week after they were abandoned, and this is what puts them back.
  *
- * It reads and writes the queue tables directly rather than through the queue
- * services, in the same way `social:debug:benchmark` does — the services have no
- * "reset this row" operation, and inventing one for a maintenance command
- * would put a footgun in the delivery path.
+ * The selecting and resetting is `QueueRetryService`, which the Retry button
+ * on the admin page's Deliveries card uses as well.
  */
 class QueueRetry extends SocialCommand {
-	/** how many rows one run will touch unless --limit says otherwise */
-	private const DEFAULT_LIMIT = 500;
-
-	/**
-	 * How many rows are read at a time while looking for one instance's.
-	 *
-	 * The host a delivery was for lives inside the JSON `instance` column, so
-	 * `--instance` is matched in PHP — the same reason `FederationHealthService`
-	 * groups by host in PHP. Reading the table in pages keeps that bounded: a
-	 * queue with a hundred thousand rows for other servers costs page-sized
-	 * reads, not one enormous one.
-	 */
-	private const SCAN_PAGE = 1000;
-
-	/**
-	 * Both queue tables carry the same (id, token, status, tries) shape and
-	 * the same status numbering — StreamQueue::STATUS_* and
-	 * RequestQueue::STATUS_* are 0/1/9 in both — so one set of constants
-	 * serves both.
-	 */
-
 	public function __construct(
-		private IDBConnection $connection,
+		private QueueRetryService $queueRetryService,
 	) {
 		parent::__construct();
 	}
@@ -85,7 +60,7 @@ class QueueRetry extends SocialCommand {
 			)
 			->addOption(
 				'limit', '', InputOption::VALUE_REQUIRED,
-				'how many rows to touch at most', (string)self::DEFAULT_LIMIT
+				'how many rows to touch at most', (string)QueueRetryService::DEFAULT_LIMIT
 			)
 			->addOption(
 				'stream', '', InputOption::VALUE_NONE,
@@ -122,7 +97,7 @@ class QueueRetry extends SocialCommand {
 			return 1;
 		}
 
-		$matched = $this->matching($table, $token, $minTries, $limit, $host);
+		$matched = $this->queueRetryService->matching($table, $token, $minTries, $limit, $host);
 		if ($matched === []) {
 			$output->writeln('nothing in <info>' . $table . '</info> matches.');
 
@@ -136,7 +111,9 @@ class QueueRetry extends SocialCommand {
 		}
 
 		$ids = array_map('intval', array_column($matched, 'id'));
-		$touched = $flush ? $this->flush($table, $ids) : $this->retry($table, $ids);
+		$touched = $flush
+			? $this->queueRetryService->flush($table, $ids)
+			: $this->queueRetryService->retry($table, $ids);
 
 		$output->writeln(
 			($flush ? 'dropped ' : 'queued again: ') . $touched . ' row(s).'
@@ -147,114 +124,6 @@ class QueueRetry extends SocialCommand {
 		}
 
 		return 0;
-	}
-
-	/**
-	 * The rows this run would act on.
-	 *
-	 * A successful row (status 9) is left alone: it is history, not a pending
-	 * delivery, and re-queueing it would send the activity a second time. An
-	 * abandoned one (status 8) is not — it is precisely what this command is
-	 * for, a delivery the drain has given up on and that nothing else will
-	 * ever try again.
-	 *
-	 * @param string $host a hostname to restrict to, or '' for all of them
-	 *
-	 * @return list<array<string, mixed>>
-	 */
-	private function matching(string $table, string $token, int $minTries, int $limit, string $host = ''): array {
-		if ($host === '') {
-			return $this->page($table, $token, $minTries, $limit, 0, 'tries');
-		}
-
-		// paged by id rather than ordered by attempts: with the filter in PHP
-		// the run has to be able to say where it got to, and `tries` is not
-		// unique enough to resume on
-		$matched = [];
-		$after = 0;
-		while (count($matched) < $limit) {
-			$rows = $this->page($table, $token, $minTries, self::SCAN_PAGE, $after, 'id');
-			if ($rows === []) {
-				break;
-			}
-
-			$after = (int)$rows[count($rows) - 1]['id'];
-			foreach ($rows as $row) {
-				if ($this->hostOf($row) !== $host) {
-					continue;
-				}
-
-				$matched[] = $row;
-				if (count($matched) >= $limit) {
-					break;
-				}
-			}
-		}
-
-		return $matched;
-	}
-
-	/**
-	 * One page of candidate rows.
-	 *
-	 * @param string $order 'tries' for the worst first, 'id' to walk the table
-	 *
-	 * @return list<array<string, mixed>>
-	 */
-	private function page(string $table, string $token, int $minTries, int $limit, int $after, string $order): array {
-		$qb = $this->connection->getQueryBuilder();
-		$qb->select('id', 'token', 'status', 'tries')
-			->from($table)
-			->andWhere($qb->expr()->neq(
-				'status',
-				$qb->createNamedParameter(RequestQueue::STATUS_SUCCESS, IQueryBuilder::PARAM_INT)
-			))
-			->setMaxResults($limit);
-
-		if ($table === CoreRequestBuilder::TABLE_REQUEST_QUEUE) {
-			// only the delivery queue knows what it was delivering to
-			$qb->addSelect('instance');
-		}
-
-		if ($order === 'tries') {
-			$qb->orderBy('tries', 'desc');
-		}
-		$qb->addOrderBy('id', 'asc');
-
-		if ($after > 0) {
-			$qb->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($after, IQueryBuilder::PARAM_INT)));
-		}
-
-		if ($token !== '') {
-			$qb->andWhere($qb->expr()->eq('token', $qb->createNamedParameter($token)));
-		} else {
-			$qb->andWhere($qb->expr()->gte(
-				'tries',
-				$qb->createNamedParameter($minTries, IQueryBuilder::PARAM_INT)
-			));
-		}
-
-		$cursor = $qb->executeQuery();
-		$rows = $cursor->fetchAll();
-		$cursor->closeCursor();
-
-		return $rows;
-	}
-
-	/**
-	 * The host one queued delivery was for, lower-cased, or '' when the row
-	 * does not say — which is what a row written before the column held an
-	 * uri, or one whose JSON cannot be read, looks like.
-	 *
-	 * @param array<string, mixed> $row
-	 */
-	private function hostOf(array $row): string {
-		$instance = json_decode((string)($row['instance'] ?? ''), true);
-		if (!is_array($instance) || !is_string($instance['uri'] ?? null)) {
-			return '';
-		}
-
-		return strtolower(parse_url($instance['uri'], PHP_URL_HOST) ?: '');
 	}
 
 	/**
@@ -305,42 +174,5 @@ class QueueRetry extends SocialCommand {
 		$output->writeln('cancelled, the queue was left alone.');
 
 		return false;
-	}
-
-	/**
-	 * Back to standby with the attempt count cleared, so the row gets the full
-	 * run of retries again rather than being abandoned on its next failure.
-	 *
-	 * @param list<int> $ids
-	 */
-	private function retry(string $table, array $ids): int {
-		$touched = 0;
-		foreach (array_chunk($ids, 100) as $chunk) {
-			$qb = $this->connection->getQueryBuilder();
-			$qb->update($table)
-				->set('status', $qb->createNamedParameter(RequestQueue::STATUS_STANDBY, IQueryBuilder::PARAM_INT))
-				->set('tries', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
-				->where($qb->expr()->in('id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)));
-
-			$touched += $qb->executeStatement();
-		}
-
-		return $touched;
-	}
-
-	/**
-	 * @param list<int> $ids
-	 */
-	private function flush(string $table, array $ids): int {
-		$touched = 0;
-		foreach (array_chunk($ids, 100) as $chunk) {
-			$qb = $this->connection->getQueryBuilder();
-			$qb->delete($table)
-				->where($qb->expr()->in('id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)));
-
-			$touched += $qb->executeStatement();
-		}
-
-		return $touched;
 	}
 }

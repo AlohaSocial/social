@@ -99,6 +99,15 @@ export function relaysUrl(path = '') {
 }
 
 /**
+ * Queues the failing deliveries to one instance again; administrators only.
+ *
+ * @return {string} the whole URL
+ */
+export function federationRetryUrl() {
+	return generateUrl('/apps/social/admin/federation/retry')
+}
+
+/**
  * The Bluesky card: its settings, its checks, and the relays it tells.
  *
  * @param {string} [path] appended below /apps/social/admin/bluesky

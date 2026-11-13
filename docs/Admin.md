@@ -391,7 +391,12 @@ occ social:queue:retry --flush --min-tries 16   # or drop them, for a peer that 
 
 The **Deliveries** section of the Aloha Social settings names the instances
 the failures are stacked against, with the highest attempt count so far and
-when each was last tried.
+when each was last tried. Each instance given up on has a **Retry deliveries**
+button for an administrator (not a delegate): once the reason is fixed, it does
+what `occ social:queue:retry --instance HOST --force` does — every delivery to
+that host that has failed at least once, the abandoned ones included, goes back
+on standby with its attempts reset, at most 500 a press — and says how many it
+queued. It is limited to twenty presses an hour per administrator.
 
 ### Stored posts and bios after an upgrade
 
