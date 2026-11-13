@@ -39,6 +39,7 @@ use OCA\Social\Listeners\ExternalUserStatusListener;
 use OCA\Social\Listeners\FileCommentsListener;
 use OCA\Social\Listeners\FilesScriptsListener;
 use OCA\Social\Listeners\GroupListListener;
+use OCA\Social\Listeners\PasswordUpdatedListener;
 use OCA\Social\Listeners\ProfileSectionListener;
 use OCA\Social\Listeners\UserAccountListener;
 use OCA\Social\Listeners\UserDeletedListener;
@@ -87,6 +88,7 @@ use OCP\Group\Events\UserRemovedEvent;
 use OCP\IGroupManager;
 use OCP\IUserManager;
 use OCP\Profile\BeforeTemplateRenderedEvent;
+use OCP\User\Events\PasswordUpdatedEvent;
 use OCP\User\Events\UserChangedEvent;
 use OCP\User\Events\UserDeletedEvent;
 use OCP\User\Events\UserEnumerationFilterEvent;
@@ -141,6 +143,8 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(UserUpdatedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserChangedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
+		// a changed or reset password signs every OAuth app out of the account
+		$context->registerEventListener(PasswordUpdatedEvent::class, PasswordUpdatedListener::class);
 		// a public post goes to Bluesky as it is made, edited or deleted
 		$context->registerEventListener(PostPublishedEvent::class, AtprotoPostListener::class);
 		$context->registerEventListener(PostEditedEvent::class, AtprotoPostListener::class);

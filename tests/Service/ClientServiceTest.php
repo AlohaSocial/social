@@ -33,6 +33,7 @@ class ClientServiceTest extends TestCase {
 	private ClientService $service;
 	private ConfigService $configService;
 	private PushSubscriptionService|MockObject $pushSubscriptions;
+	private \OCA\Social\Db\DeviceAuthorizationRequest|MockObject $deviceAuthorizations;
 	/** What `token_max_days` reads as. */
 	private int $maxDays = 365;
 	/** @var string[] the accounts an administrator disabled */
@@ -43,7 +44,7 @@ class ClientServiceTest extends TestCase {
 		$this->clientAuthRequest = $this->createMock(ClientAuthRequest::class);
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->pushSubscriptions = $this->createMock(PushSubscriptionService::class);
-		$deviceAuthorizations = $this->createMock(\OCA\Social\Db\DeviceAuthorizationRequest::class);
+		$this->deviceAuthorizations = $this->createMock(\OCA\Social\Db\DeviceAuthorizationRequest::class);
 		$this->disabled = [];
 		$enabledUsers = $this->createStub(EnabledUserService::class);
 		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => !in_array($userId, $this->disabled, true));
@@ -55,7 +56,7 @@ class ClientServiceTest extends TestCase {
 			$this->clientAuthRequest,
 			$this->configService,
 			$this->pushSubscriptions,
-			$deviceAuthorizations,
+			$this->deviceAuthorizations,
 			new \Psr\Log\NullLogger(),
 			$enabledUsers,
 		);
@@ -85,6 +86,36 @@ class ClientServiceTest extends TestCase {
 			->willReturn(3);
 
 		$this->assertSame(3, $this->service->sweep());
+	}
+
+	/**
+	 * A changed password signs every app out of the account: the
+	 * authorizations with their tokens and codes, the device codes it
+	 * approved, and the push subscriptions bound to the tokens.
+	 */
+	public function testRevokingEverythingOfAnAccountTakesTokensDeviceCodesAndPush(): void {
+		$this->clientAuthRequest->method('getByUser')->with('alice')
+			->willReturn([$this->registeredClient(), $this->registeredClient()]);
+		$this->clientAuthRequest->expects($this->once())->method('deleteRelatedId')->with('alice');
+		$this->deviceAuthorizations->expects($this->once())->method('deleteByUser')->with('alice');
+		$this->pushSubscriptions->expects($this->once())->method('deleteAll')->with('alice');
+
+		$this->assertSame(2, $this->service->revokeAllOf('alice'));
+	}
+
+	public function testAPushFailureDoesNotKeepTheTokens(): void {
+		$this->clientAuthRequest->method('getByUser')->willReturn([]);
+		$this->pushSubscriptions->method('deleteAll')->willThrowException(new Exception('crypto'));
+		$this->clientAuthRequest->expects($this->once())->method('deleteRelatedId')->with('alice');
+
+		$this->assertSame(0, $this->service->revokeAllOf('alice'));
+	}
+
+	public function testRevokingForNobodyTouchesNothing(): void {
+		$this->clientAuthRequest->expects($this->never())->method('deleteRelatedId');
+		$this->deviceAuthorizations->expects($this->never())->method('deleteByUser');
+
+		$this->assertSame(0, $this->service->revokeAllOf(''));
 	}
 
 	public function testCreateAppGeneratesCredentialsAndSaves(): void {

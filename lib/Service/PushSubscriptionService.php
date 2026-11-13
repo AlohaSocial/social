@@ -181,6 +181,20 @@ class PushSubscriptionService {
 		});
 	}
 
+	/**
+	 * Removes every subscription of the account. Each one is bound to one of
+	 * its OAuth access tokens, so this is what goes with all of them.
+	 */
+	public function deleteAll(string $userId): void {
+		if (!$this->hasAny($userId)) {
+			return;
+		}
+
+		$this->mutate($userId, static function (array &$subscriptions): void {
+			$subscriptions = [];
+		});
+	}
+
 	/** @return array<string, bool> */
 	private static function normalizeAlerts(array $alerts): array {
 		$normalized = [];

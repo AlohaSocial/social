@@ -343,6 +343,38 @@ class ClientService {
 	}
 
 	/**
+	 * Signs every application out of one account: all its authorizations,
+	 * with their access tokens and unexchanged codes, the device codes it
+	 * approved and nobody has collected yet, and the Web Push subscriptions
+	 * bound to those tokens. App registrations and app tokens are the
+	 * instance's and stay.
+	 *
+	 * A streaming connection opened with one of the tokens is closed by the
+	 * daemon at its next token check (`MastodonStreamingDaemon`).
+	 *
+	 * @return int how many authorizations were taken back
+	 */
+	public function revokeAllOf(string $userId): int {
+		if ($userId === '') {
+			return 0;
+		}
+
+		$count = count($this->clientAuthRequest->getByUser($userId));
+		$this->clientAuthRequest->deleteRelatedId($userId);
+		$this->deviceAuthorizations->deleteByUser($userId);
+		try {
+			$this->pushSubscriptions->deleteAll($userId);
+		} catch (Throwable $e) {
+			$this->logger->error('Could not remove the Mastodon Web Push subscriptions of a signed-out account', [
+				'user' => $userId,
+				'exception' => $e,
+			]);
+		}
+
+		return $count;
+	}
+
+	/**
 	 * The `client_credentials` grant (RFC 6749 §4.4): a token for the app
 	 * itself, bound to no account.
 	 *

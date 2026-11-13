@@ -82,6 +82,19 @@ class PushSubscriptionServiceTest extends TestCase {
 		$this->assertSame([], $service->forUser('alice'));
 	}
 
+	public function testDeletingAllRemovesEverySubscriptionOfTheAccount(): void {
+		$service = $this->service();
+		$service->deleteAll('alice');
+		$this->assertSame('', $this->stored, 'nothing to remove writes nothing');
+
+		$service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/one', str_repeat('A', 87), str_repeat('b', 22), [], 'all');
+		$service->save('alice', 'token-two', 'bearer-two', 'https://push.example.net/two', str_repeat('C', 87), str_repeat('d', 22), [], 'all');
+		$service->deleteAll('alice');
+
+		$this->assertSame('', $this->stored);
+		$this->assertSame([], $service->all('alice'));
+	}
+
 	public function testReplacingATokenKeepsItsIdAndEnforcesTheAccountLimit(): void {
 		$service = $this->service();
 		$first = $service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/one', str_repeat('A', 87), str_repeat('b', 22), [], 'all');

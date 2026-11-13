@@ -1153,7 +1153,11 @@ hand, it is picked up as one.
   in again the next time you open it. It is the page to open after losing a
   phone, and the only page where signing an app out does not depend on still
   having the app. While nothing is signed in, it shows the *Use it in an app*
-  card instead.
+  card instead. Changing or resetting your Nextcloud password signs every app
+  out at once — Mastodon apps and Bluesky apps that signed in through the
+  browser — and stops their push notifications; each asks you to sign in
+  again. Your Nextcloud sessions and app passwords, and your Bluesky app
+  passwords, are not affected by this.
 - **Export and migration.** The whole move, in order, is one page:
   [Moving.md](Moving.md). **Migration** (in the account menu at the foot of
   the sidebar, a page of its own) opens with three choices, and each shows

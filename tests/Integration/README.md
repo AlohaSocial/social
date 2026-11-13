@@ -43,6 +43,10 @@ to stop.
   plaintext tokens resolve through the hashed lookup, re-authorization
   invalidates the old token, revocation works, a legacy plaintext row is
   refused and the hashing migration converts it.
+- `Db/PasswordChangeSignOutTest` — `IUser::setPassword()` reaches
+  `PasswordUpdatedListener` through the real dispatcher: the account's token
+  is refused and its authorizations are gone, while another account's
+  authorization of the same app keeps working.
 - `Db/ClientAuthMultiUserTest` — two accounts authorize one app without
   signing each other out; two app tokens, or two authorizations by one
   account, written at the same moment both succeed and the last one holds.
