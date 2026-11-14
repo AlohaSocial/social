@@ -150,7 +150,9 @@ class InstanceService {
 			// account, so v2 names the page a client sends people to instead.
 			->setRegistrations($open)
 			->setApprovalRequired($open && $this->externalUserService->mode() === ExternalUserService::MODE_APPROVAL)
-			->setInvitesEnabled($this->externalUserService->usersMayInvite())
+			// an invitation can be used only while there is room, whatever the
+			// mode; "users may invite" alone says nothing when the sign-up is off
+			->setInvitesEnabled($this->externalUserService->hasRoom() && $this->externalUserService->usersMayInvite())
 			->setRegistrationsUrl($open ? $this->urlGenerator->linkToRouteAbsolute('social.Signup.page') : null)
 			->setUrls($this->urls($uri))
 			->setStats($this->stats())

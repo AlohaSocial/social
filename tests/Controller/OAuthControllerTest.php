@@ -222,7 +222,6 @@ class OAuthControllerTest extends TestCase {
 
 	public function testNodeinfo2FallsBackToAppDefaultsWithoutAnInstance(): void {
 		$this->instanceService->method('getLocal')->willThrowException(new InstanceDoesNotExistException());
-		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturn(false);
 		$this->configService->method('getAppValue')->with('installed_version')->willReturn('0.10.1');
 		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/apps/social/');
 
@@ -234,7 +233,10 @@ class OAuthControllerTest extends TestCase {
 			'{"users":{}}', json_encode($data['usage']),
 			'an object with the users member the NodeInfo schema requires, not an empty list'
 		);
-		$this->assertFalse($data['openRegistrations']);
+		$this->assertTrue(
+			$data['openRegistrations'],
+			'the sign-up as it stands, with or without the stored instance row'
+		);
 	}
 
 	public function testNodeinfoRegistrationStatusUsesSocialSignupInsteadOfNextcloudSignup(): void {
