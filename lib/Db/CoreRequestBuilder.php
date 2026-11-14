@@ -86,7 +86,6 @@ class CoreRequestBuilder {
 	public const TABLE_MEDIA_TAGS = 'social_media_tag';
 	public const TABLE_FILE_POSTS = 'social_file_post';
 	public const TABLE_FILE_COMMENTS = 'social_file_comment';
-	public const TABLE_PORTFOLIOS = 'social_portfolio';
 	public const TABLE_TEAMS = 'social_team';
 	public const TABLE_TEAM_POSTS = 'social_team_post';
 	public const TABLE_TREND_REVIEW = 'social_trend_review';
@@ -448,22 +447,6 @@ class CoreRequestBuilder {
 			'reply_id',
 			'reply_id_prim',
 			'outbound',
-			'creation'
-		],
-		self::TABLE_PORTFOLIOS => [
-			'id',
-			'actor_id',
-			'actor_id_prim',
-			'active',
-			'title',
-			'intro',
-			'layout',
-			'source',
-			'collection_id',
-			'show_captions',
-			'show_places',
-			'show_dates',
-			'show_avatar',
 			'creation'
 		],
 		self::TABLE_TEAMS => [
@@ -1283,9 +1266,9 @@ class CoreRequestBuilder {
 	 *
 	 * The request object outlives one read — it is a service — so a reader set
 	 * for an earlier query is still set for the next one. A path that has to
-	 * answer as the anonymous internet does (the portfolio page, which is
-	 * public and must only ever show public posts) says so rather than hoping
-	 * nothing before it set a viewer.
+	 * answer as the anonymous internet does (a collection read by a signed-out
+	 * visitor, which must only ever show public posts) says so rather than
+	 * hoping nothing before it set a viewer.
 	 */
 	public function resetViewer(): void {
 		$this->viewer = null;

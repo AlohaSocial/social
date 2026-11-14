@@ -1225,14 +1225,14 @@ class ActivityPubController extends Controller {
 	 * @throws UrlCloudException
 	 */
 	// The route is in `appinfo/routes.php`, not here. `{token}` matches any
-	// single segment, so it also matches `/@{username}/portfolio` and
-	// `/@{username}/collections` — which belong to `SocialPubController` — and
-	// the first route offered to the matcher wins. Attribute routes of two
-	// *different* controllers are contributed in whatever order the filesystem
-	// hands the directory back, so on some installs this one was offered first
-	// and swallowed both: `resolvePost()` found no post called `portfolio`, and
-	// the reader got "Post not found". See the file for why being last is
-	// something only `appinfo/routes.php` can guarantee.
+	// single segment, so it also matches `/@{username}/collections` — which
+	// belongs to `SocialPubController` — and the first route offered to the
+	// matcher wins. Attribute routes of two *different* controllers are
+	// contributed in whatever order the filesystem hands the directory back,
+	// so on some installs this one was offered first and swallowed it:
+	// `resolvePost()` found no post called `collections`, and the reader got
+	// "Post not found". See the file for why being last is something only
+	// `appinfo/routes.php` can guarantee.
 	public function displayPost(string $username, string $token): Response {
 		try {
 			return $this->fixToken($username, $token);

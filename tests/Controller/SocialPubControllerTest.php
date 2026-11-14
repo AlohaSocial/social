@@ -210,7 +210,6 @@ class SocialPubControllerTest extends TestCase {
 		yield 'actor' => ['actor'];
 		yield 'followers' => ['followers'];
 		yield 'following' => ['following'];
-		yield 'portfolio' => ['portfolio'];
 	}
 
 	#[DataProvider('publicPages')]

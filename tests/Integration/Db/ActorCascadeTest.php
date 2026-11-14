@@ -80,7 +80,6 @@ class ActorCascadeTest extends TestCase {
 		'social_list_member' => [['actor_id' => 'uri', 'actor_id_prim' => 'prim']],
 		'social_media_tag' => [['actor_id' => 'uri', 'actor_id_prim' => 'prim'], ['tagger_id_prim' => 'prim']],
 		'social_mute_expiry' => [['actor_id_prim' => 'prim'], ['object_id_prim' => 'prim']],
-		'social_portfolio' => [['actor_id' => 'uri', 'actor_id_prim' => 'prim']],
 		'social_post_hold' => [['actor_id' => 'uri', 'actor_id_prim' => 'prim']],
 		'social_quote_grant' => [['actor_id' => 'uri']],
 		'social_reaction' => [['actor_id' => 'uri', 'actor_id_prim' => 'prim']],

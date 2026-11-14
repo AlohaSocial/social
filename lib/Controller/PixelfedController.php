@@ -20,7 +20,6 @@ use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\MediaTagService;
 use OCA\Social\Service\PixelfedConfigService;
 use OCA\Social\Service\PixelfedService;
-use OCA\Social\Service\PortfolioService;
 use OCA\Social\Service\PostDecorationService;
 use OCA\Social\Service\StoryInteractionService;
 use OCA\Social\Service\StoryService;
@@ -79,7 +78,6 @@ class PixelfedController extends ClientApiController {
 		private StoryService $storyService,
 		private StoryInteractionService $storyInteractionService,
 		private MediaTagService $mediaTagService,
-		private PortfolioService $portfolioService,
 		private TeamService $teamService,
 		private CacheActorService $cacheActorService,
 		private ArchiveService $archiveService,
@@ -423,95 +421,6 @@ class PixelfedController extends ClientApiController {
 			}
 
 			return $response;
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * The viewer's own page of work, turned on or not.
-	 *
-	 * An account that has never opened the editor gets the defaults rather
-	 * than a 404: there is nothing to find, and this is what lets the editor
-	 * render without a "create it first" step nobody needs.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1.1/portfolio')]
-	public function portfolioOwn(): DataResponse {
-		try {
-			$this->initViewer(['read:accounts']);
-
-			return new DataResponse($this->portfolioService->own($this->viewer()), Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * Writes it.
-	 *
-	 * `active` is the moment its owner decides the internet may read it; a row
-	 * that exists without it is a draft.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
-	#[UserRateLimit(limit: 60, period: 60)]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/portfolio')]
-	public function portfolioSave(
-		bool $active = false,
-		string $title = '',
-		string $intro = '',
-		string $layout = 'grid',
-		string $source = 'recent',
-		int $collection_id = 0,
-		bool $show_captions = true,
-		bool $show_places = true,
-		bool $show_dates = false,
-		bool $show_avatar = true,
-	): DataResponse {
-		try {
-			$this->initViewer(['write:accounts']);
-
-			return new DataResponse(
-				$this->portfolioService->save($this->viewer(), [
-					'active' => $active,
-					'title' => $title,
-					'intro' => $intro,
-					'layout' => $layout,
-					'source' => $source,
-					'collection_id' => $collection_id,
-					'show_captions' => $show_captions,
-					'show_places' => $show_places,
-					'show_dates' => $show_dates,
-					'show_avatar' => $show_avatar,
-				]),
-				Http::STATUS_OK
-			);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * Somebody's published page, as the internet reads it.
-	 *
-	 * **No viewer is resolved at all**, deliberately: what a portfolio shows
-	 * is what the whole internet may see, whoever happens to be reading it, so
-	 * the posts on it are read as the anonymous internet reads them. A
-	 * followers-only photograph cannot reach this page because nothing on the
-	 * path to it has ever seen one. A page its owner has not turned on is a
-	 * **404**, not an empty page with their name on it.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1.1/portfolio/{handle}')]
-	public function portfolioOf(string $handle): DataResponse {
-		try {
-			return new DataResponse(
-				$this->portfolioService->published($handle), Http::STATUS_OK
-			);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

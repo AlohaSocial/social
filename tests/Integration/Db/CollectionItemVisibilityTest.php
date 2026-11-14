@@ -23,10 +23,9 @@ use PHPUnit\Framework\TestCase;
  * Who may read the posts inside a collection.
  *
  * A collection says which posts its owner grouped together; it says nothing
- * about who may read them. The routes that serve one — the album and the
- * portfolio — are unauthenticated, so the per-post predicate is the only thing
- * standing between a followers-only post dropped into a public album and the
- * whole internet.
+ * about who may read them. The routes that serve one are unauthenticated, so
+ * the per-post predicate is the only thing standing between a followers-only
+ * post dropped into a public album and the whole internet.
  *
  * This needs a real database: what is being asserted is which rows a WHERE
  * clause returns for a given viewer, which no mock can answer.

@@ -129,7 +129,6 @@ import DeleteAccount from '../components/DeleteAccount.vue'
 import DraftsButton from '../components/DraftsButton.vue'
 import HeldPosts from '../components/HeldPosts.vue'
 import IntroductionSettings from '../components/IntroductionSettings.vue'
-import PortfolioSettings from '../components/PortfolioSettings.vue'
 import ScheduledPosts from '../components/ScheduledPosts.vue'
 import ShortcutsSettings from '../components/ShortcutsSettings.vue'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
@@ -149,7 +148,6 @@ import IconInvite from 'vue-material-design-icons/EmailPlusOutline.vue'
 import IconKeyboard from 'vue-material-design-icons/KeyboardOutline.vue'
 import IconLists from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconNotifications from 'vue-material-design-icons/BellOutline.vue'
-import IconPortfolio from 'vue-material-design-icons/ImageMultipleOutline.vue'
 import IconPosts from 'vue-material-design-icons/NoteTextOutline.vue'
 import IconReading from 'vue-material-design-icons/BookOpenPageVariantOutline.vue'
 import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
@@ -250,7 +248,6 @@ export default {
 		IconKeyboard,
 		IconLists,
 		IconNotifications,
-		IconPortfolio,
 		IconPosts,
 		IconReading,
 		IconRecap,
@@ -269,7 +266,6 @@ export default {
 		NcTextField,
 		NotificationDeliverySettings,
 		NotificationPolicySettings,
-		PortfolioSettings,
 		RecapSettings,
 		CountsSettings,
 		FeedDisplaySettings,
@@ -342,14 +338,6 @@ export default {
 					component: 'FeaturedTagsSettings',
 					title: t('social', 'Featured hashtags'),
 					lede: t('social', 'Hashtags shown under your bio. Anyone can click one to read what you posted with it.'),
-				},
-				{
-					id: 'portfolio',
-					group: 'profile',
-					icon: 'IconPortfolio',
-					component: 'PortfolioSettings',
-					title: t('social', 'Portfolio'),
-					lede: t('social', 'A public page with the photos you choose and its own address, for a CV or a website. Only public photos can be on it.'),
 				},
 				// only where the administrator has the feature on: without it
 				// there is no feed for the list to shape

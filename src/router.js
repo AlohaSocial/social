@@ -19,7 +19,6 @@ const ProfileTimeline = () => import(/* webpackChunkName: "profile" */'./views/P
 const ProfileFollowers = () => import(/* webpackChunkName: "profile" */'./views/ProfileFollowers.vue')
 const ProfileCollections = () => import(/* webpackChunkName: "profile" */'./views/ProfileCollections.vue')
 const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/ProfileTagged.vue')
-const Portfolio = () => import(/* webpackChunkName: "portfolio" */'./views/Portfolio.vue')
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
 const StarterPack = () => import(/* webpackChunkName: "profile" */'./views/StarterPack.vue')
@@ -316,13 +315,6 @@ const router = createRouter({
 
 					components: {
 						details: ProfileFollowers,
-					},
-				},
-				{
-					path: 'portfolio',
-					name: 'profile.portfolio',
-					components: {
-						details: Portfolio,
 					},
 				},
 				{

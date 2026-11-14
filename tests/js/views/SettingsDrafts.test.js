@@ -24,7 +24,6 @@ const stubs = Object.fromEntries([
 	'ProfileLayoutSettings',
 	'DirectMessagesSettings',
 	'FeaturedTagsSettings',
-	'PortfolioSettings',
 	'ScheduledPosts',
 	'HeldPosts',
 	'ArchivedPosts',

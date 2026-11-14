@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Migration;
 
 use OCA\Social\Migration\Version1000Date20221118000002;
 use OCA\Social\Migration\Version1000Date20261011500100;
+use OCA\Social\Migration\Version1000Date20261114000001;
 use OCP\IDBConnection;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -97,7 +98,9 @@ class UpgradeFromReleasesTest extends TestCase {
 
 	/**
 	 * An upgrade that stopped half way is run again, and the steps that make
-	 * up the difference must find their work done the second time.
+	 * up the difference must find their work done the second time. The squash
+	 * still creates `social_portfolio`, so the step that drops it runs again
+	 * after it, as it would on the instance.
 	 */
 	#[DataProvider('releases')]
 	public function testRunningTheRepairsAgainChangesNothing(string $release): void {
@@ -105,7 +108,7 @@ class UpgradeFromReleasesTest extends TestCase {
 		$once = $schema->shape();
 
 		MigrationReplay::run(
-			[Version1000Date20221118000002::class, Version1000Date20261011500100::class],
+			[Version1000Date20221118000002::class, Version1000Date20261011500100::class, Version1000Date20261114000001::class],
 			$this->stand(),
 			$schema
 		);

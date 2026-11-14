@@ -24,7 +24,6 @@ use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\MediaTagService;
 use OCA\Social\Service\PixelfedConfigService;
 use OCA\Social\Service\PixelfedService;
-use OCA\Social\Service\PortfolioService;
 use OCA\Social\Service\PostDecorationService;
 use OCA\Social\Service\StoryInteractionService;
 use OCA\Social\Service\StoryService;
@@ -180,7 +179,6 @@ class PixelfedControllerTest extends TestCase {
 			$this->storyService,
 			$this->storyInteractionService,
 			$this->mediaTagService,
-			$this->createStub(PortfolioService::class),
 			$this->createStub(TeamService::class),
 			$this->cacheActorService,
 			$this->archiveService,
