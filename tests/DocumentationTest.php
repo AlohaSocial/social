@@ -1010,18 +1010,18 @@ class DocumentationTest extends TestCase {
 	 * it would otherwise swallow are not.
 	 *
 	 * `/@{username}/{token}` matches any single segment, so it also matches
-	 * `/@{username}/portfolio` and `/@{username}/collections` — which belong to
-	 * `SocialPubController`. The first route offered to the matcher wins, and
-	 * attribute routes of two *different* controllers are contributed in
-	 * whatever order the filesystem hands the directory back. On an install
-	 * where `ActivityPubController` came back first, both pages were answered
-	 * by `displayPost()`, found no post of that name, and served "Post not
-	 * found" to every reader without a session (#2284). Whether an instance
-	 * had the bug came down to the order of two files on disk.
+	 * `/@{username}/collections` — which belongs to `SocialPubController`. The
+	 * first route offered to the matcher wins, and attribute routes of two
+	 * *different* controllers are contributed in whatever order the filesystem
+	 * hands the directory back. On an install where `ActivityPubController`
+	 * came back first, the page was answered by `displayPost()`, found no post
+	 * of that name, and served "Post not found" to every reader without a
+	 * session (#2284). Whether an instance had the bug came down to the order
+	 * of two files on disk.
 	 *
 	 * `appinfo/routes.php` is offered after every attribute route, which is the
 	 * one place in the app where "last" is a guarantee rather than an
-	 * accident. Moving the greedy route there fixes both pages and every
+	 * accident. Moving the greedy route there fixes the page and every
 	 * reserved segment added later.
 	 */
 	public function testTheGreedyPostRouteCannotSwallowTheReservedPages(): void {
@@ -1034,7 +1034,7 @@ class DocumentationTest extends TestCase {
 		$this->assertNotContains(
 			$this->normalisePath($greedy),
 			$attributes,
-			$greedy . ' is a controller attribute again. It matches /@{username}/portfolio and'
+			$greedy . ' is a controller attribute again. It matches'
 			. ' /@{username}/collections, and nothing decides which of two controllers is offered'
 			. ' first — put it back in appinfo/routes.php, which is always offered last.'
 		);
@@ -1051,7 +1051,7 @@ class DocumentationTest extends TestCase {
 
 		// and the pages it would swallow stay attributes, so they are offered
 		// before it whatever order their own file came back in
-		foreach (['/@{username}/portfolio', '/@{username}/collections'] as $reserved) {
+		foreach (['/@{username}/collections'] as $reserved) {
 			$this->assertContains(
 				$this->normalisePath($reserved),
 				$attributes,

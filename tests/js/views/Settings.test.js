@@ -37,8 +37,6 @@ const asyncStubs = {
 	// reads the recap setting on mount, for the same reason: its request would
 	// answer after this file has finished
 	RecapSettings: { name: 'RecapSettings', template: '<section class="recap-settings-stub" />' },
-	// reads the portfolio and the collections on mount, same story again
-	PortfolioSettings: { name: 'PortfolioSettings', template: '<section class="portfolio-settings-stub" />' },
 	ForYouSettings: { name: 'ForYouSettings', template: '<section class="for-you-settings-stub" />' },
 	// reads the delivery settings on mount
 	NotificationDeliverySettings: { name: 'NotificationDeliverySettings', template: '<section class="notification-delivery-settings-stub" />' },
@@ -98,7 +96,7 @@ describe('Settings', () => {
 		expect(wrapper.find('h1').text()).toBe('Settings')
 		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Notifications', 'Your posts', 'Apps and account', 'Help'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Profile and privacy')
-		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Public profile layout', 'Who may send you direct messages', 'Featured hashtags', 'Portfolio'])
+		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Public profile layout', 'Who may send you direct messages', 'Featured hashtags'])
 	})
 
 	it('has every section in exactly one group, in the order they are read', async () => {
@@ -115,7 +113,6 @@ describe('Settings', () => {
 			'Public profile layout',
 			'Who may send you direct messages',
 			'Featured hashtags',
-			'Portfolio',
 			'Lists',
 			'Sensitive media',
 			'Likes and followers',
@@ -229,14 +226,14 @@ describe('Settings', () => {
 		it('marks the last section whose heading has passed the top', async () => {
 			const wrapper = await mountSettings()
 
-			const tops = { account: -800, 'direct-messages': -400, 'featured-tags': 40, portfolio: 320 }
+			const tops = { account: -800, 'direct-messages': 40, 'featured-tags': 320 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)
 			))
 
 			wrapper.vm.markCurrent()
-			expect(wrapper.vm.current).toBe('featured-tags')
+			expect(wrapper.vm.current).toBe('direct-messages')
 
 			vi.restoreAllMocks()
 		})
@@ -248,9 +245,9 @@ describe('Settings', () => {
 		 */
 		it('marks the first section before any has passed the top', async () => {
 			const wrapper = await mountSettings()
-			wrapper.vm.current = 'portfolio'
+			wrapper.vm.current = 'featured-tags'
 
-			const tops = { account: 150, 'direct-messages': 600, 'featured-tags': 900, portfolio: 1400 }
+			const tops = { account: 150, 'direct-messages': 600, 'featured-tags': 900 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)

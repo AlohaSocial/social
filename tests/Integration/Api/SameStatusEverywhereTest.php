@@ -17,14 +17,13 @@ use OCA\Social\Controller\PlaceController;
 use OCA\Social\Controller\StatusApiController;
 use OCA\Social\Controller\TimelineApiController;
 use OCA\Social\Db\MediaTagsRequest;
-use OCA\Social\Db\PortfoliosRequest;
 use OCP\Server;
 
 /**
  * A status carries the same reactions, place and tagged people wherever a
  * client is served it: a timeline, the status on its own, its thread, a list,
- * a place, a collection, the trends, the photos somebody is in, a portfolio,
- * the archive and the videos to continue.
+ * a place, a collection, the trends, the photos somebody is in, the archive
+ * and the videos to continue.
  *
  * Only the timelines dressed their posts with all of them; `GET
  * /api/v1/statuses/{id}` answered `"reactions": []` for a post with reactions,
@@ -42,15 +41,9 @@ class SameStatusEverywhereTest extends ApiTestCase {
 	/** @var list<int|string> posts whose media tags are removed afterwards */
 	private array $tagged = [];
 
-	/** @var list<string> actors whose portfolio is removed afterwards */
-	private array $portfolios = [];
-
 	protected function tearDown(): void {
 		foreach ($this->tagged as $nid) {
 			Server::get(MediaTagsRequest::class)->deleteByStream($nid);
-		}
-		foreach ($this->portfolios as $actorId) {
-			Server::get(PortfoliosRequest::class)->deleteByActor($actorId);
 		}
 		parent::tearDown();
 	}
@@ -218,26 +211,6 @@ class SameStatusEverywhereTest extends ApiTestCase {
 
 		$this->assertSame(200, $photos->status, json_encode($photos->body) ?: '');
 		$this->assertSame(self::AS_BOB, $this->reactionsIn($photos->body, $post->id, 'the photos of carol'));
-	}
-
-	/** The published page resolves no reader, so nobody's reaction is theirs on it. */
-	public function testAPortfolioHasTheReactions(): void {
-		$post = $this->reactedPost();
-		$collection = $this->collectionOf($post);
-		$this->portfolios[] = $this->account('alice')->getId();
-		$saved = $this->call(
-			PixelfedController::class, 'portfolioSave', [],
-			['active' => true, 'source' => 'collection', 'collection_id' => $collection->id], 'alice', 'POST'
-		);
-		$this->assertSame(200, $saved->status, json_encode($saved->body) ?: '');
-
-		$page = $this->call(PixelfedController::class, 'portfolioOf', ['handle' => self::PREFIX . 'alice'], [], null);
-
-		$this->assertSame(200, $page->status, json_encode($page->body) ?: '');
-		$this->assertSame([
-			['name' => '🎉', 'count' => 2, 'me' => false],
-			['name' => '👍', 'count' => 1, 'me' => false],
-		], $this->reactionsIn($page->body->posts, $post->id, 'the portfolio'));
 	}
 
 	public function testTheArchiveHasTheReactions(): void {

@@ -108,7 +108,7 @@ to stop.
 - `Db/ListsRequestTest`, `Db/TrendsRequestTest`, `Db/DiscoveryRequestTest`,
   `Db/ConversationsRequestTest`, `Db/StreamInterestsTest`,
   `Db/CacheDocumentsRequestTest` and one `Db/*RequestTest` for each smaller
-  table (reactions, interests, featured tags, portfolios, media tags, stories,
+  table (reactions, interests, featured tags, media tags, stories,
   places, post holds, quote grants, revisions, imports, emoji and GIFs,
   channels and teams, access blocks, account notes, mutes, stream views,
   watches, trend review, Discover categories) — the request classes whose SQL
@@ -351,8 +351,8 @@ to stop.
   post service.
   `Api/SameStatusEverywhereTest` serves one reacted-to post through the home
   timeline, `GET /api/v1/statuses/{id}`, its thread, a list, a place, a
-  collection, the trends, a favourite's answer, the photos somebody is in, a
-  portfolio, the archive and the videos to continue, and holds each to the same
+  collection, the trends, a favourite's answer, the photos somebody is in, the
+  archive and the videos to continue, and holds each to the same
   `reactions` with `me` for the reader, and the single status to its place
   and tagged people; it caught the single status answering `reactions: []`.
   `Api/SignedInPagesTest` sends the reader's own pages — settings,

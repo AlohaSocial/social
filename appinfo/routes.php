@@ -25,15 +25,15 @@ namespace OCA\Social\AppInfo;
  * is exactly the guarantee this route needs, so it stays here.
  *
  * `/@{username}/{token}` is here for the same reason. `{token}` matches any
- * single segment, so it also matches `/@{username}/portfolio` and
- * `/@{username}/collections`, which are pages of `SocialPubController` — and
- * on an install where the directory happened to hand `ActivityPubController`
- * back first, this route was offered to the matcher first and swallowed both.
- * `resolvePost()` then found no post called `portfolio`, and the reader got
- * "Post not found" (#2284). A signed-in reader did not: the 404 branch hands
- * them the app, whose own router then drew the page — so the bug looked like
- * "public visitors cannot see a portfolio", and it appeared or not depending
- * on the order a filesystem returns two files in.
+ * single segment, so it also matches `/@{username}/collections`, which is a
+ * page of `SocialPubController` — and on an install where the directory
+ * happened to hand `ActivityPubController` back first, this route was offered
+ * to the matcher first and swallowed it. `resolvePost()` then found no post
+ * called `collections`, and the reader got "Post not found" (#2284). A
+ * signed-in reader did not: the 404 branch hands them the app, whose own
+ * router then drew the page — so the bug looked like "public visitors cannot
+ * see the page", and it appeared or not depending on the order a filesystem
+ * returns two files in.
  *
  * `ActivityPubController::displayPost()` also has `/@{username}/{token}/replies`,
  * `/@{username}/{token}/quote_authorizations/{stamp}` and

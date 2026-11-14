@@ -429,7 +429,7 @@ class MediaApiController extends MastodonApiController {
 	// The numbers are the most generous pair already in this file — the ones
 	// `mediaLadderFile()` and `mediaPlaylistFile()` use — and deliberately so.
 	// This is the highest-volume route the app has: a timeline is forty to
-	// sixty of these a screen (see below), a portfolio is a gridful, and
+	// sixty of these a screen (see below), a collection is a gridful, and
 	// **every other fediverse server fetches media through it unsigned**, so
 	// one busy instance pulling a popular post's pictures arrives as a single
 	// anonymous address. A limit tight enough to matter against a determined

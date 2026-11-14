@@ -205,7 +205,6 @@ class SignedInPagesTest extends ApiTestCase {
 			[MemoriesController::class, 'recap'],
 			[PixelfedController::class, 'archiveList'],
 			[PixelfedController::class, 'collectionsSelf'],
-			[PixelfedController::class, 'portfolioOwn'],
 			[AtprotoAccountController::class, 'identity'],
 			[AtprotoAccountController::class, 'appPasswords'],
 			[AtprotoAccountController::class, 'oauthSessions'],

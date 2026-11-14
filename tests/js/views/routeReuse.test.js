@@ -15,7 +15,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { reactive } from 'vue'
 import CollectionPage from '../../../src/views/CollectionPage.vue'
 import PlacePage from '../../../src/views/PlacePage.vue'
-import Portfolio from '../../../src/views/Portfolio.vue'
 import ProfileCollections from '../../../src/views/ProfileCollections.vue'
 import ProfileTagged from '../../../src/views/ProfileTagged.vue'
 
@@ -158,34 +157,6 @@ describe('views the router reuses', () => {
 
 			expect(wrapper.find('.tagged__error').exists()).toBe(false)
 			expect(wrapper.findAll('.entry-stub')).toHaveLength(1)
-		})
-	})
-
-	describe('Portfolio', () => {
-		it('keeps B when A answers last', async () => {
-			const { wrapper, route } = mountAccountView(Portfolio, 'alice')
-			route.params.account = 'bob'
-			await flushPromises()
-
-			request('/portfolio/bob').resolve({ data: { title: 'Bob\'s work', posts: [], account: {} } })
-			await flushPromises()
-			request('/portfolio/alice').resolve({ data: { title: 'Alice\'s work', posts: [], account: {} } })
-			await flushPromises()
-
-			expect(wrapper.find('.portfolio__title').text()).toBe('Bob\'s work')
-		})
-
-		it('does not call B missing when A was', async () => {
-			const { wrapper, route } = mountAccountView(Portfolio, 'alice')
-			route.params.account = 'bob'
-			await flushPromises()
-
-			request('/portfolio/bob').resolve({ data: { title: 'Bob\'s work', posts: [], account: {} } })
-			await flushPromises()
-			request('/portfolio/alice').reject({ response: { status: 404 } })
-			await flushPromises()
-
-			expect(wrapper.find('.portfolio__title').text()).toBe('Bob\'s work')
 		})
 	})
 

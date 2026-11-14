@@ -30,7 +30,6 @@ use OCA\Social\Db\ImportsRequest;
 use OCA\Social\Db\ListsRequest;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\MuteExpiryRequest;
-use OCA\Social\Db\PortfoliosRequest;
 use OCA\Social\Db\PostHoldsRequest;
 use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\ReactionsRequest;
@@ -102,7 +101,6 @@ class ActorCascadeServiceTest extends TestCase {
 			'dismissed announcements' => [AnnouncementsRequest::class, 'deleteRelatedId'],
 			'scheduled statuses' => [ScheduledStatusesRequest::class, 'deleteRelatedId'],
 			'collections' => [CollectionsRequest::class, 'deleteRelatedId'],
-			'portfolio' => [PortfoliosRequest::class, 'deleteByActor'],
 			'stories' => [StoriesRequest::class, 'deleteRelatedId'],
 			'media tags' => [MediaTagsRequest::class, 'deleteByActor'],
 			'the tags it put on pictures' => [MediaTagsRequest::class, 'deleteByTagger'],
@@ -166,7 +164,6 @@ class ActorCascadeServiceTest extends TestCase {
 			$this->request(ImportedPostsRequest::class),
 			$this->request(PostHoldsRequest::class),
 			$this->request(MediaTagsRequest::class),
-			$this->request(PortfoliosRequest::class),
 			$this->request(FollowedTagsRequest::class),
 			$this->request(QuoteGrantRequest::class),
 			$this->request(TeamsRequest::class),

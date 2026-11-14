@@ -32,7 +32,6 @@ use OCA\Social\Db\InterestsRequest;
 use OCA\Social\Db\ListsRequest;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\MuteExpiryRequest;
-use OCA\Social\Db\PortfoliosRequest;
 use OCA\Social\Db\PostHoldsRequest;
 use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\ReactionsRequest;
@@ -99,7 +98,6 @@ class ActorCascadeService {
 		private ImportedPostsRequest $importedPostsRequest,
 		private PostHoldsRequest $postHoldsRequest,
 		private MediaTagsRequest $mediaTagsRequest,
-		private PortfoliosRequest $portfoliosRequest,
 		private FollowedTagsRequest $followedTagsRequest,
 		private QuoteGrantRequest $quoteGrantRequest,
 		private TeamsRequest $teamsRequest,
@@ -187,10 +185,9 @@ class ActorCascadeService {
 			// thing here that would otherwise go *out* under an account nothing
 			// is serving any more
 			'scheduled' => fn () => $this->scheduledStatusesRequest->deleteRelatedId($actorId),
-			// the albums and the portfolio it curated, which are pages of its
-			// own posts, and its live stories, which must not outlive it
+			// the albums it curated, which are pages of its own posts, and its
+			// live stories, which must not outlive it
 			'collections' => fn () => $this->collectionsRequest->deleteRelatedId($actorId),
-			'portfolios' => fn () => $this->portfoliosRequest->deleteByActor($actorId),
 			'stories' => fn () => $this->storiesRequest->deleteRelatedId($actorId),
 			// where it is named in somebody else's picture
 			'mediaTags' => fn () => $this->mediaTagsRequest->deleteByActor($actorId),

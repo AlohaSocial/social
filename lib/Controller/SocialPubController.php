@@ -209,24 +209,6 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * Somebody's page of work, for a browser.
-	 *
-	 * Public, and the point of the feature: a portfolio is what a photographer
-	 * links from a CV, and a link that asks the reader to sign in first is not
-	 * that. The client-side router owns the path; this exists so that a link
-	 * to it is not a 404 when it is opened cold.
-	 *
-	 * @throws UrlCloudException
-	 * @throws SocialAppConfigException
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/@{username}/portfolio')]
-	public function portfolio(string $username): Response {
-		return $this->renderPage($username);
-	}
-
-	/**
 	 * Return webpage content for human navigation.
 	 * Should return following of a Social account, based on username.
 	 *
