@@ -104,6 +104,14 @@ is `@username@your-nextcloud-host` from the start; where Bluesky is switched
 on, the form shows the Bluesky address it gets as well. Depending on the server you
 confirm your email address first, and an administrator may look at the
 registration before it becomes an account; you are emailed either way.
+The confirmation email has a link and a six-digit code: type the code into the
+page you registered on, or follow the link within 24 hours.
+
+From the Aloha Social app on a phone, **Create an account** opens the same form
+inside the app's sign-in window. Once the account exists you are logged in
+there and taken back to the app, which then asks you to allow it, as any app
+sign-in does. Where an administrator approves new accounts first, the email
+saying yours is ready has a **Log in** button that continues the same sign-in.
 
 Such an account is for Aloha Social only. You log in on the normal login page, with
 two-factor authentication if you set it up or the server requires it, and

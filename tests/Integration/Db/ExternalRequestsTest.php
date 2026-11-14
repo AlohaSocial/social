@@ -99,6 +99,30 @@ class ExternalRequestsTest extends TestCase {
 		$this->signups->create('itest_dave', 'other@example.org', 'H', 'x', false, false, 0, 'ip2', 1000);
 	}
 
+	public function testARegistrationFromAnAppKeepsItsWayBackAndLosesItsCodeAfterTheLastWrongOne(): void {
+		$return = '/index.php/apps/social/oauth/authorize?client_id=app&state=s1';
+		$id = $this->signups->create('itest_erin', 'erin@example.org', 'H', hash('sha256', 't'), false, false, 0, 'ip', 1000, false, '', 0, '', $return, str_repeat('c', 64));
+
+		$row = $this->signups->get($id);
+		$this->assertSame($return, $row['returnTo']);
+		$this->assertSame(str_repeat('c', 64), $row['codeHash']);
+		$this->assertSame(0, $row['codeAttempts']);
+
+		$this->assertSame(1, $this->signups->addCodeAttempt($id, 2));
+		$this->assertSame(str_repeat('c', 64), $this->signups->get($id)['codeHash']);
+		$this->assertSame(2, $this->signups->addCodeAttempt($id, 2));
+		$this->assertSame('', $this->signups->get($id)['codeHash'], 'only the link confirms it now');
+		$this->assertSame($return, $this->signups->get($id)['returnTo']);
+
+		$older = $this->signups->create('itest_frank', 'frank@example.org', 'H', hash('sha256', 'u'), false, false, 0, 'ip', 1000);
+		$this->assertSame('', $this->signups->get($older)['returnTo']);
+		$this->assertSame('', $this->signups->get($older)['codeHash']);
+
+		$withCode = $this->signups->create('itest_gail', 'gail@example.org', 'H', hash('sha256', 'v'), false, true, 0, 'ip', 1000, false, '', 0, '', '', str_repeat('d', 64));
+		$this->signups->markVerified($withCode, true);
+		$this->assertSame('', $this->signups->get($withCode)['codeHash'], 'a confirmed address takes no code');
+	}
+
 	public function testOnlyUnconfirmedRegistrationsExpire(): void {
 		$this->signups->create('itest_old', 'old@example.org', 'H', 'a', false, false, 0, 'ip', 100);
 		$waiting = $this->signups->create('itest_waiting', 'w@example.org', 'H', '', true, true, 0, 'ip', 100);

@@ -3398,6 +3398,14 @@ OC.L10N.register(
     "Re-draft" : "Erneuter Entwurf",
     "Media draft" : "Medienentwurf",
     "This draft is no longer available." : "Dieser Entwurf ist nicht mehr verfügbar.",
-    "The original post could not be loaded. Your draft has been kept. Try again later." : "Der ursprüngliche Beitrag konnte nicht geladen werden. Dein Entwurf bleibt erhalten. Versuche es später erneut."
+    "The original post could not be loaded. Your draft has been kept. Try again later." : "Der ursprüngliche Beitrag konnte nicht geladen werden. Dein Entwurf bleibt erhalten. Versuche es später erneut.",
+    "Confirmation code" : "Bestätigungscode",
+    "The six digits from the email" : "Die sechs Ziffern aus der E-Mail",
+    "Confirm" : "Bestätigen",
+    "Signing you in …" : "Du wirst angemeldet …",
+    "We sent a code and a link to {email}. Type the code below, or follow the link within 24 hours." : "Wir haben einen Code und einen Link an {email} gesendet. Gib den Code unten ein oder öffne den Link innerhalb von 24 Stunden.",
+    "Your account {handle} is ready." : "Dein Konto {handle} ist bereit.",
+    "Too many attempts right now, please try again later." : "Zurzeit gibt es zu viele Versuche. Bitte versuche es später erneut.",
+    "The code could not be checked. Please try again." : "Der Code konnte nicht geprüft werden. Bitte versuche es erneut."
 },
 "nplurals=2; plural=(n != 1);");

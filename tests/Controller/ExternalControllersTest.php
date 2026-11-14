@@ -28,6 +28,7 @@ use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
+use OCP\ISession;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
@@ -37,6 +38,22 @@ use ReflectionClass;
 use ReflectionMethod;
 
 class ExternalControllersTest extends TestCase {
+	/** @var array<string, mixed> what the signup controller keeps in the PHP session */
+	private array $sessionData = [];
+
+	private function phpSession(): ISession {
+		$session = $this->createStub(ISession::class);
+		$session->method('get')->willReturnCallback(fn (string $key): mixed => $this->sessionData[$key] ?? null);
+		$session->method('set')->willReturnCallback(function (string $key, mixed $value): void {
+			$this->sessionData[$key] = $value;
+		});
+		$session->method('remove')->willReturnCallback(function (string $key): void {
+			unset($this->sessionData[$key]);
+		});
+
+		return $session;
+	}
+
 	private function session(?IUser $user): IUserSession {
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturn($user);
@@ -51,7 +68,7 @@ class ExternalControllersTest extends TestCase {
 		$url = $this->createStub(IURLGenerator::class);
 		$url->method('linkToRoute')->willReturn('/apps/social/');
 
-		return new SignupController($request, $service, $state ?? $this->createStub(IInitialState::class), $this->session($viewer), $url, $challenges ?? $this->createStub(SignupChallengeService::class));
+		return new SignupController($request, $service, $state ?? $this->createStub(IInitialState::class), $this->session($viewer), $url, $challenges ?? $this->createStub(SignupChallengeService::class), $this->phpSession());
 	}
 
 	/** @return list<string> the attribute class names on a method */
@@ -64,14 +81,14 @@ class ExternalControllersTest extends TestCase {
 
 	public function testTheRegistrationPageIsDrawnInTheGuestLayoutWithItsState(): void {
 		$service = $this->createStub(ExternalSignupService::class);
-		$service->method('pageState')->willReturn(['open' => true]);
+		$service->method('pageState')->willReturnCallback(static fn (string $invite, string $return): array => ['open' => $invite === 'token' && $return === 'https://cloud.example/oauth/authorize?client_id=app']);
 		$provided = [];
 		$state = $this->createStub(IInitialState::class);
 		$state->method('provideInitialState')->willReturnCallback(function (string $key, $data) use (&$provided): void {
 			$provided[$key] = $data;
 		});
 
-		$response = $this->signup($service, null, $state)->page('token');
+		$response = $this->signup($service, null, $state)->page('token', 'https://cloud.example/oauth/authorize?client_id=app');
 
 		$this->assertInstanceOf(TemplateResponse::class, $response);
 		$this->assertSame('signup', $response->getTemplateName());
@@ -102,12 +119,62 @@ class ExternalControllersTest extends TestCase {
 	public function testARegistrationIsHandedOverWithTheAddressItCameFrom(): void {
 		$service = $this->createMock(ExternalSignupService::class);
 		$service->expects($this->once())->method('submit')
-			->with('alice', 'a@example.org', 'secret123', true, true, 'inv', '', '192.0.2.7', false, '', 'the-challenge', 'n0nce')
-			->willReturn(['state' => 'verify', 'handle' => 'alice']);
+			->with('alice', 'a@example.org', 'secret123', true, true, 'inv', '', '192.0.2.7', false, '', 'the-challenge', 'n0nce', '/oauth/authorize?client_id=app')
+			->willReturn(['state' => 'verify', 'handle' => 'alice', 'pending' => 42]);
+		$service->method('confirmsByCode')->willReturn(true);
 
-		$response = $this->signup($service)->submit('alice', 'a@example.org', 'secret123', true, true, 'inv', '', false, '', 'the-challenge', 'n0nce');
+		$response = $this->signup($service)->submit('alice', 'a@example.org', 'secret123', true, true, 'inv', '', false, '', 'the-challenge', 'n0nce', '/oauth/authorize?client_id=app');
 
-		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $response->getData());
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice', 'code' => true], $response->getData(), 'the id stays on the server');
+		$this->assertSame(42, $this->sessionData[SignupController::SESSION_PENDING]);
+	}
+
+	/** "Check your email" offers the code whether or not a registration waits, so the two cannot be told apart. */
+	public function testAnAnswerWithNothingBehindItOffersTheCodeToo(): void {
+		$this->sessionData[SignupController::SESSION_PENDING] = 41;
+		$service = $this->createStub(ExternalSignupService::class);
+		$service->method('submit')->willReturn(['state' => 'verify', 'handle' => 'alice']);
+		$service->method('confirmsByCode')->willReturn(true);
+
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice', 'code' => true], $this->signup($service)->submit('alice', 'a@example.org', 'secret123', true, true)->getData());
+		$this->assertSame(0, $this->sessionData[SignupController::SESSION_PENDING], 'an earlier registration of this session is not tried any more');
+	}
+
+	public function testTheCodeIsTriedAgainstTheRegistrationThisSessionMade(): void {
+		$this->sessionData[SignupController::SESSION_PENDING] = 42;
+		$this->sessionData[SignupController::SESSION_TRIES] = 1;
+		$service = $this->createMock(ExternalSignupService::class);
+		$service->expects($this->once())->method('confirmCode')->with(42, '123456')
+			->willReturn(['state' => 'created', 'handle' => 'alice', 'loginUrl' => '/login?redirect_url=x']);
+
+		$response = $this->signup($service)->confirm('123456');
+
+		$this->assertSame(['state' => 'created', 'handle' => 'alice', 'loginUrl' => '/login?redirect_url=x'], $response->getData());
+		$this->assertSame([], $this->sessionData, 'a confirmed registration is forgotten by the session');
+	}
+
+	public function testASessionTakesFiveWrongCodesAndNoMore(): void {
+		$service = $this->createMock(ExternalSignupService::class);
+		$service->expects($this->exactly(ExternalSignupService::CODE_ATTEMPTS))->method('confirmCode')
+			->willThrowException(new ExternalUserException('That code is not right.', 'code'));
+		$service->method('codeLockedMessage')->willReturn('Too many wrong codes.');
+		$controller = $this->signup($service);
+
+		$fields = [];
+		for ($try = 0; $try <= ExternalSignupService::CODE_ATTEMPTS; $try++) {
+			$response = $controller->confirm('000000');
+			$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+			$fields[] = $response->getData()['field'];
+		}
+
+		$this->assertSame(['code', 'code', 'code', 'code', 'code-locked', 'code-locked'], $fields);
+	}
+
+	public function testSomebodyLoggedInCannotConfirmACode(): void {
+		$service = $this->createMock(ExternalSignupService::class);
+		$service->expects($this->never())->method('confirmCode');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->signup($service, $this->createStub(IUser::class))->confirm('123456')->getStatus());
 	}
 
 	public function testARefusedRegistrationNamesTheField(): void {
@@ -136,8 +203,14 @@ class ExternalControllersTest extends TestCase {
 	}
 
 	public function testTheRegistrationRoutesArePublicAndRateLimited(): void {
-		foreach (['page', 'submit', 'verify', 'challenge'] as $method) {
+		foreach (['page', 'submit', 'verify', 'challenge', 'confirm'] as $method) {
 			$this->assertContains(PublicPage::class, self::attributes(SignupController::class, $method), $method);
+		}
+		// the code is typed into the page, with its CSRF token, in the session that made the registration
+		$this->assertNotContains(NoCSRFRequired::class, self::attributes(SignupController::class, 'confirm'));
+		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'confirm'));
+		foreach (['submit', 'confirm'] as $method) {
+			$this->assertContains(\OCP\AppFramework\Http\Attribute\UseSession::class, self::attributes(SignupController::class, $method), $method);
 		}
 		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'challenge'));
 		// the form is posted with the guest page's CSRF token

@@ -20,7 +20,7 @@ use OCP\IDBConnection;
  * email address for as long as it exists. The verification token is stored
  * as a SHA-256 hash, never as sent.
  *
- * @psalm-type ExternalSignupRow = array{id: int, handle: string, email: string, password: string, token: string, verified: bool, approval: bool, inviteId: int, ipHash: string, creation: int, emailVerified: bool, noticeVersion: string, noticeAcceptedAt: int, noticeSnapshot: string}
+ * @psalm-type ExternalSignupRow = array{id: int, handle: string, email: string, password: string, token: string, verified: bool, approval: bool, inviteId: int, ipHash: string, creation: int, emailVerified: bool, noticeVersion: string, noticeAcceptedAt: int, noticeSnapshot: string, returnTo: string, codeHash: string, codeAttempts: int}
  */
 class ExternalSignupsRequest {
 	private const TABLE = CoreRequestBuilder::TABLE_EXTERNAL_SIGNUPS;
@@ -44,6 +44,8 @@ class ExternalSignupsRequest {
 		string $noticeVersion = '',
 		int $noticeAcceptedAt = 0,
 		string $noticeSnapshot = '',
+		string $returnTo = '',
+		string $codeHash = '',
 	): int {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->insert(self::TABLE)
@@ -59,7 +61,9 @@ class ExternalSignupsRequest {
 			->setValue('email_verified', $qb->createNamedParameter($emailVerified ? 1 : 0, IQueryBuilder::PARAM_INT))
 			->setValue('notice_version', $qb->createNamedParameter($noticeVersion))
 			->setValue('notice_accepted', $qb->createNamedParameter($noticeAcceptedAt, IQueryBuilder::PARAM_INT))
-			->setValue('notice_snapshot', $qb->createNamedParameter($noticeSnapshot));
+			->setValue('notice_snapshot', $qb->createNamedParameter($noticeSnapshot))
+			->setValue('return_to', $qb->createNamedParameter(($returnTo === '') ? null : $returnTo))
+			->setValue('code_hash', $qb->createNamedParameter(($codeHash === '') ? null : $codeHash));
 		$qb->executeStatement();
 
 		return $qb->getLastInsertId();
@@ -103,11 +107,38 @@ class ExternalSignupsRequest {
 			->set('verified', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
 			->set('email_verified', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
 			->set('token', $qb->createNamedParameter(''))
+			->set('code_hash', $qb->createNamedParameter(null))
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
 		if ($approval) {
 			$qb->set('approval', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT));
 		}
 		$qb->executeStatement();
+	}
+
+	/**
+	 * Counts one wrong confirmation code against a registration, and takes
+	 * its code away once `$limit` have been tried: the link in the email is
+	 * all that confirms it after that.
+	 *
+	 * @return int the wrong codes tried, this one included
+	 */
+	public function addCodeAttempt(int $id, int $limit): int {
+		$qb = $this->connection->getQueryBuilder();
+		$qb->update(self::TABLE)
+			->set('code_attempts', $qb->func()->add('code_attempts', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+		$qb->executeStatement();
+
+		$attempts = $this->get($id)['codeAttempts'] ?? $limit;
+		if ($attempts >= $limit) {
+			$clear = $this->connection->getQueryBuilder();
+			$clear->update(self::TABLE)
+				->set('code_hash', $clear->createNamedParameter(null))
+				->where($clear->expr()->eq('id', $clear->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+			$clear->executeStatement();
+		}
+
+		return $attempts;
 	}
 
 	public function delete(int $id): bool {
@@ -211,6 +242,9 @@ class ExternalSignupsRequest {
 				'noticeVersion' => (string)($row['notice_version'] ?? ''),
 				'noticeAcceptedAt' => (int)($row['notice_accepted'] ?? 0),
 				'noticeSnapshot' => (string)($row['notice_snapshot'] ?? ''),
+				'returnTo' => (string)($row['return_to'] ?? ''),
+				'codeHash' => (string)($row['code_hash'] ?? ''),
+				'codeAttempts' => (int)($row['code_attempts'] ?? 0),
 			];
 		}
 		$cursor->closeCursor();

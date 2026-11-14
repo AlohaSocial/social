@@ -15,6 +15,7 @@ use OCA\Social\Db\ExternalInvitesRequest;
 use OCA\Social\Db\ExternalSignupsRequest;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Exceptions\SocialAppConfigException;
+use OCA\Social\External\SignupReturn;
 use OCA\Social\Security\ClientAddress;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
@@ -40,10 +41,15 @@ use Throwable;
  * every mode, approval included. Email confirmation, when it is switched on,
  * comes first in every mode. The account itself is made by
  * `ExternalUserService::createAccount()`, which checks everything again.
+ *
+ * @psalm-import-type ExternalSignupRow from ExternalSignupsRequest
  */
 class ExternalSignupService {
-	/** How long a confirmation link works. */
+	/** How long a confirmation link, and the code sent with it, works. */
 	public const VERIFY_TTL = 86400;
+
+	/** Wrong confirmation codes one registration takes before only its link confirms it. */
+	public const CODE_ATTEMPTS = 5;
 
 	/** Registrations one address may make in an hour. */
 	public const PER_IP_PER_HOUR = 5;
@@ -81,6 +87,7 @@ class ExternalSignupService {
 		private ConfigService $configService,
 		private SignupMailLimiter $mailLimiter,
 		private SignupChallengeService $challengeService,
+		private SignupReturn $signupReturn,
 	) {
 	}
 
@@ -89,7 +96,7 @@ class ExternalSignupService {
 	 *
 	 * @return array<string, mixed>
 	 */
-	public function pageState(string $inviteToken = ''): array {
+	public function pageState(string $inviteToken = '', string $returnTo = ''): array {
 		$invite = $this->validInvite($inviteToken);
 		$mode = $this->externalUserService->mode();
 		$signupNotice = $this->signupNoticeText();
@@ -115,7 +122,10 @@ class ExternalSignupService {
 			'proofOfWork' => $invite === null && $this->externalUserService->requiresProofOfWork(),
 			'domain' => $this->addressHost(),
 			'bluesky' => $this->bluesky(),
-			'loginUrl' => $this->urlGenerator->linkToRoute('core.login.showLoginForm'),
+			'loginUrl' => $this->signupReturn->loginUrl($returnTo),
+			// the authorization request of the app this registration started
+			// from, as the login form takes it; '' when it did not
+			'returnUrl' => $this->signupReturn->normalize($returnTo),
 		];
 	}
 
@@ -193,7 +203,13 @@ class ExternalSignupService {
 	 * confirmation link stores nothing, so the address is not kept from its
 	 * owner for a day by a registration that cannot be confirmed.
 	 *
-	 * @return array{state: string, handle: string}
+	 * A registration that waits for its email to be confirmed also gets a
+	 * code, sent with the link, that the page it was made on can confirm it
+	 * with; `pending` is its id, for the caller to bind that page to it and
+	 * never to hand out.
+	 *
+	 * @param string $returnTo where an app that started the registration wants the person back, see `SignupReturn`
+	 * @return array{state: string, handle: string, pending?: int, loginUrl?: string}
 	 * @throws ExternalUserException
 	 */
 	public function submit(
@@ -209,7 +225,9 @@ class ExternalSignupService {
 		string $signupNoticeVersion = '',
 		string $challenge = '',
 		string $nonce = '',
+		string $returnTo = '',
 	): array {
+		$returnTo = $this->signupReturn->normalize($returnTo);
 		if ($honeypot !== '') {
 			$this->logger->info('[ExternalSignupService] dropped a registration that filled in the honeypot');
 
@@ -302,36 +320,84 @@ class ExternalSignupService {
 
 		if ($claim !== null) {
 			$token = $this->secureRandom->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
+			$tokenHash = hash('sha256', $token);
+			$code = $this->newCode();
 			$id = $this->signupsRequest->create(
-				$handle, $email, $passwordHash, hash('sha256', $token), false, $needsApproval, $inviteId, $ipHash, $now,
+				$handle, $email, $passwordHash, $tokenHash, false, $needsApproval, $inviteId, $ipHash, $now,
 				false, $noticeVersion, $noticeAcceptedAt, $noticeRequired ? $noticeText : '',
+				$returnTo, $this->codeHash($code, $tokenHash),
 			);
-			if (!$this->sendVerification($email, $handle, $token)) {
+			if (!$this->sendVerification($email, $handle, $token, $code)) {
 				$this->signupsRequest->delete($id);
 				$this->mailLimiter->release($claim);
 
 				throw new ExternalUserException($this->l10n->t('The confirmation email could not be sent. Please try again later.'));
 			}
 
-			return ['state' => self::STATE_VERIFY, 'handle' => $handle];
+			return ['state' => self::STATE_VERIFY, 'handle' => $handle, 'pending' => $id];
 		}
 
 		if ($needsApproval) {
-			$this->signupsRequest->create($handle, $email, $passwordHash, '', true, true, 0, $ipHash, $now, false, $noticeVersion, $noticeAcceptedAt, $noticeRequired ? $noticeText : '');
+			$this->signupsRequest->create($handle, $email, $passwordHash, '', true, true, 0, $ipHash, $now, false, $noticeVersion, $noticeAcceptedAt, $noticeRequired ? $noticeText : '', $returnTo);
 
 			return ['state' => self::STATE_APPROVAL, 'handle' => $handle];
 		}
 
 		$this->externalUserService->createAccount($handle, $email, $passwordHash, $this->origin($inviteId), 0, false, $noticeRequired ? $noticeVersion : '', $noticeAcceptedAt, $noticeRequired ? $noticeText : '');
-		$this->sendWelcome($email, $handle);
+		$this->sendWelcome($email, $handle, $returnTo);
 
-		return ['state' => self::STATE_CREATED, 'handle' => $handle];
+		return ['state' => self::STATE_CREATED, 'handle' => $handle, 'loginUrl' => $this->signupReturn->loginUrl($returnTo)];
+	}
+
+	/** Whether a registration waiting for its email can be confirmed with a code as well as the link. */
+	public function confirmsByCode(): bool {
+		return $this->externalUserService->verifiesEmail();
+	}
+
+	/**
+	 * The code from the confirmation email, typed into the page the
+	 * registration was made on.
+	 *
+	 * `$pendingId` is the registration that page made, as its session
+	 * remembers it, so a code is only ever tried against one registration;
+	 * 0, where the page made none that waits for a code, is answered as a
+	 * wrong code is. A registration takes `CODE_ATTEMPTS` wrong codes, then
+	 * only its link confirms it.
+	 *
+	 * @return array{state: string, handle: string, loginUrl?: string}
+	 * @throws ExternalUserException with the field `code`, or `code-locked` once no code is taken any more
+	 */
+	public function confirmCode(int $pendingId, string $code): array {
+		$code = (string)preg_replace('/\s+/', '', $code);
+		$row = ($pendingId > 0) ? $this->signupsRequest->get($pendingId) : null;
+		if ($row !== null && ($row['verified'] || $row['token'] === ''
+			|| $row['creation'] < $this->timeFactory->getTime() - self::VERIFY_TTL)) {
+			throw new ExternalUserException($this->l10n->t('This code is not valid any more. Please register again.'), 'code-locked');
+		}
+		if ($row !== null && ($row['codeHash'] ?? '') === '') {
+			throw new ExternalUserException($this->codeLockedMessage(), 'code-locked');
+		}
+
+		if ($row === null || preg_match('/^[0-9]{6}$/', $code) !== 1
+			|| !hash_equals($row['codeHash'] ?? '', $this->codeHash($code, $row['token']))) {
+			if ($row !== null && $this->signupsRequest->addCodeAttempt($row['id'], self::CODE_ATTEMPTS) >= self::CODE_ATTEMPTS) {
+				throw new ExternalUserException($this->codeLockedMessage(), 'code-locked');
+			}
+
+			throw new ExternalUserException($this->l10n->t('That code is not right. Check the email and try again.'), 'code');
+		}
+
+		return $this->confirm($row);
+	}
+
+	public function codeLockedMessage(): string {
+		return $this->l10n->t('Too many wrong codes. Follow the link in the email to confirm your address instead.');
 	}
 
 	/**
 	 * The link from the confirmation email.
 	 *
-	 * @return array{state: string, handle: string}
+	 * @return array{state: string, handle: string, loginUrl?: string}
 	 * @throws ExternalUserException
 	 */
 	public function verify(string $token): array {
@@ -341,6 +407,18 @@ class ExternalSignupService {
 			throw new ExternalUserException($this->l10n->t('This confirmation link is not valid any more. Please register again.'));
 		}
 
+		return $this->confirm($row);
+	}
+
+	/**
+	 * A registration whose address is confirmed, by its link or its code:
+	 * the account, or the queue where approval applies. `loginUrl` comes back
+	 * to the app that started the registration, if one did.
+	 *
+	 * @param ExternalSignupRow $row
+	 * @return array{state: string, handle: string, loginUrl?: string}
+	 */
+	private function confirm(array $row): array {
 		// the mode when the address is confirmed counts, so a registration
 		// sent before approval was switched on does not walk past it
 		if ($row['approval']
@@ -355,9 +433,9 @@ class ExternalSignupService {
 			$row['emailVerified'] ?? false, $row['noticeVersion'] ?? '', $row['noticeAcceptedAt'] ?? 0, $row['noticeSnapshot'] ?? '',
 		);
 		$this->signupsRequest->delete($row['id']);
-		$this->sendWelcome($row['email'], $row['handle']);
+		$this->sendWelcome($row['email'], $row['handle'], $row['returnTo'] ?? '');
 
-		return ['state' => self::STATE_CREATED, 'handle' => $row['handle']];
+		return ['state' => self::STATE_CREATED, 'handle' => $row['handle'], 'loginUrl' => $this->signupReturn->loginUrl($row['returnTo'] ?? '')];
 	}
 
 	/**
@@ -388,7 +466,7 @@ class ExternalSignupService {
 			$row['emailVerified'] ?? false, $row['noticeVersion'] ?? '', $row['noticeAcceptedAt'] ?? 0, $row['noticeSnapshot'] ?? '',
 		);
 		$this->signupsRequest->delete($row['id']);
-		$this->sendWelcome($row['email'], $row['handle']);
+		$this->sendWelcome($row['email'], $row['handle'], $row['returnTo'] ?? '');
 
 		return $row['handle'];
 	}
@@ -584,13 +662,28 @@ class ExternalSignupService {
 		}
 	}
 
-	private function sendVerification(string $email, string $handle, string $token): bool {
+	/** Six digits, for a person to type; good for one registration and `CODE_ATTEMPTS` tries. */
+	private function newCode(): string {
+		return str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+	}
+
+	/**
+	 * A code as it is stored: keyed with this instance's secret and the
+	 * registration's own token, so a stolen table neither gives the codes
+	 * away to a lookup table nor lets one registration's code confirm another.
+	 */
+	private function codeHash(string $code, string $tokenHash): string {
+		return hash_hmac('sha256', $code, $this->config->getSystemValueString('secret', '') . '|' . $tokenHash);
+	}
+
+	private function sendVerification(string $email, string $handle, string $token, string $code): bool {
 		$link = $this->urlGenerator->linkToRouteAbsolute('social.Signup.verify', ['token' => $token]);
-		$template = $this->mailer->createEMailTemplate('social.SignupVerify', ['handle' => $handle]);
+		$template = $this->mailer->createEMailTemplate('social.SignupVerify', ['handle' => $handle, 'code' => $code]);
 		$template->setSubject($this->l10n->t('Confirm your email address'));
 		$template->addHeader();
 		$template->addHeading($this->l10n->t('Welcome, @%s', [$handle]));
 		$template->addBodyText($this->l10n->t('Please confirm your email address to finish creating your account on %s. The link works for 24 hours.', [$this->domain()]));
+		$template->addBodyText($this->l10n->t('Still on the registration page? Type this code there: %s', [$code]));
 		$template->addBodyButton($this->l10n->t('Confirm email address'), $link);
 		$template->addBodyText($this->l10n->t('If you did not register, you can ignore this email.'));
 		$template->addFooter();
@@ -625,13 +718,14 @@ class ExternalSignupService {
 		return $this->send($email, $template);
 	}
 
-	private function sendWelcome(string $email, string $handle): void {
+	/** @param string $returnTo the app's authorization request the Log in button continues, see `SignupReturn` */
+	private function sendWelcome(string $email, string $handle, string $returnTo = ''): void {
 		$template = $this->mailer->createEMailTemplate('social.SignupWelcome', ['handle' => $handle]);
 		$template->setSubject($this->l10n->t('Your account is ready'));
 		$template->addHeader();
 		$template->addHeading($this->l10n->t('Welcome, @%s', [$handle]));
 		$template->addBodyText($this->l10n->t('Your account @%1$s@%2$s is ready. Log in with your username and the password you chose.', [$handle, $this->addressHost()]));
-		$template->addBodyButton($this->l10n->t('Log in'), $this->urlGenerator->linkToRouteAbsolute('core.login.showLoginForm'));
+		$template->addBodyButton($this->l10n->t('Log in'), $this->signupReturn->absoluteLoginUrl($returnTo));
 		$template->addFooter();
 
 		$this->send($email, $template);

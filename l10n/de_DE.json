@@ -3415,6 +3415,14 @@
     "Delete draft" : "Entwurf löschen",
     "Delete this draft?" : "Diesen Entwurf löschen?",
     "This draft will be permanently removed from this browser." : "Dieser Entwurf wird dauerhaft aus diesem Browser entfernt.",
-    "Could not delete this draft. Please try again." : "Der Entwurf konnte nicht gelöscht werden. Bitte versuche es erneut."
+    "Could not delete this draft. Please try again." : "Der Entwurf konnte nicht gelöscht werden. Bitte versuche es erneut.",
+    "Confirmation code" : "Bestätigungscode",
+    "The six digits from the email" : "Die sechs Ziffern aus der E-Mail",
+    "Confirm" : "Bestätigen",
+    "Signing you in …" : "Sie werden angemeldet …",
+    "We sent a code and a link to {email}. Type the code below, or follow the link within 24 hours." : "Wir haben einen Code und einen Link an {email} gesendet. Geben Sie den Code unten ein oder öffnen Sie den Link innerhalb von 24 Stunden.",
+    "Your account {handle} is ready." : "Ihr Konto {handle} ist bereit.",
+    "Too many attempts right now, please try again later." : "Zurzeit gibt es zu viele Versuche. Bitte versuchen Sie es später erneut.",
+    "The code could not be checked. Please try again." : "Der Code konnte nicht geprüft werden. Bitte versuchen Sie es erneut."
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }
