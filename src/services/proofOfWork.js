@@ -46,7 +46,9 @@ export function startSolving({ challenge, bits }, onProgress) {
 		}
 	}
 
+	/** @type {function((string|null|Promise<string|null>)): void} */
 	let settle = () => {}
+	/** @type {Promise<string|null>} */
 	const nonce = new Promise((resolve) => {
 		settle = resolve
 	})
