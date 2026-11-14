@@ -16,6 +16,7 @@ use OCA\Social\Db\DeviceAuthorizationRequest;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InvalidGrantException;
+use OCA\Social\Exceptions\InvalidScopeException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -29,12 +30,11 @@ use Throwable;
  * @package OCA\Social\Service
  */
 class ClientService {
+	/** How often a token in use has its last use written, at most. */
 	public const TIME_TOKEN_REFRESH = 300; // 5m
-	//	const TIME_TOKEN_TTL = 21600; // 6h
-	//	const TIME_AUTH_TTL = 30672000; // 1y
 
-	// looks like there is no token refresh. token must have been used in the last year.
-	public const TIME_TOKEN_TTL = 30672000; // 1y
+	/** `token_idle_days` when it is not set or not a number of days. */
+	public const DEFAULT_TOKEN_IDLE_DAYS = 90;
 
 	/**
 	 * How long a registration nobody has authorized is kept. Mastodon vacuums
@@ -197,6 +197,29 @@ class ClientService {
 	}
 
 	/**
+	 * Whether granting these scopes takes the account's password first:
+	 * `write:migration`, which lets the holder move the account away, and any
+	 * `admin` scope (`admin:read`, `admin:write` and their sub-scopes), which
+	 * lets it use the administration API as an administrator.
+	 *
+	 * @param string[] $scopes
+	 */
+	public static function needsPasswordConfirmation(array $scopes): bool {
+		foreach ($scopes as $scope) {
+			if ($scope === MoveFinishService::SCOPE || self::isAdminScope((string)$scope)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** `admin`, `admin:read`, `admin:write:accounts` and the like. */
+	public static function isAdminScope(string $scope): bool {
+		return $scope === 'admin' || str_starts_with($scope, 'admin:');
+	}
+
+	/**
 	 * A client registration for a PeerTube app, made on the spot.
 	 *
 	 * PeerTube's `/oauth-clients/local` hands out **one** pair per instance,
@@ -291,7 +314,103 @@ class ClientService {
 
 		$this->confirmCodeVerifier($authorized, $codeVerifier);
 
-		return $this->clientAuthRequest->exchange($client->getId(), $code, $this->token(80));
+		return $this->clientAuthRequest->exchange($client->getId(), $code, $this->token(80), $this->token(80));
+	}
+
+	/**
+	 * The `refresh_token` grant (RFC 6749 §6): a new access token and a new
+	 * refresh token in place of the ones the authorization holds.
+	 *
+	 * Rotated on every use, so a refresh token works once. One presented a
+	 * second time is a copy — whoever holds the other one has already used
+	 * it — and since nothing tells the two holders apart, the whole
+	 * authorization goes, and its client signs in again (OAuth 2.0 Security
+	 * BCP, RFC 9700 §4.14.2). A refresh may narrow the scopes, never widen them.
+	 *
+	 * The Web Push subscription bound to the old access token is moved to the
+	 * new one. A streaming connection opened with the old one is closed at
+	 * the daemon's next token check, and the client reconnects with the new.
+	 *
+	 * @throws InvalidGrantException the token is unknown, spent, expired, the
+	 *                               account's is disabled, or it belongs to
+	 *                               another client
+	 * @throws InvalidScopeException a scope that was not granted was asked for
+	 */
+	public function refresh(SocialClient $client, string $refreshToken, string $scope = ''): SocialClient {
+		try {
+			$stored = $this->clientAuthRequest->getByRefreshToken($refreshToken);
+		} catch (ClientNotFoundException $e) {
+			$this->revokeFamilyOfSpent($refreshToken);
+
+			throw new InvalidGrantException('unknown refresh_token');
+		}
+
+		if ($stored->getId() !== $client->getId()) {
+			throw new InvalidGrantException('refresh_token was not issued to this client');
+		}
+
+		$now = $this->now();
+		if ($stored->getLastUpdate() + $this->idleSeconds() < $now) {
+			$this->clientAuthRequest->revoke($stored->getAuthId());
+			$this->deletePushSubscription($stored->getAuthUserId(), $stored->getToken());
+
+			throw new InvalidGrantException('refresh_token expired');
+		}
+
+		if ($stored->getAuthUserId() === '' || !$this->enabledUsers->isEnabled($stored->getAuthUserId())) {
+			throw new InvalidGrantException('the account is disabled');
+		}
+
+		$scopes = $stored->getAuthScopes();
+		if (trim($scope) !== '') {
+			$requested = array_values(array_unique(array_filter(
+				$stored->getScopesFromString(trim($scope)), static fn (string $one): bool => $one !== ''
+			)));
+			if (array_diff($requested, $scopes) !== []) {
+				throw new InvalidScopeException('scope exceeds what was granted');
+			}
+			$scopes = $requested;
+		}
+
+		$token = $this->token(80);
+		$newRefreshToken = $this->token(80);
+		if (!$this->clientAuthRequest->rotate($stored->getAuthId(), $refreshToken, $token, $newRefreshToken, $scopes, $now)) {
+			// another request presented the same token a moment ago and won
+			throw new InvalidGrantException('refresh_token already used');
+		}
+
+		$this->rebindPushSubscription($stored->getAuthUserId(), $stored->getToken(), $token);
+
+		return $stored->setToken($token)
+			->setRefreshToken($newRefreshToken)
+			->setAuthScopes($scopes)
+			->setTokenCreation($now)
+			->setRefreshCount($stored->getRefreshCount() + 1)
+			->setLastUpdate($now);
+	}
+
+	/**
+	 * Revokes the authorization a spent refresh token was exchanged on, if
+	 * it was: presenting it again means somebody else holds a copy.
+	 */
+	private function revokeFamilyOfSpent(string $refreshToken): void {
+		$authId = $this->clientAuthRequest->spentOn($refreshToken);
+		if ($authId === null) {
+			return;
+		}
+
+		try {
+			$family = $this->clientAuthRequest->getByAuthId($authId);
+		} catch (ClientNotFoundException $e) {
+			return;
+		}
+
+		$this->logger->warning('A spent OAuth refresh token was presented again; the authorization was revoked', [
+			'user' => $family->getAuthUserId(),
+			'app' => $family->getAppName(),
+		]);
+		$this->clientAuthRequest->revoke($authId);
+		$this->deletePushSubscription($family->getAuthUserId(), $family->getToken());
 	}
 
 	/**
@@ -343,6 +462,38 @@ class ClientService {
 	}
 
 	/**
+	 * Signs every application out of one account: all its authorizations,
+	 * with their access tokens and unexchanged codes, the device codes it
+	 * approved and nobody has collected yet, and the Web Push subscriptions
+	 * bound to those tokens. App registrations and app tokens are the
+	 * instance's and stay.
+	 *
+	 * A streaming connection opened with one of the tokens is closed by the
+	 * daemon at its next token check (`MastodonStreamingDaemon`).
+	 *
+	 * @return int how many authorizations were taken back
+	 */
+	public function revokeAllOf(string $userId): int {
+		if ($userId === '') {
+			return 0;
+		}
+
+		$count = count($this->clientAuthRequest->getByUser($userId));
+		$this->clientAuthRequest->deleteRelatedId($userId);
+		$this->deviceAuthorizations->deleteByUser($userId);
+		try {
+			$this->pushSubscriptions->deleteAll($userId);
+		} catch (Throwable $e) {
+			$this->logger->error('Could not remove the Mastodon Web Push subscriptions of a signed-out account', [
+				'user' => $userId,
+				'exception' => $e,
+			]);
+		}
+
+		return $count;
+	}
+
+	/**
 	 * The `client_credentials` grant (RFC 6749 §4.4): a token for the app
 	 * itself, bound to no account.
 	 *
@@ -379,12 +530,12 @@ class ClientService {
 		$client = $this->clientAuthRequest->getByToken($token);
 
 		$now = $this->now();
-		if ($client->getLastUpdate() + self::TIME_TOKEN_TTL < $now) {
+		if ($client->getLastUpdate() + $this->idleSeconds() < $now) {
 			try {
 				// only the authorization goes: the app registration is the
 				// instance's, and taking it with an idle token made the client
 				// register itself all over again
-				$this->clientAuthRequest->deprecate($now);
+				$this->clientAuthRequest->revoke($client->getAuthId());
 				$this->deletePushSubscription($client->getAuthUserId(), $client->getToken());
 			} catch (Exception $e) {
 			}
@@ -392,12 +543,15 @@ class ClientService {
 			throw new ClientNotFoundException();
 		}
 
-		// The sliding TTL above is about a token nobody uses; this is about one
-		// somebody does. Without it a token copied off a device lived as long
-		// as whoever held the copy kept using it.
+		// The sliding idle limit above is about a token nobody uses; this is
+		// about one somebody does. Without it a token copied off a device lived
+		// as long as whoever held the copy kept using it. An authorization
+		// with a refresh token is kept, so its client can refresh it.
 		if ($this->expiredByAge($client, $now)) {
-			$this->clientAuthRequest->revoke($client->getAuthId());
-			$this->deletePushSubscription($client->getAuthUserId(), $client->getToken());
+			if ($client->getRefreshToken() === '') {
+				$this->clientAuthRequest->revoke($client->getAuthId());
+				$this->deletePushSubscription($client->getAuthUserId(), $client->getToken());
+			}
 
 			throw new ClientNotFoundException('the access_token has expired');
 		}
@@ -408,10 +562,8 @@ class ClientService {
 		}
 
 		// Keep the row's last_update roughly current (at most one write per
-		// TIME_TOKEN_REFRESH), so a token in active use never reaches the TTL.
-		// The old inverted comparison only refreshed *recently written* rows, so
-		// any token idle for five minutes stopped refreshing and died a year
-		// after its first burst of use, no matter how actively it was used since.
+		// TIME_TOKEN_REFRESH), so a token in active use never reaches the
+		// idle limit.
 		if ($client->getLastUpdate() + self::TIME_TOKEN_REFRESH < $now) {
 			$this->clientAuthRequest->touch($client->getAuthId(), $now);
 		}
@@ -420,35 +572,65 @@ class ClientService {
 	}
 
 	/**
-	 * The housekeeping `Cron\Cache` runs: authorizations idle past the TTL,
-	 * and app registrations nobody ever authorized.
+	 * How long an authorization may go unused before it is removed:
+	 * `token_idle_days`, at least a day.
+	 */
+	public function idleSeconds(): int {
+		$days = $this->configService->getAppValueInt(ConfigService::SOCIAL_TOKEN_IDLE_DAYS);
+
+		return max(1, $days > 0 ? $days : self::DEFAULT_TOKEN_IDLE_DAYS) * 86400;
+	}
+
+	/**
+	 * The housekeeping `Cron\Cache` runs: authorizations idle past
+	 * `token_idle_days` with their Web Push subscriptions, the spent refresh
+	 * tokens of authorizations that are gone, and app registrations nobody
+	 * ever authorized.
 	 *
 	 * The first used to happen only when an expired token was presented, so a
 	 * token whose holder never came back stayed in the table for good; the
-	 * second is what keeps the public `POST /api/v1/apps` from filling it.
+	 * last is what keeps the public `POST /api/v1/apps` from filling it.
 	 *
 	 * @return int how many unused registrations were removed
 	 */
 	public function sweep(): int {
 		$now = $this->now();
-		$this->clientAuthRequest->deprecate($now);
+		$before = $now - $this->idleSeconds();
+		foreach ($this->clientAuthRequest->getIdleSince($before) as $idle) {
+			$this->deletePushSubscription($idle->getAuthUserId(), $idle->getToken());
+		}
+		$this->clientAuthRequest->deprecate($before);
+		$this->clientAuthRequest->pruneSpentRefreshTokens();
 		$this->deviceAuthorizations->prune($now);
 
 		return $this->clientRequest->deleteNeverAuthorized($now - self::TIME_UNUSED_APP_TTL);
 	}
 
 	/**
-	 * When an authorization stops working however much it is used: its grant
-	 * plus `token_max_days`, or 0 for never — with the setting at 0, or for an
-	 * authorization whose grant date is not recorded.
+	 * When the current access token stops working however much it is used,
+	 * or 0 for never.
+	 *
+	 * Counted from when it was issued (the grant, for a row from before that
+	 * was recorded): `refreshed_token_hours` for a token issued by a refresh,
+	 * `token_max_days` for any other. A setting at 0, or a row with no date,
+	 * is never.
 	 */
 	public function expiresAt(SocialClient $client): int {
-		$days = $this->configService->getAppValueInt(ConfigService::SOCIAL_TOKEN_MAX_DAYS);
-		if ($days < 1 || $client->getAuthCreation() < 1) {
+		$issued = ($client->getTokenCreation() > 0) ? $client->getTokenCreation() : $client->getAuthCreation();
+		if ($issued < 1) {
 			return 0;
 		}
 
-		return $client->getAuthCreation() + $days * 86400;
+		if ($client->getRefreshCount() > 0) {
+			$hours = $this->configService->getAppValueInt(ConfigService::SOCIAL_REFRESHED_TOKEN_HOURS);
+			if ($hours > 0) {
+				return $issued + $hours * 3600;
+			}
+		}
+
+		$days = $this->configService->getAppValueInt(ConfigService::SOCIAL_TOKEN_MAX_DAYS);
+
+		return ($days < 1) ? 0 : $issued + $days * 86400;
 	}
 
 	private function expiredByAge(SocialClient $client, int $now): bool {
@@ -458,13 +640,36 @@ class ClientService {
 	}
 
 	/**
-	 * Revokes the access token presented by a client (RFC 7009). Unknown tokens
+	 * When the app is signed out however much it is used, as the Authorized
+	 * apps page says it: the end of its access token's lifetime, or 0 — for
+	 * a lifetime that does not end, and for an app that has refreshed its
+	 * token before, which shows it renews it rather than signs out.
+	 */
+	public function signsOutAt(SocialClient $client): int {
+		return ($client->getRefreshCount() > 0) ? 0 : $this->expiresAt($client);
+	}
+
+	/** Seconds the access token has left, for `expires_in`; null when it does not expire. */
+	public function expiresIn(SocialClient $client): ?int {
+		$expiresAt = $this->expiresAt($client);
+
+		return ($expiresAt === 0) ? null : max(0, $expiresAt - $this->now());
+	}
+
+	/**
+	 * Revokes the access or refresh token presented by a client (RFC 7009),
+	 * which is the whole authorization either way. Unknown tokens
 	 * are not an error — the outcome the caller asked for is true either way.
 	 *
 	 * @throws ClientException
 	 */
 	public function revokeToken(SocialClient $client, string $token): void {
-		$stored = $this->clientAuthRequest->getByToken($token);
+		try {
+			$stored = $this->clientAuthRequest->getByToken($token);
+		} catch (ClientNotFoundException $e) {
+			// RFC 7009 §2.1: a refresh token takes its access token with it
+			$stored = $this->clientAuthRequest->getByRefreshToken($token);
+		}
 		if ($stored->getId() !== $client->getId()) {
 			throw new ClientException('token does not belong to this client');
 		}
@@ -473,6 +678,25 @@ class ClientService {
 		// sign out everybody else who authorized the same client
 		$this->clientAuthRequest->revoke($stored->getAuthId());
 		$this->deletePushSubscription($stored->getAuthUserId(), $stored->getToken());
+	}
+
+	private function rebindPushSubscription(string $userId, string $storedToken, string $token): void {
+		if ($userId === '' || !str_starts_with($storedToken, SecretHasher::PREFIX)) {
+			return;
+		}
+		try {
+			$this->pushSubscriptions->rebind(
+				$userId,
+				substr($storedToken, strlen(SecretHasher::PREFIX)),
+				substr($this->secretHasher->hash($token), strlen(SecretHasher::PREFIX)),
+				$token
+			);
+		} catch (Throwable $e) {
+			$this->logger->error('Could not move a Mastodon Web Push subscription to a refreshed token', [
+				'user' => $userId,
+				'exception' => $e,
+			]);
+		}
 	}
 
 	private function deletePushSubscription(string $userId, string $storedToken): void {

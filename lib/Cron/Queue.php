@@ -11,6 +11,7 @@ namespace OCA\Social\Cron;
 
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\RequestQueueService;
@@ -122,14 +123,15 @@ class Queue extends TimedJob {
 	 * itself: logged, and handed back to standby.
 	 */
 	private function failed(RequestQueue $request, Throwable $e): void {
+		$token = AsyncRequestSigner::fingerprint($request->getToken());
 		if ($e instanceof SocialAppConfigException) {
 			// The app is misconfigured, so *every* delivery in this queue
 			// will fail the same way. That used to be swallowed silently:
 			// at warning, because federation is down until it is fixed.
 			$this->logger->warning(
-				'[Cron\\Queue] cannot deliver ' . $request->getToken()
+				'[Cron\\Queue] cannot deliver ' . $token
 				. ': the Social app is not configured (' . $e->getMessage() . ')',
-				['exception' => $e, 'token' => $request->getToken()]
+				['exception' => $e, 'token' => $token]
 			);
 		} else {
 			// One row must cost that row and no more. manageRequest() ends
@@ -137,9 +139,9 @@ class Queue extends TimedJob {
 			// database going away comes out of it unhandled — and used to
 			// take the rest of the batch with it.
 			$this->logger->warning(
-				'[Cron\\Queue] delivery of ' . $request->getToken() . ' failed: '
+				'[Cron\\Queue] delivery of ' . $token . ' failed: '
 				. get_class($e) . ' ' . $e->getMessage(),
-				['exception' => $e, 'token' => $request->getToken()]
+				['exception' => $e, 'token' => $token]
 			);
 		}
 
@@ -159,9 +161,10 @@ class Queue extends TimedJob {
 			$this->requestQueueService->endRequest($request, false);
 		} catch (Throwable $e) {
 			// the database is what just failed; the stale reaper is the backstop
+			$token = AsyncRequestSigner::fingerprint($request->getToken());
 			$this->logger->warning(
-				'[Cron\\Queue] cannot return ' . $request->getToken() . ' to standby',
-				['exception' => $e, 'token' => $request->getToken()]
+				'[Cron\\Queue] cannot return ' . $token . ' to standby',
+				['exception' => $e, 'token' => $token]
 			);
 		}
 	}

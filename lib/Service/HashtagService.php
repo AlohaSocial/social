@@ -64,7 +64,7 @@ class HashtagService {
 		// the instance has ever seen on every cron run
 		$current = $this->hashtagsRequest->getWithAnyTrend();
 
-		// all five windows in one read of the widest: they are the same rows
+		// all five windows at once, off the hourly buckets (StreamTrendBuckets)
 		$time = $this->timeFactory?->getTime() ?? time();
 		$hashtags = $this->streamRequest->countHashtagsInWindows([
 			'1h' => $time - self::TREND_1H,

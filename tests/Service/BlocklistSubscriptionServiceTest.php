@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use InvalidArgumentException;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Service\BlocklistImportService;
 use OCA\Social\Service\BlocklistSubscriptionService;
 use OCA\Social\Service\ConfigService;
@@ -47,7 +48,7 @@ class BlocklistSubscriptionServiceTest extends TestCase {
 
 		$this->service = new BlocklistSubscriptionService(
 			$this->configService,
-			new BlocklistImportService($this->fediverseService),
+			new BlocklistImportService($this->fediverseService, $this->createStub(ServerBlockRequest::class)),
 			$this->curl,
 			new NullLogger(),
 		);

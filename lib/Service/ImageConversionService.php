@@ -191,6 +191,8 @@ class ImageConversionService {
 			);
 		}
 
+		$this->assertHeicWithinPixelLimit($content);
+
 		try {
 			$image = new \Imagick();
 			$image->readImageBlob($content);
@@ -214,6 +216,29 @@ class ImageConversionService {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * `CacheDocumentService::MAX_PIXELS` for a HEIC, whose header
+	 * `getimagesizefromstring()` cannot read: Imagick's ping reads the
+	 * dimensions without decoding a pixel.
+	 *
+	 * @throws CacheContentDecodeException
+	 */
+	private function assertHeicWithinPixelLimit(string $content): void {
+		try {
+			$ping = new \Imagick();
+			$ping->pingImageBlob($content);
+			$width = $ping->getImageWidth();
+			$height = $ping->getImageHeight();
+			$ping->clear();
+		} catch (Throwable $e) {
+			throw new CacheContentDecodeException('cannot read this HEIC image: ' . $e->getMessage());
+		}
+
+		if ($width * $height > CacheDocumentService::MAX_PIXELS) {
+			throw new CacheContentDecodeException('image is too large to decode: ' . $width . 'x' . $height);
+		}
 	}
 
 	/**

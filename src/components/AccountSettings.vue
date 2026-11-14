@@ -50,6 +50,14 @@
 			</NcCheckboxRadioSwitch>
 
 			<NcCheckboxRadioSwitch
+				v-model="draft.hideCollections"
+				type="switch"
+				class="account-settings__switch"
+				:description="t('social', 'Others still see how many followers you have and how many accounts you follow, but not who they are. Other servers are told the numbers only.')">
+				{{ t('social', 'Hide my followers and following') }}
+			</NcCheckboxRadioSwitch>
+
+			<NcCheckboxRadioSwitch
 				v-model="draft.bot"
 				type="switch"
 				class="account-settings__switch"
@@ -96,8 +104,8 @@ import VisibilityIcon from './Visibility/VisibilityIcon.vue'
 
 /**
  * The account as a form: the settings `update_credentials` takes that are
- * about the account rather than the profile. The name, the four flags and the
- * default audience are here; the bio, the banner and the metadata fields stay
+ * about the account rather than the profile. The name, the four flags, the
+ * hidden follower lists and the default audience are here; the bio, the banner and the metadata fields stay
  * in the profile's own editor, because they are what a visitor reads and are
  * edited where they are seen.
  *
@@ -124,6 +132,7 @@ export default {
 				locked: false,
 				discoverable: false,
 				indexable: false,
+				hideCollections: false,
 				bot: false,
 				/** @type {import('./Visibility/VisibilitiesInfos.js').Visibility|null} */
 				privacy: null,
@@ -175,6 +184,9 @@ export default {
 				if (this.draft[flag] !== Boolean(stored[flag])) {
 					changes[flag] = this.draft[flag]
 				}
+			}
+			if (this.draft.hideCollections !== Boolean(stored.source?.hide_collections)) {
+				changes.hide_collections = this.draft.hideCollections
 			}
 			const privacy = this.draft.privacy?.id
 			if (privacy && privacy !== this.accountStore.defaultPostVisibility) {
@@ -231,6 +243,7 @@ export default {
 				locked: Boolean(credentials.locked),
 				discoverable: Boolean(credentials.discoverable),
 				indexable: Boolean(credentials.indexable),
+				hideCollections: Boolean(credentials.source?.hide_collections),
 				bot: Boolean(credentials.bot),
 				privacy: visibilitiesInfo.find(({ id }) => id === privacy) ?? null,
 			}

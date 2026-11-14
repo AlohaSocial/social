@@ -238,7 +238,7 @@ describe('OAuth2Authorize', () => {
 
 			expect(confirm).toHaveBeenCalledOnce()
 			expect(submit).toHaveBeenCalledOnce()
-			expect(submit.mock.calls[0][1]).toBe('/index.php/apps/social/oauth/authorize/move' + window.location.search)
+			expect(submit.mock.calls[0][1]).toBe('/index.php/apps/social/oauth/authorize/confirmed' + window.location.search)
 		})
 
 		it('stays on the page when the password dialog is dismissed', async () => {
@@ -261,6 +261,46 @@ describe('OAuth2Authorize', () => {
 			await flushPromises()
 
 			expect(submit).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('an application asking for an admin scope', () => {
+		afterEach(() => {
+			delete window.OC.PasswordConfirmation
+		})
+
+		function adminPage(scopes = ['read', 'admin:read', 'admin:write:accounts']) {
+			setState('scopes', scopes)
+			setState('redirectUri', 'https://admin.example/cb')
+			return mount(OAuth2Authorize)
+		}
+
+		it('says why the password will be asked', () => {
+			const page = adminPage()
+
+			expect(page.text()).toContain('This application asks to administer this server as you')
+			expect(page.text()).toContain('you will be asked for your password')
+			expect(page.text()).toContain('Read the administration data of this server')
+			expect(page.text()).toContain('admin:write:accounts')
+		})
+
+		it('asks for the password, then posts to the confirmed route', async () => {
+			const page = adminPage(['admin'])
+			const confirm = vi.fn((resolve) => resolve())
+			window.OC.PasswordConfirmation = { requirePasswordConfirmation: confirm }
+			const submit = vi.spyOn(page.vm, 'submitTo').mockImplementation(() => {})
+
+			await page.find('form.guest-box').trigger('submit')
+			await flushPromises()
+
+			expect(confirm).toHaveBeenCalledOnce()
+			expect(submit.mock.calls[0][1]).toBe('/index.php/apps/social/oauth/authorize/confirmed' + window.location.search)
+		})
+
+		it('does not mistake a scope that only starts with the letters for one', () => {
+			const page = adminPage(['read', 'administrative'])
+
+			expect(page.text()).not.toContain('administer this server as you')
 		})
 	})
 

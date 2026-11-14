@@ -14,6 +14,8 @@ use OCA\Social\Cron\Cache;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
+use OCA\Social\Db\HostBreakerRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -86,6 +88,16 @@ class CacheWorkBudgetTest extends TestCase {
 		foreach (self::SETTINGS as $key) {
 			$this->settings[$key] = Server::get(IAppConfig::class)->getValueString('social', $key, '');
 		}
+		$this->closeBreaker();
+	}
+
+	/**
+	 * Every request here fails, so a step that talks to the seeded host can
+	 * open its circuit breaker, which the remote media prefetch honours: each
+	 * test starts, and leaves, with the host closed.
+	 */
+	private function closeBreaker(): void {
+		Server::get(HostBreakerRequest::class)->close((string)parse_url(self::BASE, PHP_URL_HOST));
 	}
 
 	protected function tearDown(): void {
@@ -100,6 +112,7 @@ class CacheWorkBudgetTest extends TestCase {
 		foreach ($this->settings as $key => $value) {
 			Server::get(IAppConfig::class)->setValueString('social', $key, $value);
 		}
+		$this->closeBreaker();
 		parent::tearDown();
 	}
 
@@ -414,10 +427,11 @@ class CacheWorkBudgetTest extends TestCase {
 		$this->assertLessThanOrEqual($cap, $pruned);
 		$this->assertGreaterThan(0, $pruned);
 		// the chunk's candidates and the ids no rule keeps, their documents,
-		// every table that names a post and the place the walk got to, per
-		// chunk of five hundred, and the queue and notification sweeps: 244
-		// today, for ten chunks
-		$this->assertWithinBudget($run, intdiv($cap, StreamPruneService::CHUNK), 25, 10);
+		// every table that names a post, the trend hours its public posts
+		// were published in (one read, one mark per hour) and the place the
+		// walk got to, per chunk of five hundred, and the queue and
+		// notification sweeps: 264 for ten chunks whose posts share an hour
+		$this->assertWithinBudget($run, intdiv($cap, StreamPruneService::CHUNK), 27, 10);
 	}
 
 	/** One batch of remote posts asked for their counts, each stamped once. */
@@ -436,14 +450,22 @@ class CacheWorkBudgetTest extends TestCase {
 		$this->assertWithinBudget($run, RemoteCountService::BATCH, 1, 3);
 	}
 
-	/** One batch of documents not yet cached, each tried and marked. */
+	/**
+	 * At most one page of documents not yet cached is tried, each claimed and
+	 * its outcome written. Every host here is unreachable, so the first wave
+	 * fails and the rest of that host's documents are not asked for in this
+	 * run: what is left is a read per page.
+	 */
 	public function testTheDocumentCacheTakesOneBatch(): void {
 		$rows = [];
 		for ($i = 0; $i < 3 * CacheDocumentsRequest::CACHE_BATCH; $i++) {
 			$id = self::BASE . '/media/' . (++$this->sequence) . '.jpg';
 			$rows[] = [
 				'id' => $id, 'id_prim' => md5($id), 'type' => 'Image', 'parent_id' => '', 'parent_id_prim' => '',
+				// the keys of the copy names as the app writes them: empty for
+				// no copy, which is what the sweep looks the rows up by
 				'media_type' => 'image/jpeg', 'mime_type' => '', 'url' => $id, 'local_copy' => '', 'resized_copy' => '',
+				'local_copy_prim' => '', 'resized_copy_prim' => '',
 				'account' => '', 'meta' => '[]', 'blurhash' => '', 'description' => '', 'public' => false,
 				'error' => 0, 'creation' => new DateTime(), 'caching' => new DateTime('2001-01-01'),
 			];
@@ -458,8 +480,8 @@ class CacheWorkBudgetTest extends TestCase {
 		);
 		$this->assertLessThanOrEqual(CacheDocumentsRequest::CACHE_BATCH, $tried);
 		$this->assertGreaterThan(0, $tried);
-		// the document read, marked as being cached and its outcome written,
-		// and the batch read once: 151 today
+		// a claim and an outcome per document tried, a read per page and the
+		// breaker read once
 		$this->assertWithinBudget($run, CacheDocumentsRequest::CACHE_BATCH, 3, 3);
 	}
 
@@ -490,9 +512,15 @@ class CacheWorkBudgetTest extends TestCase {
 
 		$written = count($first->matching('/^(UPDATE|INSERT).*social_hashtag/'));
 		$this->assertGreaterThanOrEqual(1000, $written, 'every new hashtag is written: ' . self::kinds($first));
-		// an update that finds no row, then the insert: two a new hashtag
-		$this->assertWithinBudget($first, 1000, 2, 5);
-		// the two reads of the pass, and not one write: 2 today
-		$this->assertWithinBudget($second, 0, 0, 3);
+		// an update that finds no row, then the insert: two a new hashtag; the
+		// hour's buckets, TREND_INSERT_ROWS to a statement; and the reads and
+		// the mark of the pass, two more when the oldest kept hour moved
+		// since the last one: 2012 today
+		$this->assertWithinBudget($first, 1000, 2, 11 + (int)ceil(1000 / StreamRequest::TREND_INSERT_ROWS));
+		// nothing moved: the hour is recounted and found as it is stored, so
+		// not one bucket or hashtag is written
+		$this->assertSame([], $second->matching('/^(UPDATE|INSERT|DELETE)\b.*social_(hashtag|tag_hour)\b/'), self::kinds($second));
+		// the reads of the pass and its mark: 8 today
+		$this->assertWithinBudget($second, 0, 0, 10);
 	}
 }

@@ -277,6 +277,14 @@
 		margin: 14px 0;
 
 		li {
+			.user-profile__count {
+				display: inline-block;
+				padding: 8px 12px;
+				font-size: 14px;
+				font-weight: 600;
+				color: var(--color-text-maxcontrast);
+			}
+
 			a {
 				padding: 8px 12px;
 				font-size: 14px;

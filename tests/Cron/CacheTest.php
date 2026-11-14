@@ -17,7 +17,6 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheActorSweepService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
-use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FediverseDirectoryService;
 use OCA\Social\Service\GroupListService;
@@ -25,6 +24,7 @@ use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\ProfileLinkVerifier;
+use OCA\Social\Service\RemoteMediaPrefetcher;
 use OCA\Social\Service\StreamPruneService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -45,8 +45,8 @@ class CacheTest extends TestCase {
 	private $accountService;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
-	/** @var DocumentService&MockObject */
-	private $documentService;
+	/** @var RemoteMediaPrefetcher&MockObject */
+	private $mediaPrefetcher;
 	/** @var HashtagService&MockObject */
 	private $hashtagService;
 	/** @var StreamService&MockObject */
@@ -77,7 +77,7 @@ class CacheTest extends TestCase {
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->documentService = $this->createMock(DocumentService::class);
+		$this->mediaPrefetcher = $this->createMock(RemoteMediaPrefetcher::class);
 		$this->hashtagService = $this->createMock(HashtagService::class);
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->streamPruneService = $this->createStub(StreamPruneService::class);
@@ -97,7 +97,7 @@ class CacheTest extends TestCase {
 			$time,
 			$this->accountService,
 			$this->cacheActorService,
-			$this->documentService,
+			$this->mediaPrefetcher,
 			$this->hashtagService,
 			$this->streamService,
 			$this->streamPruneService,
@@ -131,7 +131,7 @@ class CacheTest extends TestCase {
 		$this->accountService->expects($this->once())->method('manageCacheLocalActors');
 		$this->cacheActorService->expects($this->once())->method('manageCacheRemoteActors');
 		$this->cacheActorService->expects($this->once())->method('manageDetailsRemoteActors');
-		$this->documentService->expects($this->once())->method('manageCacheDocuments');
+		$this->mediaPrefetcher->expects($this->once())->method('prefetchPending');
 		$this->hashtagService->expects($this->once())->method('manageHashtags');
 		// the catch-all behind the group listener runs every pass
 		$this->groupListService->expects($this->once())->method('reconcile');
@@ -188,7 +188,7 @@ class CacheTest extends TestCase {
 		$this->cacheActorService->method('manageCacheRemoteActors')->willThrowException(new \RuntimeException('network'));
 		$this->accountService->expects($this->once())->method('manageCacheLocalActors');
 		$this->cacheActorService->expects($this->once())->method('manageDetailsRemoteActors');
-		$this->documentService->expects($this->once())->method('manageCacheDocuments');
+		$this->mediaPrefetcher->expects($this->once())->method('prefetchPending');
 		$this->hashtagService->expects($this->once())->method('manageHashtags');
 		$this->cacheActorsRequest->expects($this->once())->method('getRemoteActorsToSync')->willReturn([]);
 		$this->captureWarnings();
@@ -223,7 +223,7 @@ class CacheTest extends TestCase {
 		$this->accountService->method('manageCacheLocalActors')->willThrowException(new \RuntimeException('b'));
 		$this->cacheActorService->method('manageCacheRemoteActors')->willThrowException(new \RuntimeException('c'));
 		$this->cacheActorService->method('manageDetailsRemoteActors')->willThrowException(new \RuntimeException('d'));
-		$this->documentService->method('manageCacheDocuments')->willThrowException(new \RuntimeException('e'));
+		$this->mediaPrefetcher->method('prefetchPending')->willThrowException(new \RuntimeException('e'));
 		$this->hashtagService->method('manageHashtags')->willThrowException(new \RuntimeException('f'));
 		$this->streamPruneService->method('prune')->willThrowException(new \RuntimeException('g'));
 		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willThrowException(new \RuntimeException('h'));
@@ -293,7 +293,7 @@ class CacheTest extends TestCase {
 		$this->accountService->method('manageCacheLocalActors')->willReturnCallback(fn (): int => $note('manageCacheLocalActors'));
 		$this->cacheActorService->method('manageCacheRemoteActors')->willReturnCallback(fn (): int => $note('manageCacheRemoteActors'));
 		$this->cacheActorService->method('manageDetailsRemoteActors')->willReturnCallback(fn (): int => $note('manageDetailsRemoteActors'));
-		$this->documentService->method('manageCacheDocuments')->willReturnCallback(fn (): int => $note('manageCacheDocuments'));
+		$this->mediaPrefetcher->method('prefetchPending')->willReturnCallback(fn (): int => $note('manageCacheDocuments'));
 		$this->hashtagService->method('manageHashtags')->willReturnCallback(fn (): int => $note('manageHashtags'));
 		$this->pollService->method('announceClosedPolls')->willReturnCallback(fn (): int => $note('announceClosedPolls'));
 		$this->streamPruneService->method('prune')->willReturnCallback(fn (): array => ['streams' => $note('prune')]);
@@ -332,7 +332,7 @@ class CacheTest extends TestCase {
 			$time,
 			$this->accountService,
 			$this->cacheActorService,
-			$this->documentService,
+			$this->mediaPrefetcher,
 			$this->hashtagService,
 			$this->streamService,
 			$this->streamPruneService,
@@ -356,7 +356,7 @@ class CacheTest extends TestCase {
 			$time,
 			$this->accountService,
 			$this->cacheActorService,
-			$this->documentService,
+			$this->mediaPrefetcher,
 			$this->hashtagService,
 			$this->streamService,
 			$this->streamPruneService,
@@ -379,7 +379,7 @@ class CacheTest extends TestCase {
 			$time,
 			$this->accountService,
 			$this->cacheActorService,
-			$this->documentService,
+			$this->mediaPrefetcher,
 			$this->hashtagService,
 			$this->streamService,
 			$this->streamPruneService,
@@ -564,7 +564,7 @@ class CacheTest extends TestCase {
 			$time,
 			$this->accountService,
 			$this->cacheActorService,
-			$this->documentService,
+			$this->mediaPrefetcher,
 			$this->hashtagService,
 			$this->streamService,
 			$this->streamPruneService,

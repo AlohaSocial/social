@@ -359,9 +359,12 @@ class ExternalUserServiceTest extends TestCase {
 			[true, 10, -5, 'open', true, 0],
 			[true, 10, 0, 'whoever', true, 0],
 			[true, 10, 0, 'open', true, 120],
-		] as [$enabled, $max, $quota, $mode, $verify, $age]) {
+			[true, 10, 0, 'open', true, 0, ExternalUserService::MIN_PROOF_OF_WORK_BITS - 1],
+			[true, 10, 0, 'open', true, 0, ExternalUserService::MAX_PROOF_OF_WORK_BITS + 1],
+		] as $values) {
+			[$enabled, $max, $quota, $mode, $verify, $age] = $values;
 			try {
-				$this->service()->saveSettings($enabled, $max, $quota, $mode, $verify, $age, [], false);
+				$this->service()->saveSettings($enabled, $max, $quota, $mode, $verify, $age, [], false, '', false, true, $values[6] ?? 20);
 				$this->fail('accepted ' . json_encode([$max, $quota, $mode, $age]));
 			} catch (\InvalidArgumentException $e) {
 			}
@@ -382,6 +385,12 @@ class ExternalUserServiceTest extends TestCase {
 		$this->assertSame(['ceo', 'board'], $settings['reserved']);
 		$this->assertTrue($settings['userInvites']);
 		$this->assertFalse($settings['signupNoticeRequired']);
+		$this->assertTrue($settings['proofOfWork']);
+		$this->assertSame(20, $settings['proofOfWorkBits']);
+
+		$settings = $this->service()->saveSettings(true, 50, 2048, 'open', true, 18, [], false, '', false, false, 14);
+		$this->assertFalse($settings['proofOfWork']);
+		$this->assertSame(14, $settings['proofOfWorkBits']);
 	}
 
 	public function testSwitchingOnLetsExternalUsersIntoARestrictedSocial(): void {

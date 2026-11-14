@@ -744,28 +744,35 @@ class DocumentServiceTest extends TestCase {
 		$this->assertSame(1, $this->service->fillMissingMediaTypes());
 	}
 
-	public function testOneUnusableRowDoesNotEndTheCachingRun(): void {
-		// the poison pill: an Error escaping one row used to abandon caching for
-		// every row queued behind it, silently, on every run
-		$poison = $this->document();
-		$poison->setId('https://remote.example/media/poison');
-		$good = $this->document();
-		$good->setId('https://remote.example/media/good');
-		$this->cacheDocumentsRequest->method('getNotCachedDocuments')->willReturn([$poison, $good]);
-		$this->cacheDocumentsRequest->method('getById')->willReturnCallback(
-			fn (string $id) => $id === $poison->getId() ? $poison : $good
-		);
-		$this->cacheService->method('saveRemoteFileToCache')->willReturnCallback(
-			function (Document $document, string &$mime): void {
-				if ($document->getId() === 'https://remote.example/media/poison') {
-					throw new \Error('Call to a member function on null');
-				}
+	/**
+	 * The second half of a fetch, for a file downloaded elsewhere (the
+	 * background prefetch): what it says about the row is what the caller
+	 * counts -- stored, settled for good, or to be tried again.
+	 */
+	public function testStoringADownloadedFileSaysWhatBecameOfIt(): void {
+		$stored = $this->document();
+		$this->streamRequest->expects($this->once())->method('updateAttachments')->with($this->identicalTo($stored));
+		$this->assertSame(DocumentService::STORED, $this->service->storeRemoteDocument(
+			$stored,
+			static function (Document $document): string {
 				$document->setLocalCopy('local-1');
-				$mime = 'image/png';
-			}
-		);
 
-		$this->assertSame(1, $this->service->manageCacheDocuments());
+				return 'image/webp';
+			}
+		));
+		$this->assertSame('image/webp', $stored->getMediaType());
+
+		$tooLarge = $this->document();
+		$this->assertSame(DocumentService::SETTLED, $this->service->storeRemoteDocument(
+			$tooLarge,
+			static fn (Document $document): string => throw new RequestResultSizeException()
+		));
+		$this->assertSame(DocumentService::ERROR_SIZE, $tooLarge->getError());
+
+		$this->assertSame(DocumentService::RETRY, $this->service->storeRemoteDocument(
+			$this->document(),
+			static fn (Document $document): string => throw new RequestNetworkException('timeout')
+		));
 	}
 
 	public function testGetFromCacheReturnsTheLocalCopyAndItsMimeType(): void {
@@ -795,74 +802,6 @@ class DocumentServiceTest extends TestCase {
 
 		$this->expectException(CacheDocumentDoesNotExistException::class);
 		$this->service->getFromCache(self::DOC_ID);
-	}
-
-	public function testManageCacheDocumentsSkipsLocalAvatarsAndCountsSuccesses(): void {
-		$avatar = $this->document('avatar');
-		$header = $this->document('header');
-		$pending = $this->document();
-		$pending->setId('https://remote.example/media/2');
-		$failing = $this->document();
-		$failing->setId('https://remote.example/media/3');
-		$this->cacheDocumentsRequest->method('getNotCachedDocuments')->willReturn([$avatar, $header, $pending, $failing]);
-		$this->cacheDocumentsRequest->method('getById')->willReturnCallback(fn (string $id) => $id === $pending->getId() ? $pending : $failing);
-		$this->cacheService->method('saveRemoteFileToCache')->willReturnCallback(function (Document $document) {
-			if ($document->getId() === 'https://remote.example/media/3') {
-				throw new RequestNetworkException('timeout');
-			}
-		});
-
-		$this->assertSame(1, $this->service->manageCacheDocuments());
-	}
-
-	/**
-	 * The caching run is where a picture the inbox could not finish in the
-	 * federation timeout gets finished, so its download is not held to that
-	 * timeout: curl ends a transfer that is still arriving when it runs out.
-	 */
-	public function testTheCachingRunDownloadsUnderTheLongerBackgroundTimeout(): void {
-		$doc = $this->document();
-		$this->cacheDocumentsRequest->method('getNotCachedDocuments')->willReturn([$doc]);
-		$this->cacheDocumentsRequest->method('getById')->willReturn($doc);
-		$downloadedInScope = null;
-		$this->cacheService->expects($this->once())->method('saveRemoteFileToCache')->willReturnCallback(
-			function (Document $document, string &$mime) use (&$downloadedInScope): void {
-				$downloadedInScope = $this->inTimeoutScope;
-				$document->setLocalCopy('local-1');
-				$mime = 'image/png';
-			}
-		);
-
-		$this->assertSame(1, $this->service->manageCacheDocuments());
-		$this->assertTrue($downloadedInScope);
-		$this->assertSame(
-			[[DocumentService::BACKGROUND_FETCH_TIMEOUT, ConfigService::DEFAULT_REQUEST_TIMEOUT]],
-			$this->timeoutScopes
-		);
-		$this->assertGreaterThan(ConfigService::DEFAULT_REQUEST_TIMEOUT, DocumentService::BACKGROUND_FETCH_TIMEOUT);
-		// a download still running must not be started again by the next pass
-		$this->assertLessThan(CacheDocumentsRequest::CACHING_TIMEOUT * 60, DocumentService::BACKGROUND_FETCH_TIMEOUT);
-	}
-
-	/**
-	 * A streamed file is played from the instance that published it, and the
-	 * cache job passes over it the way it passes over an avatar.
-	 *
-	 * Belt and braces, and deliberately so: such a row should never reach the
-	 * loop, because `getNotCachedDocuments()` asks for an empty `local_copy`
-	 * and `PeerTubeService` names it `stream` before the row is written. This
-	 * pins the guard that holds if either of those ever changes, because the
-	 * cost is not symmetric -- the file on the other side of it is a video of
-	 * hundreds of megabytes.
-	 */
-	public function testManageCacheDocumentsDoesNotDownloadAStreamedFile(): void {
-		$streamed = $this->document(Document::COPY_STREAMED);
-		$streamed->setId('https://peertube.example/videos/watch/abc');
-		$this->cacheDocumentsRequest->method('getNotCachedDocuments')->willReturn([$streamed]);
-		$this->cacheDocumentsRequest->expects($this->never())->method('getById');
-		$this->cacheService->expects($this->never())->method('saveRemoteFileToCache');
-
-		$this->assertSame(0, $this->service->manageCacheDocuments());
 	}
 
 	private function alice(int $avatarVersion): Person {

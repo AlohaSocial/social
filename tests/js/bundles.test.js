@@ -219,8 +219,10 @@ describe('the compressed size of what a page downloads', () => {
 		['social-social.js', 108 * KB],
 		// 175 KB, loaded when a video is played
 		['social-hls.js', 193 * KB],
-		// 100 KB, the administration page; keep 1 KB for compression drift
-		['social-adminSettings.js', 101 * KB],
+		// 104 KB, the administration page, since the GIF library, server-block
+		// reasons and the signup proof-of-work settings were added; keep 3 KB
+		// of headroom so a small section does not turn the build red
+		['social-adminSettings.js', 107 * KB],
 		// 74 KB, the personal settings page
 		['social-settings.js', 82 * KB],
 		// 130 KB, loaded when the composer's emoji button is pressed
@@ -239,12 +241,13 @@ describe('the compressed size of what a page downloads', () => {
 	})
 
 	it('all of js/ together stays under its ceiling', () => {
-		// 1,999 KB across every entry and lazy chunk
+		// 2,204 KB across every entry and lazy chunk, including the signup
+		// proof-of-work worker
 		const total = readdirSync(JS)
 			.filter((entry) => entry.endsWith('.js'))
 			.reduce((sum, entry) => sum + gzipped(entry), 0)
 
-		expect(total, `js/ is ${Math.round(total / KB)} KB gzipped`).toBeLessThan(2200 * KB)
+		expect(total, `js/ is ${Math.round(total / KB)} KB gzipped`).toBeLessThan(2250 * KB)
 	})
 })
 

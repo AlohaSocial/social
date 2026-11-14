@@ -1120,6 +1120,15 @@ hand, it is picked up as one.
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
   **Approve who follows you** switch under **Settings → Profile and privacy**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.
+- **Hiding your followers and following.** **Hide my followers and following**,
+  under **Settings → Profile and privacy → Who can find and follow you**, keeps
+  the two lists to yourself: anybody else, here or on another server, sees how
+  many followers you have and how many accounts you follow, but not who they
+  are, and your profile shows the numbers without links. You are not named
+  among the "followed by" people on other profiles either. You still see your
+  own lists. It is Mastodon's `hide_collections`, so a Mastodon app can switch
+  it too. People who follow you on Bluesky can still be seen there: Bluesky
+  publishes follows openly.
 - **Reporting.** **Report** in a post's menu reports that post; **Report** in
   the menu on a profile reports the account itself. You say what is wrong —
   spam, breaking this server's rules (and which ones; offered when the server
@@ -1149,11 +1158,19 @@ hand, it is picked up as one.
 - **Authorized apps.** **Settings → Apps and account → Authorized apps** lists every app you have
   signed in to with this account — a phone client, a cross-poster, anything
   that asked — with what it may do, when you granted it and when it was last
-  used. **Sign this app out** takes the key back, and the app asks you to sign
-  in again the next time you open it. It is the page to open after losing a
+  used. An app you have not opened for 90 days is signed out by itself.
+  **Sign this app out** takes the key back, and the app asks you to sign in
+  again the next time you open it. It is the page to open after losing a
   phone, and the only page where signing an app out does not depend on still
   having the app. While nothing is signed in, it shows the *Use it in an app*
-  card instead.
+  card instead. Changing or resetting your Nextcloud password signs every app
+  out at once — Mastodon apps and Bluesky apps that signed in through the
+  browser — and stops their push notifications; each asks you to sign in
+  again. Your Nextcloud sessions and app passwords, and your Bluesky app
+  passwords, are not affected by this. An app that asks to administer the
+  server — a moderation tool asking for an `admin` permission — is told yes
+  only after you enter your password on the sign-in page, which says so
+  before you agree.
 - **Export and migration.** The whole move, in order, is one page:
   [Moving.md](Moving.md). **Migration** (in the account menu at the foot of
   the sidebar, a page of its own) opens with three choices, and each shows

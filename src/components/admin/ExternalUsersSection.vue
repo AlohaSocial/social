@@ -78,6 +78,24 @@
 			<NcCheckboxRadioSwitch v-model="form.verifyEmail" type="switch">
 				{{ t('social', 'Confirm the email address before the account is made') }}
 			</NcCheckboxRadioSwitch>
+			<NcNoteCard v-if="openWithoutConfirmation" class="external__open-warning" type="warning">
+				{{ t('social', 'Anybody who registers gets an account at once, without confirming an email address. Bots can then create accounts in bulk with made-up addresses. Switch on email confirmation, or choose approval, unless you watch new accounts closely.') }}
+			</NcNoteCard>
+			<NcCheckboxRadioSwitch v-model="form.proofOfWork" type="switch">
+				{{ t('social', 'Make the browser solve a puzzle before registering') }}
+			</NcCheckboxRadioSwitch>
+			<p class="external__hint">
+				{{ t('social', 'A proof of work the browser computes while the form is filled in. It makes automated registrations slower and more costly, without a captcha or any third-party service. Registrations with an invitation link skip it.') }}
+			</p>
+			<NcTextField
+				v-if="form.proofOfWork"
+				v-model="form.proofOfWorkBits"
+				class="external__difficulty"
+				type="number"
+				min="12"
+				max="24"
+				:label="t('social', 'Puzzle difficulty (12 to 24)')"
+				:helperText="t('social', 'Each step doubles the work. At 20 a computer needs about a second and a phone a few seconds.')" />
 			<NcCheckboxRadioSwitch v-model="form.userInvites" type="switch">
 				{{ t('social', 'Let everybody here send invitation links') }}
 			</NcCheckboxRadioSwitch>
@@ -177,6 +195,11 @@ export default {
 			return this.external.settings
 		},
 
+		/** @return {boolean} whether the form as edited lets anybody in at once, unconfirmed */
+		openWithoutConfirmation() {
+			return this.form.mode === 'open' && !this.form.verifyEmail
+		},
+
 		/** @return {{enforced: boolean, everybody: boolean}} */
 		twoFactor() {
 			return this.external.twoFactor ?? { enforced: false, everybody: false }
@@ -203,6 +226,8 @@ export default {
 				userInvites: settings.userInvites,
 				signupNotice: settings.signupNotice ?? '',
 				signupNoticeRequired: Boolean(settings.signupNoticeRequired),
+				proofOfWork: settings.proofOfWork !== false,
+				proofOfWorkBits: String(settings.proofOfWorkBits ?? 20),
 			}
 		},
 
@@ -221,6 +246,8 @@ export default {
 					userInvites: this.form.userInvites,
 					signupNotice: this.form.signupNotice,
 					signupNoticeRequired: this.form.signupNoticeRequired,
+					proofOfWork: this.form.proofOfWork,
+					proofOfWorkBits: parseInt(this.form.proofOfWorkBits, 10) || 20,
 				})
 				this.form = this.formOf(data)
 				this.$emit('changed', { ...this.external, settings: data })
@@ -305,6 +332,10 @@ export default {
 
 	&__hint {
 		color: var(--color-text-maxcontrast);
+	}
+
+	&__difficulty {
+		max-width: 320px;
 	}
 
 	&__twofactor {

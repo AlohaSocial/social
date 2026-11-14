@@ -1244,6 +1244,76 @@ class OAuthControllerTest extends TestCase {
 		], $response->getData());
 	}
 
+	public function testTokenAnswersACodeExchangeWithARefreshTokenAndItsLifetime(): void {
+		$client = $this->knownClient();
+		$client->setAuthScopes(['read'])->setCreation(1700000000);
+		$this->clientService->method('exchangeCode')
+			->willReturnCallback(static fn (SocialClient $c): SocialClient => $c->setToken('bearer-token')->setRefreshToken('refresh-token'));
+		$this->clientService->method('expiresIn')->willReturn(31536000);
+
+		$data = $this->controller->token(self::OOB, 'authorization_code', 'client-1', 'secret', 'auth-code-1')->getData();
+
+		$this->assertSame('refresh-token', $data['refresh_token']);
+		$this->assertSame(31536000, $data['expires_in']);
+	}
+
+	public function testTokenRefreshesWithoutARedirectUri(): void {
+		$client = $this->knownClient();
+		$client->setCreation(1700000000);
+		$confirmations = [];
+		$this->clientService->method('confirmData')->willReturnCallback(function (SocialClient $c, array $data) use (&$confirmations): void {
+			$confirmations[] = $data;
+		});
+		$this->clientService->expects($this->once())->method('refresh')
+			->with($this->identicalTo($client), 'old-refresh', 'read')
+			->willReturnCallback(static fn (SocialClient $c): SocialClient => $c->setToken('new-access')->setRefreshToken('new-refresh')->setAuthScopes(['read']));
+		$this->clientService->method('expiresIn')->willReturn(86400);
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret', '', '', '', 'old-refresh', 'read');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([
+			'access_token' => 'new-access',
+			'token_type' => 'Bearer',
+			'scope' => 'read',
+			'created_at' => 1700000000,
+			'expires_in' => 86400,
+			'refresh_token' => 'new-refresh',
+		], $response->getData());
+		$this->assertSame([['client_secret' => 'secret']], $confirmations);
+	}
+
+	public function testTokenRequiresARefreshTokenForTheRefreshGrant(): void {
+		$this->knownClient();
+		$this->clientService->expects($this->never())->method('refresh');
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_request', $response->getData()['error']);
+	}
+
+	public function testTokenAnswersASpentRefreshTokenWithInvalidGrant(): void {
+		$this->knownClient();
+		$this->clientService->method('refresh')->willThrowException(new InvalidGrantException('unknown refresh_token'));
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret', '', '', '', 'spent');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_grant', $response->getData()['error']);
+		$this->assertTrue($response->isThrottled());
+	}
+
+	public function testTokenAnswersAWiderScopeOnARefreshWithInvalidScope(): void {
+		$this->knownClient();
+		$this->clientService->method('refresh')->willThrowException(new \OCA\Social\Exceptions\InvalidScopeException('scope exceeds what was granted'));
+
+		$response = $this->controller->token('', 'refresh_token', 'client-1', 'secret', '', '', '', 'old-refresh', 'admin:write');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_scope', $response->getData()['error']);
+	}
+
 	public function testTokenRejectsUnknownClientIds(): void {
 		$this->clientService->method('getFromClientId')->willThrowException(new ClientNotFoundException());
 
@@ -1570,7 +1640,7 @@ class OAuthControllerTest extends TestCase {
 
 		$data = $this->controller->oauthMetadata()->getData();
 
-		$this->assertSame(['authorization_code', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code'], $data['grant_types_supported']);
+		$this->assertSame(['authorization_code', 'client_credentials', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'], $data['grant_types_supported']);
 		$this->assertSame(['S256'], $data['code_challenge_methods_supported']);
 		$this->assertSame(
 			['client_secret_post', 'client_secret_basic'], $data['token_endpoint_auth_methods_supported']
@@ -1801,7 +1871,7 @@ class OAuthControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorize('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizing('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
-		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizingMove('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizingConfirmed('client-1', 'https://evil.example/cb', 'code', 'write:migration')->getStatus());
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $controller->authorizing('client-1', 'https://evil.example/cb', 'code', 'read write:migration')->getStatus());
 		$this->assertCount(0, $authorized);
 	}
@@ -1837,17 +1907,72 @@ class OAuthControllerTest extends TestCase {
 		$this->assertStringContainsString('password', $unconfirmed->getData()['error']);
 		$this->assertCount(0, $authorized);
 
-		$granted = $controller->authorizingMove('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
+		$granted = $controller->authorizingConfirmed('client-1', self::MOVE_IN_CALLBACK, 'code', 'write:migration', 's1');
 		$this->assertInstanceOf(RedirectResponse::class, $granted);
 		$this->assertStringStartsWith(self::MOVE_IN_CALLBACK . '?code=', $granted->getRedirectURL());
 		$this->assertStringEndsWith('&state=s1', $granted->getRedirectURL());
 		$this->assertSame([['write:migration']], $authorized->getArrayCopy());
 	}
 
-	public function testOnlyTheMoveConsentAsksForThePassword(): void {
+	/**
+	 * An `admin` scope lets the application use the administration API as
+	 * the account, so the plain consent refuses it and only the
+	 * password-confirmed one grants it.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function adminScopes(): array {
+		return [
+			'admin:read' => ['admin:read'],
+			'admin:write' => ['admin:write'],
+			'a sub-scope' => ['admin:write:accounts'],
+			'the broad prefix' => ['admin'],
+			'beside ordinary ones' => ['read write admin:read:reports'],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('adminScopes')]
+	public function testAdminScopesAreGrantedOnlyBehindThePassword(string $scope): void {
+		$this->loggedIn('alice');
+		$authorized = new ArrayObject();
+		$registered = array_values(array_unique(array_merge(['read', 'write'], explode(' ', $scope))));
+		$controller = $this->controllerWith($this->storedRegistration($registered, ['https://admin.example/cb'], $authorized));
+
+		$unconfirmed = $controller->authorizing('client-1', 'https://admin.example/cb', 'code', $scope, 's1');
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $unconfirmed->getStatus());
+		$this->assertStringContainsString('password', $unconfirmed->getData()['error']);
+		$this->assertCount(0, $authorized);
+
+		$granted = $controller->authorizingConfirmed('client-1', 'https://admin.example/cb', 'code', $scope, 's1');
+		$this->assertInstanceOf(RedirectResponse::class, $granted);
+		$this->assertStringStartsWith('https://admin.example/cb?code=', $granted->getRedirectURL());
+		$this->assertSame([explode(' ', $scope)], $authorized->getArrayCopy());
+	}
+
+	public function testOrdinaryScopesNeedNoPassword(): void {
+		$this->loggedIn('alice');
+		$authorized = new ArrayObject();
+		$controller = $this->controllerWith($this->storedRegistration(['read', 'write', 'follow', 'push'], ['https://app.example/cb'], $authorized));
+
+		$this->assertInstanceOf(RedirectResponse::class, $controller->authorizing('client-1', 'https://app.example/cb', 'code', 'read write follow push'));
+		$this->assertCount(1, $authorized);
+	}
+
+	public function testTheDeviceFlowNeverHandsOutAnAdminScope(): void {
+		$devices = $this->createMock(DeviceAuthorizationService::class);
+		$devices->expects($this->never())->method('create');
+		$controller = $this->controllerWith($this->storedRegistration(['read', 'admin:read'], ['https://admin.example/cb']), $devices);
+
+		$response = $controller->deviceAuthorization('client-1', 'read admin:read');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_scope', $response->getData()['error']);
+	}
+
+	public function testOnlyTheConfirmedConsentAsksForThePassword(): void {
 		$attribute = \OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired::class;
 
-		$this->assertNotSame([], (new \ReflectionMethod(OAuthController::class, 'authorizingMove'))->getAttributes($attribute));
+		$this->assertNotSame([], (new \ReflectionMethod(OAuthController::class, 'authorizingConfirmed'))->getAttributes($attribute));
 		$this->assertSame([], (new \ReflectionMethod(OAuthController::class, 'authorizing'))->getAttributes($attribute));
 	}
 }

@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Service\AtprotoStatusService;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\AboutService;
+use OCA\Social\Service\AdminApiService;
 use OCA\Social\Service\BackgroundHealthService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ExternalAdminState;
@@ -92,6 +93,7 @@ class AdminSettings implements IDelegatedSettings {
 		private AtprotoStatusService $atprotoStatus,
 		private RecommendationPreferenceService $recommendationPreferences,
 		private AboutService $aboutService,
+		private AdminApiService $adminApiService,
 	) {
 	}
 
@@ -138,6 +140,10 @@ class AdminSettings implements IDelegatedSettings {
 			'interests' => $this->isAdministrator() ? $this->interestAdminSettings() : null,
 			'accessType' => $this->fediverseService->getAccessType(),
 			'accessList' => $this->fediverseService->getListedAddresses(),
+			// on a block list, each entry with its tier and its reasons
+			'accessBlocks' => ($this->fediverseService->getAccessType() === 'all_but')
+				? $this->adminApiService->domainBlocks()
+				: [],
 			'retentionDays' => (int)$this->configService->getAppValue(ConfigService::SOCIAL_RETENTION_DAYS),
 			'federation' => $this->federationHealthService->summary(),
 			// whether the work that happens away from a request is happening

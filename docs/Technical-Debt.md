@@ -63,6 +63,19 @@ Records in collections Aloha Social has no role for at all are capped per
 account (`atproto_opaque_records`, `atproto_opaque_mb`) but are not reviewed
 either.
 
+### Hidden follower lists and local suggestions (2026-11-13)
+
+`hide_collections` (`HiddenCollectionsService`) empties the follower and
+following lists, the familiar followers and the ActivityPub collections for
+everybody but the account. The local friends-of-friends suggestions
+(`DiscoveryRequest::friendsOfFriendsPrims()`) still count the follows of an
+account that hides its lists. They never name who vouched, so no list is
+disclosed, but Mastodon leaves such accounts out of that walk. Doing the same
+needs the setting where the query can join it (a column on `social_actor`
+rather than a user value). The flag is also reported only on accounts fetched
+on their own, not on accounts embedded in statuses and notifications, for the
+same reason: reading a user value per embedded account is a query per author.
+
 ### Pixelfed remote edit rendering (feature-branch review, 2026-10-28)
 
 The interop run against Pixelfed v0.14.4 accepts the video Update and stores its

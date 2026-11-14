@@ -12,10 +12,13 @@ namespace OCA\Social\Tests\Controller;
 use OCA\Social\Controller\ModerationController;
 use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Db\MediaBlocksRequest;
+use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
+use OCA\Social\Model\Client\AdminDomainBlock;
+use OCA\Social\Model\Gif;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\Strike;
 use OCA\Social\Service\AccountService;
@@ -25,6 +28,7 @@ use OCA\Social\Service\BlocklistSubscriptionService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\FediverseService;
+use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostReviewService;
@@ -48,7 +52,7 @@ class ModerationControllerTest extends TestCase {
 	private FediverseService|MockObject $fediverseService;
 	private ConfigService|MockObject $configService;
 	private ModerationService|MockObject $moderationService;
-	private AdminApiService|Stub $adminApiService;
+	private AdminApiService|MockObject $adminApiService;
 	private PostReviewService|Stub $postReviewService;
 	private MediaBlocksRequest|MockObject $mediaBlocksRequest;
 	private DiscoverCategoriesRequest|MockObject $discoverCategoriesRequest;
@@ -59,7 +63,10 @@ class ModerationControllerTest extends TestCase {
 	private BlocklistImportService|Stub $blocklistImportService;
 	private BlocklistSubscriptionService|Stub $blocklistSubscriptionService;
 	private AccountService|Stub $accountService;
+	private GifService|MockObject $gifService;
 	private ModerationController $controller;
+	/** @var array<string, mixed>|null the `picture` upload the request carries */
+	private ?array $upload = null;
 
 	/** The arguments the account page was asked for. */
 	private array $accountQuery = [];
@@ -75,7 +82,7 @@ class ModerationControllerTest extends TestCase {
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->adminApiService = $this->createStub(AdminApiService::class);
+		$this->adminApiService = $this->createMock(AdminApiService::class);
 		$this->postReviewService = $this->createStub(PostReviewService::class);
 		$this->mediaBlocksRequest = $this->createMock(MediaBlocksRequest::class);
 		$this->discoverCategoriesRequest = $this->createMock(DiscoverCategoriesRequest::class);
@@ -90,8 +97,13 @@ class ModerationControllerTest extends TestCase {
 
 		$this->blocklistImportService = $this->createStub(BlocklistImportService::class);
 		$this->blocklistSubscriptionService = $this->createStub(BlocklistSubscriptionService::class);
+		$this->gifService = $this->createMock(GifService::class);
+		$request = $this->createStub(IRequest::class);
+		$request->method('getUploadedFile')->willReturnCallback(
+			fn (string $key): ?array => ($key === 'picture') ? $this->upload : null
+		);
 		$this->controller = new ModerationController(
-			$this->createStub(IRequest::class),
+			$request,
 			$this->reportService,
 			$this->fediverseService,
 			$this->configService,
@@ -106,7 +118,8 @@ class ModerationControllerTest extends TestCase {
 			$this->emojiService,
 			$this->userSession,
 			$this->blocklistImportService,
-			$this->blocklistSubscriptionService
+			$this->blocklistSubscriptionService,
+			$this->gifService
 		);
 
 		$this->adminApiService->method('accountPage')->willReturnCallback(
@@ -206,17 +219,19 @@ class ModerationControllerTest extends TestCase {
 	}
 
 	public function testFediverseAddNormalisesAndReturnsTheList(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('none_but');
 		$this->fediverseService->expects($this->once())->method('addAddress')->with('evil.example');
 		$this->fediverseService->method('getListedAddresses')->willReturn(['evil.example']);
 
 		$response = $this->controller->fediverseAdd('  EVIL.example ');
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame(['list' => ['evil.example']], $response->getData());
+		$this->assertSame(['list' => ['evil.example'], 'blocks' => []], $response->getData());
 	}
 
 	public function testFediverseAddRefusesAnInvalidAddress(): void {
 		$this->fediverseService->expects($this->never())->method('addAddress');
+		$this->adminApiService->expects($this->never())->method('blockDomain');
 
 		$this->assertSame(
 			Http::STATUS_UNPROCESSABLE_ENTITY,
@@ -228,13 +243,77 @@ class ModerationControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * On a block list the page blocks or silences through the service the
+	 * Mastodon admin API uses, with the reasons, and answers every entry.
+	 */
+	public function testOnABlockListAnInstanceIsAddedAtItsTierWithItsReasons(): void {
+		$block = new AdminDomainBlock('loud.example', AdminDomainBlock::SEVERITY_SILENCE, null, 'Spam');
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->fediverseService->method('getListedAddresses')->willReturn([]);
+		$this->fediverseService->expects($this->never())->method('addAddress');
+		$this->adminApiService->expects($this->once())->method('blockDomain')
+			->with('loud.example', 'silence', null, 'Spam')
+			->willReturn($block);
+		$this->adminApiService->method('domainBlocks')->willReturn([$block]);
+
+		$response = $this->controller->fediverseAdd('Loud.example', 'silence', '', 'Spam');
+
+		$this->assertSame(['list' => [], 'blocks' => [$block]], $response->getData());
+	}
+
+	public function testATierOrAReasonTheServiceRefusesIsA422(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->adminApiService->method('blockDomain')
+			->willThrowException(new \InvalidArgumentException('a reason is at most 1000 characters'));
+
+		$response = $this->controller->fediverseAdd('evil.example', 'suspend', str_repeat('x', 1001));
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('a reason is at most 1000 characters', $response->getData()['error']);
+	}
+
+	public function testAnEntryCanBeSwitchedAndItsReasonsRewritten(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->adminApiService->expects($this->once())->method('updateDomainBlock')
+			->with('evil.example', 'silence', '', 'Spam')
+			->willReturn(new AdminDomainBlock('evil.example'));
+
+		$response = $this->controller->fediverseUpdate(' Evil.example', 'silence', '', 'Spam');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+	}
+
+	public function testSwitchingAnInstanceThatIsNotListedIsA404(): void {
+		$this->adminApiService->method('updateDomainBlock')
+			->willThrowException(new \OCA\Social\Exceptions\ItemNotFoundException('Record not found'));
+
+		$this->assertSame(
+			Http::STATUS_NOT_FOUND,
+			$this->controller->fediverseUpdate('never.example', 'silence')->getStatus()
+		);
+	}
+
 	public function testFediverseRemoveReturnsTheRemainingList(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('none_but');
 		$this->fediverseService->expects($this->once())->method('removeAddress')->with('evil.example');
+		$this->fediverseService->expects($this->never())->method('unsilenceAddress');
 		$this->fediverseService->method('getListedAddresses')->willReturn([]);
 
 		$response = $this->controller->fediverseRemove('evil.example');
 
-		$this->assertSame(['list' => []], $response->getData());
+		$this->assertSame(['list' => [], 'blocks' => []], $response->getData());
+	}
+
+	/** A silenced instance is on the list the page shows, so removing it lifts the silence. */
+	public function testOnABlockListRemovingLiftsEitherTier(): void {
+		$this->fediverseService->method('getAccessType')->willReturn('all_but');
+		$this->fediverseService->expects($this->once())->method('removeAddress')->with('loud.example');
+		$this->fediverseService->expects($this->once())->method('unsilenceAddress')->with('loud.example');
+		$this->fediverseService->method('getListedAddresses')->willReturn([]);
+		$this->adminApiService->method('domainBlocks')->willReturn([]);
+
+		$this->controller->fediverseRemove('Loud.example');
 	}
 
 	public function testRetentionStoresTheConfiguredPeriod(): void {
@@ -302,7 +381,7 @@ class ModerationControllerTest extends TestCase {
 
 		$response = $this->controller->fediverseAccess('none_but');
 
-		$this->assertSame(['accessType' => 'none_but'], $response->getData());
+		$this->assertSame(['accessType' => 'none_but', 'list' => [], 'blocks' => []], $response->getData());
 	}
 
 	private function remotePerson(string $id, string $handle): Person {
@@ -712,5 +791,54 @@ class ModerationControllerTest extends TestCase {
 			Http::STATUS_UNPROCESSABLE_ENTITY,
 			$this->controller->discoverCategoryAdd('One more', '#more')->getStatus()
 		);
+	}
+
+	public function testTheGifLibraryIsTheInstancesOwnPictures(): void {
+		$gif = (new Gif('high-five', 'high-five.gif', 'image/gif', 'high five'))->setUrl('https://cloud.example/gif/high-five');
+		$this->gifService->method('all')->willReturn([$gif]);
+
+		$this->assertSame(['gifs' => [$gif]], $this->controller->gifs()->getData());
+	}
+
+	/** The upload goes to the service the command calls, so the checks are the command's. */
+	public function testAGifIsAddedFromTheUploadThroughTheCommandsService(): void {
+		$this->upload = ['tmp_name' => '/tmp/php123', 'error' => UPLOAD_ERR_OK, 'name' => 'x.gif'];
+		$this->gifService->expects($this->once())->method('add')
+			->with('high-five', '/tmp/php123', 'high five')
+			->willReturn(new Gif('high-five', 'high-five.gif', 'image/gif'));
+		$this->gifService->method('all')->willReturn([]);
+
+		$response = $this->controller->gifAdd('high-five', 'high five');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['gifs' => []], $response->getData());
+	}
+
+	public function testWhatTheServiceRefusesIsA422ThatSaysWhy(): void {
+		$this->upload = ['tmp_name' => '/tmp/php123', 'error' => UPLOAD_ERR_OK];
+		$this->gifService->method('add')
+			->willThrowException(new InvalidActionException('a library picture has to be a GIF, an animated WebP or an MP4'));
+
+		$response = $this->controller->gifAdd('still', '');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('a library picture has to be a GIF, an animated WebP or an MP4', $response->getData()['error']);
+	}
+
+	public function testAGifNeedsAPictureThatArrivedWhole(): void {
+		$this->gifService->expects($this->never())->method('add');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->gifAdd('high-five')->getStatus());
+
+		$this->upload = ['tmp_name' => '/tmp/php123', 'error' => UPLOAD_ERR_INI_SIZE];
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller->gifAdd('high-five')->getStatus());
+	}
+
+	public function testAGifIsRemovedByItsSlugAndAnUnknownOneIsA404(): void {
+		$this->gifService->method('remove')->willReturnCallback(static fn (string $slug): bool => $slug === 'high-five');
+		$this->gifService->method('all')->willReturn([]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->gifRemove('high-five')->getStatus());
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller->gifRemove('never')->getStatus());
 	}
 }

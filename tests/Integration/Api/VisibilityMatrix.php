@@ -168,6 +168,7 @@ final class VisibilityMatrix {
 		'AnnualReportApiController::annualReport' => 'the viewer\'s own posts and counts',
 		'AnnualReportApiController::annualReports' => 'the viewer\'s own posts and counts',
 		'AtprotoFeedsController::timeline' => 'Bluesky posts read from the AppView, never a post of this server',
+		'BadgeController::index' => 'counts of the viewer\'s notifications, held senders and conversations, no post',
 		'ConversationController::unreadCount' => 'a count of the viewer\'s conversations, no post',
 		'NotificationController::unreadCountV2' => 'a count of the viewer\'s notifications, no post',
 		'NotificationController::policy' => 'the viewer\'s notification policy and a count of what it holds',

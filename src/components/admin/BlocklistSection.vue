@@ -207,7 +207,7 @@ export default {
 				}))
 				this.preview = null
 				this.csv = ''
-				this.$emit('changed', data.list)
+				this.$emit('changed', data.list, data.blocks)
 			} catch (error) {
 				showError(errorOf(error, t('social', 'Could not apply that list')))
 			} finally {
@@ -264,7 +264,7 @@ export default {
 				})
 				this.results = { ...this.results, [source.id]: data.result }
 				this.sources = data.sources ?? this.sources
-				this.$emit('changed', data.list)
+				this.$emit('changed', data.list, data.blocks)
 			} catch (error) {
 				showError(errorOf(error, t('social', 'Could not read that list')))
 			} finally {

@@ -14,6 +14,8 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\AccessBlock;
 use OCA\Social\Service\AccessBlockService;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -33,6 +35,12 @@ class AccessBlockServiceTest extends TestCase {
 	/** @var array<string, AccessBlock> "type value" => the block */
 	private array $stored = [];
 	private int $nextId = 1;
+	/** how many times a list was read from the table */
+	private int $tableReads = 0;
+	/** @var (\Closure(): void)|null run once, after the next table read has taken its rows */
+	private ?\Closure $duringRead = null;
+	/** @var array<string, array{0: mixed, 1: int}> the distributed cache: key => [value, ttl] */
+	private array $cached = [];
 
 	protected function setUp(): void {
 		$this->accessBlocksRequest = $this->createStub(AccessBlocksRequest::class);
@@ -54,9 +62,19 @@ class AccessBlockServiceTest extends TestCase {
 		);
 
 		$this->accessBlocksRequest->method('getByType')->willReturnCallback(
-			fn (string $type): array => array_values(array_filter(
-				$this->stored, static fn (AccessBlock $b): bool => $b->getType() === $type
-			))
+			function (string $type): array {
+				$this->tableReads++;
+				$blocks = array_values(array_filter(
+					$this->stored, static fn (AccessBlock $b): bool => $b->getType() === $type
+				));
+				if ($this->duringRead !== null) {
+					$write = $this->duringRead;
+					$this->duringRead = null;
+					$write();
+				}
+
+				return $blocks;
+			}
 		);
 
 		$this->accessBlocksRequest->method('getById')->willReturnCallback(
@@ -271,6 +289,166 @@ class AccessBlockServiceTest extends TestCase {
 		$this->service->blockIp('1.2.3.4');
 
 		$this->assertTrue($this->service->isBlockedIp('1.2.3.4'), 'the cached list outlived the change');
+	}
+
+	// the IP blocks in the distributed cache
+
+	/** A service as one request on one server has it, sharing the cache with every other. */
+	private function request(bool $cacheAvailable = true): AccessBlockService {
+		$test = $this;
+		$cache = new class($test) implements ICache {
+			public function __construct(
+				private AccessBlockServiceTest $test,
+			) {
+			}
+
+			public function get(string $key) {
+				return $this->test->cacheGet($key);
+			}
+
+			public function set(string $key, $value, int $ttl = 0) {
+				$this->test->cacheSet($key, $value, $ttl);
+
+				return true;
+			}
+
+			public function hasKey(string $key) {
+				return $this->get($key) !== null;
+			}
+
+			public function remove(string $key) {
+				$this->test->cacheSet($key, null, 0);
+
+				return true;
+			}
+
+			public function clear(string $prefix = '') {
+				return true;
+			}
+
+			public static function isAvailable(): bool {
+				return true;
+			}
+		};
+
+		$factory = $this->createStub(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn($cacheAvailable);
+		$factory->method('createDistributed')->willReturn($cache);
+
+		return new AccessBlockService($this->accessBlocksRequest, $factory);
+	}
+
+	/** @internal for the cache double */
+	public function cacheGet(string $key): mixed {
+		return $this->cached[$key][0] ?? null;
+	}
+
+	/** @internal for the cache double */
+	public function cacheSet(string $key, mixed $value, int $ttl): void {
+		if ($value === null) {
+			unset($this->cached[$key]);
+
+			return;
+		}
+		$this->cached[$key] = [$value, $ttl];
+	}
+
+	public function testTheListIsReadFromTheTableOnceForEveryRequest(): void {
+		$this->service->blockIp('1.2.3.4');
+
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4'));
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4'));
+		$this->assertFalse($this->request()->isBlockedIp('5.6.7.8'));
+
+		$this->assertSame(1, $this->tableReads);
+	}
+
+	/** Nothing blocked is a list too, and it is cached like any other. */
+	public function testAnEmptyListIsCached(): void {
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4'));
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4'));
+
+		$this->assertSame(1, $this->tableReads);
+	}
+
+	public function testABlockIsEnforcedOnTheVeryNextRequest(): void {
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4'));
+
+		$this->request()->blockIp('1.2.3.0/24');
+
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4'));
+	}
+
+	public function testALiftIsInForceOnTheVeryNextRequest(): void {
+		$this->request()->blockIp('1.2.3.4');
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4'));
+
+		$this->request()->unblockIp($this->service->ipBlocks()[0]->getId());
+
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4'));
+	}
+
+	public function testChangingABlockIsAWriteToo(): void {
+		$this->request()->blockIp('1.2.3.4', expiresAt: 2_000);
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4', 3_000));
+
+		$this->request()->blockIp('1.2.3.4');
+
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4', 3_000));
+	}
+
+	/** Expiry needs no write: the cached copy carries the end date. */
+	public function testACachedBlockStillLiftsItselfWhenItsEndDatePasses(): void {
+		$this->service->blockIp('1.2.3.4', expiresAt: 2_000);
+
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4', 1_000));
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4', 3_000));
+		$this->assertSame(1, $this->tableReads);
+	}
+
+	/**
+	 * A request that read the table just before a block was written must not
+	 * leave the list from before it in the cache for everybody after.
+	 */
+	public function testAListReadBeforeAWriteIsNotServedAfterIt(): void {
+		$this->duringRead = function (): void {
+			$this->request()->blockIp('1.2.3.4');
+		};
+
+		$this->assertFalse($this->request()->isBlockedIp('1.2.3.4'), 'read before the write');
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4'));
+	}
+
+	/** On a server whose cache nobody else writes to, the list is read again once it is this old. */
+	public function testTheCachedListIsKeptForAShortTimeOnly(): void {
+		$this->request()->isBlockedIp('1.2.3.4');
+
+		$lists = array_filter($this->cached, static fn (string $key): bool => $key !== 'ip_version', ARRAY_FILTER_USE_KEY);
+		$this->assertCount(1, $lists);
+		$this->assertSame(AccessBlockService::IP_CACHE_TTL, array_values($lists)[0][1]);
+		$this->assertLessThanOrEqual(60, AccessBlockService::IP_CACHE_TTL);
+	}
+
+	/** A cached list that is not whole is read again rather than trusted. */
+	public function testAMangledCachedListIsReadFromTheTable(): void {
+		$this->service->blockIp('1.2.3.4');
+		$this->request()->isBlockedIp('1.2.3.4');
+		foreach (array_keys($this->cached) as $key) {
+			if ($key !== 'ip_version') {
+				$this->cached[$key][0] = [['1.2.3.4/32', 'never']];
+			}
+		}
+
+		$this->assertTrue($this->request()->isBlockedIp('1.2.3.4'));
+		$this->assertSame(2, $this->tableReads);
+	}
+
+	public function testWithoutAMemoryCacheEveryRequestReadsTheTable(): void {
+		$this->request(false)->isBlockedIp('1.2.3.4');
+		$this->request(false)->isBlockedIp('1.2.3.4');
+
+		$this->assertSame(2, $this->tableReads);
+		$this->assertSame([], $this->cached);
 	}
 
 	// email-domain blocks

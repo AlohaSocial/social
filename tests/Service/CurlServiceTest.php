@@ -909,7 +909,7 @@ class CurlServiceTest extends TestCase {
 
 		$service->asyncWithToken('tok-1');
 
-		$this->assertSame(substr(hash('sha256', 'tok-1'), 0, 8), $logged['token']);
+		$this->assertSame(AsyncRequestSigner::fingerprint('tok-1'), $logged['token']);
 		$this->assertStringNotContainsString('tok-1', json_encode($logged['token']));
 	}
 
@@ -1842,5 +1842,158 @@ class CurlServiceTest extends TestCase {
 			'https://mastodon.example/.well-known/webfinger?resource=acct%3Abob%40mastodon.example',
 			'http://mastodon.example/.well-known/webfinger?resource=acct%3Abob%40mastodon.example',
 		], $this->requests[1]['urls']);
+	}
+
+	/** @return array{url: string, path: string, max: int, on_behalf_of: string} */
+	private function mediaDownload(string $path, int $max = 16, string $file = '/media/a.png'): array {
+		return ['url' => 'https://' . self::PUBLIC_IP . $file, 'path' => $path, 'max' => $max, 'on_behalf_of' => 'mastodon.example'];
+	}
+
+	private function tempPath(): string {
+		$path = tempnam(sys_get_temp_dir(), 'social-download-');
+		$this->assertIsString($path);
+		$this->downloads[] = $path;
+
+		return $path;
+	}
+
+	/** @var list<string> the files the download tests wrote */
+	private array $downloads = [];
+
+	#[\PHPUnit\Framework\Attributes\After]
+	public function removeDownloads(): void {
+		foreach ($this->downloads as $path) {
+			@unlink($path);
+		}
+		$this->downloads = [];
+	}
+
+	/**
+	 * A transport that writes `$bodies[$url]` into the sink it is handed, as
+	 * Guzzle does, and answers with `$status`.
+	 *
+	 * @param array<string, string> $bodies
+	 * @param list<array{url: string, options: array}> $sent
+	 */
+	private function sinkingTransport(array $bodies, array &$sent, int $status = 200): void {
+		$this->client->method('getAsync')->willReturnCallback(
+			function (string $url, array $options) use ($bodies, &$sent, $status) {
+				$sent[] = ['url' => $url, 'options' => $options];
+				$options['sink']->write($bodies[$url] ?? '');
+
+				return $this->promiseOf($this->answer('', $status, 'image/png'));
+			}
+		);
+	}
+
+	/**
+	 * Media files are downloaded together, each straight into its own file:
+	 * not streamed back unread, not buffered, and never redirected by the
+	 * client, which would skip the checks on the next hop.
+	 */
+	public function testSeveralFilesAreDownloadedTogetherIntoTheirPaths(): void {
+		$a = $this->tempPath();
+		$b = $this->tempPath();
+		$sent = [];
+		$this->sinkingTransport([
+			'https://' . self::PUBLIC_IP . '/media/a.png' => 'first',
+			'https://' . self::PUBLIC_IP . '/media/b.png' => 'second',
+		], $sent);
+		$this->fediverseService->expects($this->exactly(2))->method('authorized')
+			->with(self::PUBLIC_IP, 'mastodon.example');
+
+		$outcomes = $this->service()->downloadMany([
+			'a' => $this->mediaDownload($a),
+			'b' => $this->mediaDownload($b, 16, '/media/b.png'),
+		]);
+
+		$this->assertSame(['a' => null, 'b' => null], $outcomes);
+		$this->assertSame('first', file_get_contents($a));
+		$this->assertSame('second', file_get_contents($b));
+		$this->assertCount(2, $sent);
+		$this->assertArrayNotHasKey('stream', $sent[0]['options']);
+		$this->assertFalse($sent[0]['options']['allow_redirects']);
+	}
+
+	/** A file past its ceiling is cut off one byte past it, and said to be too large. */
+	public function testAFileLargerThanItsCeilingIsCutOffAndRefused(): void {
+		$path = $this->tempPath();
+		$sent = [];
+		$this->sinkingTransport(['https://' . self::PUBLIC_IP . '/media/a.png' => str_repeat('x', 100)], $sent);
+
+		$outcomes = $this->service()->downloadMany(['a' => $this->mediaDownload($path, 16)]);
+
+		$this->assertInstanceOf(RequestResultSizeException::class, $outcomes['a']);
+		$this->assertSame(17, filesize($path));
+	}
+
+	public function testATransferEndedByTheCeilingIsRefusedAsTooLarge(): void {
+		$path = $this->tempPath();
+		$this->client->method('getAsync')->willReturnCallback(
+			function (string $url, array $options) {
+				$options['sink']->write(str_repeat('x', 100));
+
+				return $this->promiseOf(new \RuntimeException('cURL error 23: Failure writing output'));
+			}
+		);
+
+		$outcomes = $this->service()->downloadMany(['a' => $this->mediaDownload($path, 16)]);
+
+		$this->assertInstanceOf(RequestResultSizeException::class, $outcomes['a']);
+	}
+
+	public function testAnErrorStatusAndAFailedTransferAreReportedPerFile(): void {
+		$gone = $this->tempPath();
+		$down = $this->tempPath();
+		$this->client->method('getAsync')->willReturnCallback(
+			fn (string $url, array $options) => str_contains($url, '/gone')
+				? $this->promiseOf($this->answer('', 410, 'text/html'))
+				: $this->promiseOf(new \RuntimeException('cURL error 7: Failed to connect'))
+		);
+
+		$outcomes = $this->service()->downloadMany([
+			'gone' => $this->mediaDownload($gone, 16, '/gone.png'),
+			'down' => $this->mediaDownload($down, 16, '/down.png'),
+		]);
+
+		$this->assertInstanceOf(RequestContentException::class, $outcomes['gone']);
+		$this->assertSame(410, $outcomes['gone']->getCode());
+		$this->assertInstanceOf(RequestNetworkException::class, $outcomes['down']);
+	}
+
+	public function testAFileOnABlockedHostIsNotAskedFor(): void {
+		$this->fediverseService->method('authorized')->willThrowException(new UnauthorizedFediverseException());
+		$this->client->expects($this->never())->method('getAsync');
+
+		$outcomes = $this->service()->downloadMany(['a' => $this->mediaDownload($this->tempPath())]);
+
+		$this->assertInstanceOf(UnauthorizedFediverseException::class, $outcomes['a']);
+	}
+
+	/** A redirect is followed one checked hop at a time, outside the batch. */
+	public function testARedirectedFileIsFinishedHopByHop(): void {
+		$path = $this->tempPath();
+		$this->client->method('getAsync')->willReturn(
+			$this->promiseOf($this->redirect('https://' . self::PUBLIC_IP . '/cdn/a.png'))
+		);
+		$asked = [];
+		$this->client->method('get')->willReturnCallback(
+			function (string $url) use (&$asked): IResponse {
+				$asked[] = $url;
+
+				return str_contains($url, '/cdn/')
+					? $this->answer('moved bytes', 200, 'image/png')
+					: $this->redirect('https://' . self::PUBLIC_IP . '/cdn/a.png');
+			}
+		);
+
+		$outcomes = $this->service()->downloadMany(['a' => $this->mediaDownload($path)]);
+
+		$this->assertNull($outcomes['a']);
+		$this->assertSame('moved bytes', file_get_contents($path));
+		$this->assertSame([
+			'https://' . self::PUBLIC_IP . '/media/a.png',
+			'https://' . self::PUBLIC_IP . '/cdn/a.png',
+		], $asked);
 	}
 }

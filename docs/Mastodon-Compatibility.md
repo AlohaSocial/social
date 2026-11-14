@@ -62,6 +62,23 @@ the push provider. Nextcloud's own notification channel is a separate feature.
   Mastodon instance API registration flags remain disabled while
   `POST /api/v1/accounts` cannot register accounts. NodeInfo independently
   advertises the actual availability of Social's web registration flow.
+  As in Mastodon, changing or resetting the password revokes every OAuth
+  token of the account; the change itself is made in Nextcloud.
+- `POST /oauth/token` answers an account token with `refresh_token` and
+  `expires_in` and accepts `grant_type=refresh_token`, which Mastodon does
+  not. A client that ignores both keeps working as with Mastodon: its token
+  works for `token_max_days` (a year by default) and while it is used at
+  least once every `token_idle_days` (90), then it signs in again. A client
+  that refreshes gets a new refresh token each time and must keep the newest;
+  sending an old one again signs it out.
+- `hide_collections` is honoured as in Mastodon: the lists read empty to
+  others through the client API, the ActivityPub collections carry only
+  `totalItems`, and the counts stay visible. It is reported on a local
+  account's entity where the account is fetched on its own (by id, by
+  lookup, and the credentials), not on accounts embedded in other entities.
+- Consent to an `admin:*` scope (or `write:migration`) takes the account's
+  password, through Nextcloud's password confirmation; Mastodon asks for no
+  password there. The device flow does not grant these scopes at all.
 - Mastodon-specific endpoints may be absent or return a documented partial
   result. `API.md` is the source of truth for the current route surface; a
   route being registered does not guarantee identical Mastodon semantics.

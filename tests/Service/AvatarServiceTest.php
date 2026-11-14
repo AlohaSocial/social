@@ -26,6 +26,7 @@ use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -271,6 +272,39 @@ class AvatarServiceTest extends TestCase {
 		$this->assertSame($path, $this->service->checkUpload(self::USER, ['tmp_name' => $path]));
 		$this->assertNull($this->stored);
 		$this->assertSame([], $this->refreshed);
+	}
+
+	/** The header of a 10000x10000 PNG, which GD would need gigabytes to decode. */
+	private function hugePng(): string {
+		$ihdr = 'IHDR' . pack('NN', 10000, 10000) . "\x08\x02\x00\x00\x00";
+
+		return $this->file("\x89PNG\r\n\x1a\n" . pack('N', 13) . $ihdr . pack('N', crc32($ihdr))
+			. pack('N', 0) . 'IEND' . pack('N', crc32('IEND')));
+	}
+
+	/** @return iterable<string, array{string}> */
+	public static function waysIn(): iterable {
+		yield 'a file this server holds, cropped square' => ['setFromFile'];
+		yield 'an archive restore' => ['restoreFromArchive'];
+		yield 'an upload' => ['setFromTempFile'];
+	}
+
+	#[DataProvider('waysIn')]
+	public function testAPictureWithTooManyPixelsIsRefusedBeforeItIsDecoded(string $method): void {
+		$path = $this->hugePng();
+		$this->uploaded[] = $path;
+
+		try {
+			match ($method) {
+				'setFromFile' => $this->service->setFromFile(self::USER, $path),
+				'restoreFromArchive' => $this->service->restoreFromArchive(self::USER, $path),
+				default => $this->service->setFromTempFile(self::USER, ['tmp_name' => $path]),
+			};
+			$this->fail('a hundred-megapixel picture was accepted');
+		} catch (InvalidActionException $e) {
+			$this->assertStringContainsString('too many pixels', $e->getMessage());
+		}
+		$this->assertNull($this->stored);
 	}
 
 	public function testAnEmptyFileIsRefused(): void {

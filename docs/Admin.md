@@ -391,7 +391,23 @@ occ social:queue:retry --flush --min-tries 16   # or drop them, for a peer that 
 
 The **Deliveries** section of the Aloha Social settings names the instances
 the failures are stacked against, with the highest attempt count so far and
-when each was last tried.
+when each was last tried. Each instance given up on has a **Retry deliveries**
+button for an administrator (not a delegate): once the reason is fixed, it does
+what `occ social:queue:retry --instance HOST --force` does — every delivery to
+that host that has failed at least once, the abandoned ones included, goes back
+on standby with its attempts reset, at most 500 a press — and says how many it
+queued. It is limited to twenty presses an hour per administrator.
+
+### Mastodon app sign-ins after an upgrade
+
+Refresh tokens came with a lower limit on how long an unused Mastodon app
+stays signed in: 90 days (`token_idle_days`) instead of 355. Tokens issued before
+the upgrade keep working, with two differences: an app nobody has used for 90
+days is signed out by the first background run after the upgrade, and an app
+that held a token from before has no refresh token, so when `token_max_days`
+ends — a year after the grant, as before — it asks the person to sign in once
+more and receives one with the new token. To keep the old idle limit for a
+while, set `token_idle_days` to `355` before upgrading.
 
 ### Stored posts and bios after an upgrade
 
@@ -404,6 +420,27 @@ posts and as many bios, walking each table once from a cursor in the app
 settings, and does nothing once both walks have reached the end. A row it
 cannot rewrite is logged (`cannot bring a stored text up to the current
 sanitizer`) and passed over; it still reads correctly, only slower.
+
+### Reading posts without their wire object
+
+A timeline reads a post's emoji and the counts its server stated from a small
+digest stored beside the post rather than from the whole ActivityPub document
+it arrived as. Posts stored before the digest existed are read from the
+document as before until `Cron\SourceDigests` has given them one: every five
+minutes it takes up to 10,000 posts, walking the table once from a cursor in the
+app settings (`source_digest_walk`, `done` once finished). It starts only after
+the `BackfillStreamPostFields` repair step has run on the instance. A row it
+cannot write is logged (`cannot digest the source of a stored post`) and passed
+over; it still reads correctly, only slower.
+
+### Hashtag trends after an upgrade
+
+The trending hashtags are counted from hourly tallies per hashtag rather than
+from every post of the last ten days. The first background run after the
+upgrade that introduced them builds the tallies of the current ten days in one
+pass, which costs what a single trends update used to cost; every later run
+recounts only the hours that changed. Nothing needs doing, and the trends read
+the same numbers as before.
 
 ### Posts the index repairs skipped
 
@@ -735,7 +772,11 @@ from, and one that people here follow is removed with its posts — the
 Bluesky counterpart of a domain block. Reports people file about Bluesky
 accounts with *forward* ticked go to Bluesky's moderation service
 (`atproto_moderation_did`, Bluesky's own by default), sent by this server, not
-in the reporter's name.
+in the reporter's name. They are sent to the `#atproto_labeler` endpoint that
+service's DID document names, which has to be `https` and a public address;
+set `atproto_moderation_endpoint` (`occ config:app:set social
+atproto_moderation_endpoint --value http://ozone.internal:3000`) to send them
+somewhere else, such as a moderation service on the local network.
 
 **Video.** A video posted here goes to Bluesky as a Bluesky video: it is sent
 to Bluesky's video service (`atproto_video_service`, `https://video.bsky.app`
@@ -774,7 +815,7 @@ administrator came to do, and one group is shown at a time:
 | **Overview** | Needs attention, Activity here |
 | **Moderation** | Reports, Posts waiting for review, Accounts, Verified accounts, Refused pictures |
 | **Sign-ups** | Who may sign up, Waiting and invited, External accounts (only when the server sends them, see [External users](#external-users)) |
-| **Discover and features** | Topics on Discover, What may trend, Custom emoji, Announcements, Features, For you |
+| **Discover and features** | Topics on Discover, What may trend, Custom emoji, GIF library, Announcements, Features, For you |
 | **Federation** | Allowed and blocked servers, Block lists, Relays, Deliveries |
 | **Server** | About this server, Server settings, Retention, Storage, Background jobs |
 
@@ -860,6 +901,13 @@ Federation health widget to `#federation`.
   `:shortcode:`. They travel with the post, so somebody on another server sees
   them too. The upload goes through the same code `occ social:emoji` uses, so
   what is refused here is exactly what the command refuses.
+- **GIF library** — this server's own pictures in the composer's GIF picker,
+  offered to everybody before the animated emoji: list them, add one (a name,
+  what people search for, and a GIF, animated WebP or MP4 of at most 8 MiB) and
+  remove one. Adding under a name already in the library replaces it; removing
+  one leaves posts that attached it as they are. The upload goes through the
+  same code `occ social:gif add` uses, with the same checks. Open to delegates,
+  as Custom emoji is.
 - **About this server** (in the **Server** group) — everything the user-facing
   **About this server** page in the account menu shows, in one place:
   - the **name**, which is Theming's, shown with a link to Theming;
@@ -995,7 +1043,9 @@ administrator approves, or only the holders of an invitation link; an
 invitation admits its holder in every mode, without approval. With *Confirm
 the email address* on, which is the default, the account is made when the
 link in the confirmation email is followed, so the server needs working
-mail. The form also asks to accept the server rules (in the **About this server** section) and
+mail. With *Anybody who registers* and confirmation off, every registration
+is an account at once, made with whatever address was typed; the card shows
+a warning while the form is set that way, and leaves the choice to you. The form also asks to accept the server rules (in the **About this server** section) and
 links the privacy policy and legal notice set in Administration → Theming.
 The additional registration and privacy information box is plain text shown
 on the introduction page and beside the form. It starts with a translated
@@ -1009,6 +1059,25 @@ hours. These
 settings provide an audit trail, not legal advice or a guarantee that a notice
 is sufficient for a particular jurisdiction. The operator remains responsible
 for local policies and any consent required.
+*Make the browser solve a puzzle before registering*, on by default, asks
+for a proof of work with every registration that does not come with an
+invitation link: when the form opens, the browser is given a puzzle and
+works at it in the background (a Web Worker) while the person types, and the
+registration carries the answer. Nothing is sent to a third party, unlike a
+captcha service. Each answer is accepted once and for 20 minutes. It makes
+every registration cost some seconds of computation, which a person filling
+in the form hardly notices and a script registering thousands of accounts
+pays thousands of times; it does not stop a determined attacker with enough
+computers. It is on in approval mode too: there, automated registrations
+would otherwise fill the approval queue, which stops taking registrations at
+1000, and send a confirmation email each. *Difficulty* is in bits, 12 to 24,
+and every step doubles the work: at the default of 20 a computer needs about
+a second and a phone a few seconds, now and then more than ten, which mostly
+passes while the form is filled in. The page is allowed to start a worker
+from this server's own scripts (`worker-src 'self'`); where a browser cannot
+start one, the puzzle is solved on the page itself. Raise it when automated registrations get through, lower it
+when people give up waiting.
+
 *Usernames nobody may register* adds to a built-in list (`admin`, `root`,
 `support`, `social`, `postmaster` and similar). Email domains on the access
 block list are refused here as they are for every account.
@@ -1021,6 +1090,16 @@ instead: *You already have an account*, or *Choose another username*. Such a
 registration counts towards the limit of registrations per address like any
 other. With *Confirm the email address* off a new registration is answered
 differently, so there the answers can be told apart.
+
+So that the form cannot be used to fill a stranger's inbox from many
+addresses, the mails it sends are also limited per recipient: one *You
+already have an account* or *Choose another username* per email address
+every 6 hours (a confirmation link starts the same wait), and at most 3 mails
+of any kind from the form to one address in 24 hours. The address is counted
+as its inbox receives it — case, a `+tag` and Gmail's dots do not make it
+another — and only as a hash keyed with the instance secret. A mail held back
+is answered exactly like one that was sent; a held-back confirmation link
+stores no registration, so the address is free again when the limit runs out.
 
 *Require two-factor authentication* is Nextcloud's own mandatory two-factor
 setting for the `social-external` group, the same one as in Administration →
@@ -1262,10 +1341,24 @@ holds them, and that is routinely not the host the post came from: a post on
 a CDN is common besides. Those hosts are judged as the instance that named
 them, because nobody can list the buckets another server keeps its pictures
 in. Judging them on their own refused every picture from every allowed
-instance, so allow-list mode federated text and nothing else. An instance that is a nuisance
-rather than a menace can be *silenced* instead with `occ social:fediverse
-silence`: its accounts leave the public timelines and stay readable for the
-people who follow them.
+instance, so allow-list mode federated text and nothing else.
+
+In block-list mode an instance that is a nuisance rather than a menace can be
+**silenced** instead of blocked: its accounts leave the public timelines and
+stay readable for the people who follow them, and nothing is deleted. The
+*Add instance* form asks which (*Block* or *Silence*), and an entry already on
+the list can be switched with its **Edit** button; `occ social:fediverse
+silence` does the same from a shell. Each entry may carry two reasons:
+a **note for moderators**, which only the people who may open this page and
+the Mastodon admin API see, and a **reason shown publicly**, which
+`/api/v1/instance/domain_blocks` gives as `comment` when the server publishes
+its list (*Publish the list of blocked instances* on the Server card,
+`publish_blocks`). Both are kept in `social_server_block` beside the domain, at
+most 1000 characters each, and go when the instance is taken off both lists —
+blocking it again later starts without a reason. A list imported as a CSV
+brings the reasons in its `#public_comment` column (the one Mastodon's export
+writes) for the instances the import adds; one already listed keeps what was
+written here.
 
 ---
 
@@ -1363,17 +1456,19 @@ both validate the ranges given here, and every one can be set with `occ`.
 | `video_quota` | `0` | How many megabytes of video **one account** may keep here; `0` is no quota, which is what every instance has in effect today. A different question from `max_video_size`, which is a ceiling on one file: that is about a single request, this about a year of them. Off by default because an instance that has been running without a quota and acquires one on upgrade would start refusing uploads from exactly the accounts that use it most. Checked once, where an upload is written, against the size recorded on each stored file — so a video uploaded before this app recorded sizes counts as nothing until the daily usage job has been past it, which fills the column in as it walks. The **ladders this server builds do not count against it**: they are made because an administrator asked for them, are several times the size of the upload, and would turn a quota somebody was told about into one several times smaller. They are counted in what an administrator is shown, because they are real disk. Who is holding what is under **Administration → Aloha Social → Storage**. |
 | `nsfw_policy` | `default` | What happens to media somebody marked sensitive, for readers who have not chosen for themselves. PeerTube's three NSFW policies under Mastodon's names for the same three states: `show_all` (PeerTube's *display*), `default` (its *blur* — covered, the blurhash showing, one press away, and what this app has always done) and `hide_all` (its *hide* — not drawn, and no button to draw it). Anybody can override it for themselves under **Settings** in the app, and "follow the instance" stays a state of its own, so changing this moves everybody who is following it and nobody who has chosen. A **content warning is a different thing** and always covers its post, whatever this says. |
 | `review_videos` | `0` | Whether every post with a video on it waits for a moderator. The third rule of the review queue, beside a new account's first post and the spam rules, and the one an instance that hosts video wants: a video is minutes of somebody's attention and a great deal of somebody else's disk. **Unlike the other two it is not about the account** — a trusted account with a thousand posts behind it is held by it too, every time, because what it is about is the video. A moderator's own video is not held, and neither is a direct message. Under **Administration → Aloha Social → Posts waiting to be looked at**. |
-| `inbox_throttle` | `300` | Incoming inbox requests allowed per origin host per minute. `0` accepts everything, which is what an instance behind its own rate limiter wants. |
+| `inbox_throttle` | `300` | Incoming inbox requests allowed per minute, per source address (an IPv6 address by its /64) before the signature is checked, and four times that per verified origin host. `0` accepts everything, which is what an instance behind its own rate limiter wants. |
 | `rate_limit_user` | `900` | How many client API requests one **signed-in account** may make per window. The routes that fan out — search, the directories, the follow graph — carry limits of their own and Nextcloud enforces those; this is the budget for everything else, which was some three hundred routes with no limit at all. Generous on purpose: it exists to stop a scraper reading the whole instance at machine speed, not to pace an app. One budget for the whole API, not one per route. `0` switches it off, which is what an instance behind its own limiter wants. Federation, the internal queue and the routes that serve bytes (attachments, avatars, emoji, GIFs) are never counted — one public page is forty requests for pictures, and deliveries arrive in bursts from a handful of addresses. |
-| `rate_limit_anon` | `300` | The same budget for a caller with **no account**, counted per address. |
+| `rate_limit_anon` | `300` | The same budget for a caller with **no account**, counted per address (an IPv6 address by its /64). |
 | `rate_limit_window` | `300` | How long that window is, in seconds. |
-| `token_max_days` | `365` | How many days an OAuth token works from the moment it was granted, **however much it is used**. A token idle for a year stops working anyway; this is about one in use, which used to live for ever — every request kept it alive, so a token copied off a phone lived as long as whoever held the copy kept using it. Past it the app is signed out and the person signs in again; there are no refresh tokens. Each person sees when under **Settings → Authorized apps**. `0` lets a token in use live for ever. |
+| `token_max_days` | `365` | How many days an OAuth access token works from the moment it was issued, **however much it is used**, for an app that has never refreshed it. Almost every Mastodon app is one of those — Mastodon itself issues tokens that never expire and no refresh tokens, so the apps never learned to refresh — and for them this is how often they ask the person to sign in again; a year keeps that to once a year, as before. An app that refreshes is not affected: past this its access token is refused, it refreshes, and from then on `refreshed_token_hours` applies. Each person sees when an app signs out by itself under **Settings → Apps and account → Authorized apps**. `0` lets a token in use live for ever. |
+| `token_idle_days` | `90` | How many days an app may go **unused** — no request with its access token, no refresh — before it is signed out and its push subscription removed. Every use moves the date on, so an app in daily use never meets it; a phone in a drawer does. At least `1`. |
+| `refreshed_token_hours` | `24` | How many hours an access token works when it was issued by a **refresh**. An app that has refreshed once has shown that it renews its token by itself, so its tokens can be short-lived: a token copied off the device stops working within this, and the app does not notice. The refresh token itself is rotated on every use, and one used twice signs the app out. `0` counts these tokens by `token_max_days` like any other. |
 | `follow_limit` | `100` | How many follows **one account** may send in an hour. A compromised account, or one running a script, can fan out follows to thousands of servers from this instance's address in a few minutes — every one a signed request this instance is answerable for. An hour rather than a day because what this catches is a burst, and high enough that importing a follow list from another server still goes through. Counted from the rows, so it holds on an instance with no memcache. `0` is no limit. |
 | `atproto_opaque_records` | `10000` | How many records **one account** may keep in its Bluesky repository in collections Aloha Social has no role for — anything other than posts, likes, reposts, follows, blocks, the profile, the chat setting, lists, list items, starter packs, feed generators, gates and profile links. Apps can write such records and this server stores and publishes them as written, so without a cap one app could fill the repository and every relay copying it. A write past the cap is refused with an `InvalidRequest` error naming the limits; deleting such records stays possible. Records brought by a move are counted but never refused. `0` is no limit. |
 | `atproto_opaque_mb` | `50` | The same cap in megabytes: the total size of those records, as stored. `0` is no limit. |
 | `domain_media_quota` | `0` | How many megabytes of media **one other server** may keep here. Every picture on a post somebody here follows is fetched and cached, and nothing bounded that by where it came from: one server posting large images at a high rate fills the disk of every instance that follows anybody on it. The server is the host of the file's own address (its `url`), which for a Mastodon instance is often a separate media host. Counted from the figure the daily storage walk takes, plus successfully cached bytes from that host since — rejected or unreadable downloads do not spend quota. The figure is up to a day coarse and errs towards refusing early. Off by default, because an instance that has been federating for a year and acquires a quota on upgrade would start refusing the pictures of the servers it talks to most. Who is holding what is under **Administration → Aloha Social → Storage**. |
 | `secure_mode` | `0` | Refuse ActivityPub fetches that are not signed. Mastodon's secure mode. Turning it on makes this instance invisible to every peer that does not sign what it asks for, and to every anonymous reader; it is a decision about who to federate with, not a hardening step to apply by default. |
-| `publish_blocks` | `0` | Publish the deny list on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
+| `publish_blocks` | `0` | Publish the blocked and silenced instances, with their public reasons, on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
 | `allow_self_signed` | `0` | Accept peers whose certificates do not check out. **Development only**: on a server anybody else uses, this hands every federated request to whoever can answer for the address. |
 | `hide_instance_counts` | `0` | Keep the number of accounts and posts out of the public instance metadata, which anybody can read without logging in and fediverse crawlers collect: `/api/v1/instance` and `/api/v2/instance` then report `0`, NodeInfo leaves `usage.users.total` and `usage.localPosts` out, and `/api/v1/instance/activity` reports `0` posts a week. Either way the account count is the accounts of this app — local accounts that are not deleted or suspended — never every Nextcloud user. Set from the Server card. |
 | `stories` | `1` | Whether this instance offers Shorts — a picture or a video that is gone in a day. Off, the bar goes from the timeline and nothing new is taken; what was posted expires as it would have. Set from the Sections card. |
@@ -1429,6 +1524,8 @@ Set from the External users cards; these are the keys they write.
 | `external_reserved` | `[]` | Usernames nobody may register, as a JSON array, on top of the built-in ones. |
 | `external_user_invites` | `0` | Whether every user may send invitation links. |
 | `external_signup_notice` | *(empty)* | The additional registration and privacy information shown on the introduction page and beside the form, as plain text. Empty shows the translated template text. |
+| `external_signup_pow` | `1` | Whether a registration without an invitation has to carry a proof of work that the browser computes. `0` switches it off. |
+| `external_signup_pow_bits` | `20` | The difficulty of that proof of work, in leading zero bits of a SHA-256 hash, `12` to `24`. Each step doubles the work. |
 | `external_signup_notice_required` | `0` | Whether registering requires ticking that the notice was read. With it on, the notice's version, the time and the text as accepted are recorded with the account (the per-account keys below). |
 
 ### Aloha Directory
@@ -1607,7 +1704,7 @@ occ social:ip-blocks:remove <id-or-range>     # lift one; the range completes in
 ```bash
 occ social:stream:prune             # apply retention, purge finished queue rows and old notifications
 occ social:media:purge              # apply the media cache limits now (see --help for one-off limits)
-occ social:cache:refresh            # re-fetch cached remote accounts
+occ social:cache:refresh            # re-fetch cached remote accounts and waiting remote media
 occ social:domain:purge <instance>  # remove what a now-blocked instance sent
 ```
 
@@ -1664,6 +1761,17 @@ pass held to about 60,000. A details refresh is three or more fetches, so it
 covers fewer, 30 to 90 a pass. Past those sizes the cycle stretches and the
 stalest still go first; a key that rotated in between is fetched again the
 first time a signature fails to verify.
+
+**Remote media** is fetched in the background. A post stored with attachments
+the inbox could not finish (it has ten seconds), or brought in by a remote
+timeline sync, which does not download them at all, is queued and its files
+fetched by the queue drain — `Cron\Queue` or `occ social:worker` — eight at a
+time, at most four from one server, with up to 120 seconds per wave.
+`Cron\Cache` sweeps whatever still waits, newest first, for up to 90 seconds a
+pass. A server behind the delivery circuit breaker is not asked, and one whose
+downloads failed is not asked again in the same run. Run `social:worker` if
+pictures from busy accounts appear late: without it the queue is drained every
+twelve minutes.
 
 **Plan the upgrade window on a large instance.** Three upgrade steps rewrite
 `social_stream` row by row, and they run inside `occ upgrade`, while the server

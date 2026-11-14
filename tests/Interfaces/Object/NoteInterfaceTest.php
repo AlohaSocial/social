@@ -32,6 +32,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamQueue;
+use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\ForwardService;
@@ -471,6 +472,54 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
 
 		$this->assertFalse($note->hasCache());
+	}
+
+	private static function attachment(string $url, int $error = 0): MediaAttachment {
+		return (new MediaAttachment())
+			->setUrl($url)
+			->setRemoteUrl('https://files.remote.example/pic.png')
+			->setCacheError($error);
+	}
+
+	/**
+	 * A picture the inbox could not finish has no link yet; the post is
+	 * queued so the files are fetched in the background, not by the first
+	 * reader's request.
+	 */
+	public function testAPostWithAnAttachmentStillWaitingIsQueuedForItsMedia(): void {
+		$this->nothingStored();
+		$note = $this->incomingNote();
+		$note->setAttachments([self::attachment('https://cloud.example/media/1.png'), self::attachment('')]);
+
+		$this->streamQueueService->expects($this->once())->method('queueMedia')
+			->with($note->getRequestToken(), self::NOTE);
+
+		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
+	}
+
+	public function testAPostWhoseAttachmentsAreStoredOrRefusedIsNotQueuedForMedia(): void {
+		$this->nothingStored();
+		$note = $this->incomingNote();
+		$note->setAttachments([
+			self::attachment('https://cloud.example/media/1.png'),
+			self::attachment('', DocumentService::ERROR_SIZE),
+		]);
+
+		$this->streamQueueService->expects($this->never())->method('queueMedia');
+
+		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
+	}
+
+	public function testAnEditThatBringsAnAttachmentStillWaitingIsQueuedForItsMedia(): void {
+		$note = $this->incomingNote();
+		$note->setContent('<p>edited</p>');
+		$note->setAttachments([self::attachment('')]);
+		$this->streamRequest->method('getStreamById')->with(self::NOTE)->willReturn($this->storedCopy());
+
+		$this->streamQueueService->expects($this->once())->method('queueMedia')
+			->with($note->getRequestToken(), self::NOTE);
+
+		$this->handler->activity($this->wrap(Update::TYPE, $note), $note);
 	}
 
 	/** A fetched ancestor carries how deep the climb already is; at the cap it stops. */

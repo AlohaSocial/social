@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interop;
 
-use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\RemoteMediaPrefetcher;
 use OCA\Social\Service\Thread\ThreadService;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -356,10 +356,10 @@ class MastodonInboundTest extends TestCase {
 
 		// a remote picture is copied here by the cache job cron runs, and
 		// shown once it has been
-		$documents = Server::get(DocumentService::class);
+		$documents = Server::get(RemoteMediaPrefetcher::class);
 		$this->assertNotNull(
 			$this->here->await(function () use ($before, $documents): ?bool {
-				$documents->manageCacheDocuments();
+				$documents->prefetchPending(time() + 60);
 
 				return (($this->here->account($this->interopHere)['avatar'] ?? '') !== ($before['avatar'] ?? '')) ? true : null;
 			}),

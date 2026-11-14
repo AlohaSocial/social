@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Service\ExternalSignupService;
+use OCA\Social\Service\SignupChallengeService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -19,6 +20,7 @@ use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UseSession;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
@@ -42,6 +44,7 @@ class SignupController extends Controller {
 		private IInitialState $initialState,
 		private IUserSession $userSession,
 		private IURLGenerator $urlGenerator,
+		private SignupChallengeService $challengeService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -62,13 +65,30 @@ class SignupController extends Controller {
 
 		$this->initialState->provideInitialState('signup', $this->signupService->pageState($invite));
 
-		return new TemplateResponse(Application::APP_ID, 'signup', [], TemplateResponse::RENDER_AS_GUEST);
+		return $this->template();
+	}
+
+	/**
+	 * A proof-of-work challenge for the form; see `SignupChallengeService`.
+	 * Nothing is stored until an answer to it is accepted.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[FrontpageRoute(verb: 'GET', url: '/signup/challenge')]
+	public function challenge(): DataResponse {
+		if ($this->userSession->isLoggedIn()) {
+			return new DataResponse(['message' => 'You are already logged in.'], Http::STATUS_FORBIDDEN);
+		}
+
+		return new DataResponse($this->challengeService->issue());
 	}
 
 	/**
 	 * A registration.
 	 *
-	 * `website` is a field no person sees and a form-filling bot does; see
+	 * `website` is a field no person sees and a form-filling bot does;
+	 * `challenge` and `nonce` are the proof of work. See
 	 * `ExternalSignupService::submit()`.
 	 */
 	#[PublicPage]
@@ -84,6 +104,8 @@ class SignupController extends Controller {
 		string $website = '',
 		bool $notice = false,
 		string $noticeVersion = '',
+		string $challenge = '',
+		string $nonce = '',
 	): DataResponse {
 		if ($this->userSession->isLoggedIn()) {
 			return new DataResponse(['message' => 'You are already logged in.'], Http::STATUS_FORBIDDEN);
@@ -101,6 +123,8 @@ class SignupController extends Controller {
 				$this->request->getRemoteAddress(),
 				$notice,
 				$noticeVersion,
+				$challenge,
+				$nonce,
 			));
 		} catch (ExternalUserException $e) {
 			return new DataResponse(
@@ -129,6 +153,19 @@ class SignupController extends Controller {
 
 		$this->initialState->provideInitialState('signup', $state);
 
-		return new TemplateResponse(Application::APP_ID, 'signup', [], TemplateResponse::RENDER_AS_GUEST);
+		return $this->template();
+	}
+
+	/**
+	 * The page, allowed to start the Web Worker that solves the challenge
+	 * from this server's own scripts.
+	 */
+	private function template(): TemplateResponse {
+		$response = new TemplateResponse(Application::APP_ID, 'signup', [], TemplateResponse::RENDER_AS_GUEST);
+		$policy = new ContentSecurityPolicy();
+		$policy->addAllowedWorkerSrcDomain("'self'");
+		$response->setContentSecurityPolicy($policy);
+
+		return $response;
 	}
 }

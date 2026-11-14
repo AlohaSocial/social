@@ -181,6 +181,17 @@ class RateLimitServiceTest extends TestCase {
 		$this->assertSame(1, $this->service->count(RateLimitService::BUCKET_API, 300));
 	}
 
+	/** An IPv6 client may use any address of its /64, which is one budget. */
+	public function testAnIpv6ClientIsCountedByItsSlash64(): void {
+		$this->request = $this->createStub(IRequest::class);
+		$this->request->method('getRemoteAddress')->willReturnOnConsecutiveCalls('2001:db8:1:2::1', '2001:db8:1:2::ffff', '2001:db8:1:3::1');
+		$this->service = $this->build();
+
+		$this->assertSame(1, $this->service->count('api', 300));
+		$this->assertSame(2, $this->service->count('api', 300));
+		$this->assertSame(1, $this->service->count('api', 300));
+	}
+
 	public function testTwoBucketsAreTwoBudgets(): void {
 		$this->service->count(RateLimitService::BUCKET_API, 300);
 

@@ -15,13 +15,19 @@ use OCA\Social\Db\ExternalSignupsRequest;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\ExternalUserService;
 use OCA\Social\Service\InstanceService;
+use OCA\Social\Service\SignupChallengeService;
+use OCA\Social\Service\SignupMailLimiter;
+use OCA\Social\Tests\Helper\FrozenClock;
+use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\HintException;
 use OCP\IAppConfig;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IURLGenerator;
@@ -50,6 +56,7 @@ class ExternalSignupServiceTest extends TestCase {
 	private bool $room = true;
 	private bool $twoFactorRequired = false;
 	private bool $noticeRequired = false;
+	private bool $proofOfWork = false;
 	private bool $bluesky = false;
 	private ?string $blueskyHost = 'social.example';
 	/** the social address, or null while none can be worked out */
@@ -69,8 +76,15 @@ class ExternalSignupServiceTest extends TestCase {
 	private array $recipients = [];
 	/** @var array<int, int> message => template */
 	private array $templates = [];
+	/** the table `SignupMailLimiter` keeps its claims in */
+	private InMemoryDurableCacheRequest $mailTable;
+	private FrozenClock $mailClock;
+	/** the challenges of the service service() made last */
+	private SignupChallengeService $challenges;
 
 	protected function setUp(): void {
+		$this->mailTable = new InMemoryDurableCacheRequest();
+		$this->mailClock = new FrozenClock(self::NOW);
 		$this->users = $this->createMock(ExternalUserService::class);
 		$this->users->method('mode')->willReturnCallback(fn (): string => $this->mode);
 		$this->users->method('verifiesEmail')->willReturnCallback(fn (): bool => $this->verify);
@@ -79,6 +93,8 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->users->method('isEnabled')->willReturn(true);
 		$this->users->method('minimumAge')->willReturn(16);
 		$this->users->method('requiresSignupNoticeAcceptance')->willReturnCallback(fn (): bool => $this->noticeRequired);
+		$this->users->method('requiresProofOfWork')->willReturnCallback(fn (): bool => $this->proofOfWork);
+		$this->users->method('proofOfWorkBits')->willReturn(12);
 		$this->users->method('assertHandleAvailable')->willReturnArgument(0);
 		$this->users->method('assertEmailAvailable')->willReturnArgument(0);
 		$this->users->method('assertHandleOpen')->willReturnArgument(0);
@@ -159,6 +175,12 @@ class ExternalSignupServiceTest extends TestCase {
 		$atproto->method('handleHost')->willReturnCallback(fn (): string => $this->blueskyHost ?? throw new SocialAppConfigException('no address'));
 		$config = $this->createStub(ConfigService::class);
 		$config->method('getSocialAddress')->willReturnCallback(fn (): string => $this->socialAddress ?? throw new SocialAppConfigException('no address'));
+		$cacheFactory = $this->createStub(ICacheFactory::class);
+		$cacheFactory->method('isAvailable')->willReturn(true);
+		$systemConfig = $this->createStub(IConfig::class);
+		$systemConfig->method('getSystemValueString')->willReturn('instance-secret');
+		$mailLimiter = new SignupMailLimiter(new DurableCache($cacheFactory, $this->mailTable, $this->mailClock), $systemConfig);
+		$this->challenges = new SignupChallengeService($this->users, new DurableCache($cacheFactory, $this->mailTable, $this->mailClock), $random, $systemConfig, $this->mailClock);
 
 		return new ExternalSignupService(
 			$this->users,
@@ -178,14 +200,16 @@ class ExternalSignupServiceTest extends TestCase {
 			$l10n,
 			new NullLogger(),
 			$config,
+			$mailLimiter,
+			$this->challenges,
 		);
 	}
 
-	private function submit(string $invite = '', string $honeypot = '', bool $rules = true, bool $age = true, string $password = 'long enough', bool $notice = false, string $noticeVersion = ''): array {
+	private function submit(string $invite = '', string $honeypot = '', bool $rules = true, bool $age = true, string $password = 'long enough', bool $notice = false, string $noticeVersion = '', string $email = 'alice@example.org'): array {
 		$service = $this->service();
 		$noticeVersion = $noticeVersion !== '' ? $noticeVersion : $service->pageState()['signupNoticeVersion'];
 
-		return $service->submit('alice', 'alice@example.org', $password, $rules, $age, $invite, $honeypot, '192.0.2.1', $notice, $noticeVersion);
+		return $service->submit('alice', $email, $password, $rules, $age, $invite, $honeypot, '192.0.2.1', $notice, $noticeVersion);
 	}
 
 	public function testTheHoneypotIsAnsweredAsIfItWorkedAndNothingIsStored(): void {
@@ -369,6 +393,149 @@ class ExternalSignupServiceTest extends TestCase {
 			$this->assertSame('rules', $e->getField());
 		}
 		$this->assertSame([], $this->sent);
+	}
+
+	/**
+	 * Many IP addresses could otherwise mail one stranger without end: each
+	 * notice resets nothing the per-IP limits see.
+	 */
+	public function testOneAddressGetsOneNoticePerCooldownWithTheSameAnswer(): void {
+		$this->emailInUse = true;
+		$this->signups->expects($this->exactly(3))->method('createPlaceholder');
+
+		$first = $this->submit();
+		$second = $this->submit();
+		$this->mailClock->set(self::NOW + SignupMailLimiter::NOTICE_COOLDOWN);
+		$third = $this->submit();
+
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $first);
+		$this->assertSame($first, $second);
+		$this->assertSame($first, $third);
+		$this->assertSame([
+			['You already have an account', 'alice@example.org'],
+			['You already have an account', 'alice@example.org'],
+		], $this->sent);
+	}
+
+	public function testTheCooldownCountsTheAddressAsItsInboxReceivesIt(): void {
+		$this->login = true;
+
+		$this->submit();
+		$this->submit('', '', true, true, 'long enough', false, '', ' Alice+spam@Example.org ');
+
+		$this->assertSame([['Choose another username', 'alice@example.org']], $this->sent);
+	}
+
+	public function testAllFormMailToOneAddressStopsAtTheDailyCap(): void {
+		$this->emailInUse = true;
+		for ($i = 0; $i <= SignupMailLimiter::DAILY_CAP; $i++) {
+			$this->mailClock->set(self::NOW + $i * SignupMailLimiter::NOTICE_COOLDOWN);
+			$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $this->submit());
+		}
+		$this->assertCount(SignupMailLimiter::DAILY_CAP, $this->sent);
+
+		$this->mailClock->set(self::NOW + SignupMailLimiter::DAY + 1);
+		$this->submit();
+		$this->assertCount(SignupMailLimiter::DAILY_CAP + 1, $this->sent);
+	}
+
+	/**
+	 * A confirmation link starts the cooldown as a notice does: a second
+	 * registration with the address is answered and mailed the same way
+	 * whether or not the address was somebody's before the first.
+	 */
+	public function testAConfirmationLinkHoldsBackTheNoticeThatWouldFollowIt(): void {
+		$this->submit();
+		$this->emailInUse = true;
+		$this->submit();
+
+		$this->assertSame([['Confirm your email address', 'alice@example.org']], $this->sent);
+	}
+
+	public function testAHeldBackConfirmationLinkStoresNothingAndIsAnsweredTheSame(): void {
+		$this->emailInUse = true;
+		for ($i = 0; $i < SignupMailLimiter::DAILY_CAP; $i++) {
+			$this->mailClock->set(self::NOW + $i * SignupMailLimiter::NOTICE_COOLDOWN);
+			$this->submit();
+		}
+		$this->emailInUse = false;
+		$this->sent = [];
+		$this->signups->expects($this->never())->method('create');
+		$this->signups->expects($this->once())->method('createPlaceholder');
+		$this->invites->expects($this->never())->method('consume');
+
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $this->submit('good'));
+		$this->assertSame([], $this->sent);
+	}
+
+	public function testAMailThatCouldNotBeSentDoesNotCountAgainstTheAddress(): void {
+		$this->emailInUse = true;
+		$this->mailWorks = false;
+		try {
+			$this->submit();
+			$this->fail('answered as sent');
+		} catch (ExternalUserException $e) {
+		}
+
+		$this->mailWorks = true;
+		$this->submit();
+		$this->assertSame([['You already have an account', 'alice@example.org']], $this->sent);
+	}
+
+	public function testWithTheProofOfWorkOnARegistrationWithoutItIsRefusedAndNothingStored(): void {
+		$this->proofOfWork = true;
+		$this->signups->expects($this->never())->method('create');
+		$this->signups->expects($this->never())->method('createPlaceholder');
+		$this->signups->expects($this->never())->method('countFromIpSince');
+
+		try {
+			$this->submit();
+			$this->fail('accepted without a proof of work');
+		} catch (ExternalUserException $e) {
+			$this->assertSame('challenge', $e->getField());
+		}
+		$this->assertSame([], $this->sent);
+		$this->assertTrue($this->service()->pageState()['proofOfWork']);
+	}
+
+	public function testASolvedChallengeAdmitsOneRegistration(): void {
+		$this->proofOfWork = true;
+		$service = $this->service();
+		$challenge = $this->challenges->issue()['challenge'];
+		$nonce = SignupChallengeServiceTest::solve($challenge, 12);
+		$version = $service->pageState()['signupNoticeVersion'];
+
+		$answer = $service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $version, $challenge, $nonce);
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $answer);
+
+		$this->expectExceptionObject(new ExternalUserException('The check of this browser did not succeed. Please try again.', 'challenge'));
+		$service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $version, $challenge, $nonce);
+	}
+
+	/** An invitation is admission enough. */
+	public function testAnInvitationNeedsNoProofOfWork(): void {
+		$this->proofOfWork = true;
+		$this->invites->method('consume')->willReturn(true);
+
+		$this->assertFalse($this->service()->pageState('good')['proofOfWork']);
+		$this->assertSame('verify', $this->submit('good')['state']);
+	}
+
+	public function testRegistrationsAreCountedPerIpv4AddressAndPerIpv6Slash64(): void {
+		$hashes = [];
+		$this->signups->method('countFromIpSince')->willReturnCallback(function (string $hash) use (&$hashes): int {
+			$hashes[] = $hash;
+
+			return 0;
+		});
+		$service = $this->service();
+		$version = $service->pageState()['signupNoticeVersion'];
+		foreach (['2001:db8:1:2::1', '2001:db8:1:2:ffff::9', '2001:db8:1:3::1', '192.0.2.1', '192.0.2.2'] as $i => $address) {
+			$service->submit('alice', 'user' . $i . '@example.org', 'long enough', true, true, '', '', $address, false, $version);
+		}
+
+		$this->assertSame($hashes[0], $hashes[1]);
+		$this->assertCount(4, array_unique($hashes));
 	}
 
 	public function testOneAddressCannotRegisterWithoutEnd(): void {

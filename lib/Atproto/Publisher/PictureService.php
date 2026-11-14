@@ -191,6 +191,12 @@ class PictureService {
 	 * @return array{0: string, 1: int, 2: int}|null bytes, width, height
 	 */
 	private function reencode(string $original, int $maxBytes): ?array {
+		[$sourceWidth, $sourceHeight] = @getimagesizefromstring($original) ?: [0, 0];
+		if ($sourceWidth * $sourceHeight > CacheDocumentService::MAX_PIXELS) {
+			$this->logger->notice('Picture has too many pixels to re-encode for Bluesky', ['width' => $sourceWidth, 'height' => $sourceHeight]);
+
+			return null;
+		}
 		foreach (self::WIDTHS as $width) {
 			foreach (self::QUALITIES as $quality) {
 				try {

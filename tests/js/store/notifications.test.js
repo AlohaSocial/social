@@ -78,13 +78,14 @@ describe('notifications store', () => {
 			['fetchUnreadNotifications', { count: 1 }],
 			['fetchUnreadDirectMessages', { count: 1 }],
 			['fetchPendingRequests', { summary: { pending_requests_count: 1 } }],
+			['fetchBadges', { unread_notifications: 1 }],
 		])('%s says the server answered', async (fetch, data) => {
 			axios.get.mockResolvedValue({ data })
 
 			await expect(store[fetch]()).resolves.toBe(true)
 		})
 
-		it.each(['fetchUnreadNotifications', 'fetchUnreadDirectMessages', 'fetchPendingRequests'])(
+		it.each(['fetchUnreadNotifications', 'fetchUnreadDirectMessages', 'fetchPendingRequests', 'fetchBadges'])(
 			'%s says the server did not answer',
 			async (fetch) => {
 				axios.get.mockRejectedValue(new Error('offline'))
@@ -282,6 +283,43 @@ describe('notifications store', () => {
 			// the badge is left alone: nothing was marked, so it is still right
 			expect(store.unreadNotifications).toBe(3)
 			expect(marker).toBe('0')
+		})
+	})
+
+	describe('fetchBadges', () => {
+		it('reads all three counts and the notice in one request', async () => {
+			axios.get.mockResolvedValue({ data: { unread_notifications: 3, pending_requests: 2, notice: true, unread_conversations: 1 } })
+
+			await store.fetchBadges()
+
+			expect(axios.get).toHaveBeenCalledTimes(1)
+			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/social/badges')
+			expect(store.unreadNotifications).toBe(3)
+			expect(store.pendingRequests).toBe(2)
+			expect(store.activitiesCount).toBe(5)
+			expect(store.policyNotice).toBe(true)
+			expect(store.unreadDirectMessages).toBe(1)
+		})
+
+		it('leaves the counts as they were when the server cannot be asked', async () => {
+			store.setUnreadNotifications(4)
+			store.setUnreadDirectMessages(2)
+			axios.get.mockRejectedValue(new Error('offline'))
+
+			await store.fetchBadges()
+
+			expect(store.unreadNotifications).toBe(4)
+			expect(store.unreadDirectMessages).toBe(2)
+		})
+
+		it('chimes for a conversation that became unread, as the direct count does', async () => {
+			axios.get.mockResolvedValue({ data: { unread_conversations: 1 } })
+			await store.fetchBadges()
+			expect(feel).not.toHaveBeenCalled()
+
+			axios.get.mockResolvedValue({ data: { unread_conversations: 2 } })
+			await store.fetchBadges()
+			expect(feel).toHaveBeenCalledWith('dm')
 		})
 	})
 

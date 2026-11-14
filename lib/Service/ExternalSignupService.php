@@ -15,6 +15,7 @@ use OCA\Social\Db\ExternalInvitesRequest;
 use OCA\Social\Db\ExternalSignupsRequest;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Exceptions\SocialAppConfigException;
+use OCA\Social\Security\ClientAddress;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\HintException;
@@ -78,6 +79,8 @@ class ExternalSignupService {
 		private IL10N $l10n,
 		private LoggerInterface $logger,
 		private ConfigService $configService,
+		private SignupMailLimiter $mailLimiter,
+		private SignupChallengeService $challengeService,
 	) {
 	}
 
@@ -109,6 +112,7 @@ class ExternalSignupService {
 			'signupNotice' => $signupNotice,
 			'signupNoticeRequired' => $this->externalUserService->requiresSignupNoticeAcceptance(),
 			'signupNoticeVersion' => hash('sha256', $signupNotice),
+			'proofOfWork' => $invite === null && $this->externalUserService->requiresProofOfWork(),
 			'domain' => $this->addressHost(),
 			'bluesky' => $this->bluesky(),
 			'loginUrl' => $this->urlGenerator->linkToRoute('core.login.showLoginForm'),
@@ -173,12 +177,21 @@ class ExternalSignupService {
 	 * A filled-in honeypot is answered as if the registration had worked and
 	 * nothing is stored: a bot learns nothing from the answer.
 	 *
+	 * Without a valid invitation, and unless the administrator switched it
+	 * off, the registration carries the answer to a challenge of
+	 * `SignupChallengeService`, which it uses up whatever comes of it.
+	 *
 	 * The form is public, so it does not say whether an email address is
 	 * somebody's here, or whether a username is a Nextcloud login that has no
 	 * account of its own: either is answered as a new registration is, with
 	 * "check your email", and the mail goes to the address instead, saying
 	 * why nothing was made. With email confirmation off a new registration is
 	 * answered differently, and the two can be told apart.
+	 *
+	 * How often the form mails one address is limited by `SignupMailLimiter`.
+	 * A mail held back by it is answered the same as a mail sent; a held back
+	 * confirmation link stores nothing, so the address is not kept from its
+	 * owner for a day by a registration that cannot be confirmed.
 	 *
 	 * @return array{state: string, handle: string}
 	 * @throws ExternalUserException
@@ -194,6 +207,8 @@ class ExternalSignupService {
 		string $remoteAddress,
 		bool $acceptsSignupNotice = false,
 		string $signupNoticeVersion = '',
+		string $challenge = '',
+		string $nonce = '',
 	): array {
 		if ($honeypot !== '') {
 			$this->logger->info('[ExternalSignupService] dropped a registration that filled in the honeypot');
@@ -205,6 +220,10 @@ class ExternalSignupService {
 		$mode = $this->externalUserService->mode();
 		if (!$this->externalUserService->hasRoom() || ($mode === ExternalUserService::MODE_INVITE && $invite === null)) {
 			throw new ExternalUserException($this->closedReason($mode, $inviteToken !== ''));
+		}
+		if ($invite === null && $this->externalUserService->requiresProofOfWork()
+			&& !$this->challengeService->verify($challenge, $nonce)) {
+			throw new ExternalUserException($this->l10n->t('The check of this browser did not succeed. Please try again.'), 'challenge');
 		}
 
 		$ipHash = $this->ipHash($remoteAddress);
@@ -248,7 +267,10 @@ class ExternalSignupService {
 
 		$emailInUse = $this->externalUserService->isEmailInUse($email);
 		if ($emailInUse || $this->externalUserService->isLogin($handle)) {
-			if (!$this->sendUnavailable($email, $handle, $emailInUse)) {
+			$claim = $this->mailLimiter->claim($email, SignupMailLimiter::KIND_NOTICE);
+			if ($claim !== null && !$this->sendUnavailable($email, $handle, $emailInUse)) {
+				$this->mailLimiter->release($claim);
+
 				throw new ExternalUserException($this->l10n->t('The confirmation email could not be sent. Please try again later.'));
 			}
 			// a registration that is taken leaves a row the limits count,
@@ -260,11 +282,25 @@ class ExternalSignupService {
 			return ['state' => self::STATE_VERIFY, 'handle' => $handle];
 		}
 
+		$claim = null;
+		if ($this->externalUserService->verifiesEmail()) {
+			$claim = $this->mailLimiter->claim($email, SignupMailLimiter::KIND_VERIFICATION);
+			if ($claim === null) {
+				$this->signupsRequest->createPlaceholder($ipHash, $now);
+
+				return ['state' => self::STATE_VERIFY, 'handle' => $handle];
+			}
+		}
+
 		if ($invite !== null && !$this->invitesRequest->consume($invite['id'])) {
+			if ($claim !== null) {
+				$this->mailLimiter->release($claim);
+			}
+
 			throw new ExternalUserException($this->l10n->t('This invitation link is no longer valid.'));
 		}
 
-		if ($this->externalUserService->verifiesEmail()) {
+		if ($claim !== null) {
 			$token = $this->secureRandom->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
 			$id = $this->signupsRequest->create(
 				$handle, $email, $passwordHash, hash('sha256', $token), false, $needsApproval, $inviteId, $ipHash, $now,
@@ -272,6 +308,7 @@ class ExternalSignupService {
 			);
 			if (!$this->sendVerification($email, $handle, $token)) {
 				$this->signupsRequest->delete($id);
+				$this->mailLimiter->release($claim);
 
 				throw new ExternalUserException($this->l10n->t('The confirmation email could not be sent. Please try again later.'));
 			}
@@ -523,12 +560,12 @@ class ExternalSignupService {
 	}
 
 	/**
-	 * The address a registration came from, hashed with this instance's
-	 * secret: enough to count registrations per address, not enough to say
-	 * which address it was.
+	 * The address a registration came from, as `ClientAddress` counts it,
+	 * hashed with this instance's secret: enough to count registrations per
+	 * address, not enough to say which address it was.
 	 */
 	private function ipHash(string $remoteAddress): string {
-		return hash('sha256', $remoteAddress . '|' . $this->config->getSystemValueString('secret', ''));
+		return hash('sha256', ClientAddress::bucket($remoteAddress) . '|' . $this->config->getSystemValueString('secret', ''));
 	}
 
 	private function domain(): string {

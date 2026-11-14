@@ -36,6 +36,7 @@ class StreamReadPredicatesTest extends TestCase {
 		__DIR__ . '/../../lib/Db/StreamStatistics.php',
 	];
 	private const TAGS_SOURCE = [__DIR__ . '/../../lib/Db/StreamTagsRequest.php'];
+	private const TREND_SOURCE = [__DIR__ . '/../../lib/Db/StreamTrendBuckets.php'];
 
 	/** The body of one method, from its signature to the next one at the same indentation. */
 	private function methodBody(array $sources, string $name): string {
@@ -155,31 +156,46 @@ class StreamReadPredicatesTest extends TestCase {
 	 * posts for exactly this reason.
 	 */
 	public function testTrendsAreCountedOverPublicPostsOnly(): void {
-		$body = $this->methodBody(self::SOURCE, 'countHashtagsInWindows');
+		$uses = $this->methodBody(self::TREND_SOURCE, 'trendTagUses');
 
 		$this->assertStringContainsString(
 			"->andWhere(\$expr->eq(\n\t\t\t\t's.visibility', \$qb->createNamedParameter(Stream::TYPE_PUBLIC)\n\t\t\t))",
-			$body,
+			$uses,
 			'a followers-only post or a direct message still counts towards the trends'
 		);
 		$this->assertStringContainsString(
 			'$qb->limitToStatusTypes()',
-			$body,
+			$uses,
 			'anything with a tag row counts, not only a status'
 		);
+
+		// every read of the tag rows a trend is counted from goes through it
+		foreach ([
+			[self::SOURCE, 'countHashtagsInWindowsFromPosts'],
+			[self::TREND_SOURCE, 'rebuildTrendBuckets'],
+			[self::TREND_SOURCE, 'recountTrendHours'],
+			[self::TREND_SOURCE, 'countHashtagsFromBuckets'],
+		] as [$source, $method]) {
+			$this->assertStringContainsString('$this->trendTagUses($qb)', $this->methodBody($source, $method), $method);
+		}
 	}
 
 	/**
 	 * The five trend windows are the same rows at different cut-offs: one
-	 * grouped read of the widest, with a conditional sum per window, rather
-	 * than one scan of the tag table each.
+	 * grouped read of the hourly buckets with a conditional sum per window,
+	 * and one of the posts before each window's first whole hour, rather than
+	 * one scan of the tag table each.
 	 */
 	public function testTheTrendWindowsAreCountedInOnePass(): void {
-		$body = $this->methodBody(self::SOURCE, 'countHashtagsInWindows');
+		$body = $this->methodBody(self::TREND_SOURCE, 'countHashtagsFromBuckets');
 
-		$this->assertSame(1, substr_count($body, 'executeQuery()'));
-		$this->assertStringContainsString("'SUM(CASE WHEN '", $body);
-		$this->assertStringContainsString('min($windows)', $body, 'the scan is bounded by the widest window');
+		$this->assertSame(2, substr_count($body, 'executeQuery()'));
+		$this->assertSame(2, substr_count($body, "'SUM(CASE WHEN '"));
+		$this->assertStringContainsString('min($firstHours)', $body, 'the bucket read is bounded by the widest window');
+
+		$fromPosts = $this->methodBody(self::SOURCE, 'countHashtagsInWindowsFromPosts');
+		$this->assertSame(1, substr_count($fromPosts, 'executeQuery()'));
+		$this->assertStringContainsString('min($windows)', $fromPosts, 'the scan is bounded by the widest window');
 	}
 
 	/**

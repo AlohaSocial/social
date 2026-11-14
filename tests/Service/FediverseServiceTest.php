@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use Exception;
 use OCA\Social\Cron\DomainPurge;
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Service\AuditService;
 use OCA\Social\Service\ConfigService;
@@ -30,6 +31,7 @@ class FediverseServiceTest extends TestCase {
 	private CacheActorsRequest|Stub $cacheActorsRequest;
 	private IJobList|MockObject $jobList;
 	private AuditService|MockObject $auditService;
+	private ServerBlockRequest|MockObject $serverBlockRequest;
 	private FediverseService $service;
 	/** What the app values hold, for the tests that write one and read it back. */
 	private array $stored = [];
@@ -39,9 +41,10 @@ class FediverseServiceTest extends TestCase {
 		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->auditService = $this->createMock(AuditService::class);
+		$this->serverBlockRequest = $this->createMock(ServerBlockRequest::class);
 		$this->service = new FediverseService(
 			$this->configService, $this->createStub(MiscService::class), $this->cacheActorsRequest,
-			$this->jobList, $this->auditService
+			$this->jobList, $this->auditService, $this->serverBlockRequest
 		);
 	}
 
@@ -274,9 +277,65 @@ class FediverseServiceTest extends TestCase {
 	}
 
 	public function testResetAddressesStoresAnEmptyList(): void {
+		$this->withAccess('all_but', ['a.example']);
 		$this->configService->expects($this->once())
 			->method('setAppValue')
 			->with(ConfigService::SOCIAL_ACCESS_LIST, '[]');
+
+		$this->service->resetAddresses();
+	}
+
+	/**
+	 * The reasons recorded for a block go once the domain is on neither
+	 * list, so blocking it again later does not bring back an old reason.
+	 */
+	public function testTheReasonsOfALiftedBlockAreForgotten(): void {
+		$this->withStoredConfig([
+			ConfigService::SOCIAL_ACCESS_TYPE => 'all_but',
+			ConfigService::SOCIAL_ACCESS_LIST => '["evil.example","other.example"]',
+		]);
+		$this->serverBlockRequest->expects($this->once())->method('delete')->with(['evil.example']);
+
+		$this->service->removeAddress('evil.example');
+	}
+
+	public function testTheReasonsOfALiftedSilenceAreForgotten(): void {
+		$this->withStoredConfig([ConfigService::SOCIAL_SILENCED_LIST => '["noisy.example"]']);
+		$this->serverBlockRequest->expects($this->once())->method('delete')->with(['noisy.example']);
+
+		$this->service->unsilenceAddress('Noisy.example');
+	}
+
+	/** A domain still on the other list keeps them: it is still held back. */
+	public function testADomainStillOnTheOtherListKeepsItsReasons(): void {
+		$this->withStoredConfig([
+			ConfigService::SOCIAL_ACCESS_TYPE => 'all_but',
+			ConfigService::SOCIAL_ACCESS_LIST => '["evil.example"]',
+			ConfigService::SOCIAL_SILENCED_LIST => '["evil.example"]',
+		]);
+		$this->serverBlockRequest->expects($this->never())->method('delete');
+
+		$this->service->removeAddress('evil.example');
+	}
+
+	public function testADomainStillBlockedKeepsItsReasonsWhenItsSilenceIsLifted(): void {
+		$this->withStoredConfig([
+			ConfigService::SOCIAL_ACCESS_TYPE => 'all_but',
+			ConfigService::SOCIAL_ACCESS_LIST => '["evil.example"]',
+			ConfigService::SOCIAL_SILENCED_LIST => '["evil.example"]',
+		]);
+		$this->serverBlockRequest->expects($this->never())->method('delete');
+
+		$this->service->unsilenceAddress('evil.example');
+	}
+
+	public function testResettingTheListForgetsTheReasonsOfWhatWasOnIt(): void {
+		$this->withStoredConfig([
+			ConfigService::SOCIAL_ACCESS_TYPE => 'all_but',
+			ConfigService::SOCIAL_ACCESS_LIST => '["evil.example","noisy.example"]',
+			ConfigService::SOCIAL_SILENCED_LIST => '["noisy.example"]',
+		]);
+		$this->serverBlockRequest->expects($this->once())->method('delete')->with(['evil.example']);
 
 		$this->service->resetAddresses();
 	}

@@ -38,6 +38,7 @@ use OCA\Social\Service\CountsService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowList\FollowListService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\HiddenCollectionsService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationDeliveryService;
@@ -104,6 +105,7 @@ class AccountApiController extends MastodonApiController {
 		private IdentityService $atprotoIdentities,
 		private FollowListService $followLists,
 		private BlueskyFeeds $blueskyFeeds,
+		private HiddenCollectionsService $hiddenCollections,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -129,8 +131,10 @@ class AccountApiController extends MastodonApiController {
 	 * Mastodon's profile update: `display_name`, `note` (the bio), `avatar` and
 	 * `header` (multipart), `locked` (manually approve followers),
 	 * `discoverable`, `indexable` and `bot` (the actor flags),
-	 * `source[privacy]` (the default audience) and `fields_attributes` (the
-	 * profile metadata). Returns the updated account entity.
+	 * `hide_collections` (the follower and following lists shown to nobody
+	 * else, `HiddenCollectionsService`), `source[privacy]` (the default
+	 * audience) and `fields_attributes` (the profile metadata). Returns the
+	 * updated account entity.
 	 *
 	 * Every field is optional and only what was sent is written, which is what
 	 * lets a client that edits one thing leave the rest alone. Three of them
@@ -237,6 +241,13 @@ class AccountApiController extends MastodonApiController {
 				$parts['fields_attributes'] = fn () => $this->accountService->setFields(
 					$userId, array_values($input['fields_attributes'])
 				);
+			}
+
+			// a setting of this server's rather than of the profile: nothing
+			// is federated for it, and what other servers see is the
+			// collections themselves
+			if (array_key_exists('hide_collections', $input)) {
+				$this->hiddenCollections->setHides($userId, $this->formBool($input['hide_collections']));
 			}
 
 			if ($this->accountService->changingProfile($userId, fn (): bool => $this->applyProfileParts($parts))) {
@@ -417,6 +428,8 @@ class AccountApiController extends MastodonApiController {
 			$data['source']['privacy'] = $this->accountService->getDefaultPrivacy(
 				$this->currentSession()
 			);
+			$data['source']['hide_collections'] = $this->hiddenCollections->hides($this->currentSession());
+			$data['hide_collections'] = $data['source']['hide_collections'];
 		}
 
 		$data['role'] = $this->adminApiService->credentialRole($this->currentSession());
@@ -611,7 +624,7 @@ class AccountApiController extends MastodonApiController {
 			$account = $this->cacheActorService->resolve($id, $this->viewer !== null);
 			$account->setExportFormat(ACore::FORMAT_LOCAL);
 
-			return new DataResponse($account, Http::STATUS_OK);
+			return new DataResponse($this->hiddenCollections->annotate($account), Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
@@ -641,7 +654,7 @@ class AccountApiController extends MastodonApiController {
 			$account = $this->cacheActorService->getFromAccount($acct, false);
 			$account->setExportFormat(ACore::FORMAT_LOCAL);
 
-			return new DataResponse($account, Http::STATUS_OK);
+			return new DataResponse($this->hiddenCollections->annotate($account), Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
@@ -962,7 +975,8 @@ class AccountApiController extends MastodonApiController {
 	 * after the last of them, read in the background and kept for an hour
 	 * (`X-Social-Filling: 1` while that read was just asked for); a page that
 	 * reaches into those is continued by the `max_id` of its last account.
-	 * An account that hides its list where it lives has it hidden here too.
+	 * An account that hides its list where it lives has it hidden here too,
+	 * and a local account that hides its lists shows them to itself only.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -991,6 +1005,12 @@ class AccountApiController extends MastodonApiController {
 		try {
 			$this->initViewer(false);
 			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
+
+			// Mastodon answers an empty list, not a refusal, to anybody but
+			// the account itself
+			if (!$this->hiddenCollections->mayList($actor, $this->viewer)) {
+				return new DataResponse([], Http::STATUS_OK);
+			}
 
 			$options = new ProbeOptions($this->request);
 			$options->setFormat(ACore::FORMAT_LOCAL);

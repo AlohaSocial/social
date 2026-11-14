@@ -243,8 +243,11 @@ class QueryBudgetTest extends ReaderTestCase {
 
 		$this->assertFlatCostWithin(
 			// Opening a post reads its live-count refresh marker and records that
-			// the viewer saw it before loading the conversation context.
-			'status and context', 19,
+			// the viewer saw it before loading the conversation context. The
+			// replies a viewer may see are paged by nid first, over the key
+			// alone, and then read whole, which keeps the large columns out of
+			// the DISTINCT the recipient join needs.
+			'status and context', 20,
 			function (int $count) use (&$replies, $root): void {
 				for ($i = 0; $i < $count; $i++, $replies++) {
 					$this->post(

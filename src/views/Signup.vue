@@ -206,6 +206,10 @@
 				{{ message }}
 			</NcNoteCard>
 
+			<p v-if="solving" class="signup__progress" role="status">
+				{{ solvingText }}
+			</p>
+
 			<NcButton
 				type="submit"
 				variant="primary"
@@ -236,6 +240,8 @@ import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
 import { signupUrl } from '../services/externalApi.js'
+import { fetchChallenge, startSolving } from '../services/proofOfWork.js'
+import { progressOf } from '../utils/proofOfWork.js'
 import { blueskyHandle } from '../utils/blueskyHandle.js'
 
 /** What `ExternalSignupService::pageState()` provides when it provides nothing. */
@@ -255,6 +261,7 @@ const CLOSED = {
 	signupNotice: '',
 	signupNoticeRequired: false,
 	signupNoticeVersion: '',
+	proofOfWork: false,
 	domain: '',
 	bluesky: { enabled: false, host: '' },
 	loginUrl: '/login',
@@ -298,6 +305,12 @@ export default {
 			field: '',
 			message: '',
 			showForm: false,
+			/** the proof of work under way, see preparePow() */
+			powTask: null,
+			powAttempts: 0,
+			powBits: 0,
+			/** whether a submitted form waits for the proof of work */
+			solving: false,
 			/** @type {{state: string, handle?: string, message?: string}|null} */
 			outcome: state.result ?? null,
 		}
@@ -396,16 +409,98 @@ export default {
 		signupPage() {
 			return signupUrl()
 		},
+
+		/** @return {string} what the proof of work is doing, and how far along */
+		solvingText() {
+			return t('social', 'Your browser is solving a small puzzle that keeps automated registrations out: {progress}%', { progress: progressOf(this.powAttempts, this.powBits) })
+		},
+	},
+
+	watch: {
+		showForm(shown) {
+			if (shown && this.state.proofOfWork && this.powTask === null) {
+				this.preparePow()
+			}
+		},
+	},
+
+	beforeUnmount() {
+		this.powTask?.cancel()
 	},
 
 	methods: {
 		t,
+
+		/**
+		 * Fetches a challenge and starts solving it in the background, so it
+		 * is mostly done by the time the form is sent. A challenge is good
+		 * for one registration, so this runs again after every answer.
+		 */
+		preparePow() {
+			this.powTask?.cancel()
+			this.powAttempts = 0
+			const task = {
+				cancelled: false,
+				solver: null,
+				cancel: () => {
+					task.cancelled = true
+					task.solver?.cancel()
+				},
+			}
+			task.result = (async () => {
+				const issued = await fetchChallenge()
+				if (task.cancelled) {
+					return null
+				}
+				this.powBits = issued.bits
+				task.solver = startSolving(issued, (attempts) => {
+					if (this.powTask === task) {
+						this.powAttempts = attempts
+					}
+				})
+				const nonce = await task.solver.nonce
+
+				return nonce === null ? null : { challenge: issued.challenge, nonce }
+			})()
+			// a failure is reported when the form is sent
+			task.result.catch(() => {})
+			this.powTask = task
+		},
+
+		/** @return {Promise<{challenge: string, nonce: string}|null>} the solved challenge */
+		async proofOfWork() {
+			if (this.powTask === null) {
+				this.preparePow()
+			}
+			const task = this.powTask
+			this.solving = true
+			try {
+				return await task.result
+			} catch {
+				return null
+			} finally {
+				this.solving = false
+				if (this.powTask === task) {
+					this.powTask = null
+				}
+			}
+		},
 
 		/** @return {Promise<void>} */
 		async submit() {
 			this.sending = true
 			this.field = ''
 			this.message = ''
+			let proof = null
+			if (this.state.proofOfWork) {
+				proof = await this.proofOfWork()
+				if (proof === null) {
+					this.message = t('social', 'The check of this browser did not succeed. Please try again.')
+					this.sending = false
+					this.preparePow()
+					return
+				}
+			}
 			try {
 				const { data } = await axios.post(signupUrl(), {
 					handle: this.handle,
@@ -417,10 +512,14 @@ export default {
 					age: this.age,
 					invite: this.state.inviteToken,
 					website: this.website,
+					...(proof === null ? {} : proof),
 				})
 				this.password = ''
 				this.outcome = data
 			} catch (error) {
+				if (this.state.proofOfWork) {
+					this.preparePow()
+				}
 				this.field = error?.response?.data?.field ?? ''
 				this.message = error?.response?.data?.message
 					|| (error?.response?.status === 429
@@ -615,6 +714,12 @@ export default {
 		flex-direction: column;
 		gap: calc(var(--default-grid-baseline) * 2);
 		margin-block-start: calc(var(--default-grid-baseline) * 3);
+	}
+
+	&__progress {
+		margin: 0;
+		color: var(--color-text-maxcontrast);
+		text-align: center;
 	}
 
 	&__login {

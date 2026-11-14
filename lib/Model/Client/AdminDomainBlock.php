@@ -16,22 +16,22 @@ use JsonSerializable;
  * that `FediverseService` keeps — not the per-account domain blocks of
  * `/api/v1/domain_blocks`, which are one user hiding a server from themselves.
  *
- * The access list stores a hostname and nothing else, so most of the entity is
- * the empty value of its type rather than an invented one:
+ * The two lists store a hostname each; what else is known about an entry is
+ * a row of `social_server_block` (`ServerBlockRequest`), and an entry without
+ * one carries the empty value of each field rather than an invented one:
  *
- *  - `severity` is always `suspend`. An entry on the block list refuses the
- *    domain outright — `FediverseService::authorized()` throws before anything
- *    is read or delivered — and there is no lesser setting to report. It is
- *    also why `reject_media` and `reject_reports` are `true`: nothing from the
- *    domain is accepted, media and reports included.
- *  - `private_comment` and `public_comment` are `null`: the list has no room
- *    for a reason, so there is none to show.
- *  - `obfuscate` is `false`: this instance publishes no list of what it
- *    blocks, so there is nothing to obfuscate in one.
- *  - `created_at` is the epoch. The list stores no timestamps, and the epoch
+ *  - `severity` is `suspend` for the deny list, which refuses the domain
+ *    outright — `FediverseService::authorized()` throws before anything is
+ *    read or delivered — so `reject_media` and `reject_reports` are `true`;
+ *    and `silence` for the silenced list, which refuses nothing.
+ *  - `private_comment` is the reason the moderators keep for themselves,
+ *    `public_comment` the one `/api/v1/instance/domain_blocks` shows; `null`
+ *    when none was given.
+ *  - `obfuscate` is `false`: the published list names domains as they are.
+ *  - `created_at` is when the row was recorded, or the epoch for an entry
+ *    added without one (by `occ`, or before reasons were stored) — the epoch
  *    is how this API says "not recorded" in a field Mastodon declares as a
- *    date and clients decode as one — it does not mean the domain was blocked
- *    in 1970.
+ *    date and clients decode as one.
  *
  * `id` is derived from the domain rather than stored: the first eight hex
  * digits of its md5, as a decimal string, so it is numeric the way every other
@@ -48,10 +48,29 @@ class AdminDomainBlock implements JsonSerializable {
 
 	public const SEVERITIES = [self::SEVERITY, self::SEVERITY_SILENCE];
 
+	/** The longest reason, in characters, either comment may hold. */
+	public const MAX_COMMENT = 1000;
+
 	public function __construct(
 		private string $domain = '',
 		private string $severity = self::SEVERITY,
+		private ?string $privateComment = null,
+		private ?string $publicComment = null,
+		private int $created = 0,
 	) {
+	}
+
+	public function getPrivateComment(): ?string {
+		return $this->privateComment;
+	}
+
+	public function getPublicComment(): ?string {
+		return $this->publicComment;
+	}
+
+	/** When the entry was recorded, in unix time; 0 when it was not. */
+	public function getCreated(): int {
+		return $this->created;
 	}
 
 	public function getDomain(): string {
@@ -87,15 +106,30 @@ class AdminDomainBlock implements JsonSerializable {
 		return [
 			'id' => $this->getId(),
 			'domain' => $this->domain,
-			'created_at' => gmdate('Y-m-d\TH:i:s', 0) . '.000Z',
+			'created_at' => gmdate('Y-m-d\TH:i:s', $this->created) . '.000Z',
 			'severity' => $this->severity,
 			// a suspension refuses everything from the domain, media and
 			// reports included; a silence refuses nothing, it only hides
 			'reject_media' => !$this->isSilence(),
 			'reject_reports' => !$this->isSilence(),
-			'private_comment' => null,
-			'public_comment' => null,
+			'private_comment' => $this->privateComment,
+			'public_comment' => $this->publicComment,
 			'obfuscate' => false,
+		];
+	}
+
+	/**
+	 * The entry as `/api/v1/instance/domain_blocks` publishes it: Mastodon's
+	 * `DomainBlock`, with the public reason and never the private one.
+	 *
+	 * @return array{domain: string, digest: string, severity: string, comment: string}
+	 */
+	public function published(): array {
+		return [
+			'domain' => $this->domain,
+			'digest' => hash('sha256', $this->domain),
+			'severity' => $this->severity,
+			'comment' => $this->publicComment ?? '',
 		];
 	}
 }

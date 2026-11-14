@@ -109,19 +109,52 @@ export const useNotificationsStore = defineStore('notifications', {
 		async fetchUnreadDirectMessages() {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/conversations/unread_count'))
-				const count = Number(data?.count) || 0
-				// a chime for a conversation that became unread since the last
-				// look -- never for the count the page opened with, which is
-				// news to nobody
-				if (this.directCounted && count > this.unreadDirect) {
-					feel('dm')
-				}
-				this.directCounted = true
-				this.setUnreadDirectMessages(count)
+				this.countDirectMessages(data?.count)
 
 				return true
 			} catch (error) {
 				logger.error('Failed to read the unread direct message count', { error })
+
+				return false
+			}
+		},
+
+		/**
+		 * Takes a new unread conversation count, with a chime for a
+		 * conversation that became unread since the last look -- never for
+		 * the count the page opened with, which is news to nobody.
+		 *
+		 * @param {unknown} answered the count as the server sent it
+		 */
+		countDirectMessages(answered) {
+			const count = Number(answered) || 0
+			if (this.directCounted && count > this.unreadDirect) {
+				feel('dm')
+			}
+			this.directCounted = true
+			this.setUnreadDirectMessages(count)
+		},
+
+		/**
+		 * Reads all three sidebar counts in one request: the unread
+		 * notifications, the senders the policy holds (and whether its
+		 * one-time notice is due) and the unread conversations. The server
+		 * answers `304` while none of them changed. Silent on failure, like
+		 * each of the three on its own.
+		 *
+		 * @return {Promise<boolean>} whether the server answered
+		 */
+		async fetchBadges() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/social/badges'))
+				this.setUnreadNotifications(Number(data?.unread_notifications) || 0)
+				this.setPendingRequests(data?.pending_requests)
+				this.setPolicyNotice(data?.notice === true)
+				this.countDirectMessages(data?.unread_conversations)
+
+				return true
+			} catch (error) {
+				logger.error('Failed to read the sidebar counts', { error })
 
 				return false
 			}

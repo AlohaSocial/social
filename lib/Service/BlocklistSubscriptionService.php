@@ -200,7 +200,7 @@ class BlocklistSubscriptionService {
 
 		try {
 			$read = $this->importService->parse($body, $source['format']);
-			$applied = $this->importService->apply($read['entries'], $dryRun);
+			$applied = $this->importService->apply($read['entries'], $dryRun, $read['comments']);
 		} catch (InvalidArgumentException $e) {
 			return $this->recorded($id, $dryRun, ['error' => $e->getMessage()]);
 		}

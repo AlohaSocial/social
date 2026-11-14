@@ -27,6 +27,7 @@ class AtprotoModerationTest extends TestCase {
 	private DevNetwork $network;
 	private LocalAccount $alice;
 	private string $moderation = '';
+	private string $moderationEndpoint = '';
 
 	protected function setUp(): void {
 		$network = DevNetwork::fromEnvironment();
@@ -37,14 +38,20 @@ class AtprotoModerationTest extends TestCase {
 		$this->alice = LocalAccount::create('md');
 		$config = Server::get(ConfigService::class);
 		$this->moderation = (string)$config->getAppValue(ConfigService::ATPROTO_MODERATION_DID);
+		$this->moderationEndpoint = (string)$config->getAppValue(ConfigService::ATPROTO_MODERATION_ENDPOINT);
 		if ($network->ozoneDid !== '') {
 			$config->setAppValue(ConfigService::ATPROTO_MODERATION_DID, $network->ozoneDid);
+			// the development Ozone is on plain http, which only an endpoint
+			// the administrator names may be
+			$config->setAppValue(ConfigService::ATPROTO_MODERATION_ENDPOINT, $network->ozone);
 		}
 	}
 
 	protected function tearDown(): void {
 		if ($this->moderation !== '') {
-			Server::get(ConfigService::class)->setAppValue(ConfigService::ATPROTO_MODERATION_DID, $this->moderation);
+			$config = Server::get(ConfigService::class);
+			$config->setAppValue(ConfigService::ATPROTO_MODERATION_DID, $this->moderation);
+			$config->setAppValue(ConfigService::ATPROTO_MODERATION_ENDPOINT, $this->moderationEndpoint);
 		}
 	}
 

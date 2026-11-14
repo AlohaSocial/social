@@ -25,6 +25,7 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\StreamAction;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
 
@@ -111,7 +112,7 @@ class LikeService {
 		$token = $this->activityService->request($like);
 
 		$this->logger->info('LikeService::create - request done', [
-			'token' => $token,
+			'token' => AsyncRequestSigner::fingerprint($token),
 		]);
 
 		return $like;

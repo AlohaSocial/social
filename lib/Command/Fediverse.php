@@ -309,7 +309,7 @@ class Fediverse extends SocialCommand {
 		}
 
 		try {
-			$applied = $this->importService->apply($read['entries']);
+			$applied = $this->importService->apply($read['entries'], false, $read['comments']);
 		} catch (InvalidArgumentException $e) {
 			$this->output->writeln('<error>' . $e->getMessage() . '</error>');
 

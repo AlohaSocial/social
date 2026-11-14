@@ -49,6 +49,15 @@ class SocialClient implements IQueryRow, JsonSerializable {
 	 * come from `social_client_auth` at all.
 	 */
 	private int $authCreation = 0;
+	/**
+	 * The refresh token: its digest as read from the row, the token itself
+	 * right after it was issued; '' for an authorization that has none.
+	 */
+	private string $refreshToken = '';
+	/** When the current access token was issued, 0 where that is not recorded. */
+	private int $tokenCreation = 0;
+	/** How many times the authorization was refreshed. */
+	private int $refreshCount = 0;
 
 	//	/** @var array */
 	//	private $tokenScopes = [];
@@ -388,6 +397,36 @@ class SocialClient implements IQueryRow, JsonSerializable {
 		return $this;
 	}
 
+	public function getRefreshToken(): string {
+		return $this->refreshToken;
+	}
+
+	public function setRefreshToken(string $refreshToken): self {
+		$this->refreshToken = $refreshToken;
+
+		return $this;
+	}
+
+	public function getTokenCreation(): int {
+		return $this->tokenCreation;
+	}
+
+	public function setTokenCreation(int $tokenCreation): self {
+		$this->tokenCreation = $tokenCreation;
+
+		return $this;
+	}
+
+	public function getRefreshCount(): int {
+		return $this->refreshCount;
+	}
+
+	public function setRefreshCount(int $refreshCount): self {
+		$this->refreshCount = $refreshCount;
+
+		return $this;
+	}
+
 	/**
 	 * @param string $scopes
 	 *
@@ -433,6 +472,9 @@ class SocialClient implements IQueryRow, JsonSerializable {
 		$this->setCreation($this->timestamp($this->get('creation', $data, '')));
 		// the authorization's own date, where the read joined one in
 		$this->setAuthCreation($this->timestamp($this->get('auth_creation', $data, '')));
+		$this->setRefreshToken($this->get('refresh_token', $data));
+		$this->setTokenCreation($this->timestamp($this->get('token_creation', $data, '')));
+		$this->setRefreshCount($this->getInt('refresh_count', $data));
 
 		return $this;
 	}

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Db\ReportsRequest;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
@@ -64,6 +65,9 @@ class AdminApiServiceTest extends TestCase {
 	private StreamRequest|Stub $streamRequest;
 	private IUserManager|Stub $userManager;
 	private ISettingsManager|Stub $settingsManager;
+	private ServerBlockRequest|Stub $serverBlockRequest;
+	/** @var array<string, array{private_comment: ?string, public_comment: ?string, created: int}> */
+	private array $recorded = [];
 
 	/** @var string[] the user ids the Social settings section is delegated to */
 	private array $delegatedTo = [];
@@ -101,6 +105,20 @@ class AdminApiServiceTest extends TestCase {
 		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->userManager = $this->createStub(IUserManager::class);
 		$this->settingsManager = $this->createStub(ISettingsManager::class);
+		$this->serverBlockRequest = $this->createStub(ServerBlockRequest::class);
+		$this->serverBlockRequest->method('all')->willReturnCallback(fn (): array => $this->recorded);
+		$this->serverBlockRequest->method('save')->willReturnCallback(
+			function (string $domain, ?string $private, ?string $public): void {
+				$row = $this->recorded[$domain] ?? ['private_comment' => null, 'public_comment' => null, 'created' => 1763000000];
+				if ($private !== null) {
+					$row['private_comment'] = ($private === '') ? null : $private;
+				}
+				if ($public !== null) {
+					$row['public_comment'] = ($public === '') ? null : $public;
+				}
+				$this->recorded[$domain] = $row;
+			}
+		);
 
 		$this->userManager->method('get')->willReturnCallback(
 			function (string $userId): ?IUser {
@@ -253,6 +271,7 @@ class AdminApiServiceTest extends TestCase {
 			'userManager' => $this->userManager,
 			'settingsManager' => $this->settingsManager,
 			'logger' => new NullLogger(),
+			'serverBlockRequest' => $this->serverBlockRequest,
 		] as $name => $dependency) {
 			// the constructor is not run (it takes an IDBConnection, which
 			// cannot be mocked here), so the dependencies go in directly
@@ -945,6 +964,85 @@ class AdminApiServiceTest extends TestCase {
 
 		$this->assertSame('evil.example', $this->service()->unblockDomain('evil.example')->getDomain());
 		$this->assertSame(['other.example'], $this->accessList);
+	}
+
+	/** The reasons are recorded with the block and served with it. */
+	public function testABlockCarriesItsReasonsAndWhenItWasMade(): void {
+		$block = $this->service()->blockDomain('Evil.example', 'suspend', ' ticket 42 ', 'Harassment');
+
+		$entity = $block->jsonSerialize();
+		$this->assertSame('ticket 42', $entity['private_comment']);
+		$this->assertSame('Harassment', $entity['public_comment']);
+		$this->assertSame('2025-11-13T02:13:20.000Z', $entity['created_at']);
+		$this->assertSame(['evil.example'], $this->accessList);
+	}
+
+	public function testAnEntryWithNothingRecordedHasNoReasonAndTheEpoch(): void {
+		$this->accessList = ['evil.example'];
+
+		$entity = $this->service()->domainBlock('evil.example')->jsonSerialize();
+
+		$this->assertNull($entity['private_comment']);
+		$this->assertNull($entity['public_comment']);
+		$this->assertSame('1970-01-01T00:00:00.000Z', $entity['created_at']);
+	}
+
+	/** A reason that is not sent is left alone; an empty one clears it. */
+	public function testUpdatingRewritesOnlyTheReasonsThatAreSent(): void {
+		$this->accessList = ['evil.example'];
+		$this->recorded['evil.example'] = ['private_comment' => 'keep', 'public_comment' => 'old', 'created' => 1];
+		$service = $this->service();
+
+		$block = $service->updateDomainBlock('evil.example', '', null, 'new');
+		$this->assertSame('keep', $block->getPrivateComment());
+		$this->assertSame('new', $block->getPublicComment());
+
+		$block = $service->updateDomainBlock('evil.example', '', '', null);
+		$this->assertNull($block->getPrivateComment());
+		$this->assertSame('new', $block->getPublicComment());
+	}
+
+	/** Moving a block between the tiers keeps what was written about it. */
+	public function testChangingTheTierKeepsTheReasons(): void {
+		$this->accessList = ['evil.example'];
+		$this->recorded['evil.example'] = ['private_comment' => 'p', 'public_comment' => 'q', 'created' => 1];
+
+		$block = $this->service()->updateDomainBlock('evil.example', 'silence');
+
+		$this->assertSame('silence', $block->getSeverity());
+		$this->assertSame('q', $block->getPublicComment());
+		$this->assertSame(['evil.example'], $this->silencedList);
+		$this->assertSame([], $this->accessList);
+	}
+
+	/**
+	 * The new tier is written before the old one is lifted, so the domain is
+	 * never on neither list — which is when its reasons are forgotten.
+	 */
+	public function testAMoveBetweenTheTiersNeverLeavesTheDomainOnNeitherList(): void {
+		$this->accessList = ['evil.example'];
+		$order = [];
+		$fediverse = $this->createMock(FediverseService::class);
+		$fediverse->method('getAccessType')->willReturn('all_but');
+		$fediverse->method('getListedAddresses')->willReturn(['evil.example']);
+		$fediverse->method('getSilencedAddresses')->willReturn([]);
+		$fediverse->method('silenceAddress')->willReturnCallback(function () use (&$order): void {
+			$order[] = 'silence';
+		});
+		$fediverse->method('removeAddress')->willReturnCallback(function () use (&$order): void {
+			$order[] = 'remove';
+		});
+		$this->fediverseService = $fediverse;
+
+		$this->service()->updateDomainBlock('evil.example', 'silence');
+
+		$this->assertSame(['silence', 'remove'], $order);
+	}
+
+	public function testAReasonLongerThanTheLimitIsRefused(): void {
+		$this->expectException(\InvalidArgumentException::class);
+
+		$this->service()->blockDomain('evil.example', 'suspend', str_repeat('x', 1001));
 	}
 
 	public function testAnAllowListInstanceRefusesEveryDomainBlockRoute(): void {

@@ -63,6 +63,17 @@ class InboxLimiterTest extends TestCase {
 		return $request;
 	}
 
+	/** Rotating through one /64 does not make an IPv6 sender a new one. */
+	public function testAnIpv6SenderIsCountedByItsSlash64(): void {
+		$this->limit(2);
+		$this->limiter->assertAllowed($this->request('', '2001:db8:1:2::1'));
+		$this->limiter->assertAllowed($this->request('', '2001:db8:1:2::2'));
+		$this->limiter->assertAllowed($this->request('', '2001:db8:1:3::1'));
+
+		$this->expectException(TooManyRequestsException::class);
+		$this->limiter->assertAllowed($this->request('', '2001:db8:1:2:dead:beef:0:3'));
+	}
+
 	public function testRequestsUnderTheLimitPass(): void {
 		$this->limit(3);
 		$request = $this->request('https://remote.example/users/bob#main-key');

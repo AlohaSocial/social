@@ -82,6 +82,34 @@ class PushSubscriptionServiceTest extends TestCase {
 		$this->assertSame([], $service->forUser('alice'));
 	}
 
+	public function testDeletingAllRemovesEverySubscriptionOfTheAccount(): void {
+		$service = $this->service();
+		$service->deleteAll('alice');
+		$this->assertSame('', $this->stored, 'nothing to remove writes nothing');
+
+		$service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/one', str_repeat('A', 87), str_repeat('b', 22), [], 'all');
+		$service->save('alice', 'token-two', 'bearer-two', 'https://push.example.net/two', str_repeat('C', 87), str_repeat('d', 22), [], 'all');
+		$service->deleteAll('alice');
+
+		$this->assertSame('', $this->stored);
+		$this->assertSame([], $service->all('alice'));
+	}
+
+	public function testARefreshMovesTheSubscriptionToTheNewToken(): void {
+		$service = $this->service();
+		$this->assertFalse($service->rebind('alice', 'token-one', 'token-two', 'bearer-two'), 'nothing to move');
+
+		$created = $service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/one', str_repeat('A', 87), str_repeat('b', 22), ['mention' => true], 'all');
+		$this->assertTrue($service->rebind('alice', 'token-one', 'token-two', 'bearer-two'));
+
+		$this->assertNull($service->forToken('alice', 'token-one'));
+		$moved = $service->forToken('alice', 'token-two');
+		$this->assertNotNull($moved);
+		$this->assertSame($created['id'], $moved['id']);
+		$this->assertTrue($moved['alerts']['mention']);
+		$this->assertSame('bearer-two', $service->forUser('alice')[0]['accessToken']);
+	}
+
 	public function testReplacingATokenKeepsItsIdAndEnforcesTheAccountLimit(): void {
 		$service = $this->service();
 		$first = $service->save('alice', 'token-one', 'bearer-one', 'https://push.example.net/one', str_repeat('A', 87), str_repeat('b', 22), [], 'all');

@@ -10,10 +10,11 @@ declare(strict_types=1);
 namespace OCA\Social\Command;
 
 use Exception;
+use OCA\Social\Cron\Cache;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
-use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\HashtagService;
+use OCA\Social\Service\RemoteMediaPrefetcher;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -25,7 +26,7 @@ class CacheRefresh extends SocialCommand {
 	public function __construct(
 		private AccountService $accountService,
 		CacheActorService $cacheActorService,
-		private DocumentService $documentService,
+		private RemoteMediaPrefetcher $mediaPrefetcher,
 		HashtagService $hashtagService,
 	) {
 		parent::__construct();
@@ -71,7 +72,7 @@ class CacheRefresh extends SocialCommand {
 		$result = $this->cacheActorService->manageDetailsRemoteActors($input->getOption('force'));
 		$output->writeLn($result . ' remote accounts details updated');
 
-		$result = $this->documentService->manageCacheDocuments();
+		$result = $this->mediaPrefetcher->prefetchPending(time() + Cache::MEDIA_SECONDS);
 		$output->writeLn($result . ' documents cached');
 
 		$result = $this->hashtagService->manageHashtags();

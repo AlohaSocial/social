@@ -411,7 +411,7 @@ import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { cssUrl } from '../utils/cssUrl.js'
 import { capacityFrom, chooseEntries, entriesThatFit } from '../utils/explore.js'
-import { offTimelinePush, onTimelinePush, PUSH_DIRECT, PUSH_KINDS, PUSH_NOTIFICATION } from '../services/timelinePush.js'
+import { offTimelinePush, onTimelinePush, PUSH_DIRECT, PUSH_NOTIFICATION } from '../services/timelinePush.js'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import IconCancel from 'vue-material-design-icons/Cancel.vue'
@@ -1184,28 +1184,14 @@ export default {
 		},
 
 		/**
-		 * Reads the counts the sidebar badges show, of the three those kinds
-		 * of news can change. One request each: the server has no route that
-		 * answers them together.
+		 * Reads the counts the sidebar badges show, all three in one
+		 * request, for a poll and for a push of a direct message or a
+		 * notification alike.
 		 *
-		 * @param {string[]} kinds what arrived (`timelinePush.js`); everything
-		 *                         for a poll
-		 * @return {Promise<boolean>} whether the server answered any of them
+		 * @return {Promise<boolean>} whether the server answered
 		 */
-		async refreshBadges(kinds = PUSH_KINDS) {
-			const asked = []
-			if (kinds.includes(PUSH_NOTIFICATION)) {
-				asked.push(
-					this.notificationsStore.fetchUnreadNotifications(),
-					this.notificationsStore.fetchPendingRequests(),
-				)
-			}
-			if (kinds.includes(PUSH_DIRECT)) {
-				asked.push(this.notificationsStore.fetchUnreadDirectMessages())
-			}
-			const answered = await Promise.all(asked)
-
-			return answered.some(Boolean)
+		refreshBadges() {
+			return this.notificationsStore.fetchBadges()
 		},
 
 		async openStoryComposer() {

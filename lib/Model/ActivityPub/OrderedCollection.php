@@ -107,6 +107,18 @@ class OrderedCollection extends ACore implements JsonSerializable {
 		return $collection;
 	}
 
+	/**
+	 * A collection that states how many items it holds and lists none: no
+	 * `first`, so there is nothing to page through.
+	 */
+	public static function counted(string $id, int $totalItems): self {
+		$collection = new self();
+		$collection->setId($id);
+		$collection->setTotalItems($totalItems);
+
+		return $collection;
+	}
+
 	#[\Override]
 	public function import(array $data): self {
 		parent::import($data);

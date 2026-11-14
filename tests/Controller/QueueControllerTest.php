@@ -167,15 +167,20 @@ class QueueControllerTest extends TestCase {
 				$ended[] = [$queue->getToken(), $success];
 			});
 		$logged = [];
+		$context = [];
 		$this->logger->expects($this->once())->method('warning')
-			->willReturnCallback(function (string $message) use (&$logged): void {
+			->willReturnCallback(function (string $message, array $with) use (&$logged, &$context): void {
 				$logged[] = $message;
+				$context = $with;
 			});
 
 		$this->controller->handBackOne($request, new SignatureException('cannot sign: the private key is empty'));
 
 		$this->assertSame([['tok', false]], $ended);
 		$this->assertStringContainsString('SignatureException', $logged[0]);
+		$this->assertStringContainsString(AsyncRequestSigner::fingerprint('tok'), $logged[0]);
+		$this->assertStringNotContainsString('tok ', $logged[0]);
+		$this->assertSame(AsyncRequestSigner::fingerprint('tok'), $context['token']);
 	}
 
 	public function testADeliveryThatCannotEvenBeEndedIsLoggedAndSwallowed(): void {

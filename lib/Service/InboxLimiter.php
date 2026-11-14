@@ -11,6 +11,7 @@ namespace OCA\Social\Service;
 
 use OCA\Social\Exceptions\PayloadTooLargeException;
 use OCA\Social\Exceptions\TooManyRequestsException;
+use OCA\Social\Security\ClientAddress;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IRequest;
 
@@ -70,7 +71,8 @@ class InboxLimiter {
 
 	/**
 	 * The ceiling that applies before anything about the request is known: the
-	 * source address, and nothing else the sender wrote.
+	 * source address (an IPv6 one by its /64, see `ClientAddress`), and
+	 * nothing else the sender wrote.
 	 *
 	 * @throws TooManyRequestsException
 	 */
@@ -80,7 +82,7 @@ class InboxLimiter {
 			return;
 		}
 
-		$this->consume('ip.' . md5($request->getRemoteAddress()), $this->window(), $limit);
+		$this->consume('ip.' . md5(ClientAddress::bucket($request->getRemoteAddress())), $this->window(), $limit);
 	}
 
 	/**

@@ -83,6 +83,7 @@ class FollowService {
 		private LoggerInterface $logger,
 		private ?BlueskyGraphService $blueskyGraph = null,
 		private ?BlockedByService $blockedBy = null,
+		private ?HiddenCollectionsService $hiddenCollections = null,
 	) {
 	}
 
@@ -550,14 +551,19 @@ class FollowService {
 	}
 
 	/**
-	 * @param Person $actor
-	 *
-	 * @return OrderedCollection
+	 * The followers collection: its count and its first and last page, or,
+	 * for an account that hides its lists, the count alone, as Mastodon
+	 * answers for one.
 	 */
 	public function getFollowersCollection(Person $actor): OrderedCollection {
+		$total = $this->getInt('followers', $actor->getDetails(Details::COUNT));
+		if ($this->hiddenCollections?->hidesFor($actor) === true) {
+			return OrderedCollection::counted($actor->getFollowers(), $total);
+		}
+
 		return OrderedCollection::paged(
 			$actor->getFollowers(),
-			$this->getInt('followers', $actor->getDetails(Details::COUNT)),
+			$total,
 			$this->collectionRoute('social.ActivityPub.followers', $actor)
 		);
 	}
@@ -647,15 +653,16 @@ class FollowService {
 		return array_keys($following);
 	}
 
-	/**
-	 * @param Person $actor
-	 *
-	 * @return OrderedCollection
-	 */
+	/** The following collection. See getFollowersCollection(). */
 	public function getFollowingCollection(Person $actor): OrderedCollection {
+		$total = $this->getInt('following', $actor->getDetails(Details::COUNT));
+		if ($this->hiddenCollections?->hidesFor($actor) === true) {
+			return OrderedCollection::counted($actor->getFollowing(), $total);
+		}
+
 		return OrderedCollection::paged(
 			$actor->getFollowing(),
-			$this->getInt('following', $actor->getDetails(Details::COUNT)),
+			$total,
 			$this->collectionRoute('social.ActivityPub.following', $actor)
 		);
 	}
@@ -694,12 +701,17 @@ class FollowService {
 	 * "followed by X and 3 others you know" line on a profile.
 	 *
 	 * Answers nothing for the viewer's own profile, which is what Mastodon
-	 * does: everybody who follows you is somebody you know of.
+	 * does: everybody who follows you is somebody you know of. Nothing either
+	 * for an account that hides its followers, and nobody who hides whom they
+	 * follow is named as following it.
 	 *
 	 * @return Person[]
 	 */
 	public function familiarFollowers(Person $viewer, Person $target, int $limit = self::FAMILIAR_MAX): array {
 		if ($viewer->getId() === $target->getId()) {
+			return [];
+		}
+		if ($this->hiddenCollections?->hidesFor($target) === true) {
 			return [];
 		}
 
@@ -708,7 +720,10 @@ class FollowService {
 			return [];
 		}
 
-		return array_values($this->cacheActorService->getCachedFromIds($ids));
+		return array_values(array_filter(
+			$this->cacheActorService->getCachedFromIds($ids),
+			fn (Person $follower): bool => $this->hiddenCollections?->hidesFor($follower) !== true
+		));
 	}
 
 	public function getRelationships(array $ids): array {

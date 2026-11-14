@@ -159,6 +159,28 @@ class CacheDocumentsRequestTest extends TestCase {
 		$this->assertSame(99, $this->documents->getByNid($waiting->getNid())->getSizeBytes());
 	}
 
+	/** Newest first, and paged on by nid to the older ones. */
+	public function testTheCachingQueueIsNewestFirstAndPagesOn(): void {
+		$this->document('older');
+		$newer = $this->document('newer');
+
+		$this->assertSame(['newer', 'older'], $this->ours($this->documents->getNotCachedDocuments(0)));
+		$this->assertSame(['older'], $this->ours($this->documents->getNotCachedDocuments(0, (int)$newer->getNid())));
+	}
+
+	/** Two workers that read the same row: one statement decides which takes it. */
+	public function testADocumentIsClaimedOnceAndOnlyWhileItWaits(): void {
+		$waiting = $this->document('claimed');
+		$cached = $this->document('cached', ['localCopy' => 'uuid-cached']);
+		$failed = $this->document('failed', ['error' => 1]);
+
+		$this->assertTrue($this->documents->claimForCaching($waiting));
+		$this->assertFalse($this->documents->claimForCaching($waiting), 'taken already');
+		$this->assertFalse($this->documents->claimForCaching($cached));
+		$this->assertFalse($this->documents->claimForCaching($failed));
+		$this->assertSame([], $this->ours($this->documents->getNotCachedDocuments(0)));
+	}
+
 	public function testAFailedDownloadCanBeRetriedOnce(): void {
 		$failed = $this->document('failed', ['error' => 3]);
 

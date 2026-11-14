@@ -15,9 +15,11 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\AdminDomainBlock;
 use OCA\Social\Model\Instance;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AdminApiService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
@@ -75,6 +77,7 @@ class InstanceApiController extends MastodonApiController {
 		private FediverseService $fediverseService,
 		private GifService $gifService,
 		private TranslationService $translationService,
+		private AdminApiService $adminApiService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -121,17 +124,21 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The instances this one has decided not to federate with.
+	 * The instances this one has decided not to federate with, or keeps out
+	 * of its public timelines.
 	 *
-	 * Mastodon publishes the deny list so that somebody choosing a server can
-	 * see who it will not talk to. That is a disclosure decision rather than a
+	 * Mastodon publishes the list so that somebody choosing a server can see
+	 * who it will not talk to. That is a disclosure decision rather than a
 	 * lookup, so it is one an admin makes: with `publish_blocks` unset — the
 	 * default — this answers `[]`, which is what an instance that has not opted
 	 * in should say rather than refusing and inviting a client to guess.
 	 *
-	 * Only ever the deny list. In allow-list mode the same column holds the
-	 * instances this server *does* talk to, and publishing that as a block list
-	 * would be exactly backwards.
+	 * Every entry is `suspend` or `silence`, with its public reason as
+	 * `comment`; the private one is never part of it.
+	 *
+	 * Only ever in block-list mode. In allow-list mode the same column holds
+	 * the instances this server *does* talk to, and publishing that as a block
+	 * list would be exactly backwards.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -142,19 +149,10 @@ class InstanceApiController extends MastodonApiController {
 			return new DataResponse([], Http::STATUS_OK);
 		}
 
-		$blocks = [];
-		foreach ($this->fediverseService->getListedAddresses() as $domain) {
-			// `digest` is Mastodon's sha256 of the domain, `severity` the only
-			// one this list has, and `comment` is not stored here
-			$blocks[] = [
-				'domain' => $domain,
-				'digest' => hash('sha256', $domain),
-				'severity' => 'suspend',
-				'comment' => '',
-			];
-		}
-
-		return new DataResponse($blocks, Http::STATUS_OK);
+		return new DataResponse(array_map(
+			static fn (AdminDomainBlock $block): array => $block->published(),
+			$this->adminApiService->domainBlocks()
+		), Http::STATUS_OK);
 	}
 
 	/**

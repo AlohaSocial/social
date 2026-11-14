@@ -38,6 +38,7 @@ use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
@@ -571,7 +572,7 @@ class ActivityService {
 			try {
 				$this->deliverToken($token);
 			} catch (\Throwable $e) {
-				$this->logger->notice('Queued activity will be delivered by the worker', ['token' => $token, 'exception' => $e]);
+				$this->logger->notice('Queued activity will be delivered by the worker', ['token' => AsyncRequestSigner::fingerprint($token), 'exception' => $e]);
 			}
 		}
 	}

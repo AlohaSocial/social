@@ -17,9 +17,9 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * The signature that lets `/async/request/{token}` tell this server's own
- * call from anybody else's. The route is public and the tokens are written
- * to the log, so the signature is all that keeps a reader of the log from
- * making a worker deliver on demand.
+ * call from anybody else's. The route is public, so the signature is all
+ * that keeps somebody who learned a token from making a worker deliver on
+ * demand; the log names a token only by its fingerprint.
  */
 class AsyncRequestSignerTest extends TestCase {
 	private const NOW = 1760000000;
@@ -35,6 +35,15 @@ class AsyncRequestSignerTest extends TestCase {
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 
 		return new AsyncRequestSigner($crypto, $time);
+	}
+
+	public function testTheFingerprintMatchesARowWithoutGivingTheTokenAway(): void {
+		$token = 'f3a1c9e2-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+
+		$this->assertSame(substr(hash('sha256', $token), 0, 8), AsyncRequestSigner::fingerprint($token));
+		$this->assertSame(AsyncRequestSigner::fingerprint($token), AsyncRequestSigner::fingerprint($token));
+		$this->assertNotSame(AsyncRequestSigner::fingerprint($token), AsyncRequestSigner::fingerprint($token . 'x'));
+		$this->assertStringNotContainsString(substr($token, 0, 8), AsyncRequestSigner::fingerprint($token));
 	}
 
 	public function testASignatureVerifiesForTheTokenItWasMadeFor(): void {

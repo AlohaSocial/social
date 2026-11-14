@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Command;
 
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
@@ -194,8 +195,9 @@ class Worker extends SocialCommand {
 			} catch (Throwable $e) {
 				// one row costs that row and no more; without this the rest of
 				// the batch went with it and the row stayed `running`
-				$this->logger->warning('[social:worker] delivery of ' . $request->getToken() . ' failed', [
-					'exception' => $e, 'token' => $request->getToken(),
+				$token = AsyncRequestSigner::fingerprint($request->getToken());
+				$this->logger->warning('[social:worker] delivery of ' . $token . ' failed', [
+					'exception' => $e, 'token' => $token,
 				]);
 				$this->release($request);
 				$done++;

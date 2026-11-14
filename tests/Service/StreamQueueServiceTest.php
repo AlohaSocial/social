@@ -31,6 +31,7 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ImportService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\MiscService;
+use OCA\Social\Service\RemoteMediaPrefetcher;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -498,6 +499,72 @@ class StreamQueueServiceTest extends TestCase {
 		$this->service->cacheStreamByToken('tok');
 		$this->assertSame([$first, $second], $deleted);
 	}
+	/** The service with a media prefetcher behind it. */
+	private function serviceWithPrefetcher(RemoteMediaPrefetcher $prefetcher): StreamQueueService {
+		return new StreamQueueService(
+			$this->streamRequest,
+			$this->streamQueueRequest,
+			$this->cacheActorService,
+			$this->importService,
+			$this->curlService,
+			$this->miscService,
+			$this->linkPreviewService,
+			new NullLogger(),
+			$this->hostBreakerRequest,
+			$prefetcher,
+		);
+	}
+
+	public function testAMediaEntryWhoseFilesAreAllSettledIsDropped(): void {
+		$queue = $this->queue(StreamQueue::TYPE_MEDIA);
+		$prefetcher = $this->createMock(RemoteMediaPrefetcher::class);
+		$prefetcher->expects($this->once())->method('prefetchPost')
+			->with(self::STREAM_ID, $this->greaterThan(time()))
+			->willReturn(0);
+		$this->streamQueueRequest->expects($this->once())->method('delete')->with($this->identicalTo($queue));
+		$this->streamQueueRequest->expects($this->never())->method('setAsFailure');
+
+		$this->serviceWithPrefetcher($prefetcher)->manageStreamQueue($queue);
+	}
+
+	public function testAMediaEntryWithFilesStillWaitingIsAskedAgainLater(): void {
+		$queue = $this->queue(StreamQueue::TYPE_MEDIA);
+		$prefetcher = $this->createMock(RemoteMediaPrefetcher::class);
+		$prefetcher->method('prefetchPost')->willReturn(2);
+		$this->streamQueueRequest->expects($this->once())->method('setAsFailure');
+		$this->streamQueueRequest->expects($this->never())->method('delete');
+
+		$this->serviceWithPrefetcher($prefetcher)->manageStreamQueue($queue);
+	}
+
+	/**
+	 * The inbox has just tried those files itself, inside the delivery; what
+	 * it could not finish is the background drain's, not the inline pass's.
+	 */
+	public function testTheInlinePassLeavesMediaEntriesToTheBackground(): void {
+		$media = $this->queue(StreamQueue::TYPE_MEDIA);
+		$other = $this->queue('Unknown');
+		$this->streamQueueRequest->method('getFromToken')->willReturn([$media, $other]);
+		$prefetcher = $this->createMock(RemoteMediaPrefetcher::class);
+		$prefetcher->expects($this->never())->method('prefetchPost');
+		$this->streamQueueRequest->expects($this->once())->method('setAsRunning')->with($this->identicalTo($other));
+
+		$this->serviceWithPrefetcher($prefetcher)->cacheStreamByToken('tok');
+	}
+
+	public function testQueueMediaQueuesThePostUnlessItsIdDoesNotFit(): void {
+		$this->streamQueueRequest->expects($this->once())->method('create')
+			->with($this->callback(function (StreamQueue $queue): bool {
+				$this->assertSame(StreamQueue::TYPE_MEDIA, $queue->getType());
+				$this->assertSame(self::REPLY_URL, $queue->getStreamId());
+
+				return true;
+			}));
+
+		$this->assertTrue($this->service->queueMedia('tok', self::REPLY_URL));
+		$this->assertFalse($this->service->queueMedia('tok', 'https://remote.example/' . str_repeat('a', 300)));
+	}
+
 	public function testQueueFetchQueuesAnHttpUrl(): void {
 		$this->streamQueueRequest->expects($this->once())->method('create')
 			->with($this->callback(function (StreamQueue $queue): bool {

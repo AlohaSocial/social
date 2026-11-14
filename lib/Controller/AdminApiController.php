@@ -488,17 +488,25 @@ class AdminApiController extends AdminApiControllerBase {
 	 * everything from it; `silence` keeps its accounts readable to whoever
 	 * follows them and takes them out of the public timelines. Mastodon's
 	 * `noop` has no list to go on here and is refused with a 422 rather than
-	 * quietly applied as something else.
+	 * quietly applied as something else. `private_comment` is kept for the
+	 * moderators, `public_comment` is what the published list shows; an
+	 * absent one leaves what is recorded as it is.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/admin/domain_blocks')]
-	public function domainBlockCreate(string $domain = '', string $severity = ''): DataResponse {
+	public function domainBlockCreate(
+		string $domain = '',
+		string $severity = '',
+		?string $private_comment = null,
+		?string $public_comment = null,
+	): DataResponse {
 		try {
 			$this->initAdmin(['admin:write']);
 
 			return new DataResponse(
-				$this->adminApiService->blockDomain($domain, $severity), Http::STATUS_OK
+				$this->adminApiService->blockDomain($domain, $severity, $private_comment, $public_comment),
+				Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
 			return $this->error($e);
@@ -506,17 +514,26 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Moves a block between the two tiers: a change of severity is a move
-	 * from one list to the other, the same severity again a no-op.
+	 * Moves a block between the two tiers — a change of severity is a move
+	 * from one list to the other, the same severity again a no-op — and
+	 * rewrites whichever of the two reasons is sent.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/admin/domain_blocks/{id}')]
-	public function domainBlockUpdate(string $id, string $severity = ''): DataResponse {
+	public function domainBlockUpdate(
+		string $id,
+		string $severity = '',
+		?string $private_comment = null,
+		?string $public_comment = null,
+	): DataResponse {
 		try {
 			$this->initAdmin(['admin:write']);
 
-			return new DataResponse($this->adminApiService->updateDomainBlock($id, $severity), Http::STATUS_OK);
+			return new DataResponse(
+				$this->adminApiService->updateDomainBlock($id, $severity, $private_comment, $public_comment),
+				Http::STATUS_OK
+			);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

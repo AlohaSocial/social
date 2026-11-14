@@ -3,20 +3,27 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import axios from '@nextcloud/axios'
 
 import FederationSection from '../../../../src/components/admin/FederationSection.vue'
+import { showError, showSuccess } from '../../../../src/services/toast.js'
+
+vi.mock('@nextcloud/axios', () => ({ default: { post: vi.fn() } }))
+vi.mock('../../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 
 /**
  * `FederationHealthService::summary()`, with nothing wrong.
  *
  * @param {object} overrides what this instance is seeing
+ * @param {boolean} administrator whether the viewer administers the server
  * @return {object} the mounted section
  */
-function mountFederation(overrides = {}) {
+function mountFederation(overrides = {}, administrator = false) {
 	return mount(FederationSection, {
 		props: {
+			administrator,
 			federation: {
 				waiting: 0,
 				running: 0,
@@ -106,7 +113,7 @@ describe('the federation health section', () => {
 		expect(wrapper.text()).toContain('Given up on')
 		expect(wrapper.text()).toContain('12 deliveries were given up on')
 		expect(wrapper.text()).toContain('Deliveries given up on')
-		expect(wrapper.text()).toContain('social:queue:retry --instance')
+		expect(wrapper.text()).not.toContain('occ')
 	})
 
 	it('says nothing has been given up on when nothing has', () => {
@@ -121,5 +128,54 @@ describe('the federation health section', () => {
 			.toContain('2 are being sent right now.')
 		expect(mountFederation({ waiting: 4 }).text())
 			.not.toContain('being sent right now')
+	})
+
+	describe('retrying the deliveries given up on', () => {
+		const givenUp = { abandoned: 12, givenUp: [{ host: 'gone.example', requests: 12, tries: 16, last: 1_700_000_000 }] }
+
+		beforeEach(() => {
+			vi.clearAllMocks()
+		})
+
+		it('offers a delegate no button, and says an administrator can', () => {
+			const wrapper = mountFederation(givenUp)
+
+			expect(wrapper.find('button').exists()).toBe(false)
+			expect(wrapper.text()).toContain('an administrator can queue them again')
+		})
+
+		it('queues one instance again from the button in its row, and says how many', async () => {
+			axios.post.mockResolvedValue({ data: { instance: 'gone.example', queued: 12, limited: false } })
+			const wrapper = mountFederation(givenUp, true)
+
+			await wrapper.find('button').trigger('click')
+			await flushPromises()
+
+			expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/admin/federation/retry', { instance: 'gone.example' })
+			expect(showSuccess).toHaveBeenCalledWith('12 deliveries queued again.')
+			expect(wrapper.text()).toContain('12 deliveries queued again')
+			expect(wrapper.find('button').exists()).toBe(false)
+		})
+
+		it('says when a press stopped at the limit', async () => {
+			axios.post.mockResolvedValue({ data: { instance: 'gone.example', queued: 500, limited: true } })
+			const wrapper = mountFederation(givenUp, true)
+
+			await wrapper.vm.retry('gone.example')
+
+			expect(showSuccess).toHaveBeenCalledWith('500 deliveries queued again; press again for the rest.')
+		})
+
+		it('says to wait when the rate limit refused it, and keeps the button', async () => {
+			axios.post.mockRejectedValue({ response: { status: 429, data: {} } })
+			const wrapper = mountFederation(givenUp, true)
+
+			await wrapper.vm.retry('gone.example')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('There were too many tries for now. Wait a while and try again.')
+			expect(wrapper.find('button').exists()).toBe(true)
+			expect(wrapper.vm.retrying).toBe('')
+		})
 	})
 })

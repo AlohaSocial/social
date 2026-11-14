@@ -145,6 +145,7 @@ import IconExternalRequests from 'vue-material-design-icons/AccountClockOutline.
 import IconFederation from 'vue-material-design-icons/Earth.vue'
 import IconFederationHealth from 'vue-material-design-icons/SendCheckOutline.vue'
 import IconFeatures from 'vue-material-design-icons/ViewGridOutline.vue'
+import IconGifs from 'vue-material-design-icons/FileGifBox.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
 import IconMedia from 'vue-material-design-icons/ImageOffOutline.vue'
 import IconModeration from 'vue-material-design-icons/ShieldAccountOutline.vue'
@@ -179,6 +180,7 @@ import ExternalAccountsSection from './ExternalAccountsSection.vue'
 import ExternalRequestsSection from './ExternalRequestsSection.vue'
 import ExternalUsersSection from './ExternalUsersSection.vue'
 import FederationSection from './FederationSection.vue'
+import GifSection from './GifSection.vue'
 import InterestsSection from './InterestsSection.vue'
 import MediaBlocksSection from './MediaBlocksSection.vue'
 import RelaysSection from './RelaysSection.vue'
@@ -214,6 +216,7 @@ const NOTHING = {
 	server: null,
 	accessType: 'all_but',
 	accessList: [],
+	accessBlocks: [],
 	retentionDays: 0,
 	storage: null,
 	/** @type {?{days: number, sizeMb: number, lastPurge: ?object}} the media cache limits */
@@ -288,6 +291,7 @@ export default {
 		ExternalRequestsSection,
 		ExternalUsersSection,
 		FederationSection,
+		GifSection,
 		IconAccess,
 		IconAccounts,
 		IconActivity,
@@ -307,6 +311,7 @@ export default {
 		IconFederation,
 		IconFederationHealth,
 		IconFeatures,
+		IconGifs,
 		IconInterests,
 		IconMedia,
 		IconModeration,
@@ -572,6 +577,15 @@ export default {
 					lede: t('social', 'Pictures people here can put in a post as :shortcode:. Other servers see them too.'),
 				},
 				{
+					id: 'gifs',
+					group: 'explore',
+					icon: 'IconGifs',
+					component: 'GifSection',
+					title: t('social', 'GIF library'),
+					lede: t('social', 'This server\'s own pictures in the GIF picker of the composer, offered to everybody before the animated emoji.'),
+					keywords: t('social', 'gif animated picture picker composer'),
+				},
+				{
 					id: 'announcements',
 					group: 'explore',
 					icon: 'IconAnnouncements',
@@ -609,7 +623,7 @@ export default {
 					group: 'federation',
 					icon: 'IconAccess',
 					component: 'AccessSection',
-					props: { accessType: state.accessType, addresses: state.accessList },
+					props: { accessType: state.accessType, addresses: state.accessList, blocks: state.accessBlocks ?? [] },
 					title: t('social', 'Allowed and blocked servers'),
 					lede: t('social', 'Federate with every server except the ones listed, or only with the ones listed.'),
 					keywords: t('social', 'fediverse access blocklist allowlist defederate domain instance'),
@@ -661,7 +675,7 @@ export default {
 					group: 'federation',
 					icon: 'IconFederationHealth',
 					component: 'FederationSection',
-					props: { federation: state.federation },
+					props: { federation: state.federation, administrator },
 					title: t('social', 'Deliveries'),
 					lede: t('social', 'Posts, follows and likes on their way to other servers, and the ones that keep failing.'),
 					keywords: t('social', 'federation health queue failing'),
@@ -931,10 +945,14 @@ export default {
 		 * rather than left showing what it read when the page opened.
 		 *
 		 * @param {string[]|undefined} list the addresses now on it
+		 * @param {object[]|undefined} blocks each entry with its tier and reasons
 		 */
-		onListChanged(list) {
+		onListChanged(list, blocks) {
 			if (Array.isArray(list)) {
 				this.state = { ...this.state, accessList: list }
+			}
+			if (Array.isArray(blocks)) {
+				this.state = { ...this.state, accessBlocks: blocks }
 			}
 		},
 

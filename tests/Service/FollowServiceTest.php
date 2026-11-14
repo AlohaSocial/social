@@ -593,6 +593,67 @@ class FollowServiceTest extends TestCase {
 		$this->assertSame('https://cloud.example/apps/social/@alice/following?page=1', $collection->getFirst());
 	}
 
+	/** A service whose hidden-lists answer is the one given, per actor id. */
+	private function serviceHiding(array $hiding): FollowService {
+		$hidden = $this->createStub(\OCA\Social\Service\HiddenCollectionsService::class);
+		$hidden->method('hidesFor')->willReturnCallback(static fn (Person $actor): bool => in_array($actor->getId(), $hiding, true));
+
+		return new FollowService(
+			$this->urlGenerator,
+			$this->followsRequest,
+			$this->actorRelationRequest,
+			$this->activityService,
+			$this->cacheActorService,
+			$this->configService,
+			$this->followInterface,
+			$this->moderationService,
+			$this->accountRelationService,
+			$this->accountService,
+			$this->timelineRevisionService,
+			new NullLogger(),
+			null,
+			null,
+			$hidden,
+		);
+	}
+
+	/** Mastodon's answer for an account that hides its lists: the count, and nothing to page through. */
+	public function testAHiddenCollectionStatesItsCountAndListsNothing(): void {
+		$alice = $this->alice();
+		$alice->setDetailArray('count', ['followers' => 12, 'following' => 4]);
+		$this->urlGenerator->expects($this->never())->method('linkToRouteAbsolute');
+		$service = $this->serviceHiding([self::ALICE_ID]);
+
+		$followers = $service->getFollowersCollection($alice);
+		$following = $service->getFollowingCollection($alice);
+
+		$this->assertSame(12, $followers->getTotalItems());
+		$this->assertSame(4, $following->getTotalItems());
+		$this->assertSame('', $followers->getFirst());
+		$this->assertSame(self::ALICE_ID . '/followers', $followers->getId());
+		$json = $followers->jsonSerialize();
+		$this->assertSame(12, $json['totalItems']);
+		$this->assertArrayNotHasKey('first', $json);
+		$this->assertArrayNotHasKey('orderedItems', $json);
+	}
+
+	public function testFamiliarFollowersOfAnAccountThatHidesItsFollowersAreNobody(): void {
+		$this->followsRequest->expects($this->never())->method('getFamiliarFollowers');
+		$viewer = $this->person(self::CLOUD_URL . '/users/viewer', 'viewer', 7);
+
+		$this->assertSame([], $this->serviceHiding([self::ALICE_ID])->familiarFollowers($viewer, $this->alice()));
+	}
+
+	public function testSomebodyWhoHidesWhomTheyFollowIsNotNamedAsAFamiliarFollower(): void {
+		$viewer = $this->person(self::CLOUD_URL . '/users/viewer', 'viewer', 7);
+		$open = $this->person(self::CLOUD_URL . '/users/open', 'open', 8);
+		$hiding = $this->person(self::CLOUD_URL . '/users/hiding', 'hiding', 9);
+		$this->followsRequest->method('getFamiliarFollowers')->willReturn([$open->getId(), $hiding->getId()]);
+		$this->cacheActorService->method('getCachedFromIds')->willReturn([$open, $hiding]);
+
+		$this->assertSame([$open], $this->serviceHiding([$hiding->getId()])->familiarFollowers($viewer, $this->alice()));
+	}
+
 	public function testFollowersPageListsTheFollowerActorUris(): void {
 		$alice = $this->alice();
 		$this->urlGenerator->method('linkToRouteAbsolute')

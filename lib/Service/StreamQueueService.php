@@ -86,6 +86,7 @@ class StreamQueueService {
 		private LinkPreviewService $linkPreviewService,
 		private LoggerInterface $logger,
 		HostBreakerRequest $hostBreakerRequest,
+		private ?RemoteMediaPrefetcher $mediaPrefetcher = null,
 	) {
 		$this->breaker = new HostBreaker($hostBreakerRequest);
 	}
@@ -119,6 +120,24 @@ class StreamQueueService {
 		}
 
 		$this->generateStreamQueue($token, StreamQueue::TYPE_FETCH, $url);
+
+		return true;
+	}
+
+	/**
+	 * Queues the attachments of a stored post for their files to be fetched
+	 * in the background (`RemoteMediaPrefetcher`), under the token of the
+	 * delivery that brought it. A post id wider than the column is not queued;
+	 * the sweep in `Cron\Cache` still finds its documents.
+	 *
+	 * @return bool whether it was queued
+	 */
+	public function queueMedia(string $token, string $streamId): bool {
+		if ($streamId === '' || strlen($streamId) > 255) {
+			return false;
+		}
+
+		$this->generateStreamQueue($token, StreamQueue::TYPE_MEDIA, $streamId);
 
 		return true;
 	}
@@ -170,6 +189,12 @@ class StreamQueueService {
 		$done = 0;
 
 		foreach ($items as $item) {
+			// the inbox has just tried these files itself; what it could not
+			// finish is for the background drain, with its longer timeout
+			if ($item->getType() === StreamQueue::TYPE_MEDIA) {
+				continue;
+			}
+
 			// Bounded, because this runs **inside the inbox request**, after
 			// the response has been flushed but while the PHP worker is still
 			// held. Each item can be an HTTP fetch of a parent post or an
@@ -233,6 +258,10 @@ class StreamQueueService {
 					$this->manageStreamQueueFetch($queue);
 					break;
 
+				case StreamQueue::TYPE_MEDIA:
+					$this->manageStreamQueueMedia($queue);
+					break;
+
 				default:
 					$this->deleteCache($queue);
 					break;
@@ -272,6 +301,32 @@ class StreamQueueService {
 
 		$this->linkPreviewService->generate($stream);
 		$this->deleteCache($queue);
+	}
+
+	/**
+	 * Fetches the files of a stored post's attachments
+	 * (`RemoteMediaPrefetcher::prefetchPost()`). The item is done when none
+	 * waits any more -- each stored, refused or forgotten -- and is asked
+	 * again by the queue while some do; once the queue gives up, the sweep in
+	 * `Cron\Cache` still finds them.
+	 */
+	private function manageStreamQueueMedia(StreamQueue $queue): void {
+		if ($this->mediaPrefetcher === null) {
+			$this->deleteCache($queue);
+
+			return;
+		}
+
+		$waiting = $this->mediaPrefetcher->prefetchPost(
+			$queue->getStreamId(), time() + RemoteMediaPrefetcher::POST_SECONDS
+		);
+		if ($waiting === 0) {
+			$this->deleteCache($queue);
+
+			return;
+		}
+
+		$this->endCache($queue, false);
 	}
 
 	/**

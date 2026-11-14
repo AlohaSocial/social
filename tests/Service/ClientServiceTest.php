@@ -33,8 +33,13 @@ class ClientServiceTest extends TestCase {
 	private ClientService $service;
 	private ConfigService $configService;
 	private PushSubscriptionService|MockObject $pushSubscriptions;
+	private \OCA\Social\Db\DeviceAuthorizationRequest|MockObject $deviceAuthorizations;
 	/** What `token_max_days` reads as. */
 	private int $maxDays = 365;
+	/** What `token_idle_days` reads as. */
+	private int $idleDays = 90;
+	/** What `refreshed_token_hours` reads as. */
+	private int $refreshedHours = 24;
 	/** @var string[] the accounts an administrator disabled */
 	private array $disabled = [];
 
@@ -43,19 +48,24 @@ class ClientServiceTest extends TestCase {
 		$this->clientAuthRequest = $this->createMock(ClientAuthRequest::class);
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->pushSubscriptions = $this->createMock(PushSubscriptionService::class);
-		$deviceAuthorizations = $this->createMock(\OCA\Social\Db\DeviceAuthorizationRequest::class);
+		$this->deviceAuthorizations = $this->createMock(\OCA\Social\Db\DeviceAuthorizationRequest::class);
 		$this->disabled = [];
 		$enabledUsers = $this->createStub(EnabledUserService::class);
 		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => !in_array($userId, $this->disabled, true));
 		$this->configService->method('getAppValueInt')
-			->willReturnCallback(fn (string $key): int => $key === ConfigService::SOCIAL_TOKEN_MAX_DAYS ? $this->maxDays : 0);
+			->willReturnCallback(fn (string $key): int => match ($key) {
+				ConfigService::SOCIAL_TOKEN_MAX_DAYS => $this->maxDays,
+				ConfigService::SOCIAL_TOKEN_IDLE_DAYS => $this->idleDays,
+				ConfigService::SOCIAL_REFRESHED_TOKEN_HOURS => $this->refreshedHours,
+				default => 0,
+			});
 		$this->service = new ClientService(
 			$this->clientRequest,
 			new SecretHasher(),
 			$this->clientAuthRequest,
 			$this->configService,
 			$this->pushSubscriptions,
-			$deviceAuthorizations,
+			$this->deviceAuthorizations,
 			new \Psr\Log\NullLogger(),
 			$enabledUsers,
 		);
@@ -78,13 +88,49 @@ class ClientServiceTest extends TestCase {
 	 * registrations nobody signed in with never went at all.
 	 */
 	public function testTheSweepTakesExpiredAuthorizationsAndUnusedRegistrations(): void {
-		$this->clientAuthRequest->expects($this->once())->method('deprecate');
+		$idle = $this->registeredClient()->setAuthUserId('alice')->setToken('sha256:' . str_repeat('a', 64));
+		$this->clientAuthRequest->method('getIdleSince')->willReturn([$idle]);
+		$this->clientAuthRequest->expects($this->once())->method('deprecate')
+			->with($this->callback(static fn (int $before): bool
+				=> abs($before - (time() - 90 * 86400)) <= 5));
+		$this->clientAuthRequest->expects($this->once())->method('pruneSpentRefreshTokens');
+		$this->pushSubscriptions->expects($this->once())->method('delete')->with('alice', str_repeat('a', 64));
 		$this->clientRequest->expects($this->once())->method('deleteNeverAuthorized')
 			->with($this->callback(static fn (int $before): bool
 				=> abs($before - (time() - ClientService::TIME_UNUSED_APP_TTL)) <= 5))
 			->willReturn(3);
 
 		$this->assertSame(3, $this->service->sweep());
+	}
+
+	/**
+	 * A changed password signs every app out of the account: the
+	 * authorizations with their tokens and codes, the device codes it
+	 * approved, and the push subscriptions bound to the tokens.
+	 */
+	public function testRevokingEverythingOfAnAccountTakesTokensDeviceCodesAndPush(): void {
+		$this->clientAuthRequest->method('getByUser')->with('alice')
+			->willReturn([$this->registeredClient(), $this->registeredClient()]);
+		$this->clientAuthRequest->expects($this->once())->method('deleteRelatedId')->with('alice');
+		$this->deviceAuthorizations->expects($this->once())->method('deleteByUser')->with('alice');
+		$this->pushSubscriptions->expects($this->once())->method('deleteAll')->with('alice');
+
+		$this->assertSame(2, $this->service->revokeAllOf('alice'));
+	}
+
+	public function testAPushFailureDoesNotKeepTheTokens(): void {
+		$this->clientAuthRequest->method('getByUser')->willReturn([]);
+		$this->pushSubscriptions->method('deleteAll')->willThrowException(new Exception('crypto'));
+		$this->clientAuthRequest->expects($this->once())->method('deleteRelatedId')->with('alice');
+
+		$this->assertSame(0, $this->service->revokeAllOf('alice'));
+	}
+
+	public function testRevokingForNobodyTouchesNothing(): void {
+		$this->clientAuthRequest->expects($this->never())->method('deleteRelatedId');
+		$this->deviceAuthorizations->expects($this->never())->method('deleteByUser');
+
+		$this->assertSame(0, $this->service->revokeAllOf(''));
 	}
 
 	public function testCreateAppGeneratesCredentialsAndSaves(): void {
@@ -524,11 +570,12 @@ class ClientServiceTest extends TestCase {
 		$this->assertSame($client, $this->service->getFromToken('tok'));
 	}
 
-	public function testGetFromTokenRejectsAnExpiredTokenAndPurges(): void {
+	public function testGetFromTokenRejectsAnIdleTokenAndRevokesIt(): void {
 		$client = $this->registeredClient();
-		$client->setLastUpdate(time() - ClientService::TIME_TOKEN_TTL - 1);
+		$client->setAuthId(11);
+		$client->setLastUpdate(time() - 90 * 86400 - 1);
 		$this->clientAuthRequest->method('getByToken')->willReturn($client);
-		$this->clientAuthRequest->expects($this->once())->method('deprecate');
+		$this->clientAuthRequest->expects($this->once())->method('revoke')->with(11);
 
 		$this->expectException(ClientNotFoundException::class);
 		$this->service->getFromToken('tok');
@@ -538,7 +585,7 @@ class ClientServiceTest extends TestCase {
 		$client = $this->registeredClient();
 		$client->setLastUpdate(0);
 		$this->clientAuthRequest->method('getByToken')->willReturn($client);
-		$this->clientAuthRequest->method('deprecate')->willThrowException(new Exception('db'));
+		$this->clientAuthRequest->method('revoke')->willThrowException(new Exception('db'));
 
 		$this->expectException(ClientNotFoundException::class);
 		$this->service->getFromToken('tok');
@@ -756,5 +803,203 @@ class ClientServiceTest extends TestCase {
 		$this->clientAuthRequest->expects($this->never())->method('revoke');
 
 		$this->assertFalse($this->service->revokeAuthorizationOf('alice', 5));
+	}
+
+	// refresh tokens
+
+	/** An authorization of app 7 by alice, as the row reads back. */
+	private function stored(int $lastUse = 60): SocialClient {
+		$stored = $this->registeredClient();
+		$stored->setId(7)->setAuthId(11)->setAuthUserId('alice')
+			->setAuthScopes(['read', 'write', 'follow'])
+			->setToken('sha256:' . hash('sha256', 'old-access'))
+			->setRefreshToken('sha256:' . hash('sha256', 'old-refresh'))
+			->setLastUpdate(time() - $lastUse);
+
+		return $stored;
+	}
+
+	private function app(int $id = 7): SocialClient {
+		return $this->registeredClient()->setId($id);
+	}
+
+	public function testExchangingACodeAlsoMintsARefreshToken(): void {
+		$authorized = (new SocialClient())->setId(7)->setAuthUserId('alice');
+		$authorized->setLastUpdate(time() - 10);
+		$this->clientAuthRequest->method('getByCode')->willReturn($authorized);
+		$this->clientAuthRequest->expects($this->once())->method('exchange')
+			->willReturnCallback(function (int $clientId, string $code, string $token, string $refresh) use ($authorized): SocialClient {
+				$this->assertMatchesRegularExpression('/^[A-Za-z0-9]{80}$/', $refresh);
+				$this->assertNotSame($token, $refresh);
+
+				return $authorized->setToken($token)->setRefreshToken($refresh);
+			});
+
+		$this->assertNotSame('', $this->service->exchangeCode($this->app(), 'the-code')->getRefreshToken());
+	}
+
+	public function testARefreshRotatesBothTokensAndMovesThePushSubscription(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->with('old-refresh')->willReturn($this->stored());
+		$issued = [];
+		$this->clientAuthRequest->expects($this->once())->method('rotate')
+			->willReturnCallback(function (int $authId, string $presented, string $token, string $refresh, array $scopes) use (&$issued): bool {
+				$this->assertSame(11, $authId);
+				$this->assertSame('old-refresh', $presented);
+				$this->assertSame(['read', 'write', 'follow'], $scopes);
+				$issued = [$token, $refresh];
+
+				return true;
+			});
+		$this->pushSubscriptions->expects($this->once())->method('rebind')
+			->willReturnCallback(function (string $userId, string $old, string $new, string $access) use (&$issued): bool {
+				$this->assertSame('alice', $userId);
+				$this->assertSame(hash('sha256', 'old-access'), $old);
+				$this->assertSame(hash('sha256', $issued[0]), $new);
+				$this->assertSame($issued[0], $access);
+
+				return true;
+			});
+
+		$refreshed = $this->service->refresh($this->app(), 'old-refresh');
+
+		$this->assertSame($issued, [$refreshed->getToken(), $refreshed->getRefreshToken()]);
+		$this->assertSame(1, $refreshed->getRefreshCount());
+		$this->assertEqualsWithDelta(24 * 3600, $this->service->expiresIn($refreshed), 5, 'a refreshed token lives refreshed_token_hours');
+	}
+
+	/** The copy and the original cannot be told apart, so the whole authorization goes. */
+	public function testASpentRefreshTokenPresentedAgainRevokesTheAuthorization(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willThrowException(new ClientNotFoundException());
+		$this->clientAuthRequest->method('spentOn')->with('spent-refresh')->willReturn(11);
+		$this->clientAuthRequest->method('getByAuthId')->with(11)->willReturn($this->stored());
+		$this->clientAuthRequest->expects($this->once())->method('revoke')->with(11);
+		$this->pushSubscriptions->expects($this->once())->method('delete')->with('alice', hash('sha256', 'old-access'));
+		$this->clientAuthRequest->expects($this->never())->method('rotate');
+
+		$this->expectException(InvalidGrantException::class);
+		$this->service->refresh($this->app(), 'spent-refresh');
+	}
+
+	public function testAnUnknownRefreshTokenRevokesNothing(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willThrowException(new ClientNotFoundException());
+		$this->clientAuthRequest->method('spentOn')->willReturn(null);
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+
+		$this->expectException(InvalidGrantException::class);
+		$this->service->refresh($this->app(), 'made-up');
+	}
+
+	/** Two requests with one token at once: the loser is refused, nobody is signed out. */
+	public function testLosingARaceForTheSameRefreshTokenRevokesNothing(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willReturn($this->stored());
+		$this->clientAuthRequest->method('rotate')->willReturn(false);
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+		$this->pushSubscriptions->expects($this->never())->method('rebind');
+
+		$this->expectException(InvalidGrantException::class);
+		$this->expectExceptionMessage('already used');
+		$this->service->refresh($this->app(), 'old-refresh');
+	}
+
+	public function testAnotherClientCannotRefresh(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willReturn($this->stored());
+		$this->clientAuthRequest->expects($this->never())->method('rotate');
+
+		$this->expectException(InvalidGrantException::class);
+		$this->service->refresh($this->app(8), 'old-refresh');
+	}
+
+	public function testAnAuthorizationIdlePastItsLimitCannotBeRefreshed(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willReturn($this->stored(90 * 86400 + 1));
+		$this->clientAuthRequest->expects($this->once())->method('revoke')->with(11);
+		$this->clientAuthRequest->expects($this->never())->method('rotate');
+
+		$this->expectException(InvalidGrantException::class);
+		$this->service->refresh($this->app(), 'old-refresh');
+	}
+
+	public function testADisabledAccountCannotRefresh(): void {
+		$this->disabled = ['alice'];
+		$this->clientAuthRequest->method('getByRefreshToken')->willReturn($this->stored());
+		$this->clientAuthRequest->expects($this->never())->method('rotate');
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+
+		$this->expectException(InvalidGrantException::class);
+		$this->service->refresh($this->app(), 'old-refresh');
+	}
+
+	public function testARefreshMayNarrowTheScopes(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willReturn($this->stored());
+		$this->clientAuthRequest->expects($this->once())->method('rotate')
+			->with(11, 'old-refresh', $this->anything(), $this->anything(), ['read'])
+			->willReturn(true);
+
+		$this->assertSame(['read'], $this->service->refresh($this->app(), 'old-refresh', 'read')->getAuthScopes());
+	}
+
+	public function testARefreshMayNotWidenTheScopes(): void {
+		$this->clientAuthRequest->method('getByRefreshToken')->willReturn($this->stored());
+		$this->clientAuthRequest->expects($this->never())->method('rotate');
+
+		$this->expectException(\OCA\Social\Exceptions\InvalidScopeException::class);
+		$this->service->refresh($this->app(), 'old-refresh', 'read admin:write');
+	}
+
+	/** Past its lifetime the access token is refused, and the refresh token still works. */
+	public function testAnAgedTokenWithARefreshTokenIsRefusedButKept(): void {
+		$client = $this->stored();
+		$client->setTokenCreation(time() - 365 * 86400 - 1);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+		$this->pushSubscriptions->expects($this->never())->method('delete');
+
+		$this->expectException(ClientNotFoundException::class);
+		$this->expectExceptionMessage('the access_token has expired');
+		$this->service->getFromToken('old-access');
+	}
+
+	public function testTheLifetimeIsCountedFromTheLastIssueNotTheGrant(): void {
+		$client = $this->registeredClient();
+		$client->setAuthCreation(1_600_000_000)->setTokenCreation(1_700_000_000);
+
+		$this->assertSame(1_700_000_000 + 365 * 86400, $this->service->expiresAt($client));
+
+		$client->setRefreshCount(3);
+		$this->assertSame(1_700_000_000 + 24 * 3600, $this->service->expiresAt($client));
+
+		$this->refreshedHours = 0;
+		$this->assertSame(1_700_000_000 + 365 * 86400, $this->service->expiresAt($client), 'at 0 a refreshed token counts token_max_days');
+	}
+
+	public function testAnAppThatRefreshesIsNotSaidToSignOutByItself(): void {
+		$client = $this->registeredClient()->setTokenCreation(1_700_000_000);
+		$this->assertSame(1_700_000_000 + 365 * 86400, $this->service->signsOutAt($client));
+
+		$client->setRefreshCount(1);
+		$this->assertSame(0, $this->service->signsOutAt($client));
+	}
+
+	public function testTheIdleLimitIsTheSetting(): void {
+		$this->assertSame(90 * 86400, $this->service->idleSeconds());
+
+		$this->idleDays = 30;
+		$this->assertSame(30 * 86400, $this->service->idleSeconds());
+
+		$this->idleDays = 0;
+		$this->assertSame(ClientService::DEFAULT_TOKEN_IDLE_DAYS * 86400, $this->service->idleSeconds(), 'never 0: an unset value is the default');
+	}
+
+	public function testAnAppTokenHasNoExpiryToReport(): void {
+		$this->maxDays = 0;
+
+		$this->assertNull($this->service->expiresIn($this->registeredClient()->setAuthCreation(time())));
+	}
+
+	public function testRevokingARefreshTokenTakesTheWholeAuthorization(): void {
+		$this->clientAuthRequest->method('getByToken')->willThrowException(new ClientNotFoundException());
+		$this->clientAuthRequest->method('getByRefreshToken')->with('old-refresh')->willReturn($this->stored());
+		$this->clientAuthRequest->expects($this->once())->method('revoke')->with(11);
+
+		$this->service->revokeToken($this->app(), 'old-refresh');
 	}
 }

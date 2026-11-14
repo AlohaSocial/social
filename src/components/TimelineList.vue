@@ -250,12 +250,16 @@ function keepsPlace(identity) {
  */
 const SEEN_AFTER = 2000
 
-/** how often the counts of posts on screen are asked for again */
-const COUNT_REFRESH_MS = 60 * 1000
+/**
+ * How often the counts of posts on screen are asked for again. Posts that
+ * come into view are asked about once scrolling settles; this tick only
+ * catches a screen left where it is.
+ */
+const COUNT_REFRESH_MS = 2 * 60 * 1000
 /** how long scrolling has to rest before posts that came into view are asked about */
 const COUNT_SETTLE_MS = 1500
 /** the shortest time between two asks about one post, a little under the interval so each tick finds it due */
-const COUNT_REASK_MS = 50 * 1000
+const COUNT_REASK_MS = 110 * 1000
 
 /**
  * Whether a link leaves this app: not a hashtag, not a mention, not a page of

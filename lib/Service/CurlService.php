@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use GuzzleHttp\Psr7\DroppingStream;
+use GuzzleHttp\Psr7\Utils;
 use OCA\Social\AP;
 use OCA\Social\Exceptions\HostMetaException;
 use OCA\Social\Exceptions\InvalidOriginException;
@@ -35,8 +37,10 @@ use OCA\Social\Tools\Traits\TPathTools;
 use OCP\AppFramework\Http;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IPromise;
 use OCP\Http\Client\IResponse;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -381,9 +385,7 @@ class CurlService {
 			]);
 		} catch (RequestResultNotJsonException $e) {
 		} catch (Exception $e) {
-			// the token names a queue the route will deliver; the log gets a
-			// fingerprint of it, enough to match a row, not enough to call
-			$this->logger->error('Cannot initiate AsyncWithToken', ['token' => substr(hash('sha256', $token), 0, 8), 'exception' => $e]);
+			$this->logger->error('Cannot initiate AsyncWithToken', ['token' => AsyncRequestSigner::fingerprint($token), 'exception' => $e]);
 		}
 	}
 
@@ -676,6 +678,138 @@ class CurlService {
 		} catch (Throwable $e) {
 			return $e;
 		}
+	}
+
+	/**
+	 * Several files at once, each written to its own path as it arrives.
+	 *
+	 * `sendMany()` for media: the same parallel client and the same checks
+	 * before anything is sent (the federation policy, asked on behalf of the
+	 * instance that named the file, and the local-address guard with its
+	 * pin). The body goes straight to the file through a sink that refuses
+	 * the byte past `max + 1`, which ends that transfer, so an answer larger
+	 * than allowed costs that much disk and no more, and nothing is held in
+	 * memory. A redirect is finished by `openStream()`, which checks every
+	 * hop before following it.
+	 *
+	 * @param array<array-key, array{url: string, path: string, max: int, on_behalf_of?: string}> $downloads
+	 *
+	 * @return array<array-key, Throwable|null> the key of each download => its outcome; null when the
+	 *                                          whole file is at its path
+	 */
+	public function downloadMany(array $downloads): array {
+		$client = $this->parallelClient();
+		$clientOptions = $this->clientOptions('get', ['json_headers' => false]);
+		$clientOptions['allow_redirects'] = false;
+		// a streamed response is handed back unread and never reaches the sink
+		unset($clientOptions['stream']);
+
+		$outcomes = [];
+		$promises = [];
+		$sinks = [];
+		foreach ($downloads as $key => $download) {
+			try {
+				$options = $this->pinReachable($download['url'], $clientOptions, $download['on_behalf_of'] ?? '');
+				$sinks[$key] = new DroppingStream(Utils::streamFor(Utils::tryFopen($download['path'], 'w')), $download['max'] + 1);
+				$options['sink'] = $sinks[$key];
+				$promises[$key] = $client->getAsync($download['url'], $options);
+			} catch (Throwable $e) {
+				$outcomes[$key] = $e;
+			}
+		}
+
+		foreach ($promises as $key => $promise) {
+			$outcomes[$key] = $this->settledDownload($downloads[$key], $promise, $sinks[$key]);
+		}
+		foreach ($sinks as $sink) {
+			$sink->close();
+		}
+
+		return $outcomes;
+	}
+
+	/**
+	 * @param array{url: string, path: string, max: int, on_behalf_of?: string} $download
+	 */
+	private function settledDownload(array $download, IPromise $promise, StreamInterface $sink): ?Throwable {
+		$url = $download['url'];
+		try {
+			$response = $this->settledResponse($promise->wait());
+		} catch (Throwable $e) {
+			$sink->close();
+
+			// the sink refusing the byte past the ceiling is what ended it
+			return self::overflowed($download)
+				? new RequestResultSizeException()
+				: new RequestNetworkException($e->getMessage() . ' - ' . $url, (int)$e->getCode());
+		}
+		$sink->close();
+
+		if ($response === null) {
+			return new RequestNetworkException('no response - ' . $url);
+		}
+
+		try {
+			if ($this->redirectTarget($response, $url) !== '') {
+				$this->downloadOne($download);
+
+				return null;
+			}
+			if ($response->getStatusCode() >= 300) {
+				return (new RequestContentException($url, $response->getStatusCode()))
+					->setRetryAfter(self::retryAfter($response));
+			}
+		} catch (Throwable $e) {
+			return $e;
+		}
+
+		return self::overflowed($download) ? new RequestResultSizeException() : null;
+	}
+
+	/**
+	 * One file, through `openStream()`, copied to its path a chunk at a time
+	 * and cut off one byte past its ceiling.
+	 *
+	 * @param array{url: string, path: string, max: int, on_behalf_of?: string} $download
+	 *
+	 * @throws RequestContentException
+	 * @throws RequestNetworkException
+	 * @throws RequestResultSizeException
+	 * @throws RequestServerException
+	 * @throws SocialAppConfigException
+	 * @throws UnauthorizedFediverseException
+	 */
+	private function downloadOne(array $download): void {
+		$opened = $this->openStream($download['url'], [], $download['on_behalf_of'] ?? '');
+		$target = fopen($download['path'], 'w');
+		if ($target === false) {
+			fclose($opened['stream']);
+
+			throw new RequestServerException('could not write the downloaded file');
+		}
+
+		try {
+			$copied = stream_copy_to_stream($opened['stream'], $target, $download['max'] + 1);
+		} finally {
+			fclose($opened['stream']);
+			fclose($target);
+		}
+
+		if ($copied === false) {
+			throw new RequestServerException('could not read ' . $download['url']);
+		}
+		if ($copied > $download['max']) {
+			throw new RequestResultSizeException();
+		}
+	}
+
+	/**
+	 * @param array{url: string, path: string, max: int, on_behalf_of?: string} $download
+	 */
+	private static function overflowed(array $download): bool {
+		clearstatcache(true, $download['path']);
+
+		return ((int)@filesize($download['path'])) > $download['max'];
 	}
 
 	/**

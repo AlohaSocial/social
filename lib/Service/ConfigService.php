@@ -103,11 +103,25 @@ class ConfigService {
 	public const SOCIAL_CACHE_ACTOR_DAYS = 'cache_actor_days';
 
 	/**
-	 * Days an OAuth token lives from the moment it was granted, however much
-	 * it is used; 0 lets a token in use live for ever, as it used to. Use
-	 * keeps a token from ageing out inside this, never past it.
+	 * Days an OAuth access token lives from the moment it was issued,
+	 * however much it is used, until its client has refreshed it once; 0 lets
+	 * a token in use live for ever. Use keeps a token from ageing out inside
+	 * this, never past it.
 	 */
 	public const SOCIAL_TOKEN_MAX_DAYS = 'token_max_days';
+
+	/**
+	 * Days an OAuth authorization may go unused — no request with its access
+	 * token, no refresh — before it is removed; at least 1.
+	 */
+	public const SOCIAL_TOKEN_IDLE_DAYS = 'token_idle_days';
+
+	/**
+	 * Hours an access token issued by a refresh lives. A client that has
+	 * refreshed once has shown it can refresh again; 0 counts such a token's
+	 * lifetime by `token_max_days` like any other.
+	 */
+	public const SOCIAL_REFRESHED_TOKEN_HOURS = 'refreshed_token_hours';
 
 	/**
 	 * Which of `Cron\Cache`'s steps the next pass begins with — bookkeeping,
@@ -528,7 +542,9 @@ class ConfigService {
 	 * (0 is no quota), how a registration is admitted (`open`, `invite` or
 	 * `approval`), whether its email has to be confirmed first, the minimum
 	 * age a person must confirm (0 asks nothing), handles nobody may register
-	 * (a JSON list) and whether existing users may send invitations.
+	 * (a JSON list), whether existing users may send invitations, and whether
+	 * the form asks for a proof of work and of how many bits
+	 * (`SignupChallengeService`).
 	 */
 	public const SOCIAL_EXTERNAL_ENABLED = 'external_enabled';
 	public const SOCIAL_EXTERNAL_MAX = 'external_max';
@@ -540,6 +556,8 @@ class ConfigService {
 	public const SOCIAL_EXTERNAL_USER_INVITES = 'external_user_invites';
 	public const SOCIAL_EXTERNAL_SIGNUP_NOTICE = 'external_signup_notice';
 	public const SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED = 'external_signup_notice_required';
+	public const SOCIAL_EXTERNAL_PROOF_OF_WORK = 'external_signup_pow';
+	public const SOCIAL_EXTERNAL_PROOF_OF_WORK_BITS = 'external_signup_pow_bits';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_VERSION = 'external_signup_notice_version';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED = 'external_signup_notice_accepted';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT = 'external_signup_notice_snapshot';
@@ -583,6 +601,8 @@ class ConfigService {
 	public const ATPROTO_DELETE_RECENT_CURSOR = 'atproto_delete_recent_cursor';
 	public const ATPROTO_DETACH_CURSOR = 'atproto_detach_cursor';
 	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
+	/** where reports to that service are sent; empty for the endpoint its DID document names */
+	public const ATPROTO_MODERATION_ENDPOINT = 'atproto_moderation_endpoint';
 	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
 	public const ATPROTO_VIDEO_SERVICE_DID = 'atproto_video_service_did';
 	/** the Bluesky apps (client IDs) whose own name and logo the consent page shows */
@@ -617,6 +637,7 @@ class ConfigService {
 		self::ATPROTO_DELETE_RECENT_CURSOR => '0',
 		self::ATPROTO_DETACH_CURSOR => '0',
 		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
+		self::ATPROTO_MODERATION_ENDPOINT => '',
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
 		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
 		self::ATPROTO_OAUTH_TRUSTED => '[]',
@@ -645,6 +666,8 @@ class ConfigService {
 		self::SOCIAL_MEDIA_CACHE_DAYS => '30',
 		self::SOCIAL_MEDIA_CACHE_MB => '5120',
 		self::SOCIAL_TOKEN_MAX_DAYS => '365',
+		self::SOCIAL_TOKEN_IDLE_DAYS => '90',
+		self::SOCIAL_REFRESHED_TOKEN_HOURS => '24',
 		self::SOCIAL_SILENCED_LIST => '[]',
 		self::SOCIAL_BLOCKLIST_SOURCES => '[]',
 		self::SOCIAL_SECURE_MODE => '0',
@@ -696,6 +719,8 @@ class ConfigService {
 		self::SOCIAL_EXTERNAL_USER_INVITES => '0',
 		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE => '',
 		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED => '0',
+		self::SOCIAL_EXTERNAL_PROOF_OF_WORK => '1',
+		self::SOCIAL_EXTERNAL_PROOF_OF_WORK_BITS => '20',
 	];
 
 	public array $accessTypeList = [

@@ -73,6 +73,41 @@ describe('ProfileFollowers', () => {
 		expect(shown(wrapper)).toEqual(['carol'])
 	})
 
+	describe('an account that hides its lists', () => {
+		const alice = { id: 'https://cloud.example.org/users/alice', url: 'https://cloud.example.org/users/alice', acct: 'alice', username: 'alice' }
+
+		beforeEach(() => {
+			useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', viewer: { username: 'alice', address: 'alice@cloud.example.org' } })
+			store.addAccount({ actorId: carol.url, data: { ...carol, hide_collections: true } })
+			store.addAccount({ actorId: alice.url, data: { ...alice, hide_collections: true } })
+		})
+
+		it('says the followers are hidden and does not ask for them', async () => {
+			const wrapper = mountView({ name: 'profile.followers', params: { account: 'carol' } })
+			await flushPromises()
+
+			expect(store.fetchAccountFollowers).not.toHaveBeenCalled()
+			expect(shown(wrapper)).toEqual([])
+			expect(wrapper.text()).toContain('This account hides its followers')
+		})
+
+		it('says whom it follows is hidden', async () => {
+			const wrapper = mountView({ name: 'profile.following', params: { account: 'carol' } })
+			await flushPromises()
+
+			expect(store.fetchAccountFollowing).not.toHaveBeenCalled()
+			expect(wrapper.text()).toContain('This account hides who it follows')
+		})
+
+		it('shows the reader their own lists', async () => {
+			const wrapper = mountView({ name: 'profile.followers', params: { account: 'alice' } })
+			await flushPromises()
+
+			expect(store.fetchAccountFollowers).toHaveBeenCalled()
+			expect(wrapper.text()).not.toContain('This account hides')
+		})
+	})
+
 	describe('an empty list and a list that would not load', () => {
 		const key = (handle) => store.getActorIdForAccount(handle) || handle
 

@@ -22,6 +22,7 @@ use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
 use OCA\Social\Exceptions\InvalidGrantException;
+use OCA\Social\Exceptions\InvalidScopeException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
@@ -31,7 +32,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DeviceAuthorizationService;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\InstanceService;
-use OCA\Social\Service\MoveFinishService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -274,10 +274,12 @@ class OAuthController extends Controller {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
 			$client = $this->clientService->getFromClientId($client_id);
 			// RFC 8628 §3.5: a token that moves the account away goes to the
-			// move-in callback only, never to whoever polls with a device code
-			if (in_array(MoveFinishService::SCOPE, $client->getScopesFromString($scope), true)) {
+			// move-in callback only, never to whoever polls with a device code;
+			// and the device consent has no password step for the scopes that
+			// need one
+			if (ClientService::needsPasswordConfirmation($client->getScopesFromString($scope))) {
 				return new DataResponse(
-					['error' => 'invalid_scope', 'error_description' => MoveFinishService::SCOPE . ' is not granted to a device'],
+					['error' => 'invalid_scope', 'error_description' => 'write:migration and admin scopes are not granted to a device'],
 					Http::STATUS_BAD_REQUEST
 				);
 			}
@@ -759,14 +761,17 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The consent to `write:migration`, which lets another Aloha Social
-	 * server move the account there: the same grant as `authorizing()`,
-	 * behind Nextcloud's password confirmation, as the Move button is.
+	 * The consent to the scopes that need the password
+	 * (`ClientService::needsPasswordConfirmation()`): `write:migration`,
+	 * which lets another Aloha Social server move the account there, and the
+	 * `admin` scopes, which let an application use the administration API.
+	 * The same grant as `authorizing()`, behind Nextcloud's password
+	 * confirmation, as the Move button is.
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
-	#[FrontpageRoute(verb: 'POST', url: '/oauth/authorize/move')]
-	public function authorizingMove(
+	#[FrontpageRoute(verb: 'POST', url: '/oauth/authorize/confirmed')]
+	public function authorizingConfirmed(
 		string $client_id,
 		string $redirect_uri = '',
 		string $response_type = '',
@@ -781,7 +786,7 @@ class OAuthController extends Controller {
 	/**
 	 * Issues an authorization code for the signed-in account.
 	 *
-	 * @param bool $passwordConfirmed whether the request came through the password-confirmed route, the only one that grants `write:migration`
+	 * @param bool $passwordConfirmed whether the request came through the password-confirmed route, the only one that grants `write:migration` and the `admin` scopes
 	 */
 	private function grantCode(
 		string $client_id,
@@ -808,8 +813,8 @@ class OAuthController extends Controller {
 			}
 
 			$this->clientService->confirmData($client, ['app_scopes' => $scope, 'redirect_uri' => $redirect_uri]);
-			if (!$passwordConfirmed && in_array(MoveFinishService::SCOPE, $client->getScopesFromString($scope), true)) {
-				throw new ClientException(MoveFinishService::SCOPE . ' is granted only after the password is confirmed');
+			if (!$passwordConfirmed && ClientService::needsPasswordConfirmation($client->getScopesFromString($scope))) {
+				throw new ClientException('write:migration and admin scopes are granted only after the password is confirmed');
 			}
 
 			// no code without an account: a token names the account it acts as
@@ -888,14 +893,19 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The authorization-code grant.
+	 * The token endpoint: the authorization-code, device-code,
+	 * `client_credentials` and `refresh_token` grants.
 	 *
-	 * There is no `scope` parameter here, and there never was one in RFC 6749
-	 * §4.1.3. What the token carries is what the person granted, which lives on
-	 * the authorization the code names; comparing a `scope` the client sent
-	 * here against the *app row* refused every client registered since
-	 * authorizations moved to a table of their own, because that column has had
-	 * no writer since.
+	 * The authorization-code grant has no `scope` parameter, and there never
+	 * was one in RFC 6749 §4.1.3. What the token carries is what the person
+	 * granted, which lives on the authorization the code names; comparing a
+	 * `scope` the client sent here against the *app row* refused every client
+	 * registered since authorizations moved to a table of their own, because
+	 * that column has had no writer since. Only the `refresh_token` grant
+	 * reads `scope`, which may narrow what was granted (RFC 6749 §6).
+	 *
+	 * A token issued for an account comes with a `refresh_token` and an
+	 * `expires_in`; see `ClientService::refresh()` and `expiresAt()`.
 	 *
 	 * The client may authenticate with its credentials in the body
 	 * (`client_secret_post`) or in an `Authorization: Basic` header
@@ -914,6 +924,8 @@ class OAuthController extends Controller {
 		string $code = '',
 		string $code_verifier = '',
 		string $device_code = '',
+		string $refresh_token = '',
+		string $scope = '',
 	): DataResponse {
 		if ($this->isAtprotoClient($client_id)) {
 			return $this->atprotoToken();
@@ -940,10 +952,11 @@ class OAuthController extends Controller {
 				$this->clientService->authClient($client);
 				$client = $this->clientService->exchangeCode($client, $client->getAuthCode(), '', ClientService::REDIRECT_URI_OOB);
 			} else {
-				// no redirect_uri on the client_credentials grant (RFC 6749 §4.4.2)
+				// no redirect_uri on the client_credentials and refresh_token
+				// grants (RFC 6749 §4.4.2, §6)
 				$this->clientService->confirmData(
 					$client,
-					($grant_type === 'client_credentials')
+					($grant_type === 'client_credentials' || $grant_type === 'refresh_token')
 						? ['client_secret' => $client_secret]
 						: ['client_secret' => $client_secret, 'redirect_uri' => $redirect_uri]
 				);
@@ -962,6 +975,17 @@ class OAuthController extends Controller {
 					// account that granted it rather than whatever the app row
 					// last held -- and only against the redirect_uri it was sent to
 					$client = $this->clientService->exchangeCode($client, $code, $code_verifier, $redirect_uri);
+				} elseif ($grant_type === 'refresh_token') {
+					if ($refresh_token === '') {
+						return new DataResponse(
+							['error' => 'invalid_request', 'error_description' => 'missing refresh_token'],
+							Http::STATUS_BAD_REQUEST
+						);
+					}
+
+					// rotated: the refresh token presented is spent, and a
+					// second use of it revokes the authorization
+					$client = $this->clientService->refresh($client, $refresh_token, $scope);
 				} elseif ($grant_type === 'client_credentials') {
 					// a token for the app itself, bound to no account: what
 					// Mastodon's own apps take before anybody has signed in
@@ -970,7 +994,7 @@ class OAuthController extends Controller {
 					return new DataResponse(
 						[
 							'error' => 'unsupported_grant_type',
-							'error_description' => 'grant_type must be authorization_code, client_credentials or urn:ietf:params:oauth:grant-type:device_code',
+							'error_description' => 'grant_type must be authorization_code, refresh_token, client_credentials or urn:ietf:params:oauth:grant-type:device_code',
 						],
 						Http::STATUS_BAD_REQUEST
 					);
@@ -983,19 +1007,27 @@ class OAuthController extends Controller {
 				);
 			}
 
-			return new DataResponse(
-				[
-					// the scopes this token really carries, which is what
-					// checkTokenScope() enforces on every request made with it.
-					// Echoing the scope of the token *call* — 'read', for a
-					// client like Tusky that omits it — had clients hiding
-					// their compose button while writes in fact worked.
-					'access_token' => $client->getToken(),
-					'token_type' => 'Bearer',
-					'scope' => implode(' ', $client->getAuthScopes()),
-					'created_at' => $client->getCreation()
-				], Http::STATUS_OK
-			);
+			$answer = [
+				// the scopes this token really carries, which is what
+				// checkTokenScope() enforces on every request made with it.
+				// Echoing the scope of the token *call* — 'read', for a
+				// client like Tusky that omits it — had clients hiding
+				// their compose button while writes in fact worked.
+				'access_token' => $client->getToken(),
+				'token_type' => 'Bearer',
+				'scope' => implode(' ', $client->getAuthScopes()),
+				'created_at' => $client->getCreation()
+			];
+			// RFC 6749 §5.1; an app token has neither
+			$expiresIn = $this->clientService->expiresIn($client);
+			if ($expiresIn !== null) {
+				$answer['expires_in'] = $expiresIn;
+			}
+			if ($client->getRefreshToken() !== '') {
+				$answer['refresh_token'] = $client->getRefreshToken();
+			}
+
+			return new DataResponse($answer, Http::STATUS_OK);
 		} catch (ClientNotFoundException $e) {
 			// A wrong client id / secret / code is a credential guess; throttle it so
 			// the public token endpoint cannot be brute-forced.
@@ -1006,9 +1038,15 @@ class OAuthController extends Controller {
 			$response->throttle(['action' => 'socialOauthToken']);
 
 			return $response;
+		} catch (InvalidScopeException $e) {
+			return new DataResponse(
+				['error' => 'invalid_scope', 'error_description' => $e->getMessage()],
+				Http::STATUS_BAD_REQUEST
+			);
 		} catch (InvalidGrantException $e) {
 			// RFC 6749 §5.2: a code presented under another redirect_uri than
-			// the one it was issued for is a 400, and a guess at somebody's code
+			// the one it was issued for is a 400, and a guess at somebody's code,
+			// as is an unknown, spent or expired refresh token
 			$response = new DataResponse(
 				['error' => 'invalid_grant', 'error_description' => $e->getMessage()],
 				Http::STATUS_BAD_REQUEST
@@ -1141,7 +1179,7 @@ class OAuthController extends Controller {
 			'app_registration_endpoint' => $base . '/api/v1/apps',
 			'scopes_supported' => self::SCOPES,
 			'response_types_supported' => ['code'],
-			'grant_types_supported' => ['authorization_code', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code'],
+			'grant_types_supported' => ['authorization_code', 'client_credentials', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
 			'token_endpoint_auth_methods_supported' => ['client_secret_post', 'client_secret_basic'],
 			'code_challenge_methods_supported' => ClientService::CODE_CHALLENGE_METHODS,
 			'service_documentation' => self::REPOSITORY,

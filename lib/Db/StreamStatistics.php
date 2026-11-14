@@ -202,16 +202,14 @@ trait StreamStatistics {
 	}
 
 	/**
-	 * How often each hashtag was used in each of several windows, in one pass.
+	 * How often each hashtag was used in each of several windows: how many
+	 * public statuses published at or after each window's start carry it.
 	 *
-	 * This is what the trends cron needs, and all it needs. It used to hydrate
-	 * the posts themselves — every column of every note, plus its action row —
-	 * and count the tags in PHP, bounded to a sample of the most recent
-	 * thousand notes; on a busy instance all five windows saw the same
-	 * thousand notes and every period therefore reported the same count. Then
-	 * it was one grouped query per window, which read the tag rows of the
-	 * widest window five times over; now the widest window is read once and
-	 * each narrower one is a conditional sum over the same rows.
+	 * This is what the trends cron needs, and all it needs. It is counted off
+	 * the hourly buckets (`StreamTrendBuckets`), settled first, so a pass reads
+	 * the buckets of the widest window and the posts of the hours that changed
+	 * rather than every tag row of ten days. A window reaching further back
+	 * than the buckets are kept is counted from the posts.
 	 *
 	 * A hashtag used in none of a window's posts is absent from that window
 	 * rather than zero.
@@ -221,10 +219,28 @@ trait StreamStatistics {
 	 * @return array<string, array<string, int>> name => (hashtag => how many posts used it)
 	 */
 	public function countHashtagsInWindows(array $windows): array {
-		$result = array_fill_keys(array_keys($windows), []);
 		if ($windows === []) {
-			return $result;
+			return [];
 		}
+		if (min($windows) < $this->trendBucketFloor()) {
+			return $this->countHashtagsInWindowsFromPosts($windows);
+		}
+
+		$this->settleTrendBuckets();
+
+		return $this->countHashtagsFromBuckets($windows);
+	}
+
+	/**
+	 * The windows counted from the posts themselves: the widest window read
+	 * once, each narrower one a conditional sum over the same rows.
+	 *
+	 * @param array<string, int> $windows name => since, as a timestamp
+	 *
+	 * @return array<string, array<string, int>> name => (hashtag => how many posts used it)
+	 */
+	protected function countHashtagsInWindowsFromPosts(array $windows): array {
+		$result = array_fill_keys(array_keys($windows), []);
 
 		$qb = $this->getQueryBuilder();
 		$expr = $qb->expr();
@@ -245,23 +261,11 @@ trait StreamStatistics {
 		}
 
 		$widest = new DateTime('@' . min($windows));
-		$qb->from(self::TABLE_STREAM_TAGS, 'st')
-			->innerJoin('st', self::TABLE_STREAM, 's', $expr->eq('s.id_prim', 'st.stream_id'))
-			->where($expr->gte(
-				's.published_time', $qb->createNamedParameter($widest, IQueryBuilder::PARAM_DATE)
-			))
-			// public posts only, the rule `HashtagsRequest::related()` counts
-			// by: a tag used inside a followers-only thread or a direct message
-			// is not public knowledge, and counting it published the tag — and
-			// its usage count — through `/api/v1/trends/tags`, `tagHistory()`
-			// and search
-			->andWhere($expr->eq(
-				's.visibility', $qb->createNamedParameter(Stream::TYPE_PUBLIC)
-			))
+		$this->trendTagUses($qb);
+		$qb->andWhere($expr->gte(
+			's.published_time', $qb->createNamedParameter($widest, IQueryBuilder::PARAM_DATE)
+		))
 			->groupBy('st.hashtag');
-
-		$qb->setDefaultSelectAlias('s');
-		$qb->limitToStatusTypes();
 
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {

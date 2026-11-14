@@ -212,6 +212,16 @@ class NotificationInboxService {
 	}
 
 	/**
+	 * One tag that moves whenever `unreadTag()` or `pendingTag()` does, for an
+	 * answer carrying both counts. Each of their parts is read once.
+	 */
+	public function badgeTag(Person $viewer, string $userId): string {
+		return $this->newNotifications($viewer, $userId) . '-' . $this->markerService->lastReadId($userId, self::TIMELINE)
+			. '-' . $this->timelineRevisionService->of($userId)
+			. '-' . md5($this->unreadState($viewer, $userId) . $this->notificationPolicyService->stateOf($userId));
+	}
+
+	/**
 	 * What moves when a notification is stored for the viewer: the newest
 	 * one, as a nid — one index-only probe — and the number moved with each
 	 * one stored (`TimelineRevisionService::NOTIFICATIONS`), as a second in

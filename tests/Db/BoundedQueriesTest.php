@@ -68,7 +68,7 @@ class BoundedQueriesTest extends TestCase {
 		'RequestQueueRequest::getFromToken' => 'the deliveries of one activity: one per inbox it went to',
 		'RequestQueueRequest::getHeldByObject' => 'the held deliveries of one activity: one per inbox it went to',
 		'StreamMedia::updateLocalAttachmentCopies' => 'the local posts carrying one uploaded file',
-		'StreamStatistics::countHashtagsInWindows' => 'one row per hashtag used in the widest trend window (GROUP BY hashtag); the window is the bound, read every twelve minutes by the trends cron',
+		'StreamTrendBuckets::trendHoursStoredSince' => 'the public statuses stored since the previous trends pass, twelve minutes before: the `creation` window is the bound',
 	];
 
 	/**

@@ -148,6 +148,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 				$item->setUpdated($stored->getUpdated());
 			}
 			$this->streamRequest->update($item);
+			$this->queueMedia($item);
 			if ($stored->getSubType() === 'Event' || $item->getSubType() === 'Event') {
 				// Event facts live in a dedicated key in `details`. The general
 				// stream update rewrites the ActivityPub fields, but deliberately
@@ -398,6 +399,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			// posts, as against whoever it mentioned
 			$this->notificationService->onNewStatus($note);
 			$this->pushService->onNewStream($note->getId());
+			$this->queueMedia($note);
 			$this->queueLinkPreview($note);
 			$this->fileCommentsService->onReply($note);
 			if ($fetchParent || $fetchQuote) {
@@ -483,6 +485,26 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		$note->addCacheItem($quoted);
 
 		return true;
+	}
+
+	/**
+	 * A post stored with attachments whose files are not here yet -- the
+	 * inbox could not finish them, or the path that brought the post defers
+	 * its downloads -- has them fetched by the queue rather than by the first
+	 * reader's request. Such an attachment is one with no link, no recorded
+	 * refusal, and an origin (`Document::convertToMediaAttachment()`).
+	 */
+	private function queueMedia(Stream $note): void {
+		foreach ($note->getAttachments() as $attachment) {
+			if ($attachment instanceof MediaAttachment
+				&& $attachment->getUrl() === ''
+				&& $attachment->getCacheError() === 0
+				&& ($attachment->getRemoteUrl() ?? '') !== '') {
+				$this->streamQueueService->queueMedia($note->getRequestToken(), $note->getId());
+
+				return;
+			}
+		}
 	}
 
 	/**

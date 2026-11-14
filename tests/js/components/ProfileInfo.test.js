@@ -227,6 +227,21 @@ describe('ProfileInfo', () => {
 		expect(linkTexts(mountProfile('alice'))).toEqual(['7 posts', '2 following', '2 followers'])
 	})
 
+	it('shows the counts of an account that hides its lists, but not as links', () => {
+		accountStore.addAccount({ actorId: carol.url, data: { ...carol, followers_count: 4, following_count: 6, hide_collections: true } })
+		const wrapper = mountProfile('carol')
+
+		expect(linkTexts(wrapper)).toEqual(['0 posts', '6 following', '4 followers'])
+		expect(wrapper.findAll('.user-profile__count').map((count) => count.text())).toEqual(['6 following', '4 followers'])
+		expect(wrapper.find('.user-profile__sections').findAllComponents(RouterLinkStub).map((link) => link.props('to').name)).toEqual(['profile'])
+	})
+
+	it('still links the lists on the reader’s own profile when they hide them', () => {
+		accountStore.addAccount({ actorId: alice.url, data: { ...alice, hide_collections: true } })
+
+		expect(linkTexts(mountProfile('alice'))).toEqual(['7 posts', '2 following', '2 followers'])
+	})
+
 	it('counts one post as a post, and one follower as a follower', () => {
 		// "1 posts" is not English, and three labels glued to a bare number
 		// cannot be pluralised in any language at all

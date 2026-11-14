@@ -17,7 +17,7 @@ import eventBus, { TIMELINE_PUSHED } from './eventBus.js'
  * bus, which components can leave.
  *
  * The server pushes once per post that reaches the account, and each
- * subscriber answers a push with requests of its own — the sidebar with three.
+ * subscriber answers a push with requests of its own.
  * Someone who follows a few hundred active accounts was pushed every few
  * seconds, in every open tab, hidden ones too. So the pushes are gathered
  * here before anybody hears of them: a run of them is handed on once it has

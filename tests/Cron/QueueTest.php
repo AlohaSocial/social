@@ -14,6 +14,7 @@ use OCA\Social\Exceptions\SignatureException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Model\StreamQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\RequestQueueService;
@@ -203,7 +204,8 @@ class QueueTest extends TestCase {
 
 		$this->assertSame(['good'], $sent, 'the rest of the batch is still delivered');
 		$this->assertSame([['bad', false]], $ended);
-		$this->assertStringContainsString('bad', $logged[0]);
+		$this->assertStringContainsString(AsyncRequestSigner::fingerprint('bad'), $logged[0], 'named by its fingerprint');
+		$this->assertStringNotContainsString(' bad ', $logged[0], 'not by the token');
 		$this->assertStringContainsString('SignatureException', $logged[0]);
 	}
 
@@ -254,7 +256,7 @@ class QueueTest extends TestCase {
 
 		$this->assertSame(['good'], $sent);
 		$this->assertCount(1, $logged);
-		$this->assertStringContainsString('bad', $logged[0]);
+		$this->assertStringContainsString(AsyncRequestSigner::fingerprint('bad'), $logged[0]);
 		$this->assertStringContainsString('not configured', $logged[0]);
 	}
 

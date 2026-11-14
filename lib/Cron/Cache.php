@@ -17,7 +17,6 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheActorSweepService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
-use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FediverseDirectoryService;
 use OCA\Social\Service\GroupListService;
@@ -26,6 +25,7 @@ use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\ProfileLinkVerifier;
 use OCA\Social\Service\RemoteCountService;
+use OCA\Social\Service\RemoteMediaPrefetcher;
 use OCA\Social\Service\StreamPruneService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\VideoViewService;
@@ -75,6 +75,13 @@ class Cache extends TimedJob {
 	public const COUNTS_SECONDS = 60;
 
 	/**
+	 * How long one pass may spend fetching remote media files, in seconds,
+	 * inside the pass's own budget: wave after wave of downloads until this
+	 * runs out (`RemoteMediaPrefetcher::prefetchPending()`).
+	 */
+	public const MEDIA_SECONDS = 90;
+
+	/**
 	 * How often the disk is added up, in seconds.
 	 *
 	 * Once a day: it is a `stat` per stored file, and a number about disk does
@@ -86,7 +93,7 @@ class Cache extends TimedJob {
 		ITimeFactory $time,
 		private AccountService $accountService,
 		private CacheActorService $cacheActorService,
-		private DocumentService $documentService,
+		private RemoteMediaPrefetcher $mediaPrefetcher,
 		private HashtagService $hashtagService,
 		private StreamService $streamService,
 		private StreamPruneService $streamPruneService,
@@ -134,8 +141,12 @@ class Cache extends TimedJob {
 			'manageDetailsRemoteActors' => function () use ($deadline): void {
 				$this->cacheActorService->manageDetailsRemoteActors(false, $this->stepDeadline($deadline));
 			},
-			'manageCacheDocuments' => function (): void {
-				$this->documentService->manageCacheDocuments();
+			'manageCacheDocuments' => function () use ($deadline): void {
+				// the backstop behind the per-post queue: every remote file
+				// still waiting, newest first, several at a time
+				$this->mediaPrefetcher->prefetchPending(
+					min($deadline, $this->time->getTime() + self::MEDIA_SECONDS)
+				);
 			},
 			'manageHashtags' => function (): void {
 				$this->hashtagService->manageHashtags();

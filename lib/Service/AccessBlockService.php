@@ -13,6 +13,8 @@ use OCA\Social\Db\AccessBlocksRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\AccessBlock;
+use OCP\ICache;
+use OCP\ICacheFactory;
 
 /**
  * The two blocks that are about an address rather than an account.
@@ -36,6 +38,17 @@ use OCA\Social\Model\AccessBlock;
  *   Mastodon account, kept so the same person cannot sign up again. Nothing
  *   here deletes an account's address, because the address is not this app's
  *   to hold.
+ *
+ * The IP blocks are read on every request, so they are kept in Nextcloud's
+ * distributed cache under a version that every write replaces: a block or a
+ * lift is in force on the next request on every server sharing that cache.
+ * A cache that is only local to each server (APCu alone on several web
+ * servers, or `occ`, which does not share APCu with the web server) still
+ * holds the server that wrote it to that; the others read the table again
+ * once `IP_CACHE_TTL` has passed. Expiry needs no write: an
+ * expired block lifts itself where it is read, cached or not. `occ
+ * social:reset` empties the table without going through here, so what it
+ * removes stays enforced for at most `IP_CACHE_TTL`.
  */
 class AccessBlockService {
 	/** the widest IPv4 prefix a block may have: a /16, 65,536 addresses */
@@ -43,12 +56,22 @@ class AccessBlockService {
 	/** the widest IPv6 prefix a block may have: a /32, what one provider is given */
 	public const WIDEST_V6 = 32;
 
+	/** the longest a server reads the IP blocks from the cache without a write telling it to stop */
+	public const IP_CACHE_TTL = 60;
+
+	private const CACHE_VERSION_KEY = 'ip_version';
+
 	/** @var AccessBlock[]|null the live IP blocks, for this request */
 	private ?array $cachedIps = null;
 
+	private ?ICache $cache;
+
 	public function __construct(
 		private AccessBlocksRequest $accessBlocksRequest,
+		?ICacheFactory $cacheFactory = null,
 	) {
+		$this->cache = ($cacheFactory !== null && $cacheFactory->isAvailable())
+			? $cacheFactory->createDistributed('social.access_blocks') : null;
 	}
 
 	// IP blocks
@@ -115,7 +138,7 @@ class AccessBlockService {
 			AccessBlock::TYPE_IP, $range, $severity, trim($comment), max(0, $expiresAt)
 		);
 		$this->accessBlocksRequest->save($block);
-		$this->cachedIps = null;
+		$this->forgetIpBlocks();
 
 		return $block;
 	}
@@ -123,7 +146,13 @@ class AccessBlockService {
 	/** @throws ItemNotFoundException */
 	public function unblockIp(int $id): void {
 		$this->accessBlocksRequest->delete($id, AccessBlock::TYPE_IP);
+		$this->forgetIpBlocks();
+	}
+
+	/** Drops the cached IP blocks, here and on every server sharing the cache. */
+	private function forgetIpBlocks(): void {
 		$this->cachedIps = null;
+		$this->cache?->set(self::CACHE_VERSION_KEY, self::newVersion());
 	}
 
 	/**
@@ -140,7 +169,7 @@ class AccessBlockService {
 		}
 
 		if ($this->cachedIps === null) {
-			$this->cachedIps = $this->ipBlocks();
+			$this->cachedIps = $this->cachedIpBlocks();
 		}
 
 		foreach ($this->cachedIps as $block) {
@@ -150,6 +179,70 @@ class AccessBlockService {
 		}
 
 		return false;
+	}
+
+	/**
+	 * The IP blocks as the cache holds them, read from the table when it
+	 * does not: the range and the expiry of each, which is all
+	 * `isBlockedIp()` reads.
+	 *
+	 * The version is settled before the table is read. A write that lands
+	 * in between replaces it, so a list read before that write is stored
+	 * under a version nobody asks for again.
+	 *
+	 * @return AccessBlock[]
+	 */
+	private function cachedIpBlocks(): array {
+		if ($this->cache === null) {
+			return $this->ipBlocks();
+		}
+
+		$version = $this->cache->get(self::CACHE_VERSION_KEY);
+		if (!is_string($version) || $version === '') {
+			$version = self::newVersion();
+			$this->cache->set(self::CACHE_VERSION_KEY, $version);
+		}
+
+		$key = 'ip_blocks/' . $version;
+		$blocks = self::fromCache($this->cache->get($key));
+		if ($blocks !== null) {
+			return $blocks;
+		}
+
+		$blocks = $this->ipBlocks();
+		$this->cache->set(
+			$key,
+			array_map(static fn (AccessBlock $block): array => [$block->getValue(), $block->getExpires()], $blocks),
+			self::IP_CACHE_TTL
+		);
+
+		return $blocks;
+	}
+
+	/**
+	 * The blocks a cached list names, or null for anything that is not one
+	 * whole: a list missing one of its entries would let that range in.
+	 *
+	 * @return AccessBlock[]|null
+	 */
+	private static function fromCache(mixed $cached): ?array {
+		if (!is_array($cached)) {
+			return null;
+		}
+
+		$blocks = [];
+		foreach ($cached as $entry) {
+			if (!is_array($entry) || !is_string($entry[0] ?? null) || !is_int($entry[1] ?? null)) {
+				return null;
+			}
+			$blocks[] = new AccessBlock(AccessBlock::TYPE_IP, $entry[0], AccessBlock::SEVERITY_NO_ACCESS, '', $entry[1]);
+		}
+
+		return $blocks;
+	}
+
+	private static function newVersion(): string {
+		return bin2hex(random_bytes(8));
 	}
 
 	// email-domain blocks

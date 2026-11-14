@@ -74,8 +74,9 @@ class AuthorizedAppsController extends ClientApiController {
 					// everybody and says nothing about whose phone this is
 					'created_at' => $client->getAuthCreation(),
 					'last_used_at' => $client->getLastUpdate(),
-					// 0 when the instance lets a token in use live for ever
-					'expires_at' => $this->clientService->expiresAt($client),
+					// 0 when the instance lets a token in use live for ever, or
+					// the app keeps itself signed in by refreshing
+					'expires_at' => $this->clientService->signsOutAt($client),
 					// an authorization whose code was never exchanged: the browser
 					// came back and the app never asked for its token. Worth
 					// showing, because taking it back is still the right thing to

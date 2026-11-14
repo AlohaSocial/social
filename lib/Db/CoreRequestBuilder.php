@@ -36,6 +36,7 @@ class CoreRequestBuilder {
 	public const TABLE_CACHE_DOCUMENTS = 'social_cache_doc';
 	public const TABLE_CLIENT = 'social_client';
 	public const TABLE_CLIENT_AUTH = 'social_client_auth';
+	public const TABLE_CLIENT_REFRESH_SPENT = 'social_client_refresh_spent';
 	public const TABLE_EMOJI = 'social_emoji';
 	public const TABLE_GIFS = 'social_gif';
 	public const TABLE_FOLLOWED_TAGS = 'social_followed_tag';
@@ -71,6 +72,7 @@ class CoreRequestBuilder {
 	public const TABLE_REACTIONS = 'social_reaction';
 	public const TABLE_REQUEST_QUEUE = 'social_req_queue';
 	public const TABLE_SEARCH_TERMS = 'social_search_term';
+	public const TABLE_SERVER_BLOCKS = 'social_server_block';
 	public const TABLE_HOST_BREAKER = 'social_host_breaker';
 	public const TABLE_POST_HOLD = 'social_post_hold';
 	public const TABLE_RECOMMENDATION_DISCOVERY = 'social_rec_discovery';
@@ -88,6 +90,8 @@ class CoreRequestBuilder {
 	public const TABLE_TEAMS = 'social_team';
 	public const TABLE_TEAM_POSTS = 'social_team_post';
 	public const TABLE_TREND_REVIEW = 'social_trend_review';
+	public const TABLE_TAG_HOURS = 'social_tag_hour';
+	public const TABLE_TAG_HOURS_DIRTY = 'social_tag_dirty';
 	public const TABLE_RELAYS = 'social_relay';
 	public const TABLE_QUOTE_GRANTS = 'social_quote_grant';
 	public const TABLE_CHANNELS = 'social_channel';
@@ -485,6 +489,8 @@ class CoreRequestBuilder {
 			'moderator',
 			'creation'
 		],
+		self::TABLE_TAG_HOURS => ['hashtag', 'hour_start', 'uses'],
+		self::TABLE_TAG_HOURS_DIRTY => ['hour_start'],
 		self::TABLE_RELAYS => [
 			'id',
 			'actor_id',
@@ -686,6 +692,13 @@ class CoreRequestBuilder {
 			'position',
 			'creation'
 		],
+		self::TABLE_SERVER_BLOCKS => [
+			'id',
+			'domain',
+			'private_comment',
+			'public_comment',
+			'creation'
+		],
 		self::TABLE_MEDIA_BLOCKS => [
 			'id',
 			'hash',
@@ -710,8 +723,17 @@ class CoreRequestBuilder {
 			'scopes',
 			'code',
 			'token',
+			'refresh_token',
+			'token_creation',
+			'refresh_count',
 			'creation',
 			'last_update'
+		],
+		self::TABLE_CLIENT_REFRESH_SPENT => [
+			'id',
+			'auth_id',
+			'token',
+			'creation'
 		],
 		self::TABLE_ACCESS_BLOCKS => [
 			'id',
@@ -831,6 +853,7 @@ class CoreRequestBuilder {
 			'hashtags',
 			'details',
 			'source',
+			'source_digest',
 			'instances',
 			'attachments',
 			'media_kind',

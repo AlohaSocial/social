@@ -83,6 +83,8 @@ class AsyncFreeActivityPubController extends ActivityPubController {
 
 #[AllowMockObjectsWithoutExpectations]
 class ActivityPubControllerTest extends TestCase {
+	/** @var string[] the usernames of the accounts that hide their lists */
+	private array $hiding = [];
 	private const SOCIAL_URL = 'https://cloud.example/apps/social/';
 	private const LD_JSON = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"';
 
@@ -172,6 +174,12 @@ class ActivityPubControllerTest extends TestCase {
 			}
 		);
 
+		$this->hiding = [];
+		$hiddenCollections = $this->createStub(\OCA\Social\Service\HiddenCollectionsService::class);
+		$hiddenCollections->method('hidesFor')->willReturnCallback(
+			fn (Person $actor): bool => in_array($actor->getPreferredUsername(), $this->hiding, true)
+		);
+
 		$this->controller = new AsyncFreeActivityPubController(
 			$this->request,
 			$this->socialPubController,
@@ -193,7 +201,8 @@ class ActivityPubControllerTest extends TestCase {
 			$this->quoteGrantRequest,
 			$this->systemConfig,
 			$this->configService,
-			$this->logger
+			$this->logger,
+			$hiddenCollections,
 		);
 	}
 
@@ -986,6 +995,18 @@ class ActivityPubControllerTest extends TestCase {
 		$this->followService->expects($this->never())->method('getFollowersCollection');
 
 		$this->assertActivityPubResponse($this->controller->followers('alice', '2'), $page);
+	}
+
+	/** Mastodon refuses a page of a hidden list; the collection still carries the count. */
+	public function testAPageOfAHiddenListIsRefused(): void {
+		$this->acceptHeader('application/activity+json');
+		$this->localActor('alice', (new Person())->setPreferredUsername('alice'));
+		$this->hiding = ['alice'];
+		$this->followService->expects($this->never())->method('getFollowersPage');
+		$this->followService->expects($this->never())->method('getFollowingPage');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller->followers('alice', '1')->getStatus());
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller->following('alice', '', 'https://cloud.example/follow/1')->getStatus());
 	}
 
 	/** `?page=true` is how Mastodon asks for the first page. */

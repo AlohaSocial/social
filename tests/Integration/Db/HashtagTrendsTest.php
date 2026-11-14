@@ -110,6 +110,46 @@ class HashtagTrendsTest extends TestCase {
 		$this->assertSame(2, $counts['10d']['itest-steady'] ?? 0);
 	}
 
+	/**
+	 * The windows are counted off hourly buckets, recounted only for the hours
+	 * that changed: a post stored after a pass, however long ago it says it
+	 * was published, and a post deleted after one both move the next count.
+	 */
+	public function testAPostStoredLateCountsInTheHourItWasPublishedIn(): void {
+		$this->streamRequest->countHashtagsSince(time() - 864000);
+		$this->note('late', ['itest-steady'], 3 * 86400);
+
+		$this->assertSame(1, $this->streamRequest->countHashtagsSince(time() - 864000)['itest-steady'] ?? 0);
+		$this->assertArrayNotHasKey('itest-steady', $this->streamRequest->countHashtagsSince(time() - 86400));
+		$this->assertSame(1, $this->bucketUses('itest-steady'), 'one bucket, for the hour it was published in');
+	}
+
+	public function testADeletedPostLeavesTheCountAtTheNextPass(): void {
+		$this->note('a', ['itest-spike'], 60);
+		$this->note('b', ['itest-spike'], 2 * 86400);
+		$this->assertSame(2, $this->streamRequest->countHashtagsSince(time() - 864000)['itest-spike'] ?? 0);
+
+		$this->streamRequest->deleteById(self::BASE . '/notes/b');
+
+		$this->assertSame(1, $this->streamRequest->countHashtagsSince(time() - 864000)['itest-spike'] ?? 0);
+		$this->assertSame(1, $this->bucketUses('itest-spike'));
+	}
+
+	private function bucketUses(string $hashtag): int {
+		$qb = $this->connection->getQueryBuilder();
+		$qb->select('uses')
+			->from(CoreRequestBuilder::TABLE_TAG_HOURS)
+			->where($qb->expr()->eq('hashtag', $qb->createNamedParameter($hashtag)));
+		$cursor = $qb->executeQuery();
+		$uses = 0;
+		while ($row = $cursor->fetch()) {
+			$uses += (int)$row['uses'];
+		}
+		$cursor->closeCursor();
+
+		return $uses;
+	}
+
 	public function testATagUsedByNoPostInTheWindowIsAbsentRatherThanZero(): void {
 		$this->note('a', ['itest-quiet'], 5 * 86400);
 

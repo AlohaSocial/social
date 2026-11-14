@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use Exception;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\ReportsRequest;
+use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
@@ -128,6 +129,7 @@ class AdminApiService {
 		private IUserManager $userManager,
 		private ISettingsManager $settingsManager,
 		private LoggerInterface $logger,
+		private ServerBlockRequest $serverBlockRequest,
 	) {
 	}
 
@@ -617,23 +619,35 @@ class AdminApiService {
 	public function domainBlocks(): array {
 		$this->assertBlockList();
 
-		$blocks = [];
+		$severities = [];
 		foreach ($this->fediverseService->getListedAddresses() as $entry) {
 			$domain = strtolower(trim((string)$entry));
 			if ($domain !== '') {
-				$blocks[$domain] = new AdminDomainBlock($domain, AdminDomainBlock::SEVERITY);
+				$severities[$domain] = AdminDomainBlock::SEVERITY;
 			}
 		}
 		foreach ($this->fediverseService->getSilencedAddresses() as $entry) {
 			$domain = strtolower(trim($entry));
 			// a domain on both lists is suspended: the stronger tier is the
 			// one that is actually in force
-			if ($domain !== '' && !isset($blocks[$domain])) {
-				$blocks[$domain] = new AdminDomainBlock($domain, AdminDomainBlock::SEVERITY_SILENCE);
+			if ($domain !== '' && !isset($severities[$domain])) {
+				$severities[$domain] = AdminDomainBlock::SEVERITY_SILENCE;
 			}
 		}
 
-		return array_values($blocks);
+		$recorded = ($severities === []) ? [] : $this->serverBlockRequest->all();
+		$blocks = [];
+		foreach ($severities as $domain => $severity) {
+			$row = $recorded[FediverseService::normalizeHost($domain)] ?? null;
+			$blocks[] = new AdminDomainBlock(
+				$domain, $severity,
+				$row['private_comment'] ?? null,
+				$row['public_comment'] ?? null,
+				$row['created'] ?? 0,
+			);
+		}
+
+		return $blocks;
 	}
 
 	public function domainBlock(string $reference): AdminDomainBlock {
@@ -646,9 +660,22 @@ class AdminApiService {
 		throw new ItemNotFoundException('Record not found');
 	}
 
-	public function blockDomain(string $domain, string $severity = AdminDomainBlock::SEVERITY): AdminDomainBlock {
+	/**
+	 * Blocks or silences a domain, with the reasons for it.
+	 *
+	 * A null reason leaves what is recorded alone, so a client retrying a
+	 * block without them does not erase what a moderator wrote; '' clears it.
+	 */
+	public function blockDomain(
+		string $domain,
+		string $severity = AdminDomainBlock::SEVERITY,
+		?string $privateComment = null,
+		?string $publicComment = null,
+	): AdminDomainBlock {
 		$this->assertBlockList();
 		$severity = $this->severity($severity);
+		$privateComment = $this->comment($privateComment);
+		$publicComment = $this->comment($publicComment);
 
 		$domain = strtolower(trim($domain));
 		if ($domain === '' || preg_match('/^[a-z0-9.:\[\]-]+$/', $domain) !== 1) {
@@ -656,34 +683,71 @@ class AdminApiService {
 		}
 
 		$this->applySeverity($domain, $severity);
+		$this->serverBlockRequest->save(FediverseService::normalizeHost($domain), $privateComment, $publicComment);
 
-		return new AdminDomainBlock($domain, $severity);
+		return $this->domainBlock($domain);
 	}
 
 	/**
-	 * Moves a block between the two tiers.
+	 * Moves a block between the two tiers, and rewrites its reasons.
 	 *
 	 * A change of severity is a move from one list to the other; the same
-	 * severity again is a no-op, and the block comes back as it stands.
+	 * severity again, or none, leaves the tier as it is. A null reason is
+	 * left as it is, '' clears it.
 	 */
-	public function updateDomainBlock(string $reference, string $severity): AdminDomainBlock {
+	public function updateDomainBlock(
+		string $reference,
+		string $severity,
+		?string $privateComment = null,
+		?string $publicComment = null,
+	): AdminDomainBlock {
 		$block = $this->domainBlock($reference);
 		$severity = ($severity === '') ? $block->getSeverity() : $this->severity($severity);
-		if ($severity === $block->getSeverity()) {
-			return $block;
+		$privateComment = $this->comment($privateComment);
+		$publicComment = $this->comment($publicComment);
+
+		if ($severity !== $block->getSeverity()) {
+			$this->applySeverity($block->getDomain(), $severity);
+		}
+		if ($privateComment !== null || $publicComment !== null) {
+			$this->serverBlockRequest->save(
+				FediverseService::normalizeHost($block->getDomain()), $privateComment, $publicComment
+			);
 		}
 
-		$this->applySeverity($block->getDomain(), $severity);
-
-		return new AdminDomainBlock($block->getDomain(), $severity);
+		return $this->domainBlock($block->getDomain());
 	}
 
+	/**
+	 * Lifts a block at whichever tier it is. Its recorded reasons go with it,
+	 * which `FediverseService` sees to once the domain is on neither list.
+	 */
 	public function unblockDomain(string $reference): AdminDomainBlock {
 		$block = $this->domainBlock($reference);
 		$this->fediverseService->removeAddress($block->getDomain());
 		$this->fediverseService->unsilenceAddress($block->getDomain());
 
 		return $block;
+	}
+
+	/**
+	 * A reason as it is stored: trimmed, null left as null.
+	 *
+	 * @throws \InvalidArgumentException it is longer than a reason is let be
+	 */
+	private function comment(?string $comment): ?string {
+		if ($comment === null) {
+			return null;
+		}
+
+		$comment = trim($comment);
+		if (mb_strlen($comment) > AdminDomainBlock::MAX_COMMENT) {
+			throw new \InvalidArgumentException(
+				'a reason is at most ' . AdminDomainBlock::MAX_COMMENT . ' characters'
+			);
+		}
+
+		return $comment;
 	}
 
 	/**
@@ -799,17 +863,20 @@ class AdminApiService {
 
 	/**
 	 * Puts a domain on the list its severity names and takes it off the other.
+	 *
+	 * In that order: a domain that is on neither list loses its recorded
+	 * reasons, and a move between the tiers must not pass through that.
 	 */
 	private function applySeverity(string $domain, string $severity): void {
 		if ($severity === AdminDomainBlock::SEVERITY_SILENCE) {
-			$this->fediverseService->removeAddress($domain);
 			$this->fediverseService->silenceAddress($domain);
+			$this->fediverseService->removeAddress($domain);
 
 			return;
 		}
 
-		$this->fediverseService->unsilenceAddress($domain);
 		$this->fediverseService->addAddress($domain);
+		$this->fediverseService->unsilenceAddress($domain);
 	}
 
 	/**

@@ -30,6 +30,7 @@ use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Mention;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\ActivityPub\Object\Playlist;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Place;
@@ -212,6 +213,13 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		Details::DISLIKES => 'count_dislikes',
 		Details::QUOTES => 'count_quotes',
 	];
+
+	/**
+	 * The types whose model reads the stored wire object itself (`Question`
+	 * its poll, `Playlist` its list), so a read that leaves `source` out
+	 * still reads it for them.
+	 */
+	public const TYPES_READING_SOURCE = [Question::TYPE, Playlist::TYPE];
 
 	/** The interactions an author can speak about, in this app's own names. */
 	public const INTERACTION_REPLY = 'reply';
@@ -530,6 +538,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private ?StreamCard $card = null;
 	/** null until asked; see isDeliveryHeld() */
 	private ?bool $deliveryHeld = null;
+	/** whether this copy was read without its `source`; see setSourceOmitted() */
+	private bool $sourceOmitted = false;
 
 	/**
 	 * The emoji reactions on this post, attached by ReactionService.
@@ -2282,23 +2292,24 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$this->setQuoteAuthorization($this->validate(self::AS_ID, 'quote_authorization', $data, ''));
 		$this->setQuotePolicy($this->get('quote_policy', $data, ''));
 
-		$source = $this->get('source', $data, '');
-		if ($source !== '') {
-			$sourceData = json_decode($source, true);
+		// What a read takes from the wire object beside the columns — the
+		// custom emoji and the totals the origin stated — is kept digested in
+		// `source_digest` by every write of `source`, so the whole document is
+		// decoded only for a row the digest has not reached yet.
+		$digest = self::storedSourceDigest($data);
+		if ($digest === null) {
+			$source = $this->get('source', $data, '');
+			$sourceData = ($source !== '') ? json_decode($source, true) : null;
 			if (is_array($sourceData)) {
-				// Emoji still come from the raw wire object rather than from
-				// the `tags` column: an emoji tag carries an `icon`, and what
-				// `AS_TAGS` validation keeps of a tag is its type, href and
-				// name — the column holds the post's tags as the model holds
-				// them, which is already without the icons.
-				$this->setEmojis($this->extractEmojisFromTag($sourceData));
+				$digest = $this->digestSource($sourceData);
 
 				// The fallback, for a row stored before the columns existed and
 				// not yet reached by the BackfillStreamPostFields repair step:
 				// the schema change lands during `occ upgrade` and the backfill
 				// runs after it, so an instance serves reads in between. Each
 				// field falls back on its own, because a post may legitimately
-				// have four of the five empty.
+				// have four of the five empty. A row with a digest has been
+				// through one of the two, so it needs none of this.
 				if ($this->getTags() === []) {
 					$this->setTags($this->validateArray(self::AS_TAGS, 'tag', ['tag' => self::listOf('tag', $sourceData)], []));
 				}
@@ -2316,27 +2327,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 						$this->validate(self::AS_ID, 'quoteAuthorization', $sourceData, '')
 					);
 				}
-				$details = $this->getDetailsAll();
-				if (!array_key_exists('remote_likes', $details) && isset($sourceData['likes']['totalItems'])) {
-					$remoteLikes = (int)$sourceData['likes']['totalItems'];
-					$this->setDetailInt(Details::REMOTE_LIKES, $remoteLikes);
-					if (!array_key_exists('likes', $details) || $details['likes'] === 0) {
-						$this->setDetailInt(Details::LIKES, $remoteLikes);
-					}
-				}
-				if (!array_key_exists('remote_boosts', $details) && isset($sourceData['shares']['totalItems'])) {
-					$remoteBoosts = (int)$sourceData['shares']['totalItems'];
-					$this->setDetailInt(Details::REMOTE_BOOSTS, $remoteBoosts);
-					if (!array_key_exists('boosts', $details) || $details['boosts'] === 0) {
-						$this->setDetailInt(Details::BOOSTS, $remoteBoosts);
-					}
-				}
-				$remoteReplies = self::statedCount($sourceData, 'replies');
-				if ($remoteReplies !== null) {
-					$this->setDetailInt(Details::REPLIES, $remoteReplies);
-					$this->setDetailInt(Details::REMOTE_REPLIES, $remoteReplies);
-				}
 			}
+		}
+		if ($digest !== null) {
+			$this->applySourceDigest($digest);
 		}
 
 		$this->setFilterDuplicate($this->getBool('filter_duplicate', $data, false));
@@ -2354,6 +2348,108 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$cache = new Cache();
 		$cache->import($this->getArray('cache', $data, []));
 		$this->setCache($cache);
+	}
+
+	/**
+	 * What `importFromDatabase()` reads out of a wire object beside the
+	 * columns, as `source_digest` keeps it: the custom emoji, which come from
+	 * the raw `tag` because what `AS_TAGS` validation keeps of a tag is its
+	 * type, href and name and not the `icon`, and the totals the origin
+	 * stated for likes, shares and replies.
+	 *
+	 * @param array<string, mixed> $wire the stored wire object
+	 *
+	 * @return array{emojis: list<array<string, mixed>>, likes?: int, shares?: int, replies?: int}
+	 */
+	private function digestSource(array $wire): array {
+		$digest = ['emojis' => $this->extractEmojisFromTag($wire)];
+		if (isset($wire['likes']['totalItems'])) {
+			$digest['likes'] = (int)$wire['likes']['totalItems'];
+		}
+		if (isset($wire['shares']['totalItems'])) {
+			$digest['shares'] = (int)$wire['shares']['totalItems'];
+		}
+		$replies = self::statedCount($wire, 'replies');
+		if ($replies !== null) {
+			$digest['replies'] = $replies;
+		}
+
+		return $digest;
+	}
+
+	/**
+	 * The `source_digest` of a stored wire object, as written beside it: a
+	 * JSON object, `{}` for a source that is empty or not a JSON object.
+	 */
+	public static function sourceDigestOf(string $source): string {
+		$wire = ($source !== '') ? json_decode($source, true) : null;
+		$digest = is_array($wire) ? (new self())->digestSource($wire) : [];
+
+		return (string)json_encode((object)$digest, JSON_UNESCAPED_SLASHES);
+	}
+
+	/**
+	 * The digest a row carries, or null for a row the digest has not
+	 * reached, whose `source` is then read instead.
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	private static function storedSourceDigest(array $data): ?array {
+		$stored = $data['source_digest'] ?? null;
+		if (!is_string($stored) || $stored === '') {
+			return null;
+		}
+		$digest = json_decode($stored, true);
+
+		return is_array($digest) ? $digest : null;
+	}
+
+	/**
+	 * Lays a digest over the post: the emoji, and the origin's totals where
+	 * `details` holds none of its own (replies always, as the origin states
+	 * them).
+	 *
+	 * @param array<string, mixed> $digest
+	 */
+	private function applySourceDigest(array $digest): void {
+		if (array_key_exists('emojis', $digest)) {
+			$this->setEmojis(is_array($digest['emojis']) ? array_values(array_filter($digest['emojis'], 'is_array')) : []);
+		}
+
+		$details = $this->getDetailsAll();
+		if (!array_key_exists('remote_likes', $details) && is_int($digest['likes'] ?? null)) {
+			$remoteLikes = $digest['likes'];
+			$this->setDetailInt(Details::REMOTE_LIKES, $remoteLikes);
+			if (!array_key_exists('likes', $details) || $details['likes'] === 0) {
+				$this->setDetailInt(Details::LIKES, $remoteLikes);
+			}
+		}
+		if (!array_key_exists('remote_boosts', $details) && is_int($digest['shares'] ?? null)) {
+			$remoteBoosts = $digest['shares'];
+			$this->setDetailInt(Details::REMOTE_BOOSTS, $remoteBoosts);
+			if (!array_key_exists('boosts', $details) || $details['boosts'] === 0) {
+				$this->setDetailInt(Details::BOOSTS, $remoteBoosts);
+			}
+		}
+		if (is_int($digest['replies'] ?? null)) {
+			$this->setDetailInt(Details::REPLIES, $digest['replies']);
+			$this->setDetailInt(Details::REMOTE_REPLIES, $digest['replies']);
+		}
+	}
+
+	/**
+	 * Marks a copy read without its `source` (`StreamRequestBuilder`'s
+	 * narrow reads): exported as a client sees it, it is complete, but it
+	 * must never be written back, or the stored wire object would go with it.
+	 */
+	public function setSourceOmitted(bool $omitted): self {
+		$this->sourceOmitted = $omitted;
+
+		return $this;
+	}
+
+	public function isSourceOmitted(): bool {
+		return $this->sourceOmitted;
 	}
 
 	/**

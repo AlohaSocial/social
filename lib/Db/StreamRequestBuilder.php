@@ -69,23 +69,44 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * The posts, every column of them, with no `DISTINCT`.
 	 *
-	 * @param int $format
+	 * A `DISTINCT` over these columns — `source`, `cache`, `details`, `content`
+	 * and the like are TEXT — makes the database build a temporary table of
+	 * every matching row (on disk, on MySQL and MariaDB) before it can return
+	 * one, for a read by primary key as much as for a page. Most of the joins
+	 * a read adds cannot repeat a post: the author and the boosted post are
+	 * joined on unique keys. The ones that can repeat it with identical
+	 * columns — the recipient rows `limitToViewer()` joins, the expiry rows of
+	 * `filterHiddenActors()` — are deduplicated by `getStreamsFromRequest()`,
+	 * and a read that pages over them chooses its page by nid first
+	 * (`getStreamNidsSelectSql()`) and reads the rows by nid afterwards. The
+	 * rest (two raced copies of an avatar's document row, an action row on a
+	 * boost and on the post it boosts) differ in a selected column, which a
+	 * `DISTINCT` never collapsed either.
 	 *
-	 * @return SocialQueryBuilder
+	 * @param bool $narrow read without what a client-format export does not
+	 *                     use (`SocialCrossQueryBuilder::setNarrowStreamRead()`);
+	 *                     only for the client format, and only where the
+	 *                     posts go to a client and nowhere else
 	 */
 	protected function getStreamSelectSql(
 		int $format = Stream::FORMAT_ACTIVITYPUB,
 		bool $withArchived = false,
+		bool $narrow = false,
 	): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->setFormat($format);
+		$qb->setNarrowStreamRead($narrow && $format === ACore::FORMAT_LOCAL);
 
-		$qb->selectDistinct('s.id')
+		$qb->select('s.id')
 			->from(self::TABLE_STREAM, 's');
 		foreach (self::$tables[self::TABLE_STREAM] as $field) {
 			if ($field === 'id') {
+				continue;
+			}
+			if ($field === 'source') {
+				$qb->selectStreamSource('s', 'source');
 				continue;
 			}
 			$qb->addSelect('s.' . $field);
@@ -131,16 +152,12 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	/**
 	 * The same query, projecting one column.
 	 *
-	 * A timeline reads DISTINCT over eighty columns, several of them TEXT,
-	 * because joining the recipients and follows tables can return a stream
-	 * more than once. The database cannot deduplicate that without building
-	 * and sorting the whole matching set first, which is why a timeline used
-	 * to cost the same whether twenty rows were asked for or a hundred.
+	 * Joining the recipients and follows tables can return a post more than
+	 * once, and a page with repeats in it is a page short. Deduplicating whole
+	 * rows means building and sorting the whole matching set first, eighty
+	 * columns of it, several TEXT; deduplicating one integer is cheap, so the
+	 * page is chosen here and the rows are fetched afterwards by id.
 	 *
-	 * Deduplicating one integer instead is cheap, so the page is chosen here
-	 * and the rows are fetched afterwards by id.
-	 */
-	/**
 	 * @param bool $distinct whether the joins this page uses can return a post
 	 *                       more than once.
 	 *
@@ -277,11 +294,58 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	 * @return Stream[]
 	 */
 	public function getStreamsFromRequest(SocialQueryBuilder $qb): array {
-		/** @var Stream[] $result */
-		$result = $qb->getRows([$this, 'parseStreamSelectSql']);
+		/** @var Stream[] $rows */
+		$rows = $qb->getRows([$this, 'parseStreamSelectSql']);
+
+		// one post once, at its first row: see getStreamSelectSql()
+		$result = [];
+		$seen = [];
+		foreach ($rows as $stream) {
+			$nid = (string)$stream->getNid();
+			if (isset($seen[$nid])) {
+				continue;
+			}
+			$seen[$nid] = true;
+			$result[] = $stream;
+		}
 		$this->markMutedConversations($result);
 
 		return $result;
+	}
+
+	/**
+	 * The posts of a page already chosen, in the page's order, each with its
+	 * author, and as the viewer acts on it when `$asViewer`.
+	 *
+	 * @param string[] $nids
+	 *
+	 * @return Stream[]
+	 */
+	protected function streamsInPageOrder(array $nids, int $format, bool $asViewer): array {
+		if ($nids === []) {
+			return [];
+		}
+
+		$qb = $this->getStreamSelectSql($format);
+		$qb->andWhere(
+			$qb->expr()->in('s.nid', $qb->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY))
+		);
+		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
+		if ($asViewer) {
+			$qb->leftJoinStreamAction('sa');
+		}
+
+		$order = array_flip($nids);
+		$streams = array_values(array_filter(
+			$this->getStreamsFromRequest($qb),
+			static fn (Stream $stream): bool => isset($order[(string)$stream->getNid()])
+		));
+		usort(
+			$streams,
+			static fn (Stream $a, Stream $b): int => $order[(string)$a->getNid()] <=> $order[(string)$b->getNid()]
+		);
+
+		return $streams;
 	}
 
 	/**
@@ -431,6 +495,7 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 		$item = AP::instance()->getItemFromType($as);
 		$item->importFromDatabase($data);
 		$item->setExportFormat($qb->getFormat());
+		$item->setSourceOmitted($qb->omitsSourceOf($data));
 		$instances = json_decode($this->get('instances', $data, '[]'), true);
 		if (is_array($instances)) {
 			foreach ($instances as $instance) {

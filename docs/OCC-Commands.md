@@ -590,7 +590,9 @@ it was abandoned, so the queue looked healthiest exactly when a peer had been
 lost for good. The count covers the last seven days, which is how long a
 finished row is kept, and is followed by the same per-instance table under
 "given up". `occ social:queue:retry --instance HOST` puts those deliveries back
-in the queue once the reason they failed has been dealt with.
+in the queue once the reason they failed has been dealt with; the **Retry
+deliveries** button beside each of those instances on the admin page does the
+same.
 
 ---
 
@@ -655,7 +657,9 @@ php occ social:cache:refresh [-f|--force] [--rotate-keys]
 Steps and their output lines: local accounts deleted, local accounts regenerated,
 remote accounts created, remote accounts updated, remote accounts details updated,
 documents cached, hashtags updated. With `--rotate-keys`, `N key pairs refreshed`
-is printed first.
+is printed first. The documents step is the background media sweep of
+`Cron\Cache` (`RemoteMediaPrefetcher::prefetchPending()`): the remote files
+still waiting, newest first, several at a time, for up to 90 seconds.
 
 Rotation is the only step that is opt-in, and it is the only way to rotate a key
 pair: nothing else calls `AccountService::blindKeyRotation()`, and the cron never
@@ -1266,9 +1270,9 @@ is what the Files picker beside it is already for. The metadata is stripped the
 way every other upload's is, because these end up attached to posts that leave
 this instance.
 
-**Why there is no upload form.** This is a small set curated for a whole
-instance rather than something every reader adds to, and the files an
-administrator wants in it are already on a machine they have a shell on.
+**The same from the admin page.** The **GIF library** card of the Aloha
+Social settings lists, adds (by upload) and removes the same pictures through
+the same `GifService`, so a file this command refuses is refused there too.
 
 **Why there is no Giphy or Tenor.** Both would mean every composer on the
 instance talking to a third party: the search terms people type go there, and
@@ -1366,6 +1370,11 @@ php occ social:ip-blocks:remove <block>
 | `block` | Yes | The `id` from `social:ip-blocks:list`, or the range as it lists it (`203.0.113.0/24`; a bare address means its single-address range). The shell completes it from the ranges blocked now |
 
 An unknown id or range prints an error and exits with 2.
+
+The web servers keep the IP blocks in Nextcloud's distributed cache. With a
+cache the console shares with them (Redis, Memcached) the lift applies to
+their next request; with APCu, which the console does not share, it applies
+within a minute (`AccessBlockService::IP_CACHE_TTL`).
 
 ---
 

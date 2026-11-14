@@ -13,7 +13,6 @@ use DateTime;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
-use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use OCP\DB\Exception as DBException;
@@ -135,15 +134,19 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	 *
 	 * @throws ClientNotFoundException the code names no live authorization
 	 */
-	public function exchange(int $clientId, string $code, string $token): SocialClient {
+	public function exchange(int $clientId, string $code, string $token, string $refreshToken = ''): SocialClient {
 		$auth = $this->getByCode($clientId, $code);
+		$now = new DateTime('now');
 
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_CLIENT_AUTH)
 			->set('token', $qb->createNamedParameter($this->secretHasher->hash($token)))
+			->set('refresh_token', $qb->createNamedParameter($this->secretHasher->hash($refreshToken)))
+			->set('token_creation', $qb->createNamedParameter($now, IQueryBuilder::PARAM_DATE))
+			->set('refresh_count', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
 			->set('code', $qb->createNamedParameter(''))
 			->set('code_challenge', $qb->createNamedParameter(''))
-			->set('last_update', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
+			->set('last_update', $qb->createNamedParameter($now, IQueryBuilder::PARAM_DATE))
 			// the authorization row, not the app row: a joined read carries both
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($auth->getAuthId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->neq('code', $qb->createNamedParameter('')));
@@ -152,7 +155,97 @@ class ClientAuthRequest extends ClientRequestBuilder {
 			throw new ClientNotFoundException('unknown code');
 		}
 
-		return $auth->setToken($token);
+		return $auth->setToken($token)
+			->setRefreshToken($refreshToken)
+			->setTokenCreation($now->getTimestamp())
+			->setRefreshCount(0);
+	}
+
+	/**
+	 * Puts a new access and refresh token in place of the ones an
+	 * authorization holds, if the refresh token presented is still its
+	 * current one, and remembers the presented one as spent.
+	 *
+	 * The comparison is in the statement that writes, so of two requests
+	 * presenting the same refresh token at once only one rotates; the other
+	 * updates no row and is told so.
+	 *
+	 * @param string[] $scopes
+	 * @return bool whether the authorization was rotated
+	 */
+	public function rotate(int $authId, string $presented, string $token, string $refreshToken, array $scopes, int $now): bool {
+		$spent = $this->secretHasher->hash($presented);
+		$at = new DateTime('@' . $now);
+
+		$qb = $this->getQueryBuilder();
+		$qb->update(self::TABLE_CLIENT_AUTH)
+			->set('token', $qb->createNamedParameter($this->secretHasher->hash($token)))
+			->set('refresh_token', $qb->createNamedParameter($this->secretHasher->hash($refreshToken)))
+			->set('scopes', $qb->createNamedParameter((string)json_encode(array_values($scopes))))
+			->set('token_creation', $qb->createNamedParameter($at, IQueryBuilder::PARAM_DATE))
+			->set('refresh_count', $qb->createFunction('refresh_count + 1'))
+			->set('last_update', $qb->createNamedParameter($at, IQueryBuilder::PARAM_DATE))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($authId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('refresh_token', $qb->createNamedParameter($spent)));
+
+		if ($qb->executeStatement() === 0) {
+			return false;
+		}
+
+		$this->dbConnection->insertIgnoreConflict(self::TABLE_CLIENT_REFRESH_SPENT, [
+			'auth_id' => $authId,
+			'token' => $spent,
+			'creation' => $at->format('Y-m-d H:i:s'),
+		]);
+
+		return true;
+	}
+
+	/**
+	 * The authorization a refresh token names, with the app it was granted to.
+	 *
+	 * @throws ClientNotFoundException
+	 */
+	public function getByRefreshToken(string $refreshToken): SocialClient {
+		$stored = $this->secretHasher->forLookup($refreshToken);
+		if ($stored === null) {
+			throw new ClientNotFoundException();
+		}
+
+		return $this->getOne('a.refresh_token', $stored);
+	}
+
+	/**
+	 * The authorization a refresh token was spent on, or null for a token
+	 * that was never exchanged here.
+	 */
+	public function spentOn(string $refreshToken): ?int {
+		$stored = $this->secretHasher->forLookup($refreshToken);
+		if ($stored === null) {
+			return null;
+		}
+
+		$qb = $this->dbConnection->getQueryBuilder();
+		$qb->select('auth_id')
+			->from(self::TABLE_CLIENT_REFRESH_SPENT)
+			->where($qb->expr()->eq('token', $qb->createNamedParameter($stored)));
+		$result = $qb->executeQuery();
+		$authId = $result->fetchOne();
+		$result->closeCursor();
+
+		return ($authId === false) ? null : (int)$authId;
+	}
+
+	/**
+	 * One authorization by its row, with the app it was granted to.
+	 *
+	 * @throws ClientNotFoundException
+	 */
+	public function getByAuthId(int $authId): SocialClient {
+		$qb = $this->joined();
+		$qb->andWhere($qb->expr()->eq('a.id', $qb->createNamedParameter($authId, IQueryBuilder::PARAM_INT)));
+
+		return $this->getClientFromRequest($qb);
 	}
 
 	/**
@@ -232,27 +325,54 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Drops authorizations nobody has used inside the TTL.
+	 * The authorizations nobody has used since a moment.
+	 *
+	 * @return SocialClient[]
+	 */
+	public function getIdleSince(int $before): array {
+		$qb = $this->joined();
+		$qb->andWhere($qb->expr()->lt('a.last_update', $qb->createNamedParameter(new DateTime('@' . $before), IQueryBuilder::PARAM_DATE)));
+
+		return $this->getClientsFromRequest($qb);
+	}
+
+	/**
+	 * Drops authorizations nobody has used since a moment
+	 * (`ClientService::idleSeconds()` before now), with their refresh tokens.
 	 *
 	 * The app registration is untouched, which is the other half of what the
 	 * old sweep got wrong: it deleted the whole `social_client` row, so an
 	 * idle token took the app's registration with it and the client had to
 	 * register again.
-	 *
-	 * @param int|null $now the moment the TTL is counted back from; the wall
-	 *                      clock when not given
 	 */
-	public function deprecate(?int $now = null): void {
+	public function deprecate(int $before): void {
 		$qb = $this->getQueryBuilder();
-		$date = new DateTime('@' . (($now ?? time()) - ClientService::TIME_TOKEN_TTL));
-
 		$qb->delete(self::TABLE_CLIENT_AUTH)
-			->where($qb->expr()->lt('last_update', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE)));
+			->where($qb->expr()->lt('last_update', $qb->createNamedParameter(new DateTime('@' . $before), IQueryBuilder::PARAM_DATE)));
 
 		try {
 			$qb->executeStatement();
 		} catch (DBException $e) {
 			$this->logger->warning('could not sweep expired authorizations', ['exception' => $e]);
+		}
+	}
+
+	/**
+	 * Forgets the spent refresh tokens of authorizations that are gone: a
+	 * copy of one of those has nothing left to revoke.
+	 */
+	public function pruneSpentRefreshTokens(): void {
+		$live = $this->dbConnection->getQueryBuilder();
+		$live->select('id')->from(self::TABLE_CLIENT_AUTH);
+
+		$qb = $this->dbConnection->getQueryBuilder();
+		$qb->delete(self::TABLE_CLIENT_REFRESH_SPENT)
+			->where($qb->expr()->notIn('auth_id', $qb->createFunction($live->getSQL())));
+
+		try {
+			$qb->executeStatement();
+		} catch (DBException $e) {
+			$this->logger->warning('could not sweep spent refresh tokens', ['exception' => $e]);
 		}
 	}
 
@@ -331,6 +451,9 @@ class ClientAuthRequest extends ClientRequestBuilder {
 			->selectAlias('a.code_challenge_method', 'auth_code_challenge_method')
 			->selectAlias('a.redirect_uri', 'auth_redirect_uri')
 			->selectAlias('a.token', 'token')
+			->selectAlias('a.refresh_token', 'refresh_token')
+			->selectAlias('a.token_creation', 'token_creation')
+			->selectAlias('a.refresh_count', 'refresh_count')
 			->selectAlias('a.last_update', 'last_update')
 			// the authorization's own date, beside the app registration's: the
 			// Authorized apps page wants to say when *this account* granted it

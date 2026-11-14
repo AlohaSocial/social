@@ -16,6 +16,7 @@ use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\NavigationController;
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Controller\SocialPubController;
+use OCA\Social\Security\ClientAddress;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
@@ -215,14 +216,17 @@ class RateLimitService {
 		return null;
 	}
 
-	/** Who the budget belongs to: the signed-in account, else the address. */
+	/**
+	 * Who the budget belongs to: the signed-in account, else the address,
+	 * an IPv6 one by its /64 (`ClientAddress`).
+	 */
 	private function identity(): string {
 		$user = $this->userSession->getUser();
 		if ($user !== null) {
 			return 'u:' . $user->getUID();
 		}
 
-		return 'a:' . $this->request->getRemoteAddress();
+		return 'a:' . ClientAddress::bucket($this->request->getRemoteAddress());
 	}
 
 	private function now(): int {
