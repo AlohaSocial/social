@@ -49,6 +49,8 @@ class InstanceServiceTest extends TestCase {
 	private ExternalUserService|Stub $externalUserService;
 	private bool $signupsOpen = false;
 	private string $signupMode = ExternalUserService::MODE_APPROVAL;
+	private bool $usersMayInvite = false;
+	private bool $signupHasRoom = false;
 
 	protected function setUp(): void {
 		$this->instancesRequest = $this->createMock(InstancesRequest::class);
@@ -65,7 +67,8 @@ class InstanceServiceTest extends TestCase {
 		$this->externalUserService = $this->createStub(ExternalUserService::class);
 		$this->externalUserService->method('acceptsPublicRegistrations')->willReturnCallback(fn (): bool => $this->signupsOpen);
 		$this->externalUserService->method('mode')->willReturnCallback(fn (): string => $this->signupMode);
-		$this->externalUserService->method('usersMayInvite')->willReturn(false);
+		$this->externalUserService->method('usersMayInvite')->willReturnCallback(fn (): bool => $this->usersMayInvite);
+		$this->externalUserService->method('hasRoom')->willReturnCallback(fn (): bool => $this->signupHasRoom);
 
 		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('imagePath')->willReturn('/apps/social/img/social.svg');
@@ -467,6 +470,24 @@ class InstanceServiceTest extends TestCase {
 
 		$this->signupMode = ExternalUserService::MODE_OPEN;
 		$this->assertFalse($this->service->createLocal()->isApprovalRequired());
+	}
+
+	public function testInvitesAreEnabledOnlyWhileAnInvitationCanBeUsed(): void {
+		$this->theming([]);
+		$this->usersMayInvite = true;
+
+		$this->signupHasRoom = true;
+		$this->assertTrue($this->service->createLocal()->isInvitesEnabled());
+
+		$this->signupHasRoom = false;
+		$this->assertFalse(
+			$this->service->createLocal()->isInvitesEnabled(),
+			'a sign-up that is off or full admits nobody, invited or not'
+		);
+
+		$this->signupHasRoom = true;
+		$this->usersMayInvite = false;
+		$this->assertFalse($this->service->createLocal()->isInvitesEnabled());
 	}
 
 	public function testTheDescriptionIsTheOneWrittenForThisInstance(): void {

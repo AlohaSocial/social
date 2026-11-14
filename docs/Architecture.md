@@ -4622,6 +4622,17 @@ fails, the user is deleted again. `ExternalFirstLoginListener` stops the
 first-login event for external users before other apps see it, so Files does
 not copy the skeleton into their home and no default calendar is made.
 
+**What clients are told.** The instance entities and NodeInfo report this
+sign-up, never Nextcloud's own: `registrations` (v1) and
+`registrations.enabled` (v2) and NodeInfo's `openRegistrations` are
+`ExternalUserService::acceptsPublicRegistrations()` — on, with room, and not
+by invitation only — the same answer whether or not the stored instance row
+exists; `approval_required` is the approval mode; `invites_enabled` is true
+only while an invitation can be used, which needs room as well as the
+"people here may invite" switch; and v2's `registrations.url` is the absolute
+address of the sign-up page while it is open, `null` otherwise. An app has no
+API to create the account, so it opens that page.
+
 **What they reach** (`ExternalScope`, `Middleware\ExternalScopeMiddleware`).
 The middleware is registered as a **global** middleware, so it runs before the
 controllers of every app and of core, and it refuses whatever `ExternalScope`

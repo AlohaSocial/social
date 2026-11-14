@@ -146,7 +146,6 @@ class OAuthController extends Controller {
 			$version = $this->configService->getAppValue('installed_version');
 			// an object with the one member the schema requires, never `[]`
 			$usage = ['users' => new \stdClass()];
-			$openReg = false;
 		}
 
 		$software = [

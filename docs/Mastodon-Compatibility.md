@@ -59,9 +59,12 @@ the push provider. Nextcloud's own notification channel is a separate feature.
 
 - Registration and core account credentials belong to Nextcloud. Social does
   not replace Mastodon's full sign-up, email or password-management system.
-  Mastodon instance API registration flags remain disabled while
-  `POST /api/v1/accounts` cannot register accounts. NodeInfo independently
-  advertises the actual availability of Social's web registration flow.
+  `POST /api/v1/accounts` cannot register accounts. The instance entities
+  still report Aloha Social's own sign-up for accounts without Nextcloud
+  access as it stands: `registrations`, `approval_required` and
+  `invites_enabled` in v1, `registrations.enabled`, `approval_required` and
+  `url` (the sign-up page) in v2, and NodeInfo's `openRegistrations`. A client
+  sends people to `registrations.url` instead of calling the API.
   As in Mastodon, changing or resetting the password revokes every OAuth
   token of the account; the change itself is made in Nextcloud.
 - `POST /oauth/token` answers an account token with `refresh_token` and
