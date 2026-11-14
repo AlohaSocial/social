@@ -46,6 +46,10 @@ trait StreamTrendBuckets {
 	public const TREND_BUCKET_SPAN = 864000 + self::TREND_BUCKET;
 	/** how far before the last pass a post's `creation` is looked at again, for a write that was in flight */
 	private const TREND_CREATION_OVERLAP = 300;
+	/** buckets written by one INSERT: three parameters each, well inside SQLite's 999 */
+	public const TREND_INSERT_ROWS = 250;
+	/** hashtags named by one DELETE */
+	private const TREND_DELETE_NAMES = 500;
 
 	/** The start of the bucket a moment falls in. */
 	public static function trendHourOf(int $time): int {
@@ -96,11 +100,15 @@ trait StreamTrendBuckets {
 			));
 		}
 
-		foreach ([self::TABLE_TAG_HOURS, self::TABLE_TAG_HOURS_DIRTY] as $table) {
-			$qb = $this->getQueryBuilder();
-			$qb->delete($table)
-				->where($qb->expr()->lt('hour_start', $qb->createNamedParameter($floor, IQueryBuilder::PARAM_INT)));
-			$qb->executeStatement();
+		// what falls out of the kept span only changes when the oldest kept
+		// hour does: once an hour, not on every pass
+		if ($mark <= 0 || self::trendHourOf($mark - self::TREND_BUCKET_SPAN) !== $floor) {
+			foreach ([self::TABLE_TAG_HOURS, self::TABLE_TAG_HOURS_DIRTY] as $table) {
+				$qb = $this->getQueryBuilder();
+				$qb->delete($table)
+					->where($qb->expr()->lt('hour_start', $qb->createNamedParameter($floor, IQueryBuilder::PARAM_INT)));
+				$qb->executeStatement();
+			}
 		}
 
 		$this->configService->setAppValue(self::TREND_BUCKETS_MARK, (string)$now);
@@ -118,6 +126,7 @@ trait StreamTrendBuckets {
 			's.published_time', $qb->createNamedParameter(new DateTime('@' . $floor), IQueryBuilder::PARAM_DATE)
 		));
 
+		/** @var array<int, array<array-key, int>> $counts a hashtag that reads as a number is an int key */
 		$counts = [];
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {
@@ -127,14 +136,19 @@ trait StreamTrendBuckets {
 		}
 		$cursor->closeCursor();
 
+		$rows = [];
+		foreach ($counts as $hour => $uses) {
+			foreach ($uses as $hashtag => $count) {
+				$rows[] = [(string)$hashtag, $hour, $count];
+			}
+		}
+
 		$this->dbConnection->beginTransaction();
 		try {
 			foreach ([self::TABLE_TAG_HOURS, self::TABLE_TAG_HOURS_DIRTY] as $table) {
 				$this->getQueryBuilder()->delete($table)->executeStatement();
 			}
-			foreach ($counts as $hour => $uses) {
-				$this->insertTrendBuckets($hour, $uses);
-			}
+			$this->insertTrendBucketRows($rows);
 			$this->dbConnection->commit();
 		} catch (Throwable $e) {
 			$this->dbConnection->rollBack();
@@ -170,13 +184,21 @@ trait StreamTrendBuckets {
 			}
 			$cursor->closeCursor();
 
+			['stale' => $stale, 'rows' => $rows] = self::trendBucketChanges($hour, $uses, $this->storedTrendBuckets($hour));
+			if ($stale === [] && $rows === []) {
+				continue;
+			}
+
 			$this->dbConnection->beginTransaction();
 			try {
-				$delete = $this->getQueryBuilder();
-				$delete->delete(self::TABLE_TAG_HOURS)
-					->where($delete->expr()->eq('hour_start', $delete->createNamedParameter($hour, IQueryBuilder::PARAM_INT)));
-				$delete->executeStatement();
-				$this->insertTrendBuckets($hour, $uses);
+				foreach (array_chunk($stale, self::TREND_DELETE_NAMES) as $names) {
+					$delete = $this->getQueryBuilder();
+					$delete->delete(self::TABLE_TAG_HOURS)
+						->where($delete->expr()->eq('hour_start', $delete->createNamedParameter($hour, IQueryBuilder::PARAM_INT)))
+						->andWhere($delete->expr()->in('hashtag', $delete->createNamedParameter($names, IQueryBuilder::PARAM_STR_ARRAY)));
+					$delete->executeStatement();
+				}
+				$this->insertTrendBucketRows($rows);
 				$this->dbConnection->commit();
 			} catch (Throwable $e) {
 				$this->dbConnection->rollBack();
@@ -185,18 +207,83 @@ trait StreamTrendBuckets {
 		}
 	}
 
-	/** @param array<string, int> $uses hashtag => uses in the hour */
-	private function insertTrendBuckets(int $hour, array $uses): void {
+	/**
+	 * What recounting an hour changes. Only the buckets whose count moved are
+	 * written: the hour the last pass ended in is recounted on every pass, and
+	 * most of its hashtags have not been used again since.
+	 *
+	 * @param array<array-key, int> $uses hashtag => uses, counted from the posts
+	 * @param array<array-key, int> $stored hashtag => uses, as stored
+	 *
+	 * @return array{stale: list<string>, rows: list<array{0: string, 1: int, 2: int}>}
+	 *                                                                                  the stored buckets to remove (moved or no longer used), and
+	 *                                                                                  the buckets to write
+	 */
+	public static function trendBucketChanges(int $hour, array $uses, array $stored): array {
+		$stale = [];
+		$rows = [];
 		foreach ($uses as $hashtag => $count) {
-			if ($count <= 0) {
+			if (isset($stored[$hashtag]) && $stored[$hashtag] === $count) {
 				continue;
 			}
-			$qb = $this->getQueryBuilder();
-			$qb->insert(self::TABLE_TAG_HOURS)
-				->setValue('hashtag', $qb->createNamedParameter((string)$hashtag))
-				->setValue('hour_start', $qb->createNamedParameter($hour, IQueryBuilder::PARAM_INT))
-				->setValue('uses', $qb->createNamedParameter($count, IQueryBuilder::PARAM_INT));
-			$qb->executeStatement();
+			if (isset($stored[$hashtag])) {
+				$stale[] = (string)$hashtag;
+			}
+			$rows[] = [(string)$hashtag, $hour, $count];
+		}
+		foreach (array_keys($stored) as $hashtag) {
+			if (!isset($uses[$hashtag])) {
+				$stale[] = (string)$hashtag;
+			}
+		}
+
+		return ['stale' => $stale, 'rows' => $rows];
+	}
+
+	/**
+	 * The buckets of one hour as they are stored.
+	 *
+	 * @return array<string, int> hashtag => uses
+	 */
+	private function storedTrendBuckets(int $hour): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select('hashtag', 'uses')
+			->from(self::TABLE_TAG_HOURS)
+			->where($qb->expr()->eq('hour_start', $qb->createNamedParameter($hour, IQueryBuilder::PARAM_INT)));
+
+		$stored = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$stored[(string)$data['hashtag']] = (int)$data['uses'];
+		}
+		$cursor->closeCursor();
+
+		return $stored;
+	}
+
+	/**
+	 * Writes buckets `TREND_INSERT_ROWS` to a statement, as an hour can hold
+	 * thousands of hashtags and the query builder inserts one row per
+	 * statement. `*PREFIX*` and the backticks are what the connection
+	 * rewrites for the platform.
+	 *
+	 * @param list<array{0: string, 1: int, 2: int}> $rows hashtag, hour, uses
+	 */
+	private function insertTrendBucketRows(array $rows): void {
+		$rows = array_values(array_filter($rows, static fn (array $row): bool => $row[2] > 0));
+		foreach (array_chunk($rows, self::TREND_INSERT_ROWS) as $chunk) {
+			$params = [];
+			$types = [];
+			foreach ($chunk as [$hashtag, $hour, $count]) {
+				array_push($params, $hashtag, $hour, $count);
+				array_push($types, IQueryBuilder::PARAM_STR, IQueryBuilder::PARAM_INT, IQueryBuilder::PARAM_INT);
+			}
+			$this->dbConnection->executeStatement(
+				'INSERT INTO `*PREFIX*' . self::TABLE_TAG_HOURS . '` (`hashtag`, `hour_start`, `uses`) VALUES '
+				. implode(', ', array_fill(0, count($chunk), '(?, ?, ?)')),
+				$params,
+				$types
+			);
 		}
 	}
 
@@ -266,21 +353,33 @@ trait StreamTrendBuckets {
 			return;
 		}
 
+		// only a public post counts in a bucket, and the posts of one
+		// deletion mostly share a handful of hours: one mark per hour, not per
+		// post, as a prune deletes posts five hundred at a time
 		$qb = $this->getQueryBuilder();
 		$qb->select('s.published_time')
 			->from(self::TABLE_STREAM, 's')
 			->where($qb->expr()->in('s.id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)))
+			->andWhere($qb->expr()->eq('s.visibility', $qb->createNamedParameter(Stream::TYPE_PUBLIC)))
 			->andWhere($qb->expr()->gte(
 				's.published_time',
 				$qb->createNamedParameter(new DateTime('@' . $this->trendBucketFloor()), IQueryBuilder::PARAM_DATE)
 			));
 
 		$cursor = $qb->executeQuery();
-		$rows = $cursor->fetchAll();
+		$found = $cursor->fetchAll();
 		$cursor->closeCursor();
 
-		foreach ($rows as $data) {
-			$this->markTrendHour(DbTime::toTimestamp($data['published_time'] ?? ''));
+		$hours = [];
+		foreach ($found as $data) {
+			$publishedTime = DbTime::toTimestamp($data['published_time'] ?? '');
+			if ($publishedTime > 0) {
+				$hours[self::trendHourOf($publishedTime)] = true;
+			}
+		}
+
+		foreach (array_keys($hours) as $hour) {
+			$this->markTrendHour($hour);
 		}
 	}
 

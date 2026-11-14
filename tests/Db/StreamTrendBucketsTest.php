@@ -15,6 +15,8 @@ use OCA\Social\Db\StreamRequest;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Tests\Migration\FakeConnection;
+use OCP\DB\IResult;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -32,6 +34,8 @@ class StreamTrendBucketsTest extends TestCase {
 	private array $config = [];
 	/** @var list<array{string, array}> */
 	private array $marked = [];
+	/** @var list<array{0: string, 1: array, 2: array}> the raw statements run, with their parameters and types */
+	private array $statements = [];
 
 	/** @param string[] $methods */
 	private function request(array $methods): StreamRequest&MockObject {
@@ -55,10 +59,15 @@ class StreamTrendBucketsTest extends TestCase {
 			$this->config[$key] = (string)$value;
 		});
 		$marked = &$this->marked;
-		$connection = new class($marked) extends FakeConnection {
-			/** @param list<array{string, array}> $marked */
+		$statements = &$this->statements;
+		$connection = new class($marked, $statements) extends FakeConnection {
+			/**
+			 * @param list<array{string, array}> $marked
+			 * @param list<array{0: string, 1: array, 2: array}> $statements
+			 */
 			public function __construct(
 				private array &$marked,
+				private array &$statements,
 			) {
 				parent::__construct();
 			}
@@ -67,6 +76,12 @@ class StreamTrendBucketsTest extends TestCase {
 				$this->marked[] = [$table, $values];
 
 				return 1;
+			}
+
+			public function executeStatement($sql, ?array $params = null, ?array $types = null): int {
+				$this->statements[] = [$sql, $params ?? [], $types ?? []];
+
+				return count($params ?? []) / 3;
 			}
 		};
 		foreach (['configService' => $config, 'dbConnection' => $connection] as $property => $value) {
@@ -179,5 +194,95 @@ class StreamTrendBucketsTest extends TestCase {
 				$name . ' repairs tag rows without marking their hour'
 			);
 		}
+	}
+
+	public function testRecountingAnHourThatDidNotMoveWritesNothing(): void {
+		$this->assertSame(
+			['stale' => [], 'rows' => []],
+			StreamRequest::trendBucketChanges(7200, ['cats' => 2, 'dogs' => 1], ['dogs' => 1, 'cats' => 2])
+		);
+	}
+
+	public function testRecountingWritesOnlyTheBucketsThatMoved(): void {
+		$this->assertSame(
+			[
+				// moved, and no longer used
+				'stale' => ['cats', 'birds'],
+				// moved, and new
+				'rows' => [['cats', 7200, 3], ['fish', 7200, 1]],
+			],
+			StreamRequest::trendBucketChanges(7200, ['cats' => 3, 'dogs' => 1, 'fish' => 1], ['cats' => 2, 'dogs' => 1, 'birds' => 4])
+		);
+	}
+
+	public function testANumericHashtagIsWrittenAsTheTextItIs(): void {
+		// an array key that looks like a number is an int in PHP
+		$changes = StreamRequest::trendBucketChanges(7200, ['2026' => 1], ['1999' => 1]);
+
+		$this->assertSame(['1999'], $changes['stale']);
+		$this->assertSame([['2026', 7200, 1]], $changes['rows']);
+	}
+
+	public function testBucketsAreWrittenManyToAStatement(): void {
+		$rows = [];
+		for ($i = 0; $i < 600; $i++) {
+			$rows[] = ['tag' . $i, 7200, 1 + $i % 3];
+		}
+		$rows[] = ['unused', 7200, 0];
+
+		$insert = new \ReflectionMethod(StreamRequest::class, 'insertTrendBucketRows');
+		$insert->invoke($this->request([]), $rows);
+
+		$this->assertCount(3, $this->statements, 'six hundred buckets, TREND_INSERT_ROWS to a statement');
+		$sizes = array_map(static fn (array $statement): int => count($statement[1]) / 3, $this->statements);
+		$this->assertSame([StreamRequest::TREND_INSERT_ROWS, StreamRequest::TREND_INSERT_ROWS, 100], $sizes, 'a bucket of no uses is not written');
+
+		[$sql, $params, $types] = $this->statements[2];
+		$this->assertStringStartsWith('INSERT INTO `*PREFIX*' . CoreRequestBuilder::TABLE_TAG_HOURS . '` (`hashtag`, `hour_start`, `uses`) VALUES (?, ?, ?), ', $sql);
+		$this->assertSame(100, substr_count($sql, '(?, ?, ?)'));
+		$this->assertSame(['tag500', 7200, 1 + 500 % 3], array_slice($params, 0, 3));
+		$this->assertSame([IQueryBuilder::PARAM_STR, IQueryBuilder::PARAM_INT, IQueryBuilder::PARAM_INT], array_slice($types, 0, 3));
+	}
+
+	public function testADeletionMarksEachHourItsPostsWerePublishedInOnce(): void {
+		$hour = StreamRequest::trendHourOf(time() - 7200);
+		$published = [$hour + 60, $hour + 600, $hour + 3599, $hour + 3600 + 5, 0];
+
+		$request = $this->getMockBuilder(StreamRequest::class)
+			->disableOriginalConstructor()
+			->onlyMethods(['getQueryBuilder'])
+			->getMock();
+		$request->method('getQueryBuilder')->willReturnCallback(function () use ($published): SocialQueryBuilder {
+			$qb = $this->createMock(SocialQueryBuilder::class);
+			foreach (['select', 'from', 'where', 'andWhere'] as $method) {
+				$qb->method($method)->willReturnSelf();
+			}
+			$qb->method('expr')->willReturn(new FakeExpressions());
+			$result = $this->createMock(IResult::class);
+			$result->method('fetchAll')->willReturn(array_map(
+				static fn (int $time): array => ['published_time' => $time > 0 ? gmdate('Y-m-d H:i:s', $time) : ''],
+				$published
+			));
+			$qb->method('executeQuery')->willReturn($result);
+
+			return $qb;
+		});
+		$this->marked = [];
+		$connection = $this->request([]);
+		(new \ReflectionProperty(CoreRequestBuilder::class, 'dbConnection'))->setValue(
+			$request,
+			(new \ReflectionProperty(CoreRequestBuilder::class, 'dbConnection'))->getValue($connection)
+		);
+
+		$request->markTrendHoursOf(['a', 'b', 'c', 'd', 'e']);
+
+		$this->assertSame(
+			[
+				[CoreRequestBuilder::TABLE_TAG_HOURS_DIRTY, ['hour_start' => $hour]],
+				[CoreRequestBuilder::TABLE_TAG_HOURS_DIRTY, ['hour_start' => $hour + 3600]],
+			],
+			$this->marked,
+			'five posts in two hours, and one with no time: two marks'
+		);
 	}
 }

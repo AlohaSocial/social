@@ -3596,8 +3596,13 @@ hour. Each pass (`settleTrendBuckets()`) recounts the hours of the public
 statuses stored since the previous pass, found on the indexed `creation` with
 five minutes of overlap for writes in flight — by the hour a post says it was
 published in, so a late arrival counts where the windows count it — and the
-hours in `social_tag_dirty`, which a deletion or an edit marks; buckets older
-than the widest window are dropped. The first pass after the upgrade, which finds
+hours in `social_tag_dirty`, which a deletion or an edit marks, once per hour
+its public posts were published in rather than once per post; buckets older
+than the widest window are dropped when the oldest kept hour moves, so once an
+hour. A recount compares the hour with its stored buckets and writes only the
+ones whose count moved (`trendBucketChanges()`), `TREND_INSERT_ROWS` (250) to an
+`INSERT`: the hour the last pass ended in is recounted on every pass, and a pass
+in which nothing moved writes no bucket at all. The first pass after the upgrade, which finds
 no `trend_buckets_mark` in the app config, builds every bucket of the window in
 one read of its tag rows. A window reaching further back than the buckets are
 kept is counted from the posts as before. Review, hidden tags and the scoring
