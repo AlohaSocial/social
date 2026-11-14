@@ -462,7 +462,10 @@ class CacheWorkBudgetTest extends TestCase {
 			$id = self::BASE . '/media/' . (++$this->sequence) . '.jpg';
 			$rows[] = [
 				'id' => $id, 'id_prim' => md5($id), 'type' => 'Image', 'parent_id' => '', 'parent_id_prim' => '',
+				// the keys of the copy names as the app writes them: empty for
+				// no copy, which is what the sweep looks the rows up by
 				'media_type' => 'image/jpeg', 'mime_type' => '', 'url' => $id, 'local_copy' => '', 'resized_copy' => '',
+				'local_copy_prim' => '', 'resized_copy_prim' => '',
 				'account' => '', 'meta' => '[]', 'blurhash' => '', 'description' => '', 'public' => false,
 				'error' => 0, 'creation' => new DateTime(), 'caching' => new DateTime('2001-01-01'),
 			];
