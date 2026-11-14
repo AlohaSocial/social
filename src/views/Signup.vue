@@ -13,11 +13,45 @@
 			<NcNoteCard :type="outcome.state === 'error' ? 'error' : 'success'">
 				{{ outcomeText }}
 			</NcNoteCard>
-			<div class="signup__actions">
+
+			<!-- the code from the confirmation email, typed here instead of following the link -->
+			<form
+				v-if="offersCode"
+				class="signup__form signup__code"
+				novalidate
+				@submit.prevent="confirmCode">
+				<NcTextField
+					v-model="code"
+					:label="t('social', 'Confirmation code')"
+					:error="codeMessage !== ''"
+					:helperText="codeMessage || t('social', 'The six digits from the email')"
+					inputmode="numeric"
+					autocomplete="one-time-code"
+					:maxlength="6"
+					required />
+				<NcButton
+					type="submit"
+					variant="primary"
+					:disabled="confirming"
+					wide>
+					<template v-if="confirming" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Confirm') }}
+				</NcButton>
+			</form>
+			<NcNoteCard v-else-if="codeLocked" type="warning">
+				{{ codeMessage }}
+			</NcNoteCard>
+
+			<p v-if="signingIn" class="signup__progress" role="status">
+				{{ t('social', 'Signing you in …') }}
+			</p>
+			<div v-else class="signup__actions">
 				<NcButton
 					v-if="outcome.state === 'created'"
 					variant="primary"
-					:href="state.loginUrl"
+					:href="outcome.loginUrl || state.loginUrl"
 					wide>
 					{{ t('social', 'Log in') }}
 				</NcButton>
@@ -243,6 +277,7 @@ import { signupUrl } from '../services/externalApi.js'
 import { fetchChallenge, startSolving } from '../services/proofOfWork.js'
 import { progressOf } from '../utils/proofOfWork.js'
 import { blueskyHandle } from '../utils/blueskyHandle.js'
+import { submitCoreLogin } from '../utils/coreLogin.js'
 
 /** What `ExternalSignupService::pageState()` provides when it provides nothing. */
 const CLOSED = {
@@ -265,6 +300,7 @@ const CLOSED = {
 	domain: '',
 	bluesky: { enabled: false, host: '' },
 	loginUrl: '/login',
+	returnUrl: '',
 	result: null,
 }
 
@@ -311,8 +347,24 @@ export default {
 			powBits: 0,
 			/** whether a submitted form waits for the proof of work */
 			solving: false,
-			/** @type {{state: string, handle?: string, message?: string}|null} */
+			/** @type {{state: string, handle?: string, message?: string, code?: boolean, loginUrl?: string}|null} */
 			outcome: state.result ?? null,
+			code: '',
+			codeMessage: '',
+			/** whether the server takes no more codes for this registration */
+			codeLocked: false,
+			confirming: false,
+			/** whether the page is handing over to the login form */
+			signingIn: false,
+			/**
+			 * The login and password just typed into this page, kept only
+			 * until the account they make can be logged in to and never
+			 * stored: a page opened from the email link has none, so it never
+			 * logs anybody in.
+			 *
+			 * @type {{user: string, password: string}|null}
+			 */
+			credentials: null,
 		}
 	},
 
@@ -395,14 +447,23 @@ export default {
 		outcomeText() {
 			switch (this.outcome?.state) {
 				case 'verify':
-					return t('social', 'We sent a link to {email}. Follow it within 24 hours to confirm your address.', { email: this.email || t('social', 'your email address') })
+					return this.outcome.code
+						? t('social', 'We sent a code and a link to {email}. Type the code below, or follow the link within 24 hours.', { email: this.email || t('social', 'your email address') })
+						: t('social', 'We sent a link to {email}. Follow it within 24 hours to confirm your address.', { email: this.email || t('social', 'your email address') })
 				case 'approval':
 					return t('social', 'Your registration is waiting for an administrator. You get an email once it has been looked at.')
 				case 'created':
-					return t('social', 'Log in as {handle} with the password you chose.', { handle: this.outcome.handle ?? '' })
+					return this.signingIn
+						? t('social', 'Your account {handle} is ready.', { handle: this.outcome.handle ?? '' })
+						: t('social', 'Log in as {handle} with the password you chose.', { handle: this.outcome.handle ?? '' })
 				default:
 					return this.outcome?.message ?? t('social', 'Something went wrong.')
 			}
+		},
+
+		/** @return {boolean} whether the page asks for the code from the email */
+		offersCode() {
+			return this.outcome?.state === 'verify' && this.outcome.code === true && !this.codeLocked
 		},
 
 		/** @return {string} */
@@ -512,10 +573,12 @@ export default {
 					age: this.age,
 					invite: this.state.inviteToken,
 					website: this.website,
+					return: this.state.returnUrl,
 					...(proof === null ? {} : proof),
 				})
+				this.credentials = { user: data.handle, password: this.password }
 				this.password = ''
-				this.outcome = data
+				this.finish(data)
 			} catch (error) {
 				if (this.state.proofOfWork) {
 					this.preparePow()
@@ -528,6 +591,50 @@ export default {
 			} finally {
 				this.sending = false
 			}
+		},
+
+		/** @return {Promise<void>} */
+		async confirmCode() {
+			this.confirming = true
+			this.codeMessage = ''
+			try {
+				const { data } = await axios.post(signupUrl('/confirm'), { code: this.code })
+				this.finish(data)
+			} catch (error) {
+				const data = error?.response?.data ?? {}
+				this.codeLocked = data.field === 'code-locked'
+				if (this.codeLocked) {
+					this.credentials = null
+				}
+				this.codeMessage = data.message
+					|| (error?.response?.status === 429
+						? t('social', 'Too many attempts right now, please try again later.')
+						: t('social', 'The code could not be checked. Please try again.'))
+			} finally {
+				this.confirming = false
+			}
+		},
+
+		/**
+		 * Shows what a registration came to, and logs in to an account that
+		 * now exists with what was typed on this page. Where the server makes
+		 * everybody set up two-factor authentication, the Log in button takes
+		 * over instead, so that happens on the login page.
+		 *
+		 * @param {{state: string, handle?: string, code?: boolean, loginUrl?: string}} result the server's answer
+		 */
+		finish(result) {
+			this.outcome = result
+			if (result.state === 'verify') {
+				return
+			}
+			const credentials = this.credentials
+			this.credentials = null
+			if (result.state !== 'created' || credentials === null || this.state.twoFactorRequired) {
+				return
+			}
+			this.signingIn = true
+			submitCoreLogin({ ...credentials, redirectUrl: this.state.returnUrl })
 		},
 	},
 }
@@ -713,6 +820,10 @@ export default {
 		display: flex;
 		flex-direction: column;
 		gap: calc(var(--default-grid-baseline) * 2);
+		margin-block-start: calc(var(--default-grid-baseline) * 3);
+	}
+
+	&__code {
 		margin-block-start: calc(var(--default-grid-baseline) * 3);
 	}
 

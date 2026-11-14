@@ -105,6 +105,7 @@ class RouteAuthMatrixTest extends TestCase {
 		'QueueController::asyncForRequest' => 'the server calling itself, authenticated by AsyncRequestSigner',
 		'SignupController::page' => 'signup form',
 		'SignupController::submit' => 'signup form submission, CSRF checked',
+		'SignupController::confirm' => 'confirmation code typed into the signup page, CSRF checked, bound to the session\'s own registration, rate limited',
 		'SignupController::verify' => 'email verification link',
 		'SignupController::challenge' => 'signed proof-of-work challenge for the signup form, stores nothing, rate limited',
 		'SocialPubController::collections' => 'public collections page',

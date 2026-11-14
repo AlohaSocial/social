@@ -286,8 +286,10 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_scheduled` | Posts asked to be published later: one row per waiting post, with the client's request as JSON in `params` and the resolved visibility inside it |
 | `social_durable_cache` | `DurableCache`'s entries on an instance with no memcache: a hashed key, a JSON value and the unix time it expires at, indexed on that for the purge in `Cron\Cache`. Wherever a memcache is configured, only what `setShared()` writes for a background job and a web request to share — such as the Jetstream listener's cursor and report (`JetstreamState`) |
 | `social_ext_user` | The logins of self-registered external users: the Nextcloud user id, which is also their handle, its lowercase form (unique), the password hash, the display name and how the account came to be (`origin`). Everything else about the person is where Nextcloud keeps it for any user |
-| `social_ext_signup` | Registrations of external users that are not accounts yet: the handle and email they reserve, the password hash, the SHA-256 of the confirmation token, whether the email is confirmed (`verified`) and whether an administrator has to decide (`approval`), the invitation used and a salted hash of the address it came from |
+| `social_ext_signup` | Registrations of external users that are not accounts yet: the handle and email they reserve, the password hash, the SHA-256 of the confirmation token, whether the email is confirmed (`verified`) and whether an administrator has to decide (`approval`), the invitation used and a salted hash of the address it came from Since `Version1000Date20261114000002` also the app authorization request a registration started from an app returns to (`return_to`), and the HMAC of the code sent with the confirmation link (`code_hash`) with the wrong codes tried (`code_attempts`). |
 | `social_ext_invite` | Invitation links for external users: the token as it is sent, who made it, how many registrations it admits (`max_uses`, 0 for any number), how many it has (`uses`) and when it expires (`expires`, unix seconds, 0 for never) |
+
+`Version1000Date20261114000002` adds `return_to`, `code_hash` and `code_attempts` to `social_ext_signup`, so a registration made from a phone app can be confirmed in the page it was made on and lead back to the app — see *Registering from an app* under [External users](#external-users). All three are empty or 0 for registrations made before, which then confirm by their link only.
 
 `Version1000Date20260927000010` adds the three tables of self-registered external users, `social_ext_user`, `social_ext_signup` and `social_ext_invite` — see [External users](#external-users).
 
@@ -4632,6 +4634,48 @@ only while an invitation can be used, which needs room as well as the
 "people here may invite" switch; and v2's `registrations.url` is the absolute
 address of the sign-up page while it is open, `null` otherwise. An app has no
 API to create the account, so it opens that page.
+
+**Registering from an app** (`External\SignupReturn`, `POST /signup/confirm`).
+A phone app with no account to sign in to opens `/signup?return=<its OAuth
+authorization request>` in the system's sign-in browser (an
+`ASWebAuthenticationSession`, a Custom Tab) and expects to come back signed
+in. `SignupReturn::normalize()` takes `return` only when it is this server's
+own authorize route — at the domain root, through `index.php` or with pretty
+URLs, on an origin this server is reached at (the generated URL, the cloud
+URL, the social URL), with a `client_id`, and without `@`, a fragment,
+credentials, a backslash, whitespace or a malformed escape — and gives back
+that route as a path with the query untouched, which is the shape core's
+login form follows as `redirect_url`. Anything else becomes ''. It is checked
+again on every use: on the page, on the form, and when an email is written
+from the stored registration (`social_ext_signup.return_to`).
+
+Following the email link means leaving the sign-in browser, so the
+confirmation email also carries a six-digit code that the page asks for.
+Only an HMAC of it is stored (`code_hash`, keyed with the instance secret and
+the registration's own token hash), it expires with the link, and a code is
+only tried against the registration this browser session's form made
+(`SignupController::SESSION_PENDING`): every "check your email" answer offers
+the code field and records the registration behind it, or none, so the page
+does not tell a real registration from one answered without storing anything.
+Five wrong codes, counted per registration (`code_attempts`, which then
+clears `code_hash`) and per session, leave only the link. A right code does
+what the link does.
+
+Once the account exists in the tab where the password was typed — open mode
+without confirmation, or a right code — the page logs in by posting core's own
+login form (`submitCoreLogin()`): a top-level POST from this origin with the
+session's request token, `user`, `password` and `redirect_url`. Core's login
+then does everything it does for a typed login: the origin and CSRF checks,
+brute-force protection, two-factor authentication, the session token, and the
+redirect to the authorization request, which returns the code to the app. No
+login is made on the server's side of the registration and no private API is
+used for it. The password is kept in the page's memory only until then. The
+page opened from the email link never has it, so the link never logs anybody
+in, wherever it is opened; its page and every welcome email (after the link,
+the code or an administrator's approval) offer a Log in button whose
+`loginUrl` carries the stored `return_to`. Where two-factor authentication is
+enforced for external users the page does not log in either, and leaves it to
+the login page with the same `redirect_url`.
 
 **What they reach** (`ExternalScope`, `Middleware\ExternalScopeMiddleware`).
 The middleware is registered as a **global** middleware, so it runs before the

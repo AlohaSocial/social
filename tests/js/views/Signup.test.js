@@ -10,6 +10,8 @@ import { leadingZeroBits } from '../../../src/utils/proofOfWork.js'
 
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock('@nextcloud/axios', () => ({ default: { get, post } }))
+const { submitCoreLogin } = vi.hoisted(() => ({ submitCoreLogin: vi.fn() }))
+vi.mock('../../../src/utils/coreLogin.js', () => ({ submitCoreLogin }))
 const { state } = vi.hoisted(() => ({ state: { value: {} } }))
 vi.mock('@nextcloud/initial-state', () => ({
 	loadState: (app, key, fallback) => (app === 'social' && key === 'signup') ? state.value : fallback,
@@ -54,6 +56,7 @@ describe('the registration page', () => {
 	beforeEach(() => {
 		post.mockReset()
 		get.mockReset()
+		submitCoreLogin.mockReset()
 	})
 
 	it('solves the proof of work while the form is filled in and sends its answer', async () => {
@@ -182,6 +185,7 @@ describe('the registration page', () => {
 			age: true,
 			invite: 'tok',
 			website: '',
+			return: '',
 		})
 		expect(wrapper.text()).toContain('Check your email')
 		expect(wrapper.text()).toContain('a@example.org')
@@ -221,6 +225,99 @@ describe('the registration page', () => {
 
 		expect(wrapper.vm.field).toBe('handle')
 		expect(wrapper.text()).toContain('This username is already taken.')
+	})
+
+	describe('coming from an app', () => {
+		const AUTHORIZE = '/index.php/apps/social/oauth/authorize?client_id=app&state=s1'
+		const LOGIN = '/index.php/login?redirect_url=' + encodeURIComponent(AUTHORIZE)
+
+		async function register(pageState, answer) {
+			post.mockResolvedValueOnce({ data: answer })
+			const wrapper = await page({ ...OPEN, returnUrl: AUTHORIZE, loginUrl: LOGIN, ...pageState })
+			await continueToForm(wrapper)
+			Object.assign(wrapper.vm, { handle: 'alice', email: 'a@example.org', password: 'long enough', rules: true, age: true })
+			await wrapper.find('form').trigger('submit')
+			await flushPromises()
+
+			return wrapper
+		}
+
+		async function typeCode(wrapper, code, answer) {
+			if (answer instanceof Error) {
+				post.mockRejectedValueOnce(answer)
+			} else {
+				post.mockResolvedValueOnce({ data: answer })
+			}
+			await wrapper.find('input[autocomplete="one-time-code"]').setValue(code)
+			await wrapper.find('form.signup__code').trigger('submit')
+			await flushPromises()
+		}
+
+		it('sends the way back with the registration and keeps the login page on it', async () => {
+			const wrapper = await register({}, { state: 'verify', handle: 'alice', code: false })
+
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/signup', expect.objectContaining({ return: AUTHORIZE }))
+			expect(wrapper.find('form.signup__code').exists()).toBe(false)
+		})
+
+		it('confirms with the code from the email and logs in to the new account on the way back', async () => {
+			const wrapper = await register({}, { state: 'verify', handle: 'alice', code: true })
+			expect(wrapper.text()).toContain('We sent a code and a link to a@example.org.')
+			const input = wrapper.find('input[autocomplete="one-time-code"]')
+			expect(input.attributes('inputmode')).toBe('numeric')
+
+			await typeCode(wrapper, '123456', { state: 'created', handle: 'alice', loginUrl: LOGIN })
+
+			expect(post).toHaveBeenLastCalledWith('/index.php/apps/social/signup/confirm', { code: '123456' })
+			expect(submitCoreLogin).toHaveBeenCalledWith({ user: 'alice', password: 'long enough', redirectUrl: AUTHORIZE })
+			expect(wrapper.find('[role="status"]').text()).toBe('Signing you in …')
+			expect(wrapper.vm.credentials).toBeNull()
+		})
+
+		it('logs in at once where the account is made without confirmation', async () => {
+			await register({ verifyEmail: false }, { state: 'created', handle: 'alice', loginUrl: LOGIN })
+
+			expect(submitCoreLogin).toHaveBeenCalledWith({ user: 'alice', password: 'long enough', redirectUrl: AUTHORIZE })
+		})
+
+		it('leaves logging in to the login page where two-factor authentication is required', async () => {
+			const wrapper = await register({ verifyEmail: false, twoFactorRequired: true }, { state: 'created', handle: 'alice', loginUrl: LOGIN })
+
+			expect(submitCoreLogin).not.toHaveBeenCalled()
+			expect(button(wrapper, 'Log in').attributes('href')).toBe(LOGIN)
+			expect(wrapper.vm.credentials).toBeNull()
+		})
+
+		it('forgets the password once a registration waits for an administrator', async () => {
+			const wrapper = await register({}, { state: 'verify', handle: 'alice', code: true })
+			await typeCode(wrapper, '123456', { state: 'approval', handle: 'alice' })
+
+			expect(submitCoreLogin).not.toHaveBeenCalled()
+			expect(wrapper.text()).toContain('Your registration is waiting for an administrator.')
+			expect(wrapper.vm.credentials).toBeNull()
+		})
+
+		it('puts a wrong code on the field and stops asking once the code is used up', async () => {
+			const wrapper = await register({}, { state: 'verify', handle: 'alice', code: true })
+			const refusal = (field, message) => Object.assign(new Error(message), { response: { status: 422, data: { field, message } } })
+
+			await typeCode(wrapper, '000000', refusal('code', 'That code is not right. Check the email and try again.'))
+			expect(wrapper.text()).toContain('That code is not right.')
+			expect(wrapper.find('form.signup__code').exists()).toBe(true)
+
+			await typeCode(wrapper, '000001', refusal('code-locked', 'Too many wrong codes. Follow the link in the email to confirm your address instead.'))
+			expect(wrapper.find('form.signup__code').exists()).toBe(false)
+			expect(wrapper.text()).toContain('Follow the link in the email')
+			expect(wrapper.vm.credentials).toBeNull()
+		})
+
+		it('never logs in from the page the email link opens', async () => {
+			const wrapper = await page({ ...OPEN, result: { state: 'created', handle: 'alice', loginUrl: LOGIN } })
+			await flushPromises()
+
+			expect(submitCoreLogin).not.toHaveBeenCalled()
+			expect(button(wrapper, 'Log in').attributes('href')).toBe(LOGIN)
+		})
 	})
 
 	it('says what the confirmation link came to', async () => {

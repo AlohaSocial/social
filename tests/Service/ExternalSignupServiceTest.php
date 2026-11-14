@@ -14,6 +14,7 @@ use OCA\Social\Db\ExternalInvitesRequest;
 use OCA\Social\Db\ExternalSignupsRequest;
 use OCA\Social\Exceptions\ExternalUserException;
 use OCA\Social\Exceptions\SocialAppConfigException;
+use OCA\Social\External\SignupReturn;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\ExternalSignupService;
@@ -63,6 +64,8 @@ class ExternalSignupServiceTest extends TestCase {
 	private ?string $socialAddress = 'example.org';
 	/** @var list<string> the body text of every mail written */
 	private array $bodies = [];
+	/** @var list<string> the address of every button in a mail written */
+	private array $buttons = [];
 	/** @var list<array{string, string}> subject, recipient */
 	private array $sent = [];
 	private bool $mailWorks = true;
@@ -122,6 +125,9 @@ class ExternalSignupServiceTest extends TestCase {
 			$template->method('addBodyText')->willReturnCallback(function (string $text): void {
 				$this->bodies[] = $text;
 			});
+			$template->method('addBodyButton')->willReturnCallback(function (string $text, string $url): void {
+				$this->buttons[] = $url;
+			});
 
 			return $template;
 		});
@@ -160,7 +166,13 @@ class ExternalSignupServiceTest extends TestCase {
 		$url->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args = []): string => 'https://cloud.example/' . $route . '?' . http_build_query($args)
 		);
-		$url->method('getAbsoluteURL')->willReturn('https://cloud.example/');
+		$url->method('getAbsoluteURL')->willReturnCallback(static fn (string $path): string => 'https://cloud.example' . ($path === '/' ? '/' : $path));
+		$url->method('linkToRoute')->willReturnCallback(static fn (string $route, array $args = []): string => match ($route) {
+			'core.login.showLoginForm' => '/index.php/login',
+			'social.OAuth.authorize' => '/index.php/apps/social/oauth/authorize',
+			default => '/index.php/' . $route,
+		} . ($args === [] ? '' : '?' . http_build_query($args)));
+		$url->method('getWebroot')->willReturn('');
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 		$l10n = $this->createStub(IL10N::class);
@@ -202,6 +214,7 @@ class ExternalSignupServiceTest extends TestCase {
 			$config,
 			$mailLimiter,
 			$this->challenges,
+			new SignupReturn($url, $config),
 		);
 	}
 
@@ -225,7 +238,7 @@ class ExternalSignupServiceTest extends TestCase {
 			->with('alice', 'alice@example.org', 'hash:long enough', hash('sha256', 'TOKEN'), false, false, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Aloha Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
 		$this->users->expects($this->never())->method('createAccount');
 
-		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $this->submit());
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice', 'pending' => 42], $this->submit());
 		$this->assertSame([['Confirm your email address', 'alice@example.org']], $this->sent);
 	}
 
@@ -243,7 +256,7 @@ class ExternalSignupServiceTest extends TestCase {
 			->with('alice', 'alice@example.org', 'hash:long enough', 'open', 0, false, '', 0, '')
 			->willReturn($this->createStub(IUser::class));
 
-		$this->assertSame(['state' => 'created', 'handle' => 'alice'], $this->submit());
+		$this->assertSame(['state' => 'created', 'handle' => 'alice', 'loginUrl' => '/index.php/login'], $this->submit());
 		$this->assertSame([['Your account is ready', 'alice@example.org']], $this->sent);
 	}
 
@@ -343,7 +356,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->users->expects($this->never())->method('createAccount');
 
 		$result = $service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', true, $version);
-		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $result);
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice', 'pending' => 42], $result);
 	}
 
 	/**
@@ -506,7 +519,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$version = $service->pageState()['signupNoticeVersion'];
 
 		$answer = $service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $version, $challenge, $nonce);
-		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $answer);
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice', 'pending' => 42], $answer);
 
 		$this->expectExceptionObject(new ExternalUserException('The check of this browser did not succeed. Please try again.', 'challenge'));
 		$service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $version, $challenge, $nonce);
@@ -552,7 +565,7 @@ class ExternalSignupServiceTest extends TestCase {
 			->willReturn($this->createStub(IUser::class));
 		$this->signups->expects($this->once())->method('delete')->with(9);
 
-		$this->assertSame(['state' => 'created', 'handle' => 'bob'], $this->service()->verify('abc'));
+		$this->assertSame(['state' => 'created', 'handle' => 'bob', 'loginUrl' => '/index.php/login'], $this->service()->verify('abc'));
 	}
 
 	public function testConfirmingAnApprovalRegistrationQueuesIt(): void {
@@ -741,6 +754,151 @@ class ExternalSignupServiceTest extends TestCase {
 		// no address to issue handles under yet: nothing to preview
 		$this->blueskyHost = null;
 		$this->assertSame(['enabled' => false, 'host' => ''], $this->service()->pageState()['bluesky']);
+	}
+
+	// an app's way back, and the code
+
+	private const AUTHORIZE = '/index.php/apps/social/oauth/authorize?client_id=app&response_type=code&state=s1';
+
+	/** The service's submit() with an app's return address. */
+	private function submitFromApp(string $returnTo): array {
+		$service = $this->service();
+
+		return $service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', false, $service->pageState()['signupNoticeVersion'], '', '', $returnTo);
+	}
+
+	/** The code as `ExternalSignupService` keys it, for a registration whose token hash is `$tokenHash`. */
+	private static function codeHash(string $code, string $tokenHash): string {
+		return hash_hmac('sha256', $code, '|' . $tokenHash);
+	}
+
+	/** @return array<string, mixed> a registration waiting for its code, sent from an app */
+	private function waitingForCode(bool $approval = false): array {
+		return ['returnTo' => self::AUTHORIZE, 'codeHash' => self::codeHash('123456', 'x'), 'codeAttempts' => 0] + $this->pending(false, $approval);
+	}
+
+	public function testTheRegistrationKeepsTheAppsAuthorizationRequestAndMailsACodeWithTheLink(): void {
+		$this->signups->expects($this->once())->method('create')
+			->with('alice', 'alice@example.org', $this->anything(), hash('sha256', 'TOKEN'), false, false, 0, $this->anything(), self::NOW, false, $this->anything(), 0, '',
+				self::AUTHORIZE, $this->callback(static fn (string $hash): bool => preg_match('/^[0-9a-f]{64}$/', $hash) === 1));
+
+		$this->submitFromApp('https://cloud.example/oauth/authorize?client_id=app&response_type=code&state=s1');
+
+		$codes = array_values(array_filter(array_map(
+			static fn (string $text): ?string => preg_match('/Type this code there: ([0-9]{6})$/', $text, $m) === 1 ? $m[1] : null,
+			$this->bodies
+		)));
+		$this->assertCount(1, $codes, 'the confirmation email carries the code next to its link');
+	}
+
+	public function testAReturnAddressThatIsNotThisServersAuthorizationRequestIsDropped(): void {
+		$this->signups->expects($this->once())->method('create')
+			->with($this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(),
+				'', $this->anything());
+
+		$this->submitFromApp('https://evil.example/oauth/authorize?client_id=app');
+	}
+
+	public function testTheRightCodeMakesTheAccountAndLeadsBackToTheApp(): void {
+		$this->signups->method('get')->with(9)->willReturn($this->waitingForCode());
+		$this->signups->expects($this->never())->method('addCodeAttempt');
+		$this->users->expects($this->once())->method('createAccount')->with('bob', 'bob@example.org', 'H', 'open', 9, true, '', 0, '')
+			->willReturn($this->createStub(IUser::class));
+		$this->signups->expects($this->once())->method('delete')->with(9);
+
+		$result = $this->service()->confirmCode(9, ' 123 456 ');
+
+		$this->assertSame('created', $result['state']);
+		$this->assertSame('/index.php/login?' . http_build_query(['redirect_url' => self::AUTHORIZE]), $result['loginUrl']);
+		$this->assertSame(['https://cloud.example/index.php/login?' . http_build_query(['redirect_url' => self::AUTHORIZE])], $this->buttons, 'the welcome mail continues the app too');
+	}
+
+	public function testTheRightCodeOfAnApprovalRegistrationQueuesIt(): void {
+		$this->signups->method('get')->willReturn($this->waitingForCode(true));
+		$this->signups->expects($this->once())->method('markVerified')->with(9, true);
+		$this->users->expects($this->never())->method('createAccount');
+
+		$this->assertSame('approval', $this->service()->confirmCode(9, '123456')['state']);
+	}
+
+	public function testAWrongCodeIsCountedAndTheFifthTakesTheCodeAway(): void {
+		$this->signups->method('get')->willReturn($this->waitingForCode());
+		$this->signups->expects($this->exactly(2))->method('addCodeAttempt')->with(9, ExternalSignupService::CODE_ATTEMPTS)
+			->willReturnOnConsecutiveCalls(1, ExternalSignupService::CODE_ATTEMPTS);
+		$this->users->expects($this->never())->method('createAccount');
+
+		foreach ([['654321', 'code'], ['000000', 'code-locked']] as [$code, $field]) {
+			try {
+				$this->service()->confirmCode(9, $code);
+				$this->fail('accepted ' . $code);
+			} catch (ExternalUserException $e) {
+				$this->assertSame($field, $e->getField());
+			}
+		}
+	}
+
+	/** A session that made no registration has nothing to guess at, and is told so the way a wrong code is. */
+	public function testACodeWithoutARegistrationOfThisSessionIsAWrongCode(): void {
+		$this->signups->expects($this->never())->method('get');
+		$this->signups->expects($this->never())->method('addCodeAttempt');
+
+		try {
+			$this->service()->confirmCode(0, '123456');
+			$this->fail('accepted a code for no registration');
+		} catch (ExternalUserException $e) {
+			$this->assertSame('code', $e->getField());
+		}
+	}
+
+	public function testNoCodeConfirmsAnExpiredALockedOrAConfirmedRegistration(): void {
+		$rows = [
+			['creation' => self::NOW - ExternalSignupService::VERIFY_TTL - 1] + $this->waitingForCode(),
+			['codeHash' => ''] + $this->waitingForCode(),
+			['verified' => true] + $this->waitingForCode(),
+		];
+		$this->signups->method('get')->willReturnOnConsecutiveCalls(...$rows);
+		$this->users->expects($this->never())->method('createAccount');
+
+		foreach ($rows as $index => $row) {
+			try {
+				$this->service()->confirmCode(9, '123456');
+				$this->fail('accepted the code for row ' . $index);
+			} catch (ExternalUserException $e) {
+				$this->assertSame('code-locked', $e->getField());
+			}
+		}
+	}
+
+	public function testTheApprovalMailLeadsBackToTheAppTheRegistrationCameFrom(): void {
+		$this->signups->method('get')->willReturn(['returnTo' => self::AUTHORIZE] + $this->pending(true, true));
+		$this->users->method('createAccount')->willReturn($this->createStub(IUser::class));
+
+		$this->service()->approve(9);
+
+		$this->assertSame(['https://cloud.example/index.php/login?' . http_build_query(['redirect_url' => self::AUTHORIZE])], $this->buttons);
+	}
+
+	public function testTheConfirmationLinkOfARegistrationFromAnAppLeadsBackToIt(): void {
+		$this->signups->method('getByTokenHash')->willReturn($this->waitingForCode());
+		$this->users->method('createAccount')->willReturn($this->createStub(IUser::class));
+
+		$this->assertSame('/index.php/login?' . http_build_query(['redirect_url' => self::AUTHORIZE]), $this->service()->verify('abc')['loginUrl']);
+	}
+
+	public function testThePageCarriesTheAppsAuthorizationRequestOnlyWhenItIsOne(): void {
+		$state = $this->service()->pageState('', 'https://cloud.example/oauth/authorize?client_id=app&response_type=code&state=s1');
+		$this->assertSame(self::AUTHORIZE, $state['returnUrl']);
+		$this->assertSame('/index.php/login?' . http_build_query(['redirect_url' => self::AUTHORIZE]), $state['loginUrl']);
+
+		$state = $this->service()->pageState('', 'https://cloud.example/index.php/apps/files/');
+		$this->assertSame('', $state['returnUrl']);
+		$this->assertSame('/index.php/login', $state['loginUrl']);
+	}
+
+	public function testOnlyARegistrationWaitingForItsEmailOffersTheCode(): void {
+		$this->assertTrue($this->service()->confirmsByCode());
+		$this->verify = false;
+		$this->assertFalse($this->service()->confirmsByCode());
 	}
 
 	private function pending(bool $verified, bool $approval): array {
