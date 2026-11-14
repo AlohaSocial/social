@@ -265,11 +265,15 @@ jobs:
           # the whole point: Mastodon has to be allowed to fetch from, and
           # deliver to, the Nextcloud on this same runner
           ALLOWED_PRIVATE_ADDRESSES=127.0.0.1,::1,172.17.0.1
+          # Mastodon resolves with DNS alone; answer the names in /etc/hosts
+          # from it rather than through the runner's DNS stub
+          RUBYOPT=-r/opt/interop/mastodon-hosts-first.rb
           ENV
 
           docker network create interop || true
           docker run -d --name mastodon-setup --network host --env-file /tmp/mastodon.env \
             -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
+            -v "$GITHUB_WORKSPACE/apps/social/.github/scripts/mastodon-hosts-first.rb:/opt/interop/mastodon-hosts-first.rb:ro" \
             "ghcr.io/mastodon/mastodon:${MASTODON_VERSION}" \
             bundle exec rails db:setup
           docker wait mastodon-setup
@@ -277,10 +281,12 @@ jobs:
 
           docker run -d --name mastodon-web --network host --env-file /tmp/mastodon.env \
             -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
+            -v "$GITHUB_WORKSPACE/apps/social/.github/scripts/mastodon-hosts-first.rb:/opt/interop/mastodon-hosts-first.rb:ro" \
             "ghcr.io/mastodon/mastodon:${MASTODON_VERSION}" \
             bundle exec puma -C config/puma.rb
           docker run -d --name mastodon-sidekiq --network host --env-file /tmp/mastodon.env \
             -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
+            -v "$GITHUB_WORKSPACE/apps/social/.github/scripts/mastodon-hosts-first.rb:/opt/interop/mastodon-hosts-first.rb:ro" \
             "ghcr.io/mastodon/mastodon:${MASTODON_VERSION}" \
             bundle exec sidekiq
 
