@@ -1277,10 +1277,29 @@ export default {
 }
 
 /*
- * With a pointer, a like or boost already given shows as a small mark by the
- * timestamp, since the row's actions only show when the post is pointed at.
+ * With a pointer, the controls take no room of their own: an invisible row
+ * under every post was a band of empty space down the page. The pill floats
+ * over the top end of the row, across the timestamp, when the post is
+ * pointed at or focused. A post that shows something in that row at rest —
+ * reactions, or a count where the reader has the numbers on — keeps the
+ * row, since a pill over the timestamp would draw its numbers across it.
  */
 @media (hover: hover) {
+	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper :deep(.post-footer:not(:has(.reaction-bar, .post-action-count))) {
+		height: 0;
+		margin: 0;
+
+		.post-actions-reveal {
+			position: absolute;
+			inset-block-start: -8px;
+			inset-inline-end: 0;
+			margin-inline-end: 0;
+		}
+	}
+
+	// a like or boost already given shows as a small mark by the timestamp,
+	// so it never needs a row of its own under the words; its button keeps
+	// to the pill, which only shows when the post is pointed at
 	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper :deep(.post-content:not(:has(.reaction-bar, .post-action-count))) {
 		.post-given {
 			display: inline-flex;
@@ -1293,117 +1312,36 @@ export default {
 }
 
 /*
- * The drawer. With a pointer, the row's hover and its actions are one piece of
- * material: the row takes a tint, and its bottom-end corner extends into a
- * drawer of the same tint that holds the actions, joined to the row by a soft
- * concave curve. The footer keeps its row, of a fixed height, so the drawer
- * lines up with the row's edges whatever the post holds; the actions in it
- * are hidden at rest. In over about a third of a second, out flat in 100 ms,
- * so a pointer crossing the feed leaves nothing behind. Touch screens keep
- * their always-visible row.
+ * The row, pointed at. At rest it is only the post, and its counts where the
+ * reader has the numbers on. Pointed at or focused, it takes a hairline frame
+ * and a faint tint, its controls come to full strength beside their counts,
+ * and the ones without a count slide in at the end of the row: where the
+ * reader has the numbers off, that is all of them, over the timestamp, which
+ * steps aside. No pill. In over about 250 ms; out flat in 100 ms, so a
+ * pointer crossing the feed leaves nothing behind. Touch screens keep their
+ * always-visible row.
  */
 @media (hover: hover) {
 	.timeline-entry:not(.timeline-entry--direct) {
-		--drawer-tint: color-mix(in srgb, var(--color-primary-element) 8%, var(--color-main-background));
-		// the actions' row, the drawer's 4px above it, and the row's padding below
-		--drawer-row: max(40px, calc(var(--default-clickable-area, 34px) + 4px));
-		--drawer-curve: 14px;
+		box-shadow: inset 0 0 0 1px transparent;
+		transition: box-shadow .1s linear, background-color .1s linear;
 
 		&:hover,
-		&:focus-within,
+		&:focus-within {
+			background-color: color-mix(in srgb, var(--color-primary-element) 3%, transparent);
+			box-shadow: inset 0 0 0 1px var(--color-border);
+			transition: box-shadow .2s ease, background-color .2s ease;
+		}
+
+		// its own rule: a browser without `:has()` drops the selector, and it
+		// must not take the hover case with it
 		&:has(.post-actions-reveal--held) {
-			background-color: transparent;
+			background-color: color-mix(in srgb, var(--color-primary-element) 3%, transparent);
+			box-shadow: inset 0 0 0 1px var(--color-border);
 		}
 
-		.wrapper {
-			position: relative;
-		}
-
-		// the row's body: everything above the drawer
-		.wrapper::before {
-			content: '';
-			position: absolute;
-			z-index: -1;
-			inset: -14px -8px calc(var(--drawer-row) + 4px) -8px;
-			border-radius: var(--border-radius-large, 8px) var(--border-radius-large, 8px) 0 var(--border-radius-large, 8px);
-			background: var(--drawer-tint);
-			opacity: 0;
-			transition: opacity .1s linear;
-			pointer-events: none;
-		}
-
-		.wrapper :deep(.post-footer) {
-			margin-bottom: 0;
-		}
-
-		.wrapper :deep(.post-actions-reveal) {
-			isolation: isolate;
-			align-self: flex-end;
-			height: var(--drawer-row);
-			padding: 0;
-			border: none;
-		}
-
-		// the drawer: from 4px above the actions to the row's foot, out to the
-		// row's end edge (the actions sit 9px past the post, see above)
 		.wrapper :deep(.post-actions-reveal::before) {
-			z-index: -1;
-			inset: -4px 1px -13px -10px;
-			border: none;
-			border-radius: 0 0 var(--border-radius-large, 8px) 18px;
-			background: var(--drawer-tint);
-			box-shadow: none;
-			clip-path: inset(0 0 100% 0);
-			transition: opacity .1s linear, clip-path 0s .1s;
-		}
-
-		// the concave curve where the drawer meets the row's body
-		.wrapper :deep(.post-actions-reveal::after) {
-			content: '';
-			position: absolute;
-			z-index: -1;
-			inset-block-start: -4px;
-			inset-inline-start: calc(-10px - var(--drawer-curve));
-			width: var(--drawer-curve);
-			height: var(--drawer-curve);
-			background: radial-gradient(circle at 0 100%, transparent calc(var(--drawer-curve) - .5px), var(--drawer-tint) var(--drawer-curve));
-			opacity: 0;
-			transition: opacity .1s linear;
-			pointer-events: none;
-		}
-
-		// the actions are hidden at rest and ride down with the drawer; a
-		// reader who has the numbers on keeps them, as before
-		&:not(:has(.post-action-count)) .wrapper :deep(.post-actions) {
-			opacity: 0;
-			transform: translateY(-10px);
-			transition: opacity .1s linear, transform .1s linear;
-		}
-
-		&:is(:hover, :focus-within) .wrapper::before,
-		&:has(.post-actions-reveal--held) .wrapper::before {
-			opacity: 1;
-			transition: opacity .18s ease;
-		}
-
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions-reveal::before),
-		&:has(.post-actions-reveal--held) .wrapper :deep(.post-actions-reveal::before) {
-			opacity: 1;
-			clip-path: inset(0);
-			transition: opacity .05s ease .08s, clip-path .34s cubic-bezier(.2, .8, .2, 1) .08s;
-		}
-
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions-reveal::after),
-		&:has(.post-actions-reveal--held) .wrapper :deep(.post-actions-reveal::after) {
-			opacity: 1;
-			transition: opacity .16s ease .2s;
-		}
-
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions),
-		&:has(.post-actions-reveal--held) .wrapper :deep(.post-actions) {
-			opacity: 1;
-			transform: none;
-			transition: opacity .2s ease .12s, transform .34s cubic-bezier(.2, .8, .2, 1) .1s;
+			display: none;
 		}
 
 		&:is(:hover, :focus-within) .wrapper :deep(.post-actions .button-vue__icon),
@@ -1412,16 +1350,45 @@ export default {
 			opacity: 1;
 		}
 
-		&:dir(rtl) .wrapper::before {
-			border-radius: var(--border-radius-large, 8px) var(--border-radius-large, 8px) var(--border-radius-large, 8px) 0;
+		// the controls without a count arrive from the end of the row
+		.wrapper :deep(.post-actions > :first-child),
+		.wrapper :deep(.post-action-group:not(:has(.post-action-count))) {
+			transform: translateX(8px);
+			transition: transform .1s linear;
 		}
 
-		&:dir(rtl) .wrapper :deep(.post-actions-reveal::before) {
-			border-radius: 0 0 18px var(--border-radius-large, 8px);
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > :first-child),
+		&:is(:hover, :focus-within) .wrapper :deep(.post-action-group:not(:has(.post-action-count))),
+		&:has(.post-actions-reveal--held) .wrapper :deep(.post-actions > :first-child),
+		&:has(.post-actions-reveal--held) .wrapper :deep(.post-action-group:not(:has(.post-action-count))) {
+			transform: none;
+			transition: transform .3s cubic-bezier(.2, .8, .2, 1) .06s;
 		}
 
-		&:dir(rtl) .wrapper :deep(.post-actions-reveal::after) {
-			background: radial-gradient(circle at 100% 100%, transparent calc(var(--drawer-curve) - .5px), var(--drawer-tint) var(--drawer-curve));
+		&:dir(rtl) .wrapper :deep(.post-actions > :first-child),
+		&:dir(rtl) .wrapper :deep(.post-action-group:not(:has(.post-action-count))) {
+			transform: translateX(-8px);
+		}
+
+		&:dir(rtl):is(:hover, :focus-within) .wrapper :deep(.post-actions > :first-child),
+		&:dir(rtl):is(:hover, :focus-within) .wrapper :deep(.post-action-group:not(:has(.post-action-count))) {
+			transform: none;
+		}
+	}
+
+	// the numbers off: the controls float over the top end of the row (the
+	// rule above), and with no pill under them the timestamp steps aside
+	.timeline-entry:not(.notification, .timeline-entry--direct):not(:has(.reaction-bar, .post-action-count)) {
+		.wrapper :deep(.post-timestamp),
+		.wrapper :deep(.post-given) {
+			transition: opacity .1s linear;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-timestamp),
+		&:is(:hover, :focus-within) .wrapper :deep(.post-given),
+		&:has(.post-actions-reveal--held) .wrapper :deep(.post-timestamp),
+		&:has(.post-actions-reveal--held) .wrapper :deep(.post-given) {
+			opacity: 0;
 		}
 	}
 }
@@ -1429,10 +1396,10 @@ export default {
 @media (hover: hover) and (prefers-reduced-motion: reduce) {
 	.timeline-entry:not(.timeline-entry--direct),
 	.timeline-entry:not(.timeline-entry--direct):is(:hover, :focus-within) {
-		.wrapper::before,
-		.wrapper :deep(.post-actions-reveal::before),
-		.wrapper :deep(.post-actions-reveal::after),
-		.wrapper :deep(.post-actions) {
+		transition: none;
+
+		.wrapper :deep(.post-actions > :first-child),
+		.wrapper :deep(.post-action-group) {
 			transform: none;
 			transition: none;
 		}
@@ -1440,14 +1407,9 @@ export default {
 }
 
 @media (forced-colors: active) {
-	.timeline-entry:not(.timeline-entry--direct) .wrapper::before,
-	.timeline-entry:not(.timeline-entry--direct) .wrapper :deep(.post-actions-reveal::after) {
-		display: none;
-	}
-
-	.timeline-entry:not(.timeline-entry--direct) .wrapper :deep(.post-actions-reveal::before) {
-		border: 1px solid CanvasText;
-		background: Canvas;
+	.timeline-entry:not(.timeline-entry--direct):is(:hover, :focus-within) {
+		outline: 1px solid CanvasText;
+		outline-offset: -1px;
 	}
 }
 
