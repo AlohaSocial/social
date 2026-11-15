@@ -267,7 +267,6 @@ class ApiControllerTest extends TestCase {
 	private string $pathParam = '';
 	/** the request headers the controller under construction will see */
 	private array $headers = [];
-	private bool $socialSignupsOpen = false;
 
 	protected function setUp(): void {
 		$this->blockedBy = $this->createMock(\OCA\Social\Service\BlockedBy\BlockedByService::class);
@@ -302,7 +301,6 @@ class ApiControllerTest extends TestCase {
 		$this->userSession = $this->createStub(IUserSession::class);
 		$this->instanceService = $this->createMock(InstanceService::class);
 		$this->externalSignupService = $this->createStub(ExternalSignupService::class);
-		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturnCallback(fn (): bool => $this->socialSignupsOpen);
 		$this->externalSignupService->method('requiresRegistrationApproval')->willReturn(false);
 		$this->externalSignupService->method('invitationsEnabled')->willReturn(false);
 		$this->clientService = $this->createMock(ClientService::class);
@@ -5030,16 +5028,33 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('cloud.example', $response->getData()['domain']);
 	}
 
-	public function testWebSignupsDoNotAdvertiseUnsupportedMastodonApiRegistration(): void {
-		$this->socialSignupsOpen = true;
-		$instance = (new Instance())->setUri('cloud.example')->setTitle('Ours');
+	public function testTheInstanceEntitiesReportTheSignupAsItStands(): void {
+		$instance = (new Instance())->setUri('cloud.example')->setTitle('Ours')
+			->setRegistrations(true)
+			->setApprovalRequired(true)
+			->setInvitesEnabled(true)
+			->setRegistrationsUrl('https://cloud.example/apps/social/signup');
 		$this->instanceService->method('getLocal')->willReturn($instance);
 
 		$v1 = $this->controller()->instance()->getData();
-		self::assertFalse($v1->isRegistrations());
+		self::assertTrue($v1->isRegistrations());
+		self::assertTrue($v1->isApprovalRequired());
+		self::assertTrue($v1->isInvitesEnabled());
 
 		$v2 = $this->controller()->instanceV2()->getData();
+		self::assertTrue($v2['registrations']->enabled);
+		self::assertTrue($v2['registrations']->approval_required);
+		self::assertSame('https://cloud.example/apps/social/signup', $v2['registrations']->url);
+	}
+
+	public function testAClosedSignupIsReportedClosed(): void {
+		$instance = (new Instance())->setUri('cloud.example')->setTitle('Ours');
+		$this->instanceService->method('getLocal')->willReturn($instance);
+
+		self::assertFalse($this->controller()->instance()->getData()->isRegistrations());
+		$v2 = $this->controller()->instanceV2()->getData();
 		self::assertFalse($v2['registrations']->enabled);
+		self::assertNull($v2['registrations']->url);
 	}
 
 	// search
