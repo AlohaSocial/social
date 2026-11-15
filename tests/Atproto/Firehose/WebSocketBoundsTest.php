@@ -172,6 +172,45 @@ class WebSocketBoundsTest extends TestCase {
 		fclose($second);
 	}
 
+	/**
+	 * Behind the web server every connection comes from the loopback: each
+	 * is counted under the client its proxy names, the last address in
+	 * `X-Forwarded-For` that is not a proxy, whatever a client wrote in
+	 * front of it.
+	 */
+	public function testAConnectionThroughAProxyIsCountedUnderTheClientItNames(): void {
+		$this->server?->shutdown();
+		$this->server = new WebSocketServer($this->bind, 256, 1, trustedProxy: static fn (string $address): bool => $address === '192.0.2.1');
+		$first = $this->connect(WebSocketServer::PATH, '203.0.113.5');
+		$second = $this->connect(WebSocketServer::PATH, '203.0.113.6, 192.0.2.1');
+		$this->assertCount(2, $this->pump());
+		$spoofed = $this->connect(WebSocketServer::PATH, '198.51.100.9, 203.0.113.5');
+		$this->pump();
+
+		$this->assertStringStartsWith('HTTP/1.1 503', $this->read($spoofed), 'a client cannot choose its address by writing one in front');
+		$this->assertSame(['203.0.113.5', '203.0.113.6'], array_map(static fn ($s): string => $s->address, $this->server->subscribers()));
+		fclose($first);
+		fclose($second);
+	}
+
+	public function testAnIpv6AddressIsCountedWithItsSlash64(): void {
+		$this->assertSame('2001:db8:1:2::/64', WebSocketServer::bucket('2001:db8:1:2:aaaa:bbbb:cccc:dddd'));
+		$this->assertSame(WebSocketServer::bucket('2001:db8:1:2::1'), WebSocketServer::bucket('[2001:db8:1:2:ffff::9]'));
+		$this->assertNotSame(WebSocketServer::bucket('2001:db8:1:2::1'), WebSocketServer::bucket('2001:db8:1:3::1'));
+		$this->assertSame('203.0.113.5', WebSocketServer::bucket('::ffff:203.0.113.5'));
+		$this->assertSame('203.0.113.5', WebSocketServer::bucket('203.0.113.5'));
+	}
+
+	public function testAConnectionNothingIsHeardFromIsClosed(): void {
+		$client = $this->connect(WebSocketServer::PATH);
+		$this->assertCount(1, $this->pump());
+
+		$this->server->closeIdle(-1);
+
+		$this->assertSame([], $this->server->subscribers());
+		fclose($client);
+	}
+
 	public function testALengthWithItsTopBitSetIsTooLong(): void {
 		$buffer = "\x89\x7f" . str_repeat("\xff", 8) . 'abcdefghij';
 
@@ -182,10 +221,11 @@ class WebSocketBoundsTest extends TestCase {
 	/**
 	 * @return resource
 	 */
-	private function connect(string $path) {
+	private function connect(string $path, string $forwardedFor = '') {
 		$client = stream_socket_client('tcp://' . $this->bind, $errno, $error, 2);
 		$this->assertNotFalse($client, (string)$error);
-		fwrite($client, 'GET ' . $path . " HTTP/1.1\r\nHost: social.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
+		$forwarded = $forwardedFor === '' ? '' : 'X-Forwarded-For: ' . $forwardedFor . "\r\n";
+		fwrite($client, 'GET ' . $path . " HTTP/1.1\r\nHost: social.example.com\r\n" . $forwarded . "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
 
 		return $client;
 	}
