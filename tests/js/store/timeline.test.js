@@ -236,6 +236,38 @@ describe('timeline store state changes', () => {
 		expect(toRaw(store.statuses['1'])).toBe(parent)
 	})
 
+	it('removeStatus takes the boosts of a deleted post off the list with it', () => {
+		const post = makeStatus('1')
+		store.addToTimeline([makeStatus('3'), makeStatus('2', { reblog: post, content: '' }), makeStatus('4')])
+
+		store.removeStatus(post)
+
+		expect(store.timeline).toEqual(['3', '4'])
+		expect(store.statuses['2']).toBeUndefined()
+		expect(store.statuses['1']).toBeUndefined()
+	})
+
+	it('restoreStatus brings the boost back, and not the post on its own, after a refused delete', () => {
+		const post = makeStatus('1')
+		const boost = makeStatus('2', { reblog: post, content: '' })
+		store.addToTimeline([makeStatus('3'), boost, makeStatus('4')])
+
+		store.removeStatus(post)
+		store.restoreStatus(post)
+
+		expect(store.timeline).toEqual(['3', '2', '4'])
+		expect(store.statuses['2']?.reblog?.id).toBe('1')
+	})
+
+	it('removeStatus keeps the boosts when the post only leaves this list', () => {
+		const post = makeStatus('1')
+		store.addToTimeline([makeStatus('2', { reblog: post, content: '' })])
+
+		store.removeStatus(post, false)
+
+		expect(store.timeline).toEqual(['2'])
+	})
+
 	it('removeStatus ignores ids that are not in the timeline', () => {
 		store.addToTimeline({ ancestors: [makeStatus('1')], descendants: [makeStatus('2')] })
 

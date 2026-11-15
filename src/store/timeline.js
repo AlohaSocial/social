@@ -127,6 +127,7 @@ function rememberCelebrated() {
  * @property {string[]} timeline the ids on screen, newest first
  * @property {string[]} parentsTimeline the ids above a post being read in its thread
  * @property {Record<string, string>} removedFrom which list a removed status came from
+ * @property {Record<string, Array<{status: object, list: string, index: number}>>} removedBoosts the boosts of a removed status that left the lists with it
  * @property {string} type which timeline this is
  * @property {Array|null} seededPage the first screenful the server rendered with the page
  * @property {{tag?: string, id?: string, account?: string, scope?: string, media?: string, filter?: string, url?: string, singlePost?: string}} params what the current list was asked for
@@ -552,6 +553,8 @@ export const useTimelineStore = defineStore('timeline', {
 		parentsTimeline: [],
 		/** which list a removed status came from, so a rollback restores it there */
 		removedFrom: {},
+		/** the boosts that went with a removed status, so a rollback brings them back */
+		removedBoosts: {},
 		/** how many replies of the open conversation its author hid, and that are not shown */
 		hiddenByAuthor: 0,
 		type: 'home',
@@ -903,6 +906,26 @@ export const useTimelineStore = defineStore('timeline', {
 			// which list it came from, so a failed delete puts it back where it was
 			this.removedFrom = { ...this.removedFrom, [status.id]: parentsTimelineIndex !== -1 ? 'parents' : 'timeline' }
 			if (gone) {
+				// a boost is listed under its own id, and with the post gone
+				// it would stay on screen as an empty entry
+				const boosts = []
+				for (const list of ['timeline', 'parentsTimeline']) {
+					for (let index = this[list].length - 1; index >= 0; index--) {
+						const listed = this.statuses[this[list][index]]
+						if (listed?.reblog?.id === status.id) {
+							boosts.unshift({ status: listed, list, index })
+							this[list].splice(index, 1)
+							delete this.statuses[listed.id]
+						}
+					}
+				}
+				if (boosts.length > 0) {
+					this.removedBoosts = { ...this.removedBoosts, [status.id]: boosts }
+					if (timelineIndex === -1 && parentsTimelineIndex === -1) {
+						// listed only as boosts: a rollback brings those back, not the post
+						this.removedFrom = { ...this.removedFrom, [status.id]: 'boosts' }
+					}
+				}
 				delete this.statuses[status.id]
 			}
 		},
@@ -918,7 +941,7 @@ export const useTimelineStore = defineStore('timeline', {
 		restoreStatus(status, index = -1) {
 			indexStatus(this, status)
 			const list = this.removedFrom?.[status.id] === 'parents' ? 'parentsTimeline' : 'timeline'
-			if (this[list].indexOf(status.id) === -1) {
+			if (this.removedFrom?.[status.id] !== 'boosts' && this[list].indexOf(status.id) === -1) {
 				if (index >= 0 && index <= this[list].length) {
 					this[list].splice(index, 0, status.id)
 				} else {
@@ -928,6 +951,24 @@ export const useTimelineStore = defineStore('timeline', {
 			const removedFrom = { ...this.removedFrom }
 			delete removedFrom[status.id]
 			this.removedFrom = removedFrom
+			for (const boost of this.removedBoosts[status.id] ?? []) {
+				indexStatus(this, boost.status)
+				if (this[boost.list].indexOf(boost.status.id) === -1) {
+					this[boost.list].splice(Math.min(boost.index, this[boost.list].length), 0, boost.status.id)
+				}
+			}
+			this.forgetBoosts(status)
+		},
+		/**
+		 * @param {import('../types/Mastodon.js').Status} status the status whose boosts are not coming back
+		 */
+		forgetBoosts(status) {
+			if (this.removedBoosts[status.id] === undefined) {
+				return
+			}
+			const removedBoosts = { ...this.removedBoosts }
+			delete removedBoosts[status.id]
+			this.removedBoosts = removedBoosts
 		},
 		/**
 		 * Drops the "where it came from" hint for a removal that is final. Only
@@ -973,6 +1014,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.timeline = []
 			this.parentsTimeline = []
 			this.removedFrom = {}
+			this.removedBoosts = {}
 			this.hiddenByAuthor = 0
 			this.timelinePageFilling = false
 			this.profilePageFilling = false
@@ -1610,6 +1652,7 @@ export const useTimelineStore = defineStore('timeline', {
 				this.removeStatus(status)
 				const response = await axios.delete(generateUrl(`apps/social/api/v1/post?id=${status.uri}`))
 				logger.info('Post deleted with token ' + response.data.result.token)
+				this.forgetBoosts(status)
 				return true
 			} catch (error) {
 				// restoreStatus puts it back in the list it came from; addToTimeline
