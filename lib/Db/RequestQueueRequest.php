@@ -514,7 +514,13 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Return every request stuck `running` since before $before to standby.
+	 * Return every request stuck `running` since before $before to standby,
+	 * counted as a failed attempt.
+	 *
+	 * A row is left `running` when the process delivering it died — a fatal
+	 * error, the memory limit, a killed worker — and nothing else ever counts
+	 * that attempt: returned without a try, a delivery whose processing kills
+	 * the worker was picked up and killed it again for ever.
 	 *
 	 * @return int the number of requests re-queued
 	 * @throws Exception
@@ -522,6 +528,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	public function resetStaleRunning(int $before): int {
 		$qb = $this->getRequestQueueUpdateSql();
 		$qb->set('status', $qb->createNamedParameter(RequestQueue::STATUS_STANDBY));
+		$qb->set('tries', $qb->func()->add('tries', $qb->expr()->literal(1)));
 		$qb->limitToStatus(RequestQueue::STATUS_RUNNING);
 		$qb->andWhere(
 			$qb->expr()->lt('last', $qb->createNamedParameter(

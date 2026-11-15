@@ -40,8 +40,13 @@ class RequestQueueFinishedBodyTest extends TestCase {
 		$this->set = [];
 		$this->queryBuilder = $this->createMock(IQueryBuilder::class);
 		$this->queryBuilder->method('expr')->willReturn(new FakeExpressions());
+		$this->queryBuilder->method('func')->willReturn(new class {
+			public function add($x, $y): string {
+				return $x . ' + ' . $y;
+			}
+		});
 		$this->queryBuilder->method('createNamedParameter')->willReturnCallback(
-			static fn ($value): mixed => $value
+			static fn ($value): mixed => ($value instanceof \DateTime) ? '@' . $value->getTimestamp() : $value
 		);
 		$this->queryBuilder->method('set')->willReturnCallback(
 			function (string $column, $value): IQueryBuilder {
@@ -81,6 +86,18 @@ class RequestQueueFinishedBodyTest extends TestCase {
 
 		$this->assertSame(RequestQueue::STATUS_SUCCESS, $this->set['status']);
 		$this->assertSame('', $this->set['activity']);
+	}
+
+	/**
+	 * A row left `running` by a process that died is returned counted as an
+	 * attempt: one whose processing kills the worker is otherwise retried
+	 * for ever, since nothing else counts that attempt.
+	 */
+	public function testAStaleRunningRowIsReturnedWithATryCounted(): void {
+		$this->request->resetStaleRunning(time() - 3600);
+
+		$this->assertSame(RequestQueue::STATUS_STANDBY, $this->set['status']);
+		$this->assertSame('tries + 1', $this->set['tries'] ?? null, 'the try is counted in the same statement');
 	}
 
 	/** `social:queue:retry` hands an abandoned row back, and it goes out with its body. */
