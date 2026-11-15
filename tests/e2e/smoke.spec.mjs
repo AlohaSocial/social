@@ -100,8 +100,9 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('the feed opens one modal and Escape keeps its draft', async ({ page }) => {
 		await openApp(page)
-		await expect(page.locator('.social__wrapper .new-post--one-line')).toHaveCount(1)
-		await page.locator('.composer-line__expand').click()
+		// posting starts from the sidebar: the feed has no composer of its own
+		await expect(page.locator('.social__wrapper .new-post--one-line')).toHaveCount(0)
+		await page.locator('.navigation__compose').click()
 		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').fill('half a thought')
 		await page.keyboard.press('Escape')
@@ -110,7 +111,7 @@ test.describe('Aloha Social, in a browser', () => {
 		await expect(composer.locator('.message')).toHaveText('half a thought')
 		await expect(page.locator('.new-post')).toHaveCount(1)
 		await openApp(page)
-		await page.locator('.composer-line__expand').click()
+		await page.locator('.navigation__compose').click()
 		await expect(composer.locator('.message')).toHaveText('half a thought')
 		await composer.locator('.message').fill('')
 	})
@@ -122,7 +123,7 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('each composer panel closes from itself', async ({ page }) => {
 		await openApp(page)
-		await page.locator('.composer-line__expand').click()
+		await page.locator('.navigation__compose').click()
 		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await composer.getByRole('button', { name: 'More options', exact: true }).click()
@@ -154,7 +155,7 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('the place picker has room for the box that names a new place', async ({ page }) => {
 		await openApp(page)
-		await page.locator('.composer-line__expand').click()
+		await page.locator('.navigation__compose').click()
 		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await composer.getByRole('button', { name: 'More options', exact: true }).click()
@@ -179,7 +180,7 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('the Files dialog has a button to confirm the pick', async ({ page }) => {
 		await openApp(page)
-		await page.locator('.composer-line__expand').click()
+		await page.locator('.navigation__compose').click()
 		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await composer.getByRole('button', { name: 'Add from Files' }).click()

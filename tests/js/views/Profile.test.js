@@ -205,22 +205,13 @@ describe('Profile', () => {
 			accountStore.setCurrentAccount('alice@cloud.example.org')
 		})
 
-		it('is offered on the reader\'s own profile, as it is on their timeline', async () => {
+		// New post in the sidebar is where a post is written; drafts are on Settings
+		it('is not offered on the reader\'s own profile either', async () => {
 			const wrapper = mountProfile({ name: 'profile', params: { account: 'alice' } })
 			await flushPromises()
-			const composer = wrapper.findComponent(ComposerStub)
-			expect(composer.props('oneLine')).toBe('')
-			expect(composer.props('listenForIntents')).toBe(false)
-		})
-
-		it('comes with the saved drafts on the own profile only', async () => {
-			const own = mountProfile({ name: 'profile', params: { account: 'alice' } })
-			await flushPromises()
-			expect(own.findComponent({ name: 'DraftsButton' }).exists()).toBe(true)
-
-			const other = mountProfile({ name: 'profile', params: { account: 'bob@remote.example' } })
-			await flushPromises()
-			expect(other.findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
+			expect(wrapper.findComponent(ProfileInfoStub).exists()).toBe(true)
+			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
+			expect(wrapper.findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
 		})
 
 		it('is not offered on somebody else\'s profile', async () => {

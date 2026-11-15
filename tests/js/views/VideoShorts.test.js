@@ -1274,6 +1274,8 @@ describe('VideoShorts', () => {
 
 			expect(wrapper.find('.shorts__header nav.shorts__scopes').attributes('aria-label')).toBe('Whose videos')
 			expect(wrapper.find('.shorts__heading').text()).toBe('Shorts')
+			// named for screen readers, not drawn: the scopes head the page
+			expect(wrapper.find('.shorts__heading').classes()).toContain('hidden-visually')
 		})
 
 		it('offers the rest of a caption past two lines', async () => {

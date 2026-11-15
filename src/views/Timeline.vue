@@ -55,31 +55,21 @@
 					:value="selectedPhotoLayout"
 					:label="t('social', 'Photo feed layout')"
 					@update:value="choosePhotoLayout" />
+				<!-- at the end of the row, as Videos has its upload beside its chips -->
+				<div v-if="type === 'photos' && !settingsStore.getServerData.public" class="photo-compose-actions">
+					<MediaUploadButton
+						v-if="!timelineStore.composerDisplayStatus"
+						accept="image/*,video/*"
+						multiple
+						:label="t('social', 'Share photos or a video')" />
+					<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
+				</div>
 				<HashtagFollowButton
 					v-if="type === 'tags' && !followedTagsOnly"
 					:tag="String($route.params.tag)"
 					@changed="onHashtagFollowChanged" />
 			</template>
 		</PageHeader>
-		<Composer
-			v-if="hasCompactComposer && !timelineStore.composerDisplayStatus"
-			oneLine
-			:listenForIntents="false" />
-		<!-- the drafts are kept per post; this is where they are found again -->
-		<DraftsButton
-			v-if="hasCompactComposer"
-			class="compose-drafts"
-			:disabled="timelineStore.composerDisplayStatus" />
-
-		<div v-if="type === 'photos' && !settingsStore.getServerData.public" class="photo-compose-actions">
-			<MediaUploadButton
-				v-if="!timelineStore.composerDisplayStatus"
-				accept="image/*,video/*"
-				multiple
-				:label="t('social', 'Share photos or a video')" />
-			<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
-		</div>
-
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
 
 		<!-- said once to an account that existed before the policy did: it
@@ -245,13 +235,10 @@ const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkNa
 const DirectMessages = defineAsyncComponent(() => import(/* webpackChunkName: "direct-messages" */'../components/DirectMessages.vue'))
 const FirstRun = defineAsyncComponent(() => import(/* webpackChunkName: "first-run" */'../components/FirstRun.vue'))
 
-const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
-
 export default {
 	name: 'Timeline',
 	components: {
 		PageHeader,
-		Composer,
 		Announcements,
 		IconCheckAll,
 		NcButton,
@@ -296,11 +283,6 @@ export default {
 	},
 
 	computed: {
-		/** @return {boolean} whether this feed has the one-line composer */
-		hasCompactComposer() {
-			return !this.settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos', 'photos'].includes(this.type)
-		},
-
 		...mapStores(useAccountStore, useNotificationsStore, useSettingsStore, useTimelineStore),
 
 		/** @return {number} how many senders the policy is holding back */
@@ -579,10 +561,7 @@ export default {
 		 * the view for a screen reader without changing what anyone sees.
 		 */
 		headingIsVisible() {
-			// Photos and Videos are views of their own rather than a filter of
-			// a list you were already on, so they say which one you are
-			// looking at
-			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky' || this.type === 'notifications' || this.isScopedPage
+			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky' || this.type === 'notifications'
 		},
 
 		/**
@@ -1082,17 +1061,11 @@ export default {
 	}
 }
 
-.compose-drafts {
-	display: flex;
-	justify-content: flex-end;
-	padding-inline: var(--social-column-gutter, 12px);
-}
-
 .photo-compose-actions {
 	display: flex;
 	align-items: center;
-	flex-wrap: wrap;
 	gap: 8px;
+	margin-inline-start: auto;
 }
 
 .timeline-scope-description {

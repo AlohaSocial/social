@@ -68,7 +68,7 @@ test.describe('on a phone', () => {
 		await openApp(page)
 		const text = `Hello from a phone ${Date.now()}`
 
-		await page.locator('.composer-line__expand').click()
+		await page.locator('.phone-bar__compose').click()
 		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await page.keyboard.type(text)
