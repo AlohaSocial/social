@@ -745,6 +745,18 @@ export const useTimelineStore = defineStore('timeline', {
 			return (statusId) => state.statuses[statusId]
 		},
 		/**
+		 * The posts of a list that is not on screen but held: left lately, or
+		 * fetched ahead by `prefetchTimeline()`.
+		 *
+		 * @param {TimelineState} state the store state
+		 * @return {(identity: string) => object[]} identity -> its posts, [] when it is not held
+		 */
+		getHeldTimeline(state) {
+			return (identity) => (state.remembered.find((entry) => entry.identity === identity)?.timeline ?? [])
+				.map((statusId) => state.statuses[statusId])
+				.filter(Boolean)
+		},
+		/**
 		 * @param {TimelineState} state the store state
 		 * @return {object|undefined} the post a single-post view is showing
 		 */
@@ -1350,10 +1362,11 @@ export const useTimelineStore = defineStore('timeline', {
 		 *
 		 * @param {object} list which list
 		 * @param {string} list.type the timeline type, as the store names it
+		 * @param {string} [list.account] whose posts, for a profile
 		 * @param {object} [list.params] what narrows it
 		 */
-		async prefetchTimeline({ type, params = {} }) {
-			const identity = JSON.stringify([type, '', params])
+		async prefetchTimeline({ type, account = '', params = {} }) {
+			const identity = JSON.stringify([type, account, params])
 			const held = this.remembered.find((entry) => entry.identity === identity)
 			if (identity === this.getTimelineIdentity
 				|| prefetching.has(identity)
@@ -1362,7 +1375,7 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 
 			const query = { limit: 15 }
-			const url = timelineRequest({ type, account: '', params }, query)
+			const url = timelineRequest({ type, account, params }, query)
 			prefetching.add(identity)
 			let data
 			try {
@@ -1379,7 +1392,7 @@ export const useTimelineStore = defineStore('timeline', {
 			if (items === null || identity === this.getTimelineIdentity) {
 				return
 			}
-			if (!Array.isArray(data) && usesV4RecommendationTimeline({ type, account: '', params })) {
+			if (!Array.isArray(data) && usesV4RecommendationTimeline({ type, account, params })) {
 				this.recommendationCursors = { ...this.recommendationCursors, [identity]: data.next_cursor ?? null }
 				this.recommendationCoverage = { ...this.recommendationCoverage, [identity]: data.coverage ?? null }
 			}

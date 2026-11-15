@@ -4,7 +4,7 @@
 -->
 <template>
 	<div class="media-grid">
-		<ul v-if="tiles.length" class="media-grid__list">
+		<ul v-if="tiles.length" class="media-grid__list" :style="listStyle">
 			<li v-for="tile in tiles" :key="tile.key" class="media-grid__cell">
 				<router-link
 					class="media-grid__link"
@@ -121,6 +121,12 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		/** How many squares across; 0 fits as many as the width takes. */
+		columns: {
+			type: Number,
+			default: 0,
+		},
 	},
 
 	data() {
@@ -138,6 +144,11 @@ export default {
 			return this.posts
 				.filter((post) => post && Array.isArray(post.media_attachments) && post.media_attachments.length > 0)
 				.map((post) => this.toTile(post))
+		},
+
+		/** @return {object|undefined} a fixed number of columns, when one is asked for */
+		listStyle() {
+			return this.columns > 0 ? { gridTemplateColumns: `repeat(${this.columns}, 1fr)` } : undefined
 		},
 	},
 
