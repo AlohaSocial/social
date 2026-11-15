@@ -190,6 +190,23 @@ class PostImportServiceTest extends TestCase {
 		], $values);
 	}
 
+	/**
+	 * The date is a post's place in every timeline: one dated in the future
+	 * would sit above every real post until then, so it is dated now.
+	 */
+	public function testAPostDatedInTheFutureIsDatedNow(): void {
+		$path = $this->outbox([
+			$this->note('https://old.example/users/alice/statuses/9', ['published' => '2099-01-01T00:00:00Z']),
+		]);
+		$before = time();
+
+		$this->service->import($this->alice(), $path);
+
+		$this->assertCount(1, $this->written);
+		$this->assertGreaterThanOrEqual($before, $this->written[0]->getPublishedTime());
+		$this->assertLessThanOrEqual(time(), $this->written[0]->getPublishedTime());
+	}
+
 	public function testItWritesEachPostAsALocalPostDatedWhenItWasWritten(): void {
 		$path = $this->outbox([
 			$this->note('https://old.example/users/alice/statuses/1'),

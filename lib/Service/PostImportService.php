@@ -1400,8 +1400,10 @@ class PostImportService {
 
 		// when it was written, not when it was imported: an archive that
 		// arrived as today's posts would be a timeline of somebody's whole
-		// history, in one minute, in the wrong order
-		$note->setPublished(gmdate('Y-m-d\TH:i:s\Z', $post['published']));
+		// history, in one minute, in the wrong order. Never later than now:
+		// the date is the post's place in every timeline, and one dated in
+		// the future would sit above every real post until then
+		$note->setPublished(gmdate('Y-m-d\TH:i:s\Z', min($post['published'], time())));
 		$note->convertPublished();
 
 		// a reply keeps its parent where the archive holds both: the thread is
