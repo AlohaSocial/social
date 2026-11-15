@@ -307,7 +307,8 @@ class XrpcService {
 			}
 		}
 		$value = $fetch();
-		$cache?->set($cacheKey, ['value' => $value], $value === null || $value === '' ? self::MISS_TTL : self::LOOKUP_TTL);
+		$found = $value !== null && $value !== '';
+		$cache?->set($cacheKey, ['value' => $value], $found ? self::LOOKUP_TTL : self::MISS_TTL);
 
 		return $value;
 	}
