@@ -479,8 +479,8 @@ describe('Composer', () => {
 			await setContent(wrapper, `${MENTION_BOB}hi`)
 
 			expect(MENTION_BOB.length).toBeGreaterThan(150)
-			// '@bob@remote.example' + nbsp + 'hi'
-			expect(wrapper.find('.char-ring').attributes('style')).toContain('--char-progress: 0.044')
+			// '@bob' (a remote mention counts as its name) + nbsp + 'hi'
+			expect(wrapper.find('.char-ring').attributes('style')).toContain('--char-progress: 0.014')
 			expect(canPost(wrapper)).toBe(true)
 		})
 
@@ -715,6 +715,22 @@ describe('Composer', () => {
 			await setContent(wrapper, 'a'.repeat(501))
 			expect(canPost(wrapper)).toBe(false)
 			expect(input(wrapper).classes()).toContain('too-long')
+		})
+
+		it('counts the content warning towards the 500 characters', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'a'.repeat(490))
+			expect(canPost(wrapper)).toBe(true)
+
+			await addWarning(wrapper, 'b'.repeat(11))
+			await flushPromises()
+			expect(canPost(wrapper)).toBe(false)
+		})
+
+		it('counts a long link as 23 characters, as the server does', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'a'.repeat(470) + ' https://example.org/' + 'x'.repeat(80))
+			expect(canPost(wrapper)).toBe(true)
 		})
 
 		it('not as a direct message without anyone mentioned', async () => {

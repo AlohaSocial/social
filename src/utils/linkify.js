@@ -124,6 +124,34 @@ export function entitiesIn(text) {
 	return entities
 }
 
+/** What every URL counts as towards the length of a post, whatever its length. */
+export const URL_LENGTH = 23
+
+/**
+ * The length of a post as the server measures it against `max_characters`
+ * (`LinkifyService::countableLength()`): characters, not UTF-16 units; every
+ * URL as `URL_LENGTH`; a mention of an account elsewhere as its `@name` alone.
+ *
+ * @param {string} text what was typed
+ * @return {number} the length that counts
+ */
+export function countableLength(text) {
+	const source = String(text ?? '')
+	let length = [...source].length
+	for (const entity of entitiesIn(source)) {
+		if (entity.type === 'url') {
+			length += URL_LENGTH - [...entity.text].length
+		} else if (entity.type === 'mention') {
+			const at = entity.name.indexOf('@')
+			if (at !== -1) {
+				length -= [...entity.name].length - [...entity.name.slice(0, at)].length
+			}
+		}
+	}
+
+	return length
+}
+
 /**
  * The text broken into the runs it is drawn as: plain stretches and entities.
  *

@@ -682,6 +682,7 @@ import { useAccountStore } from '../../store/account.js'
 import { useTimelineStore } from '../../store/timeline.js'
 import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
 import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
+import { countableLength } from '../../utils/linkify.js'
 import { pollIsComplete, statusPayload } from '../../utils/statusPayload.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
@@ -1409,17 +1410,29 @@ export default {
 		 * before a word was typed.
 		 */
 		statusIsTooLong() {
-			return this.statusText.length > this.maxLength
+			return this.statusLength > this.maxLength
+		},
+
+		/**
+		 * The length the server holds against the allowance: the text counted
+		 * as `LinkifyService::countableLength()` counts it, and the content
+		 * warning with it.
+		 *
+		 * @return {number}
+		 */
+		statusLength() {
+			const warning = this.showWarning ? this.spoilerText.trim() : ''
+			return countableLength(this.statusText) + [...warning].length
 		},
 
 		/** @return {number} how much of the allowance is spent, 0..1 */
 		charProgress() {
-			return Math.min(this.statusText.length / this.maxLength, 1)
+			return Math.min(this.statusLength / this.maxLength, 1)
 		},
 
 		/** @return {number} how many characters remain, negative once over */
 		charsLeft() {
-			return this.maxLength - this.statusText.length
+			return this.maxLength - this.statusLength
 		},
 
 		hasMentions() {
