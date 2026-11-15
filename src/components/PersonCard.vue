@@ -252,7 +252,7 @@ export default {
 	padding-inline-end: calc(var(--default-grid-baseline) * 2);
 	border-radius: var(--border-radius-large);
 	background-color: var(--color-background-hover);
-	transition: background-color .15s ease;
+	transition: background-color var(--social-motion-fast) var(--social-ease);
 
 	&:hover,
 	&:focus-within {

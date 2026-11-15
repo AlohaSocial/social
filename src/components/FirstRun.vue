@@ -654,7 +654,7 @@ export default {
 		height: 8px;
 		border-radius: 999px;
 		background: var(--color-border-dark);
-		transition: width .3s cubic-bezier(.22, 1.2, .48, 1), background-color .2s ease;
+		transition: width var(--social-motion-slow) var(--social-ease-spring), background-color var(--social-motion-base) var(--social-ease);
 
 		&--done {
 			background: var(--color-primary-element-light-hover);
@@ -829,7 +829,7 @@ export default {
 /* one step slides out to the left as the next comes in from the right */
 .first-run-step-enter-active,
 .first-run-step-leave-active {
-	transition: opacity .18s ease, transform .22s cubic-bezier(.22, 1.2, .48, 1);
+	transition: opacity var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease-spring);
 }
 
 .first-run-step-enter-from {

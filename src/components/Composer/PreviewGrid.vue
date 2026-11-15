@@ -168,7 +168,7 @@ export default {
 	&__tracker {
 		height: 100%;
 		background: var(--color-primary-element);
-		transition: width .2s ease;
+		transition: width var(--social-motion-base) var(--social-ease);
 	}
 }
 

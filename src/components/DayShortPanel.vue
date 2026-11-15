@@ -421,7 +421,7 @@ export default {
 	display: block;
 	block-size: 100%;
 	background: var(--social-on-dark-text);
-	transition: width 0.1s linear;
+	transition: width var(--social-motion-fast) linear;
 }
 
 .day-short__bottom {

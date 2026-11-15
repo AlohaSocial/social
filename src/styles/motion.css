@@ -1,0 +1,29 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/*
+ * One scale for everything that moves in answer to the reader: three
+ * durations and one curve, so a button, a menu and a page change feel like
+ * parts of the same app. A component picks the step by what moves, not by
+ * taste — a colour or a hover is fast, something that appears or slides is
+ * base, something that travels across the page or settles into place is slow.
+ *
+ * The spring overshoots a little and settles; it is for things that snap to a
+ * choice, like the feed switcher's glider, and nothing that merely fades.
+ *
+ * Long decorative loops (a skeleton's sheen, a drifting illustration) keep
+ * their own timing, and every animation still answers
+ * `prefers-reduced-motion` in its own component.
+ *
+ * Imported by every entry point, so the names mean the same on every page the
+ * app draws, not only inside the app itself.
+ */
+:root {
+	--social-motion-fast: 150ms;
+	--social-motion-base: 200ms;
+	--social-motion-slow: 400ms;
+	--social-ease: cubic-bezier(.2, 0, .1, 1);
+	--social-ease-spring: cubic-bezier(.22, 1.4, .36, 1);
+}

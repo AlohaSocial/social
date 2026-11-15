@@ -260,7 +260,7 @@
 		font-size: 12px;
 		font-weight: 600;
 		pointer-events: none;
-		animation: short-hint-in .4s ease-out both;
+		animation: short-hint-in var(--social-motion-slow) var(--social-ease) both;
 	}
 
 	&__recommendation-menu {
@@ -306,7 +306,7 @@
 		background: var(--social-on-dark-scrim);
 		color: var(--social-on-dark-text);
 		cursor: pointer;
-		transition: transform .15s ease;
+		transition: transform var(--social-motion-fast) var(--social-ease);
 
 		&:active {
 			transform: scale(.9);
@@ -739,7 +739,7 @@
 		background: var(--color-main-background);
 		color: var(--color-main-text);
 		box-shadow: var(--social-elevation-raised);
-		animation: shorts-sheet-in .2s ease-out both;
+		animation: shorts-sheet-in var(--social-motion-base) var(--social-ease) both;
 
 		&:focus-visible {
 			outline: 2px solid var(--color-primary-element);

@@ -2832,8 +2832,8 @@ function rememberedVisibility() {
 
 // one duration and one curve for the whole opening, so the parts of it arrive
 // together rather than each on its own schedule
-$composer-ease: cubic-bezier(0.25, 0.8, 0.35, 1);
-$composer-duration: 220ms;
+$composer-ease: var(--social-ease);
+$composer-duration: var(--social-motion-base);
 
 .new-post {
 	background: var(--color-main-background);
@@ -3006,7 +3006,7 @@ $composer-duration: 220ms;
 
 .new-post--refused {
 	// 400ms, the same span REFUSAL_DURATION in useComposerAttachments keeps the class on for
-	animation: composer-refused 400ms $composer-ease;
+	animation: composer-refused var(--social-motion-slow) $composer-ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3422,7 +3422,7 @@ $composer-duration: 220ms;
 		var(--color-primary-element) calc(var(--char-progress) * 360deg),
 		var(--color-background-dark) 0
 	);
-	transition: background .2s ease;
+	transition: background var(--social-motion-base) var(--social-ease);
 
 	&::after {
 		content: '';
@@ -3502,7 +3502,7 @@ $composer-duration: 220ms;
 		aspect-ratio: 1;
 		padding: 10%;
 		border-radius: var(--border-radius-large, 12px);
-		animation: composer-card-in .35s cubic-bezier(.3, 1.3, .5, 1) both;
+		animation: composer-card-in var(--social-motion-slow) var(--social-ease-spring) both;
 	}
 
 	&__text {
@@ -3599,7 +3599,7 @@ $composer-duration: 220ms;
 	}
 
 	&--landed &__die {
-		animation: composer-land .32s cubic-bezier(.3, 1.4, .5, 1) both;
+		animation: composer-land var(--social-motion-slow) var(--social-ease-spring) both;
 	}
 }
 

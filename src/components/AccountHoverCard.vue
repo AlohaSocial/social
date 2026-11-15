@@ -682,7 +682,7 @@ export default {
 
 	/* rises into place rather than appearing, in the vocabulary of the
 	   timeline entries */
-	animation: account-hover-card-rise .18s cubic-bezier(.4, 0, .2, 1);
+	animation: account-hover-card-rise var(--social-motion-base) var(--social-ease);
 
 	&__head {
 		display: flex;

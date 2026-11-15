@@ -1184,7 +1184,7 @@ export default {
 	background: var(--color-background-hover);
 	color: var(--color-main-text);
 	cursor: pointer;
-	transition: border-color .15s ease, transform .15s ease;
+	transition: border-color var(--social-motion-fast) var(--social-ease), transform var(--social-motion-fast) var(--social-ease);
 
 	&:hover,
 	&:focus-visible {
@@ -1376,7 +1376,7 @@ export default {
 	background: var(--social-on-dark-accent);
 	box-shadow: var(--social-elevation-raised);
 	cursor: pointer;
-	transition: border-radius .2s ease, transform .2s ease;
+	transition: border-radius var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease);
 
 	&:hover:not(:disabled) {
 		background: var(--social-on-dark-accent);
@@ -1701,7 +1701,7 @@ export default {
 		display: block;
 		block-size: 100%;
 		background: linear-gradient(90deg, var(--social-on-dark-accent-cool), var(--social-on-dark-accent));
-		transition: width .2s ease;
+		transition: width var(--social-motion-base) var(--social-ease);
 	}
 }
 

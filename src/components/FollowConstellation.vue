@@ -470,7 +470,7 @@ export default {
 	border-radius: 50%;
 	background: var(--color-main-background);
 	object-fit: cover;
-	transition: transform .15s ease;
+	transition: transform var(--social-motion-fast) var(--social-ease);
 }
 
 .constellation__name {

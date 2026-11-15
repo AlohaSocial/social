@@ -363,16 +363,16 @@ export default {
 		font-weight: 600 !important;
 		/* the colours cross from primary to success to error as the state
 		   changes under the pointer, instead of switching in one frame */
-		transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+		transition: background-color var(--social-motion-fast) var(--social-ease), border-color var(--social-motion-fast) var(--social-ease), color var(--social-motion-fast) var(--social-ease), box-shadow var(--social-motion-fast) var(--social-ease);
 	}
 
 	.follow-button__label {
 		display: inline-block;
-		animation: follow-label-in .18s ease;
+		animation: follow-label-in var(--social-motion-base) var(--social-ease);
 	}
 
 	.follow-button__icon {
-		animation: follow-icon-in .18s ease;
+		animation: follow-icon-in var(--social-motion-base) var(--social-ease);
 	}
 
 	.follow-button--pending {
@@ -380,11 +380,11 @@ export default {
 	}
 
 	.follow-button--refused {
-		animation: follow-refused .4s ease;
+		animation: follow-refused var(--social-motion-slow) var(--social-ease);
 	}
 
 	.follow-button--confirmed .follow-button__check {
-		animation: follow-pop .45s cubic-bezier(.34, 1.56, .64, 1);
+		animation: follow-pop var(--social-motion-slow) var(--social-ease-spring);
 	}
 
 	/* the ring, sized to the button it comes out of and behind it */
@@ -397,7 +397,7 @@ export default {
 		border-radius: 8px;
 		background: var(--color-success, var(--color-primary-element));
 		pointer-events: none;
-		animation: follow-burst .5s ease-out forwards;
+		animation: follow-burst var(--social-motion-slow) var(--social-ease) forwards;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

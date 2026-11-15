@@ -1747,7 +1747,7 @@ export default {
 	border-radius: 999px;
 	background: var(--color-background-hover);
 	color: var(--color-text-maxcontrast);
-	transition: border-color .15s ease;
+	transition: border-color var(--social-motion-fast) var(--social-ease);
 
 	// the ring is the pill's, round the whole field, rather than the
 	// square one the browser would draw round the text inside it
@@ -1809,7 +1809,7 @@ export default {
 	display: flex;
 	align-items: center;
 	border-radius: var(--border-radius-large, 8px);
-	transition: background-color .15s ease;
+	transition: background-color var(--social-motion-fast) var(--social-ease);
 
 	& + &::before {
 		content: '';
@@ -1938,7 +1938,7 @@ export default {
 	flex: 0 0 auto;
 	margin-inline-end: 2px;
 	opacity: 0;
-	transition: opacity .16s ease;
+	transition: opacity var(--social-motion-fast) var(--social-ease);
 }
 
 .direct-messages__row:hover .direct-messages__row-menu,
@@ -2088,7 +2088,7 @@ export default {
 	margin: 0 0.5rem;
 	white-space: nowrap;
 	opacity: 0;
-	transition: opacity .15s ease;
+	transition: opacity var(--social-motion-fast) var(--social-ease);
 	pointer-events: none;
 }
 
