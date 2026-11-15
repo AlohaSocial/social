@@ -1185,6 +1185,33 @@ describe('one column above the feed', () => {
 		expect(wrapper.classes()).toContain('social__wrapper--scoped')
 	})
 
+	it('folds the scopes to icons well into the feed, and opens them near the top', async () => {
+		const column = document.createElement('div')
+		column.id = 'app-content-vue'
+		document.body.appendChild(column)
+		try {
+			const wrapper = mountTimeline({ params: { type: 'federated' } })
+			const scrollTo = async (offset) => {
+				column.scrollTop = offset
+				column.dispatchEvent(new Event('scroll'))
+				await new Promise((resolve) => requestAnimationFrame(resolve))
+			}
+			const compact = () => wrapper.findComponent(TimelineSwitcher).props('compact')
+
+			expect(compact()).toBe(false)
+			await scrollTo(400)
+			expect(compact()).toBe(true)
+			// between the two thresholds nothing changes, so the row does not flicker
+			await scrollTo(80)
+			expect(compact()).toBe(true)
+			await scrollTo(10)
+			expect(compact()).toBe(false)
+			wrapper.unmount()
+		} finally {
+			column.remove()
+		}
+	})
+
 	it('draws no band where there are no scopes', () => {
 		const wrapper = mountTimeline({ name: 'tags', params: { tag: 'nextcloud' } })
 
