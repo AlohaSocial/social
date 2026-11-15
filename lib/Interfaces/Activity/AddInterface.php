@@ -43,7 +43,7 @@ class AddInterface extends AbstractActivityPubInterface implements IActivityPubI
 			$story->setAttributedTo($item->getActorId());
 			// checked against the activity's own origin, which is what stops
 			// one server publishing a story onto another's account
-			$story->setOrigin($item->getOrigin(), $item->getOriginSource(), $item->getOriginCreationTime());
+			$story->setOrigin($item->getOriginAuthority(), $item->getOriginSource(), $item->getOriginCreationTime());
 			AP::instance()->getInterfaceFromType(Story::TYPE)->save($story);
 
 			return;

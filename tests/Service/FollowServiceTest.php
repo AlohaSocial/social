@@ -291,7 +291,7 @@ class FollowServiceTest extends TestCase {
 		$this->followsRequest->method('getByPersons')
 			->willThrowException(new FollowNotFoundException());
 		$this->followsRequest->expects($this->once())->method('save');
-		$this->configService->method('getCloudHost')->willReturn('social.example');
+		$this->configService->method('getCloudAuthority')->willReturn('social.example');
 
 		// nothing goes to the network, and the inbox handler runs on the Follow
 		// that was just saved

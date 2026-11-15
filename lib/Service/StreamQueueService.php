@@ -404,7 +404,7 @@ class StreamQueueService {
 
 		$activity->setId($url);
 		$activity->setActorId($object->getAttributedTo());
-		$activity->setOrigin((string)parse_url($url, PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+		$activity->setOrigin(ConfigService::authorityOf($url), SignatureService::ORIGIN_REQUEST, time());
 		$activity->setObject($object);
 
 		// its author has to be known before the post can be shown as theirs
@@ -550,8 +550,7 @@ class StreamQueueService {
 			$this->breaker->close($host);
 			$object = AP::instance()->getItemFromData($data);
 
-			$origin = parse_url($item->getUrl(), PHP_URL_HOST);
-			$object->setOrigin($origin, SignatureService::ORIGIN_REQUEST, time());
+			$object->setOrigin(ConfigService::authorityOf($item->getUrl()), SignatureService::ORIGIN_REQUEST, time());
 
 			if ($object->getId() !== $item->getUrl()) {
 				throw new InvalidOriginException(

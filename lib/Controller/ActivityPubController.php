@@ -357,7 +357,10 @@ class ActivityPubController extends Controller {
 				} catch (InvalidOriginException $e) {
 					return $this->acceptForwarded($activity, $origin, $e);
 				}
-				$activity->setOrigin($origin, SignatureService::ORIGIN_HEADER, $requestTime);
+				// the signer is the actor here, and its address keeps the port
+				$activity->setOrigin(
+					ConfigService::authorityOf($signer) ?: $origin, SignatureService::ORIGIN_HEADER, $requestTime
+				);
 			}
 
 			// A Linked Data signature moves the origin off the host that
@@ -445,7 +448,10 @@ class ActivityPubController extends Controller {
 				} catch (InvalidOriginException $e) {
 					return $this->acceptForwarded($activity, $origin, $e);
 				}
-				$activity->setOrigin($origin, SignatureService::ORIGIN_HEADER, $requestTime);
+				// the signer is the actor here, and its address keeps the port
+				$activity->setOrigin(
+					ConfigService::authorityOf($signer) ?: $origin, SignatureService::ORIGIN_HEADER, $requestTime
+				);
 			}
 
 			// A Linked Data signature moves the origin off the host that

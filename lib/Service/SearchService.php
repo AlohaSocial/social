@@ -147,7 +147,7 @@ class SearchService {
 			}
 
 			$object->setOrigin(
-				(string)parse_url($uri, PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time()
+				ConfigService::authorityOf($uri), SignatureService::ORIGIN_REQUEST, time()
 			);
 
 			/** @var Stream $object */

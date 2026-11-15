@@ -1118,7 +1118,7 @@ class StreamService {
 							continue;
 						}
 						$announce = AP::instance()->getItemFromData($itemData, deferAttachmentDownloads: true);
-						$announce->setOrigin((string)parse_url($actor->getId(), PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+						$announce->setOrigin(ConfigService::authorityOf($actor->getId()), SignatureService::ORIGIN_REQUEST, time());
 						$announce->setActor($actor);
 						AP::instance()->getInterfaceForItem($announce)->processIncomingRequest($announce);
 						$synced++;
@@ -1134,7 +1134,7 @@ class StreamService {
 						if ($delete->getType() !== 'Delete' || $delete->getActorId() !== $actor->getId()) {
 							continue;
 						}
-						$delete->setOrigin((string)parse_url($actor->getId(), PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+						$delete->setOrigin(ConfigService::authorityOf($actor->getId()), SignatureService::ORIGIN_REQUEST, time());
 						AP::instance()->getInterfaceForItem($delete)->processIncomingRequest($delete);
 						$synced++;
 						continue;
@@ -1189,7 +1189,7 @@ class StreamService {
 							}
 							// The document was fetched from this actor's own outbox.
 							// The inbox handler still checks the stored author and edit time.
-							$update->setOrigin($actorHost, SignatureService::ORIGIN_REQUEST, time());
+							$update->setOrigin(ConfigService::authorityOf($actor->getId()), SignatureService::ORIGIN_REQUEST, time());
 							AP::instance()->getInterfaceForItem($update)->processIncomingRequest($update);
 							$synced++;
 						}

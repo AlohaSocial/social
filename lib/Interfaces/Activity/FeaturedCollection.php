@@ -22,6 +22,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\SignatureService;
@@ -155,7 +156,7 @@ class FeaturedCollection {
 
 		try {
 			$object = AP::instance()->getItemFromData($embedded);
-			$object->setOrigin((string)parse_url($postId, PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+			$object->setOrigin(ConfigService::authorityOf($postId), SignatureService::ORIGIN_REQUEST, time());
 			if ($object->getId() !== $postId || $object->getType() !== Note::TYPE) {
 				return false;
 			}

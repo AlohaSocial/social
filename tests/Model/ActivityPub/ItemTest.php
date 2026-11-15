@@ -101,6 +101,20 @@ class ItemTest extends TestCase {
 		$this->assertSame(1714564800, $item->getOriginCreationTime());
 	}
 
+	public function testAnOriginWithAPortKeepsItApartFromTheHost(): void {
+		$item = new Item();
+
+		$item->setOrigin('mastodon.social:8443', 2, 0);
+		$this->assertSame('mastodon.social', $item->getOrigin());
+		$this->assertSame('mastodon.social:8443', $item->getOriginAuthority());
+
+		$item->setOrigin('[2001:db8::1]:8443', 2, 0);
+		$this->assertSame('[2001:db8::1]', $item->getOrigin());
+
+		$item->setOrigin('[2001:db8::1]', 2, 0);
+		$this->assertSame('[2001:db8::1]', $item->getOrigin());
+	}
+
 	public function testScalarAccessorsRoundTrip(): void {
 		$item = new Item();
 

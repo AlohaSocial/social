@@ -349,7 +349,7 @@ class FollowService {
 				// a moment ago, so say so — otherwise checkOrigin() compares
 				// the actor's host against an empty origin and refuses it.
 				$follow->setOrigin(
-					$this->configService->getCloudHost(),
+					$this->configService->getCloudAuthority(),
 					SignatureService::ORIGIN_REQUEST,
 					time()
 				);

@@ -400,9 +400,24 @@ class Item {
 	}
 
 	/**
-	 * @return string
+	 * The host the item was proven to come from, without a port: what block
+	 * lists, rate limits and host comparisons are keyed on.
 	 */
 	public function getOrigin(): string {
+		$authority = $this->origin;
+		if (preg_match('/^(.+):(\d+)$/', $authority, $m) === 1
+			&& (!str_contains($m[1], ':') || str_ends_with($m[1], ']'))) {
+			return $m[1];
+		}
+
+		return $authority;
+	}
+
+	/**
+	 * The `host[:port]` the item was proven to come from, the port only when
+	 * it is not the scheme's default (ConfigService::authorityOf()).
+	 */
+	public function getOriginAuthority(): string {
 		return $this->origin;
 	}
 
@@ -421,7 +436,7 @@ class Item {
 	}
 
 	/**
-	 * @param string $origin
+	 * @param string $origin a host, or `host:port` for a non-default port
 	 *
 	 * @param int $source
 	 *

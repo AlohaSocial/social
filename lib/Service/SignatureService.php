@@ -850,8 +850,9 @@ class SignatureService {
 			}
 			$this->durableCache->set(self::LD_SEEN_NAMESPACE, $seenKey, 1, self::LD_WINDOW * 2 + self::REPLAY_MARGIN);
 
+			$this->getKeyOrigin($actorId);
 			$object->setOrigin(
-				$this->getKeyOrigin($actorId), SignatureService::ORIGIN_SIGNATURE, $time
+				ConfigService::authorityOf($actorId), SignatureService::ORIGIN_SIGNATURE, $time
 			);
 
 			return true;
