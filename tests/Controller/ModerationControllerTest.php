@@ -19,6 +19,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Model\Client\AdminDomainBlock;
 use OCA\Social\Model\Gif;
+use OCA\Social\Model\HeldPost;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\Strike;
 use OCA\Social\Service\AccountService;
@@ -732,6 +733,39 @@ class ModerationControllerTest extends TestCase {
 			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 			$this->assertSame('a moderator cannot act on their own account', $response->getData()['error']);
 		}
+	}
+
+	/**
+	 * A post is its author's: the account rule holds for taking one down,
+	 * and for deciding on one held for review, which a moderator could
+	 * otherwise use to publish their own.
+	 */
+	public function testAPostOfAnAccountTheModeratorMayNotActOnIsLeftAlone(): void {
+		$this->moderationService->method('authorOf')->with('https://cloud.example/users/admin/statuses/1')
+			->willReturn('https://cloud.example/users/admin');
+		$held = (new HeldPost())->setActorId('https://cloud.example/users/admin');
+		$this->postReviewService->method('heldPost')->willReturn($held);
+		$this->adminApiService->method('assertMayActOn')
+			->with('https://cloud.example/users/admin', 'alice')
+			->willThrowException(new ModerationNotAllowedException('only a Nextcloud administrator can act on an administrator\'s account'));
+		$this->moderationService->expects($this->never())->method('removeStream');
+
+		foreach ([
+			$this->controller->statusRemove('https://cloud.example/users/admin/statuses/1'),
+			$this->controller->reviewApprove(3),
+			$this->controller->reviewReject(3),
+		] as $response) {
+			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		}
+	}
+
+	public function testAPostTheModeratorMayActOnIsTakenDown(): void {
+		$this->moderationService->method('authorOf')->willReturn('https://remote.example/users/x');
+		$this->moderationService->expects($this->once())->method('removeStream')->with('https://remote.example/users/x/1');
+
+		$response = $this->controller->statusRemove('https://remote.example/users/x/1');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 	}
 
 	public function testForcingSensitiveNeedsAnAccount(): void {

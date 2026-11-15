@@ -93,6 +93,16 @@ class MigrationService {
 	 */
 	private const REFOLLOW_MAX = 20000;
 
+	/**
+	 * The most entries one import of a list of accounts or posts works
+	 * through, as many as a move-in follows. Each entry can be a WebFinger
+	 * lookup, an actor fetch and a delivery to a server the file names, so
+	 * an uploaded file of a few hundred thousand lines would otherwise be
+	 * as many requests sent on the uploader's say-so. What is past the cap
+	 * is counted as skipped.
+	 */
+	public const MAX_IMPORT_ENTRIES = MoveInService::MAX_FOLLOWS;
+
 	public function __construct(
 		private AccountService $accountService,
 		private ActorsRequest $actorsRequest,
@@ -300,7 +310,7 @@ class MigrationService {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['followed' => 0, 'skipped' => 0, 'failed' => []];
 
-		$handles = self::parseFollows($csv);
+		[$handles, $result['skipped']] = self::capped(self::parseFollows($csv));
 		$total = count($handles);
 		$handled = 0;
 		foreach ($handles as $handle) {
@@ -386,6 +396,8 @@ class MigrationService {
 		$result = ['bookmarked' => 0, 'skipped' => 0, 'failed' => []];
 
 		[$urls, $result['skipped']] = self::addressesOf($csv);
+		[$urls, $over] = self::capped($urls);
+		$result['skipped'] += $over;
 		$total = count($urls);
 		$handled = 0;
 		foreach ($urls as $url) {
@@ -432,6 +444,8 @@ class MigrationService {
 		$result = ['blocked' => 0, 'skipped' => 0, 'failed' => []];
 
 		[$domains, $result['skipped']] = self::domainsOf($csv);
+		[$domains, $over] = self::capped($domains);
+		$result['skipped'] += $over;
 		$total = count($domains);
 		$handled = 0;
 		foreach ($domains as $domain) {
@@ -492,6 +506,19 @@ class MigrationService {
 		}
 
 		return [array_keys($domains), $skipped];
+	}
+
+	/**
+	 * The first MAX_IMPORT_ENTRIES entries of an import, and how many more
+	 * there were.
+	 *
+	 * @param string[] $entries
+	 * @return array{0: string[], 1: int}
+	 */
+	private static function capped(array $entries): array {
+		$kept = array_slice($entries, 0, self::MAX_IMPORT_ENTRIES);
+
+		return [$kept, count($entries) - count($kept)];
 	}
 
 	/** @return string[] the non-empty lines, trimmed */
@@ -595,7 +622,16 @@ class MigrationService {
 			$existing[mb_strtolower($list->getTitle())] = $list;
 		}
 
-		$parsed = self::parseListsCsv($csv);
+		$parsed = [];
+		$room = self::MAX_IMPORT_ENTRIES;
+		foreach (self::parseListsCsv($csv) as $title => $handles) {
+			$kept = array_slice($handles, 0, max(0, $room));
+			$result['skipped'] += count($handles) - count($kept);
+			$room -= count($kept);
+			if ($kept !== []) {
+				$parsed[$title] = $kept;
+			}
+		}
 		$total = array_sum(array_map('count', $parsed));
 		$handled = 0;
 		foreach ($parsed as $title => $handles) {
@@ -701,7 +737,7 @@ class MigrationService {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['done' => 0, 'skipped' => 0, 'failed' => []];
 
-		$handles = self::parseFollows($csv);
+		[$handles, $result['skipped']] = self::capped(self::parseFollows($csv));
 		$total = count($handles);
 		$handled = 0;
 		foreach ($handles as $handle) {

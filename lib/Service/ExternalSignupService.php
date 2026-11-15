@@ -54,8 +54,19 @@ class ExternalSignupService {
 	/** Registrations one address may make in an hour. */
 	public const PER_IP_PER_HOUR = 5;
 
-	/** Registrations waiting in all, before the form stops taking more. */
+	/**
+	 * Confirmed registrations waiting for an administrator, before the form
+	 * stops taking more that would have to wait too.
+	 */
 	public const MAX_PENDING = 1000;
+
+	/**
+	 * Unconfirmed registrations kept at most. Past it the oldest are
+	 * forgotten to make room rather than the form closing: they cost nothing
+	 * but a row, and closing on their count let anybody with a few hundred
+	 * addresses keep the form shut by never confirming.
+	 */
+	public const MAX_UNVERIFIED = 5000;
 
 	public const MIN_PASSWORD_LENGTH = 8;
 
@@ -246,9 +257,14 @@ class ExternalSignupService {
 
 		$ipHash = $this->ipHash($remoteAddress);
 		$now = $this->timeFactory->getTime();
+		$needsApproval = $mode === ExternalUserService::MODE_APPROVAL && $invite === null;
 		if ($this->signupsRequest->countFromIpSince($ipHash, $now - 3600) >= self::PER_IP_PER_HOUR
-			|| $this->signupsRequest->count() >= self::MAX_PENDING) {
+			|| ($needsApproval && $this->signupsRequest->countAwaitingApproval() >= self::MAX_PENDING)) {
 			throw new ExternalUserException($this->l10n->t('Too many registrations right now, please try again later.'));
+		}
+		$unverified = $this->signupsRequest->countUnverified();
+		if ($unverified >= self::MAX_UNVERIFIED) {
+			$this->signupsRequest->purgeOldestUnverified($unverified - self::MAX_UNVERIFIED + 1);
 		}
 
 		$handle = $this->externalUserService->assertHandleOpen($handle);
@@ -280,7 +296,6 @@ class ExternalSignupService {
 		// hashed on both paths below, so that the time an answer takes does
 		// not tell them apart either
 		$passwordHash = $this->hasher->hash($password);
-		$needsApproval = $mode === ExternalUserService::MODE_APPROVAL && $invite === null;
 		$inviteId = ($invite === null) ? 0 : $invite['id'];
 
 		$emailInUse = $this->externalUserService->isEmailInUse($email);

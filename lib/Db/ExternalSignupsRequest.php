@@ -176,13 +176,44 @@ class ExternalSignupsRequest {
 		return $this->scalar($qb);
 	}
 
-	/** Every row, confirmed or not. */
-	public function count(): int {
+	/** Rows whose email is not confirmed, the placeholders included. */
+	public function countUnverified(): int {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->select($qb->func()->count('*', 'total'))
-			->from(self::TABLE);
+			->from(self::TABLE)
+			->where($qb->expr()->eq('verified', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
 
 		return $this->scalar($qb);
+	}
+
+	/** Forgets the oldest rows whose email is not confirmed, at most `$count`. */
+	public function purgeOldestUnverified(int $count): int {
+		if ($count <= 0) {
+			return 0;
+		}
+
+		$qb = $this->connection->getQueryBuilder();
+		$qb->select('id')
+			->from(self::TABLE)
+			->where($qb->expr()->eq('verified', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+			->orderBy('creation', 'ASC')
+			->addOrderBy('id', 'ASC')
+			->setMaxResults($count);
+		$ids = [];
+		$cursor = $qb->executeQuery();
+		while (($row = $cursor->fetch()) !== false) {
+			$ids[] = (int)$row['id'];
+		}
+		$cursor->closeCursor();
+		if ($ids === []) {
+			return 0;
+		}
+
+		$delete = $this->connection->getQueryBuilder();
+		$delete->delete(self::TABLE)
+			->where($delete->expr()->in('id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
+
+		return $delete->executeStatement();
 	}
 
 	/** Registrations from one address hash since a moment. */

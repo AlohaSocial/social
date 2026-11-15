@@ -559,6 +559,27 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->submit();
 	}
 
+	/**
+	 * Registrations nobody confirms cost a row each and expire in a day:
+	 * past the ceiling the oldest are forgotten, and the form stays open.
+	 */
+	public function testUnconfirmedRegistrationsMakeRoomInsteadOfClosingTheForm(): void {
+		$this->signups->method('countUnverified')->willReturn(ExternalSignupService::MAX_UNVERIFIED + 2);
+		$this->signups->expects($this->once())->method('purgeOldestUnverified')->with(3);
+		$this->signups->expects($this->once())->method('create');
+
+		$this->submit();
+	}
+
+	public function testAFullApprovalQueueStopsOnlyTheRegistrationsThatWouldWait(): void {
+		$this->mode = ExternalUserService::MODE_APPROVAL;
+		$this->signups->method('countAwaitingApproval')->willReturn(ExternalSignupService::MAX_PENDING);
+		$this->signups->expects($this->never())->method('create');
+
+		$this->expectException(ExternalUserException::class);
+		$this->submit();
+	}
+
 	public function testConfirmingTheEmailMakesTheAccount(): void {
 		$this->signups->method('getByTokenHash')->with(hash('sha256', 'abc'))->willReturn($this->pending(false, false));
 		$this->users->expects($this->once())->method('createAccount')->with('bob', 'bob@example.org', 'H', 'open', 9, true, '', 0, '')
