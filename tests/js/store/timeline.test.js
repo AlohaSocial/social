@@ -2267,3 +2267,49 @@ describe('replies hidden by the author of a conversation', () => {
 		expect(store.hiddenByAuthor).toBe(0)
 	})
 })
+
+describe('polling for newer posts', () => {
+	let store
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		setActivePinia(createPinia())
+		store = useTimelineStore()
+	})
+
+	it('does not mark the list as ended when a poll finds nothing new', async () => {
+		await store.changeTimelineType({ type: 'home', params: {} })
+		axios.get.mockResolvedValueOnce({ data: [makeStatus('5'), makeStatus('4')], headers: {} })
+		await store.fetchTimeline()
+		expect(store.timelinePageEmpty).toBe(false)
+
+		axios.get.mockResolvedValueOnce({ data: [], headers: {} })
+		await store.fetchTimeline({ min_id: '5' })
+
+		expect(store.timelinePageEmpty).toBe(false)
+		expect(store.timeline).toEqual(['5', '4'])
+	})
+
+	it('still adds what a poll finds', async () => {
+		await store.changeTimelineType({ type: 'home', params: {} })
+		axios.get.mockResolvedValueOnce({ data: [makeStatus('5')], headers: {} })
+		await store.fetchTimeline()
+
+		axios.get.mockResolvedValueOnce({ data: [makeStatus('6')], headers: {} })
+		const found = await store.fetchTimeline({ min_id: '5' })
+
+		expect(found.map((status) => status.id)).toEqual(['6'])
+		expect(store.timeline).toContain('6')
+	})
+
+	it('marks the list as ended when a page further down is empty', async () => {
+		await store.changeTimelineType({ type: 'home', params: {} })
+		axios.get.mockResolvedValueOnce({ data: [makeStatus('5')], headers: {} })
+		await store.fetchTimeline()
+
+		axios.get.mockResolvedValueOnce({ data: [], headers: {} })
+		await store.fetchTimeline({ max_id: '5' })
+
+		expect(store.timelinePageEmpty).toBe(true)
+	})
+})

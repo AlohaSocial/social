@@ -353,6 +353,18 @@ function appendNew(list, statuses) {
 	}
 }
 
+/**
+ * Whether a timeline request asks for what is newer than the list holds,
+ * as the poll and its catch-up do, rather than for a page further down.
+ *
+ * @param {object} params the query
+ * @return {boolean} whether it pages forward
+ */
+export function isForwardRequest(params) {
+	return (params.min_id !== undefined && params.min_id !== null)
+		|| (params.since_id !== undefined && params.since_id !== null)
+}
+
 /** @param {{type: string, account?: string, params: object}} list the timeline */
 function usesV4RecommendationTimeline(list) {
 	return isPersonalizedFeed(list) && loadState('social', 'serverData', {
@@ -1984,6 +1996,13 @@ export const useTimelineStore = defineStore('timeline', {
 			if (v4Timeline && !Array.isArray(data)) {
 				this.recommendationCursors = { ...this.recommendationCursors, [identity]: data?.next_cursor ?? null }
 				this.recommendationCoverage = { ...this.recommendationCoverage, [identity]: data?.coverage ?? null }
+			}
+			// A request for what is newer than the top of the list says nothing
+			// about the end of it: an empty answer there means only that nothing
+			// new has arrived, and the page flags belong to the paging requests.
+			if (isForwardRequest(params)) {
+				this.addToTimeline(timelineData)
+				return timelineData
 			}
 			this.timelinePageFilling = response.headers?.['x-social-filling'] === '1'
 				|| response.headers?.['x-social-thread-filling'] === '1'
