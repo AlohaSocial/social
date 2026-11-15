@@ -88,6 +88,7 @@ use Throwable;
  */
 abstract class MastodonApiController extends Controller {
 	use OwnAccount;
+	use ListParameter;
 
 	/**
 	 * The entity tag of the poll being answered, held between the check and

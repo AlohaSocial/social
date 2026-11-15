@@ -2478,6 +2478,15 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(['r1', 'r2'], $response->getData());
 	}
 
+	public function testRelationshipsTakeOneIdSentWithoutBrackets(): void {
+		$this->loggedInAs();
+		$this->followService->expects($this->once())->method('getRelationships')->with(['7'])->willReturn(['r7']);
+
+		$response = $this->controller()->relationships('7');
+
+		$this->assertSame(['r7'], $response->getData());
+	}
+
 	public function testRelationshipsRequireAViewer(): void {
 		$this->assertUnauthorized($this->controller()->relationships([1]));
 	}

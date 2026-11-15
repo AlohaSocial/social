@@ -1014,13 +1014,13 @@ class AdminApiController extends AdminApiControllerBase {
 	 * 0 to "how many accounts signed up through an invite" reads as "none
 	 * did", which is a different claim from "this instance has no invites".
 	 *
-	 * @param string[] $keys
+	 * @param string[]|string $keys
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/admin/measures')]
 	public function measures(
-		array $keys = [],
+		array|string $keys = [],
 		string $start_at = '',
 		string $end_at = '',
 		string $instance = '',
@@ -1031,7 +1031,7 @@ class AdminApiController extends AdminApiControllerBase {
 
 			return new DataResponse(
 				$this->metricsService->measures(
-					$keys, $this->timestamp($start_at), $this->timestamp($end_at), $instance, $id
+					self::listParam($keys), $this->timestamp($start_at), $this->timestamp($end_at), $instance, $id
 				),
 				Http::STATUS_OK
 			);
@@ -1045,13 +1045,13 @@ class AdminApiController extends AdminApiControllerBase {
 	/**
 	 * The ranked list behind one number, for each key asked for.
 	 *
-	 * @param string[] $keys
+	 * @param string[]|string $keys
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/admin/dimensions')]
 	public function dimensions(
-		array $keys = [],
+		array|string $keys = [],
 		string $start_at = '',
 		string $end_at = '',
 		int $limit = 10,
@@ -1062,7 +1062,7 @@ class AdminApiController extends AdminApiControllerBase {
 
 			return new DataResponse(
 				$this->metricsService->dimensions(
-					$keys, $this->timestamp($start_at), $this->timestamp($end_at), $limit, $id
+					self::listParam($keys), $this->timestamp($start_at), $this->timestamp($end_at), $limit, $id
 				),
 				Http::STATUS_OK
 			);

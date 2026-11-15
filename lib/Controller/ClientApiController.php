@@ -59,6 +59,7 @@ use Throwable;
  */
 abstract class ClientApiController extends Controller {
 	use OwnAccount;
+	use ListParameter;
 
 	protected string $bearer = '';
 	protected ?SocialClient $client = null;
