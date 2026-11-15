@@ -41,7 +41,14 @@
 					<!-- `disableMenu`, or the card sprouts a second card of
 					     Nextcloud's own when the pointer reaches this face -->
 					<NcAvatar
-						v-if="nextcloudUserOf(account) !== ''"
+						v-if="patternAvatarUrl(account) !== ''"
+						:size="48"
+						:url="patternAvatarUrl(account)"
+						:hideStatus="true"
+						:disableMenu="true"
+						:disableTooltip="true" />
+					<NcAvatar
+						v-else-if="nextcloudUserOf(account) !== ''"
 						:size="48"
 						:user="nextcloudUserOf(account)"
 						:displayName="account.display_name || account.username"
@@ -139,6 +146,7 @@ import VerifiedBadge from './VerifiedBadge.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
 import { isBlueskyAccount, nextcloudUserOf } from '../utils/accountLocality.js'
 import { accountAvatarUrl } from '../utils/accountAvatar.js'
+import { patternAvatarUrl } from '../utils/patternAvatar.js'
 import { originOf } from '../utils/instanceIdentity.js'
 import { profileFields } from '../utils/profileFields.js'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
@@ -439,6 +447,7 @@ export default {
 
 	methods: {
 		accountAvatarUrl,
+		patternAvatarUrl,
 		t,
 		n,
 		nextcloudUserOf,

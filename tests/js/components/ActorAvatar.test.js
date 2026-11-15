@@ -54,6 +54,21 @@ describe('ActorAvatar', () => {
 		expect(avatar.props('url')).toBeUndefined()
 	})
 
+	// Nextcloud's initials for somebody who never uploaded a picture: the
+	// server says so, and the app draws its own flower instead
+	it('draws a flower for a local account without a picture of its own', () => {
+		const avatar = mountAvatar({ actor: { ...local, avatar_default: true } }).findComponent(NcAvatarStub)
+
+		expect(avatar.props('url')).toMatch(/^data:image\/svg\+xml/)
+		expect(avatar.props('user')).toBeUndefined()
+	})
+
+	it('draws a flower for a remote account whose picture is missing', () => {
+		const avatar = mountAvatar({ actor: { ...remote, avatar_default: true } }).findComponent(NcAvatarStub)
+
+		expect(avatar.props('url')).toMatch(/^data:image\/svg\+xml/)
+	})
+
 	it('never shows a tooltip or user status', () => {
 		const avatar = mountAvatar({ actor: local }).findComponent(NcAvatarStub)
 		expect(avatar.props('disableTooltip')).toBe(true)

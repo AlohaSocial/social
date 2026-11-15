@@ -31,7 +31,13 @@
 			     See ActorAvatar, which says the rest. -->
 			<component :is="linkTag" v-bind="linkProps">
 				<NcAvatar
-					v-if="nextcloudUserOf(item.account) !== ''"
+					v-if="pattern !== ''"
+					:url="pattern"
+					:size="size ?? undefined"
+					:disableMenu="true"
+					:disableTooltip="true" />
+				<NcAvatar
+					v-else-if="nextcloudUserOf(item.account) !== ''"
 					class="messages__avatar__icon"
 					:hideStatus="true"
 					:user="nextcloudUserOf(item.account)"
@@ -58,6 +64,7 @@ import { originOf } from '../utils/instanceIdentity.js'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
 import { isLocalAccount, nextcloudUserOf } from '../utils/accountLocality.js'
 import { accountAvatarUrl } from '../utils/accountAvatar.js'
+import { patternAvatarUrl } from '../utils/patternAvatar.js'
 
 export default {
 	name: 'TimelineAvatar',
@@ -136,6 +143,11 @@ export default {
 				rel: 'nofollow noopener noreferrer',
 				'aria-label': label,
 			}
+		},
+
+		/** @return {string} the placeholder flower, or '' for an account with a picture */
+		pattern() {
+			return patternAvatarUrl(this.item.account)
 		},
 
 		/** @return {{instance: string, colour: string, local: boolean}} where the author lives */

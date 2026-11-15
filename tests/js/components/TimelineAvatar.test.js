@@ -59,6 +59,14 @@ describe('TimelineAvatar', () => {
 		expect(wrapper.find('a').attributes('href')).toBe('/index.php/u/alice')
 	})
 
+	it('draws a flower for an author without a picture of their own', () => {
+		const status = { ...localStatus, account: { ...localStatus.account, avatar_default: true } }
+		const avatar = mountAvatar(status).findComponent(NcAvatarStub)
+
+		expect(avatar.props('url')).toMatch(/^data:image\/svg\+xml/)
+		expect(avatar.props('user')).toBeUndefined()
+	})
+
 	it('shows a remote author through the avatar URL delivered with the status', () => {
 		const avatar = mountAvatar(remoteStatus).findComponent(NcAvatarStub)
 		expect(avatar.props('url')).toBe('https://remote.example/media/carol.png')
