@@ -51,3 +51,23 @@ export function isEntryActive(route, item) {
 
 	return true
 }
+
+/**
+ * Whether following a link would land exactly where the reader already is,
+ * query and fragment included. A second press on such a link takes the reader
+ * to the top of the page instead, the way a native app's tab bar does.
+ *
+ * @param {import('vue-router').Router} router the app's router
+ * @param {{fullPath?: string}} route the current route
+ * @param {string|object} to where the link points
+ * @return {boolean}
+ */
+export function isCurrentLocation(router, route, to) {
+	if (typeof to === 'string' || typeof router?.resolve !== 'function') {
+		return false
+	}
+
+	const target = router.resolve(to).fullPath
+
+	return typeof target === 'string' && target === route?.fullPath
+}

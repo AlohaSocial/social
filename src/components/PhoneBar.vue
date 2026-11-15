@@ -34,7 +34,7 @@
 						class="phone-bar__link"
 						:class="{ 'phone-bar__link--active': isActive(item) }"
 						:aria-current="isActive(item) ? 'page' : undefined"
-						@click="navigate">
+						@click="follow(item, navigate, $event)">
 						<span class="phone-bar__icon">
 							<component :is="item.icon" :size="24" />
 							<span v-if="item.counter > 0" class="phone-bar__badge" aria-hidden="true">
@@ -65,8 +65,8 @@ import { isPhone, onPhoneChange } from '../services/phone.js'
 import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
-import { isEntryActive, MY_FEED_COVERS } from '../utils/navigationActive.js'
-import { scroller } from '../utils/scroller.js'
+import { isCurrentLocation, isEntryActive, MY_FEED_COVERS } from '../utils/navigationActive.js'
+import { scroller, scrollToTop } from '../utils/scroller.js'
 
 /** The class on the root that reserves the bar's room at the foot of the page. */
 export const ROOT_CLASS = 'social-phone-bar'
@@ -195,6 +195,24 @@ export default {
 		 */
 		isActive(item) {
 			return isEntryActive(this.$route, item)
+		},
+
+		/**
+		 * Opens the entry's page, or, pressed again on the page already open,
+		 * goes back to its top.
+		 *
+		 * @param {object} item one of the entries
+		 * @param {(event: MouseEvent) => void} navigate the router link's own
+		 * @param {MouseEvent} event the press
+		 */
+		follow(item, navigate, event) {
+			const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button > 0
+			if (!modified && isCurrentLocation(this.$router, this.$route, item.to)) {
+				event.preventDefault()
+				scrollToTop()
+				return
+			}
+			navigate(event)
 		},
 
 		/**

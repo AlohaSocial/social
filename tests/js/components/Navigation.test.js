@@ -886,6 +886,39 @@ describe('Navigation', () => {
 	 * press, at the place the press happened, which is the only feedback that
 	 * can be instant when the page it opens is a chunk away.
 	 */
+	describe('pressing the entry of the page already open', () => {
+		const press = (wrapper, name) => {
+			const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+			item(wrapper, name).element.dispatchEvent(event)
+			return event
+		}
+
+		it('takes the page back to its top instead of navigating', () => {
+			router.resolve = vi.fn(() => ({ href: '/timeline/notifications', fullPath: '/timeline/notifications' }))
+			const column = document.createElement('div')
+			column.id = 'app-content-vue'
+			column.scrollTo = vi.fn()
+			document.body.appendChild(column)
+			const wrapper = mountNavigation({}, { name: 'timeline', params: { type: 'notifications' }, fullPath: '/timeline/notifications' })
+
+			const event = press(wrapper, 'Activities')
+
+			expect(event.defaultPrevented).toBe(true)
+			expect(column.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+			expect(router.push).not.toHaveBeenCalled()
+			column.remove()
+		})
+
+		it('navigates as before from anywhere else', () => {
+			router.resolve = vi.fn(() => ({ href: '/timeline/notifications', fullPath: '/timeline/notifications' }))
+			const wrapper = mountNavigation({}, { name: 'timeline', params: {}, fullPath: '/timeline' })
+
+			press(wrapper, 'Activities')
+
+			expect(router.push).toHaveBeenCalledWith({ name: 'timeline', params: { type: 'notifications' } })
+		})
+	})
+
 	describe('the travelling mark', () => {
 		it('sits on nothing until it has a row to sit on', () => {
 			const wrapper = mountNavigation()

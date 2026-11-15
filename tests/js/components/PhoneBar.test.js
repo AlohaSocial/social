@@ -242,6 +242,28 @@ describe('PhoneBar', () => {
 			expect(router.currentRoute.value.name).toBe('discover')
 			expect(current()).toEqual(['Discover'])
 		})
+
+		it('takes the page back to its top when its own entry is pressed again', async () => {
+			const { router } = await mountBar({ at: '/discover' })
+			column.scrollTo = vi.fn()
+			const push = vi.spyOn(router, 'push')
+
+			await wrapper.findAll('a')[1].trigger('click')
+
+			expect(column.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+			expect(push).not.toHaveBeenCalled()
+		})
+
+		it('changes the scope rather than scrolling when My Feed is pressed on Local', async () => {
+			const { router } = await mountBar({ at: '/timeline/timeline' })
+			column.scrollTo = vi.fn()
+
+			await wrapper.findAll('a')[0].trigger('click')
+			await flushPromises()
+
+			expect(router.currentRoute.value.fullPath).toBe('/timeline')
+			expect(column.scrollTo).not.toHaveBeenCalled()
+		})
 	})
 
 	describe('hiding on scroll', () => {

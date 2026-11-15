@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { scrollOffset, scroller } from '../../../src/utils/scroller.js'
+import { scrollOffset, scroller, scrollToTop } from '../../../src/utils/scroller.js'
 
 /** @return {Element} the app's content column, added to the page */
 function column() {
@@ -45,5 +45,43 @@ describe('scroller', () => {
 		Object.defineProperty(window, 'scrollY', { value: 120, configurable: true, writable: true })
 
 		expect(scrollOffset()).toBe(120)
+	})
+
+	describe('scrollToTop', () => {
+		/** @param {boolean} reduce whether the reader asked for less motion */
+		function motion(reduce) {
+			vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: reduce && query.includes('reduce'), media: query }))
+		}
+
+		afterEach(() => vi.restoreAllMocks())
+
+		it('glides the column back to the top', () => {
+			motion(false)
+			const element = column()
+			element.scrollTo = vi.fn()
+
+			scrollToTop()
+
+			expect(element.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+		})
+
+		it('jumps for a reader who asked for less motion', () => {
+			motion(true)
+			const element = column()
+			element.scrollTo = vi.fn()
+
+			scrollToTop()
+
+			expect(element.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' })
+		})
+
+		it('moves the window where there is no column', () => {
+			motion(false)
+			const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+			scrollToTop()
+
+			expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+		})
 	})
 })
