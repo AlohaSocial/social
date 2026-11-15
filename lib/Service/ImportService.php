@@ -18,6 +18,7 @@ use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\RedundancyLimitException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TStringTools;
 
@@ -52,10 +53,16 @@ class ImportService {
 		// sender's bytes that are wrong, which is a 400 — not a 500 that makes
 		// the peer send the same bytes again for two days
 		try {
-			return AP::instance()->getItemFromData($data);
+			$activity = AP::instance()->getItemFromData($data);
 		} catch (\TypeError $e) {
 			throw new ActivityPubFormatException('malformed activity: ' . $e->getMessage(), 0, $e);
 		}
+
+		// what a request carries is stored only once it has been checked:
+		// `parseIncomingRequest()` releases it
+		Stream::holdAttachments($activity);
+
+		return $activity;
 	}
 
 	/**
@@ -77,6 +84,7 @@ class ImportService {
 			return;
 		}
 
+		Stream::releaseAttachments($activity);
 		$activity->setRequestToken($this->uuid());
 
 		// A relay speaks a dialect of its own: its `Announce` is a pointer at

@@ -462,6 +462,14 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/** who the author said may quote this post; '' means the visibility rule decides */
 	private string $quotePolicy = '';
 	private array $attachments = [];
+	/**
+	 * Stores the attachments a post arrived with and answers them as
+	 * `MediaAttachment`s; run once, by the first `getAttachments()` that is
+	 * not held. Parsing a post writes nothing and fetches nothing.
+	 */
+	private ?\Closure $pendingAttachments = null;
+	/** whether the pending attachments wait for `releaseAttachments()` */
+	private bool $attachmentsHeld = false;
 	private array $mentions = [];
 	private array $emojis = [];
 	private bool $sensitive = false;
@@ -1528,6 +1536,12 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * @return MediaAttachment[]
 	 */
 	public function getAttachments(): array {
+		if ($this->pendingAttachments !== null && !$this->attachmentsHeld) {
+			$store = $this->pendingAttachments;
+			$this->pendingAttachments = null;
+			$this->attachments = $store();
+		}
+
 		return $this->attachments;
 	}
 
@@ -1538,8 +1552,50 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 */
 	public function setAttachments(array $attachments): self {
 		$this->attachments = $attachments;
+		$this->pendingAttachments = null;
 
 		return $this;
+	}
+
+	/**
+	 * Has the attachments come from `$source` when they are first read: what
+	 * it answers, or what they would otherwise have been when it answers
+	 * nothing.
+	 *
+	 * @param \Closure(): MediaAttachment[] $source
+	 */
+	public function preferAttachments(\Closure $source): void {
+		$previous = $this->pendingAttachments;
+		$this->pendingAttachments = function () use ($source, $previous): array {
+			$preferred = $source();
+			if ($preferred !== []) {
+				return $preferred;
+			}
+
+			return ($previous !== null) ? $previous() : $this->attachments;
+		};
+	}
+
+	/**
+	 * Keeps the attachments of this activity and every object inside it
+	 * unstored until `releaseAttachments()`: a request whose sender is not yet
+	 * held to the activity must not have this instance write rows or fetch
+	 * files on its behalf. Read while held, they are empty.
+	 */
+	public static function holdAttachments(ACore $item, bool $held = true): void {
+		for ($level = 0; $level < AP::REDUNDANCY_LIMIT; $level++) {
+			if ($item instanceof Stream) {
+				$item->attachmentsHeld = $held;
+			}
+			if (!$item->hasObject()) {
+				return;
+			}
+			$item = $item->getObject();
+		}
+	}
+
+	public static function releaseAttachments(ACore $item): void {
+		self::holdAttachments($item, false);
 	}
 
 	/**
@@ -2121,26 +2177,39 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/**
 	 * The attachments a post arrived with, each one stored and none of them
 	 * able to take the post down with it.
+	 *
+	 * Only read here: the rows are written and the files fetched when the
+	 * attachments are first asked for (`getAttachments()`), which for an inbox
+	 * request is after the sender has been held to the activity.
 	 */
 	public function importAttachments(array $list): void {
-		$urlGenerator = Server::get(IURLGenerator::class);
-		$logger = Server::get(LoggerInterface::class);
 		/** why each attachment that did not make it was left out */
 		$dropped = [];
 
-		$new = [];
+		$documents = [];
+		$seen = 0;
 		foreach ($list as $item) {
 			// A signed Create is authenticated, not trusted: a peer may list as
-			// many attachments as it likes, and each one is a row written and a
-			// file queued for download inside the inbox request. Real posts carry
-			// a handful (Mastodon allows four), so the rest of a list of fifty
-			// thousand is dropped rather than imported.
-			if (count($new) >= self::MAX_ATTACHMENTS) {
+			// many attachments as it likes. Real posts carry a handful
+			// (Mastodon allows four), so every entry counts against the
+			// ceiling, kept or not, and the rest of a list of fifty thousand is
+			// not read at all.
+			if (++$seen > self::MAX_ATTACHMENTS) {
+				$dropped[] = ['reason' => 'over the ceiling', 'left out' => count($list) - self::MAX_ATTACHMENTS];
 				break;
 			}
 
 			if (!is_array($item)) {
 				$dropped[] = ['reason' => 'not an object'];
+				continue;
+			}
+
+			// the type is checked before the entry is parsed: an attachment
+			// that is itself a post would otherwise import attachments of its
+			// own, and its own, before being left out
+			$type = $this->get('type', $item);
+			if ($type !== Document::TYPE && $type !== Image::TYPE) {
+				$dropped[] = ['reason' => 'not a document or image', 'type' => $type];
 				continue;
 			}
 
@@ -2153,7 +2222,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 				// having at all
 				$dropped[] = [
 					'reason' => 'unreadable',
-					'type' => $this->get('type', $item),
+					'type' => $type,
 					'url' => $this->get('url', $item, $this->get('href', $item)),
 					'error' => $e->getMessage(),
 				];
@@ -2183,6 +2252,33 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 				$attachment->setLocalCopy(Document::COPY_STREAMED);
 			}
 
+			$documents[] = $attachment;
+		}
+
+		$this->atprotoStreamedBlobs = [];
+		$arrived = count($list);
+		$defer = $this->deferAttachmentDownloads;
+		$this->attachments = [];
+		$this->pendingAttachments = function () use ($documents, $dropped, $arrived, $defer): array {
+			return $this->storeAttachments($documents, $dropped, $arrived, $defer);
+		};
+	}
+
+	/**
+	 * Writes the documents `importAttachments()` kept and answers them as
+	 * the post's attachments.
+	 *
+	 * @param Document[] $documents
+	 * @param list<array<string, mixed>> $dropped
+	 *
+	 * @return MediaAttachment[]
+	 */
+	private function storeAttachments(array $documents, array $dropped, int $arrived, bool $deferDownloads): array {
+		$urlGenerator = Server::get(IURLGenerator::class);
+		$logger = Server::get(LoggerInterface::class);
+
+		$new = [];
+		foreach ($documents as $attachment) {
 			try {
 				$interface = AP::instance()->getInterfaceFromType($attachment->getType());
 			} catch (ItemUnknownException $e) {
@@ -2191,7 +2287,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			}
 
 			try {
-				if ($this->deferAttachmentDownloads && $interface instanceof DocumentInterface) {
+				if ($deferDownloads && $interface instanceof DocumentInterface) {
 					$interface->save($attachment, true);
 				} else {
 					$interface->save($attachment);
@@ -2218,19 +2314,18 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 		// A post that arrived with pictures and is stored with fewer is a
 		// thing readers report and nobody can diagnose: every way out of the
-		// loop above is silent, and the post keeps its own frozen copy of what
+		// loops above is silent, and the post keeps its own frozen copy of what
 		// survived, so there is nothing to go back to afterwards either.
 		if ($dropped !== []) {
 			$logger->warning('dropped attachments while importing a post', [
 				'status' => $this->getId(),
-				'arrived' => count($list),
+				'arrived' => $arrived,
 				'kept' => count($new),
 				'dropped' => $dropped,
 			]);
 		}
 
-		$this->setAttachments($new);
-		$this->atprotoStreamedBlobs = [];
+		return $new;
 	}
 
 	/**

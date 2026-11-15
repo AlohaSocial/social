@@ -440,10 +440,11 @@ class AP {
 			$item->setVideoMeta($meta);
 		}
 
-		$attachments = $this->peerTubeService->attachments($data, $item);
-		if ($attachments !== []) {
-			$item->setAttachments($attachments);
-		}
+		// stored when the attachments are first read, like any others
+		$peerTubeService = $this->peerTubeService;
+		$item->preferAttachments(
+			static fn (): array => $peerTubeService->attachments($data, $item)
+		);
 	}
 
 	public function getItemFromType(string $type): ACore {

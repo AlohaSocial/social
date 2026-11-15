@@ -317,6 +317,8 @@ class StreamTest extends TestCase {
 				['type' => 'Link', 'href' => 'https://example.org/'],
 			],
 		]);
+		$this->assertSame([], $logged, 'nothing is stored, or dropped, before the attachments are read');
+		$stream->getAttachments();
 
 		$this->assertCount(1, $logged, 'one line for the post, not one per attachment');
 		[$message, $context] = $logged[0];
@@ -326,13 +328,11 @@ class StreamTest extends TestCase {
 
 		$reasons = array_column($context['dropped'], 'reason');
 		$this->assertContains('could not be stored', $reasons, 'the one whose save threw');
-		// the Link: its type has no interface, so it never becomes a Document
-		// to have a type checked. The line says which type it was, because the
-		// exception for an unknown one carries no message at all.
-		$this->assertContains('unreadable', $reasons);
-		$link = $context['dropped'][array_search('unreadable', $reasons, true)];
+		// the Link is left out on its declared type, before it is parsed, and
+		// the line says which type it was
+		$this->assertContains('not a document or image', $reasons);
+		$link = $context['dropped'][array_search('not a document or image', $reasons, true)];
 		$this->assertSame('Link', $link['type']);
-		$this->assertSame('https://example.org/', $link['url']);
 		// and the reason names the file, or the line says nothing useful
 		$stored = $context['dropped'][array_search('could not be stored', $reasons, true)];
 		$this->assertSame('https://files.mastodon.social/media/cat.jpg', $stored['url']);
@@ -416,6 +416,69 @@ class StreamTest extends TestCase {
 		]);
 
 		$this->assertCount(Stream::MAX_ATTACHMENTS, $stream->getAttachments());
+	}
+
+	public function testEntriesThatAreLeftOutCountAgainstTheCeilingToo(): void {
+		$this->installActivityPub(mocked: [DocumentInterface::class]);
+		$this->apInterface(DocumentInterface::class)->expects($this->never())->method('save');
+
+		// an attachment that is itself a post, carrying attachments of its
+		// own: none of them is parsed, stored or fetched, and the list is not
+		// read past the ceiling
+		$nested = [];
+		for ($i = 0; $i < 1000; $i++) {
+			$nested[] = [
+				'type' => 'Note',
+				'id' => 'https://evil.example/n/' . $i,
+				'attachment' => [
+					['type' => 'Document', 'mediaType' => 'image/jpeg', 'url' => 'https://tarpit.example/' . $i],
+				],
+			];
+		}
+		$nested[] = ['type' => 'Document', 'mediaType' => 'image/jpeg', 'url' => 'https://files.example/late.jpg'];
+
+		$stream = new Stream();
+		$stream->import([
+			'id' => 'https://evil.example/users/alice/statuses/1',
+			'type' => 'Note',
+			'attachment' => $nested,
+		]);
+
+		$this->assertSame([], $stream->getAttachments());
+	}
+
+	public function testHeldAttachmentsAreNeitherStoredNorFetchedUntilReleased(): void {
+		$this->installActivityPub(mocked: [DocumentInterface::class]);
+		$saves = 0;
+		$this->apInterface(DocumentInterface::class)->method('save')
+			->willReturnCallback(function () use (&$saves): void {
+				$saves++;
+			});
+
+		$create = AP::instance()->getItemFromData([
+			'id' => 'https://mastodon.social/users/alice/statuses/1/activity',
+			'type' => 'Create',
+			'actor' => 'https://mastodon.social/users/alice',
+			'object' => [
+				'id' => 'https://mastodon.social/users/alice/statuses/1',
+				'type' => 'Note',
+				'attachment' => [
+					['type' => 'Document', 'mediaType' => 'image/jpeg', 'url' => 'https://files.mastodon.social/media/cat.jpg'],
+				],
+			],
+		]);
+		Stream::holdAttachments($create);
+		/** @var Stream $note */
+		$note = $create->getObject();
+
+		$this->assertSame([], $note->getAttachments(), 'read while held: nothing');
+		$this->assertSame(0, $saves, 'and nothing written or fetched');
+
+		Stream::releaseAttachments($create);
+		$this->assertCount(1, $note->getAttachments());
+		$this->assertSame(1, $saves);
+		$note->getAttachments();
+		$this->assertSame(1, $saves, 'stored once');
 	}
 
 	public function testAnOrdinaryPostKeepsEveryAttachment(): void {
