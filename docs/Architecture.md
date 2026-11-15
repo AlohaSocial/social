@@ -3236,8 +3236,14 @@ than sending the picture unfiltered. The first upload of a filtered picture is
 left on the server unattached.
 
 **Image metadata.** `ImageMetadataService` strips camera EXIF, GPS coordinates,
-XMP, IPTC, comments and timestamps from stored JPEG, PNG and WebP copies. It
-reads the declared IPTC `DigitalSourceType` first and stores only whether the
+XMP, IPTC, comments and timestamps from stored JPEG, PNG and WebP copies. A
+JPEG is cut after the end of its primary image, which drops the secondary
+images an `MPF` segment points at and a Motion Photo's appended video, and one
+whose segment structure cannot be followed is re-encoded rather than kept as it
+is. An AVIF that declares Exif or XMP is re-encoded, and refused where neither
+Imagick nor GD can encode AVIF, as a HEIC is where nothing can read it. Video
+and sound keep their container metadata only where ffmpeg is missing, which the
+*video conversion* setup check says. It reads the declared IPTC `DigitalSourceType` first and stores only whether the
 image was marked as AI-generated or AI-composite; the client receives that as
 `ai_generated`. The viewer shows the supplied description, original dimensions
 and this retained AI label. It does not expose discarded camera metadata.

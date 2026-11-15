@@ -34,11 +34,15 @@ namespace OCA\Social\Service;
  * What is deliberately kept: the ICC colour profile (dropping it shifts colour
  * on a wide-gamut photo), and everything structural -- animation, transparency,
  * the palette. What goes: Exif in all its spellings, XMP, IPTC/Photoshop
- * resources, JPEG comments, PNG text chunks and timestamps.
+ * resources, JPEG comments, PNG text chunks and timestamps, and whatever a
+ * JPEG carries after the end of its primary image.
  */
 class ImageMetadataService {
 	/** Exif orientation meaning "as shot, no rotation needed". */
 	public const ORIENTATION_NORMAL = 1;
+
+	/** The quality a JPEG whose structure cannot be followed is re-encoded at. */
+	private const REENCODE_QUALITY = 90;
 
 	/**
 	 * JPEG APPn/COM segments that carry metadata rather than image data.
@@ -85,7 +89,7 @@ class ImageMetadataService {
 
 	/**
 	 * The picture with its metadata removed, or the bytes unchanged when the
-	 * format is one this cannot open safely.
+	 * format is not one handled here.
 	 *
 	 * Never throws: a picture that cannot be parsed is a picture that is stored
 	 * as it arrived, which is what happened to every upload before this
@@ -211,10 +215,17 @@ class ImageMetadataService {
 	/**
 	 * Walks the JPEG segment list and copies everything but the metadata.
 	 *
-	 * A JPEG is a run of `FF <marker> <big-endian length> <payload>` segments
-	 * until `SOS` (start of scan), after which the rest of the file is entropy
-	 * coded data with no more segments to find -- so the walk stops there and
-	 * copies the remainder verbatim.
+	 * A JPEG is a run of `FF <marker> <big-endian length> <payload>` segments.
+	 * Each `SOS` (start of scan) is followed by entropy coded data, which ends
+	 * at the next marker that is not a stuffed `FF 00` or a restart; a
+	 * progressive JPEG has several scans with segments between them. The
+	 * primary image ends at `EOI`, and nothing after it is copied: that is
+	 * where a camera appends the secondary images an `MPF` segment points at
+	 * and a phone appends a Motion Photo's video, each with metadata of its
+	 * own.
+	 *
+	 * A file whose structure cannot be followed is re-encoded rather than
+	 * copied, since the part that could not be read may hold the metadata.
 	 */
 	private function stripJpeg(string $content): string {
 		if (strlen($content) < 4 || substr($content, 0, 2) !== "\xFF\xD8") {
@@ -227,9 +238,7 @@ class ImageMetadataService {
 
 		while ($i + 1 < $len) {
 			if ($content[$i] !== "\xFF") {
-				// not where a segment should start: stop trusting the structure
-				// and keep what is left rather than corrupt the file
-				return $out . substr($content, $i);
+				return $this->reencodeJpeg($content, $out);
 			}
 
 			$marker = ord($content[$i + 1]);
@@ -240,34 +249,85 @@ class ImageMetadataService {
 				$i++;
 				continue;
 			}
+			if ($marker === 0xD9) {
+				return $out . "\xFF\xD9";
+			}
 			if ($marker === 0xD8 || ($marker >= 0xD0 && $marker <= 0xD7) || $marker === 0x01) {
 				$out .= substr($content, $i, 2);
 				$i += 2;
 				continue;
 			}
-			// start of scan, or end of image: the rest is not segments
-			if ($marker === 0xDA || $marker === 0xD9) {
-				return $out . substr($content, $i);
-			}
 
 			if ($i + 3 >= $len) {
-				return $out . substr($content, $i);
+				return $this->reencodeJpeg($content, $out);
 			}
 
 			$size = (ord($content[$i + 2]) << 8) | ord($content[$i + 3]);
 			if ($size < 2 || $i + 2 + $size > $len) {
-				// a length that runs off the end: structure is not trustworthy
-				return $out . substr($content, $i);
+				return $this->reencodeJpeg($content, $out);
 			}
 
-			if (!in_array($marker, self::JPEG_DROP_MARKERS, true)) {
+			if ($marker === 0xDA) {
+				$out .= substr($content, $i, 2 + $size);
+				$i += 2 + $size;
+				$end = self::entropyEnd($content, $i);
+				$out .= substr($content, $i, $end - $i);
+				$i = $end;
+				continue;
+			}
+
+			if (!in_array($marker, self::JPEG_DROP_MARKERS, true)
+				&& !($marker === 0xE2 && substr($content, $i + 4, 4) === "MPF\0")) {
 				$out .= substr($content, $i, 2 + $size);
 			}
 
 			$i += 2 + $size;
 		}
 
+		// a file cut off before its end: what was copied carries no metadata
 		return $out;
+	}
+
+	/**
+	 * Where the entropy coded data starting at `$i` ends: the next `FF` that
+	 * is neither a stuffed `FF 00`, a restart marker nor fill, or the end of
+	 * the file.
+	 */
+	private static function entropyEnd(string $content, int $i): int {
+		$len = strlen($content);
+		while (($i = strpos($content, "\xFF", $i)) !== false && $i + 1 < $len) {
+			$next = ord($content[$i + 1]);
+			if ($next === 0xFF) {
+				$i++;
+				continue;
+			}
+			if ($next === 0x00 || ($next >= 0xD0 && $next <= 0xD7)) {
+				$i += 2;
+				continue;
+			}
+
+			return $i;
+		}
+
+		return $len;
+	}
+
+	/**
+	 * The pixels of a JPEG written out afresh, which carries no metadata at
+	 * all, or `$fallback` -- what the walk copied before it lost its way, which
+	 * carries none either -- when the picture does not decode.
+	 */
+	private function reencodeJpeg(string $content, string $fallback): string {
+		$image = @imagecreatefromstring($content);
+		if ($image === false) {
+			return $fallback;
+		}
+
+		ob_start();
+		$ok = @imagejpeg($image, null, self::REENCODE_QUALITY);
+		$out = (string)ob_get_clean();
+
+		return ($ok && $out !== '') ? $out : $fallback;
 	}
 
 	/**
