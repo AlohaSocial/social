@@ -295,6 +295,51 @@ describe('Search', () => {
 		}
 	})
 
+	it('leaves the results undimmed while the same term is asked again', async () => {
+		vi.useFakeTimers()
+		try {
+			let answer
+			get.mockResolvedValueOnce({ ...response({ statuses: [status('1')] }), headers: { 'x-social-filling': '1' } })
+				.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+			const wrapper = mountSearch('open source')
+			await flushPromises()
+
+			await vi.advanceTimersByTimeAsync(SEARCH_REFILL_MS)
+			expect(get).toHaveBeenCalledTimes(2)
+			expect(wrapper.vm.loading).toBe(true)
+			expect(wrapper.classes()).not.toContain('social__search--refreshing')
+
+			answer(response({ statuses: [status('1'), status('2')] }))
+			await flushPromises()
+			expect(wrapper.vm.loading).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('dims the results of the previous term while a refined one is asked', async () => {
+		vi.useFakeTimers()
+		try {
+			let answer
+			get.mockResolvedValueOnce(response({ statuses: [status('1')] }))
+				.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+			const wrapper = mountSearch('open')
+			await flushPromises()
+			expect(wrapper.classes()).not.toContain('social__search--refreshing')
+
+			await wrapper.setProps({ term: 'open source' })
+			vi.advanceTimersByTime(300)
+			await nextTick()
+			expect(wrapper.classes()).toContain('social__search--refreshing')
+
+			answer(response({ statuses: [status('2')] }))
+			await flushPromises()
+			expect(wrapper.classes()).not.toContain('social__search--refreshing')
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	/**
 	 * Typing a handle letter by letter must not look up `@bob@r`,
 	 * `@bob@re`, … on servers that do not exist: other servers are asked
