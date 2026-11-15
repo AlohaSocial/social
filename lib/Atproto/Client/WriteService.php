@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use InvalidArgumentException;
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Lexicon\Lexicon;
@@ -60,7 +61,6 @@ use OCA\Social\Service\ReportService;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
-use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
