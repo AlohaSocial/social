@@ -34,8 +34,8 @@ async function mountView(requests = [bob, carol], headers = {}) {
 			stubs: {
 				ActorAvatar: true,
 				NcEmptyContent: {
-					props: ['name'],
-					template: '<div class="empty-content">{{ name }}<slot name="description" /><slot /></div>',
+					props: ['name', 'description'],
+					template: '<div class="empty-content">{{ name }} {{ description }}<slot name="icon" /><slot name="action" /></div>',
 				},
 				RouterLink: RouterLinkStub,
 			},
@@ -84,7 +84,8 @@ describe('FollowRequests', () => {
 		const wrapper = await mountView([])
 
 		expect(wrapper.find('.empty-content').text()).toContain('When your account is locked')
-		expect(wrapper.findComponent(RouterLinkStub).props('to'))
+		expect(wrapper.findComponent({ name: 'NobodyYet' }).exists()).toBe(true)
+		expect(wrapper.findComponent({ name: 'EmptyContent' }).props('item').action.to)
 			.toEqual({ name: 'settings', hash: '#account' })
 	})
 

@@ -103,6 +103,7 @@ describe('FiltersSettings', () => {
 		const wrapper = await mountFilters()
 
 		expect(wrapper.text()).toContain('You have no filters.')
+		expect(wrapper.findComponent({ name: 'QuietTimeline' }).exists()).toBe(true)
 		expect(rows(wrapper)).toHaveLength(0)
 	})
 

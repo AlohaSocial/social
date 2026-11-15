@@ -126,6 +126,20 @@ describe('ProfileCollections', () => {
 		expect(wrapper.find('.collections__loading').exists()).toBe(false)
 	})
 
+	it('draws an empty shelf the way every empty list is drawn, and tells the owner how to fill it', async () => {
+		get.mockResolvedValue({ data: [] })
+
+		const theirs = mountView('bob@remote.example')
+		await flushPromises()
+		const empty = theirs.findComponent({ name: 'EmptyContent' }).props('item')
+		expect(empty).toMatchObject({ illustration: 'quiet-timeline', title: 'No collections yet' })
+		expect(empty.description).toContain('Albums this account makes')
+
+		const mine = mountView('alice')
+		await flushPromises()
+		expect(mine.findComponent({ name: 'EmptyContent' }).props('item').description).toContain('name one above')
+	})
+
 	it('says so when the list could not be loaded, rather than showing an empty shelf', async () => {
 		get.mockRejectedValue(new Error('nope'))
 

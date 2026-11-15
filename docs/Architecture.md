@@ -3456,6 +3456,16 @@ its icon slot to 64px with `!important`, so `EmptyContent` overrides that for th
 scene. The stock undraw pictures these replaced were licensed to this app by
 permission and are gone; anything new has to be ours.
 
+Every empty list goes through `EmptyContent`, so they all read the same way: a
+drawing, at most a title and one sentence, and at most one action. Beside the
+timelines that is follow requests and the held notification requests, a
+profile's followers, following, collections and tagged photos, and the Lists
+and Filters settings. The sections of Settings that list the reader's own
+posts (drafts, scheduled, waiting for review, archived) keep a line of text:
+a group of them is usually empty all at once, and four drawings stacked on one
+page would be louder than what they say. So do the four cards of the Blocking
+page, for the same reason.
+
 **The Aloha look.** The same palette, used sparingly, in four more places:
 
 - **A like blooms.** `TimelinePost` opens five plumeria petals (`PETALS`, a

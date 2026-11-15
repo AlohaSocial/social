@@ -72,16 +72,7 @@
 			</li>
 		</ul>
 
-		<NcEmptyContent
-			v-else
-			:name="t('social', 'No collections yet')"
-			:description="isOwn
-				? t('social', 'Gather some of your posts into an album: name one above, then add posts to it from their menu.')
-				: t('social', 'Albums this account makes out of its posts will show up here.')">
-			<template #icon>
-				<IconFolderMultipleImage :size="20" />
-			</template>
-		</NcEmptyContent>
+		<EmptyContent v-else :item="emptyState" />
 	</div>
 </template>
 
@@ -92,13 +83,13 @@ import { n, t } from '@nextcloud/l10n'
 import { mapStores } from 'pinia'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import IconFolderMultipleImage from 'vue-material-design-icons/FolderMultipleImage.vue'
 import IconLock from 'vue-material-design-icons/Lock.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
+import EmptyContent from '../components/EmptyContent.vue'
 import TimelineSwitcher from '../components/TimelineSwitcher.vue'
 import { profileKinds } from '../composables/useProfileKinds.js'
 import logger from '../services/logger.js'
@@ -120,13 +111,13 @@ export default {
 	name: 'ProfileCollections',
 
 	components: {
+		EmptyContent,
 		IconFolderMultipleImage,
 		IconLock,
 		IconPlus,
 		IconRefresh,
 		NcButton,
 		NcCheckboxRadioSwitch,
-		NcEmptyContent,
 		NcLoadingIcon,
 		NcTextField,
 		TimelineSwitcher,
@@ -169,6 +160,17 @@ export default {
 			const current = this.accountStore.currentAccount?.acct
 
 			return Boolean(current && this.account && current === this.account)
+		},
+
+		/** @return {object} a shelf with no albums on it */
+		emptyState() {
+			return {
+				illustration: 'quiet-timeline',
+				title: t('social', 'No collections yet'),
+				description: this.isOwn
+					? t('social', 'Gather some of your posts into an album: name one above, then add posts to it from their menu.')
+					: t('social', 'Albums this account makes out of its posts will show up here.'),
+			}
 		},
 	},
 

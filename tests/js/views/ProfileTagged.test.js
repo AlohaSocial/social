@@ -62,6 +62,7 @@ describe('ProfileTagged', () => {
 		await flushPromises()
 
 		expect(wrapper.text()).toContain('No photos of them')
+		expect(wrapper.findComponent({ name: 'QuietTimeline' }).exists()).toBe(true)
 		expect(wrapper.findAll('.entry-stub')).toHaveLength(0)
 	})
 

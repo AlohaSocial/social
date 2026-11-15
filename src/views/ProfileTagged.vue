@@ -37,14 +37,9 @@
 			</div>
 		</template>
 
-		<NcEmptyContent
+		<EmptyContent
 			v-else
-			:name="t('social', 'No photos of them')"
-			:description="emptyDescription">
-			<template #icon>
-				<IconAccountBoxMultiple :size="20" />
-			</template>
-		</NcEmptyContent>
+			:item="{ illustration: 'quiet-timeline', title: t('social', 'No photos of them'), description: emptyDescription }" />
 
 		<div ref="sentinel" class="tagged__sentinel" />
 	</div>
@@ -54,11 +49,10 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { t } from '@nextcloud/l10n'
-import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import EmptyContent from '../components/EmptyContent.vue'
 import TimelineEntry from '../components/TimelineEntry.vue'
 import TimelineSwitcher from '../components/TimelineSwitcher.vue'
 import logger from '../services/logger.js'
@@ -86,10 +80,9 @@ export default {
 	name: 'ProfileTagged',
 
 	components: {
-		IconAccountBoxMultiple,
+		EmptyContent,
 		IconRefresh,
 		NcButton,
-		NcEmptyContent,
 		NcLoadingIcon,
 		TimelineEntry,
 		TimelineSwitcher,
