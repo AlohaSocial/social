@@ -1004,7 +1004,7 @@ class WriteService {
 		}
 		if ($repoWrites !== []) {
 			try {
-				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation($validate), $repoWrites), $swapCommit);
+				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation(self::validationFor($write->collection, $validate)), $repoWrites), $swapCommit);
 				if ($commit !== null) {
 					$committed = ['cid' => $commit->commitCid->toString(), 'rev' => $commit->rev];
 				}
@@ -1627,7 +1627,7 @@ class WriteService {
 		$write = !$replace || $was === null
 			? RepoWrite::create($collection, $record, '', $rkey)
 			: RepoWrite::update($collection, $rkey, $record, $was->localId);
-		$this->writeRaw($session, $write->withValidation($validate), $swapCommit);
+		$this->writeRaw($session, $write->withValidation(self::validationFor($collection, $validate)), $swapCommit);
 
 		$kept = $this->repositories->getRecord($did, $collection, $rkey)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
@@ -1690,7 +1690,19 @@ class WriteService {
 		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'commit' => $this->commit($session), 'validationStatus' => $this->validationStatus($record, $validate)];
 	}
 
+	/**
+	 * The validation a write gets. Social reads the records it keeps as
+	 * written (lists, starter packs, gates, profile links), so an app's
+	 * `validate: false` does not skip their schema there; it only applies to
+	 * collections Social has no role for, which the opaque quota bounds.
+	 */
+	private static function validationFor(string $collection, ?bool $validate): ?bool {
+		return $validate === false && in_array($collection, self::KEPT_AS_WRITTEN, true) ? null : $validate;
+	}
+
 	private function validationStatus(StoredRecord $record, ?bool $validate): string {
+		$validate = self::validationFor($record->collection, $validate);
+
 		return $validate !== false && $this->lexicon->hasRecordSchema($record->collection) ? 'valid' : 'unknown';
 	}
 
