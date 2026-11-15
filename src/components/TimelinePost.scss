@@ -528,9 +528,10 @@
  * A finger cannot hover, so on a touch screen there is no state in which the
  * pill would ever open. It is not a pill there: the row goes back into the
  * card's flow, open, where it takes its own space and pushes nothing, because
- * nothing is moving.
+ * nothing is moving. `pointer: coarse` catches the phones and tablets that
+ * claim a hover they cannot do.
  */
-@media (hover: none) {
+@media (hover: none), (pointer: coarse) {
 	.post-content .post-actions-reveal {
 		padding: 0;
 		border: none;
@@ -543,17 +544,13 @@
 		display: none;
 	}
 
-	/* and nothing is dimmed waiting for a hover that never comes */
+	/* nothing waits for a hover that never comes, but a row on every card
+	   stays a step behind the text: a like or boost the reader has given is
+	   still drawn at full strength (see `aria-pressed` above) */
 	.post-content .post-actions :deep(.button-vue__icon),
 	.post-content .post-actions :deep(.action-item),
 	.post-content .post-actions :deep(.actions) {
-		opacity: 1;
-	}
-
-	.post-content .post-actions {
-		margin-top: 10px;
-		padding-top: 8px;
-		border-top: 1px solid var(--color-border);
+		opacity: .62;
 	}
 
 	/* the menu goes back to the far end of a full-width row */

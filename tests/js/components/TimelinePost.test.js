@@ -1188,6 +1188,17 @@ describe('TimelinePost', () => {
 		expect(source).toMatch(/\.post-action-group:has\(\.post-action-count\) \{\s*--post-action-rest: \.38;/)
 	})
 
+	/** A finger cannot hover, so a touch screen keeps a quiet row of controls on every card. */
+	it('keeps the controls on a touch screen, a step behind the text', () => {
+		const source = timelinePostStyles()
+		const start = source.indexOf('@media (hover: none), (pointer: coarse) {')
+		expect(start).toBeGreaterThan(-1)
+		const touch = source.slice(start)
+
+		expect(touch).toMatch(/\.post-content \.post-actions-reveal::before \{\s*display: none;/)
+		expect(touch).toMatch(/:deep\(\.button-vue__icon\),[^{]*\{\s*opacity: \.62;/)
+	})
+
 	/** The button's padding stood between a glyph and its number, so the number read as the next control's. */
 	it('sets each count against its own glyph', () => {
 		const source = timelinePostStyles()
