@@ -3029,11 +3029,14 @@ keep it in `localStorage` under `social.notificationsFilter`, inside a
 not fit the reading column, so the row scrolls at its natural widths rather
 than shrinking them or hiding them at a viewport breakpoint.
 
-*Grouping* is `groupNotifications()` in the same service: consecutive favourites
-or boosts of one status, and consecutive follows, become one card carrying
-`accounts` (everyone in it) and `ids` (every row it stands for). Only
-consecutive ones — folding across something that happened in between would
-reorder what happened. `TimelineEntry` draws up to `GROUP_FACES` overlapping
+*Grouping* is `groupNotifications()` in the same service: the favourites or
+boosts of one status, and the follows, on the loaded pages become one card
+carrying `accounts` (everyone in it) and `ids` (every row it stands for). The
+card keeps the place of its newest member, so what is folded into it is only
+ever older. The web app groups on the client from `/api/v1/notifications`
+rather than reading `/api/v2/notifications`: the list is a timeline of the
+timeline store, paged, pushed and marked read by notification id, and the v2
+groups would need a second store shape for one page. `TimelineEntry` draws up to `GROUP_FACES` overlapping
 avatars and `notificationSummary()` writes "Anna, Bob and 3 others liked your
 post"; `newestIdOf()` is what keeps the read marker covering every folded row.
 
@@ -3054,11 +3057,13 @@ reader for `SEEN_AFTER` (two seconds) with the tab visible**, and it is read up
 to the newest card on it at that moment. It used to be read by an
 `immediate: true` watcher, i.e. by rendering — and the marker is the
 server-side Mastodon one every client shares, so a tab opened in the background
-cleared the reader's phone for notifications no human had seen. The "New" and
-"Earlier" headings are drawn against `notificationsStore.fetchLastRead()`
+cleared the reader's phone for notifications no human had seen. The "New"
+heading over the unread run is drawn against `notificationsStore.fetchLastRead()`
 (`GET /api/v1/markers`), read once when the page opens and then frozen in the
 component: a boundary that followed the marker would rub itself out as the page
-was read.
+was read. Below it the cards are headed by the local day they arrived —
+*Today*, *This week* (the six days before), *Earlier* — by `dayHeadings()` in
+the same service, one heading where each run starts.
 
 **The home feed's line is the server's marker too.** The *Up to date since
 14:02* line on My Feed (`caughtUpAt`, `.timeline-caughtup`) used to be drawn

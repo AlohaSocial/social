@@ -338,3 +338,74 @@ export function notificationSummary(notification) {
 			return ''
 	}
 }
+
+/**
+ * Where a card falls on the calendar: today, the six days before it, or
+ * longer ago. Days are the reader's local days, so a like at 23:50 is not
+ * "today" ten minutes later. A date that cannot be read counts as long ago.
+ *
+ * @param {string|undefined} createdAt when it happened, as the API sends it
+ * @param {Date} now the moment the page is drawn
+ * @return {'today'|'week'|'earlier'}
+ */
+export function dayOf(createdAt, now = new Date()) {
+	const when = new Date(createdAt ?? '')
+	if (Number.isNaN(when.getTime())) {
+		return 'earlier'
+	}
+
+	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+	if (when >= today) {
+		return 'today'
+	}
+	const weekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6)
+
+	return when >= weekAgo ? 'week' : 'earlier'
+}
+
+/**
+ * The headings over the notifications page, by the index of the card each
+ * one stands above.
+ *
+ * The unread cards at the top keep the one "New" heading the sidebar badge
+ * points at; below them the cards are under the day they arrived: Today,
+ * This week, Earlier. A heading is only drawn where the run changes, and the
+ * cards are newest first, so each appears at most once.
+ *
+ * @param {NotificationCard[]} cards the cards, newest first
+ * @param {number} newCount how many cards at the top are under "New"; 0 for none
+ * @param {Date} now the moment the page is drawn
+ * @return {Object<number, 'new'|'today'|'week'|'earlier'>}
+ */
+export function dayHeadings(cards, newCount = 0, now = new Date()) {
+	/** @type {Object<number, 'new'|'today'|'week'|'earlier'>} */
+	const headings = {}
+	let previous = ''
+	cards.forEach((card, index) => {
+		/** @type {'new'|'today'|'week'|'earlier'} */
+		const run = index < newCount ? 'new' : dayOf(card.created_at, now)
+		if (run !== previous) {
+			headings[index] = run
+		}
+		previous = run
+	})
+
+	return headings
+}
+
+/**
+ * @param {'new'|'today'|'week'|'earlier'} run a key from dayHeadings()
+ * @return {string} what the heading says
+ */
+export function dayHeadingLabel(run) {
+	switch (run) {
+		case 'new':
+			return t('social', 'New')
+		case 'today':
+			return t('social', 'Today')
+		case 'week':
+			return t('social', 'This week')
+		default:
+			return t('social', 'Earlier')
+	}
+}

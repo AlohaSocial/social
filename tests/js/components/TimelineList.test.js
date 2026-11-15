@@ -903,10 +903,11 @@ describe('TimelineList', () => {
 	})
 
 	describe('what is new since the reader last looked', () => {
+		const daysAgo = (days) => new Date(Date.now() - days * 86400000).toISOString()
 		const notifications = [
-			{ id: '40', type: 'mention', account: { id: 'a' } },
-			{ id: '30', type: 'mention', account: { id: 'b' } },
-			{ id: '20', type: 'mention', account: { id: 'c' } },
+			{ id: '40', type: 'mention', account: { id: 'a' }, created_at: daysAgo(0) },
+			{ id: '30', type: 'mention', account: { id: 'b' }, created_at: daysAgo(3) },
+			{ id: '20', type: 'mention', account: { id: 'c' }, created_at: daysAgo(30) },
 		]
 
 		const onNotifications = (lastRead) => mountList({
@@ -919,19 +920,19 @@ describe('TimelineList', () => {
 		const headings = (wrapper) => wrapper.findAll('.timeline-divider').map((line) => line.text())
 		const unread = (wrapper) => wrapper.findAll('.timeline-entry-stub').map((entry) => entry.attributes('data-unread'))
 
-		it('draws the line at the marker the server keeps', async () => {
+		it('heads the unread run New and the rest by the day it arrived', async () => {
 			const { wrapper } = onNotifications(30)
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual(['New', 'Earlier'])
+			expect(headings(wrapper)).toEqual(['New', 'This week', 'Earlier'])
 			expect(unread(wrapper)).toEqual(['yes', 'no', 'no'])
 		})
 
-		it('draws no line on a page that is new all the way down', async () => {
+		it('heads a page that is new all the way down by day alone', async () => {
 			const { wrapper } = onNotifications(5)
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual([])
+			expect(headings(wrapper)).toEqual(['Today', 'This week', 'Earlier'])
 			// but every card on it is still marked: a heading over the whole
 			// page separates nothing, which is not the same as there being
 			// nothing new on it. The marks used to be read off the heading's
@@ -948,7 +949,7 @@ describe('TimelineList', () => {
 			await flushPromises()
 
 			expect(unread(wrapper)).toEqual(['yes', 'yes', 'yes'])
-			expect(headings(wrapper)).toEqual([])
+			expect(headings(wrapper)).toEqual(['Today', 'This week', 'Earlier'])
 		})
 
 		it('marks nothing until the server has said where the marker is', async () => {
@@ -970,7 +971,7 @@ describe('TimelineList', () => {
 			eventBus.emit(NOTIFICATIONS_READ, 40)
 			await wrapper.vm.$nextTick()
 
-			expect(headings(wrapper)).toEqual([])
+			expect(headings(wrapper)).toEqual(['Today', 'This week', 'Earlier'])
 			expect(unread(wrapper)).toEqual(['no', 'no', 'no'])
 		})
 
@@ -984,11 +985,11 @@ describe('TimelineList', () => {
 			expect(unread(wrapper)).toEqual(['yes', 'no', 'no'])
 		})
 
-		it('draws no line when nothing has arrived since', async () => {
+		it('heads a page with nothing new by day alone', async () => {
 			const { wrapper } = onNotifications(40)
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual([])
+			expect(headings(wrapper)).toEqual(['Today', 'This week', 'Earlier'])
 			expect(unread(wrapper)).toEqual(['no', 'no', 'no'])
 		})
 
@@ -999,7 +1000,7 @@ describe('TimelineList', () => {
 			await flushPromises()
 			await vi.advanceTimersByTimeAsync(2000)
 
-			expect(headings(wrapper)).toEqual(['New', 'Earlier'])
+			expect(headings(wrapper)).toEqual(['New', 'This week', 'Earlier'])
 		})
 
 		it('reads the marker for a notifications page arrived at rather than landed on', async () => {

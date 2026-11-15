@@ -544,8 +544,11 @@ in the sidebar.
   the top — *3 new activities*, with a **Mark all as read** button that clears
   the badge whichever filter you are looking at — and marks the activities
   themselves: each new one carries a **New** tag beside its age and a bar
-  down its edge, and a **New** heading separates them from **Earlier** where
-  the page holds both. Each activity is a row like a post in My Feed: who did
+  down its edge, and a **New** heading is over them where the page also holds
+  older ones. The rest are under the day they arrived: **Today**, **This
+  week** and **Earlier**. Several likes or boosts of one post, and several new
+  followers, are one row — *Anna, Bob and 4 others liked your post* — with
+  their faces side by side. Each activity is a row like a post in My Feed: who did
   what and how long ago (*3h*, *2w*), with the post or account it is about
   underneath. People are named by their display name, and a small coloured
   disc on their picture says what happened (a heart for a like, arrows for a
