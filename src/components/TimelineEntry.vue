@@ -1331,82 +1331,50 @@ export default {
 }
 
 /*
- * The drawer. With a pointer, a row's hover is one piece of material: the row
- * takes a light tint and a drawer of a deeper tint slides out of its edge,
- * holding the actions, joined to that edge by soft concave curves so it reads
- * as part of the row rather than a pill laid on it. Where the actions float
- * over the top end of the row (the rule above) the drawer hangs from the top
- * edge and the timestamp under it steps aside; where they keep a row at the
- * foot (reactions, counts, Activities) it rises from the bottom edge. In over
- * about a third of a second; out flat in 100 ms, so a pointer crossing the
- * feed leaves nothing behind. Touch screens keep their always-visible row.
+ * Corner light. With a pointer, a row has no flat hover fill and its actions
+ * no pill: a soft light rises in the corner where the actions are and fades
+ * out across the row. Where the actions float over the top end of the row
+ * (the rule above), the timestamp slides out of their way and they slide in
+ * from the edge, the nearest first; where they keep a row at the foot
+ * (reactions, counts, Activities) the light rises in the bottom corner and
+ * the row reveals them as before. In over about 300 ms; out flat in 100 ms,
+ * so a pointer crossing the feed leaves nothing behind. Touch screens keep
+ * their always-visible row.
  */
+@property --corner-light {
+	syntax: '<percentage>';
+	inherits: false;
+	initial-value: 0%;
+}
+
 @media (hover: hover) {
 	.timeline-entry:not(.timeline-entry--direct) {
-		--drawer-tint: color-mix(in srgb, var(--color-primary-element) 13%, var(--color-main-background));
-		--drawer-radius: 14px;
+		--corner-x: calc(100% - 90px);
+		--corner-y: 100%;
+		background-image: radial-gradient(360px 120px at var(--corner-x) var(--corner-y), color-mix(in srgb, var(--color-primary-element) var(--corner-light), transparent), transparent 70%);
+		transition: --corner-light .1s linear;
 
 		&:hover,
 		&:focus-within {
-			background-color: color-mix(in srgb, var(--color-primary-element) 5%, transparent);
-			transition: background-color .18s ease;
+			background-color: transparent;
+			--corner-light: 12%;
+			transition: --corner-light .28s ease;
 		}
 
 		// its own rule: a browser without `:has()` drops the selector, and it
 		// must not take the hover case with it
 		&:has(.post-actions-reveal--held) {
-			background-color: color-mix(in srgb, var(--color-primary-element) 5%, transparent);
+			background-color: transparent;
+			--corner-light: 12%;
 		}
 
-		// the drawer is the pill's own element, reshaped: from the row's edge
-		// to past the actions, as wide as them plus the row's end padding
-		.wrapper :deep(.post-actions-reveal) {
-			isolation: isolate;
+		&:dir(rtl) {
+			--corner-x: 90px;
 		}
 
+		// the light is the actions' ground now; the pill's own surface goes
 		.wrapper :deep(.post-actions-reveal::before) {
-			z-index: -1;
-			// the footer's actions sit 9px past the post (see above), so the
-			// drawer's end is 1px inside them to meet the row's own edge
-			inset: -6px 1px -13px -8px;
-			border: none;
-			border-radius: var(--drawer-radius) 0 var(--border-radius-large, 8px) 0;
-			background: var(--drawer-tint);
-			box-shadow: none;
-			clip-path: inset(100% 0 0 0);
-			transition: opacity .1s linear, clip-path 0s .1s;
-		}
-
-		// the concave curve that joins the drawer to the row's edge
-		.wrapper :deep(.post-actions-reveal::after) {
-			content: '';
-			position: absolute;
-			z-index: -1;
-			inset-block-end: -13px;
-			inset-inline-start: calc(-8px - var(--drawer-radius));
-			width: var(--drawer-radius);
-			height: var(--drawer-radius);
-			background: radial-gradient(circle at 0 0, transparent calc(var(--drawer-radius) - .5px), var(--drawer-tint) var(--drawer-radius));
-			opacity: 0;
-			transition: opacity .1s linear;
-			pointer-events: none;
-		}
-
-		// the actions ride out with the drawer
-		.wrapper :deep(.post-actions > *) {
-			transform: translateY(var(--drawer-ride, 8px));
-			transition: transform .1s linear;
-		}
-
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions-reveal::before) {
-			opacity: 1;
-			clip-path: inset(0);
-			transition: opacity .05s ease .06s, clip-path .32s cubic-bezier(.2, .8, .2, 1) .06s;
-		}
-
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions-reveal::after) {
-			opacity: 1;
-			transition: opacity .16s ease .2s;
+			display: none;
 		}
 
 		&:is(:hover, :focus-within) .wrapper :deep(.post-actions .button-vue__icon),
@@ -1414,53 +1382,87 @@ export default {
 		&:is(:hover, :focus-within) .wrapper :deep(.post-actions .actions) {
 			opacity: 1;
 		}
-
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > *) {
-			transform: none;
-			transition: transform .32s cubic-bezier(.2, .8, .2, 1) .1s;
-		}
-
-		&:dir(rtl) .wrapper :deep(.post-actions-reveal::before) {
-			border-radius: 0 var(--drawer-radius) 0 var(--border-radius-large, 8px);
-		}
-
-		&:dir(rtl) .wrapper :deep(.post-actions-reveal::after) {
-			background: radial-gradient(circle at 100% 0, transparent calc(var(--drawer-radius) - .5px), var(--drawer-tint) var(--drawer-radius));
-		}
 	}
 
-	// the actions float over the top end of the row: the drawer hangs from the
-	// top edge, the curve joins it there, and the timestamp under it steps aside
+	// the actions float over the top end of the row: the light rises in the
+	// top corner, the timestamp slides out, and the actions slide in from the
+	// edge one after another, the one nearest the edge first
 	.timeline-entry:not(.notification, .timeline-entry--direct):not(:has(.reaction-bar, .post-action-count)) {
-		--drawer-ride: -8px;
-
-		.wrapper :deep(.post-actions-reveal::before) {
-			inset: -6px -8px -6px -8px;
-			border-radius: 0 var(--border-radius-large, 8px) 0 var(--drawer-radius);
-			clip-path: inset(0 0 100% 0);
-		}
-
-		.wrapper :deep(.post-actions-reveal::after) {
-			inset-block: -6px auto;
-			background: radial-gradient(circle at 0 100%, transparent calc(var(--drawer-radius) - .5px), var(--drawer-tint) var(--drawer-radius));
-		}
-
-		&:dir(rtl) .wrapper :deep(.post-actions-reveal::before) {
-			border-radius: var(--border-radius-large, 8px) 0 var(--drawer-radius) 0;
-		}
-
-		&:dir(rtl) .wrapper :deep(.post-actions-reveal::after) {
-			background: radial-gradient(circle at 100% 100%, transparent calc(var(--drawer-radius) - .5px), var(--drawer-tint) var(--drawer-radius));
-		}
+		--corner-y: 0%;
 
 		.wrapper :deep(.post-timestamp),
 		.wrapper :deep(.post-given) {
-			transition: opacity .1s linear;
+			transition: opacity .1s linear, transform .1s linear;
 		}
 
 		&:is(:hover, :focus-within) .wrapper :deep(.post-timestamp),
 		&:is(:hover, :focus-within) .wrapper :deep(.post-given) {
 			opacity: 0;
+			transform: translateX(-10px);
+			transition: opacity .15s ease, transform .2s ease;
+		}
+
+		// each action moves as one piece, its glyph shown with it
+		.wrapper :deep(.post-actions > :first-child),
+		.wrapper :deep(.post-actions__groups > *) {
+			opacity: 0;
+			transform: translateX(10px);
+			transition: opacity .1s linear, transform .1s linear;
+		}
+
+		.wrapper :deep(.post-actions .button-vue__icon),
+		.wrapper :deep(.post-actions .action-item),
+		.wrapper :deep(.post-actions .actions) {
+			opacity: 1;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > :first-child),
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions__groups > *) {
+			opacity: 1;
+			transform: none;
+			transition: opacity .2s ease .05s, transform .3s cubic-bezier(.2, .8, .2, 1) .05s;
+		}
+
+		&:has(.post-actions-reveal--held) .wrapper :deep(.post-actions > :first-child),
+		&:has(.post-actions-reveal--held) .wrapper :deep(.post-actions__groups > *) {
+			opacity: 1;
+			transform: none;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions__groups > :nth-last-child(2)) {
+			transition-delay: .085s;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions__groups > :nth-last-child(3)) {
+			transition-delay: .12s;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions__groups > :nth-last-child(4)) {
+			transition-delay: .155s;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions__groups > :nth-last-child(n + 5)) {
+			transition-delay: .19s;
+		}
+
+		// the menu is the first in the row, so it is the last to arrive
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > :first-child) {
+			transition-delay: .22s;
+		}
+
+		&:dir(rtl) .wrapper :deep(.post-actions > :first-child),
+		&:dir(rtl) .wrapper :deep(.post-actions__groups > *) {
+			transform: translateX(-10px);
+		}
+
+		&:dir(rtl):is(:hover, :focus-within) .wrapper :deep(.post-timestamp),
+		&:dir(rtl):is(:hover, :focus-within) .wrapper :deep(.post-given) {
+			transform: translateX(10px);
+		}
+
+		&:is(:hover, :focus-within):dir(rtl) .wrapper :deep(.post-actions > :first-child),
+		&:is(:hover, :focus-within):dir(rtl) .wrapper :deep(.post-actions__groups > *) {
+			transform: none;
 		}
 	}
 }
@@ -1470,9 +1472,10 @@ export default {
 	.timeline-entry:not(.timeline-entry--direct):is(:hover, :focus-within) {
 		transition: none;
 
-		.wrapper :deep(.post-actions-reveal::before),
-		.wrapper :deep(.post-actions-reveal::after),
-		.wrapper :deep(.post-actions > *) {
+		.wrapper :deep(.post-timestamp),
+		.wrapper :deep(.post-given),
+		.wrapper :deep(.post-actions > :first-child),
+		.wrapper :deep(.post-actions__groups > *) {
 			transform: none;
 			transition: none;
 		}
@@ -1480,13 +1483,8 @@ export default {
 }
 
 @media (forced-colors: active) {
-	.timeline-entry:not(.timeline-entry--direct) .wrapper :deep(.post-actions-reveal::before) {
-		border: 1px solid CanvasText;
-		background: Canvas;
-	}
-
-	.timeline-entry:not(.timeline-entry--direct) .wrapper :deep(.post-actions-reveal::after) {
-		display: none;
+	.timeline-entry:not(.timeline-entry--direct) {
+		background-image: none;
 	}
 }
 
