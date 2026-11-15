@@ -3927,6 +3927,8 @@ cannot leak into a public page.
 
 **The tab also decides how it is drawn**, and there is nothing beside it to say otherwise: Posts is what somebody wrote, so it is a list of posts; Photos and Videos are what they showed, so they are grids. There used to be a grid/list switch here, remembered across profiles, and it could disagree with the tab — `ProfileMediaGrid` kept only the posts carrying a picture, so Posts showed sixteen of them as a list and three as a grid, with nothing to say where the other thirteen had gone. One question, one answer. The empty state comes from `TimelineList` in both views for the same reason: the grid carried one of its own that said "No photos yet" whatever the tab was, so an account with no videos was told it had no photos.
 
+**The pictures above the posts.** On the Posts tab of an account whose profile shows Photos, `ProfileMosaic.vue` draws up to three rows of three of its newest pictures above the pinned posts, headed by a link to the Photos tab. It reads them as that tab's first page, fetched ahead with `prefetchTimeline({ type: 'account', account, params: { media: 'image' } })` and read back with `getHeldTimeline()`, so opening Photos afterwards puts the same page on screen without a request, and coming back to Posts finds it held. Fewer pictures than fill a row draw nothing: one square over a list of posts is not a preview of anything.
+
 **The Videos view.** The sidebar's `Videos`, directly under Photos, is the same
 page again with `only_video` — this app's own narrowing of `only_media`, because
 a video timeline that asked Mastodon's question would answer with every holiday

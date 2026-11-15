@@ -302,4 +302,37 @@ describe('ProfileTimeline', () => {
 
 		expect(pinnedIds(wrapper)).toEqual(['bob-pin'])
 	})
+
+	describe('the preview of their pictures', () => {
+		const MosaicStub = { name: 'ProfileMosaic', props: ['account', 'to'], template: '<div class="mosaic-stub" />' }
+		const mountWith = (route, profileLayout = undefined) => mount(ProfileTimeline, {
+			props: { profileLayout },
+			global: {
+				plugins: [pinia],
+				mocks: { $route: route },
+				stubs: { TimelineList: TimelineListStub, TimelineEntry: TimelineEntryStub, ProfileMosaic: MosaicStub },
+			},
+		})
+
+		it('sits above the posts and leads to the Photos tab', () => {
+			const wrapper = mountWith({ name: 'profile', params: { account: 'bob' }, query: {} })
+			const mosaic = wrapper.findComponent(MosaicStub)
+
+			expect(mosaic.exists()).toBe(true)
+			expect(mosaic.props('account')).toBe('bob')
+			expect(mosaic.props('to')).toEqual({ name: 'profile', params: { account: 'bob' }, query: { media: 'image' } })
+		})
+
+		it.each(['image', 'video'])('is not drawn over the %s tab, which is pictures already', (media) => {
+			const wrapper = mountWith({ name: 'profile', params: { account: 'bob' }, query: { media } })
+
+			expect(wrapper.findComponent(MosaicStub).exists()).toBe(false)
+		})
+
+		it('is not drawn for an account that keeps Photos off its profile', () => {
+			const wrapper = mountWith({ name: 'profile', params: { account: 'bob' }, query: {} }, { tabs: ['posts', 'videos'] })
+
+			expect(wrapper.findComponent(MosaicStub).exists()).toBe(false)
+		})
+	})
 })
