@@ -105,6 +105,11 @@ async function elementKind(page, target) {
  * @return {Promise<string[]>}
  */
 async function scan(page, name, findings, known) {
+	// Content that has just arrived fades in from opacity 0, and axe measures
+	// contrast through opacity: a scan during the fade reports text no reader
+	// is left looking at. Spinners run forever and are not waited for.
+	await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'
+		|| animation.effect?.getComputedTiming().iterations === Infinity), null, { timeout: 10_000 })
 	const results = await new AxeBuilder({ page }).withTags(TAGS).analyze()
 
 	const fresh = []
