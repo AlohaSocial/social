@@ -73,13 +73,13 @@
 			tag="ul"
 			:class="{ 'timeline-list--settling': holding, 'timeline-list--swapping': swapping }">
 			<template v-for="(entry, index) in entries" :key="entry.id">
-				<!-- the two headings only appear when there is a boundary to
-				     mark: a page that is all new, or all seen, is one run -->
-				<li v-if="index === 0 && dividerAt > 0" class="timeline-divider timeline-divider--new">
-					{{ t('social', 'New') }}
-				</li>
-				<li v-else-if="dividerAt > 0 && index === dividerAt" class="timeline-divider">
-					{{ t('social', 'Earlier') }}
+				<!-- notifications only: "New" over the unread run, then the
+				     day each card arrived. See dayHeadings() -->
+				<li
+					v-if="headings[index]"
+					class="timeline-divider"
+					:class="{ 'timeline-divider--new': headings[index] === 'new' }">
+					{{ dayHeadingLabel(headings[index]) }}
 				</li>
 				<!-- Where the reader had got to last time. Everything below it
 				     they have seen, and is drawn a shade quieter, which is what
@@ -178,7 +178,7 @@ const UNTAGGED_RECOMMENDATION_CONTEXTS = ['interests', 'photos', 'videos', 'shor
 import EmptyContent from './EmptyContent.vue'
 import logger from '../services/logger.js'
 import eventBus, { NOTIFICATIONS_READ } from '../services/eventBus.js'
-import { groupNotifications, newestIdOf } from '../services/notifications.js'
+import { dayHeadingLabel, dayHeadings, groupNotifications, newestIdOf } from '../services/notifications.js'
 import { isNewerId, newerId, newestId, oldestId } from '../utils/snowflake.js'
 import { scrollOffset, scroller } from '../utils/scroller.js'
 import { mapStores } from 'pinia'
@@ -983,6 +983,15 @@ export default {
 			// every card is newer than the marker: the whole page is new, and
 			// a heading over all of it separates nothing
 			return older <= 0 ? 0 : older
+		},
+
+		/**
+		 * The headings between the notification cards, by card index.
+		 *
+		 * @return {Object<number, 'new'|'today'|'week'|'earlier'>} empty on every other timeline
+		 */
+		headings() {
+			return this.type === 'notifications' ? dayHeadings(this.entries, this.dividerAt) : {}
 		},
 	},
 
@@ -2068,6 +2077,7 @@ export default {
 
 		t,
 		n,
+		dayHeadingLabel,
 		/**
 		 * Catches up on what arrived since the newest post on screen.
 		 *

@@ -12,6 +12,11 @@
 			:value="kind"
 			:label="t('social', 'Which of their posts to show')" />
 
+		<ProfileMosaic
+			v-if="kind === '' && photosTab"
+			:account="routeAccount"
+			:to="photosTab.to" />
+
 		<!-- pinned posts belong to the account, not to a kind of attachment:
 		     on Photos they would be whatever that account pinned, pictures or
 		     not, above a page that promised pictures -->
@@ -30,6 +35,7 @@
 <script>
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
+import ProfileMosaic from './../components/ProfileMosaic.vue'
 import TimelineEntry from './../components/TimelineEntry.vue'
 import TimelineList from './../components/TimelineList.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
@@ -42,6 +48,7 @@ import { profileKinds } from '../composables/useProfileKinds.js'
 export default {
 	name: 'ProfileTimeline',
 	components: {
+		ProfileMosaic,
 		TimelineEntry,
 		TimelineList,
 		TimelineSwitcher,
@@ -109,6 +116,13 @@ export default {
 		 */
 		kinds() {
 			return profileKinds(this.routeAccount, this.profileLayout, this.kind)
+		},
+
+		/**
+		 * @return {object|undefined} the Photos tab, where the account shows one
+		 */
+		photosTab() {
+			return this.kinds.find((tab) => tab.value === 'image')
 		},
 
 		/**

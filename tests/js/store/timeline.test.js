@@ -2165,6 +2165,23 @@ describe('fetching a scope ahead', () => {
 		expect(showError).not.toHaveBeenCalled()
 		expect(store.timeline).toEqual(['1'])
 	})
+
+	it('fetches the Photos tab of a profile ahead, and hands its posts to whoever shows them', async () => {
+		axios.get.mockResolvedValue({ data: [makeStatus('7'), makeStatus('8')] })
+		const photos = '["account","bob",{"media":"image"}]'
+
+		await store.prefetchTimeline({ type: 'account', account: 'bob', params: { media: 'image' } })
+
+		expect(axios.get).toHaveBeenCalledWith(`${API}/accounts/bob/statuses`, { params: { limit: 15, only_media: true, media_type: 'image' } })
+		expect(store.getHeldTimeline(photos).map((status) => status.id)).toEqual(['7', '8'])
+		expect(store.getHeldTimeline('["account","carol",{"media":"image"}]')).toEqual([])
+
+		axios.get.mockClear()
+		store.changeTimelineTypeAccount('bob', 'image')
+
+		expect(store.timeline).toEqual(['7', '8'])
+		expect(axios.get).not.toHaveBeenCalled()
+	})
 })
 
 describe('a conversation read from where it lives', () => {

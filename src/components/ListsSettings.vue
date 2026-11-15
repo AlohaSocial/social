@@ -23,9 +23,9 @@
 		<p v-if="loading" class="lists-settings__hint">
 			{{ t('social', 'Loading your lists …') }}
 		</p>
-		<p v-else-if="lists.length === 0" class="lists-settings__hint">
-			{{ t('social', 'You have no lists yet. A list is a few of the people you follow, read as a timeline of their own.') }}
-		</p>
+		<EmptyContent
+			v-else-if="lists.length === 0"
+			:item="{ illustration: 'nobody-yet', description: t('social', 'You have no lists yet. A list is a few of the people you follow, read as a timeline of their own.') }" />
 
 		<ul v-else class="lists-settings__list">
 			<li
@@ -225,6 +225,7 @@ import IconPlus from 'vue-material-design-icons/Plus.vue'
 import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
+import EmptyContent from './EmptyContent.vue'
 import ActorAvatar from './ActorAvatar.vue'
 import { nextCursor } from '../utils/linkHeader.js'
 import eventBus, { LISTS_CHANGED } from '../services/eventBus.js'
@@ -263,6 +264,7 @@ export default {
 	name: 'ListsSettings',
 
 	components: {
+		EmptyContent,
 		ActorAvatar,
 		IconAccountGroup,
 		IconAccountMultiple,

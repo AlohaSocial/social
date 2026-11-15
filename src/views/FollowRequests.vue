@@ -8,22 +8,9 @@
 		<!-- the empty state waits for the last row to finish collapsing (the
 		     delay is on .empty-enter-active) so the two do not cross -->
 		<transition name="empty">
-			<NcEmptyContent
+			<EmptyContent
 				v-if="!loading && !loadFailed && cursor === '' && requests.length === 0"
-				:name="t('social', 'No pending follow requests')">
-				<template #icon>
-					<AccountClock />
-				</template>
-				<!-- the sentence names a switch, so it links to it: this page
-				     is empty for two quite different reasons, and one of them
-				     is that the switch is off -->
-				<template #description>
-					{{ t('social', 'When your account is locked, people asking to follow you show up here.') }}
-					<router-link :to="{ name: 'settings', hash: '#account' }">
-						{{ t('social', 'Change that in your account settings.') }}
-					</router-link>
-				</template>
-			</NcEmptyContent>
+				:item="emptyState" />
 		</transition>
 		<!-- keyed on the account id, never on the index: on removal an index
 		     key makes Vue patch the row above into the one below and drop the
@@ -81,11 +68,11 @@
 import PageHeader from '../components/PageHeader.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
+import { translate as t } from '@nextcloud/l10n'
 import { showError } from '../services/toast.js'
 import ActorAvatar from '../components/ActorAvatar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import AccountClock from 'vue-material-design-icons/AccountClock.vue'
+import EmptyContent from '../components/EmptyContent.vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import logger from '../services/logger.js'
@@ -100,8 +87,7 @@ export default {
 		PageHeader,
 		ActorAvatar,
 		NcButton,
-		NcEmptyContent,
-		AccountClock,
+		EmptyContent,
 		Check,
 		Close,
 	},
@@ -117,6 +103,27 @@ export default {
 			/** the `max_id` of the next page, '' once the server says there is none */
 			cursor: '',
 		}
+	},
+
+	computed: {
+		/**
+		 * The page empty. The action is the switch the sentence names: the
+		 * page is empty for two quite different reasons, and one of them is
+		 * that the switch is off.
+		 *
+		 * @return {object}
+		 */
+		emptyState() {
+			return {
+				illustration: 'nobody-yet',
+				title: t('social', 'No pending follow requests'),
+				description: t('social', 'When your account is locked, people asking to follow you show up here.'),
+				action: {
+					label: t('social', 'Who can find and follow you'),
+					to: { name: 'settings', hash: '#account' },
+				},
+			}
+		},
 	},
 
 	async mounted() {

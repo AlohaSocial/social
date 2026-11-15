@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { FILTER_KEY, NOTIFICATION_TYPES, excludeTypesFor, groupNotifications, isDirectMessage, nameOf, newestIdOf, notificationSummary, rememberFilter, rememberedFilter } from '../../../src/services/notifications.js'
+import { FILTER_KEY, NOTIFICATION_TYPES, dayHeadingLabel, dayHeadings, dayOf, excludeTypesFor, groupNotifications, isDirectMessage, nameOf, newestIdOf, notificationSummary, rememberFilter, rememberedFilter } from '../../../src/services/notifications.js'
 
 function notification(type, acct = 'bob@remote.tld') {
 	return {
@@ -382,5 +382,50 @@ describe('the types the server sends', () => {
 		expect(excludeTypesFor('favourites')).not.toContain('story:react')
 		expect(excludeTypesFor('mentions')).toContain('story:react')
 		expect(excludeTypesFor('polls')).toEqual(expect.arrayContaining(['story:react', 'story:comment', 'tagged']))
+	})
+})
+
+describe('the days the notifications page is headed by', () => {
+	// a Wednesday afternoon, local time
+	const now = new Date(2026, 10, 18, 15, 0)
+	const at = (day, hour = 12) => new Date(2026, 10, day, hour, 0).toISOString()
+
+	it('puts a card under the local day it arrived', () => {
+		expect(dayOf(at(18, 0), now)).toBe('today')
+		expect(dayOf(at(17, 23), now)).toBe('week')
+		expect(dayOf(at(12, 0), now)).toBe('week')
+		expect(dayOf(at(11, 23), now)).toBe('earlier')
+	})
+
+	it('counts a date it cannot read as long ago, and one from the future as today', () => {
+		expect(dayOf(undefined, now)).toBe('earlier')
+		expect(dayOf('not a date', now)).toBe('earlier')
+		expect(dayOf(at(19), now)).toBe('today')
+	})
+
+	it('heads each run once, where it starts', () => {
+		const cards = [at(18), at(18), at(16), at(1), at(1)].map((createdAt, id) => ({ id: String(id), created_at: createdAt }))
+
+		expect(dayHeadings(cards, 0, now)).toEqual({ 0: 'today', 2: 'week', 3: 'earlier' })
+	})
+
+	it('keeps the unread run at the top under New, then goes on by day', () => {
+		const cards = [at(18), at(18), at(16), at(1)].map((createdAt, id) => ({ id: String(id), created_at: createdAt }))
+
+		expect(dayHeadings(cards, 1, now)).toEqual({ 0: 'new', 1: 'today', 2: 'week', 3: 'earlier' })
+		expect(dayHeadings(cards, 2, now)).toEqual({ 0: 'new', 2: 'week', 3: 'earlier' })
+	})
+
+	it('has nothing to head on an empty page', () => {
+		expect(dayHeadings([], 0, now)).toEqual({})
+	})
+
+	it.each([
+		['new', 'New'],
+		['today', 'Today'],
+		['week', 'This week'],
+		['earlier', 'Earlier'],
+	])('says %s as %s', (run, label) => {
+		expect(dayHeadingLabel(run)).toBe(label)
 	})
 })
