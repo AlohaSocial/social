@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import Timeline from '../../../src/views/Timeline.vue'
 import TimelineSwitcher from '../../../src/components/TimelineSwitcher.vue'
+import { dismissInfoCard } from '../../../src/services/infoCards.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
@@ -61,6 +62,8 @@ const options = (wrapper) => wrapper.findComponent(TimelineSwitcher).props('opti
 describe('For you on the timeline page', () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
+		window.localStorage.clear()
+		window.sessionStorage.clear()
 	})
 
 	describe('the switcher', () => {
@@ -123,13 +126,29 @@ describe('For you on the timeline page', () => {
 
 	describe('the still-learning note', () => {
 		it('is only over For you', () => {
+			dismissInfoCard('feed-help-v1:interests')
 			expect(mountTimeline({ params: { type: 'interests' } }, { interests: ON }).find('.InterestsLearningBanner-stub').exists()).toBe(true)
 			expect(mountTimeline({}, { interests: ON }).find('.InterestsLearningBanner-stub').exists()).toBe(false)
+		})
+
+		it('waits until the feed\'s own explanation is put away: one card at a time', async () => {
+			const wrapper = mountTimeline({ params: { type: 'interests' } }, { interests: ON })
+			expect(wrapper.find('.timeline-scope-description').exists()).toBe(true)
+			expect(wrapper.find('.InterestsLearningBanner-stub').exists()).toBe(false)
+
+			await wrapper.find('.timeline-scope-description button').trigger('click')
+
+			expect(wrapper.find('.timeline-scope-description').exists()).toBe(false)
+			expect(wrapper.find('.InterestsLearningBanner-stub').exists()).toBe(true)
 		})
 	})
 
 	describe('the first-use notice', () => {
-		const notice = (route, interests) => mountTimeline(route, { interests }).find('.InterestsNotice-stub').exists()
+		const notice = (route, interests) => {
+			window.sessionStorage.clear()
+
+			return mountTimeline(route, { interests }).find('.InterestsNotice-stub').exists()
+		}
 
 		it('shows while learning is on and the reader has not answered it', () => {
 			expect(notice({}, { ...ON, noticeAcknowledged: false })).toBe(true)
@@ -141,6 +160,25 @@ describe('For you on the timeline page', () => {
 			expect(notice({}, { ...ON, noticeAcknowledged: false, paused: true })).toBe(false)
 			expect(notice({}, { ...ON, noticeAcknowledged: false, learning: false })).toBe(false)
 			expect(notice({ params: { type: 'bookmarks' } }, { ...ON, noticeAcknowledged: false })).toBe(false)
+		})
+
+		it('is said on one page of a session, not again above every feed opened after it', () => {
+			const due = { interests: { ...ON, noticeAcknowledged: false } }
+			const first = mountTimeline({}, due)
+			expect(first.find('.InterestsNotice-stub').exists()).toBe(true)
+			first.unmount()
+
+			// the same page again, as after a reload, still has it
+			expect(mountTimeline({}, due).find('.InterestsNotice-stub').exists()).toBe(true)
+			expect(mountTimeline({ params: { type: 'timeline' } }, due).find('.InterestsNotice-stub').exists()).toBe(false)
+			expect(mountTimeline({ name: 'tags', params: { tag: 'film' } }, due).find('.InterestsNotice-stub').exists()).toBe(false)
+		})
+
+		it('stands alone above the posts, ahead of the feed\'s explanation', () => {
+			const wrapper = mountTimeline({}, { interests: { ...ON, noticeAcknowledged: false } })
+
+			expect(wrapper.find('.InterestsNotice-stub').exists()).toBe(true)
+			expect(wrapper.find('.timeline-scope-description').exists()).toBe(false)
 		})
 	})
 })

@@ -12,8 +12,9 @@ import TimelineList from '../../../src/components/TimelineList.vue'
 import eventBus, { NOTIFICATIONS_READ } from '../../../src/services/eventBus.js'
 import { offTimelinePush, onTimelinePush } from '../../../src/services/timelinePush.js'
 import EmptyContent from '../../../src/components/EmptyContent.vue'
-import { SCENES } from '../../../src/components/illustrations/AlohaScene.vue'
+import AlohaScene, { SCENES } from '../../../src/components/illustrations/AlohaScene.vue'
 import TimelineSkeleton from '../../../src/components/TimelineSkeleton.vue'
+import PullToRefresh from '../../../src/components/PullToRefresh.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useNotificationsStore } from '../../../src/store/notifications.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
@@ -67,10 +68,10 @@ function status(id) {
 
 const TimelineEntryStub = {
 	name: 'TimelineEntry',
-	props: ['item', 'type', 'depth', 'unread', 'immediate'],
+	props: ['item', 'type', 'depth', 'unread', 'immediate', 'grouped'],
 	// carries the real component's class and tabindex, because the list finds
 	// entries by that class and sends focus to them
-	template: '<li class="timeline-entry timeline-entry-stub" tabindex="-1" :data-id="item.id" :data-status-id="item.id" :data-depth="depth" :data-unread="unread ? \'yes\' : \'no\'" />',
+	template: '<li class="timeline-entry timeline-entry-stub" tabindex="-1" :data-id="item.id" :data-status-id="item.id" :data-depth="depth" :data-unread="unread ? \'yes\' : \'no\'" :data-grouped="grouped ? \'yes\' : \'no\'" />',
 }
 const entryDepths = (wrapper) => wrapper.findAll('.timeline-entry-stub').map((entry) => [entry.attributes('data-id'), Number(entry.attributes('data-depth'))])
 
@@ -405,6 +406,105 @@ describe('TimelineList', () => {
 		})
 	})
 
+	describe('runs of posts by one author', () => {
+		/**
+		 * @param {string} id the post
+		 * @param {string} author whose it is
+		 * @param {number} minutes when, in minutes after ten o'clock
+		 * @param {object} [extra] anything else about it
+		 * @return {object} the post
+		 */
+		const by = (id, author, minutes, extra = {}) => ({
+			id,
+			created_at: new Date(Date.UTC(2026, 8, 5, 10, minutes)).toISOString(),
+			content: `<p>${id}</p>`,
+			reblog: null,
+			account: { id: author, acct: author, username: author, display_name: author },
+			...extra,
+		})
+		const grouped = (wrapper) => wrapper.findAll('.timeline-entry-stub')
+			.filter((entry) => entry.attributes('data-grouped') === 'yes')
+			.map((entry) => entry.attributes('data-id'))
+
+		it('draws a post as part of a run when the one above is by the same author, shortly before', () => {
+			const { wrapper } = mountList({
+				timeline: [
+					by('70', 'ana', 50),
+					by('60', 'ana', 40),
+					by('50', 'ana', 35),
+					by('40', 'ben', 30),
+					by('30', 'ben', 29, { reblog: by('1', 'cleo', 0) }),
+					by('20', 'ben', 28),
+					by('10', 'ben', -60),
+				],
+			})
+
+			// a boost is somebody else's post and never joins a run, and an
+			// hour and a half apart is two separate thoughts
+			expect(grouped(wrapper)).toEqual(['60', '50'])
+		})
+
+		it('does not run on across the caught-up line', async () => {
+			window.localStorage.setItem('social:seen:["home","",{}]', JSON.stringify({ id: '60', at: 1 }))
+			const { wrapper } = mountList({ timeline: [by('70', 'ana', 50), by('60', 'ana', 45)] })
+			await flushPromises()
+
+			expect(wrapper.find('.timeline-caughtup').exists()).toBe(true)
+			expect(grouped(wrapper)).toEqual([])
+			window.localStorage.clear()
+		})
+
+		it('draws no runs where every entry stands alone', () => {
+			const posts = [by('70', 'ana', 50), by('60', 'ana', 45)]
+
+			expect(grouped(mountList({ timeline: posts, props: { type: 'notifications' }, identity: '["notifications","",{}]' }).wrapper)).toEqual([])
+			expect(grouped(mountList({ timeline: posts, props: { showParents: true }, parents: posts }).wrapper)).toEqual([])
+			expect(grouped(mountList({ timeline: posts, identity: '["account","ana",{}]', route: { name: 'profile', params: { account: 'ana' } } }).wrapper)).toEqual([])
+		})
+	})
+
+	describe('pulling the list down on a touch screen', () => {
+		it('asks for the newest posts, and shows what was held back', async () => {
+			const { wrapper, dispatch } = mountList({ timeline: [status('20')] })
+			await flushPromises()
+			wrapper.vm.withheld = ['99']
+			dispatch.mockClear()
+
+			wrapper.findComponent(PullToRefresh).vm.$emit('refresh')
+			expect(wrapper.findComponent(PullToRefresh).props('refreshing')).toBe(false)
+			await nextTick()
+			expect(wrapper.findComponent(PullToRefresh).props('refreshing')).toBe(true)
+			await flushPromises()
+
+			expect(dispatch).toHaveBeenCalledWith({ min_id: '20' })
+			expect(wrapper.vm.withheld).toEqual([])
+			expect(wrapper.findComponent(PullToRefresh).props('refreshing')).toBe(false)
+		})
+
+		it('retries a list that failed to load instead', async () => {
+			const { wrapper, dispatch } = mountList({ responses: [new Error('down')] })
+			await flushPromises()
+			expect(wrapper.vm.error).not.toBeNull()
+			dispatch.mockClear()
+
+			wrapper.findComponent(PullToRefresh).vm.$emit('refresh')
+			await flushPromises()
+
+			expect(dispatch).toHaveBeenCalledTimes(1)
+			expect(dispatch.mock.calls[0][0]?.min_id).toBeUndefined()
+		})
+
+		it('is only offered on a chronological list of posts', () => {
+			expect(mountList().wrapper.findComponent(PullToRefresh).exists()).toBe(true)
+			expect(mountList({ props: { display: 'grid' } }).wrapper.findComponent(PullToRefresh).exists()).toBe(false)
+			expect(mountList({ props: { showParents: true } }).wrapper.findComponent(PullToRefresh).exists()).toBe(false)
+			expect(mountList({
+				props: { type: 'interests' },
+				identity: '["interests","",{}]',
+			}).wrapper.findComponent(PullToRefresh).exists()).toBe(false)
+		})
+	})
+
 	describe('posts arriving while reading', () => {
 		// what the app renders into: NcAppContent's column scrolls, the window
 		// does not, so `window.scrollY` is 0 wherever the reader is
@@ -516,6 +616,91 @@ describe('TimelineList', () => {
 			await flushPromises()
 
 			expect(wrapper.find('.new-posts-pill').exists()).toBe(true)
+		})
+
+		/**
+		 * What the store does with an answer to the poll: the posts go into
+		 * the list it holds, ahead of what was there.
+		 *
+		 * @param {object} store the timeline store
+		 * @param {object[]} posts what the server answers with
+		 * @return {() => Promise<object[]>} the stand-in for one fetch
+		 */
+		const arriving = (store, posts) => async () => {
+			store.$patch((state) => {
+				for (const post of posts) {
+					state.statuses[post.id] = post
+					state.timeline.unshift(post.id)
+				}
+			})
+
+			return posts
+		}
+
+		it('keeps what arrived out of sight off the list until the pill is pressed', async () => {
+			// inserted above the reader, they moved the page under somebody
+			// reading; held back, nothing moves until they ask
+			scrolledTo(800)
+			const { wrapper, dispatch, store } = mountList({ timeline: [status('20'), status('10')] })
+			await flushPromises()
+			dispatch.mockImplementationOnce(arriving(store, [status('300')]))
+
+			await wrapper.vm.fetchNewStatuses()
+			await flushPromises()
+
+			expect(entryIds(wrapper)).toEqual(['20', '10'])
+			expect(wrapper.find('.new-posts-pill').text()).toContain('1 new post')
+
+			await wrapper.find('.new-posts-pill').trigger('click')
+
+			expect(entryIds(wrapper)).toEqual(['300', '20', '10'])
+		})
+
+		it('asks on from the newest post held back, so it is not counted twice', async () => {
+			scrolledTo(800)
+			const { wrapper, dispatch, store } = mountList({ timeline: [status('20')] })
+			await flushPromises()
+			dispatch.mockImplementationOnce(arriving(store, [status('300')]))
+			await wrapper.vm.fetchNewStatuses()
+			await flushPromises()
+			dispatch.mockClear()
+
+			await wrapper.vm.fetchNewStatuses()
+			await flushPromises()
+
+			expect(dispatch).toHaveBeenCalledWith({ min_id: '300' })
+			expect(wrapper.find('.new-posts-pill').text()).toContain('1 new post')
+		})
+
+		it('shows what was held back once the reader is at the top again', async () => {
+			scrolledTo(800)
+			const { wrapper, dispatch, store } = mountList({ timeline: [status('20')] })
+			await flushPromises()
+			dispatch.mockImplementationOnce(arriving(store, [status('300')]))
+			await wrapper.vm.fetchNewStatuses()
+			await flushPromises()
+
+			scrolledTo(0)
+			await wrapper.vm.fetchNewStatuses()
+			await flushPromises()
+
+			expect(entryIds(wrapper)).toEqual(['300', '20'])
+			expect(wrapper.find('.new-posts-pill').exists()).toBe(false)
+		})
+
+		it('lets go of what was held back for a list when the reader switches to another', async () => {
+			scrolledTo(800)
+			const { wrapper, dispatch, store } = mountList({ timeline: [status('20')] })
+			await flushPromises()
+			dispatch.mockImplementationOnce(arriving(store, [status('300')]))
+			await wrapper.vm.fetchNewStatuses()
+			await flushPromises()
+
+			store.$patch({ ...showing('["timeline","",{}]'), timeline: [] })
+			await flushPromises()
+
+			expect(wrapper.vm.withheld).toEqual([])
+			expect(wrapper.find('.new-posts-pill').exists()).toBe(false)
 		})
 
 		it('falls back to the window where there is no content column', async () => {
@@ -2030,7 +2215,29 @@ describe('TimelineList', () => {
 
 			expect(store.fetchHomeMarker).toHaveBeenCalled()
 			expect(lineBefore(wrapper)).toBe('20')
-			expect(wrapper.find('.timeline-caughtup__label').text()).toMatch(/Up to date since/)
+			expect(wrapper.find('.timeline-caughtup__label').text()).toBe('You\'re all caught up')
+			expect(wrapper.find('.timeline-caughtup__since').text()).toMatch(/^Your last visit was \S/)
+		})
+
+		it('says when the last visit was in words, with a small still drawing', async () => {
+			const { wrapper } = mountList({
+				timeline: posts,
+				homeMarker: { id: '20', at: Date.now() - 3 * 3600 * 1000 },
+			})
+			await flushPromises()
+
+			expect(wrapper.find('.timeline-caughtup__since').text()).toBe('Your last visit was 3 hours ago')
+			expect(wrapper.findComponent(AlohaScene).props('scene')).toBe('hammock')
+			expect(wrapper.find('.timeline-caughtup__scene').attributes('aria-hidden')).toBe('true')
+		})
+
+		it('says only that the reader is caught up when it is not known when they were here', async () => {
+			window.localStorage.setItem(PLACE, JSON.stringify({ id: '20', at: 0 }))
+			const { wrapper } = mountList({ timeline: posts })
+			await flushPromises()
+
+			expect(wrapper.find('.timeline-caughtup__label').text()).toBe('You\'re all caught up')
+			expect(wrapper.find('.timeline-caughtup__since').exists()).toBe(false)
 		})
 
 		it('writes the date of the line in the reader\'s locale, not the browser\'s', async () => {
@@ -2042,7 +2249,7 @@ describe('TimelineList', () => {
 				})
 				await flushPromises()
 
-				expect(wrapper.find('.timeline-caughtup__label').text()).toContain('5. Oktober 2026')
+				expect(wrapper.find('.timeline-caughtup__since').attributes('title')).toContain('5. Oktober 2026')
 			} finally {
 				delete globalThis._nc_l10n_locale
 			}

@@ -1163,3 +1163,75 @@ describe('administrator announcements', () => {
 		}
 	})
 })
+
+describe('one column above the feed', () => {
+	const styles = () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/views/Timeline.vue'), 'utf8')
+		return source.slice(source.indexOf('<style'))
+	}
+	const block = (css, selector) => css.slice(css.indexOf(`${selector} {`), css.indexOf('}', css.indexOf(`${selector} {`)))
+
+	beforeEach(() => {
+		window.localStorage.clear()
+		makeStore()
+	})
+
+	it('keeps the scopes in a band that stays at the top of the column on a feed', () => {
+		const wrapper = mountTimeline({ params: { type: 'federated' } })
+		const band = wrapper.find('.feed-scopes')
+
+		expect(band.exists()).toBe(true)
+		expect(band.findComponent(TimelineSwitcher).exists()).toBe(true)
+		expect(wrapper.classes()).toContain('social__wrapper--scoped')
+	})
+
+	it('draws no band where there are no scopes', () => {
+		const wrapper = mountTimeline({ name: 'tags', params: { tag: 'nextcloud' } })
+
+		expect(wrapper.find('.feed-scopes').exists()).toBe(false)
+		expect(wrapper.classes()).not.toContain('social__wrapper--scoped')
+	})
+
+	it('frosts the band, and makes it opaque for less transparency and a forced palette', () => {
+		const css = styles()
+
+		expect(block(css, '.feed-scopes')).toMatch(/position: sticky;[\s\S]*inset-block-start: 0;[\s\S]*backdrop-filter: blur/)
+		expect(css).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.feed-scopes \{\s*background: var\(--color-main-background\);\s*backdrop-filter: none;/)
+		expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.feed-scopes \{\s*background: Canvas;\s*backdrop-filter: none;/)
+		// what sticks in the list below starts clear of it
+		expect(block(css, '.social__wrapper--scoped')).toMatch(/--social-sticky-top: 48px;/)
+	})
+
+	it('sizes notices, the band and the posts from the one reading column', () => {
+		const css = styles()
+
+		expect(block(css, '.social__wrapper > :deep(.feed-notice)')).toMatch(/width: min\(calc\(100% - 2 \* var\(--social-column-gutter\)\), calc\(var\(--social-reading-column\) - 2 \* var\(--social-column-gutter\)\)\);/)
+		expect(block(css, '.social__wrapper--reading')).toMatch(/--social-column: var\(--social-reading-column\);/)
+		expect(block(css, '.feed-scopes')).toMatch(/max-width: var\(--social-column\);/)
+		expect(css).not.toMatch(/760px|616px/)
+	})
+
+	it('settles a one-time card in, and simply shows it for less motion', () => {
+		const css = styles()
+
+		expect(css).toMatch(/\.feed-notice-enter-from,\s*\.feed-notice-leave-to \{\s*opacity: 0;/)
+		expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.feed-notice-enter-active,\s*\.feed-notice-leave-active \{\s*transition: none;/)
+	})
+
+	it('shows one one-time card at a time, the next once it is put away', async () => {
+		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
+		const wrapper = mountTimeline({ params: { type: 'interests' } })
+		timelineStore.recommendationCoverage = {
+			[timelineStore.getTimelineIdentity]: { state: 'UNDERFILLED', known_eligible: 3, returned: 3, remote_refresh_queued: true },
+		}
+		await nextTick()
+
+		expect(wrapper.findAll('.info-card')).toHaveLength(1)
+		expect(wrapper.find('.timeline-recommendation-coverage').exists()).toBe(true)
+
+		await wrapper.find('.timeline-recommendation-coverage button').trigger('click')
+
+		expect(wrapper.findAll('.info-card')).toHaveLength(1)
+		expect(wrapper.find('.timeline-scope-description').exists()).toBe(true)
+	})
+})

@@ -4,12 +4,19 @@
 -->
 <template>
 	<div class="post-header">
-		<div v-if="!hideAuthor && item.account" class="post-author-wrapper" :title="item.account.acct">
+		<!-- in a run of posts by one author the name is said once, at the
+		     head of the run; the others keep it for a screen reader only -->
+		<div
+			v-if="!hideAuthor && item.account"
+			class="post-author-wrapper"
+			:class="{ 'hidden-visually': compactAuthor }"
+			:title="item.account.acct">
 			<component
 				:is="isLocalAccount(item.account) ? 'a' : 'router-link'"
 				v-if="item.account"
 				:href="isLocalAccount(item.account) ? localProfileUrl(item.account) : undefined"
-				:to="isLocalAccount(item.account) ? undefined : { name: 'profile', params: { account: item.account.acct } }">
+				:to="isLocalAccount(item.account) ? undefined : { name: 'profile', params: { account: item.account.acct } }"
+				:tabindex="compactAuthor ? -1 : undefined">
 				<span class="post-author">
 					<DisplayName :text="item.account.display_name" :emojis="item.account.emojis" />
 				</span>
@@ -108,6 +115,8 @@ export default {
 	props: {
 		item: { type: Object, required: true },
 		hideAuthor: { type: Boolean, default: false },
+		/** whether the name is only for a screen reader, the post above being by the same author */
+		compactAuthor: { type: Boolean, default: false },
 		postHref: { type: String, default: '' },
 		isBoosted: { type: Boolean, default: false },
 		isLiked: { type: Boolean, default: false },
