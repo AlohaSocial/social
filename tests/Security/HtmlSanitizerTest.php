@@ -303,4 +303,27 @@ class HtmlSanitizerTest extends TestCase {
 		$this->assertFalse(HtmlSanitizer::isAllowedUrl('data:text/html,x'));
 		$this->assertFalse(HtmlSanitizer::isAllowedUrl(''));
 	}
+
+	/**
+	 * The walk recurses once per level of nesting, and the HTML5 parser builds
+	 * a tree of any depth: twenty thousand nested spans used to crash the
+	 * process rather than come back as an error.
+	 */
+	public function testDeeplyNestedMarkupIsFlattenedRatherThanWalked(): void {
+		foreach ([true, false] as $html5) {
+			if ($html5 && PHP_VERSION_ID < 80400) {
+				continue;
+			}
+
+			$result = HtmlSanitizer::sanitizeWith(str_repeat('<span>', 20000) . 'deep<script>alert(1)</script>', '', $html5);
+
+			if ($html5) {
+				// libxml drops what lies past its 256 levels; the HTML5 path
+				// keeps the text, lifted up to that depth
+				$this->assertStringContainsString('deep', $result);
+			}
+			$this->assertStringNotContainsString('<script', $result);
+			$this->assertLessThanOrEqual(257, substr_count($result, '<span>'));
+		}
+	}
 }
