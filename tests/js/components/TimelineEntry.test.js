@@ -786,46 +786,44 @@ describe('a notification in the list', () => {
 	})
 
 	/**
-	 * With a pointer, a row's hover is one piece of material: a light tint and
-	 * a drawer of a deeper one sliding out of the row's edge with the actions,
+	 * With a pointer, a row's hover is a light in the corner where its actions
+	 * are, and the actions slide in from the edge in place of the timestamp,
 	 * instead of a flat grey fill with a white pill on top.
 	 */
-	describe('the drawer', () => {
-		const drawer = () => {
+	describe('the corner light', () => {
+		const corner = () => {
 			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
-			return source.slice(source.indexOf(' * The drawer.'))
+			return source.slice(source.indexOf(' * Corner light.'))
 		}
 
-		it('tints the row and turns the pill into a drawer, only where there is a pointer', () => {
-			const css = drawer()
+		it('lights the corner where the actions are, only where there is a pointer, and drops the pill', () => {
+			const css = corner()
 
 			expect(css).toMatch(/@media \(hover: hover\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \{/)
-			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::before\) \{[^}]*background: var\(--drawer-tint\);[^}]*box-shadow: none;/)
-			// joined to the row's edge by a concave curve, not laid on it
-			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::after\) \{[^}]*radial-gradient\(circle at 0 0, transparent/)
+			expect(css).toMatch(/radial-gradient\(360px 120px at var\(--corner-x\) var\(--corner-y\), color-mix\(in srgb, var\(--color-primary-element\) var\(--corner-light\), transparent\), transparent 70%\)/)
+			expect(css).toMatch(/&:hover,\s*&:focus-within \{\s*background-color: transparent;\s*--corner-light: 12%;\s*transition: --corner-light \.28s ease;/)
+			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::before\) \{\s*display: none;/)
 		})
 
-		it('slides the drawer out in a third of a second and takes it away flat in a tenth', () => {
-			const css = drawer()
-
-			expect(css).toMatch(/clip-path: inset\(100% 0 0 0\);\s*transition: opacity \.1s linear, clip-path 0s \.1s;/)
-			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-actions-reveal::before\) \{\s*opacity: 1;\s*clip-path: inset\(0\);\s*transition: opacity \.05s ease \.06s, clip-path \.32s/)
+		it('fades the light in over 280 ms and out flat in 100', () => {
+			expect(corner()).toMatch(/background-image: radial-gradient[^;]*;\s*transition: --corner-light \.1s linear;/)
 		})
 
-		it('hangs the drawer from the top where the actions float over the timestamp, which steps aside', () => {
-			const css = drawer()
+		it('slides the timestamp out and the actions in, the one nearest the edge first, the menu last', () => {
+			const css = corner()
 
-			expect(css).toMatch(/:not\(:has\(\.reaction-bar, \.post-action-count\)\) \{\s*--drawer-ride: -8px;/)
-			expect(css).toMatch(/clip-path: inset\(0 0 100% 0\);/)
-			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-timestamp\),\s*&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-given\) \{\s*opacity: 0;/)
+			expect(css).toMatch(/:not\(:has\(\.reaction-bar, \.post-action-count\)\) \{\s*--corner-y: 0%;/)
+			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-timestamp\),\s*&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-given\) \{\s*opacity: 0;\s*transform: translateX\(-10px\);/)
+			expect(css).toMatch(/:deep\(\.post-actions__groups > :nth-last-child\(2\)\)\) \{\s*transition-delay: \.085s;|:deep\(\.post-actions__groups > :nth-last-child\(2\)\) \{\s*transition-delay: \.085s;/)
+			expect(css).toMatch(/:deep\(\.post-actions > :first-child\) \{\s*transition-delay: \.22s;/)
 		})
 
-		it('mirrors for right-to-left, stands still for reduced motion and keeps a frame under forced colours', () => {
-			const css = drawer()
+		it('mirrors for right-to-left, stands still for reduced motion and draws no light under forced colours', () => {
+			const css = corner()
 
-			expect(css).toMatch(/&:dir\(rtl\) \.wrapper :deep\(\.post-actions-reveal::after\)/)
+			expect(css).toMatch(/&:dir\(rtl\) \{\s*--corner-x: 90px;/)
 			expect(css).toMatch(/@media \(hover: hover\) and \(prefers-reduced-motion: reduce\)/)
-			expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \.wrapper :deep\(\.post-actions-reveal::before\) \{\s*border: 1px solid CanvasText;/)
+			expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \{\s*background-image: none;/)
 		})
 	})
 })
