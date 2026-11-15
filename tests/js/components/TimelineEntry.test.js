@@ -786,42 +786,46 @@ describe('a notification in the list', () => {
 	})
 
 	/**
-	 * With a pointer, a row's hover is one shape: the floor swells into a hill
-	 * under the actions instead of a flat grey fill with a pill on top.
+	 * With a pointer, a row's hover is one piece of material: a light tint and
+	 * a drawer of a deeper one sliding out of the row's edge with the actions,
+	 * instead of a flat grey fill with a white pill on top.
 	 */
-	describe('the swell', () => {
-		const source = () => readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
-		const swell = () => source().slice(source().indexOf('@property --swell-w'))
+	describe('the drawer', () => {
+		const drawer = () => {
+			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+			return source.slice(source.indexOf(' * The drawer.'))
+		}
 
-		it('grows a hill under the actions, quickly gone again, only where there is a pointer', () => {
-			const css = swell()
+		it('tints the row and turns the pill into a drawer, only where there is a pointer', () => {
+			const css = drawer()
 
 			expect(css).toMatch(/@media \(hover: hover\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \{/)
-			expect(css).toMatch(/radial-gradient\(var\(--swell-w\) var\(--swell-h\) at var\(--swell-x\) var\(--swell-y\)/)
-			expect(css).toMatch(/&:hover,\s*&:focus-within \{[^}]*--swell-w: 300px;[^}]*--swell-h: 72px;/)
-			// out flat and fast, so a pointer crossing the feed leaves no trail
-			expect(css).toMatch(/transition: background-color \.1s linear, --swell-depth \.1s linear, --swell-w 0s \.1s, --swell-h 0s \.1s;/)
+			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::before\) \{[^}]*background: var\(--drawer-tint\);[^}]*box-shadow: none;/)
+			// joined to the row's edge by a concave curve, not laid on it
+			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::after\) \{[^}]*radial-gradient\(circle at 0 0, transparent/)
 		})
 
-		it('drops the pill’s surface and lets the actions arrive with the hill', () => {
-			const css = swell()
+		it('slides the drawer out in a third of a second and takes it away flat in a tenth', () => {
+			const css = drawer()
 
-			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::before\) \{\s*display: none;/)
-			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-actions > \*\) \{\s*transform: none;/)
+			expect(css).toMatch(/clip-path: inset\(100% 0 0 0\);\s*transition: opacity \.1s linear, clip-path 0s \.1s;/)
+			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-actions-reveal::before\) \{\s*opacity: 1;\s*clip-path: inset\(0\);\s*transition: opacity \.05s ease \.06s, clip-path \.32s/)
 		})
 
-		it('hangs the hill from the top where the actions float over the timestamp, which steps aside', () => {
-			const css = swell()
+		it('hangs the drawer from the top where the actions float over the timestamp, which steps aside', () => {
+			const css = drawer()
 
-			expect(css).toMatch(/:not\(:has\(\.reaction-bar, \.post-action-count\)\) \{\s*--swell-y: 0%;/)
+			expect(css).toMatch(/:not\(:has\(\.reaction-bar, \.post-action-count\)\) \{\s*--drawer-ride: -8px;/)
+			expect(css).toMatch(/clip-path: inset\(0 0 100% 0\);/)
 			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-timestamp\),\s*&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-given\) \{\s*opacity: 0;/)
 		})
 
-		it('stands still for reduced motion and draws nothing under forced colours', () => {
-			const css = swell()
+		it('mirrors for right-to-left, stands still for reduced motion and keeps a frame under forced colours', () => {
+			const css = drawer()
 
+			expect(css).toMatch(/&:dir\(rtl\) \.wrapper :deep\(\.post-actions-reveal::after\)/)
 			expect(css).toMatch(/@media \(hover: hover\) and \(prefers-reduced-motion: reduce\)/)
-			expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \{\s*background-image: none;/)
+			expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \.wrapper :deep\(\.post-actions-reveal::before\) \{\s*border: 1px solid CanvasText;/)
 		})
 	})
 })
