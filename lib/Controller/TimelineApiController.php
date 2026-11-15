@@ -137,9 +137,6 @@ class TimelineApiController extends MastodonApiController {
 					ProbeOptions::FAVOURITES
 				], true
 			)) {
-				$this->logger->error('[' . static::class . '] Unknown timeline requested', [
-					'timeline' => $timeline
-				]);
 				throw new UnknownProbeException('unknown timeline');
 			}
 
@@ -211,11 +208,8 @@ class TimelineApiController extends MastodonApiController {
 
 			return $this->tagged($response);
 		} catch (Throwable $e) {
-			$this->logger->error('[' . static::class . '] Timeline request failed', [
-				'timeline' => $timeline,
-				'exception' => $e->getMessage(),
-				'trace' => $e->getTraceAsString()
-			]);
+			// a 401 or an unknown timeline is the client's to fix; error()
+			// logs what answers 500, with its trace
 			return $this->error($e);
 		}
 	}

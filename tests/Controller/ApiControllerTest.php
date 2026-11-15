@@ -1602,6 +1602,24 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertUnauthorized($this->controller()->timelines('home'));
 	}
+	public function testASignedOutHomeTimelineIsNotLoggedAsAFault(): void {
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->timelines('home');
+
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+	}
+
+	public function testAnUnknownTimelineIsNotLoggedAsAFault(): void {
+		$this->loggedInAs();
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->timelines('nonsense');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+	}
 
 	public function testTimelinesReportsServiceFailuresAsServerErrors(): void {
 		$this->loggedInAs();
@@ -2335,6 +2353,18 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame($item, $response->getData());
+	}
+
+	public function testEditingSomebodyElsesPostIsANotFoundAndNotAFault(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['status' => 'hijack']);
+		$this->postService->method('editPost')->willThrowException(new StreamNotFoundException());
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->statusUpdate(5);
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
 	}
 
 	public function testStatusUpdateCanClearSpoilerAndSensitivityWhenTheClientSendsEmptyValues(): void {
