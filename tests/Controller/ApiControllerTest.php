@@ -1257,6 +1257,22 @@ class ApiControllerTest extends TestCase {
 		$this->assertNotFound($this->controller()->statusDelete(7), 'not found');
 	}
 
+	public function testASuspendedAccountIsForbiddenAndNotLoggedAsAFault(): void {
+		$this->route = 'social.Api.verifyCredentials';
+		$client = new SocialClient();
+		$client->setAppName('Tusky')->setAuthUserId('alice')->setAuthScopes(['read']);
+		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('isSuspendedUser')->with('alice')->willReturn(true);
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->never())->method('error');
+		$logger->expects($this->never())->method('warning');
+
+		$response = $this->controllerWithHeaders('Bearer s3cret', [], $logger)->verifyCredentials();
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertSame(['error' => 'Your login is currently disabled'], $response->getData());
+	}
+
 	public function testNonBearerAuthorizationIsIgnored(): void {
 		$this->clientService->expects($this->never())->method('getFromToken');
 

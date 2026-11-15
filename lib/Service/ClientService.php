@@ -93,6 +93,7 @@ class ClientService {
 		private LoggerInterface $logger,
 		private EnabledUserService $enabledUsers,
 		private ?ITimeFactory $timeFactory = null,
+		private ?ModerationService $moderation = null,
 	) {
 		$this->clientRequest = $clientRequest;
 		$this->secretHasher = $secretHasher;
@@ -518,6 +519,14 @@ class ClientService {
 	 */
 	public function getFromClientId(string $clientId): SocialClient {
 		return $this->clientRequest->getFromClientId($clientId);
+	}
+
+	/**
+	 * Whether the Nextcloud user behind a token or a session holds an account
+	 * suspended here, which the client API refuses whatever it is asked.
+	 */
+	public function isSuspendedUser(string $userId): bool {
+		return $this->moderation?->isSuspendedUser($userId) ?? false;
 	}
 
 	/**
