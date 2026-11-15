@@ -6,6 +6,7 @@
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import logger from '../services/logger.js'
+import { descriptionOf } from '../services/fileDescriptions.js'
 import { showError, showWarning } from '../services/toast.js'
 import { useInstanceStore } from '../store/instance.js'
 import { useTimelineStore } from '../store/timeline.js'
@@ -702,6 +703,7 @@ export function useComposerAttachments({ expand, root }) {
 					file,
 					data: null,
 					failed: false,
+					...(descriptionOf(file) !== '' ? { description: descriptionOf(file) } : {}),
 				},
 			}
 

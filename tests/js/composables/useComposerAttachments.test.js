@@ -8,6 +8,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { useComposerAttachments } from '../../../src/composables/useComposerAttachments.js'
+import { describeFile } from '../../../src/services/fileDescriptions.js'
 import { useInstanceStore } from '../../../src/store/instance.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 import { prepareImage } from '../../../src/utils/imageFilters.js'
@@ -403,6 +404,21 @@ describe('useComposerAttachments', () => {
 			await restoring
 
 			expect(attachments.attachments.value).toEqual({})
+		})
+
+		// a picture the app drew itself, the weekly recap, knows what is in
+		// it: the author finds the description written and can still change it
+		it('fills in the description a file arrived with', async () => {
+			const store = useTimelineStore()
+			store.createMedia = vi.fn(async () => ({ id: '9', type: 'image' }))
+			vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:https://cloud.example/recap')
+			const { attachments } = mountAttachments()
+			const recap = describeFile(new File(['x'], 'weekly-recap.png', { type: 'image/png' }), 'A weekly recap')
+
+			await attachments.attachFiles([recap])
+
+			expect(attachments.attachments.value['blob:https://cloud.example/recap'].description).toBe('A weekly recap')
+			expect(attachments.draftMedia.value[0].description).toBe('A weekly recap')
 		})
 
 		it('keeps each one by its upload, with what was written about it', async () => {
