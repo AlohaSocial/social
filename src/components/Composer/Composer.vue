@@ -679,7 +679,7 @@ import { addAiMark, hasAiMark, removeAiMark } from '../../services/aiContent.js'
 import { mapStores } from 'pinia'
 import { useInstanceStore } from '../../store/instance.js'
 import { useAccountStore } from '../../store/account.js'
-import { useTimelineStore } from '../../store/timeline.js'
+import { isRanked, useTimelineStore } from '../../store/timeline.js'
 import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
 import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
 import { countableLength } from '../../utils/linkify.js'
@@ -2607,7 +2607,12 @@ export default {
 			if (created?.id) {
 				this.timelineStore.markArrived(created.id)
 			}
-			this.timelineStore.refreshTimeline()
+			// a ranked list has no top for the post to arrive at, and asking it
+			// for its first page again would replace the cursor the reader is
+			// paging with
+			if (!isRanked({ type: this.timelineStore.type, params: this.timelineStore.params })) {
+				this.timelineStore.refreshTimeline()
+			}
 			eventBus.emit('post-published', created)
 		},
 

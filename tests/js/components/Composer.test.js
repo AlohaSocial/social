@@ -2619,6 +2619,17 @@ describe('Composer', () => {
 			expect(store.refreshTimeline).toHaveBeenCalled()
 		})
 
+		it('leaves a ranked list where the reader is in it after posting', async () => {
+			const { wrapper, store } = mountComposer()
+			store.type = 'interests'
+			await setContent(wrapper, 'Hello')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(store.post).toHaveBeenCalled()
+			expect(store.refreshTimeline).not.toHaveBeenCalled()
+		})
+
 		it('posts on Ctrl+Enter but not on Enter alone', async () => {
 			const { wrapper, store } = mountComposer()
 			await setContent(wrapper, 'Hello')
