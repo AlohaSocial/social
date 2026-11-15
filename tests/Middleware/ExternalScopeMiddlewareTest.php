@@ -86,9 +86,15 @@ class ExternalScopeMiddlewareTest extends TestCase {
 		);
 	}
 
-	/** A controller whose class name the middleware reads, as the dispatcher hands it over. */
+	/**
+	 * A controller whose class name the middleware reads, as the dispatcher hands it over.
+	 *
+	 * Only a class that cannot be autoloaded (another app's, or the
+	 * server's) is stubbed: a stub declared under the name of one of this
+	 * app's controllers would replace the real class for every later test.
+	 */
 	private function controller(string $class): Controller {
-		if (!class_exists($class, false)) {
+		if (!class_exists($class)) {
 			$namespace = substr($class, 0, (int)strrpos($class, '\\'));
 			$short = substr($class, (int)strrpos($class, '\\') + 1);
 			eval('namespace ' . $namespace . '; class ' . $short . ' extends \\OCP\\AppFramework\\Controller { public function __construct() {} }');
