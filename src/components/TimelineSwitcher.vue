@@ -5,7 +5,7 @@
 <template>
 	<div
 		class="switcher"
-		:class="{ 'switcher--more-left': overflowLeft, 'switcher--more-right': overflowRight }"
+		:class="{ 'switcher--more-left': overflowLeft, 'switcher--more-right': overflowRight, 'switcher--beside-toggle': besideToggle }"
 		role="radiogroup"
 		:aria-label="label"
 		@keydown="onKeydown"
@@ -102,6 +102,16 @@ export default {
 		label: {
 			type: String,
 			required: true,
+		},
+
+		/**
+		 * Whether this is the first row of a page with no visible title, to
+		 * sit beside Nextcloud's navigation toggle rather than below it. A
+		 * feed's scope switcher does so without being asked.
+		 */
+		besideToggle: {
+			type: Boolean,
+			default: false,
 		},
 	},
 
@@ -395,6 +405,27 @@ export default {
 
 	&.switcher--more-left.switcher--more-right {
 		mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+	}
+}
+
+/*
+ * Where the sidebar is folded away its toggle floats over the top-left corner
+ * of the page, and a page without a visible title would spend a whole row on
+ * it. The switcher that opens such a page shares the toggle's row instead:
+ * narrowed by the toggle's width on both sides, so the pill stays centred and
+ * clear of it, and lifted so the two are centred on one line (the toggle sits
+ * 8px down, the page's own padding is 16px, and 36px against 44px leaves 4px).
+ *
+ * A feed opens with its scope switcher unless a notice comes first, and then
+ * the notice is the first child and keeps the room Timeline.vue makes for the
+ * toggle; the selector below is specific enough to outrank that rule.
+ */
+@include layout.below(layout.$folded) {
+	.social__wrapper > .switcher:first-child,
+	.switcher.switcher--beside-toggle {
+		width: auto;
+		margin-block-start: -4px;
+		margin-inline: var(--default-clickable-area, 44px);
 	}
 }
 

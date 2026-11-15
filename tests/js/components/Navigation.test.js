@@ -886,6 +886,39 @@ describe('Navigation', () => {
 	 * press, at the place the press happened, which is the only feedback that
 	 * can be instant when the page it opens is a chunk away.
 	 */
+	describe('pressing the entry of the page already open', () => {
+		const press = (wrapper, name) => {
+			const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+			item(wrapper, name).element.dispatchEvent(event)
+			return event
+		}
+
+		it('takes the page back to its top instead of navigating', () => {
+			router.resolve = vi.fn(() => ({ href: '/timeline/notifications', fullPath: '/timeline/notifications' }))
+			const column = document.createElement('div')
+			column.id = 'app-content-vue'
+			column.scrollTo = vi.fn()
+			document.body.appendChild(column)
+			const wrapper = mountNavigation({}, { name: 'timeline', params: { type: 'notifications' }, fullPath: '/timeline/notifications' })
+
+			const event = press(wrapper, 'Activities')
+
+			expect(event.defaultPrevented).toBe(true)
+			expect(column.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+			expect(router.push).not.toHaveBeenCalled()
+			column.remove()
+		})
+
+		it('navigates as before from anywhere else', () => {
+			router.resolve = vi.fn(() => ({ href: '/timeline/notifications', fullPath: '/timeline/notifications' }))
+			const wrapper = mountNavigation({}, { name: 'timeline', params: {}, fullPath: '/timeline' })
+
+			press(wrapper, 'Activities')
+
+			expect(router.push).toHaveBeenCalledWith({ name: 'timeline', params: { type: 'notifications' } })
+		})
+	})
+
 	describe('the travelling mark', () => {
 		it('sits on nothing until it has a row to sit on', () => {
 			const wrapper = mountNavigation()
@@ -1101,6 +1134,22 @@ describe('Navigation', () => {
 
 		expect(source).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*body:not\(\[data-themes\*='light'\]\) \.navigation__more \{\s*--social-glass-light:/)
 		expect(source).toMatch(/\[data-themes\*='dark'\] \.navigation__more \{\s*--social-glass-light:/)
+	})
+
+	/**
+	 * The account row opens a menu, so it ends in the chevrons that say so,
+	 * filled with the text colour and with a system colour where the reader
+	 * forces their own.
+	 */
+	it('marks the account row as a menu with a chevron', () => {
+		const source = readFileSync(resolve('src/components/Navigation.vue'), 'utf8')
+		const chevron = source.match(/\n\.navigation__more :deep\(\.button-vue__wrapper\)::after \{([^}]*)\}/)
+
+		expect(chevron).not.toBeNull()
+		expect(chevron[1]).toContain('margin-inline-start: auto;')
+		expect(chevron[1]).toContain('background-color: var(--color-text-maxcontrast);')
+		expect(chevron[1]).toMatch(/mask: url\("data:image\/svg\+xml,/)
+		expect(source).toMatch(/@media \(forced-colors: active\) \{\s*\.navigation__more :deep\(\.button-vue__wrapper\)::after \{\s*forced-color-adjust: none;\s*background-color: ButtonText;/)
 	})
 
 	/**

@@ -2,6 +2,8 @@
  * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TimelineSwitcher from '../../../src/components/TimelineSwitcher.vue'
@@ -424,5 +426,42 @@ describe('TimelineSwitcher', () => {
 		expect(withShort.find('.switcher__label').text()).toBe('All time')
 		expect(without.classes()).not.toContain('switcher__option--short')
 		expect(without.find('.switcher__short').exists()).toBe(false)
+	})
+
+	/**
+	 * Where the sidebar folds away its toggle floats over the page's top-left
+	 * corner. A page with no visible title puts its first row beside the
+	 * toggle instead of spending a row under it. jsdom applies no scoped CSS
+	 * and lays nothing out, so the rule is read from the source.
+	 */
+	describe('beside the navigation toggle', () => {
+		const source = readFileSync(resolve('src/components/TimelineSwitcher.vue'), 'utf8')
+
+		it('says so when the page asks', () => {
+			const wrapper = mount(TimelineSwitcher, { props: { options: OPTIONS, value: 'first', label: 'Which', besideToggle: true } })
+			expect(wrapper.classes()).toContain('switcher--beside-toggle')
+
+			const plain = mount(TimelineSwitcher, { props: { options: OPTIONS, value: 'first', label: 'Which' } })
+			expect(plain.classes()).not.toContain('switcher--beside-toggle')
+		})
+
+		it('keeps clear of the toggle only where the sidebar is folded', () => {
+			const rule = source.match(/@include layout\.below\(layout\.\$folded\) \{\s*\.social__wrapper > \.switcher:first-child,\s*\.switcher\.switcher--beside-toggle \{([^}]*)\}/)
+
+			expect(rule).not.toBeNull()
+			expect(rule[1]).toContain('margin-inline: var(--default-clickable-area, 44px);')
+			expect(rule[1]).toContain('width: auto;')
+		})
+
+		/**
+		 * A feed's switcher is told nothing: it is the first child of the
+		 * timeline's wrapper, which Timeline.vue pushes below the toggle. The
+		 * rule here outranks that one only while it stays this shape.
+		 */
+		it('outranks the room Timeline.vue makes under the toggle', () => {
+			const timeline = readFileSync(resolve('src/views/Timeline.vue'), 'utf8')
+
+			expect(timeline).toMatch(/\.social__wrapper > :first-child \{\s*margin-top: var\(--social-toggle-clearance\);/)
+		})
 	})
 })

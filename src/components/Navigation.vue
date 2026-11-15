@@ -427,7 +427,8 @@ import { useInstanceStore } from '../store/instance.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
 import { pageIdentity } from '../services/pageOrder.js'
-import { isEntryActive, MY_FEED_COVERS } from '../utils/navigationActive.js'
+import { isCurrentLocation, isEntryActive, MY_FEED_COVERS } from '../utils/navigationActive.js'
+import { scrollToTop } from '../utils/scroller.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { afterFirstTimeline } from '../services/boot.js'
@@ -1663,6 +1664,11 @@ export default {
 			}
 
 			event?.preventDefault()
+			// a second press on the page already open goes back to its top
+			if (event && isCurrentLocation(this.$router, this.$route, to)) {
+				scrollToTop()
+				return
+			}
 			this.$router.push(to)
 		},
 
@@ -1833,6 +1839,31 @@ export default {
 	// portrait unless it is given one
 	margin-inline-start: 8px;
 	font-weight: 600;
+}
+
+/* The row is a menu, not a link to the profile, and says so with the
+   up-and-down chevrons account switchers use. The component has no slot
+   beside its name, so the mark is drawn here, as a mask filled with the
+   text colour. */
+.navigation__more :deep(.button-vue__wrapper)::after {
+	content: '';
+	flex: 0 0 auto;
+	inline-size: 20px;
+	block-size: 20px;
+	margin-inline-start: auto;
+	background-color: var(--color-text-maxcontrast);
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 18.17 8.83 15l-1.42 1.41L12 21l4.59-4.59L15.17 15M12 5.83 15.17 9l1.42-1.41L12 3 7.41 7.59 8.83 9z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.navigation__more:has(button[aria-expanded="true"]) :deep(.button-vue__wrapper)::after {
+	background-color: var(--color-main-text);
+}
+
+@media (forced-colors: active) {
+	.navigation__more :deep(.button-vue__wrapper)::after {
+		forced-color-adjust: none;
+		background-color: ButtonText;
+	}
 }
 
 .navigation__subname {

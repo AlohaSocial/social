@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SHORTCUTS, belongsToElement, eventFor, isDialogOpen, isTyping, listenForShortcuts } from '../../../src/services/shortcuts.js'
+import { PALETTE_EVENT, SHORTCUTS, belongsToElement, eventFor, isDialogOpen, isPaletteKey, isTyping, listenForShortcuts } from '../../../src/services/shortcuts.js'
 import eventBus from '../../../src/services/eventBus.js'
 
 function press(key, target = document.body, extra = {}) {
@@ -122,8 +122,59 @@ describe('the help sheet', () => {
 	it('offers nothing that no key produces', () => {
 		for (const shortcut of SHORTCUTS) {
 			for (const key of shortcut.keys) {
-				expect(eventFor(press(key)), key).toBe(shortcut.event)
+				// a chord is shown as the platform writes it, and pressed as K with a modifier
+				const event = shortcut.chord ? press(key.slice(-1).toLowerCase(), document.body, { ctrlKey: true }) : press(key)
+				expect(eventFor(event), key).toBe(shortcut.event)
 			}
+		}
+	})
+})
+
+describe('the command palette chord', () => {
+	afterEach(() => {
+		eventBus.all.clear()
+	})
+
+	it('is ⌘K or Ctrl+K and nothing else', () => {
+		expect(isPaletteKey(press('k', document.body, { metaKey: true }))).toBe(true)
+		expect(isPaletteKey(press('k', document.body, { ctrlKey: true }))).toBe(true)
+		expect(isPaletteKey(press('K', document.body, { ctrlKey: true, shiftKey: true }))).toBe(false)
+		expect(isPaletteKey(press('k', document.body, { ctrlKey: true, altKey: true }))).toBe(false)
+		expect(isPaletteKey(press('k'))).toBe(false)
+	})
+
+	it('opens the palette from the page, but not from a field, where it may be the editor\'s', () => {
+		expect(eventFor(press('k', document.body, { metaKey: true }))).toBe(PALETTE_EVENT)
+		expect(eventFor(press('k', document.createElement('textarea'), { ctrlKey: true }))).toBe('')
+	})
+
+	it('leaves a plain k to the shortcut it already is', () => {
+		expect(eventFor(press('k'))).toBe('shortcut:previous')
+	})
+
+	it('is taken from the browser, and obeys the same off switches as every shortcut', () => {
+		const heard = vi.fn()
+		eventBus.on(PALETTE_EVENT, heard)
+		let enabled = true
+		const stop = listenForShortcuts(() => enabled)
+
+		try {
+			const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true })
+			window.dispatchEvent(event)
+			expect(heard).toHaveBeenCalledTimes(1)
+			expect(event.defaultPrevented).toBe(true)
+
+			enabled = false
+			window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+			expect(heard).toHaveBeenCalledTimes(1)
+
+			enabled = true
+			window.OCP.Accessibility = { disableKeyboardShortcuts: () => true }
+			window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
+			expect(heard).toHaveBeenCalledTimes(1)
+		} finally {
+			delete window.OCP.Accessibility
+			stop()
 		}
 	})
 })

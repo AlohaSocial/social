@@ -114,6 +114,15 @@ describe('Discover', () => {
 		expect(wrapper.findAll('h3')).toHaveLength(0)
 	})
 
+	it('starts with its switcher beside the navigation toggle, not a row under it', () => {
+		const wrapper = mount(Discover, { shallow: true, global: { plugins: [createPinia()], stubs: { PageHeader: false } } })
+
+		const header = wrapper.find('header.page-header')
+		expect(header.classes()).toContain('page-header--bare')
+		expect(header.classes()).not.toContain('page-header--clear-navigation')
+		expect(wrapper.findComponent({ name: 'TimelineSwitcher' }).props('besideToggle')).toBe(true)
+	})
+
 	/** The directory search finds who is listed; it does not promise more. */
 	it.each([
 		[false, ['@someone@example.org'], ['@someone.example.com']],
