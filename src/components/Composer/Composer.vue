@@ -260,6 +260,8 @@
 					v-model:options="pollOptions"
 					v-model:multiple="pollMultiple"
 					v-model:expiresIn="pollExpiresIn"
+					:valid="pollIsValid"
+					:attempted="pollAttempted"
 					@remove="togglePoll" />
 
 				<EventEditor
@@ -677,10 +679,12 @@ import { addAiMark, hasAiMark, removeAiMark } from '../../services/aiContent.js'
 import { mapStores } from 'pinia'
 import { useInstanceStore } from '../../store/instance.js'
 import { useAccountStore } from '../../store/account.js'
-import { useTimelineStore } from '../../store/timeline.js'
+import { isRanked, useTimelineStore } from '../../store/timeline.js'
 import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
 import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
-import { statusPayload } from '../../utils/statusPayload.js'
+import { countableLength } from '../../utils/linkify.js'
+import { idempotencyKeeper } from '../../utils/idempotency.js'
+import { pollIsComplete, statusPayload } from '../../utils/statusPayload.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
 import { datePickerModule, isTooSoon, proposedSchedule } from '../../utils/schedule.js'
@@ -941,6 +945,7 @@ export default {
 			// library's own object is not wrapped in a reactive proxy
 			tribute: null,
 			tributeTarget: null,
+			idempotency: idempotencyKeeper(),
 		}
 	},
 
@@ -1066,6 +1071,8 @@ export default {
 			resumedAudienceFor: '',
 			/** whether sending was tried while the event was incomplete */
 			eventAttempted: false,
+			/** whether sending was tried with the poll incomplete */
+			pollAttempted: false,
 			onOutsideInteraction: null,
 			onBeforeUnload: null,
 			stopLeaveGuard: null,
@@ -1262,6 +1269,9 @@ export default {
 			if (!this.eventIsValid) {
 				return false
 			}
+			if (!this.pollIsValid) {
+				return false
+			}
 
 			if (this.statusIsEmpty) {
 				return false
@@ -1276,6 +1286,10 @@ export default {
 
 		statusIsEmpty() {
 			return this.statusText.trim().length === 0 && this.mediaIds.length === 0 && !this.showEvent
+		},
+
+		pollIsValid() {
+			return !this.showPoll || pollIsComplete(this.pollOptions)
 		},
 
 		eventIsValid() {
@@ -1398,17 +1412,29 @@ export default {
 		 * before a word was typed.
 		 */
 		statusIsTooLong() {
-			return this.statusText.length > this.maxLength
+			return this.statusLength > this.maxLength
+		},
+
+		/**
+		 * The length the server holds against the allowance: the text counted
+		 * as `LinkifyService::countableLength()` counts it, and the content
+		 * warning with it.
+		 *
+		 * @return {number}
+		 */
+		statusLength() {
+			const warning = this.showWarning ? this.spoilerText.trim() : ''
+			return countableLength(this.statusText) + [...warning].length
 		},
 
 		/** @return {number} how much of the allowance is spent, 0..1 */
 		charProgress() {
-			return Math.min(this.statusText.length / this.maxLength, 1)
+			return Math.min(this.statusLength / this.maxLength, 1)
 		},
 
 		/** @return {number} how many characters remain, negative once over */
 		charsLeft() {
-			return this.maxLength - this.statusText.length
+			return this.maxLength - this.statusLength
 		},
 
 		hasMentions() {
@@ -1827,6 +1853,7 @@ export default {
 			this.replyPolicy = 'everyone'
 			this.moreOptionsOpen = false
 			this.eventAttempted = false
+			this.pollAttempted = false
 			clearDraft(this.draftContext)
 			this.updateStatusContent()
 		},
@@ -2428,6 +2455,9 @@ export default {
 			if (!this.eventIsValid) {
 				this.eventAttempted = true
 			}
+			if (!this.pollIsValid) {
+				this.pollAttempted = true
+			}
 			if (this.editItem) {
 				if (this.canPost) {
 					this.$emit('save', this.editPayload)
@@ -2514,7 +2544,9 @@ export default {
 				// `post` resolves with the created status and rejects when the
 				// server said no; clearing in a `finally` used to throw the
 				// text away on every failure, offline included
-				created = await this.timelineStore.post(statusData)
+				created = await this.timelineStore.post(statusData, {
+					idempotencyKey: this.idempotency.keyFor(statusData),
+				})
 			} finally {
 				this.loading = false
 			}
@@ -2525,6 +2557,7 @@ export default {
 				this.rememberDraft()
 				return
 			}
+			this.idempotency.sent()
 
 			const wasScheduled = statusData.scheduled_at !== undefined
 			const publishedContext = this.draftContext
@@ -2574,7 +2607,12 @@ export default {
 			if (created?.id) {
 				this.timelineStore.markArrived(created.id)
 			}
-			this.timelineStore.refreshTimeline()
+			// a ranked list has no top for the post to arrive at, and asking it
+			// for its first page again would replace the cursor the reader is
+			// paging with
+			if (!isRanked({ type: this.timelineStore.type, params: this.timelineStore.params })) {
+				this.timelineStore.refreshTimeline()
+			}
 			eventBus.emit('post-published', created)
 		},
 

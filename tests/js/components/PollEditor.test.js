@@ -143,4 +143,10 @@ describe('the poll editor', () => {
 
 		expect(wrapper.emitted('remove')).toHaveLength(1)
 	})
+
+	it('says what is missing once sending was tried with an incomplete poll', () => {
+		expect(mountEditor({ valid: false }).find('.poll-editor__error').exists()).toBe(false)
+		expect(mountEditor({ valid: true, attempted: true }).find('.poll-editor__error').exists()).toBe(false)
+		expect(mountEditor({ valid: false, attempted: true }).find('.poll-editor__error').exists()).toBe(true)
+	})
 })

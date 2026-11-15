@@ -21,11 +21,12 @@
 					<IconCellphoneLink :size="20" decorative title="" />
 					<span class="apps__name">{{ app.name || t('social', 'An app that did not give a name') }}</span>
 					<a
-						v-if="app.website"
+						v-if="websiteHref(app.website)"
 						class="apps__website"
-						:href="app.website"
+						:href="websiteHref(app.website)"
 						target="_blank"
 						rel="noopener noreferrer">{{ app.website }}</a>
+					<span v-else-if="app.website" class="apps__website">{{ app.website }}</span>
 				</div>
 
 				<p class="apps__meta">
@@ -124,6 +125,26 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * The website an app gave when it registered, as a link only when it is
+		 * a web address: registration is open to anybody, and what was written
+		 * there is not checked.
+		 *
+		 * @param {string} website what the app said
+		 * @return {string} the address to link to, '' for none
+		 */
+		websiteHref(website) {
+			if (!website) {
+				return ''
+			}
+			try {
+				const url = new URL(website)
+				return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : ''
+			} catch {
+				return ''
+			}
+		},
+
 		t,
 
 		/**
