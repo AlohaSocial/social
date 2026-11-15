@@ -1137,6 +1137,22 @@ describe('Navigation', () => {
 	})
 
 	/**
+	 * The account row opens a menu, so it ends in the chevrons that say so,
+	 * filled with the text colour and with a system colour where the reader
+	 * forces their own.
+	 */
+	it('marks the account row as a menu with a chevron', () => {
+		const source = readFileSync(resolve('src/components/Navigation.vue'), 'utf8')
+		const chevron = source.match(/\n\.navigation__more :deep\(\.button-vue__wrapper\)::after \{([^}]*)\}/)
+
+		expect(chevron).not.toBeNull()
+		expect(chevron[1]).toContain('margin-inline-start: auto;')
+		expect(chevron[1]).toContain('background-color: var(--color-text-maxcontrast);')
+		expect(chevron[1]).toMatch(/mask: url\("data:image\/svg\+xml,/)
+		expect(source).toMatch(/@media \(forced-colors: active\) \{\s*\.navigation__more :deep\(\.button-vue__wrapper\)::after \{\s*forced-color-adjust: none;\s*background-color: ButtonText;/)
+	})
+
+	/**
 	 * Activities is a top-level entry again, between Shorts and Direct
 	 * messages, with its own count; the account button no longer needs to
 	 * carry one for a menu that held it.
