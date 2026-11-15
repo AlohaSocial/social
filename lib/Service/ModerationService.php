@@ -337,6 +337,15 @@ class ModerationService {
 		return $this->strikeService->countFor($actorIds);
 	}
 
+	/** Who wrote a post, or '' when there is no such post. */
+	public function authorOf(string $streamId): string {
+		try {
+			return $this->streamRequest->getStreamById($streamId)->getAttributedTo();
+		} catch (StreamNotFoundException $e) {
+			return '';
+		}
+	}
+
 	/**
 	 * Takes one post down, whoever wrote it.
 	 *

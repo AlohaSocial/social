@@ -953,8 +953,9 @@ through core's raw app-config endpoint. The check is asked of the *user id*,
 never of the token: a scope on an OAuth token says only that some client asked
 for it, since registration stores whatever scope string arrives.
 Being a moderator is not being an administrator of the server, and nobody
-moderates themselves: every write about an account — `ModerationController`'s
-decide/lift and forced-sensitive, the Mastodon admin API's `action`, `unsilence`,
+moderates themselves: every write about an account or one of its posts —
+`ModerationController`'s decide/lift, forced-sensitive, the takedown of a post
+and the approval or refusal of a held one, the Mastodon admin API's `action`, `unsilence`,
 `unsuspend`, `unsensitive` and `DELETE`, and the Pixelfed admin app's user
 actions — first asks `AdminApiService::assertMayActOn()`, which refuses (403) an
 action on the caller's own account, and an action on a Nextcloud administrator's
