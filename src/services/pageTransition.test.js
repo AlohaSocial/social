@@ -85,6 +85,41 @@ describe('startPageTransition', () => {
 		expect(update).toHaveBeenCalledOnce()
 	})
 
+	it('lands what is carried across once the page is drawn, and lets it go after', async () => {
+		asks(false)
+		const order = []
+		let finish
+		const finished = new Promise((resolve) => {
+			finish = resolve
+		})
+		const shared = { land: vi.fn(() => order.push('land')), release: vi.fn(() => order.push('release')) }
+		document.startViewTransition = vi.fn((run) => {
+			run()
+
+			return { finished }
+		})
+
+		await startPageTransition(async () => {
+			order.push('update')
+		}, shared)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(order).toEqual(['update', 'land'])
+
+		finish()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(order).toEqual(['update', 'land', 'release'])
+	})
+
+	it('lets go of what would have been carried where nothing is animated', async () => {
+		asks(true)
+		const shared = { land: vi.fn(), release: vi.fn() }
+
+		await startPageTransition(vi.fn().mockResolvedValue(undefined), shared)
+
+		expect(shared.land).not.toHaveBeenCalled()
+		expect(shared.release).toHaveBeenCalledOnce()
+	})
+
 	/**
 	 * The browser holds the old picture until the callback settles. A page
 	 * whose data is slow would otherwise freeze everything, and a freeze is

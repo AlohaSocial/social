@@ -123,6 +123,7 @@ import { listenForShortcuts } from './services/shortcuts.js'
 import { skeletonFor } from './utils/skeleton.js'
 import { isSamePage, pageDirection } from './services/pageOrder.js'
 import { canViewTransition, markDirection, startPageTransition } from './services/pageTransition.js'
+import { departFor, listenForPresses } from './services/sharedElements.js'
 import eventBus, { REACTION_PICK } from './services/eventBus.js'
 import { miniPlayer } from './services/miniPlayer.js'
 
@@ -201,6 +202,7 @@ export default {
 			/** the router hooks, so they can be taken off again */
 			stopBefore: null,
 			stopAfter: null,
+			stopPresses: null,
 			/** the request that mounts the emoji picker; it takes the rest itself */
 			firstReactionAsk: null,
 		}
@@ -267,6 +269,7 @@ export default {
 		this.stopPhone?.()
 		this.stopBefore?.()
 		this.stopAfter?.()
+		this.stopPresses?.()
 		this.disarmPending()
 		eventBus.off('shortcut:help', this.toggleShortcutHelp)
 		eventBus.off('shortcut:home', this.goHome)
@@ -320,6 +323,10 @@ export default {
 
 			// the wait for a chunk happens before this, so the skeleton is armed
 			// at the start of the navigation and disarmed when it lands
+			// what was pressed, so the card or face that started a navigation
+			// can be carried into the page it opens
+			this.stopPresses = listenForPresses()
+
 			this.stopBefore = router.beforeEach((to, from, next) => {
 				this.armPending(to)
 				next()
@@ -341,7 +348,7 @@ export default {
 					// top of that would be the same move played twice
 					this.transitionName = ''
 
-					return startPageTransition(() => this.$nextTick())
+					return startPageTransition(() => this.$nextTick(), departFor(to))
 				}
 
 				this.transitionName = direction === '' ? 'page' : `page-${direction}`
@@ -747,6 +754,15 @@ a.external_link {
 	animation: none;
 }
 
+/* Something carried from one place to another -- a card into its thread, a
+   face into the top of a profile, a picture into its viewer -- travels on the
+   slow step, so the eye can follow it. The names are made up as the page runs
+   (utils/viewTransition.js), so the rule finds them by their class. */
+::view-transition-group(*.social-morph) {
+	animation-duration: var(--social-motion-slow);
+	animation-timing-function: var(--social-ease);
+}
+
 [data-page-direction='forward'] {
 	--page-from: 26px;
 	--page-to: -18px;
@@ -786,6 +802,12 @@ a.external_link {
 
 	::view-transition-old(social-page),
 	::view-transition-new(social-page) {
+		animation: none;
+	}
+
+	/* a rule of its own: a browser that cannot read the class selector
+	   drops the whole rule it is in */
+	::view-transition-group(*.social-morph) {
 		animation: none;
 	}
 }
