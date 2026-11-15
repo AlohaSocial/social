@@ -4575,8 +4575,12 @@ The form asks for the handle, the email, a password (8 characters at least,
 and the instance's password policy), acceptance of the server rules and, when
 a minimum age is set, confirmation of it. It carries a honeypot field and two
 rate limits, 10 an hour per address on the route and 5 registrations an hour
-per address in all (an IPv6 address counted by its /64, `ClientAddress`), and it stops taking registrations while 1000 are
-waiting. The mails it sends are limited per recipient as well
+per address in all (an IPv6 address counted by its /64, `ClientAddress`). In
+approval mode it stops taking registrations that would wait for an
+administrator while 1000 confirmed ones already do (`MAX_PENDING`).
+Unconfirmed registrations close nothing: past `MAX_UNVERIFIED` (5000) the
+oldest are forgotten to make room, so somebody with a few hundred addresses
+who never confirms cannot keep the form shut. The mails it sends are limited per recipient as well
 (`SignupMailLimiter`): one "already have an account" or "choose another
 username" notice per address every `NOTICE_COOLDOWN` (6 hours), which a
 confirmation link also starts, and `DAILY_CAP` (3) form mails of any kind per
