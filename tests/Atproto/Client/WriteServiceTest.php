@@ -349,6 +349,40 @@ class WriteServiceTest extends TestCase {
 		]);
 	}
 
+	/**
+	 * @return array<string, array{0: mixed}>
+	 */
+	public static function unstorableValues(): array {
+		return [
+			'float' => [1.5],
+			'bad link' => [['$link' => 'x']],
+			'bad bytes' => [['$bytes' => '***']],
+			'not UTF-8' => ["\xff"],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('unstorableValues')]
+	public function testARecordARepositoryCannotHoldIsAnInvalidRequest(mixed $value): void {
+		$collection = 'com.example.notes.entry';
+		$this->repositories->expects($this->never())->method('write');
+		foreach (['create', 'apply'] as $method) {
+			try {
+				if ($method === 'create') {
+					$this->writes->create($this->session, ['repo' => self::DID, 'collection' => $collection, 'rkey' => 'first', 'record' => ['$type' => $collection, 'value' => $value]]);
+				} else {
+					$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+						['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $collection, 'rkey' => 'first', 'value' => ['$type' => $collection, 'value' => $value]],
+					]]);
+				}
+				$this->fail($method . ' must refuse the record');
+			} catch (XrpcException $e) {
+				$this->assertSame(400, $e->status, $method);
+				$this->assertSame('InvalidRequest', $e->error, $method);
+				$this->assertStringContainsString('cannot be stored', $e->getMessage(), $method);
+			}
+		}
+	}
+
 	public function testApplyWritesCanAtomicallyStoreCustomCollections(): void {
 		$collection = 'com.example.notes.entry';
 		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {

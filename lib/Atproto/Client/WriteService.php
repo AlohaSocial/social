@@ -60,6 +60,7 @@ use OCA\Social\Service\ReportService;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -941,7 +942,7 @@ class WriteService {
 			$type = (string)($write['$type'] ?? '');
 			$collection = (string)($write['collection'] ?? '');
 			$rkey = (string)($write['rkey'] ?? '');
-			$record = is_array($write['value'] ?? null) ? DagCbor::fromLexJson($write['value']) : [];
+			$record = is_array($write['value'] ?? null) ? self::lexRecord($write['value']) : [];
 			if (!in_array($type, ['com.atproto.repo.applyWrites#create', 'com.atproto.repo.applyWrites#update', 'com.atproto.repo.applyWrites#delete'], true)) {
 				throw XrpcException::invalidRequest('Unknown write ' . $type);
 			}
@@ -1572,13 +1573,30 @@ class WriteService {
 	}
 
 	/**
+	 * A record from an app as the repository models it (links, bytes, empty
+	 * maps), refused when it holds what a repository cannot: a float, a bad
+	 * link or bytes, text that is not UTF-8, nesting too deep.
+	 *
+	 * @throws XrpcException
+	 */
+	private static function lexRecord(array $value): array {
+		try {
+			$record = DagCbor::fromLexJson($value);
+			DagCbor::encode($record);
+		} catch (InvalidArgumentException $e) {
+			throw XrpcException::invalidRequest('The record cannot be stored: ' . $e->getMessage());
+		}
+
+		return is_array($record) ? $record : get_object_vars($record);
+	}
+
+	/**
 	 * A record kept as the app wrote it: made, or replaced under its key.
 	 *
 	 * @throws XrpcException
 	 */
 	private function keep(ClientSession $session, string $collection, string $rkey, array $record, bool $replace = true, ?string $swapCommit = null, ?bool $validate = null): StoredRecord {
-		// links, bytes and empty maps as the repository models them
-		$record = DagCbor::fromLexJson($record);
+		$record = self::lexRecord($record);
 		$did = $session->identity->did;
 		if (in_array($collection, self::GATES, true)) {
 			$gated = Syntax::parseAtUri((string)($record['post'] ?? ''));
