@@ -9,10 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Firehose;
 
+use Closure;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Service\ConfigService;
-use Closure;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
 use OCP\Security\Ip\IFactory;
