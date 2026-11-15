@@ -254,9 +254,13 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	 * for a week must publish what it can and come back for the rest, rather
 	 * than start a run it cannot finish and publish nothing.
 	 *
+	 * @param string[] $exceptActors the actor ids whose posts are held back
+	 *                               and left out, so they do not fill the
+	 *                               window run after run
+	 *
 	 * @return ScheduledStatus[]
 	 */
-	public function getDue(int $now, int $limit = 50): array {
+	public function getDue(int $now, int $limit = 50, array $exceptActors = []): array {
 		$qb = $this->getScheduledSelectSql();
 		$qb->andWhere(
 			$qb->expr()->lte(
@@ -264,6 +268,12 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 				$qb->createNamedParameter($this->dateTime($now), IQueryBuilder::PARAM_DATE)
 			)
 		);
+		if ($exceptActors !== []) {
+			$qb->andWhere($qb->expr()->notIn(
+				'ss.actor_id_prim',
+				$qb->createNamedParameter(array_map(fn (string $id): string => $qb->prim($id), $exceptActors), IQueryBuilder::PARAM_STR_ARRAY)
+			));
+		}
 
 		$qb->orderBy('ss.scheduled_at', 'asc');
 		$qb->addOrderBy('ss.id', 'asc');

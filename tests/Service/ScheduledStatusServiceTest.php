@@ -33,6 +33,8 @@ use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
+use OCP\IUser;
+use OCP\IUserManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -58,6 +60,7 @@ class ScheduledStatusServiceTest extends TestCase {
 	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
 	private ScheduledStatusService $service;
 
+	private IUserManager&Stub $userManager;
 	/** the row the service handed to save(), as save() saw it */
 	private ?ScheduledStatus $saved = null;
 	/** @var Post[] the posts createPost() was handed */
@@ -96,7 +99,8 @@ class ScheduledStatusServiceTest extends TestCase {
 			$assembly,
 			$this->createStub(IURLGenerator::class),
 			$time,
-			new NullLogger()
+			new NullLogger(),
+			$this->userManager = $this->createStub(IUserManager::class)
 		);
 	}
 
@@ -566,6 +570,53 @@ class ScheduledStatusServiceTest extends TestCase {
 
 		$this->assertSame(0, $this->service->publishDue());
 		$this->assertSame([self::NOW, ScheduledStatusService::PUBLISH_PER_RUN], $asked);
+	}
+
+	/**
+	 * A disabled user's waiting posts are held, not published and not
+	 * dropped, and their account is left out of the next read so their posts
+	 * do not take everybody else's place in the window.
+	 */
+	public function testTheWaitingPostsOfADisabledUserAreHeld(): void {
+		$this->accountService->method('getFromId')->willReturnCallback(function (string $id): Person {
+			$actor = new Person();
+			$actor->setId($id);
+			$actor->setUserId(($id === self::BOB) ? 'bob' : 'alice');
+			$actor->setPreferredUsername(($id === self::BOB) ? 'bob' : 'alice');
+
+			return $actor;
+		});
+		$disabled = $this->createStub(IUser::class);
+		$disabled->method('isEnabled')->willReturn(false);
+		$enabled = $this->createStub(IUser::class);
+		$enabled->method('isEnabled')->willReturn(true);
+		$this->userManager->method('get')->willReturnCallback(
+			static fn (string $uid): IUser => ($uid === 'alice') ? $disabled : $enabled
+		);
+		$this->capturePosts();
+
+		$reads = [];
+		$this->scheduledRequest->method('getDue')->willReturnCallback(
+			function (int $now, int $limit, array $except) use (&$reads): array {
+				$reads[] = $except;
+
+				return ($except === [])
+					? [$this->waiting(1, ['text' => 'a'], self::ALICE), $this->waiting(2, ['text' => 'b'], self::ALICE)]
+					: [$this->waiting(3, ['text' => 'from bob'], self::BOB)];
+			}
+		);
+		$claimed = [];
+		$this->scheduledRequest->method('claim')->willReturnCallback(function (int $id) use (&$claimed): bool {
+			$claimed[] = $id;
+
+			return true;
+		});
+
+		$this->assertSame(1, $this->service->publishDue());
+
+		$this->assertSame([3], $claimed, 'the disabled user\'s posts stay in the table');
+		$this->assertSame([[], [self::ALICE]], $reads, 'read again without the held account, once');
+		$this->assertSame('from bob', $this->posts[0]->getContent());
 	}
 
 	public function testADuePostIsPublishedThroughTheSamePathAnImmediatePostTakes(): void {
