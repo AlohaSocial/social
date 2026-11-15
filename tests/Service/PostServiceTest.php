@@ -1779,8 +1779,8 @@ class PostServiceTest extends TestCase {
 		$this->streamRequest->expects($this->never())->method('update');
 		$this->activityService->expects($this->never())->method('updateActivity');
 
-		$this->expectException(\Exception::class);
-		$this->expectExceptionMessage('Not authorized to edit this post');
+		// the same answer as a post that is not there: a 404, not a 500
+		$this->expectException(StreamNotFoundException::class);
 		$this->service->editPost(7, $this->actor(), 'hijack');
 	}
 
