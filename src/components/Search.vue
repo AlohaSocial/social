@@ -5,7 +5,7 @@
 <template>
 	<div
 		class="social__wrapper social__search"
-		:class="{ 'social__search--refreshing': loading && !isEmpty }"
+		:class="{ 'social__search--refreshing': refreshing }"
 		:aria-busy="loading ? 'true' : 'false'">
 		<PageHeader :title="t('social', 'Search results for “{term}”', { term: query })" clearNavigation />
 
@@ -201,6 +201,12 @@ export default {
 			 * @type {?string}
 			 */
 			renderedTerm: null,
+			/**
+			 * The term the request in flight asks about: see `refreshing`.
+			 *
+			 * @type {?string}
+			 */
+			searchingTerm: null,
 			/** whether the request in flight asks other servers */
 			lookingUp: false,
 			/**
@@ -263,6 +269,18 @@ export default {
 		 */
 		resultsAreCurrent() {
 			return this.renderedTerm === this.query.trim()
+		},
+
+		/**
+		 * Whether the results on screen answer a term the reader has since
+		 * refined, and are dimmed to say so. Asking the same term again — the
+		 * refill while posts beyond this server are read, or a lookup of the
+		 * address on screen — leaves them as they are: they still answer it.
+		 *
+		 * @return {boolean}
+		 */
+		refreshing() {
+			return this.loading && !this.isEmpty && this.searchingTerm !== this.renderedTerm
 		},
 
 		/** @return {string} the address in the search box, or '' for anything else */
@@ -386,6 +404,7 @@ export default {
 			}
 
 			this.loading = true
+			this.searchingTerm = term
 			this.lookingUp = resolve
 			this.error = null
 			try {
