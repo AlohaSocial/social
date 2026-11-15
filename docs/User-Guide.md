@@ -1403,6 +1403,7 @@ the screen.
 
 | Key | Does |
 |---|---|
+| `⌘K` or `Ctrl+K` | Jump to a page, action or account |
 | `j` | Next post |
 | `k` | Previous post |
 | `l` or `f` | Like the post in focus |
@@ -1431,6 +1432,15 @@ so they still scroll the page otherwise. The same switches turn them off.
 | `c` | Subtitles on or off |
 | `<` / `>` | Slower / faster |
 | `0` … `9` | Jump to the start, or to 10% … 90% of the video |
+
+`⌘K` (`Ctrl+K` on Windows and Linux) opens a field that finds any page of the
+app, a few Settings sections, **New post** and, from two letters on, accounts by
+name: type a few letters (`bkm` finds Bookmarks), move with the arrow keys and
+press `Enter`. `Escape` or the same keys again close it. It is a shortcut like
+the others, so it is off in a text field and when shortcuts are turned off.
+
+Pressing the sidebar entry, or the button in the bar at the bottom of a phone
+screen, of the page you are already on takes you back to the top of it.
 
 `Enter` on a focused button or link still presses it — the shortcut only
 applies where nothing else claims the key. Nextcloud's own **Skip to main

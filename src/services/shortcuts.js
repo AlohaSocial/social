@@ -18,8 +18,21 @@ import eventBus from './eventBus.js'
  * since a single key that likes or boosts is easy to press by mistake.
  */
 
-/** @type {Array<{keys: string[], event: string, label: string}>} */
+/** The event the command palette opens on. */
+export const PALETTE_EVENT = 'shortcut:palette'
+
+/** ⌘ where the platform has one, Ctrl elsewhere; both work everywhere. */
+const PALETTE_KEY = /Mac|iPhone|iPad|iPod/.test(globalThis.navigator?.platform ?? '') ? '⌘K' : 'Ctrl+K'
+
+/**
+ * `chord`: held with ⌘ or Ctrl, the one shortcut that is. A chord is not a
+ * keystroke anybody types, so it may be pressed outside a field even though
+ * the other shortcuts ignore anything with a modifier.
+ *
+ * @type {Array<{keys: string[], event: string, label: string, chord?: boolean}>}
+ */
 export const SHORTCUTS = [
+	{ keys: [PALETTE_KEY], event: PALETTE_EVENT, label: t('social', 'Jump to a page, action or account'), chord: true },
 	{ keys: ['j'], event: 'shortcut:next', label: t('social', 'Next post') },
 	{ keys: ['k'], event: 'shortcut:previous', label: t('social', 'Previous post') },
 	{ keys: ['l', 'f'], event: 'shortcut:like', label: t('social', 'Like the post in focus') },
@@ -87,13 +100,32 @@ export function isTyping(event) {
 		return true
 	}
 
-	const target = /** @type {HTMLElement|null} */ (event.target)
-	if (!target || typeof target.tagName !== 'string') {
+	return isEditable(event.target)
+}
+
+/**
+ * @param {EventTarget|null} target where a key was pressed
+ * @return {boolean} whether it is a field or an editor
+ */
+function isEditable(target) {
+	const element = /** @type {HTMLElement|null} */ (target)
+	if (!element || typeof element.tagName !== 'string') {
 		return false
 	}
 
-	return EDITABLE.includes(target.tagName.toLowerCase())
-		|| target.isContentEditable === true
+	return EDITABLE.includes(element.tagName.toLowerCase())
+		|| element.isContentEditable === true
+}
+
+/**
+ * Whether a key press is ⌘K or Ctrl+K, and not a variation of it.
+ *
+ * @param {KeyboardEvent} event the press
+ * @return {boolean}
+ */
+export function isPaletteKey(event) {
+	return (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey
+		&& String(event.key).toLowerCase() === 'k'
 }
 
 /**
@@ -131,11 +163,16 @@ export function belongsToElement(event) {
  * @return {string} the event to publish, or '' when the key means nothing here
  */
 export function eventFor(event) {
+	// in a field it may be the editor's own: Ctrl+K inserts a link in many
+	if (isPaletteKey(event)) {
+		return isEditable(event.target) ? '' : PALETTE_EVENT
+	}
+
 	if (isTyping(event) || belongsToElement(event)) {
 		return ''
 	}
 
-	const shortcut = SHORTCUTS.find(({ keys }) => keys.includes(event.key))
+	const shortcut = SHORTCUTS.find(({ keys, chord }) => !chord && keys.includes(event.key))
 
 	return shortcut === undefined ? '' : shortcut.event
 }
