@@ -191,14 +191,13 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 	 * and that id is the key `save()` updates by -- so without this, a peer
 	 * naming the id of somebody else's row as its attachment's rewrote that
 	 * row's url, parent, type and `public` flag: a local user's upload, or a
-	 * picture that belongs to a third server's post. And it is decided before
-	 * anything about the sender is known: attachments are stored while the
-	 * post is imported, which is before the inbox has held the signer to the
-	 * activity.
+	 * picture that belongs to a third server's post.
 	 *
 	 * So a row may only be rewritten by the post it hangs off -- a redelivery,
 	 * an `Update` -- or by the server whose id it carries, re-using its own
-	 * media on another of its posts. A row of this instance's own is never
+	 * media on another of its posts, and in either case only through a request
+	 * whose checked origin is the server of the post the row hangs off. A row
+	 * of this instance's own is never
 	 * rewritten from outside: one a local account owns, one hanging off a
 	 * local post, or, by id, anything named on this host, which no peer has a
 	 * reason to name.
@@ -214,6 +213,14 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 
 		$here = strtolower($this->configService->getCloudHost());
 		if ($known->getAccount() !== '' || self::hostOf($known->getParentId()) === $here) {
+			return false;
+		}
+
+		// what came through a checked request may only rewrite rows of the
+		// server it came from: naming another server's post as its own
+		// object does not make that post's media the sender's to change
+		$origin = strtolower($item->getRoot()->getOrigin());
+		if ($origin !== '' && self::hostOf($known->getParentId()) !== $origin) {
 			return false;
 		}
 

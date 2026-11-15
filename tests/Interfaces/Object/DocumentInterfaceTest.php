@@ -279,6 +279,33 @@ class DocumentInterfaceTest extends ActivityPubTestCase {
 		$this->assertSame('bobs-picture', $incoming->getLocalCopy());
 	}
 
+	/**
+	 * A request from one server that names another server's post as its own
+	 * object, with that post's attachment id, does not reach the stored row:
+	 * the checked origin is not the server the row's post lives on.
+	 */
+	public function testARequestFromAnotherOriginCannotRewriteThatPostsDocument(): void {
+		$note = $this->note(self::REMOTE_URL . '/notes/1', self::REMOTE_URL . '/users/bob');
+		$create = new Create();
+		$create->setOrigin('evil.example', 0, 0);
+		$note->setParent($create);
+		$stored = new Document();
+		$stored->setId(self::DOCUMENT);
+		$stored->setParentId($note->getId());
+		$this->cacheDocumentsRequest->method('getById')->willReturn($stored);
+		$this->cacheDocumentsRequest->method('getByUrlAndParent')->willReturn($stored);
+		$incoming = new Document($note);
+		$incoming->setId(self::DOCUMENT);
+		$incoming->setUrl(self::REMOTE_URL . '/media/1.png');
+
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
+		$this->cacheDocumentsRequest->expects($this->once())->method('save');
+
+		$this->handler->save($incoming, true);
+
+		$this->assertNotSame(self::DOCUMENT, $incoming->getId(), 'stored as a document of its own');
+	}
+
 	/** ... or re-uses it on another post of its own. */
 	public function testTheSameHostReUsingItsAttachmentOnAnotherPostUpdatesIt(): void {
 		$stored = new Document();

@@ -1319,6 +1319,17 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * The second a post's nid is composed from: when it says it was
+	 * published, but never later than now. Every timeline is ordered by nid,
+	 * so a post dated in the future would otherwise sit above everything
+	 * stored until that date; and a date past 2262 would not fit the BIGINT.
+	 * The `published` it states is kept as it is.
+	 */
+	public static function nidTime(int $publishedTime, ?int $now = null): int {
+		return max(0, min($publishedTime, $now ?? time()));
+	}
+
+	/**
 	 * Insert a new Stream in the database.
 	 *
 	 * @param Stream $stream
@@ -1344,7 +1355,7 @@ class StreamRequest extends StreamRequestBuilder {
 
 		if (Nid::compare($stream->getNid(), '0') === 0) {
 			$stream->setNid(Nid::fromPublishedTime(
-				$stream->getPublishedTime(), random_int(1, self::NID_LIMIT - 1), self::NID_LIMIT
+				self::nidTime($stream->getPublishedTime()), random_int(1, self::NID_LIMIT - 1), self::NID_LIMIT
 			));
 		}
 
