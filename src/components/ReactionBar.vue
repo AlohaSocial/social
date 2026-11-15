@@ -19,6 +19,8 @@
 				class="reaction__emoji-image"
 				:src="reaction.url"
 				alt=""
+				loading="lazy"
+				decoding="async"
 				aria-hidden="true">
 			<span v-else class="reaction__emoji" aria-hidden="true">{{ reaction.name }}</span>
 			<span class="reaction__count" aria-hidden="true">{{ reaction.count }}</span>

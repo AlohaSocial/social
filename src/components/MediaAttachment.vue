@@ -72,12 +72,15 @@
 				:class="{ 'attachment__blurhash--hidden': previewLoaded }" />
 			<!-- fetched as it comes into view and decoded off the main thread:
 			     a timeline is a long column of these, and the blurhash above
-			     holds the frame until each arrives -->
+			     holds the frame until each arrives. A dense screen that needs
+			     more pixels than the preview has picks the original instead -->
 			<img
 				v-if="hasPreview && !previewFailed"
 				class="attachment__preview attachment__preview--fading"
 				:class="{ 'attachment__preview--shown': previewLoaded }"
 				:src="attachment.preview_url"
+				:srcset="srcset"
+				:sizes="srcsetSizes"
 				:alt="attachment.description || ''"
 				loading="lazy"
 				decoding="async"
@@ -123,6 +126,20 @@ function sourceOf(attachment) {
 
 	return String((plays ? attachment.url : attachment.preview_url) ?? '')
 }
+
+/**
+ * The widest original offered beside the preview. A camera's full-size file
+ * is several megabytes; past this width it costs far more than a timeline
+ * frame can show, so the preview alone is used.
+ */
+const SRCSET_MAX_WIDTH = 2560
+
+/**
+ * How wide the picture is drawn, for the browser to choose between preview
+ * and original. `auto` lets a browser that can measure the lazily loaded
+ * frame do so; the rest is the widest a timeline column gets.
+ */
+const SRCSET_SIZES = 'auto, (max-width: 700px) 100vw, 700px'
 
 /** How many pixels the long side of a blurhash placeholder is drawn at. */
 const BLURHASH_PX = 32
@@ -411,6 +428,35 @@ export default {
 			return this.attachment !== null
 				&& typeof this.attachment.preview_url === 'string'
 				&& this.attachment.preview_url !== ''
+		},
+
+		/**
+		 * The preview and the original as width candidates, where both are
+		 * known, the original is wider and not too large to be worth it. An
+		 * animated GIF is left to its still preview, as it is now.
+		 *
+		 * @return {string|undefined} undefined leaves the attribute off
+		 */
+		srcset() {
+			const attachment = this.attachment
+			if (attachment?.type !== 'image' || !this.hasPreview || !this.hasSource
+				|| attachment.url === attachment.preview_url
+				|| String(attachment.media_type ?? '').toLowerCase() === 'image/gif') {
+				return undefined
+			}
+
+			const small = Number(attachment.meta?.small?.width)
+			const original = Number(attachment.meta?.original?.width)
+			if (!(small > 0) || !(original > small) || original > SRCSET_MAX_WIDTH) {
+				return undefined
+			}
+
+			return `${attachment.preview_url} ${small}w, ${attachment.url} ${original}w`
+		},
+
+		/** @return {string|undefined} the `sizes` the srcset is chosen with */
+		srcsetSizes() {
+			return this.srcset === undefined ? undefined : SRCSET_SIZES
 		},
 
 		/** @return {boolean} whether the still-image placeholder is on screen */

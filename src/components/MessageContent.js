@@ -52,7 +52,48 @@ function formatMessage(hFn, routerLink, item) {
 	const children = Array.from(element.childNodes).map((node) => domToVue(hFn, routerLink, node, context))
 	// the post's own direction, read from its first strong character: an
 	// Arabic or Hebrew post in an English page is otherwise set left to right
-	return hFn('div', { dir: 'auto' }, children)
+	return hFn('div', {
+		dir: 'auto',
+		class: isJumboEmoji(element.textContent ?? '', context.emojis) ? 'message-content--jumbo' : undefined,
+	}, children)
+}
+
+/** How many emoji a post may consist of and still be drawn large. */
+const JUMBO_MAX = 3
+
+/**
+ * One emoji as a reader sees it: a flag, a keycap, or a pictograph with its
+ * variation selector, skin tone, tag sequence and zero-width-joined parts.
+ */
+const emojiUnitRe = /\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?[\u{E0020}-\u{E007E}]*\u{E007F}?(?:\u200D\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?)*/gu
+
+/**
+ * Whether a text is nothing but one to three emoji, the way a messenger
+ * draws a lone emoji large. The post's own custom emoji count as emoji;
+ * a shortcode the post does not list is text.
+ *
+ * @param {string} text the post's plain text
+ * @param {import('../types/Mastodon.js').CustomEmoji[]} [emojis] the post's custom emoji
+ * @return {boolean}
+ */
+export function isJumboEmoji(text, emojis = []) {
+	const shortcodes = new Set(emojis.map((entry) => (entry.shortcode ?? '').toLowerCase()))
+	let count = 0
+	const rest = text
+		.replace(new RegExp(customEmojiRegex.source, 'g'), (whole, shortcode) => {
+			if (!shortcodes.has(shortcode.toLowerCase())) {
+				return whole
+			}
+			count++
+			return ' '
+		})
+		.replace(emojiUnitRe, () => {
+			count++
+			return ' '
+		})
+		.replace(/\s|[\u200B-\u200D]|\uFE0F/g, '')
+
+	return rest === '' && count > 0 && count <= JUMBO_MAX
 }
 
 /**
@@ -150,6 +191,8 @@ export function emojifyPlain(hFn, text, emojis) {
 					alt: match[0],
 					title: match[0],
 					draggable: 'false',
+					loading: 'lazy',
+					decoding: 'async',
 				})
 			},
 		},
@@ -196,6 +239,8 @@ function transformText(hFn, routerLink, text, context = { tags: [], mentions: []
 					alt: match[0],
 					title: match[0],
 					draggable: 'false',
+					loading: 'lazy',
+					decoding: 'async',
 				})
 			},
 		},

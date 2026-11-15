@@ -35,6 +35,18 @@ describe('PostCard', () => {
 		expect(wrapper.find('img').attributes('loading')).toBe('lazy')
 	})
 
+	it('holds the picture\'s shape before it loads, where the page gave its size', () => {
+		const sized = mountCard(card({ width: 1200, height: 630 })).find('img')
+		expect(sized.attributes('width')).toBe('1200')
+		expect(sized.attributes('height')).toBe('630')
+		expect(sized.attributes('decoding')).toBe('async')
+
+		// Mastodon sends 0 for a size it does not know
+		const unsized = mountCard(card({ width: 0, height: 0 })).find('img')
+		expect(unsized.attributes('width')).toBeUndefined()
+		expect(unsized.attributes('height')).toBeUndefined()
+	})
+
 	it('falls back to the host when the page names no provider', () => {
 		expect(mountCard(card({ provider_name: '' })).find('.post-card__provider').text()).toBe('example.org')
 	})

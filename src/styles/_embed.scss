@@ -1,0 +1,37 @@
+// One frame for whatever a post carries inside it: a link preview, a quoted
+// post, an event. Each keeps its own contents; the frame around them is the
+// same, so they read as one kind of thing and not three.
+//     @use '../styles/embed.scss' as embed;
+//     .post-card { @include embed.frame($padded: false); }
+
+/// The frame's inner spacing. A frame with a part that sits flush with its
+/// edge, like a link preview's picture, gives the rest of itself this padding.
+$padding: 10px 12px;
+
+/// The frame: border, corners, surface, spacing and the hover and focus
+/// states, the same for every embed.
+///
+/// @param {Bool} $padded whether the frame pads its contents itself
+@mixin frame($padded: true) {
+	margin-block: 8px 10px;
+	@if $padded {
+		padding: $padding;
+	}
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large, 12px);
+	background: var(--color-background-hover);
+	transition: border-color .15s ease;
+
+	&:hover {
+		border-color: var(--color-border-maxcontrast);
+	}
+
+	&:focus-visible,
+	&:focus-within {
+		border-color: var(--color-primary-element);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}

@@ -25,6 +25,13 @@ SPDX-FileCopyrightText = "2026 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 [[annotations]]
+# This Sass partial is embedded as source text in the generated Vue chunks.
+path = "src/styles/_embed.scss"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Aloha Social contributors"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
 # The list of Google's Noto Animated Emoji the composer offers. Only the list
 # is here; the pictures are fetched by the instance and kept in appdata, and
 # they carry the same licence. See lib/Service/GifPackService.php.

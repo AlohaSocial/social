@@ -14,8 +14,11 @@
 			v-if="image"
 			class="post-card__image"
 			:src="image"
+			:width="imageSize.width"
+			:height="imageSize.height"
 			alt=""
 			loading="lazy"
+			decoding="async"
 			@error="image = ''">
 		<div class="post-card__text">
 			<span class="post-card__provider">{{ provider }}</span>
@@ -62,6 +65,19 @@ export default {
 			return this.inside ? this.$router.resolve(this.inside).href : this.card.url
 		},
 
+		/**
+		 * The picture's size, where the page gave one, so its shape is held
+		 * before it loads and the card does not grow under the reader.
+		 *
+		 * @return {{width?: number, height?: number}}
+		 */
+		imageSize() {
+			const width = Number(this.card?.width)
+			const height = Number(this.card?.height)
+
+			return width > 0 && height > 0 ? { width, height } : {}
+		},
+
 		provider() {
 			if (this.card.provider_name) {
 				return this.card.provider_name
@@ -95,19 +111,17 @@ export default {
 </script>
 
 <style scoped lang="scss">
+@use '../styles/embed.scss' as embed;
+
 .post-card {
+	@include embed.frame($padded: false);
 	display: flex;
-	margin-top: 8px;
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large, 8px);
 	overflow: hidden;
 	color: var(--color-main-text);
 	text-decoration: none;
-	background: var(--color-background-hover);
 
 	&:hover,
 	&:focus {
-		border-color: var(--color-primary-element);
 		text-decoration: none;
 	}
 
@@ -123,7 +137,7 @@ export default {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 10px 12px;
+		padding: embed.$padding;
 		min-width: 0;
 	}
 

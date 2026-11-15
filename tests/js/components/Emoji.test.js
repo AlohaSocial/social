@@ -14,6 +14,8 @@ describe('Emoji', () => {
 		expect(img.attributes('src')).toBe('/apps/social/img/twemoji/1f600.svg')
 		expect(img.attributes('alt')).toBe('😀')
 		expect(img.attributes('draggable')).toBe('false')
+		expect(img.attributes('loading')).toBe('lazy')
+		expect(img.attributes('decoding')).toBe('async')
 	})
 
 	it('drops the variation selector from a plain emoji', () => {
