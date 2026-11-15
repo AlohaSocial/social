@@ -4970,15 +4970,6 @@ class ApiControllerTest extends TestCase {
 
 	// media scoping
 
-	private function attachedDocument(bool $public = false): Document {
-		$document = new Document();
-		$document->setId('https://cloud.example/documents/local/1');
-		$document->setPublic($public);
-		$this->documentService->method('getMediaFromArray')->willReturn([$document]);
-
-		return $document;
-	}
-
 	private function postWith(array $params): ?Post {
 		$this->loggedInAs();
 		$this->request->method('getParams')->willReturn($params);
@@ -4999,45 +4990,46 @@ class ApiControllerTest extends TestCase {
 	}
 
 	/**
-	 * `public` on a cached document decides whether the unauthenticated
-	 * /media/{uuid} route serves the file. Every upload used to be stored with
-	 * it set, so an attachment to a direct message was, by the row's own
-	 * account, readable by anybody who came by the uuid.
+	 * The attachments go through the resolver the edit path uses: the
+	 * author's own uploads, in the order the client sent them, scoped to the
+	 * post's audience, and refused when one is not theirs.
 	 */
-	public function testAttachmentsOfAPublicPostAreMarkedPublic(): void {
-		$document = $this->attachedDocument(false);
-		$this->cacheDocumentsRequest->expects($this->once())
-			->method('update')->with($this->identicalTo($document));
-
-		$this->postWith(['status' => 'hi', 'media_ids' => ['1'], 'visibility' => 'public']);
-
-		$this->assertTrue($document->isPublic());
+	public static function mediaVisibilityCases(): array {
+		return [
+			'public' => ['public', Stream::TYPE_PUBLIC],
+			'unlisted' => ['unlisted', Stream::TYPE_UNLISTED],
+			// Mastodon's followers-only value; the app calls it `followers`
+			'followers-only' => ['private', Stream::TYPE_FOLLOWERS],
+			'direct' => ['direct', Stream::TYPE_DIRECT],
+		];
 	}
 
-	public function testAttachmentsOfADirectMessageAreNotPublic(): void {
-		$document = $this->attachedDocument(true);
-		$this->cacheDocumentsRequest->expects($this->once())
-			->method('update')->with($this->identicalTo($document));
+	#[DataProvider('mediaVisibilityCases')]
+	public function testAttachmentsAreResolvedInOrderForThePostsAudience(string $visibility, string $type): void {
+		$calls = [];
+		$this->documentService->method('mediaAttachmentsForEdit')
+			->willReturnCallback(function (array $ids, string $account, string $audience) use (&$calls): array {
+				$calls[] = [$ids, $account, $audience];
 
-		$this->postWith(['status' => 'hi', 'media_ids' => ['1'], 'visibility' => 'direct']);
+				return [(new MediaAttachment())->setId('2'), (new MediaAttachment())->setId('1')];
+			});
+		$this->documentService->expects($this->never())->method('getMediaFromArray');
 
-		$this->assertFalse($document->isPublic());
+		$post = $this->postWith(['status' => 'hi', 'media_ids' => ['2', '1'], 'visibility' => $visibility]);
+
+		$this->assertSame([[[2, 1], 'alice', $type]], $calls);
+		$this->assertSame(['2', '1'], array_map(static fn (MediaAttachment $media): string => $media->getId(), $post->getMedias()));
 	}
 
-	public function testAttachmentsOfAFollowersOnlyPostAreNotPublic(): void {
-		$document = $this->attachedDocument(true);
+	public function testAnAttachmentThatIsNotTheAuthorsRefusesThePost(): void {
+		$this->documentService->method('mediaAttachmentsForEdit')
+			->willThrowException(new InvalidActionException('One or more media attachments are unavailable'));
+		$this->postService->expects($this->never())->method('createPost');
 
-		// Mastodon's followers-only value; the app calls it `followers`
-		$this->postWith(['status' => 'hi', 'media_ids' => ['1'], 'visibility' => 'private']);
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['status' => 'hi', 'media_ids' => ['9']]);
 
-		$this->assertFalse($document->isPublic());
-	}
-
-	public function testAnAttachmentAlreadyScopedCorrectlyIsNotRewritten(): void {
-		$this->attachedDocument(true);
-		$this->cacheDocumentsRequest->expects($this->never())->method('update');
-
-		$this->postWith(['status' => 'hi', 'media_ids' => ['1'], 'visibility' => 'unlisted']);
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->statusNew()->getStatus());
 	}
 
 	// instance

@@ -955,6 +955,30 @@ class DocumentServiceTest extends TestCase {
 		$this->service->mediaAttachmentsForEdit(['11'], 'alice', Stream::TYPE_PUBLIC);
 	}
 
+	public function testMediaIdsRefuseAnIdThatIsNotAnUploadHere(): void {
+		$this->cacheDocumentsRequest->method('getFromArray')->willReturn([$this->upload(11, 'Mine')]);
+
+		$this->expectException(InvalidActionException::class);
+		$this->service->mediaAttachmentsForEdit(['11', '99'], 'alice', Stream::TYPE_PUBLIC);
+	}
+
+	public function testMediaIdsRefuseMoreThanAPostCarries(): void {
+		$this->cacheDocumentsRequest->expects($this->never())->method('getFromArray');
+
+		$this->expectException(InvalidActionException::class);
+		$this->service->mediaAttachmentsForEdit(range(1, Stream::MAX_ATTACHMENTS + 1), 'alice', Stream::TYPE_PUBLIC);
+	}
+
+	public function testAnUploadAlreadyScopedRightIsNotWrittenAgain(): void {
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/media/x');
+		$upload = $this->upload(11, 'Mine');
+		$upload->setPublic(true);
+		$this->cacheDocumentsRequest->method('getFromArray')->willReturn([$upload]);
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
+
+		$this->service->mediaAttachmentsForEdit(['11'], 'alice', Stream::TYPE_PUBLIC);
+	}
+
 	public function testEditMediaIdsCanExplicitlyRemoveAllAttachments(): void {
 		$this->cacheDocumentsRequest->expects($this->never())->method('getFromArray');
 

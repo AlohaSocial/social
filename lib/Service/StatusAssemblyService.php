@@ -11,17 +11,13 @@ namespace OCA\Social\Service;
 
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
-use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;
-use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
-use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Model\StatusParams;
-use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -40,8 +36,6 @@ class StatusAssemblyService {
 	public function __construct(
 		private DocumentService $documentService,
 		private StreamService $streamService,
-		private CacheDocumentsRequest $cacheDocumentsRequest,
-		private IURLGenerator $urlGenerator,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -172,17 +166,9 @@ class StatusAssemblyService {
 
 		$mediaIds = $params->paramMediaIds();
 		if ($mediaIds !== []) {
-			$documents = $this->documentService->getMediaFromArray(
-				$mediaIds, $actor->getPreferredUsername()
-			);
-			$this->scopeMediaToVisibility($documents, $post->getType());
-			$post->setMedias(
-				array_map(function (Document $document): MediaAttachment {
-					return $document->convertToMediaAttachment(
-						$this->urlGenerator, ACore::FORMAT_ACTIVITYPUB
-					);
-				}, $documents)
-			);
+			$post->setMedias($this->documentService->mediaAttachmentsForEdit(
+				$mediaIds, $actor->getPreferredUsername(), $post->getType()
+			));
 		}
 
 		$replyTo = (int)$params->paramString('in_reply_to_id');
@@ -205,29 +191,5 @@ class StatusAssemblyService {
 		}
 
 		return $post;
-	}
-
-	/**
-	 * Records on a post's attachments whether the post itself is
-	 * world-readable, which decides how the bytes may be cached on the way to a
-	 * reader.
-	 *
-	 * The twin of `StatusApiController::scopeMediaToVisibility()`, which does this
-	 * for an immediate post and is private to the controller. Both exist
-	 * because the answer is only known when the post is created.
-	 *
-	 * @param Document[] $documents
-	 */
-	private function scopeMediaToVisibility(array $documents, string $visibility): void {
-		$public = in_array($visibility, [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true);
-
-		foreach ($documents as $document) {
-			if ($document->isPublic() === $public) {
-				continue;
-			}
-
-			$document->setPublic($public);
-			$this->cacheDocumentsRequest->update($document);
-		}
 	}
 }

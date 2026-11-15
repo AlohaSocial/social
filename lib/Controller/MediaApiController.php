@@ -285,7 +285,7 @@ class MediaApiController extends MastodonApiController {
 		// unauthenticated /media/{uuid} route serves the file, and this used
 		// to be set on every upload — so an attachment to a direct message
 		// was, by the row's own account, readable by anybody. The visibility
-		// is applied when the status is created; see scopeMediaToVisibility().
+		// is applied when the status is created; see DocumentService::mediaAttachmentsForEdit().
 		$document->setPublic(false);
 		$document->setDescription($description);
 
