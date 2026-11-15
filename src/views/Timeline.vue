@@ -1214,7 +1214,9 @@ export default {
 	width: 100%;
 	max-width: var(--social-column);
 	margin: 0 auto 8px;
-	padding: 6px var(--social-column-gutter);
+	/* no inline padding: the switcher drops its labels at 600px of its own
+	   width, and the reading column minus gutters is exactly that */
+	padding: 6px 0;
 	background: color-mix(in srgb, var(--color-main-background) 78%, transparent);
 	backdrop-filter: blur(12px) saturate(1.2);
 	-webkit-backdrop-filter: blur(12px) saturate(1.2);
