@@ -784,4 +784,44 @@ describe('a notification in the list', () => {
 	it('keeps the room for a post\'s face on a phone for posts only', () => {
 		expect(source).toMatch(/\.timeline-entry:not\(\.notification, \.timeline-entry--direct\) \.wrapper \{\s*position: relative;/)
 	})
+
+	/**
+	 * With a pointer, a row's hover is one shape: the floor swells into a hill
+	 * under the actions instead of a flat grey fill with a pill on top.
+	 */
+	describe('the swell', () => {
+		const source = () => readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+		const swell = () => source().slice(source().indexOf('@property --swell-w'))
+
+		it('grows a hill under the actions, quickly gone again, only where there is a pointer', () => {
+			const css = swell()
+
+			expect(css).toMatch(/@media \(hover: hover\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \{/)
+			expect(css).toMatch(/radial-gradient\(var\(--swell-w\) var\(--swell-h\) at var\(--swell-x\) var\(--swell-y\)/)
+			expect(css).toMatch(/&:hover,\s*&:focus-within \{[^}]*--swell-w: 300px;[^}]*--swell-h: 72px;/)
+			// out flat and fast, so a pointer crossing the feed leaves no trail
+			expect(css).toMatch(/transition: background-color \.1s linear, --swell-depth \.1s linear, --swell-w 0s \.1s, --swell-h 0s \.1s;/)
+		})
+
+		it('drops the pill’s surface and lets the actions arrive with the hill', () => {
+			const css = swell()
+
+			expect(css).toMatch(/\.wrapper :deep\(\.post-actions-reveal::before\) \{\s*display: none;/)
+			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-actions > \*\) \{\s*transform: none;/)
+		})
+
+		it('hangs the hill from the top where the actions float over the timestamp, which steps aside', () => {
+			const css = swell()
+
+			expect(css).toMatch(/:not\(:has\(\.reaction-bar, \.post-action-count\)\) \{\s*--swell-y: 0%;/)
+			expect(css).toMatch(/&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-timestamp\),\s*&:is\(:hover, :focus-within\) \.wrapper :deep\(\.post-given\) \{\s*opacity: 0;/)
+		})
+
+		it('stands still for reduced motion and draws nothing under forced colours', () => {
+			const css = swell()
+
+			expect(css).toMatch(/@media \(hover: hover\) and \(prefers-reduced-motion: reduce\)/)
+			expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\) \{\s*background-image: none;/)
+		})
+	})
 })
