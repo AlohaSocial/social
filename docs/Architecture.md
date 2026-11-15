@@ -4254,6 +4254,55 @@ is deliberate — the box you write in should read as the thing that makes them
 rather than as one of them. Both used to carry the same max-width independently
 while only one of them had a gutter, which is how they came to disagree.
 
+**One motion scale.** `src/styles/motion.css`, imported by every entry point
+but the self-contained Files action and recovery page, defines three durations
+(`--social-motion-fast` 150ms for a colour or a hover, `--social-motion-base`
+200ms for something that appears or slides, `--social-motion-slow` 400ms for
+something that travels or settles), one curve (`--social-ease`) and one spring
+that overshoots and settles (`--social-ease-spring`, the switcher's glider and
+other things that snap to a choice). Short UI transitions use them; long
+decorative loops (skeleton sheen, illustrations) keep their own timing, and
+each component still answers `prefers-reduced-motion` itself. The post card,
+feed list, navigation, profile and settings styles have not been moved onto
+the scale yet.
+
+**Carried across a change.** Where the browser has view transitions and the
+reader has not asked for less motion, the element a change starts from is
+morphed into the element it ends on: a post card pressed in a feed into the
+post at the head of its thread, a face into the top of the profile, a
+thumbnail into the media viewer. `utils/viewTransition.js` (`morph()`) does
+the viewer; for page changes `services/sharedElements.js` remembers what was
+pressed (a capture-phase click listener App.vue installs), names it before
+`startPageTransition()` takes the old picture, and moves the name to its
+counterpart on the new page once it is drawn. A name is never on two elements
+at once — a browser that finds a duplicate abandons the whole transition — and
+is made up per morph (`social-morph-N`), so the shared styling in App.vue finds
+them by `view-transition-class: social-morph`. Where the counterpart is not on
+the new page yet (a thread still loading), the old element fades with the page.
+
+**A face for an account without one.** An Account entity whose
+`avatar_default` is true gets a flower drawn by `utils/patternAvatar.js` in
+place of Nextcloud's initials or the app icon: an SVG data URL, pastel so it
+sits on either theme, tinted with `tagHue()` of the handle and with five to
+seven petals, so the same account gets the same flower everywhere. It is
+decoration; the name beside it says who it is. `ActorAvatar`, `TimelineAvatar`,
+`AccountHoverCard` and the profile header use it; avatars drawn by
+`NcAvatar` directly elsewhere (the navigation, the composer, direct messages)
+still show Nextcloud's initials.
+
+**The flower that blooms.** `BloomingFlower.vue` is the logo's five petals,
+opening once when drawn (`onceKey` limits that to once per page load for a
+named moment) and simply open under reduced motion. The first post's
+celebration and a finished sign-up use it.
+
+**The weekly recap as a picture.** `WeeklyRecap`'s **Share as image** draws the
+week on a 1080px square canvas in the theme accent (`utils/recapImage.js`:
+the app's flower, the count, the recap's own translated sentences, the host)
+and opens the composer with the PNG attached through `composer-open`. The
+description goes with the file through `services/fileDescriptions.js`, a
+`WeakMap` the composer's `attachFiles()` reads, so the alt text is filled in
+and the author can still change it. A quiet week offers no picture.
+
 `TimelineList` owns its own layout and the views that render it do not touch
 it. That is not style: `.social__timeline` is a child component's **root**, and
 a scoped rule still reaches a child's root — so a view styling it lands beside
