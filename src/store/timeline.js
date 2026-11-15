@@ -1552,11 +1552,17 @@ export const useTimelineStore = defineStore('timeline', {
 		 * either way, and an offline moment threw away what was typed.
 		 *
 		 * @param {object} status the status to send
+		 * @param {object} [options] how it is sent
+		 * @param {string} [options.idempotencyKey] the key a retry of the same post shares
 		 * @return {Promise<object|undefined>} the created status, or undefined
 		 */
-		async post(status) {
+		async post(status, { idempotencyKey = '' } = {}) {
 			try {
-				const { data } = await axios.post(generateUrl('apps/social/api/v1/statuses'), status)
+				const { data } = await axios.post(
+					generateUrl('apps/social/api/v1/statuses'),
+					status,
+					...(idempotencyKey === '' ? [] : [{ headers: { 'Idempotency-Key': idempotencyKey } }]),
+				)
 				logger.info('Post created', data.id)
 				return data
 			} catch (error) {

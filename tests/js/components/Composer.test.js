@@ -1176,6 +1176,25 @@ describe('Composer', () => {
 			expect(typed(wrapper)).toBe('A new thought')
 		})
 
+		it('sends a retried post with the key of the attempt whose answer was lost', async () => {
+			const { wrapper, store } = mountComposer()
+			store.post.mockResolvedValueOnce(undefined)
+			await setContent(wrapper, 'Did this go out?')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			const [first, second] = store.post.mock.calls.map((call) => call[1].idempotencyKey)
+			expect(first).toEqual(expect.any(String))
+			expect(second).toBe(first)
+
+			await setContent(wrapper, 'Did this go out?')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			expect(store.post.mock.calls[2][1].idempotencyKey).not.toBe(first)
+		})
+
 		it('keeps a refused quick post and hands its draft to the full modal', async () => {
 			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
 			store.post.mockResolvedValueOnce(undefined)
@@ -3754,7 +3773,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
-			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ post_as: expect.anything() }))
+			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ post_as: expect.anything() }), { idempotencyKey: expect.any(String) })
 		})
 
 		it('names the team when the post is written as one', async () => {
@@ -3767,7 +3786,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ post_as: 'press' }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ post_as: 'press' }), { idempotencyKey: expect.any(String) })
 		})
 	})
 
@@ -3780,7 +3799,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ reply_policy: 'mentioned' }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ reply_policy: 'mentioned' }), { idempotencyKey: expect.any(String) })
 			expect(wrapper.vm.replyPolicy).toBe('everyone')
 		})
 
@@ -3794,7 +3813,7 @@ describe('Composer', () => {
 			await flushPromises()
 
 			expect(wrapper.findComponent({ name: 'ReplyPolicySelect' }).exists()).toBe(false)
-			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ reply_policy: expect.anything() }))
+			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ reply_policy: expect.anything() }), { idempotencyKey: expect.any(String) })
 		})
 	})
 
@@ -3835,7 +3854,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await vi.waitUntil(() => store.post.mock.calls.length > 0, { timeout: 3000 })
 
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Toss for it: 🪙 heads' }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Toss for it: 🪙 heads' }), { idempotencyKey: expect.any(String) })
 			expect(feel).toHaveBeenCalledWith('roll')
 		})
 
@@ -3866,7 +3885,7 @@ describe('Composer', () => {
 			expect(renderTextCard).toHaveBeenCalledWith('Friday!', expect.objectContaining({ id: 'account' }), { width: 1080, height: 1080 })
 			expect(store.createMedia).toHaveBeenCalledWith(expect.objectContaining({ name: 'card.png' }))
 			expect(store.describeMedia).toHaveBeenCalledWith({ id: 'media-1', description: 'Friday!' })
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Friday!', media_ids: ['media-1'] }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Friday!', media_ids: ['media-1'] }), { idempotencyKey: expect.any(String) })
 		})
 
 		it('does not post at all when the card could not be drawn', async () => {

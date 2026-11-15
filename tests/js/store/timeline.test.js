@@ -1077,6 +1077,15 @@ describe('timeline store actions', () => {
 			expect(showError).not.toHaveBeenCalled()
 		})
 
+		it('sends the Idempotency-Key it is given', async () => {
+			axios.post.mockResolvedValue({ data: { id: '1' } })
+			const payload = { status: 'hello' }
+
+			await store.post(payload, { idempotencyKey: 'key-1' })
+
+			expect(axios.post).toHaveBeenCalledWith(`${API}/statuses`, payload, { headers: { 'Idempotency-Key': 'key-1' } })
+		})
+
 		it('reports a failure instead of throwing', async () => {
 			axios.post.mockRejectedValue(new Error('boom'))
 

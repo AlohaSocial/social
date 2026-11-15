@@ -683,6 +683,7 @@ import { useTimelineStore } from '../../store/timeline.js'
 import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
 import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
 import { countableLength } from '../../utils/linkify.js'
+import { idempotencyKeeper } from '../../utils/idempotency.js'
 import { pollIsComplete, statusPayload } from '../../utils/statusPayload.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
@@ -944,6 +945,7 @@ export default {
 			// library's own object is not wrapped in a reactive proxy
 			tribute: null,
 			tributeTarget: null,
+			idempotency: idempotencyKeeper(),
 		}
 	},
 
@@ -2542,7 +2544,9 @@ export default {
 				// `post` resolves with the created status and rejects when the
 				// server said no; clearing in a `finally` used to throw the
 				// text away on every failure, offline included
-				created = await this.timelineStore.post(statusData)
+				created = await this.timelineStore.post(statusData, {
+					idempotencyKey: this.idempotency.keyFor(statusData),
+				})
 			} finally {
 				this.loading = false
 			}
@@ -2553,6 +2557,7 @@ export default {
 				this.rememberDraft()
 				return
 			}
+			this.idempotency.sent()
 
 			const wasScheduled = statusData.scheduled_at !== undefined
 			const publishedContext = this.draftContext
