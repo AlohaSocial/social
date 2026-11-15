@@ -10,6 +10,8 @@
 		draggable="false"
 		:alt="emoji"
 		:src="emojiUrl"
+		loading="lazy"
+		decoding="async"
 		@error="missing = true">
 </template>
 

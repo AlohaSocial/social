@@ -217,6 +217,31 @@ describe('MediaAttachment', () => {
 		expect(image.attributes('decoding')).toBe('async')
 	})
 
+	describe('srcset', () => {
+		const sized = { ...attachment, meta: { small: { width: 800, height: 600 }, original: { width: 1600, height: 1200 } } }
+
+		it('offers the original beside the preview to a screen that wants more pixels', () => {
+			const image = mount(MediaAttachment, { props: { attachment: sized } }).find('img.attachment__preview')
+
+			expect(image.attributes('src')).toBe(attachment.preview_url)
+			expect(image.attributes('srcset')).toBe(`${attachment.preview_url} 800w, ${attachment.url} 1600w`)
+			expect(image.attributes('sizes')).toMatch(/^auto, /)
+		})
+
+		it.each([
+			['the sizes are unknown', attachment],
+			['the original is no wider', { ...sized, meta: { ...sized.meta, original: { width: 800, height: 600 } } }],
+			['the original is camera-sized', { ...sized, meta: { ...sized.meta, original: { width: 4032, height: 3024 } } }],
+			['it is an animated GIF', { ...sized, media_type: 'image/gif' }],
+			['there is no copy here', { ...sized, url: null }],
+		])('leaves the preview alone when %s', (_, media) => {
+			const image = mount(MediaAttachment, { props: { attachment: media } }).find('img.attachment__preview')
+
+			expect(image.attributes('srcset')).toBeUndefined()
+			expect(image.attributes('sizes')).toBeUndefined()
+		})
+	})
+
 	it('paints the blurhash placeholder into a small bitmap in the preview\'s ratio', () => {
 		const wrapper = mount(MediaAttachment, { props: { attachment: { ...attachment, meta: { small: { width: 400, height: 300 } } } } })
 

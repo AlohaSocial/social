@@ -191,6 +191,8 @@ export function emojifyPlain(hFn, text, emojis) {
 					alt: match[0],
 					title: match[0],
 					draggable: 'false',
+					loading: 'lazy',
+					decoding: 'async',
 				})
 			},
 		},
@@ -237,6 +239,8 @@ function transformText(hFn, routerLink, text, context = { tags: [], mentions: []
 					alt: match[0],
 					title: match[0],
 					draggable: 'false',
+					loading: 'lazy',
+					decoding: 'async',
 				})
 			},
 		},

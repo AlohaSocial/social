@@ -67,6 +67,7 @@ describe('ReactionBar', () => {
 
 		expect(image.attributes('src')).toBe('/apps/social/emoji/aloha')
 		expect(image.attributes('aria-hidden')).toBe('true')
+		expect(image.attributes('loading')).toBe('lazy')
 		expect(wrapper.find('.reaction__emoji').exists()).toBe(false)
 	})
 

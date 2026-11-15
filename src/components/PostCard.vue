@@ -14,8 +14,11 @@
 			v-if="image"
 			class="post-card__image"
 			:src="image"
+			:width="imageSize.width"
+			:height="imageSize.height"
 			alt=""
 			loading="lazy"
+			decoding="async"
 			@error="image = ''">
 		<div class="post-card__text">
 			<span class="post-card__provider">{{ provider }}</span>
@@ -60,6 +63,19 @@ export default {
 		/** @return {string} what the card links to */
 		href() {
 			return this.inside ? this.$router.resolve(this.inside).href : this.card.url
+		},
+
+		/**
+		 * The picture's size, where the page gave one, so its shape is held
+		 * before it loads and the card does not grow under the reader.
+		 *
+		 * @return {{width?: number, height?: number}}
+		 */
+		imageSize() {
+			const width = Number(this.card?.width)
+			const height = Number(this.card?.height)
+
+			return width > 0 && height > 0 ? { width, height } : {}
 		},
 
 		provider() {

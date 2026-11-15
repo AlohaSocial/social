@@ -271,6 +271,8 @@ describe('MessageContent', () => {
 			expect(img.exists()).toBe(true)
 			expect(img.attributes('src')).toBe(blobcat.url)
 			expect(img.attributes('alt')).toBe(':blobcat:')
+			expect(img.attributes('loading')).toBe('lazy')
+			expect(img.attributes('decoding')).toBe('async')
 			expect(wrapper.text()).toContain('hi')
 		})
 
