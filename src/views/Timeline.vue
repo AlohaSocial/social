@@ -49,20 +49,22 @@
 			:title="heading"
 			:hideTitle="!headingIsVisible">
 			<template v-if="type === 'photos' || (type === 'tags' && !followedTagsOnly)" #actions>
-				<TimelineSwitcher
-					v-if="type === 'photos'"
-					:options="photoLayouts"
-					:value="selectedPhotoLayout"
-					:label="t('social', 'Photo feed layout')"
-					@update:value="choosePhotoLayout" />
-				<!-- at the end of the row, as Videos has its upload beside its chips -->
-				<div v-if="type === 'photos' && !settingsStore.getServerData.public" class="photo-compose-actions">
-					<MediaUploadButton
-						v-if="!timelineStore.composerDisplayStatus"
-						accept="image/*,video/*"
-						multiple
-						:label="t('social', 'Share photos or a video')" />
-					<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
+				<!-- one row, as on Videos: the layouts at the start, the upload at the end -->
+				<div v-if="type === 'photos'" class="photo-header-bar">
+					<TimelineSwitcher
+						class="photo-header-bar__layouts"
+						:options="photoLayouts"
+						:value="selectedPhotoLayout"
+						:label="t('social', 'Photo feed layout')"
+						@update:value="choosePhotoLayout" />
+					<div v-if="!settingsStore.getServerData.public" class="photo-compose-actions">
+						<MediaUploadButton
+							v-if="!timelineStore.composerDisplayStatus"
+							accept="image/*,video/*"
+							multiple
+							:label="t('social', 'Share photos or a video')" />
+						<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
+					</div>
 				</div>
 				<HashtagFollowButton
 					v-if="type === 'tags' && !followedTagsOnly"
@@ -1061,11 +1063,32 @@ export default {
 	}
 }
 
+.photo-header-bar {
+	display: flex;
+	flex: 1 1 100%;
+	align-items: center;
+	gap: calc(var(--default-grid-baseline) * 3);
+	min-width: 0;
+	margin-block-end: 14px;
+}
+
+/* the switcher takes the room the buttons leave, its pill at the start like
+   the chips on Videos; it scrolls rather than wraps when that room is short */
+.photo-header-bar__layouts {
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+
+	:deep(.switcher__track) {
+		margin-inline: 0;
+	}
+}
+
 .photo-compose-actions {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: center;
 	gap: 8px;
-	margin-inline-start: auto;
 }
 
 .timeline-scope-description {

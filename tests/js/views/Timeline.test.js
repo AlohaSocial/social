@@ -1107,8 +1107,10 @@ describe('Timeline', () => {
 			const upload = wrapper.findComponent({ name: 'MediaUploadButton' })
 			expect(upload.props('accept')).toBe('image/*,video/*')
 			expect(upload.props('multiple')).toBe(true)
-			// in the header row with the layout switcher, as Videos has it
-			expect(wrapper.find('.timeline-heading-row .photo-compose-actions').exists()).toBe(true)
+			// one row with the layout switcher, as Videos has its upload beside its chips
+			const bar = wrapper.find('.timeline-heading-row .photo-header-bar')
+			expect(bar.find('.photo-compose-actions').exists()).toBe(true)
+			expect(bar.findComponent({ name: 'TimelineSwitcher' }).exists()).toBe(true)
 			expect(wrapper.find('.photo-compose-actions').findComponent({ name: 'DraftsButton' }).exists()).toBe(true)
 		})
 
