@@ -503,8 +503,10 @@ class PostService {
 		$this->moderationService->assertNotMoved($actor);
 		$stream = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 
+		// somebody else's post is answered as one that is not there, as
+		// Mastodon does: a 404, not a fault on this server
 		if ($stream->getAttributedTo() !== $actor->getId()) {
-			throw new \Exception('Not authorized to edit this post');
+			throw new StreamNotFoundException();
 		}
 
 		$this->assertWithinLength(

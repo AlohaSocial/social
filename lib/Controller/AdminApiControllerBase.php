@@ -41,6 +41,8 @@ use Throwable;
  * instance, not even that.
  */
 abstract class AdminApiControllerBase extends Controller {
+	use ListParameter;
+
 	protected string $bearer = '';
 	protected ?SocialClient $client = null;
 	protected string $userId = '';

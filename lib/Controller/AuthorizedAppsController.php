@@ -67,7 +67,9 @@ class AuthorizedAppsController extends ClientApiController {
 				$apps[] = [
 					'id' => $client->getAuthId(),
 					'name' => $client->getAppName(),
-					'website' => $client->getAppWebsite(),
+					// an app registered before the website was validated may
+					// carry anything there, and this is shown as a link
+					'website' => ClientService::websiteLink($client->getAppWebsite()),
 					'scopes' => $client->getAuthScopes(),
 					// when *this account* granted it, not when the app registered
 					// itself on the instance — the second is the same date for

@@ -66,6 +66,9 @@ class FollowService {
 	/** Accounts one familiar-followers answer carries; Mastodon shows a handful. */
 	public const FAMILIAR_MAX = 10;
 
+	/** Accounts one relationships answer covers; the rest of a longer list is ignored. */
+	public const RELATIONSHIPS_LIMIT = 40;
+
 	private ?Person $viewer = null;
 
 	public function __construct(
@@ -726,33 +729,45 @@ class FollowService {
 		));
 	}
 
+	/**
+	 * The viewer's relationship with each of the accounts named, by nid or by
+	 * actor id, for at most `RELATIONSHIPS_LIMIT` of them.
+	 *
+	 * Answered from the accounts this instance already holds, never fetched:
+	 * every account a client can name it learnt from this server, and a fetch
+	 * per id let one request pin a worker on hundreds of signed requests to
+	 * servers the caller chose. An id that names nothing held is left out.
+	 *
+	 * @param array<mixed> $ids
+	 */
 	public function getRelationships(array $ids): array {
-		$actorNids = [];
-
-		// try to resolve actors by their id (could be nid or url)
-		$nids = [];
+		$wanted = [];
 		foreach ($ids as $id) {
-			if (is_numeric($id) && (int)$id > 0) {
-				$nids[] = (int)$id;
+			$id = is_scalar($id) ? trim((string)$id) : '';
+			if ($id !== '') {
+				$wanted[$id] = $id;
+			}
+		}
+		$wanted = array_slice(array_values($wanted), 0, self::RELATIONSHIPS_LIMIT);
+
+		$nids = [];
+		$actorIds = [];
+		foreach ($wanted as $id) {
+			if (ctype_digit($id)) {
+				if ((int)$id > 0) {
+					$nids[] = (int)$id;
+				}
+			} else {
+				$actorIds[] = $id;
 			}
 		}
 
-		// retrieve actorIds from list of Nid
+		$actorNids = [];
 		foreach ($this->cacheActorService->getFromNids($nids) as $actor) {
 			$actorNids[$actor->getNid()] = $actor->getId();
 		}
-
-		// if any ids weren't found by nid, try by url
-		foreach ($ids as $id) {
-			if (is_numeric($id) && (int)$id > 0 && isset($actorNids[(int)$id])) {
-				continue;
-			}
-			try {
-				$actor = $this->cacheActorService->getFromId((string)$id);
-				$actorNids[$actor->getNid()] = $actor->getId();
-			} catch (CacheActorDoesNotExistException $e) {
-				$this->logger->debug('getRelationships - actor not found by id', ['id' => $id]);
-			}
+		foreach ($this->cacheActorService->getCachedFromIds($actorIds) as $actor) {
+			$actorNids[$actor->getNid()] = $actor->getId();
 		}
 
 		unset($actorNids[$this->viewer->getNid()]); // ignore current session

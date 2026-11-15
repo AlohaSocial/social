@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\AccountNotSetUpException;
+use OCA\Social\Exceptions\AccountSuspendedException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InsufficientScopeException;
@@ -58,6 +59,7 @@ use Throwable;
  */
 abstract class ClientApiController extends Controller {
 	use OwnAccount;
+	use ListParameter;
 
 	protected string $bearer = '';
 	protected ?SocialClient $client = null;
@@ -88,14 +90,22 @@ abstract class ClientApiController extends Controller {
 	 * as nobody and the viewer stays null; a token that is valid but lacks
 	 * the scope is still refused, since it said who it was.
 	 *
+	 * An account suspended here is refused (`AccountSuspendedException`, a
+	 * 403) unless `$whileSuspended` says the route is one a suspended account
+	 * keeps, such as taking its data with it.
+	 *
 	 * @param string[] $scopes
 	 *
 	 * @throws ClientNotFoundException
 	 * @throws InsufficientScopeException
+	 * @throws AccountSuspendedException
 	 */
-	protected function initViewer(array $scopes, bool $required = true): void {
+	protected function initViewer(array $scopes, bool $required = true, bool $whileSuspended = false): void {
 		try {
 			$userId = $this->currentSession($scopes);
+			if (!$whileSuspended && $this->clientService->isSuspendedUser($userId)) {
+				throw new AccountSuspendedException();
+			}
 			// a token is only issued to an account, so a caller without one
 			// came with their Nextcloud session and has not set up here yet
 			$account = ($this->bearer === '')
@@ -104,6 +114,10 @@ abstract class ClientApiController extends Controller {
 			$this->viewer = $this->prepareViewer($account);
 		} catch (InsufficientScopeException $e) {
 			throw $e;
+		} catch (AccountSuspendedException $e) {
+			if ($required) {
+				throw $e;
+			}
 		} catch (AccountNotSetUpException $e) {
 			// somebody to tell how to go on, not a credential to refuse
 			if ($required) {
@@ -242,6 +256,10 @@ abstract class ClientApiController extends Controller {
 			// as Mastodon answers a sign-in that is not usable yet: a 403,
 			// which no client reads as its token having ended
 			return self::notSetUp($e);
+		}
+
+		if ($e instanceof AccountSuspendedException) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 
 		if ($e instanceof ClientNotFoundException) {

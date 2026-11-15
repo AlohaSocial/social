@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
-use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -20,13 +20,10 @@ use OCA\Social\Model\StatusParams;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StreamService;
-use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use RuntimeException;
 
 /**
  * The post a stored request becomes.
@@ -41,35 +38,32 @@ use RuntimeException;
 class StatusAssemblyServiceTest extends TestCase {
 	private DocumentService|MockObject $documentService;
 	private StreamService|MockObject $streamService;
-	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
 	private StatusAssemblyService $service;
 
 	/** @var Document[] what the media ids resolve to */
 	private array $media = [];
-	/** @var Document[] every document written back */
-	private array $updated = [];
+	/** @var list<array{0: list<int|string>, 1: string, 2: string}> what the media resolver was asked */
+	private array $resolved = [];
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->documentService = $this->createMock(DocumentService::class);
-		$this->documentService->method('getMediaFromArray')
-			->willReturnCallback(fn (array $ids): array => array_values(array_intersect_key(
-				$this->media, array_flip($ids)
-			)));
+		$this->documentService->method('mediaAttachmentsForEdit')
+			->willReturnCallback(function (array $ids, string $account, string $visibility): array {
+				$this->resolved[] = [$ids, $account, $visibility];
+
+				return array_map(
+					static fn (int|string $id): MediaAttachment => (new MediaAttachment())->setId((string)$id),
+					array_values(array_filter($ids, fn (int|string $id): bool => isset($this->media[(int)$id])))
+				);
+			});
 
 		$this->streamService = $this->createMock(StreamService::class);
-		$this->cacheDocumentsRequest = $this->createStub(CacheDocumentsRequest::class);
-		$this->cacheDocumentsRequest->method('update')
-			->willReturnCallback(function (Document $document): void {
-				$this->updated[] = $document;
-			});
 
 		$this->service = new StatusAssemblyService(
 			$this->documentService,
 			$this->streamService,
-			$this->cacheDocumentsRequest,
-			$this->createStub(IURLGenerator::class),
 			new NullLogger()
 		);
 	}
@@ -255,20 +249,34 @@ class StatusAssemblyServiceTest extends TestCase {
 	}
 
 	/**
-	 * Likelier here than on an immediate post: the post being replied to can
-	 * be deleted while this one waits. The reply still goes out, as a post of
-	 * its own, rather than being lost with it.
+	 * The parent decides how wide a reply may go: without it a reply to a
+	 * direct message would be published to the author's default audience.
 	 */
-	public function testAReplyToAPostThatIsGoneIsStillAPost(): void {
-		$this->streamService->method('getStreamByNid')->willThrowException(new RuntimeException('gone'));
+	public function testAReplyToAPostThatIsGoneFailsRatherThanGoingOutAlone(): void {
+		$this->streamService->method('getStreamByNid')->willThrowException(new StreamNotFoundException());
 
-		$post = $this->service->fromParams($this->actor(), $this->params([
+		$this->expectException(StreamNotFoundException::class);
+
+		$this->service->fromParams($this->actor(), $this->params([
 			'text' => 'still worth saying',
 			'in_reply_to_id' => '42',
 		]));
+	}
 
-		$this->assertSame('', $post->getReplyTo());
-		$this->assertSame('still worth saying', $post->getContent());
+	/**
+	 * The cron and a moderator's approval run with another viewer or none, and
+	 * a followers-only or direct parent is only visible to its readers.
+	 */
+	public function testTheParentIsLookedUpAsTheAuthor(): void {
+		$actor = $this->actor();
+		$parent = new Stream();
+		$parent->setId('https://cloud.example/apps/social/@bob/42');
+		$this->streamService->expects($this->once())->method('setViewer')->with($this->identicalTo($actor));
+		$this->streamService->method('getStreamByNid')->with(42)->willReturn($parent);
+
+		$post = $this->service->fromParams($actor, $this->params(['in_reply_to_id' => '42']));
+
+		$this->assertSame('https://cloud.example/apps/social/@bob/42', $post->getReplyTo());
 	}
 
 	/**
@@ -276,46 +284,26 @@ class StatusAssemblyServiceTest extends TestCase {
 	 * when the post is created, which for these posts is now and not when the
 	 * media was uploaded.
 	 */
-	public function testAttachmentsAreToldWhetherThePostTheyLandOnIsPublic(): void {
+	/**
+	 * The resolver an edit uses: the author's own uploads in the stored order,
+	 * scoped to the audience the post goes out to, and refused when one is no
+	 * longer theirs.
+	 */
+	public function testAttachmentsAreResolvedInOrderForThePostsAudience(): void {
 		$this->document(7, false);
 		$this->document(9, false);
 
 		$post = $this->service->fromParams($this->actor(), $this->params([
-			'media_ids' => ['7', '9'],
-			'visibility' => Stream::TYPE_PUBLIC,
-		]));
-
-		$this->assertCount(2, $post->getMedias());
-		$this->assertCount(2, $this->updated);
-		$this->assertTrue($this->media[7]->isPublic());
-	}
-
-	public function testAttachmentsOnAPrivatePostAreMarkedPrivate(): void {
-		$this->document(7, true);
-
-		$this->service->fromParams($this->actor(), $this->params([
-			'media_ids' => ['7'],
+			'media_ids' => ['9', '7'],
 			'visibility' => Stream::TYPE_FOLLOWERS,
 		]));
 
-		$this->assertFalse($this->media[7]->isPublic());
-		$this->assertCount(1, $this->updated);
-	}
-
-	/** A write per attachment per replay, for a value that has not moved. */
-	public function testAnAttachmentAlreadyMarkedRightIsNotWrittenAgain(): void {
-		$this->document(7, true);
-
-		$this->service->fromParams($this->actor(), $this->params([
-			'media_ids' => ['7'],
-			'visibility' => Stream::TYPE_PUBLIC,
-		]));
-
-		$this->assertSame([], $this->updated);
+		$this->assertSame([[[9, 7], 'alice', Stream::TYPE_FOLLOWERS]], $this->resolved);
+		$this->assertSame(['9', '7'], array_map(static fn (MediaAttachment $media): string => $media->getId(), $post->getMedias()));
 	}
 
 	public function testAPostWithNoMediaAsksForNone(): void {
-		$this->documentService->expects($this->never())->method('getMediaFromArray');
+		$this->documentService->expects($this->never())->method('mediaAttachmentsForEdit');
 
 		$post = $this->service->fromParams($this->actor(), $this->params(['text' => 'words only']));
 

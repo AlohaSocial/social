@@ -32,6 +32,8 @@ use OCA\Social\Service\PollService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamActionService;
 use OCP\IURLGenerator;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -273,6 +275,67 @@ class PollServiceTest extends TestCase {
 		$this->expectException(InvalidActionException::class);
 
 		$this->service->vote($this->viewer(), 42, [1]);
+	}
+
+	/**
+	 * Two requests at once both read "not voted yet" and counts that did not
+	 * include each other, so both were counted and the second write lost the
+	 * first. The vote is checked and counted under the poll's lock, on a copy
+	 * of the poll read once the lock is held.
+	 */
+	public function testAVoteIsCheckedAndCountedUnderThePollsLockOnAFreshRead(): void {
+		$events = [];
+		$locks = $this->createMock(ILockingProvider::class);
+		$locks->method('acquireLock')->willReturnCallback(function (string $path) use (&$events): void {
+			$events[] = 'lock ' . $path;
+		});
+		$locks->method('releaseLock')->willReturnCallback(function (string $path) use (&$events): void {
+			$events[] = 'release ' . $path;
+		});
+		$stale = $this->poll([], true);
+		$stale->setNid(42);
+		$fresh = clone $stale;
+		$action = new StreamAction(self::VIEWER, self::POLL_ID);
+		$action->updateValue(StreamAction::POLL_VOTES, json_encode([0]));
+		$fresh->setAction($action);
+		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest->method('getStreamByNid')->willReturnCallback(function () use (&$events, $stale, $fresh): Question {
+			$events[] = 'read';
+
+			return (count($events) === 1) ? $stale : $fresh;
+		});
+		$this->streamRequest->expects($this->never())->method('update');
+		$this->service = $this->serviceWithLocks($locks);
+
+		try {
+			$this->service->vote($this->viewer(), 42, [1]);
+			$this->fail('the vote counted before it was refused');
+		} catch (InvalidActionException $e) {
+			$this->assertSame('you already voted on this poll', $e->getMessage());
+		}
+
+		$this->assertSame(['read', 'lock social/poll-vote/42', 'read', 'release social/poll-vote/42'], $events);
+	}
+
+	public function testAPollHeldByAnotherVoteForTooLongIsRefusedNotCountedUnlocked(): void {
+		$locks = $this->createMock(ILockingProvider::class);
+		$locks->method('acquireLock')->willThrowException(new LockedException('social/poll-vote/42'));
+		$locks->expects($this->never())->method('releaseLock');
+		$poll = $this->poll([], true);
+		$poll->setNid(42);
+		$this->streamRequest->expects($this->never())->method('update');
+		$this->service = $this->serviceWithLocks($locks);
+
+		$this->expectException(InvalidActionException::class);
+
+		$this->service->vote($this->viewer(), 42, [1]);
+	}
+
+	private function serviceWithLocks(ILockingProvider $locks): PollService {
+		// no waiting for a lock that is never let go
+		return new class($this->streamRequest, $this->actionsRequest, $this->accountService, $this->cacheActorService, $this->activityService, $this->createStub(SignatureService::class), $this->streamActionService, $this->streamActionsRequest, $this->notificationService, $this->configService, new NullLogger(), null, $locks) extends PollService {
+			protected const VOTE_LOCK_WAIT = 0;
+		};
 	}
 
 	// handleIncomingVote()

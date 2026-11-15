@@ -772,18 +772,18 @@ class AccountApiController extends MastodonApiController {
 	 * that asks with no `id[]` at all used to raise a TypeError there and get a
 	 * Nextcloud error page instead of `{"error": …}`.
 	 *
-	 * @param array $id
+	 * @param array<mixed>|string $id
 	 *
 	 * @return DataResponse
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/relationships')]
-	public function relationships(array $id = []): DataResponse {
+	public function relationships(array|string $id = []): DataResponse {
 		try {
 			$this->initViewer(true);
 
-			return new DataResponse($this->followService->getRelationships($id), Http::STATUS_OK);
+			return new DataResponse($this->followService->getRelationships(self::listParam($id)), Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

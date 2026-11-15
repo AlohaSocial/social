@@ -841,9 +841,10 @@ class FollowServiceTest extends TestCase {
 			->with([2, 1])
 			->willReturn([$bob, $alice]);
 		$this->cacheActorService->expects($this->once())
-			->method('getFromId')
-			->with(self::CAROL_ID)
-			->willReturn($carol);
+			->method('getCachedFromIds')
+			->with([self::CAROL_ID])
+			->willReturn([$carol]);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
 		// alice follows bob (accepted), bob follows alice (accepted),
 		// alice asked to follow carol (pending), carol does not follow alice
 		$this->followsBetween(
@@ -898,10 +899,31 @@ class FollowServiceTest extends TestCase {
 	public function testGetRelationshipsSkipsUnknownActors(): void {
 		$this->service->setViewer($this->alice());
 		$this->cacheActorService->method('getFromNids')->with([])->willReturn([]);
-		$this->cacheActorService->method('getFromId')->willThrowException(new CacheActorDoesNotExistException());
+		$this->cacheActorService->method('getCachedFromIds')->willReturn([]);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
 		$this->followsRequest->expects($this->never())->method('getByPersons');
 
 		$this->assertSame([], $this->service->getRelationships(['https://gone.example/users/x', '0', 'abc']));
+	}
+
+	public function testANumericIdNoLongerHeldIsLeftOutAndNotFetched(): void {
+		$this->service->setViewer($this->alice());
+		$this->cacheActorService->method('getFromNids')->with([12345])->willReturn([]);
+		$this->cacheActorService->method('getCachedFromIds')->with([])->willReturn([]);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->assertSame([], $this->service->getRelationships(['12345']));
+	}
+
+	public function testAtMostTheLimitOfIdsIsLookedUp(): void {
+		$this->service->setViewer($this->alice());
+		$ids = array_map('strval', range(2, 200));
+		$this->cacheActorService->expects($this->once())->method('getFromNids')
+			->with(array_map('intval', array_slice($ids, 0, FollowService::RELATIONSHIPS_LIMIT)))
+			->willReturn([]);
+		$this->cacheActorService->method('getCachedFromIds')->willReturn([]);
+
+		$this->service->getRelationships(array_merge($ids, $ids));
 	}
 
 	/**

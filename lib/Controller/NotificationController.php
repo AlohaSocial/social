@@ -143,23 +143,26 @@ class NotificationController extends ClientApiController {
 	 * controller the order the methods are written in is the order the routes
 	 * are tried in and `unread_count` would otherwise be read as a group key.
 	 *
-	 * @param string[] $types
-	 * @param string[] $exclude_types
-	 * @param string[] $grouped_types
+	 * @param string[]|string $types
+	 * @param string[]|string $exclude_types
+	 * @param string[]|string $grouped_types
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v2/notifications/unread_count')]
 	public function unreadCountV2(
 		int $limit = self::UNREAD_LIMIT,
-		array $types = [],
-		array $exclude_types = [],
+		array|string $types = [],
+		array|string $exclude_types = [],
 		string $account_id = '',
-		array $grouped_types = [],
+		array|string $grouped_types = [],
 	): Response {
 		try {
 			$this->initViewer(['read:notifications']);
 			$userId = $this->userId();
+			$types = self::listParam($types);
+			$exclude_types = self::listParam($exclude_types);
+			$grouped_types = self::listParam($grouped_types);
 
 			return Revalidation::byTag(
 				$this->request,
@@ -212,9 +215,9 @@ class NotificationController extends ClientApiController {
 	 * favourites of one post is one group and one status here, where v1 sends
 	 * forty rows and forty copies of the post.
 	 *
-	 * @param string[] $types
-	 * @param string[] $exclude_types
-	 * @param string[] $grouped_types
+	 * @param string[]|string $types
+	 * @param string[]|string $exclude_types
+	 * @param string[]|string $grouped_types
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -224,18 +227,20 @@ class NotificationController extends ClientApiController {
 		int|string $max_id = 0,
 		int|string $min_id = 0,
 		int|string $since_id = 0,
-		array $types = [],
-		array $exclude_types = [],
-		array $grouped_types = [],
+		array|string $types = [],
+		array|string $exclude_types = [],
+		array|string $grouped_types = [],
 		string $account_id = '',
 	): DataResponse {
 		try {
 			$this->initViewer(['read:notifications']);
 
-			$page = $this->visible($limit, $max_id, $min_id, $since_id, $types, $exclude_types, $account_id);
+			$page = $this->visible(
+				$limit, $max_id, $min_id, $since_id, self::listParam($types), self::listParam($exclude_types), $account_id
+			);
 
 			return new DataResponse(
-				$this->notificationGroupService->group($page, $grouped_types), Http::STATUS_OK
+				$this->notificationGroupService->group($page, self::listParam($grouped_types)), Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
 			return $this->error($e);
@@ -447,16 +452,16 @@ class NotificationController extends ClientApiController {
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/notifications/requests/accept')]
-	public function requestsAccept(array $id = []): DataResponse {
-		return $this->decideMany($id, true);
+	public function requestsAccept(array|string $id = []): DataResponse {
+		return $this->decideMany(self::listParam($id), true);
 	}
 
 	/** Dismisses several senders at once. */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/notifications/requests/dismiss')]
-	public function requestsDismiss(array $id = []): DataResponse {
-		return $this->decideMany($id, false);
+	public function requestsDismiss(array|string $id = []): DataResponse {
+		return $this->decideMany(self::listParam($id), false);
 	}
 
 	/**
