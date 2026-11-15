@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@nextcloud/auth', () => ({ getRequestToken: () => 'session-token' }))
@@ -40,5 +42,14 @@ describe('logging in through core\'s login form', () => {
 		const form = submitCoreLogin({ user: 'alice', password: 'long enough' })
 
 		expect(form.querySelector('[name="redirect_url"]')).toBeNull()
+	})
+
+	it('runs on a page that sends its origin with the POST', () => {
+		// core's login refuses a POST whose Origin is not trusted, and the
+		// server-wide `no-referrer` policy makes it `null`; core's own login
+		// page lifts that with the same meta tag
+		const source = readFileSync(resolve(process.cwd(), 'templates/signup.php'), 'utf8')
+
+		expect(source).toMatch(/Util::addHeader\('meta', \['name' => 'referrer', 'content' => 'same-origin'\]\)/)
 	})
 })
