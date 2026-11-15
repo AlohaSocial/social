@@ -66,7 +66,19 @@ class CommandsTest extends TestCase {
 	 */
 	public function testEveryCommandThatConfirmsCanAlsoBeForced(): void {
 		foreach ($this->commandFiles() as $file => $code) {
-			if (!str_contains($code, 'ConfirmationQuestion')) {
+			if (str_contains($code, 'confirmDestructive(') && basename($file) !== 'SocialCommand.php') {
+				// the base's helper checks isInteractive() itself; the
+				// command still has to declare the --force it reads
+				$this->assertContains(
+					'force',
+					$this->declaredOptions($code),
+					basename($file) . ' asks for confirmation but declares no --force,'
+					. ' so under --no-interaction it can only do nothing.'
+				);
+
+				continue;
+			}
+			if (!str_contains($code, 'ConfirmationQuestion') || basename($file) === 'SocialCommand.php') {
 				continue;
 			}
 
