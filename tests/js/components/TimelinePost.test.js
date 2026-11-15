@@ -2225,3 +2225,13 @@ describe('TimelinePost', () => {
 		})
 	})
 })
+
+/**
+ * Down a feed, a glyph sits in the same place on every post: with the
+ * numbers shown, each action keeps one width whether it has a count or not.
+ */
+describe('the actions with the numbers shown', () => {
+	it('keep one slot each, glyph first, so they line up from post to post', () => {
+		expect(timelinePostStyles()).toMatch(/\.post-footer:has\(\.post-action-count\) \.post-action-group \{\s*inline-size: calc\(var\(--default-clickable-area, 34px\) \+ 36px\);\s*justify-content: flex-start;/)
+	})
+})
