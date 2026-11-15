@@ -12,6 +12,7 @@ namespace OCA\Social\Model;
 use Exception;
 use JsonSerializable;
 use OCA\Social\Exceptions\LinkedDataSignatureMissingException;
+use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tools\Traits\TArrayTools;
 
@@ -132,7 +133,43 @@ class LinkedDataSignature implements JsonSerializable {
 		$this->setSignatureValue(base64_encode($signed));
 	}
 
+	/**
+	 * The contexts a signed document may name: the two the vocabulary is
+	 * read with. `https://w3id.org/identity/v1` is shipped for the signature
+	 * header only; in a document it would remap `name`, `url` and `image`.
+	 */
+	public const DOCUMENT_CONTEXTS = [
+		ACore::CONTEXT_ACTIVITYSTREAMS,
+		ACore::CONTEXT_SECURITY,
+	];
+
+	/**
+	 * Term definitions a document may declare inline: this app's own
+	 * (ACore::CONTEXT_EXTENSIONS) and the ones Mastodon emits. Each only adds
+	 * a term the named contexts leave undefined, so none can change what a
+	 * key of the vocabulary expands to.
+	 */
+	private const MASTODON_TERMS = [
+		'featuredTags' => ['@id' => 'toot:featuredTags', '@type' => '@id'],
+		'memorial' => 'toot:memorial',
+		'suspended' => 'toot:suspended',
+		'attributionDomains' => ['@id' => 'toot:attributionDomains', '@type' => '@id'],
+		'ostatus' => 'http://ostatus.org#',
+		'atomUri' => 'ostatus:atomUri',
+		'inReplyToAtomUri' => 'ostatus:inReplyToAtomUri',
+		'conversation' => 'ostatus:conversation',
+	];
+
 	public function verify(): bool {
+		// The signature covers the triples the document expands to, but the
+		// handlers read its keys. A context that redefines or aliases a term
+		// can make keys say something the triples do not, so only documents
+		// read with known definitions are verified at all.
+		if (!array_key_exists('@context', $this->getObject())
+			|| !self::usesOnlyKnownContexts($this->getObject())) {
+			return false;
+		}
+
 		$header = [
 			'@context' => 'https://w3id.org/identity/v1',
 			'nonce' => $this->getNonce(),
@@ -159,13 +196,96 @@ class LinkedDataSignature implements JsonSerializable {
 			$algo = OPENSSL_ALGO_SHA256;
 		}
 
-		$signed = base64_decode($this->getSignatureValue(), true);
-		if ($signed !== false
+		$signed = $this->getSignatureBytes();
+		if ($signed !== null
 			&& openssl_verify($hashHeader . $hashObject, $signed, $this->publicKey, $algo) === 1) {
 			return true;
 		}
 
 		return false;
+	}
+
+	/**
+	 * The signature bytes, or null unless the value is canonical, padded
+	 * base64: `base64_decode()` also accepts the same bytes without padding,
+	 * with whitespace or with stray trailing bits, and each spelling would
+	 * otherwise pass as a signature not seen before.
+	 */
+	public function getSignatureBytes(): ?string {
+		$signed = base64_decode($this->getSignatureValue(), true);
+		if ($signed === false || $signed === '' || base64_encode($signed) !== $this->getSignatureValue()) {
+			return null;
+		}
+
+		return $signed;
+	}
+
+	/**
+	 * Whether every `@context` in the document, at any depth, is one of
+	 * DOCUMENT_CONTEXTS or an inline object of known term definitions, and
+	 * no other key is a JSON-LD keyword.
+	 */
+	public static function usesOnlyKnownContexts(array $document): bool {
+		foreach ($document as $key => $value) {
+			if ($key === '@context') {
+				if (!self::isKnownContext($value)) {
+					return false;
+				}
+				continue;
+			}
+
+			if (is_string($key) && str_starts_with($key, '@')) {
+				return false;
+			}
+
+			if (is_array($value) && !self::usesOnlyKnownContexts($value)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static function isKnownContext(mixed $context): bool {
+		if (is_string($context)) {
+			return in_array($context, self::DOCUMENT_CONTEXTS, true);
+		}
+
+		if (!is_array($context)) {
+			return false;
+		}
+
+		if (array_is_list($context)) {
+			foreach ($context as $entry) {
+				if (is_array($entry) && array_is_list($entry)) {
+					return false;
+				}
+				if (!self::isKnownContext($entry)) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		$known = ACore::CONTEXT_EXTENSIONS + self::MASTODON_TERMS;
+		foreach ($context as $term => $definition) {
+			if (!is_string($term) || !array_key_exists($term, $known)
+				|| !self::sameDefinition($known[$term], $definition)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static function sameDefinition(mixed $known, mixed $definition): bool {
+		if (is_array($known) && is_array($definition)) {
+			ksort($known);
+			ksort($definition);
+		}
+
+		return $known === $definition;
 	}
 
 	private function hashedCanonicalize(array $data, bool $removeEmptyValue = false): string {

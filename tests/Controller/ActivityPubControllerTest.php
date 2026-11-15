@@ -691,6 +691,19 @@ class ActivityPubControllerTest extends TestCase {
 		);
 	}
 
+	public function testBothInboxesRefuseAnActivityForALocalActorBeforeVerifyingIt(): void {
+		$this->signedRequestFrom('https://remote.example');
+		$this->localActor('alice');
+		$this->incomingActivity('tok-local');
+		$this->signatureService->method('assertRemoteActor')
+			->willThrowException(new InvalidOriginException('local actor'));
+		$this->signatureService->expects($this->never())->method('checkObject');
+		$this->importService->expects($this->never())->method('parseIncomingRequest');
+
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller->sharedInbox()->getStatus());
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller->inbox('alice')->getStatus());
+	}
+
 	public function testInboxFailsForUnknownLocalUser(): void {
 		$this->signedRequestFrom('https://remote.example');
 		$this->cacheActorService->method('getFromLocalAccount')->with('ghost')

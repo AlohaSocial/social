@@ -802,6 +802,11 @@ class SignatureService {
 	public function checkObject(ACore $object): bool {
 		try {
 			$actorId = $object->getActorId();
+			// this instance's own actors never reach its inbox, and their
+			// signatures are copied around the network with every activity
+			if ($this->isLocalActor($actorId)) {
+				return false;
+			}
 
 			$signature = new LinkedDataSignature();
 			$signature->import(json_decode($object->getSource(), true));
@@ -837,7 +842,7 @@ class SignatureService {
 			// kept in `DurableCache`: in the distributed cache alone, an
 			// instance with no memcache remembered nothing and accepted every
 			// replay inside the window
-			$seenKey = hash('sha256', $signature->getSignatureValue());
+			$seenKey = hash('sha256', (string)$signature->getSignatureBytes());
 			if ($this->durableCache->get(self::LD_SEEN_NAMESPACE, $seenKey) !== null) {
 				$this->logger->notice('LD signature replayed', ['actorId' => $actorId]);
 
@@ -1285,6 +1290,51 @@ class SignatureService {
 				'the key that signed this request belongs to ' . self::excerpt($signer) . ', not to ' . self::excerpt($actor)
 			);
 		}
+	}
+
+	/**
+	 * Refuses an inbound activity that names one of this instance's own
+	 * actors: delivery never posts to this instance (ActivityService::isOurs),
+	 * so such an activity can only be a forgery or a reflection.
+	 *
+	 * @throws InvalidOriginException
+	 */
+	public function assertRemoteActor(ACore $activity): void {
+		if ($this->isLocalActor($activity->getActorId())) {
+			throw new InvalidOriginException(
+				'an inbound activity cannot act for a local actor: ' . self::excerpt($activity->getActorId())
+			);
+		}
+	}
+
+	/**
+	 * Whether an actor id is on this instance: its `host[:port]` is the one of
+	 * the cloud address or of the social URL, the two addresses local ids can
+	 * carry.
+	 */
+	public function isLocalActor(string $actorId): bool {
+		$authority = strtolower(ConfigService::authorityOf($actorId));
+		if ($authority === '') {
+			return false;
+		}
+
+		$local = [];
+		try {
+			$local[] = $this->configService->getCloudAuthority();
+		} catch (SocialAppConfigException $e) {
+		}
+		try {
+			$local[] = ConfigService::authorityOf($this->configService->getSocialUrl());
+		} catch (SocialAppConfigException $e) {
+		}
+
+		foreach ($local as $candidate) {
+			if ($candidate !== '' && strtolower($candidate) === $authority) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function getKeyOrigin(string $id) {

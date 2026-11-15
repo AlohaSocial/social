@@ -202,6 +202,155 @@ class LinkedDataSignatureTest extends TestCase {
 		(new LinkedDataSignature())->import($this->note());
 	}
 
+	private function signedCreate(): array {
+		$create = [
+			'@context' => [ACore::CONTEXT_ACTIVITYSTREAMS],
+			'id' => 'https://cloud.example.org/apps/social/@alice/1/activity',
+			'type' => 'Create',
+			'actor' => 'https://cloud.example.org/apps/social/@alice',
+			'to' => [ACore::CONTEXT_PUBLIC],
+			'object' => [
+				'id' => 'https://cloud.example.org/apps/social/@alice/1',
+				'type' => 'Note',
+				'attributedTo' => 'https://cloud.example.org/apps/social/@alice',
+				'content' => '<p>Signed hello</p>',
+			],
+		];
+		$signature = new LinkedDataSignature();
+		$signature->setType('RsaSignature2017')
+			->setCreator('https://cloud.example.org/apps/social/@alice#main-key')
+			->setCreated('2024-05-01T12:00:00Z')
+			->setPrivateKey(self::$privateKey)
+			->setObject($create);
+		$signature->sign();
+		$create['signature'] = $signature->jsonSerialize();
+
+		return $create;
+	}
+
+	/**
+	 * A signed Create, re-keyed with an inline context so that its raw keys
+	 * read as a Delete of the actor while it still expands to the signed
+	 * triples.
+	 */
+	private function aliasedAsDelete(array $create): array {
+		return [
+			'@context' => [ACore::CONTEXT_ACTIVITYSTREAMS, [
+				'type' => null,
+				'id' => null,
+				'object' => null,
+				'xtype' => '@type',
+				'xid' => '@id',
+				'xobject' => ['@id' => 'as:object', '@type' => '@id'],
+			]],
+			'xid' => $create['id'],
+			'xtype' => $create['type'],
+			'actor' => $create['actor'],
+			'to' => $create['to'],
+			'xobject' => [
+				'xid' => $create['object']['id'],
+				'xtype' => $create['object']['type'],
+				'attributedTo' => $create['object']['attributedTo'],
+				'content' => $create['object']['content'],
+			],
+			'id' => 'https://evil.example/forged',
+			'type' => 'Delete',
+			'object' => $create['actor'],
+			'signature' => $create['signature'],
+		];
+	}
+
+	public function testAnInlineContextCannotReKeyASignedDocument(): void {
+		$create = $this->signedCreate();
+		$genuine = new LinkedDataSignature();
+		$genuine->import($create);
+		$genuine->setPublicKey(self::$publicKey);
+		$this->assertTrue($genuine->verify());
+
+		$forged = new LinkedDataSignature();
+		$forged->import($this->aliasedAsDelete($create));
+		$forged->setPublicKey(self::$publicKey);
+
+		$this->assertFalse($forged->verify());
+	}
+
+	/**
+	 * The extension terms this app and Mastodon declare inline only add
+	 * definitions, so a document using them is still verified.
+	 */
+	public function testTheKnownExtensionContextIsStillVerified(): void {
+		$note = $this->note();
+		$note['@context'] = [ACore::CONTEXT_ACTIVITYSTREAMS, ACore::CONTEXT_SECURITY, ACore::CONTEXT_EXTENSIONS];
+		$note['sensitive'] = false;
+		$signature = new LinkedDataSignature();
+		$signature->setType('RsaSignature2017')
+			->setCreator('https://cloud.example.org/apps/social/@alice#main-key')
+			->setCreated('2024-05-01T12:00:00Z')
+			->setPrivateKey(self::$privateKey)
+			->setObject($note);
+		$signature->sign();
+		$note['signature'] = $signature->jsonSerialize();
+
+		$received = new LinkedDataSignature();
+		$received->import($note);
+		$received->setPublicKey(self::$publicKey);
+
+		$this->assertTrue($received->verify());
+	}
+
+	/**
+	 * @return array<string, array{mixed}>
+	 */
+	public static function refusedContexts(): array {
+		return [
+			'a term redefined to null' => [[ACore::CONTEXT_ACTIVITYSTREAMS, ['type' => null]]],
+			'a keyword alias' => [[ACore::CONTEXT_ACTIVITYSTREAMS, ['kind' => '@type']]],
+			'a known term with another definition' => [[ACore::CONTEXT_ACTIVITYSTREAMS, ['sensitive' => 'as:content']]],
+			'the as prefix redefined' => [[ACore::CONTEXT_ACTIVITYSTREAMS, ['as' => 'https://evil.example/ns#']]],
+			'a context that remaps name and url' => [[ACore::CONTEXT_ACTIVITYSTREAMS, 'https://w3id.org/identity/v1']],
+			'a vocabulary' => [[ACore::CONTEXT_ACTIVITYSTREAMS, ['@vocab' => 'https://evil.example/ns#']]],
+		];
+	}
+
+	#[DataProvider('refusedContexts')]
+	public function testADocumentWithAnUnknownContextIsNotVerified(mixed $context): void {
+		$this->assertFalse(LinkedDataSignature::usesOnlyKnownContexts(['@context' => $context, 'type' => 'Note']));
+	}
+
+	public function testANestedContextIsCheckedToo(): void {
+		$this->assertFalse(LinkedDataSignature::usesOnlyKnownContexts([
+			'@context' => ACore::CONTEXT_ACTIVITYSTREAMS,
+			'type' => 'Create',
+			'object' => ['@context' => ['type' => null], 'type' => 'Note'],
+		]));
+	}
+
+	public function testAKeywordKeyOtherThanTheContextIsRefused(): void {
+		$this->assertFalse(LinkedDataSignature::usesOnlyKnownContexts([
+			'@context' => ACore::CONTEXT_ACTIVITYSTREAMS,
+			'@type' => 'Create',
+			'type' => 'Delete',
+		]));
+	}
+
+	/**
+	 * The same signature bytes in another base64 spelling are not a different
+	 * signature: only the canonical, padded form is accepted.
+	 */
+	public function testANonCanonicalSpellingOfTheSignatureIsNotVerified(): void {
+		$signed = $this->signedNote();
+		$value = $signed->getSignatureValue();
+		foreach ([rtrim($value, '='), $value . "\n", ' ' . $value] as $variant) {
+			$document = $this->note();
+			$document['signature'] = ['signatureValue' => $variant] + $signed->jsonSerialize();
+			$received = new LinkedDataSignature();
+			$received->import($document);
+			$received->setPublicKey(self::$publicKey);
+
+			$this->assertFalse($received->verify(), json_encode($variant));
+		}
+	}
+
 	public function testJsonSerializeExposesTheSignatureBlock(): void {
 		$signature = new LinkedDataSignature();
 		$signature->setType('RsaSignature2017')

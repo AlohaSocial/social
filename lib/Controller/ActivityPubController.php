@@ -347,6 +347,7 @@ class ActivityPubController extends Controller {
 			$this->inboxLimiter->assertOriginAllowed($origin);
 
 			$activity = $this->importService->importFromJson($body);
+			$this->signatureService->assertRemoteActor($activity);
 			if (!$this->signatureService->checkObject($activity)) {
 				// no Linked Data signature to vouch for the object, so the only
 				// thing standing behind this activity is the key that signed the
@@ -434,6 +435,7 @@ class ActivityPubController extends Controller {
 			$this->cacheActorService->getFromLocalAccount($username);
 
 			$activity = $this->importService->importFromJson($body);
+			$this->signatureService->assertRemoteActor($activity);
 			if (!$this->signatureService->checkObject($activity)) {
 				// no Linked Data signature to vouch for the object, so the only
 				// thing standing behind this activity is the key that signed the
