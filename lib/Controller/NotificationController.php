@@ -610,7 +610,7 @@ class NotificationController extends ClientApiController {
 	 * The page of notifications this viewer is meant to see: what the query
 	 * returned, less what a keyword filter hides and what the policy holds.
 	 *
-	 * @param string[]|string $types
+	 * @param string[] $types
 	 * @param string[] $excludeTypes
 	 * @param bool $lookback `$limit` is this server's own, not the client's
 	 *                       (`NotificationInboxService::timeline()`)

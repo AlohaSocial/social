@@ -818,13 +818,13 @@ class FilterController extends ClientApiController {
 	 * sends a list, form encoding sends `keywords_attributes[0][keyword]`,
 	 * which PHP hands over as an array keyed by the index.
 	 *
-	 * @param array<mixed> $raw
+	 * @param array<mixed>|string $raw
 	 *
 	 * @return array<array<string, mixed>>
 	 */
 	private function keywordAttributes(array|string $raw): array {
 		$entries = [];
-		foreach ((array)$raw as $entry) {
+		foreach (is_array($raw) ? $raw : [] as $entry) {
 			if (is_array($entry)) {
 				$entries[] = $entry;
 			}
