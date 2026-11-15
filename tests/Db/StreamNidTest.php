@@ -82,4 +82,22 @@ class StreamNidTest extends TestCase {
 			'rand() is still used somewhere in this file'
 		);
 	}
+
+	/**
+	 * Every timeline is ordered by nid, and a remote post states its own
+	 * `published`: one dated in the future sat above everything stored until
+	 * that date, and one past 2262 overflowed the BIGINT.
+	 */
+	public function testAPostDatedInTheFutureIsNumberedAsOfNow(): void {
+		$now = 1_800_000_000;
+
+		$this->assertSame($now, StreamRequest::nidTime(1_900_000_000, $now));
+		$this->assertSame($now, StreamRequest::nidTime(PHP_INT_MAX, $now));
+		$this->assertSame(1_700_000_000, StreamRequest::nidTime(1_700_000_000, $now), 'the past keeps its place');
+		$this->assertSame(0, StreamRequest::nidTime(-86400, $now), 'and before 1970 is not an error');
+		$this->assertSame(-1, Nid::compare(
+			Nid::fromPublishedTime(StreamRequest::nidTime(PHP_INT_MAX), $this->constant('NID_LIMIT') - 1, $this->constant('NID_LIMIT')),
+			'9223372036854775807'
+		));
+	}
 }
