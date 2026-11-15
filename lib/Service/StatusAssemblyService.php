@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -122,6 +123,9 @@ class StatusAssemblyService {
 	/**
 	 * The same assembly an immediate post gets, reading from stored `params`
 	 * instead of from the live request.
+	 *
+	 * @throws StreamNotFoundException the post it replies to is not one the
+	 *                                 author can see any more
 	 */
 	public function fromParams(Person $actor, StatusParams $params): Post {
 		$post = new Post($actor);
@@ -183,14 +187,20 @@ class StatusAssemblyService {
 
 		$replyTo = (int)$params->paramString('in_reply_to_id');
 		if ($replyTo > 0) {
+			// Read as the author: the cron and a moderator's approval run with
+			// another viewer or none, and a followers-only or direct parent is
+			// invisible to either. A parent the author can no longer see, or
+			// that was deleted while this waited, fails the post rather than
+			// letting it go out on its own: the audience of a reply is decided
+			// by its parent, and without it a reply to a direct message would
+			// be published to the author's default audience.
+			$this->streamService->setViewer($actor);
 			try {
 				$post->setReplyTo($this->streamService->getStreamByNid($replyTo)->getId());
 			} catch (Throwable $e) {
-				// The post being replied to was deleted while this one waited,
-				// which is likelier here than on an immediate post. The reply
-				// still goes out, as a post of its own, rather than being lost
-				// with it.
 				$this->logger->debug('[StatusAssemblyService] the post ' . $replyTo . ' replied to is gone');
+
+				throw new StreamNotFoundException(PostService::REPLY_PARENT_NOT_FOUND);
 			}
 		}
 

@@ -781,11 +781,11 @@ class ScheduledStatusServiceTest extends TestCase {
 	}
 
 	/**
-	 * The post being answered is likelier to be gone here than on an immediate
-	 * reply — it had until the scheduled time to be deleted. The reply still
-	 * goes out rather than being lost with it.
+	 * The post being answered had until the scheduled time to be deleted, and
+	 * without it nothing says how wide the reply may go: a reply to a direct
+	 * message would otherwise go out to the author's default audience.
 	 */
-	public function testAReplyToAPostThatWasDeletedMeanwhileIsStillPublished(): void {
+	public function testAReplyToAPostThatWasDeletedMeanwhileIsNotPublished(): void {
 		$this->expectActorLookup();
 		$this->capturePosts();
 		$this->streamService->method('getStreamByNid')
@@ -795,10 +795,9 @@ class ScheduledStatusServiceTest extends TestCase {
 		]);
 		$this->scheduledRequest->method('claim')->willReturn(true);
 
-		$this->assertSame(1, $this->service->publishDue());
+		$this->assertSame(0, $this->service->publishDue());
 
-		$this->assertSame('', $this->posts[0]->getReplyTo());
-		$this->assertSame('agreed', $this->posts[0]->getContent());
+		$this->assertSame([], $this->posts);
 	}
 
 	public function testEachPostIsPublishedAsItsOwnAuthor(): void {

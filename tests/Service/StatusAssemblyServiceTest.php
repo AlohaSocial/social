@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -26,7 +27,6 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use RuntimeException;
 
 /**
  * The post a stored request becomes.
@@ -255,20 +255,34 @@ class StatusAssemblyServiceTest extends TestCase {
 	}
 
 	/**
-	 * Likelier here than on an immediate post: the post being replied to can
-	 * be deleted while this one waits. The reply still goes out, as a post of
-	 * its own, rather than being lost with it.
+	 * The parent decides how wide a reply may go: without it a reply to a
+	 * direct message would be published to the author's default audience.
 	 */
-	public function testAReplyToAPostThatIsGoneIsStillAPost(): void {
-		$this->streamService->method('getStreamByNid')->willThrowException(new RuntimeException('gone'));
+	public function testAReplyToAPostThatIsGoneFailsRatherThanGoingOutAlone(): void {
+		$this->streamService->method('getStreamByNid')->willThrowException(new StreamNotFoundException());
 
-		$post = $this->service->fromParams($this->actor(), $this->params([
+		$this->expectException(StreamNotFoundException::class);
+
+		$this->service->fromParams($this->actor(), $this->params([
 			'text' => 'still worth saying',
 			'in_reply_to_id' => '42',
 		]));
+	}
 
-		$this->assertSame('', $post->getReplyTo());
-		$this->assertSame('still worth saying', $post->getContent());
+	/**
+	 * The cron and a moderator's approval run with another viewer or none, and
+	 * a followers-only or direct parent is only visible to its readers.
+	 */
+	public function testTheParentIsLookedUpAsTheAuthor(): void {
+		$actor = $this->actor();
+		$parent = new Stream();
+		$parent->setId('https://cloud.example/apps/social/@bob/42');
+		$this->streamService->expects($this->once())->method('setViewer')->with($this->identicalTo($actor));
+		$this->streamService->method('getStreamByNid')->with(42)->willReturn($parent);
+
+		$post = $this->service->fromParams($actor, $this->params(['in_reply_to_id' => '42']));
+
+		$this->assertSame('https://cloud.example/apps/social/@bob/42', $post->getReplyTo());
 	}
 
 	/**
