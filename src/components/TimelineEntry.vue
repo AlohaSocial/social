@@ -1323,6 +1323,8 @@ export default {
  */
 @media (hover: hover) {
 	.timeline-entry:not(.timeline-entry--direct) {
+		// a softer corner than a card's, for a frame that comes and goes
+		border-radius: 12px;
 		box-shadow: inset 0 0 0 1px transparent;
 		transition: box-shadow .1s linear, background-color .1s linear;
 

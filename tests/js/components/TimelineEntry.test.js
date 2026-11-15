@@ -799,6 +799,7 @@ describe('a notification in the list', () => {
 		it('takes a hairline frame and a faint tint, in a fifth of a second and out in a tenth', () => {
 			const css = pointed()
 
+			expect(css).toMatch(/\.timeline-entry:not\(\.timeline-entry--direct\) \{\s*\/\/[^\n]*\n\s*border-radius: 12px;/)
 			expect(css).toMatch(/box-shadow: inset 0 0 0 1px transparent;\s*transition: box-shadow \.1s linear, background-color \.1s linear;/)
 			expect(css).toMatch(/&:hover,\s*&:focus-within \{\s*background-color: color-mix\(in srgb, var\(--color-primary-element\) 6%, transparent\);\s*box-shadow: inset 0 0 0 1px color-mix\(in srgb, var\(--color-primary-element\) 25%, var\(--color-border\)\);/)
 		})
