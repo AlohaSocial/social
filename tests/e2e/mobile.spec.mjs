@@ -64,6 +64,26 @@ test.describe('on a phone', () => {
 		await expect(page.locator('.discover')).toBeVisible()
 	})
 
+	/**
+	 * A page with no visible title starts with its switcher on the toggle's
+	 * row: level with it, and clear of it. Discover always does; a feed does
+	 * while no notice is above its switcher.
+	 */
+	test('the first switcher shares the navigation toggle\'s row', async ({ page }) => {
+		for (const [path, switcher] of [['/discover', '.discover > .switcher'], ['/timeline', '.social__wrapper > .switcher:first-child']]) {
+			await openApp(page, path)
+			await expect(page.locator('.switcher').first()).toBeVisible()
+			if (await page.locator(switcher).count() === 0) {
+				continue
+			}
+			const toggle = await page.getByRole('button', { name: /^Open navigation/ }).boundingBox()
+			const row = await page.locator(switcher).first().boundingBox()
+
+			expect(row.y, `${path}: on the toggle's row`).toBeLessThan(toggle.y + toggle.height)
+			expect(row.x, `${path}: clear of the toggle`).toBeGreaterThanOrEqual(toggle.x + toggle.width)
+		}
+	})
+
 	test('a post can be written from the phone', async ({ page }) => {
 		await openApp(page)
 		const text = `Hello from a phone ${Date.now()}`
