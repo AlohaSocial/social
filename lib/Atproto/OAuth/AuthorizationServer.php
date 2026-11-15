@@ -125,7 +125,7 @@ class AuthorizationServer {
 			throw new OAuthException('unsupported_response_type', 'Only the code response type is supported');
 		}
 		$challenge = self::field($params, 'code_challenge');
-		if (self::field($params, 'code_challenge_method') !== 'S256' || preg_match('/^[A-Za-z0-9_-]{43}$/', $challenge) !== 1) {
+		if (self::field($params, 'code_challenge_method') !== 'S256' || preg_match('/^[A-Za-z0-9_-]{43}$/D', $challenge) !== 1) {
 			throw OAuthException::invalidRequest('PKCE with S256 is required');
 		}
 		if ($this->request->challengeSeen($challenge)) {
@@ -403,7 +403,7 @@ class AuthorizationServer {
 			throw OAuthException::invalidGrant('The redirect_uri is not the one the request named');
 		}
 		$verifier = self::field($params, 'code_verifier');
-		if (preg_match('/^[A-Za-z0-9._~-]{43,128}$/', $verifier) !== 1
+		if (preg_match('/^[A-Za-z0-9._~-]{43,128}$/D', $verifier) !== 1
 			|| !hash_equals((string)($request->params['code_challenge'] ?? ''), Encoding::base64UrlEncode(hash('sha256', $verifier, true)))) {
 			throw OAuthException::invalidGrant('The code verifier does not match the challenge');
 		}

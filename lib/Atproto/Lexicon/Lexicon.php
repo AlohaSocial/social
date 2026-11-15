@@ -359,7 +359,7 @@ class Lexicon {
 			'cid' => Cid::isValid($value),
 			'datetime' => Syntax::isDatetime($value),
 			'language' => Syntax::isLanguage($value),
-			'uri' => strlen($value) <= 8192 && preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/', $value) === 1,
+			'uri' => strlen($value) <= 8192 && preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$/D', $value) === 1,
 			'tid' => Tid::isValid($value),
 			'record-key' => Syntax::isRecordKey($value),
 			default => throw new LexiconException($path . ' has a string format this app does not know: ' . $format),

@@ -31,7 +31,7 @@ final class Jose {
 			throw new InvalidArgumentException('Not a compact JWS');
 		}
 		foreach ($parts as $part) {
-			if (preg_match('/^[A-Za-z0-9_-]+$/', $part) !== 1) {
+			if (preg_match('/^[A-Za-z0-9_-]+$/D', $part) !== 1) {
 				throw new InvalidArgumentException('Not base64url');
 			}
 		}

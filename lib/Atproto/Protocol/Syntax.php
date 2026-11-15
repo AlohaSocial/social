@@ -24,7 +24,7 @@ final class Syntax {
 	 */
 	public static function isHandle(string $handle): bool {
 		return strlen($handle) <= 253
-			&& preg_match('/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/', $handle) === 1;
+			&& preg_match('/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/D', $handle) === 1;
 	}
 
 	/**
@@ -50,12 +50,12 @@ final class Syntax {
 	 * characters, not ending in a colon, at most 2 KB.
 	 */
 	public static function isDid(string $did): bool {
-		return strlen($did) <= 2048 && preg_match('/^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$/', $did) === 1;
+		return strlen($did) <= 2048 && preg_match('/^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$/D', $did) === 1;
 	}
 
 	/** `did:plc:` and 24 base32 characters */
 	public static function isDidPlc(string $did): bool {
-		return preg_match('/^did:plc:[a-z2-7]{24}$/', $did) === 1;
+		return preg_match('/^did:plc:[a-z2-7]{24}$/D', $did) === 1;
 	}
 
 	/**
@@ -71,11 +71,11 @@ final class Syntax {
 			return false;
 		}
 		$name = array_pop($segments);
-		if (preg_match('/^[a-zA-Z][a-zA-Z0-9]{0,62}$/', $name) !== 1) {
+		if (preg_match('/^[a-zA-Z][a-zA-Z0-9]{0,62}$/D', $name) !== 1) {
 			return false;
 		}
 		foreach ($segments as $i => $segment) {
-			if (preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/', $segment) !== 1) {
+			if (preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/D', $segment) !== 1) {
 				return false;
 			}
 			if ($i === 0 && ctype_digit($segment[0])) {
@@ -88,7 +88,7 @@ final class Syntax {
 
 	/** 1 to 512 characters of `[a-zA-Z0-9._:~-]`, and not `.` or `..` */
 	public static function isRecordKey(string $rkey): bool {
-		return $rkey !== '.' && $rkey !== '..' && preg_match('/^[a-zA-Z0-9._:~-]{1,512}$/', $rkey) === 1;
+		return $rkey !== '.' && $rkey !== '..' && preg_match('/^[a-zA-Z0-9._:~-]{1,512}$/D', $rkey) === 1;
 	}
 
 	/**
@@ -130,7 +130,7 @@ final class Syntax {
 	 * fraction is allowed, a zone is required (`Z` or an offset).
 	 */
 	public static function isDatetime(string $value): bool {
-		if (preg_match('/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:([0-5]\d|60)(\.\d+)?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/', $value) !== 1) {
+		if (preg_match('/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:([0-5]\d|60)(\.\d+)?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/D', $value) !== 1) {
 			return false;
 		}
 		if (str_ends_with($value, '-00:00')) {
@@ -149,6 +149,6 @@ final class Syntax {
 	 * A BCP 47 language tag, loosely: what `langs` on a post may carry.
 	 */
 	public static function isLanguage(string $tag): bool {
-		return preg_match('/^([a-z]{2,3}|[iIxX])(-[a-zA-Z0-9]{1,8})*$/', $tag) === 1 && strlen($tag) <= 128;
+		return preg_match('/^([a-z]{2,3}|[iIxX])(-[a-zA-Z0-9]{1,8})*$/D', $tag) === 1 && strlen($tag) <= 128;
 	}
 }

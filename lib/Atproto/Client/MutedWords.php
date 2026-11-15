@@ -33,7 +33,7 @@ class MutedWords {
 	 */
 	public const TITLE = 'Muted words from Bluesky';
 	/** a word's id, the filter and the keyword it stands for */
-	private const ID = '/^f(\d+)k(\d+)$/';
+	private const ID = '/^f(\d+)k(\d+)$/D';
 
 	public function __construct(
 		private FiltersRequest $filters,

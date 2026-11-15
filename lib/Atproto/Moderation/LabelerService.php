@@ -112,7 +112,7 @@ class LabelerService {
 	 * @throws InvalidArgumentException for an unknown setting or a labeler not subscribed to
 	 */
 	public function setSetting(string $userId, string $did, string $label, string $setting): void {
-		if (!in_array($setting, self::SETTINGS, true) || preg_match('/^[a-z-]{1,100}$/', $label) !== 1) {
+		if (!in_array($setting, self::SETTINGS, true) || preg_match('/^[a-z-]{1,100}$/D', $label) !== 1) {
 			throw new InvalidArgumentException('a setting is ignore, warn or hide, for a label value');
 		}
 		$settings = $this->settingsOf($userId);
@@ -237,7 +237,7 @@ class LabelerService {
 		$definitions = [];
 		foreach (is_array($view['policies']['labelValueDefinitions'] ?? null) ? $view['policies']['labelValueDefinitions'] : [] as $definition) {
 			$value = (string)($definition['identifier'] ?? '');
-			if (preg_match('/^[a-z-]{1,100}$/', $value) !== 1) {
+			if (preg_match('/^[a-z-]{1,100}$/D', $value) !== 1) {
 				continue;
 			}
 			$strings = self::strings($definition['locales'] ?? []);

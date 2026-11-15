@@ -516,15 +516,15 @@ class PostMapper {
 	private static function isOpaqueBlobName(string $name): bool {
 		$stem = preg_replace('/\.[^.]+$/', '', $name) ?? $name;
 
-		return preg_match('/^\d+$/', $stem) === 1
-			|| preg_match('/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i', $stem) === 1
-			|| preg_match('/^baf[a-z2-7]{20,}$/i', $stem) === 1
-			|| preg_match('/^[a-z0-9_-]{40,}$/i', $stem) === 1;
+		return preg_match('/^\d+$/D', $stem) === 1
+			|| preg_match('/^[0-9a-f]{8}-[0-9a-f-]{27,}$/iD', $stem) === 1
+			|| preg_match('/^baf[a-z2-7]{20,}$/iD', $stem) === 1
+			|| preg_match('/^[a-z0-9_-]{40,}$/iD', $stem) === 1;
 	}
 
 	/** @return array{0: string, 1: string} */
 	private static function genericBlobLabel(string $type, string $subtype): array {
-		$extension = preg_match('/^[a-z0-9]{1,8}$/', $subtype) === 1 ? $subtype : '';
+		$extension = preg_match('/^[a-z0-9]{1,8}$/D', $subtype) === 1 ? $subtype : '';
 		$label = match ($type) {
 			'image' => ($extension !== '' ? strtoupper($extension) : 'Image') . ' image',
 			'audio' => ($extension !== '' ? strtoupper($extension) : 'Audio') . ' audio',
@@ -861,7 +861,7 @@ class PostMapper {
 		}
 		$shown = substr($text, $start, $end - $start);
 
-		return preg_match('/^@[^\s@]+$/u', $shown) === 1 ? $shown : '';
+		return preg_match('/^@[^\s@]+$/uD', $shown) === 1 ? $shown : '';
 	}
 
 	/**

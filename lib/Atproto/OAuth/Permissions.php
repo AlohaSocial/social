@@ -62,7 +62,7 @@ final class Permissions {
 	 * @return array{resource: string, collection?: list<string>, action?: list<string>, lxm?: list<string>, aud?: string, accept?: list<string>, attr?: string, nsid?: string}|null
 	 */
 	public static function parse(string $scope): ?array {
-		if (preg_match('/^([a-z]+)(?::([^?]*))?(?:\?(.*))?$/', $scope, $m) !== 1 || !in_array($m[1], self::RESOURCES, true)) {
+		if (preg_match('/^([a-z]+)(?::([^?]*))?(?:\?(.*))?$/D', $scope, $m) !== 1 || !in_array($m[1], self::RESOURCES, true)) {
 			return null;
 		}
 		$resource = $m[1];

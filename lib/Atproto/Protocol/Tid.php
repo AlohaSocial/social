@@ -18,7 +18,7 @@ use InvalidArgumentException;
  */
 final class Tid {
 	public const ALPHABET = '234567abcdefghijklmnopqrstuvwxyz';
-	private const PATTERN = '/^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/';
+	private const PATTERN = '/^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/D';
 
 	private static int $last = 0;
 	private static ?int $clockId = null;

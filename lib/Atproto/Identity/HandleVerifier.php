@@ -87,7 +87,7 @@ class HandleVerifier {
 			return null;
 		}
 		foreach ($this->dns->txt('_atproto.' . $handle) as $text) {
-			if (preg_match('/^did=(.+)$/', trim($text), $match) === 1 && Syntax::isDid(trim($match[1]))) {
+			if (preg_match('/^did=(.+)$/D', trim($text), $match) === 1 && Syntax::isDid(trim($match[1]))) {
 				return trim($match[1]);
 			}
 		}

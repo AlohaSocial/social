@@ -60,7 +60,7 @@ class BlueskySearch {
 			&& !str_contains($query, ' ')
 			&& !str_contains($query, '/')
 			&& str_contains($query, '.')
-			&& preg_match('/^[a-zA-Z0-9.-]+$/', $query) === 1;
+			&& preg_match('/^[a-zA-Z0-9.-]+$/D', $query) === 1;
 	}
 
 	/**
