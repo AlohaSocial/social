@@ -101,10 +101,11 @@ class UnifiedSearchProvider implements IProvider {
 		// answer with the same first page for ever.
 		$reach = $offset + $limit + 1;
 		$result = array_merge(
-			// cache-only: the search bar asks once per debounced prefix of
-			// what is typed, and every prefix of a URL is another URL
-			$this->convertAccounts($this->searchService->searchUri($search, false)),
-			$this->convertAccounts($this->searchService->searchAccounts($search, $reach)),
+			// cache-only, and nothing queued: Nextcloud asks every provider
+			// for every search in every app, so what is typed there (an
+			// e-mail address, a pasted link) is never sent to another server
+			$this->convertAccounts($this->searchService->searchUri($search, false, false)),
+			$this->convertAccounts($this->searchService->searchAccounts($search, $reach, '', false, false)),
 			$this->convertHashtags($this->searchService->searchHashtags($search, $reach)),
 			$this->convertStreams($this->searchService->searchStreamContent($search, $reach))
 		);

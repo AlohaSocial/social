@@ -209,10 +209,13 @@ class SearchService {
 	 *                       cache and an unknown one is queued for
 	 *                       `Cron\ResolveActor`, so a search repeated a moment
 	 *                       later finds it
+	 * @param bool $queue whether an unknown actor is queued at all when not
+	 *                    retrieved; false answers from the cache and makes
+	 *                    no request to any other server, now or later
 	 *
 	 * @return Person[]
 	 */
-	public function searchUri(string $search, bool $retrieve = true): array {
+	public function searchUri(string $search, bool $retrieve = true, bool $queue = true): array {
 		$type = $this->getTypeFromSearch($search);
 
 		if ($search === '' || !($type & self::SEARCH_URI)) {
@@ -223,7 +226,9 @@ class SearchService {
 			try {
 				$actor = $this->cacheActorService->getCachedFromId($search);
 			} catch (CacheActorDoesNotExistException $e) {
-				$this->remoteFetchQueue?->resolveActors([$search]);
+				if ($queue) {
+					$this->remoteFetchQueue?->resolveActors([$search]);
+				}
 
 				return [];
 			}
@@ -254,10 +259,13 @@ class SearchService {
 	 *
 	 * @param int|null $limit how many accounts a paging caller needs, null for all of them
 	 * @param string $followedBy when set, only the accounts this actor follows
+	 * @param bool $queue whether a complete handle not held here is queued
+	 *                    when not resolved; false makes no request to any
+	 *                    other server, now or later
 	 *
 	 * @return Person[]
 	 */
-	public function searchAccounts(string $search, ?int $limit = null, string $followedBy = '', bool $resolve = false): array {
+	public function searchAccounts(string $search, ?int $limit = null, string $followedBy = '', bool $resolve = false, bool $queue = true): array {
 		$type = $this->getTypeFromSearch($search);
 
 		if ($search === '' || !($type & self::SEARCH_ACCOUNTS)) {
@@ -286,7 +294,7 @@ class SearchService {
 			if ($this->bluesky !== null) {
 				$found = self::withBluesky($found, $this->bluesky->keep($this->bluesky->typeahead($search)));
 			}
-		} elseif (self::isCompleteHandle($search) && !self::holds($found, $search)) {
+		} elseif ($queue && self::isCompleteHandle($search) && !self::holds($found, $search)) {
 			$this->remoteFetchQueue?->resolveAccounts([$search]);
 		}
 
