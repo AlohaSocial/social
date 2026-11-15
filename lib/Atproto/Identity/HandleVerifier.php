@@ -23,6 +23,8 @@ use Throwable;
 class HandleVerifier {
 	/** what a well-known answer may weigh: a DID and a newline */
 	private const MAX_BODY = 2048;
+	/** seconds a well-known lookup may take, all of it */
+	private const TIMEOUT = 3;
 
 	public function __construct(
 		private AtprotoConfig $config,
@@ -67,7 +69,7 @@ class HandleVerifier {
 			// read where the handle is, not where it sends: no redirect is followed
 			$status = 0;
 			$raw = $this->curl->doRequest('get', 'https://' . $handle . '/.well-known/atproto-did', [
-				'timeout' => 10,
+				'timeout' => self::TIMEOUT,
 				'json_headers' => false,
 				'accept_errors' => true,
 				'max_redirects' => 0,
@@ -95,7 +97,7 @@ class HandleVerifier {
 		try {
 			$status = 0;
 			$body = $this->curl->doRequest('get', 'https://' . $handle . '/.well-known/atproto-did', [
-				'timeout' => 10,
+				'timeout' => self::TIMEOUT,
 				'json_headers' => false,
 				'accept_errors' => true,
 				'max_redirects' => 0,

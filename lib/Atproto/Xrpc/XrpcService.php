@@ -33,6 +33,10 @@ use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
+use OCP\ICacheFactory;
+use OCP\IRequest;
+use OCP\Security\RateLimiting\ILimiter;
+use OCP\Security\RateLimiting\IRateLimitExceededException;
 
 /**
  * The XRPC methods this instance serves, each answering an array (JSON)
@@ -40,6 +44,15 @@ use OCA\Social\Service\ModerationService;
  * everything that is a protocol decision is here, where it can be tested.
  */
 class XrpcService {
+	private const LOOKUP_CACHE = 'social-atproto-identity-lookup';
+	/** seconds an identity another server answered is remembered */
+	private const LOOKUP_TTL = 300;
+	/** seconds a lookup that found nothing is remembered */
+	private const MISS_TTL = 60;
+	/** identity lookups that go out to other servers, per address and period */
+	private const LOOKUPS_PER_ADDRESS = 30;
+	private const LOOKUP_PERIOD = 60;
+
 	public const MAX_LIST = 100;
 
 	public function __construct(
@@ -56,6 +69,9 @@ class XrpcService {
 		private HandleVerifier $handles,
 		private PlcClient $plc,
 		private CurlService $curl,
+		private ?ICacheFactory $cacheFactory = null,
+		private ?ILimiter $limiter = null,
+		private ?IRequest $request = null,
 	) {
 	}
 
@@ -140,7 +156,7 @@ class XrpcService {
 		try {
 			$identity = $this->identities->getByHandle($handle);
 		} catch (AtprotoIdentityNotFoundException) {
-			$did = $this->handles->resolve($handle);
+			$did = $this->lookup('handle', $handle, fn (): ?string => $this->handles->resolve($handle));
 			if ($did === null) {
 				throw new XrpcException(404, 'HandleNotFound', 'Unable to resolve handle');
 			}
@@ -166,11 +182,11 @@ class XrpcService {
 			$identity = $this->identities->getByDid($did);
 		} catch (AtprotoIdentityNotFoundException) {
 			try {
-				$document = match (true) {
+				$document = $this->lookup('did', $did, fn (): ?array => match (true) {
 					Syntax::isDidPlc($did) => $this->plc->document($did),
 					str_starts_with($did, 'did:web:') => DidWebResolver::document($did, $this->curl),
 					default => null,
-				};
+				});
 			} catch (AtprotoException $e) {
 				throw new XrpcException(502, 'DidResolutionFailed', 'The DID resolution service could not be reached');
 			}
@@ -204,7 +220,7 @@ class XrpcService {
 			try {
 				$identity = $this->identities->getByHandle($handle);
 			} catch (AtprotoIdentityNotFoundException) {
-				$did = $this->handles->resolve($handle);
+				$did = $this->lookup('handle', $handle, fn (): ?string => $this->handles->resolve($handle));
 				if ($did === null) {
 					throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
 				}
@@ -227,7 +243,7 @@ class XrpcService {
 			$handleIsAssigned = $identity->handle === $identity->assignedHandle();
 			$handleIsVerified = $handleIsAssigned || (!$identity->customHandleBroken()
 				&& in_array('at://' . $identity->handle, $document['alsoKnownAs'] ?? [], true)
-				&& $this->handles->verify($identity->handle, $identity->did) !== '');
+				&& $this->verifiedBy($identity->handle, $identity->did) !== '');
 			$resolvedHandle = $handleIsVerified ? $identity->handle : 'handle.invalid';
 			if ($handle === '') {
 				$handle = $resolvedHandle;
@@ -253,9 +269,47 @@ class XrpcService {
 		}
 		$verified = $handle !== ''
 			&& in_array('at://' . $handle, $document['alsoKnownAs'] ?? [], true)
-			&& $this->handles->verify($handle, $identifier) !== '';
+			&& $this->verifiedBy($handle, $identifier) !== '';
 
 		return ['did' => $identifier, 'handle' => $verified ? $handle : 'handle.invalid', 'didDoc' => $document];
+	}
+
+	/** How a handle names a DID (`HandleVerifier::verify()`), remembered like any other lookup. */
+	private function verifiedBy(string $handle, string $did): string {
+		return (string)$this->lookup('verify', $handle . ' ' . $did, fn (): string => $this->handles->verify($handle, $did));
+	}
+
+	/**
+	 * What a DNS or HTTPS lookup on another server answered, for anybody who
+	 * asks: remembered for a few minutes, an answer that found nothing for
+	 * less, and a lookup that has to go out is counted against the asking
+	 * address. These queries need no sign-in, and each lookup can hold a
+	 * worker for seconds.
+	 *
+	 * @template T
+	 * @param callable(): T $fetch
+	 * @return T
+	 * @throws XrpcException past the per-address budget
+	 */
+	private function lookup(string $kind, string $key, callable $fetch): mixed {
+		$cache = $this->cacheFactory?->createDistributed(self::LOOKUP_CACHE);
+		$cacheKey = $kind . ':' . hash('sha256', $key);
+		$held = $cache?->get($cacheKey);
+		if (is_array($held) && array_key_exists('value', $held)) {
+			return $held['value'];
+		}
+		$address = $this->request?->getRemoteAddress() ?? '';
+		if ($this->limiter !== null && $address !== '') {
+			try {
+				$this->limiter->registerAnonRequest(self::LOOKUP_CACHE, self::LOOKUPS_PER_ADDRESS, self::LOOKUP_PERIOD, $address);
+			} catch (IRateLimitExceededException) {
+				throw new XrpcException(429, 'RateLimitExceeded', 'Too many identity lookups from this address; try again in a minute');
+			}
+		}
+		$value = $fetch();
+		$cache?->set($cacheKey, ['value' => $value], $value === null || $value === '' ? self::MISS_TTL : self::LOOKUP_TTL);
+
+		return $value;
 	}
 
 	/**
