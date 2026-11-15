@@ -1209,6 +1209,57 @@ class CacheDocumentServiceTest extends TestCase {
 		);
 	}
 
+	/** @return array<string, array{string, string}> */
+	public static function rangesSentOn(): array {
+		$chunk = CacheDocumentService::STREAM_CHUNK;
+
+		return [
+			'none' => ['', ''],
+			'open-ended from the start' => ['bytes=0-', 'bytes=0-' . ($chunk - 1)],
+			'open-ended from a seek' => ['bytes=1000-', 'bytes=1000-' . (1000 + $chunk - 1)],
+			'a short range' => ['bytes=0-1', 'bytes=0-1'],
+			'a long range' => ['bytes=5-999999999', 'bytes=5-' . (5 + $chunk - 1)],
+			'a short suffix' => ['bytes=-500', 'bytes=-500'],
+			'a long suffix' => ['bytes=-999999999', 'bytes=-' . $chunk],
+			'several ranges' => ['bytes=0-1, 5-6', ''],
+			'backwards' => ['bytes=10-5', ''],
+			'nothing in it' => ['bytes=-', ''],
+			'another unit' => ['items=0-1', ''],
+			'a header injection' => ["bytes=0-\r\nX: y", ''],
+		];
+	}
+
+	/**
+	 * The server's client holds a whole answer before it is passed on, so a
+	 * player's open-ended range is answered a chunk at a time rather than
+	 * with the rest of a two-hour video.
+	 */
+	#[DataProvider('rangesSentOn')]
+	public function testARangeIsSentOnBoundedToAChunk(string $asked, string $sent): void {
+		$this->assertSame($sent, CacheDocumentService::boundedRange($asked));
+	}
+
+	public function testARangedStreamIsHeldToAChunkAndAWholeOneToTheGivenCeiling(): void {
+		$calls = [];
+		$this->curlService->method('openStream')->willReturnCallback(
+			static function (string $url, array $headers, string $onBehalfOf, int $timeout = 10, ?int $max = null, bool $sameOrigin = false) use (&$calls): array {
+				$calls[] = [$headers, $max, $sameOrigin];
+
+				return ['stream' => fopen('php://memory', 'r'), 'status' => 200, 'headers' => []];
+			}
+		);
+		$document = new Document();
+		$document->setUrl('https://peer.example/video.mp4');
+
+		$this->service->openRemoteFile($document, 'bytes=0-');
+		$this->service->openRemoteFile($document, '', 1234, true);
+
+		$this->assertSame([
+			[['Range' => 'bytes=0-' . (CacheDocumentService::STREAM_CHUNK - 1)], CacheDocumentService::STREAM_CHUNK, false],
+			[[], 1234, true],
+		], $calls);
+	}
+
 	public function testSaveRemoteFileToCacheDownloadsThenStores(): void {
 		$this->origin($this->pngBytes());
 		$written = [];

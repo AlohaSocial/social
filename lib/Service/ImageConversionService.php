@@ -292,6 +292,9 @@ class ImageConversionService {
 	 * whose items are addressed by byte offset -- removing one means rewriting
 	 * every offset after it, which is a great deal of risk for a case that a
 	 * re-encode handles.
+	 *
+	 * @throws CacheContentMimeTypeException when it has metadata and nothing
+	 *                                       here can re-encode it
 	 */
 	private function stripAvif(string $content): string {
 		if (!$this->isoBmffHasMetadata($content)) {
@@ -329,13 +332,12 @@ class ImageConversionService {
 			}
 		}
 
-		// Nothing here can rewrite it. Storing it as it arrived is what happened
-		// to every upload before any of this existed, and it is still better
-		// than refusing the picture -- but say so, because it is the one path
-		// that leaves metadata in place.
-		$this->logger->warning('[ImageConversionService] storing an AVIF with its metadata: no encoder available to strip it');
-
-		return $content;
+		// The metadata may hold where the picture was taken, and once stored it
+		// is federated; refusing the picture is what a HEIC gets without a
+		// decoder too.
+		throw new CacheContentMimeTypeException(
+			'this server cannot remove the metadata from AVIF images; it needs the imagick extension with AVIF support, or GD built with AVIF'
+		);
 	}
 
 	/**
@@ -350,7 +352,7 @@ class ImageConversionService {
 	private function isoBmffHasMetadata(string $content): bool {
 		$head = substr($content, 0, 65536);
 
-		return str_contains($head, 'Exif') || str_contains($head, "\x00\x00Exif") || str_contains($head, 'mime\0');
+		return str_contains($head, 'Exif') || str_contains($head, "mime\0");
 	}
 
 	/** Whether Imagick is here and was built with a delegate for this format. */

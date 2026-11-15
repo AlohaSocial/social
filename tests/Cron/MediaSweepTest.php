@@ -59,6 +59,8 @@ class MediaSweepTest extends TestCase {
 		// every prune that orphaned more than that
 		$this->mediaPurgeService->expects($this->once())->method('sweepOrphans')
 			->with(MediaSweep::DAYS, MediaSweep::BATCH, 1_757_937_600 + MediaSweep::SECONDS)->willReturn(3);
+		$this->mediaPurgeService->expects($this->once())->method('sweepUnattached')
+			->with(MediaSweep::UNATTACHED_DAYS, MediaSweep::BATCH, 1_757_937_600 + MediaSweep::SECONDS)->willReturn(2);
 		$this->documentService->expects($this->once())->method('fillMissingMediaTypes')
 			->with(MediaSweep::BATCH)->willReturn(1);
 		$this->mediaPurgeService->expects($this->once())->method('purgeCacheAsConfigured')

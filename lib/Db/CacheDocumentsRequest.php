@@ -1088,9 +1088,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	 * "nothing can refer to this file any more". The joins are all on indexed
 	 * `_prim` columns.
 	 *
-	 * Rows with no parent are not candidates: for a local upload that says
-	 * nothing, because nothing in this schema points from a post back at the
-	 * attachment it shows.
+	 * Rows with no parent are not candidates: an upload is made before its
+	 * post exists and is never given one; see `getUnattachedUploads()`.
 	 *
 	 * @param int $afterNid where the page starts: after the last row of the
 	 *                      one before, so a row that would not go is not read
@@ -1116,6 +1115,57 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->andWhere($expr->isNull('st.id_prim'))
 			->andWhere($expr->isNull('ca.id_prim'))
 			->andWhere($expr->isNull('so.source_id_prim'));
+		if ($afterNid > 0) {
+			$qb->andWhere($expr->gt('cd.nid', $qb->createNamedParameter($afterNid, IQueryBuilder::PARAM_INT)));
+		}
+
+		$qb->orderBy('cd.nid', 'asc');
+		$qb->setMaxResults($limit);
+
+		$documents = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$documents[] = $this->parseCacheDocumentsSelectSql($data);
+		}
+		$cursor->closeCursor();
+
+		return $documents;
+	}
+
+	/**
+	 * The uploads of people here that nothing has taken up, oldest first.
+	 *
+	 * An upload is made before the post it is for, and has no parent; what
+	 * ties it to a post is `social_stream_media`, and what ties it to a
+	 * Bluesky record is `social_atproto_blob`. An upload in neither, older
+	 * than `$olderThanDays`, is one a post was never made with. A scheduled
+	 * post names its uploads in its parameters, which the caller checks.
+	 * Banners, story pictures and imported attachments carry a parent and
+	 * are not candidates.
+	 *
+	 * @param int $afterNid where the page starts: after the last row of the
+	 *                      one before
+	 *
+	 * @return Document[]
+	 */
+	public function getUnattachedUploads(int $olderThanDays, int $limit, int $afterNid = 0): array {
+		$qb = $this->getCacheDocumentsSelectSql();
+		$expr = $qb->expr();
+
+		$qb->leftJoin('cd', self::TABLE_STREAM_MEDIA, 'sm', $expr->eq('sm.doc_nid', 'cd.nid'))
+			->leftJoin('cd', self::TABLE_ATPROTO_BLOB, 'ab', $expr->eq('ab.document_id_prim', 'cd.id_prim'));
+
+		$qb->andWhere($expr->neq('cd.account', $qb->createNamedParameter('')))
+			->andWhere($expr->eq('cd.parent_id_prim', $qb->createNamedParameter('')))
+			->andWhere($expr->neq('cd.local_copy', $qb->createNamedParameter(Document::COPY_STREAMED)))
+			->andWhere($expr->lt(
+				'cd.creation',
+				$qb->createNamedParameter(
+					new DateTime('-' . max(1, $olderThanDays) . ' days'), IQueryBuilder::PARAM_DATE
+				)
+			))
+			->andWhere($expr->isNull('sm.doc_nid'))
+			->andWhere($expr->isNull('ab.document_id_prim'));
 		if ($afterNid > 0) {
 			$qb->andWhere($expr->gt('cd.nid', $qb->createNamedParameter($afterNid, IQueryBuilder::PARAM_INT)));
 		}

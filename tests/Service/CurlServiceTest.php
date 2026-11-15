@@ -32,6 +32,7 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
+use OCA\Social\Tools\Http\BoundedSink;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
@@ -1995,5 +1996,185 @@ class CurlServiceTest extends TestCase {
 			'https://' . self::PUBLIC_IP . '/media/a.png',
 			'https://' . self::PUBLIC_IP . '/cdn/a.png',
 		], $asked);
+	}
+
+	// --- what a transfer may cost, and what a redirect is handed
+
+	/**
+	 * Curl writes the whole answer to the request's sink before the request
+	 * returns, so the ceiling has to be on the sink: a sink that refuses the
+	 * byte past it is what ends the transfer.
+	 */
+	public function testEveryRequestWritesToASinkBoundedByTheCeiling(): void {
+		$sent = $this->captureRequest($this->answer('{}'));
+
+		$this->service()->doRequest('get', 'https://' . self::PUBLIC_IP . '/users/bob');
+
+		$sink = $sent()['options']['sink'];
+		$this->assertInstanceOf(BoundedSink::class, $sink);
+		$this->assertSame(10 * 1048576 + 1, $sink->write(str_repeat('a', 10 * 1048576 + 5)));
+		$this->assertTrue($sink->overflowed());
+	}
+
+	public function testATransferEndedByTheSinkIsTooLargeAndNotANetworkFailure(): void {
+		$this->client->method('request')->willReturnCallback(static function (string $method, string $url, array $options): IResponse {
+			$options['sink']->write(str_repeat('a', 10 * 1048576 + 1));
+			$options['sink']->write('a');
+
+			throw new Exception('cURL error 23: Failure writing output to destination');
+		});
+
+		$this->expectException(RequestResultSizeException::class);
+
+		$this->service()->doRequest('get', 'https://' . self::PUBLIC_IP . '/users/bob');
+	}
+
+	public function testAStreamIsHeldToTheCeilingItIsOpenedWith(): void {
+		$this->client->method('get')->willReturnCallback(static function (string $url, array $options): IResponse {
+			$options['sink']->write(str_repeat('a', 17));
+
+			throw new Exception('cURL error 23: Failure writing output to destination');
+		});
+
+		$this->expectException(RequestResultSizeException::class);
+
+		$this->service()->openStream('https://' . self::PUBLIC_IP . '/blob', max: 16);
+	}
+
+	public function testABatchedDeliveryEndedByTheSinkIsTooLarge(): void {
+		$this->client->method('postAsync')->willReturnCallback(function (string $url, array $options) {
+			$options['sink']->write(str_repeat('a', 10 * 1048576 + 2));
+
+			return $this->promiseOf(new Exception('cURL error 23'));
+		});
+
+		$outcomes = $this->service()->sendMany(['a' => $this->delivery('/inbox')]);
+
+		$this->assertInstanceOf(RequestResultSizeException::class, $outcomes['a']);
+	}
+
+	/** @var array<string, array> url => the options each hop was sent with */
+	private array $hops = [];
+
+	/**
+	 * Answers $from with a 307 to $to and $to with a document, recording the
+	 * options of each hop in `$this->hops`.
+	 *
+	 * @return callable(string, array): IResponse
+	 */
+	private function recordingHops(string $from, string $to): callable {
+		RemoteAddress::resolveWith(static fn (string $host): array => ['93.184.216.34']);
+
+		return function (string $url, array $options) use ($from, $to): IResponse {
+			$this->hops[$url] = $options;
+
+			return ($url === $from) ? $this->redirect($to, 307) : $this->answer('{}');
+		};
+	}
+
+	/**
+	 * A bearer token or cookie is for the origin it was written for. A
+	 * redirect to another one is followed without it, as the server's own
+	 * client would.
+	 */
+	public function testCredentialsAreNotSentOnToAnotherOrigin(): void {
+		$from = 'https://pds.example/xrpc/a';
+		$to = 'https://elsewhere.example/xrpc/a';
+		$answer = $this->recordingHops($from, $to);
+		$this->client->method('request')->willReturnCallback(
+			static fn (string $method, string $url, array $options): IResponse => $answer($url, $options)
+		);
+
+		$this->service()->doRequest('get', $from, ['headers' => ['Authorization' => 'Bearer t', 'Cookie' => 'c=1', 'Accept' => 'x']]);
+
+		$this->assertSame('Bearer t', $this->hops[$from]['headers']['Authorization']);
+		$this->assertArrayNotHasKey('Authorization', $this->hops[$to]['headers']);
+		$this->assertArrayNotHasKey('Cookie', $this->hops[$to]['headers']);
+		$this->assertSame('x', $this->hops[$to]['headers']['Accept']);
+	}
+
+	public function testCredentialsAreKeptOnARedirectWithinTheOrigin(): void {
+		$from = 'https://pds.example/xrpc/a';
+		$to = 'https://PDS.example:443/xrpc/b';
+		$answer = $this->recordingHops($from, $to);
+		$this->client->method('request')->willReturnCallback(
+			static fn (string $method, string $url, array $options): IResponse => $answer($url, $options)
+		);
+
+		$this->service()->doRequest('get', $from, ['headers' => ['Authorization' => 'Bearer t']]);
+
+		$this->assertSame('Bearer t', $this->hops[$to]['headers']['Authorization']);
+	}
+
+	public function testAStreamSendsNoCredentialsToAnotherOrigin(): void {
+		$from = 'https://pds.example/xrpc/getRepo';
+		$to = 'https://cdn.example/repo.car';
+		$answer = $this->recordingHops($from, $to);
+		$this->client->method('get')->willReturnCallback(
+			static fn (string $url, array $options): IResponse => $answer($url, $options)
+		);
+
+		$this->service()->openStream($from, ['Authorization' => 'Bearer t']);
+
+		$this->assertArrayNotHasKey('Authorization', $this->hops[$to]['headers']);
+	}
+
+	public function testABodyIsNotSentOnToAnotherOrigin(): void {
+		$from = 'https://pds.example/xrpc/createSession';
+		$answer = $this->recordingHops($from, 'https://elsewhere.example/xrpc/createSession');
+		$asked = [];
+		$this->client->method('request')->willReturnCallback(
+			static function (string $method, string $url, array $options) use ($answer, &$asked): IResponse {
+				$asked[] = $url;
+
+				return $answer($url, $options);
+			}
+		);
+
+		try {
+			$this->service()->doRequest('post', $from, ['body' => '{"password":"p"}']);
+			$this->fail('a 307 took the body to another origin');
+		} catch (RequestServerException $e) {
+			$this->assertSame([$from], $asked);
+		}
+	}
+
+	public function testAStreamOpenedForOneOriginRefusesARedirectToAnother(): void {
+		$from = 'https://peertube.example/hls/1/seg.ts';
+		$answer = $this->recordingHops($from, 'https://elsewhere.example/r');
+		$this->client->method('get')->willReturnCallback(
+			static fn (string $url, array $options): IResponse => $answer($url, $options)
+		);
+
+		$this->expectException(RequestServerException::class);
+
+		$this->service()->openStream($from, sameOrigin: true);
+	}
+
+	/**
+	 * A fetched document is stored under the URL it was asked for, and that
+	 * URL's host is who vouches for it. An answer that came from another
+	 * host by way of a redirect is not that host's to give.
+	 */
+	public function testAnObjectRedirectedToAnotherHostIsRefused(): void {
+		$id = 'https://victim.example/out?u=https://evil.example/actor';
+		$answer = $this->recordingHops($id, 'https://evil.example/actor');
+		$this->client->method('request')->willReturnCallback(
+			static fn (string $method, string $url, array $options): IResponse => $answer($url, $options)
+		);
+
+		$this->expectException(RequestServerException::class);
+
+		$this->service()->retrieveObject($id);
+	}
+
+	public function testAnObjectRedirectedWithinItsHostIsFetched(): void {
+		$id = 'http://victim.example/users/bob';
+		$answer = $this->recordingHops($id, 'https://victim.example/users/bob');
+		$this->client->method('request')->willReturnCallback(
+			static fn (string $method, string $url, array $options): IResponse => $answer($url, $options)
+		);
+
+		$this->assertSame('victim.example', $this->service()->retrieveObject($id)['_host']);
 	}
 }

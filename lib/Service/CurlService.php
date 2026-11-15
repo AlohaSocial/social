@@ -31,6 +31,7 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
+use OCA\Social\Tools\Http\BoundedSink;
 use OCA\Social\Tools\Http\FetchedResponse;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TPathTools;
@@ -282,7 +283,7 @@ class CurlService {
 		$status = 0;
 		$contentType = '';
 		try {
-			$options = ['headers' => $headers + $signature];
+			$options = ['headers' => $headers + $signature, 'same_host' => true];
 			if ($timeout !== null) {
 				$options['timeout'] = max(1, $timeout);
 			}
@@ -301,7 +302,7 @@ class CurlService {
 				'id' => $id, 'status' => $e->getCode(),
 			]);
 
-			$options = ['headers' => $headers];
+			$options = ['headers' => $headers, 'same_host' => true];
 			if ($timeout !== null) {
 				$options['timeout'] = max(1, $timeout);
 			}
@@ -392,7 +393,7 @@ class CurlService {
 	/**
 	 * Sends the request and reads the answer as JSON.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -440,7 +441,7 @@ class CurlService {
 
 		return $this->retrieveJsonMany(
 			array_keys($perUrl),
-			$this->mergeOptions($options, ['headers' => ['Accept' => 'application/activity+json']]),
+			$this->mergeOptions($options, ['headers' => ['Accept' => 'application/activity+json'], 'same_host' => true]),
 			$perUrl,
 			$statuses,
 			$failed
@@ -473,7 +474,7 @@ class CurlService {
 	 * them; that is an answer.
 	 *
 	 * @param string[] $urls
-	 * @param array{headers?: array<string, string>, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
+	 * @param array{headers?: array<string, string>, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
 	 * @param array<string, array<string, mixed>> $perUrl options for one URL, merged over the shared ones
 	 * @param ?array<string, int> $statuses set to url => the HTTP status of its answer, for the URLs that were answered
 	 * @param list<string>|null $failed set to the URLs that got no answer
@@ -501,7 +502,7 @@ class CurlService {
 			$clientOptions['allow_redirects'] = false;
 
 			try {
-				$clientOptions = $this->pinReachable($url, $clientOptions);
+				$clientOptions = $this->sunk($this->pinReachable($url, $clientOptions), $this->maxDownloadSize);
 				$promises[$url] = $client->getAsync($url, $clientOptions);
 			} catch (UnauthorizedFediverseException $e) {
 				$this->logger->debug('[CurlService] not asking ' . $url, ['exception' => $e]);
@@ -619,13 +620,15 @@ class CurlService {
 
 		$outcomes = [];
 		$promises = [];
+		$sinks = [];
 		foreach ($requests as $key => $request) {
 			$method = strtolower($request['method']);
 			$clientOptions = $this->clientOptions($method, $request['options']);
 			$clientOptions['allow_redirects'] = false;
 
 			try {
-				$clientOptions = $this->pinReachable($request['url'], $clientOptions);
+				$clientOptions = $this->sunk($this->pinReachable($request['url'], $clientOptions), $this->maxDownloadSize);
+				$sinks[$key] = $clientOptions['sink'];
 				$promises[$key] = match ($method) {
 					'post' => $client->postAsync($request['url'], $clientOptions),
 					'put' => $client->putAsync($request['url'], $clientOptions),
@@ -642,7 +645,9 @@ class CurlService {
 			try {
 				$response = $this->settledResponse($promise->wait());
 			} catch (Throwable $e) {
-				$outcomes[$key] = new RequestNetworkException($e->getMessage() . ' - ' . $url, (int)$e->getCode());
+				$outcomes[$key] = $sinks[$key]->overflowed()
+					? new RequestResultSizeException()
+					: new RequestNetworkException($e->getMessage() . ' - ' . $url, (int)$e->getCode());
 
 				continue;
 			}
@@ -780,7 +785,7 @@ class CurlService {
 	 * @throws UnauthorizedFediverseException
 	 */
 	private function downloadOne(array $download): void {
-		$opened = $this->openStream($download['url'], [], $download['on_behalf_of'] ?? '');
+		$opened = $this->openStream($download['url'], [], $download['on_behalf_of'] ?? '', max: $download['max']);
 		$target = fopen($download['path'], 'w');
 		if ($target === false) {
 			fclose($opened['stream']);
@@ -859,7 +864,7 @@ class CurlService {
 	 * doRequestOverUrls().
 	 *
 	 * @param string[] $urls
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -895,7 +900,7 @@ class CurlService {
 	/**
 	 * Sends the request and returns the body.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -919,37 +924,53 @@ class CurlService {
 	 *
 	 * Everything that guards an outbound request still guards this one -- the
 	 * domain has to be one this instance federates with and local addresses are
-	 * refused, on the URL asked for and again on every redirect it names. What
-	 * is deliberately *not* applied is the download ceiling, which is a limit
-	 * on what may be stored and this stores nothing.
+	 * refused, on the URL asked for and again on every redirect it names.
+	 *
+	 * The server's client is curl, which receives the whole answer before the
+	 * request returns, so the answer is held to `$max` bytes: a larger one
+	 * ends the transfer and is a `RequestResultSizeException`.
 	 *
 	 * @param array<string, string> $headers
+	 * @param string $onBehalfOf the instance that named this url, where that is
+	 *                           not the host serving it — see
+	 *                           {@see FediverseService::authorized()}
+	 * @param int|null $max the most bytes taken, the download ceiling when null
+	 * @param bool $sameOrigin whether a redirect may only lead to the scheme,
+	 *                         host and port of `$url`
 	 *
 	 * @return array{stream: resource, status: int, headers: array<string, string[]>}
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
+	 * @throws RequestResultSizeException
 	 * @throws RequestServerException
 	 * @throws SocialAppConfigException
 	 * @throws UnauthorizedFediverseException
 	 */
-	/**
-	 * @param string $onBehalfOf the instance that named this url, where that is
-	 *                           not the host serving it — see
-	 *                           {@see FediverseService::authorized()}
-	 */
-	public function openStream(string $url, array $headers = [], string $onBehalfOf = '', int $timeout = ConfigService::DEFAULT_REQUEST_TIMEOUT): array {
+	public function openStream(
+		string $url,
+		array $headers = [],
+		string $onBehalfOf = '',
+		int $timeout = ConfigService::DEFAULT_REQUEST_TIMEOUT,
+		?int $max = null,
+		bool $sameOrigin = false,
+	): array {
 		$clientOptions = $this->clientOptions('get', ['json_headers' => false, 'headers' => $headers, 'timeout' => $timeout]);
 		$clientOptions['allow_redirects'] = false;
 		$client = $this->clientService->newClient();
+		$requested = $url;
 
 		$response = null;
 		for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
-			$hopOptions = $this->pinReachable($url, $clientOptions, $onBehalfOf);
+			$hopOptions = $this->sunk($this->pinReachable($url, $clientOptions, $onBehalfOf), $max ?? $this->maxDownloadSize);
 
 			try {
 				$response = $client->get($url, $hopOptions);
 			} catch (Exception $e) {
+				if ($hopOptions['sink']->overflowed()) {
+					throw new RequestResultSizeException();
+				}
+
 				throw new RequestNetworkException($e->getMessage() . ' - ' . $url, $e->getCode());
 			}
 
@@ -957,7 +978,11 @@ class CurlService {
 			if ($location === '') {
 				break;
 			}
+			if ($sameOrigin && !self::sameOrigin($requested, $location)) {
+				throw new RequestServerException('redirect to another origin: ' . $location);
+			}
 
+			$clientOptions = self::forHop($clientOptions, $url, $location);
 			$url = $location;
 			$response = null;
 		}
@@ -1003,7 +1028,7 @@ class CurlService {
 	 * differ only in their scheme.
 	 *
 	 * @param string[] $urls
-	 * @param array{headers?: array<string, string>, body?: string|resource, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, verify?: bool, max_redirects?: int, federation?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string|resource, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, verify?: bool, max_redirects?: int, federation?: bool, same_host?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -1044,8 +1069,8 @@ class CurlService {
 	 *
 	 * The guarantees that matter for a url somebody else wrote:
 	 *
-	 * - the answer is read as a stream, so an endless body is cut off at
-	 *   `max_size` rather than filling memory.
+	 * - the answer is written to a `BoundedSink` (see `sunk()`), so an endless
+	 *   body is cut off at `max_size` rather than filling memory or disk.
 	 * - `allow_local_address` says whether a host resolving to this network may
 	 *   be reached at all. It is the instance's setting, except for the one
 	 *   request this app makes to itself (see `asyncWithToken()`).
@@ -1055,9 +1080,11 @@ class CurlService {
 	 * hop is pinned to the addresses it was checked against. `max_redirects`
 	 * caps how many are followed, 0 for none; `federation` false skips the
 	 * instance access list for a URL this app ships rather than one somebody
-	 * wrote, the address guard still applies.
+	 * wrote, the address guard still applies. `same_host` refuses a redirect
+	 * to another host, for a document that is stored under the URL it was
+	 * asked for.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string|resource, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, verify?: bool, max_redirects?: int, federation?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string|resource, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, verify?: bool, max_redirects?: int, federation?: bool, same_host?: bool} $options
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -1088,6 +1115,9 @@ class CurlService {
 		}
 		if (($options['federation'] ?? true) === false) {
 			$clientOptions['social']['federation'] = false;
+		}
+		if ($options['same_host'] ?? false) {
+			$clientOptions['social']['same_host'] = true;
 		}
 		if (isset($options['verify'])) {
 			$clientOptions['verify'] = $options['verify'];
@@ -1187,15 +1217,20 @@ class CurlService {
 		$acceptErrors = (bool)($clientOptions['social']['accept_errors'] ?? false);
 		$maxRedirects = (int)($clientOptions['social']['max_redirects'] ?? self::MAX_REDIRECTS);
 		$federation = (bool)($clientOptions['social']['federation'] ?? true);
+		$sameHost = (bool)($clientOptions['social']['same_host'] ?? false);
 		unset($clientOptions['social']);
 		$requested = $url;
 
 		for ($hop = 0; $hop <= $maxRedirects; $hop++) {
-			$hopOptions = $this->pinReachable($url, $clientOptions, '', $federation);
+			$hopOptions = $this->sunk($this->pinReachable($url, $clientOptions, '', $federation), $this->maxDownloadSize);
 
 			try {
 				$response = $client->request(strtolower($method), $url, $hopOptions);
 			} catch (Exception $e) {
+				if ($hopOptions['sink']->overflowed()) {
+					throw new RequestResultSizeException();
+				}
+
 				throw new RequestNetworkException($e->getMessage() . ' - ' . $url, $e->getCode());
 			}
 
@@ -1215,13 +1250,20 @@ class CurlService {
 				return $body;
 			}
 
+			if ($sameHost && strcasecmp((string)parse_url($requested, PHP_URL_HOST), (string)parse_url($location, PHP_URL_HOST)) !== 0) {
+				throw new RequestServerException('redirect to another host: ' . $location);
+			}
+
 			// a 301/302/303 answers a POST by naming something to GET, which is
 			// also what the server's own client does when it follows one
 			if ($statusCode !== Http::STATUS_TEMPORARY_REDIRECT && $statusCode !== 308) {
 				$method = 'get';
 				unset($clientOptions['body']);
+			} elseif (isset($clientOptions['body']) && !self::sameOrigin($url, $location)) {
+				throw new RequestServerException('a request body is not sent on to another origin: ' . $location);
 			}
 
+			$clientOptions = self::forHop($clientOptions, $url, $location);
 			$url = $location;
 		}
 
@@ -1257,6 +1299,58 @@ class CurlService {
 		}
 
 		return $target;
+	}
+
+	/**
+	 * The options of one hop, with a sink of its own that ends the transfer
+	 * one byte past `$max`.
+	 *
+	 * @param array<string, mixed> $options
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function sunk(array $options, int $max): array {
+		$options['sink'] = BoundedSink::temporary($max);
+
+		return $options;
+	}
+
+	/**
+	 * The options for following a redirect from `$from` to `$to`: credentials
+	 * are for the origin they were written for and are not sent to another.
+	 *
+	 * @param array<string, mixed> $options
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function forHop(array $options, string $from, string $to): array {
+		if (self::sameOrigin($from, $to)) {
+			return $options;
+		}
+
+		foreach (array_keys($options['headers'] ?? []) as $name) {
+			if (in_array(strtolower((string)$name), ['authorization', 'cookie', 'proxy-authorization'], true)) {
+				unset($options['headers'][$name]);
+			}
+		}
+
+		return $options;
+	}
+
+	/** Whether two URLs share scheme, host and port. */
+	private static function sameOrigin(string $one, string $other): bool {
+		$a = parse_url($one);
+		$b = parse_url($other);
+		if (!is_array($a) || !is_array($b)) {
+			return false;
+		}
+
+		$scheme = strtolower($a['scheme'] ?? '');
+		$port = static fn (array $url, string $scheme): int => (int)($url['port'] ?? ($scheme === 'https' ? 443 : 80));
+
+		return $scheme === strtolower($b['scheme'] ?? '')
+			&& strcasecmp($a['host'] ?? '', $b['host'] ?? '') === 0
+			&& $port($a, $scheme) === $port($b, $scheme);
 	}
 
 	private static function isHttpScheme(string $scheme): bool {
@@ -1380,9 +1474,9 @@ class CurlService {
 	 * the caller can tell a body that fits from one that does not — without
 	 * ever holding more than that.
 	 *
-	 * The request has to have been made with `'stream' => true`: without it
-	 * the client has already buffered the whole body, of whatever size, as a
-	 * string, and a limit applied afterwards limits nothing.
+	 * The request has to have been made with `'stream' => true`, so the body
+	 * is handed over as a resource rather than a string, and with a
+	 * `BoundedSink`, which is what keeps curl from receiving more than that.
 	 */
 	public static function readAtMost(IResponse $response, int $max): string {
 		$stream = $response->getBody();

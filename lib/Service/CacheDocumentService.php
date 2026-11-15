@@ -66,6 +66,14 @@ class CacheDocumentService {
 	private const SNIFF_BYTES = 4096;
 
 	/**
+	 * The most bytes one ranged request for a streamed file asks its origin
+	 * for. The server's client receives a whole answer before it can be
+	 * passed on, so a player's open-ended `bytes=0-` is answered with this
+	 * much and a `206` naming the rest, and the player asks for what follows.
+	 */
+	public const STREAM_CHUNK = 8 * 1024 * 1024;
+
+	/**
 	 * The names the copies being written take, by role (`local`, `resized`),
 	 * while `restoreRemoteCopy()` runs; empty otherwise, and a fresh uuid is
 	 * drawn for each copy.
@@ -328,7 +336,7 @@ class CacheDocumentService {
 	 */
 	private function downloadToTemp(Document $document, string $tmpPath): void {
 		$max = $this->downloadPlan($document)['max'];
-		$opened = $this->openRemoteFile($document);
+		$opened = $this->openRemoteFile($document, '', $max);
 		$stream = $opened['stream'];
 
 		$target = fopen($tmpPath, 'w');
@@ -1196,20 +1204,26 @@ class CacheDocumentService {
 	 * The counterpart of `retrieveContent()` for the one kind of document that
 	 * is deliberately never copied here -- see `Document::COPY_STREAMED`. The
 	 * client's `Range` is forwarded so that seeking in a long video asks the
-	 * origin for the part that was seeked to, and the origin's answer comes
-	 * back untouched for the caller to pass on.
+	 * origin for the part that was seeked to, shortened to `STREAM_CHUNK`
+	 * bytes, and the origin's answer comes back untouched for the caller to
+	 * pass on.
 	 *
 	 * @param string $range the client's own `Range` header, or ''
+	 * @param int|null $max the most bytes taken without a range, the download
+	 *                      ceiling when null
+	 * @param bool $sameOrigin whether a redirect may only lead to the file's
+	 *                         own scheme, host and port
 	 *
 	 * @return array{stream: resource, status: int, headers: array<string, string[]>}
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
+	 * @throws RequestResultSizeException
 	 * @throws RequestServerException
 	 * @throws SocialAppConfigException
 	 * @throws UnauthorizedFediverseException
 	 */
-	public function openRemoteFile(Document $document, string $range = ''): array {
+	public function openRemoteFile(Document $document, string $range = '', ?int $max = null, bool $sameOrigin = false): array {
 		$url = $document->getUrl();
 		$parsed = parse_url($url);
 		if (!is_array($parsed)) {
@@ -1221,14 +1235,42 @@ class CacheDocumentService {
 		}
 
 		$headers = [];
-		// only the shape a media element actually sends, and only that shape:
-		// the header is written by whoever is reading and reaches another
-		// server as it was written
-		if ($range !== '' && preg_match('/^bytes=\d*-\d*(, ?\d*-\d*)*$/', $range) === 1) {
+		$range = self::boundedRange($range);
+		if ($range !== '') {
 			$headers['Range'] = $range;
+			$max = self::STREAM_CHUNK;
 		}
 
-		return $this->curlService->openStream($url, $headers, self::referringHost($document));
+		return $this->curlService->openStream(
+			$url, $headers, self::referringHost($document), max: $max, sameOrigin: $sameOrigin
+		);
+	}
+
+	/**
+	 * A client's `Range` as it is sent on: one range, of the shape a media
+	 * element sends, at most `STREAM_CHUNK` bytes long; '' for anything else,
+	 * which asks for the whole file. The header is written by whoever is
+	 * reading and reaches another server.
+	 */
+	public static function boundedRange(string $range): string {
+		if (preg_match('/^bytes=(\d{0,18})-(\d{0,18})$/', trim($range), $m) !== 1 || ($m[1] === '' && $m[2] === '')) {
+			return '';
+		}
+
+		if ($m[1] === '') {
+			return 'bytes=-' . min((int)$m[2], self::STREAM_CHUNK);
+		}
+
+		$start = (int)$m[1];
+		$last = $start + self::STREAM_CHUNK - 1;
+		if ($m[2] !== '') {
+			if ((int)$m[2] < $start) {
+				return '';
+			}
+			$last = min((int)$m[2], $last);
+		}
+
+		return 'bytes=' . $start . '-' . $last;
 	}
 
 	/**
@@ -1242,7 +1284,7 @@ class CacheDocumentService {
 	 * @throws RequestServerException
 	 */
 	public function readRemoteFile(Document $document, int $max): string {
-		$opened = $this->openRemoteFile($document);
+		$opened = $this->openRemoteFile($document, '', $max);
 		$body = stream_get_contents($opened['stream'], $max + 1);
 		fclose($opened['stream']);
 
