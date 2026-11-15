@@ -27,6 +27,7 @@ import AccountHoverCard from './AccountHoverCard.vue'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
 import { isLocalAccount, nextcloudUserOf } from '../utils/accountLocality.js'
 import { accountAvatarUrl } from '../utils/accountAvatar.js'
+import { patternAvatarUrl } from '../utils/patternAvatar.js'
 
 export default {
 	name: 'ActorAvatar',
@@ -154,12 +155,21 @@ export default {
 				// avatars were affected, so which card a reader got depended
 				// on which instance the account was on
 				disableMenu: true,
-				// a local account's face is its Nextcloud user's, by the user
-				// id; where the page was not told it, the picture the server gave
-				...(this.nextcloudUser !== ''
-					? { user: this.nextcloudUser, displayName: this.actor.acct }
-					: { url: this.avatarUrl }),
+				// an account without a picture of its own gets its flower; a
+				// local account's face is otherwise its Nextcloud user's, by
+				// the user id; where the page was not told it, the picture the
+				// server gave
+				...(this.pattern !== ''
+					? { url: this.pattern }
+					: this.nextcloudUser !== ''
+						? { user: this.nextcloudUser, displayName: this.actor.acct }
+						: { url: this.avatarUrl }),
 			}
+		},
+
+		/** @return {string} the placeholder flower, or '' for an account with a picture */
+		pattern() {
+			return patternAvatarUrl(this.actor)
 		},
 
 		/** @return {string} */
