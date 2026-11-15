@@ -39,7 +39,7 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 10px;
-	width: min(100%, 760px);
+	width: min(100%, calc(var(--social-reading-column) - 2 * var(--social-column-gutter)));
 	margin: 8px auto 16px;
 	padding: 16px;
 	border: 1px solid var(--color-border);
@@ -75,9 +75,10 @@
 
 .new-posts-pill {
 	position: sticky;
-	// the fallback for a page with no composer above the list; where there is
-	// one, the component sets `top` to just below it
-	top: 8px;
+	// below whatever the page keeps stuck above the list (the scopes, see
+	// Timeline.vue); where there is a composer, the component sets `top` to
+	// just below it instead
+	top: calc(var(--social-sticky-top, 0px) + 8px);
 	// above the composer rather than below it: the offset keeps the two apart,
 	// and if the composer grows between two measurements the pill is still the
 	// one you can see
@@ -122,30 +123,69 @@
    already there. A heading rather than a rule: "New" and "Earlier" say what
    the two runs are, where a bare line only says that there are two of them. */
 /**
- * The line that says where the reader had got to.
- *
- * A hairline either side of a few quiet words, and everything below it drawn
- * a shade back. What it does is make the timeline finite: a scroll with no
- * bottom and no marks in it is the same screen for ever.
+ * Where the reader had got to: a small drawing between two hairlines, and a
+ * few quiet words under it, with everything below drawn a shade back. What it
+ * does is make the timeline finite: a scroll with no bottom and no marks in it
+ * is the same screen for ever.
  */
 .timeline-caughtup {
-	display: flex;
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
 	align-items: center;
-	gap: 12px;
-	margin: 18px 0 14px;
+	column-gap: 12px;
+	row-gap: 2px;
+	margin: 22px 0 18px;
 	list-style: none;
+	text-align: center;
+	animation: timeline-caughtup-in .6s ease-out both;
 
 	&__line {
-		flex: 1 1 auto;
 		block-size: 1px;
 		background: var(--color-border);
 	}
 
+	// a still picture, small enough to be a mark rather than an event
+	&__scene {
+		inline-size: 64px;
+
+		:deep(.bob),
+		:deep(.drift) {
+			animation: none;
+		}
+	}
+
+	&__label,
+	&__since {
+		grid-column: 1 / -1;
+	}
+
 	&__label {
-		flex: 0 0 auto;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--color-main-text);
+	}
+
+	&__since {
 		font-size: 12px;
 		color: var(--color-text-maxcontrast);
-		white-space: nowrap;
+	}
+}
+
+@keyframes timeline-caughtup-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.timeline-caughtup {
+		animation: none;
 	}
 }
 

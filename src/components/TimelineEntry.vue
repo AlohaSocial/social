@@ -14,6 +14,7 @@
 			'timeline-entry--unread': unread,
 			'timeline-entry--settled': !staggered,
 			'timeline-entry--direct': type === 'direct',
+			'timeline-entry--grouped': grouped && !isNotification,
 		}"
 		:style="entryStyle"
 		:data-status-id="entryContent?.id"
@@ -154,8 +155,15 @@
 		</div>
 		<template v-else>
 			<div v-if="entryContent" class="wrapper">
+				<!-- the face is drawn once for a run of posts by one author;
+				     the rest keep its room, with the line that joins them -->
+				<span
+					v-if="!isNotification && !hideAvatar && grouped"
+					class="entry__thread"
+					:style="{ inlineSize: avatarSize + 'px' }"
+					aria-hidden="true" />
 				<TimelineAvatar
-					v-if="!isNotification && !hideAvatar"
+					v-else-if="!isNotification && !hideAvatar"
 					class="entry__avatar"
 					:item="entryContent"
 					:size="avatarSize" />
@@ -166,6 +174,7 @@
 					:type="type"
 					:postHref="postHref"
 					:hideAuthor="hideAuthor || isOwnPost"
+					:compactAuthor="grouped && !isNotification"
 					:embeddedActions="embeddedActions">
 					<template #profileActions>
 						<slot name="profileActions" />
@@ -353,6 +362,16 @@ export default {
 		depth: {
 			type: Number,
 			default: 0,
+		},
+
+		/**
+		 * Whether this post follows another by the same author, close enough
+		 * in time to read as one run: drawn without the face and the name,
+		 * which the post above already shows.
+		 */
+		grouped: {
+			type: Boolean,
+			default: false,
 		},
 
 		element: {
@@ -1314,6 +1333,83 @@ export default {
 @media (prefers-reduced-motion: reduce) {
 	.timeline-entry:not(.timeline-entry--direct) {
 		transition: none;
+	}
+}
+
+/*
+ * A run of posts by one author reads as one voice: the face and the name at
+ * the head of the run, then the posts that follow sit closer, with no hairline
+ * between them, and a thin line runs down the face's column joining them. The
+ * line starts under the face (the row's 14px of padding, the face's 2px step
+ * and its 40px) and is centred on it.
+ */
+.entry__thread {
+	flex: 0 0 auto;
+}
+
+.timeline-entry:not(.notification, .timeline-entry--direct) {
+	&:has(+ .timeline-entry--grouped) {
+		margin-bottom: 0;
+
+		&::after {
+			content: none;
+		}
+	}
+
+	&.timeline-entry--grouped {
+		padding-block-start: 6px;
+	}
+
+	&:has(+ .timeline-entry--grouped)::before,
+	&.timeline-entry--grouped::before {
+		content: '';
+		position: absolute;
+		inset-inline-start: 27px;
+		inline-size: 2px;
+		border-radius: 1px;
+		background: var(--color-border);
+		pointer-events: none;
+	}
+
+	&:has(+ .timeline-entry--grouped)::before {
+		inset-block: 60px 0;
+	}
+
+	&.timeline-entry--grouped::before {
+		inset-block-start: 0;
+		block-size: 16px;
+	}
+
+	&.timeline-entry--grouped:has(+ .timeline-entry--grouped)::before {
+		block-size: auto;
+		inset-block-end: 0;
+	}
+
+	// a phone has no face column to run the line down: the run is only
+	// drawn closer together, and its header starts at the edge
+	@include layout.below(layout.$phone) {
+		&:has(+ .timeline-entry--grouped)::before,
+		&.timeline-entry--grouped::before {
+			content: none;
+		}
+
+		.entry__thread {
+			display: none;
+		}
+
+		&.timeline-entry--grouped .wrapper :deep(.post-header) {
+			padding-inline-start: 0;
+			min-height: 0;
+		}
+	}
+
+	// a forced palette would paint the line in the page's own colour
+	@media (forced-colors: active) {
+		&:has(+ .timeline-entry--grouped)::before,
+		&.timeline-entry--grouped::before {
+			forced-color-adjust: none;
+			background: CanvasText;
+		}
 	}
 }
 </style>

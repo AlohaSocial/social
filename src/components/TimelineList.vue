@@ -10,6 +10,7 @@
 		<div class="hidden-visually" role="status" aria-live="polite">
 			{{ announcement }}
 		</div>
+		<PullToRefresh v-if="canPull" :refreshing="refreshing" @refresh="refresh" />
 		<transition name="pill">
 			<button
 				v-if="arrived > 0"
@@ -87,8 +88,10 @@
 				     marks in it is the same screen for ever. -->
 				<li v-if="caughtUpAt > 0 && index === caughtUpAt" class="timeline-caughtup">
 					<span class="timeline-caughtup__line" />
-					<span class="timeline-caughtup__label">{{ caughtUpLabel }}</span>
+					<AlohaScene scene="hammock" class="timeline-caughtup__scene" />
 					<span class="timeline-caughtup__line" />
+					<span class="timeline-caughtup__label">{{ t('social', 'You\'re all caught up') }}</span>
+					<span v-if="caughtUpSince" class="timeline-caughtup__since" :title="caughtUpWhen">{{ caughtUpSince }}</span>
 				</li>
 				<TimelineEntry
 					:class="{
@@ -101,6 +104,7 @@
 					:immediate="swapping"
 					:depth="depths[entry.id] ?? 0"
 					:continues="hasReplies[entry.id] === true"
+					:grouped="grouped.has(entry.id)"
 					:unread="isUnread(entry)" />
 			</template>
 		</transition-group>
@@ -151,7 +155,7 @@ import { showError } from '../services/toast.js'
 import { offTimelinePush, onTimelinePush, PUSH_DIRECT, PUSH_HOME, PUSH_KINDS, PUSH_NOTIFICATION } from '../services/timelinePush.js'
 
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
-import { fullDate, timeOfDay } from '../utils/relativeTime.js'
+import { fromNow, fullDateTime } from '../utils/relativeTime.js'
 import ArrowUp from 'vue-material-design-icons/ArrowUp.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
@@ -161,6 +165,8 @@ import TimelineEntry from './TimelineEntry.vue'
 import TimelineSkeleton from './TimelineSkeleton.vue'
 import VideoBrowse from './VideoBrowse.vue'
 import WaveLoading from './WaveLoading.vue'
+import AlohaScene from './illustrations/AlohaScene.vue'
+import PullToRefresh from './PullToRefresh.vue'
 
 /**
  * How long a list counts as swapping after a held-over list is replaced, in
@@ -212,6 +218,34 @@ const MAX_POLL_WAIT = 5 * 60 * 1000
  * screen and a post appearing there is its own announcement.
  */
 const ANNOUNCE_BELOW = 240
+
+/**
+ * How far apart two posts by one author may be, in milliseconds, and still be
+ * drawn as one run in a feed.
+ */
+const RUN_WITHIN = 30 * 60 * 1000
+
+/**
+ * The lists whose posts are never drawn as runs: each entry there stands
+ * alone, and on a profile every post is by the one author.
+ */
+const NO_RUNS = ['notifications', 'direct', 'single-post', 'account']
+
+/**
+ * @param {object} earlier the entry above
+ * @param {object} later the entry below it
+ * @return {boolean} whether the two read as one author's run
+ */
+function continuesRun(earlier, later) {
+	const author = later?.account?.id
+	if (!author || earlier?.account?.id !== author || earlier.reblog || later.reblog) {
+		return false
+	}
+
+	const apart = Math.abs(Date.parse(earlier.created_at) - Date.parse(later.created_at))
+
+	return apart <= RUN_WITHIN
+}
 
 /**
  * @param {string} identity a list, as `getTimelineIdentity` names it
@@ -294,6 +328,8 @@ export default {
 		VideoBrowse,
 		WaveLoading,
 		EmptyContent,
+		AlohaScene,
+		PullToRefresh,
 	},
 
 	props: {
@@ -414,8 +450,16 @@ export default {
 			pollSkip: 0,
 			/** when the tab was last hidden, so returning can catch up */
 			hiddenSince: 0,
-			/** posts that arrived while the reader was further down the page */
-			arrived: 0,
+			/**
+			 * The posts that arrived while the reader was further down the
+			 * page, by id: in the store, but kept off the list until the
+			 * reader asks for them, so nothing moves above what they read
+			 *
+			 * @type {string[]}
+			 */
+			withheld: [],
+			/** whether a refresh pulled for on a touch screen is running */
+			refreshing: false,
 			/** how tall the sticky composer above this list is, 0 when there is none */
 			composerHeight: 0,
 			/** watches that composer, only while the pill is on screen */
@@ -585,6 +629,22 @@ export default {
 	},
 
 	computed: {
+		/**
+		 * Whether the list can be pulled down to ask for what is newer: a
+		 * chronological list of posts, which has a top for them to arrive at.
+		 *
+		 * @return {boolean}
+		 */
+		canPull() {
+			return this.display === 'list' && !this.showParents && !this.isThread
+				&& this.timelineStore.type !== 'single-post' && this.chronological
+		},
+
+		/** @return {number} how many posts are waiting above the list */
+		arrived() {
+			return this.withheld.length
+		},
+
 		...mapStores(useAccountStore, useNotificationsStore, useTimelineStore),
 
 		/**
@@ -885,18 +945,16 @@ export default {
 			return placeKeyFor(this.timelineIdentity)
 		},
 
-		/** @return {string} what the line says */
-		caughtUpLabel() {
-			if (this.lastSeenAt === 0) {
-				return t('social', 'You are up to date')
-			}
+		/** @return {string} when the reader was last here, in words; '' when not known */
+		caughtUpSince() {
+			return this.lastSeenAt === 0
+				? ''
+				: t('social', 'Your last visit was {time}', { time: fromNow(this.lastSeenAt) })
+		},
 
-			const when = new Date(this.lastSeenAt)
-			const today = new Date().toDateString() === when.toDateString()
-
-			return today
-				? t('social', 'Up to date since {time}', { time: timeOfDay(when) })
-				: t('social', 'Up to date since {date}', { date: fullDate(when) })
+		/** @return {string} the same moment as a date and time */
+		caughtUpWhen() {
+			return this.lastSeenAt === 0 ? '' : fullDateTime(this.lastSeenAt)
 		},
 
 		/**
@@ -929,13 +987,35 @@ export default {
 			// has something of its own: see `holding`
 			const timeline = (this.timeline.length === 0 && this.holding)
 				? this.heldOver
-				: this.timeline
+				: this.revealed(this.timeline)
 
 			if (this.type !== 'notifications') {
 				return timeline
 			}
 
 			return groupNotifications(timeline)
+		},
+
+		/**
+		 * The posts that continue a run by the author of the post above them.
+		 * Not across the caught-up line, which is a break in the reading.
+		 *
+		 * @return {Set<string>} their ids
+		 */
+		grouped() {
+			const ids = new Set()
+			if (this.display !== 'list' || this.showParents
+				|| NO_RUNS.includes(this.type) || NO_RUNS.includes(this.timelineStore.type)) {
+				return ids
+			}
+
+			this.entries.forEach((entry, index) => {
+				if (index > 0 && index !== this.caughtUpAt && continuesRun(this.entries[index - 1], entry)) {
+					ids.add(entry.id)
+				}
+			})
+
+			return ids
 		},
 
 		/**
@@ -1056,6 +1136,9 @@ export default {
 				this.watchComposer()
 			} else {
 				this.unwatchComposer()
+				// what was held back is on the list now, and is what the
+				// reader's place is taken from
+				this.noteNewestShown(this.timeline)
 			}
 		},
 
@@ -1064,7 +1147,7 @@ export default {
 		timeline(entries, previous) {
 			if (entries.length > 0) {
 				this.timelineStore.markFilled(this.timelineStore.getTimelineIdentity)
-				this.noteNewestShown(entries)
+				this.noteNewestShown(this.revealed(entries))
 			}
 			// the held-over list is on screen when the new one lands: that
 			// render swaps them, so it is drawn as a swap
@@ -1221,6 +1304,18 @@ export default {
 				// the one that was there before this visit moved it
 				this.armSeenTimer()
 			})
+		},
+
+		/**
+		 * @param {object[]} entries a list of posts
+		 * @return {object[]} those of them that are not being held back
+		 */
+		revealed(entries) {
+			if (this.withheld.length === 0) {
+				return entries
+			}
+
+			return entries.filter((entry) => !this.withheld.includes(String(entry.id)))
 		},
 
 		/**
@@ -1777,7 +1872,7 @@ export default {
 			this.loading = false
 			this.allLoaded = false
 			this.error = null
-			this.arrived = 0
+			this.withheld = []
 			this.setFocus(-1)
 			this.pollFailureReported = false
 			this.pollWait = 0
@@ -1988,8 +2083,27 @@ export default {
 			})
 		},
 
+		/** What a pull at the top of the list asks for: the newest posts, now. */
+		async refresh() {
+			if (this.refreshing) {
+				return
+			}
+
+			this.refreshing = true
+			try {
+				if (this.error !== null) {
+					this.retry()
+				} else {
+					this.withheld = []
+					await this.fetchNewStatuses()
+				}
+			} finally {
+				this.refreshing = false
+			}
+		},
+
 		showArrived() {
-			this.arrived = 0
+			this.withheld = []
 			// the app's content column, not the window: see utils/scroller.js
 			const column = scroller() ?? window
 			column.scrollTo({
@@ -2007,6 +2121,16 @@ export default {
 					this.watchFocused(entry)
 				}
 			})
+		},
+
+		/**
+		 * Keeps posts that just arrived off the list until they are asked for.
+		 *
+		 * @param {object[]} posts what the server answered with
+		 */
+		withhold(posts) {
+			const ids = posts.map((post) => String(post.id)).filter((id) => !this.withheld.includes(id))
+			this.withheld = [...this.withheld, ...ids]
 		},
 
 		/**
@@ -2097,6 +2221,12 @@ export default {
 				return
 			}
 
+			// a reader who has scrolled back to the top is shown what was
+			// held back for them on the way
+			if (depth === 0 && this.withheld.length > 0 && scrollOffset() <= ANNOUNCE_BELOW) {
+				this.withheld = []
+			}
+
 			// Newest by id, not this.timeline[0] (sorted by created_at): a
 			// federated post with a high id but an old date would otherwise
 			// keep min_id stuck and this method would refetch forever. As a
@@ -2114,10 +2244,11 @@ export default {
 				this.pollSkip = 0
 
 				if (response.length > 0) {
-					// only worth announcing when the top of the list is out of
-					// sight; up there the posts simply appear
+					// held back while the top of the list is out of sight, so
+					// nothing moves above what is being read; up there the
+					// posts simply appear
 					if (scrollOffset() > ANNOUNCE_BELOW) {
-						this.arrived += response.length
+						this.withhold(response)
 					}
 					if (depth + 1 < MAX_CATCHUP_PAGES) {
 						this.fetchNewStatuses(depth + 1)

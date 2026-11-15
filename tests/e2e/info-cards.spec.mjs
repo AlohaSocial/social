@@ -9,6 +9,10 @@ test('feed explanations and profile activity are optional cards', async ({ page 
 	const api = await apiAs(USER, PASSWORD)
 	await ensureAccount(api, USER)
 	const post = await postStatus(api, { status: `Information card check ${Date.now()}` })
+	// one one-time card at a time, and the learning notice goes first: put it
+	// away so the feed's own explanation is the one on screen. A 404 is a
+	// server without recommendations, where there is no notice to answer
+	await api.put(`${APP}/api/v1/interests/settings`, { data: { noticeAcknowledged: true } })
 	try {
 		await login(page)
 		await openApp(page)

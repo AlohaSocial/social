@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="social__wrapper" :class="{ 'social__wrapper--direct': type === 'direct', 'social__wrapper--reading': display === 'list' && type !== 'direct', 'social__wrapper--videos': display === 'videos' }">
+	<div class="social__wrapper" :class="{ 'social__wrapper--direct': type === 'direct', 'social__wrapper--reading': display === 'list' && type !== 'direct', 'social__wrapper--videos': display === 'videos', 'social__wrapper--scoped': isFeed }">
 		<!-- the first thing a new account sees; gone for good once closed -->
 		<FirstRun v-if="showInfo" @done="hideInfo" />
 
@@ -13,34 +13,42 @@
 		     single post's page, which the reader navigated to for that post -->
 		<Announcements v-if="type !== 'single-post' && type !== 'direct'" class="feed-notice" />
 
-		<!-- said once, on the pages where the reading it describes happens -->
-		<InterestsNotice v-if="showInterestsNotice" class="feed-notice" />
-
 		<!-- the three timelines that are the same place seen from three
 		     distances: switching between them is something a reader does while
-		     reading, not something they navigate to -->
-		<TimelineSwitcher
-			v-if="isFeed"
-			:options="scopes"
-			:value="scope"
-			:label="t('social', 'Which posts to show')"
-			@intent="prefetchScope" />
-		<InfoCard
-			v-if="scopeDescription"
-			:dismissKey="'feed-help-v1:' + scope"
-			:title="t('social', 'About this feed')"
-			class="timeline-scope-description feed-notice">
-			<p>{{ scopeDescription }}</p>
-		</InfoCard>
+		     reading, not something they navigate to, so the row stays at the
+		     top of the column while the posts scroll under it -->
+		<div v-if="isFeed" class="feed-scopes">
+			<TimelineSwitcher
+				:options="scopes"
+				:value="scope"
+				:label="t('social', 'Which posts to show')"
+				@intent="prefetchScope" />
+		</div>
 
-		<InterestsLearningBanner v-if="type === 'interests' && hasInterestsTab" class="feed-notice" />
-		<InfoCard
-			v-if="showRecommendationCoverageNote"
-			dismissKey="recommendation-coverage-v1"
-			:title="t('social', 'Available recommendations')"
-			class="timeline-recommendation-coverage feed-notice">
-			{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
-		</InfoCard>
+		<!-- the one-time notices, one at a time, in the column above the
+		     posts: the next waits until the one before it is put away -->
+		<Transition name="feed-notice" mode="out-in" appear>
+			<InterestsNotice v-if="oneTimeNotice === 'interests'" key="interests" class="feed-notice" />
+			<InfoCard
+				v-else-if="oneTimeNotice === 'coverage'"
+				key="coverage"
+				:dismissKey="COVERAGE_NOTICE"
+				:title="t('social', 'Available recommendations')"
+				class="timeline-recommendation-coverage feed-notice"
+				@dismiss="putAway(COVERAGE_NOTICE)">
+				{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
+			</InfoCard>
+			<InfoCard
+				v-else-if="oneTimeNotice === 'scope'"
+				:key="scopeNotice"
+				:dismissKey="scopeNotice"
+				:title="t('social', 'About this feed')"
+				class="timeline-scope-description feed-notice"
+				@dismiss="putAway(scopeNotice)">
+				<p>{{ scopeDescription }}</p>
+			</InfoCard>
+			<InterestsLearningBanner v-else-if="oneTimeNotice === 'learning'" key="learning" class="feed-notice" />
+		</Transition>
 
 		<PageHeader
 			class="timeline-heading-row"
@@ -217,6 +225,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import InfoCard from '../components/InfoCard.vue'
+import { claimNoticeForPage, infoCardDismissed } from '../services/infoCards.js'
 import eventBus, { NOTIFICATIONS_READ } from './../services/eventBus.js'
 import { rememberFilter, rememberedFilter } from './../services/notifications.js'
 import { hasInterestsFeed, isTracking } from './../services/interests.js'
@@ -236,6 +245,9 @@ const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkNa
 // screen most people open the app to
 const DirectMessages = defineAsyncComponent(() => import(/* webpackChunkName: "direct-messages" */'../components/DirectMessages.vue'))
 const FirstRun = defineAsyncComponent(() => import(/* webpackChunkName: "first-run" */'../components/FirstRun.vue'))
+
+/** the card that says a ranked feed has few posts to offer */
+const COVERAGE_NOTICE = 'recommendation-coverage-v1'
 
 export default {
 	name: 'Timeline',
@@ -281,6 +293,11 @@ export default {
 			markingAllRead: false,
 			/** whether the held senders are unfolded under their count */
 			showRequests: false,
+			COVERAGE_NOTICE,
+			/** the one-time cards put away while this page is open */
+			dismissedNotices: [],
+			/** whether this page is the one the learning notice was given to */
+			interestsNoticeHere: false,
 		}
 	},
 
@@ -516,13 +533,55 @@ export default {
 		 *
 		 * @return {boolean}
 		 */
-		showInterestsNotice() {
+		interestsNoticeDue() {
 			const interests = this.settingsStore.getServerData.interests
 
 			return !this.settingsStore.getServerData.public
 				&& isTracking(interests)
 				&& interests.noticeAcknowledged !== true
 				&& contextFor(this.type) !== null
+		},
+
+		/**
+		 * Whether the learning notice is on this page: due, and the first page
+		 * of the session it was due on. Unanswered, it is not repeated above
+		 * every other feed the reader opens; the next session asks again.
+		 *
+		 * @return {boolean}
+		 */
+		showInterestsNotice() {
+			return this.interestsNoticeDue && this.interestsNoticeHere
+		},
+
+		/** @return {string} the dismissal key of this scope's explanation */
+		scopeNotice() {
+			return 'feed-help-v1:' + this.scope
+		},
+
+		/**
+		 * Which one-time card stands above the posts: one at a time, so a page
+		 * never opens on a stack of them. The learning notice asks for an
+		 * answer and goes first; a feed's own explanation waits behind it.
+		 *
+		 * @return {string} `interests`, `coverage`, `scope`, `learning`, or '' for none
+		 */
+		oneTimeNotice() {
+			const open = (key) => !this.dismissedNotices.includes(key) && !infoCardDismissed(key)
+
+			if (this.showInterestsNotice) {
+				return 'interests'
+			}
+			if (this.showRecommendationCoverageNote && open(COVERAGE_NOTICE)) {
+				return 'coverage'
+			}
+			if (this.scopeDescription && open(this.scopeNotice)) {
+				return 'scope'
+			}
+			if (this.type === 'interests' && this.hasInterestsTab) {
+				return 'learning'
+			}
+
+			return ''
 		},
 
 		/**
@@ -688,6 +747,13 @@ export default {
 	},
 
 	watch: {
+		interestsNoticeDue: {
+			immediate: true,
+			handler() {
+				this.claimInterestsNotice()
+			},
+		},
+
 		// the tab, the history and a screen reader name the page by its heading
 		heading: {
 			immediate: true,
@@ -705,6 +771,7 @@ export default {
 			}
 			this.fetchListTitle()
 			this.fetchPendingRequests()
+			this.claimInterestsNotice()
 		},
 	},
 
@@ -730,6 +797,21 @@ export default {
 	},
 
 	methods: {
+		/** Asks whether the learning notice, when due, belongs to this page. */
+		claimInterestsNotice() {
+			this.interestsNoticeHere = this.interestsNoticeDue
+				&& claimNoticeForPage('interests-notice-v1', this.timelineKey)
+		},
+
+		/**
+		 * Lets the next one-time card through once one is put away.
+		 *
+		 * @param {string} key the card's dismissal key
+		 */
+		putAway(key) {
+			this.dismissedNotices.push(key)
+		},
+
 		choosePhotoLayout(layout) {
 			if (!['list', 'grid'].includes(layout)) {
 				return
@@ -927,11 +1009,15 @@ export default {
 	padding: 0;
 }
 
-/* Information cards share one calm, centered layout across every feed. */
+/*
+ * Information cards share one calm, centered layout across every feed, as wide
+ * as the posts under them: the reading column less its gutters, which is where
+ * a post's own box ends (TimelineList.scss).
+ */
 .social__wrapper > :deep(.feed-notice) {
 	position: relative;
 	box-sizing: border-box;
-	width: min(calc(100% - 2 * var(--social-column-gutter, 12px)), 760px);
+	width: min(calc(100% - 2 * var(--social-column-gutter)), calc(var(--social-reading-column) - 2 * var(--social-column-gutter)));
 	margin: 8px auto 12px;
 	padding: 12px 16px;
 	border: 1px solid var(--color-border);
@@ -1092,14 +1178,80 @@ export default {
 }
 
 .timeline-scope-description {
-	max-width: 72ch;
-	margin: calc(var(--default-grid-baseline) * 1) calc(var(--default-grid-baseline) * 2) calc(var(--default-grid-baseline) * 2);
 	color: var(--color-main-text);
 	font-size: 0.9rem;
 }
 
+/* a one-time card settles in rather than appearing in one step */
+.feed-notice-enter-active,
+.feed-notice-leave-active {
+	transition: opacity .3s ease, transform .3s ease;
+}
+
+.feed-notice-enter-from,
+.feed-notice-leave-to {
+	opacity: 0;
+	transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.feed-notice-enter-active,
+	.feed-notice-leave-active {
+		transition: none;
+	}
+}
+
+/*
+ * The scopes, kept within reach: the row sticks to the top of the column and
+ * the posts pass under it, seen through a frosted band. A reader who asked for
+ * less transparency, and a forced palette, get an opaque band instead.
+ */
+.feed-scopes {
+	position: sticky;
+	inset-block-start: 0;
+	z-index: 20;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: var(--social-column);
+	margin: 0 auto 8px;
+	padding: 6px var(--social-column-gutter);
+	background: color-mix(in srgb, var(--color-main-background) 78%, transparent);
+	backdrop-filter: blur(12px) saturate(1.2);
+	-webkit-backdrop-filter: blur(12px) saturate(1.2);
+
+	.switcher {
+		margin-block-end: 0;
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	.feed-scopes {
+		background: var(--color-main-background);
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
+}
+
+@media (forced-colors: active) {
+	.feed-scopes {
+		background: Canvas;
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+		border-block-end: 1px solid CanvasText;
+	}
+}
+
+/* how far down a sticky thing in the list starts, clear of the band above:
+   the band's padding and the switcher's 36px control */
+.social__wrapper--scoped {
+	--social-sticky-top: 48px;
+}
+
+/* the heading lines up with the posts and cards under it */
 .timeline-heading-row {
-	margin-inline: calc(var(--default-grid-baseline) * 2);
+	box-sizing: border-box;
+	width: min(calc(100% - 2 * var(--social-column-gutter)), calc(var(--social-column) - 2 * var(--social-column-gutter)));
+	margin-inline: auto;
 }
 
 .timeline-heading-row--compact {
@@ -1268,7 +1420,7 @@ export default {
    looked at, not read. Everything in the column — composer, switcher,
    the Shorts bar, posts — follows the one property. */
 .social__wrapper--reading {
-	--social-column: 616px;
+	--social-column: var(--social-reading-column);
 }
 
 /* video cards are looked at four to a row on a desk */
