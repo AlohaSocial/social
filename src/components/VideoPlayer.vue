@@ -1412,7 +1412,7 @@ export default {
 	inset-block-end: 0;
 	padding: 24px 8px 4px;
 	background: linear-gradient(to top, rgb(0 0 0 / 75%), transparent);
-	transition: opacity 0.2s ease;
+	transition: opacity var(--social-motion-base) var(--social-ease);
 
 	.video-player--idle & {
 		opacity: 0;

@@ -8,6 +8,7 @@ import pinia from './store/index.js'
 import ProfilePageIntegration from './views/ProfilePageIntegration.vue'
 import { generateFilePath } from '@nextcloud/router'
 import { configureSocialProfileApp, registerProfileSection } from './services/profileSections.js'
+import './styles/motion.css'
 
 const requestToken = window.OC?.requestToken
 if (requestToken) {

@@ -286,7 +286,7 @@ export default {
 
 .collapse-enter-active,
 .collapse-leave-active {
-	transition: opacity 0.2s ease;
+	transition: opacity var(--social-motion-base) var(--social-ease);
 }
 
 .collapse-enter-from,

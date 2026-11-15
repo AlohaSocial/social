@@ -221,7 +221,7 @@ export default {
 	/* the post underneath is the point: nothing here ever takes a click */
 	pointer-events: none;
 	opacity: 1;
-	transition: opacity .3s ease;
+	transition: opacity var(--social-motion-base) var(--social-ease);
 }
 
 .first-post--leaving {
@@ -272,7 +272,7 @@ export default {
 	font-weight: 600;
 	text-align: center;
 	/* the same curve the empty-content artwork settles on */
-	animation: first-post-settle .45s cubic-bezier(.22, 1, .36, 1) both;
+	animation: first-post-settle var(--social-motion-slow) var(--social-ease) both;
 }
 
 .first-post__emoji {

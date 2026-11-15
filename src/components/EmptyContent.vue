@@ -130,7 +130,7 @@ export default {
 .timeline-empty__illustration {
 	display: block;
 	/* it arrives with the same movement the big ones do */
-	animation: empty-content-settle .45s cubic-bezier(.22, 1, .36, 1) both;
+	animation: empty-content-settle var(--social-motion-slow) var(--social-ease) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -147,7 +147,7 @@ export default {
 	max-width: 100% !important;
 	max-height: none !important;
 	/* it arrives at its own size and settles in */
-	animation: empty-content-settle .45s cubic-bezier(.22, 1, .36, 1) both;
+	animation: empty-content-settle var(--social-motion-slow) var(--social-ease) both;
 }
 
 @keyframes empty-content-settle {

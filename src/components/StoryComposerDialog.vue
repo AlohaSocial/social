@@ -695,7 +695,7 @@ export default {
 	margin-inline: auto;
 	padding: 10%;
 	border-radius: var(--border-radius-large, 12px);
-	transition: background .3s ease;
+	transition: background var(--social-motion-slow) var(--social-ease);
 }
 
 .story-composer__card-text {
@@ -705,7 +705,7 @@ export default {
 	text-align: center;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-	transition: font-size .2s ease;
+	transition: font-size var(--social-motion-base) var(--social-ease);
 }
 
 .story-composer__words {
@@ -727,7 +727,7 @@ export default {
 	border-radius: 50%;
 	outline: 2px solid transparent;
 	cursor: pointer;
-	transition: transform .15s ease;
+	transition: transform var(--social-motion-fast) var(--social-ease);
 
 	&[aria-checked="true"] {
 		outline-color: var(--color-primary-element);
@@ -758,7 +758,7 @@ export default {
 	line-height: 1;
 	cursor: grab;
 	user-select: none;
-	animation: story-sticker-in .3s cubic-bezier(.3, 1.5, .5, 1) both;
+	animation: story-sticker-in var(--social-motion-slow) var(--social-ease-spring) both;
 
 	&--text {
 		padding: .35em .6em;
@@ -811,7 +811,7 @@ export default {
 	background: var(--color-background-hover);
 	font-size: 22px;
 	cursor: pointer;
-	transition: transform .15s ease;
+	transition: transform var(--social-motion-fast) var(--social-ease);
 
 	&:hover {
 		transform: scale(1.15);

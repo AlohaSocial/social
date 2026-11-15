@@ -12,6 +12,7 @@ import { createApp } from 'vue'
 import { generateFilePath } from '@nextcloud/router'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import Signup from './views/Signup.vue'
+import './styles/motion.css'
 
 const requestToken = window.OC?.requestToken
 if (requestToken) {

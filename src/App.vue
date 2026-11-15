@@ -664,7 +664,7 @@ a.external_link {
 
 .pending-enter-active,
 .pending-leave-active {
-	transition: opacity .12s linear;
+	transition: opacity var(--social-motion-fast) linear;
 }
 
 .pending-enter-from,
@@ -677,13 +677,13 @@ a.external_link {
 .page-enter-active,
 .page-forward-enter-active,
 .page-back-enter-active {
-	transition: opacity .2s ease-out, transform .2s cubic-bezier(.2, 0, .1, 1);
+	transition: opacity var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease);
 }
 
 .page-leave-active,
 .page-forward-leave-active,
 .page-back-leave-active {
-	transition: opacity .13s ease-in, transform .13s ease-in;
+	transition: opacity var(--social-motion-fast) var(--social-ease), transform var(--social-motion-fast) var(--social-ease);
 }
 
 /* no direction to give -- the same page, or two pages the sidebar does not
@@ -732,11 +732,11 @@ a.external_link {
 }
 
 ::view-transition-old(social-page) {
-	animation: page-vt-out .13s ease-in both;
+	animation: page-vt-out var(--social-motion-fast) var(--social-ease) both;
 }
 
 ::view-transition-new(social-page) {
-	animation: page-vt-in .2s cubic-bezier(.2, 0, .1, 1) both;
+	animation: page-vt-in var(--social-motion-base) var(--social-ease) both;
 }
 
 /* Everything that is not the page -- the sidebar, the header -- is the same
@@ -772,7 +772,7 @@ a.external_link {
 	.page-forward-leave-active,
 	.page-back-enter-active,
 	.page-back-leave-active {
-		transition: opacity .12s linear;
+		transition: opacity var(--social-motion-fast) linear;
 	}
 
 	.page-enter-from,
@@ -851,7 +851,7 @@ img.emoji {
 .list-enter-active,
 .list-leave-active,
 .list-move {
-	transition: opacity .2s ease, transform .2s ease;
+	transition: opacity var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease);
 }
 
 .list-enter-from,

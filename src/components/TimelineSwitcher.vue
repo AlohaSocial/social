@@ -429,7 +429,7 @@ export default {
 	box-shadow: var(--social-elevation-resting);
 	// overshoots and settles, which is what makes it read as a thing that
 	// moved rather than a colour that changed
-	transition: transform .42s cubic-bezier(.22, 1.4, .36, 1);
+	transition: transform var(--social-motion-slow) var(--social-ease-spring);
 }
 
 /* Written from inside the track, and every state of it said out loud.
@@ -466,7 +466,7 @@ export default {
 	font-weight: 500;
 	white-space: nowrap;
 	cursor: pointer;
-	transition: color .2s ease, background-color .2s ease, transform .2s cubic-bezier(.22, 1.2, .48, 1);
+	transition: color var(--social-motion-base) var(--social-ease), background-color var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease-spring);
 
 	// the pill is the only background in the control, in every state
 	&,
@@ -507,12 +507,12 @@ export default {
 	// an icon is a fixed glyph: squeezing it to fit is how it ends up drawn
 	// over the words beside it
 	flex: 0 0 auto;
-	transition: transform .2s cubic-bezier(.22, 1.2, .48, 1);
+	transition: transform var(--social-motion-base) var(--social-ease-spring);
 }
 
 /* the icon of the one you just chose gives a little kick */
 .switcher__option--active .switcher__icon {
-	animation: switcher-pop .45s cubic-bezier(.34, 1.56, .64, 1);
+	animation: switcher-pop var(--social-motion-slow) var(--social-ease-spring);
 }
 
 /* and the globe turns, because it is a globe */

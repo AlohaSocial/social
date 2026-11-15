@@ -6,6 +6,7 @@
 import { createApp } from 'vue'
 import pinia from './store/index.js'
 import OAuth2Authorize from './views/OAuth2Authorize.vue'
+import './styles/motion.css'
 
 const requestToken = window.OC?.requestToken
 if (requestToken) {

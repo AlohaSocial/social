@@ -265,7 +265,7 @@ export default {
 .collapse-leave-active {
 	overflow: hidden;
 	max-height: 120px;
-	transition: opacity .2s ease, transform .2s ease, max-height .3s ease-out, padding .3s ease-out;
+	transition: opacity var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease), max-height var(--social-motion-slow) var(--social-ease), padding var(--social-motion-slow) var(--social-ease);
 }
 
 .collapse-enter-from,
@@ -279,16 +279,16 @@ export default {
 
 /* an inserted row pushes the others down instead of displacing them */
 .collapse-move {
-	transition: transform .2s ease;
+	transition: transform var(--social-motion-base) var(--social-ease);
 }
 
 /* "nothing pending" arrives as the last row finishes collapsing, not on top of it */
 .empty-enter-active {
-	transition: opacity .2s ease .25s, transform .2s ease .25s;
+	transition: opacity var(--social-motion-base) var(--social-ease) .25s, transform var(--social-motion-base) var(--social-ease) .25s;
 }
 
 .empty-leave-active {
-	transition: opacity .15s ease;
+	transition: opacity var(--social-motion-fast) var(--social-ease);
 }
 
 .empty-enter-from,
