@@ -14,6 +14,7 @@ use OC\DB\SchemaWrapper;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Migration\Version1000Date20221118000002;
 use OCA\Social\Migration\Version1000Date20261011500100;
+use OCA\Social\Migration\Version1000Date20261114000001;
 use OCA\Social\Tests\Integration\Helper\RowSeeder;
 use OCP\IDBConnection;
 use OCP\Migration\IMigrationStep;
@@ -30,7 +31,8 @@ use PHPUnit\Framework\TestCase;
  *
  * The tables are changed and put back here, so a failure leaves the schema
  * current: `tearDown()` runs the squash once more, which restores whatever
- * the test removed.
+ * the test removed, and then the later steps that drop what the squash still
+ * creates, so no table of a removed feature outlives the test.
  */
 class UpgradeFromOldReleasesTest extends TestCase {
 	private const PREFIX = 'itest-upgrade-old-';
@@ -55,6 +57,8 @@ class UpgradeFromOldReleasesTest extends TestCase {
 
 		$this->runStep(Server::get(Version1000Date20221118000002::class));
 		$this->runStep(Server::get(Version1000Date20261011500100::class));
+		// the squash still creates `social_portfolio`, which this step drops
+		$this->runStep(Server::get(Version1000Date20261114000001::class));
 		parent::tearDown();
 	}
 
