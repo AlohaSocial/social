@@ -59,6 +59,14 @@ class ImportQueueService {
 	public const FAILED = 'import-failed';
 	/** The code of a run whose kept upload could not be read back. */
 	public const FILE_MISSING = 'import-file-missing';
+	/**
+	 * How long a running import may go without writing its progress before
+	 * it counts as dead. A run writes every couple of seconds; one whose
+	 * process was killed (memory limit, time limit, a restart) never reaches
+	 * its `finally`, and would otherwise stay running, and refuse every
+	 * later import of its kind, for good.
+	 */
+	public const STALE_SECONDS = 3600;
 
 	public function __construct(
 		private ImportsRequest $importsRequest,
@@ -87,6 +95,7 @@ class ImportQueueService {
 		if (!in_array($kind, ImportJob::KINDS, true)) {
 			throw new InvalidResourceException('"' . $kind . '" is not something that can be imported');
 		}
+		$this->settleStale($userId);
 		if ($this->importsRequest->hasActive($userId, $kind)) {
 			throw new MoveErrorException('an import of this kind is already running; wait for it to finish', 'import-running');
 		}
@@ -108,11 +117,15 @@ class ImportQueueService {
 	}
 
 	public function hasActive(string $userId, string $kind): bool {
+		$this->settleStale($userId);
+
 		return $this->importsRequest->hasActive($userId, $kind);
 	}
 
 	/** @return ImportJob[] one account's imports, newest first */
 	public function listFor(string $userId): array {
+		$this->settleStale($userId);
+
 		return $this->importsRequest->getByUser($userId);
 	}
 
@@ -122,6 +135,9 @@ class ImportQueueService {
 	 */
 	public function dismiss(string $userId, int $id): bool {
 		$job = $this->importsRequest->getById($id);
+		if ($job !== null && $job->getUserId() === $userId && $this->isStale($job)) {
+			$this->fail($job);
+		}
 		if ($job === null || $job->getUserId() !== $userId || $job->isActive()) {
 			return false;
 		}
@@ -129,6 +145,28 @@ class ImportQueueService {
 		$this->forget($job);
 
 		return $this->importsRequest->delete($id);
+	}
+
+	/** Records every dead run of an account as failed, and deletes what it kept. */
+	private function settleStale(string $userId): void {
+		foreach ($this->importsRequest->getStaleRunning($userId, time() - self::STALE_SECONDS) as $job) {
+			$this->fail($job);
+		}
+	}
+
+	private function isStale(ImportJob $job): bool {
+		return $job->getStatus() === ImportJob::STATUS_RUNNING
+			&& $job->getUpdated() < time() - self::STALE_SECONDS;
+	}
+
+	private function fail(ImportJob $job): void {
+		$this->logger->warning('[ImportQueueService] an import stopped without an outcome', [
+			'import' => $job->getId(), 'kind' => $job->getKind(), 'user' => $job->getUserId(),
+		]);
+		$job->setStatus(ImportJob::STATUS_FAILED);
+		$job->setReport(array_merge($job->getReport(), ['code' => self::FAILED]));
+		$this->forget($job);
+		$this->importsRequest->update($job);
 	}
 
 	/**

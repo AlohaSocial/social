@@ -409,7 +409,7 @@ class ImportQueueServiceTest extends TestCase {
 
 	public function testDismissTakesOnlyTheOwnersFinishedImports(): void {
 		$done = (new ImportJob())->setId(1)->setUserId('alice')->setStatus(ImportJob::STATUS_DONE);
-		$running = (new ImportJob())->setId(2)->setUserId('alice')->setStatus(ImportJob::STATUS_RUNNING);
+		$running = (new ImportJob())->setId(2)->setUserId('alice')->setStatus(ImportJob::STATUS_RUNNING)->setUpdated(time());
 		$bobs = (new ImportJob())->setId(3)->setUserId('bob')->setStatus(ImportJob::STATUS_DONE);
 		$this->importsRequest->method('getById')->willReturnMap([[1, $done], [2, $running], [3, $bobs], [4, null]]);
 		$this->importsRequest->method('delete')->with(1)->willReturn(true);
@@ -418,5 +418,40 @@ class ImportQueueServiceTest extends TestCase {
 		$this->assertFalse($this->service->dismiss('alice', 2));
 		$this->assertFalse($this->service->dismiss('alice', 3));
 		$this->assertFalse($this->service->dismiss('alice', 4));
+	}
+
+	/**
+	 * A run whose process was killed never records an outcome. Once it has
+	 * not written its progress for an hour it is failed, its upload deleted,
+	 * and the account may import that kind again.
+	 */
+	public function testARunThatDiedIsFailedAndNoLongerBlocksTheNextImport(): void {
+		$dead = (new ImportJob())->setId(7)->setUserId('alice')->setKind(ImportJob::KIND_FOLLOWS)
+			->setStatus(ImportJob::STATUS_RUNNING)->setFile('kept.csv')->setUpdated(time() - ImportQueueService::STALE_SECONDS - 1);
+		$this->kept['kept.csv'] = 'x@y.example';
+		$this->importsRequest->expects($this->once())->method('getStaleRunning')
+			->with('alice', $this->lessThanOrEqual(time() - ImportQueueService::STALE_SECONDS))
+			->willReturn([$dead]);
+		$this->importsRequest->method('hasActive')->willReturn(false);
+
+		$this->assertFalse($this->service->hasActive('alice', ImportJob::KIND_FOLLOWS));
+		$this->assertSame(ImportJob::STATUS_FAILED, $dead->getStatus());
+		$this->assertSame(ImportQueueService::FAILED, $dead->getReport()['code']);
+		$this->assertSame(['kept.csv'], $this->deleted);
+		$this->assertSame('', $dead->getFile());
+		$this->assertCount(1, $this->writes);
+	}
+
+	public function testADeadRunCanBeDismissedButALiveOneCannot(): void {
+		$dead = (new ImportJob())->setId(1)->setUserId('alice')->setStatus(ImportJob::STATUS_RUNNING)
+			->setUpdated(time() - ImportQueueService::STALE_SECONDS - 1);
+		$live = (new ImportJob())->setId(2)->setUserId('alice')->setStatus(ImportJob::STATUS_RUNNING)
+			->setUpdated(time() - 60);
+		$this->importsRequest->method('getById')->willReturnMap([[1, $dead], [2, $live]]);
+		$this->importsRequest->method('delete')->with(1)->willReturn(true);
+
+		$this->assertTrue($this->service->dismiss('alice', 1));
+		$this->assertFalse($this->service->dismiss('alice', 2));
+		$this->assertSame(ImportJob::STATUS_RUNNING, $live->getStatus());
 	}
 }
