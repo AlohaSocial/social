@@ -6,17 +6,6 @@
 	<div :class="{'icon-loading': !accountLoaded && !awaitingLookUp}" class="social__wrapper">
 		<ProfileInfo v-if="accountLoaded && accountInfo" :uid="uid" />
 
-		<!-- your own profile is a page you post from, the way the home
-		     timeline is. Somebody else's is a page you read -->
-		<Composer
-			v-if="isOwnProfile && !timelineStore.composerDisplayStatus"
-			oneLine
-			:listenForIntents="false" />
-		<DraftsButton
-			v-if="isOwnProfile"
-			class="compose-drafts"
-			:disabled="timelineStore.composerDisplayStatus" />
-
 		<div class="profile-sections">
 			<router-view v-if="accountLoaded && accountInfo && profileRouteReady" name="details" :profileLayout="accountInfo.profile_layout" />
 		</div>
@@ -53,9 +42,8 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import { generateUrl } from '@nextcloud/router'
 import AlohaScene from '../components/illustrations/AlohaScene.vue'
-import DraftsButton from '../components/DraftsButton.vue'
 import ProfileInfo from './../components/ProfileInfo.vue'
-import { defineAsyncComponent, ref } from 'vue'
+import { ref } from 'vue'
 import logger from '../services/logger.js'
 import { setPageTitle } from '../services/pageTitle.js'
 import { mapStores } from 'pinia'
@@ -66,14 +54,10 @@ import { useServerData } from '../composables/useServerData.js'
 import { isBlueskyHandle } from '../utils/accountLocality.js'
 import { recordRecommendationProfileVisit } from '../services/interests.js'
 
-const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
-
 export default {
 	name: 'Profile',
 	components: {
-		Composer,
 		AlohaScene,
-		DraftsButton,
 		NcButton,
 		NcEmptyContent,
 		ProfileInfo,
@@ -115,27 +99,6 @@ export default {
 		/** @return {import('../types/Mastodon.js').Account} */
 		currentAccount() {
 			return this.accountStore.currentAccount
-		},
-
-		/**
-		 * Whether this profile is the reader's own.
-		 *
-		 * Every profile used to carry a composer. On somebody else's it came
-		 * pre-filled with a mention of them and set to a direct message, which
-		 * made a page for reading an account look like a page for writing to
-		 * them — and put a box asking "what would you like to share?" on a
-		 * stranger's profile.
-		 *
-		 * The sub-routes are excluded with it: a list of followers is not a
-		 * place to post from either.
-		 *
-		 * @return {boolean}
-		 */
-		isOwnProfile() {
-			return Boolean(this.accountInfo)
-				&& Boolean(this.currentAccount)
-				&& this.accountInfo.acct === this.currentAccount.acct
-				&& this.$route.name === 'profile'
 		},
 
 		/**
@@ -260,11 +223,6 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.compose-drafts {
-	display: flex;
-	justify-content: flex-end;
-}
-
 .social__wrapper {
 	max-width: var(--social-column);
 	margin: 0 auto;

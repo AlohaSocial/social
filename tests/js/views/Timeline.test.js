@@ -367,24 +367,13 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'tags', params: { tag: 'nextcloud' } })
 		expect(wrapper.find('h1').text()).toBe('#nextcloud')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('tags')
-		expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
 	})
 
-	it('offers a single line backed by the same composer on the home feed', () => {
-		const composer = mountTimeline().findComponent(ComposerStub)
-		expect(composer.props('oneLine')).toBe('')
-		expect(composer.props('listenForIntents')).toBe(false)
-	})
-
-	it('offers the saved drafts beside the compact composer, and keeps them while the popup is open', async () => {
-		const wrapper = mountTimeline({ params: { type: 'home' } })
-		const drafts = wrapper.findComponent({ name: 'DraftsButton' })
-		expect(drafts.exists()).toBe(true)
-		expect(drafts.props('disabled')).toBe(false)
-		timelineStore.setComposerDisplayStatus(true)
-		await nextTick()
-		expect(wrapper.findComponent({ name: 'DraftsButton' }).props('disabled')).toBe(true)
-		expect(mountTimeline({ params: { type: 'notifications' } }).findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
+	// New post in the sidebar is where a post is written; drafts are on Settings
+	it.each(['home', 'timeline', 'federated', 'favourites', 'bookmarks'])('has no composer of its own on %s', (type) => {
+		const wrapper = mountTimeline({ params: { type } })
+		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
+		expect(wrapper.findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
 	})
 
 	it('uses the conversation interface instead of the ordinary timeline composer for direct messages', () => {
@@ -397,14 +386,6 @@ describe('Timeline', () => {
 	it('reads a list in the narrow column and shows a grid in the wide one', () => {
 		expect(mountTimeline({ params: { type: 'home' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
 		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
-	})
-
-	it('unmounts the compact editor while the shared popup is open', async () => {
-		const wrapper = mountTimeline({ params: { type: 'home' } })
-		expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
-		timelineStore.setComposerDisplayStatus(true)
-		await nextTick()
-		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 	})
 
 	it('hides the composer on the notifications timeline and titles it', () => {
@@ -1113,12 +1094,11 @@ describe('Timeline', () => {
 			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		})
 
-		it.each(['', 'timeline'])('keeps %s off the video layout and offers the shared composer action', (type) => {
+		it.each(['', 'timeline'])('keeps %s off the video layout', (type) => {
 			const wrapper = mountTimeline({ params: { type } })
 
 			expect(wrapper.findComponent(TimelineListStub).props('display')).not.toBe('videos')
 			expect(wrapper.find('.social__wrapper').classes()).not.toContain('social__wrapper--videos')
-			expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
 		})
 
 		it('offers a media-first entry on Photos instead of the text-only field', () => {
@@ -1127,6 +1107,9 @@ describe('Timeline', () => {
 			const upload = wrapper.findComponent({ name: 'MediaUploadButton' })
 			expect(upload.props('accept')).toBe('image/*,video/*')
 			expect(upload.props('multiple')).toBe(true)
+			// in the header row with the layout switcher, as Videos has it
+			expect(wrapper.find('.timeline-heading-row .photo-compose-actions').exists()).toBe(true)
+			expect(wrapper.find('.photo-compose-actions').findComponent({ name: 'DraftsButton' }).exists()).toBe(true)
 		})
 
 		it.each(['', 'timeline', 'federated', 'notifications'])('draws %s as a list', (type) => {
