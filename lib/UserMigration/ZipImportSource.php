@@ -64,7 +64,7 @@ class ZipImportSource implements IImportSource {
 			throw $this->tooLarge($path);
 		}
 
-		$contents = $this->zip->getFromName($path, 0, $this->maxFileBytes + 1);
+		$contents = $this->zip->getFromName($path);
 		if ($contents === false) {
 			throw new UserMigrationException($path . ' is not in this archive');
 		}

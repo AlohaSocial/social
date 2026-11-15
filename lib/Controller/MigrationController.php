@@ -68,6 +68,12 @@ use Throwable;
 class MigrationController extends ClientApiController {
 	/** A refused upload says which limit it hit rather than "failed". */
 	private const IMPORT_MAX_SIZE = 100 * 1024 * 1024;
+	/**
+	 * The largest list of accounts, posts or domains taken: the run reads
+	 * the whole file into memory, and the most entries it works through
+	 * (`MigrationService::MAX_IMPORT_ENTRIES`) fit in a fraction of this.
+	 */
+	private const LIST_MAX_SIZE = 10 * 1024 * 1024;
 
 	public function __construct(
 		IRequest $request,
@@ -637,9 +643,10 @@ class MigrationController extends ClientApiController {
 		if ($file === [] || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
 			return self::refusal('no file was uploaded', 'no-file', Http::STATUS_BAD_REQUEST);
 		}
-		if (($file['size'] ?? 0) > self::IMPORT_MAX_SIZE) {
+		$maxSize = $kind === ImportJob::KIND_POSTS ? self::IMPORT_MAX_SIZE : self::LIST_MAX_SIZE;
+		if (($file['size'] ?? 0) > $maxSize) {
 			return self::refusal(
-				'this file is larger than ' . (self::IMPORT_MAX_SIZE / 1024 / 1024) . ' MB',
+				'this file is larger than ' . ($maxSize / 1024 / 1024) . ' MB',
 				'file-too-large',
 				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
 			);
