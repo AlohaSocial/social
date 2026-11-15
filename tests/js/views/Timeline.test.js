@@ -308,7 +308,7 @@ describe('Timeline', () => {
 	it.each([
 		[{ name: 'timeline', params: {} }, 'Home timeline', false],
 		[{ name: 'timeline', params: { type: 'direct' } }, 'Direct messages', false],
-		[{ name: 'timeline', params: { type: 'notifications' } }, 'Activities', true],
+		[{ name: 'timeline', params: { type: 'notifications' } }, 'Activities', false],
 		[{ name: 'timeline', params: { type: 'timeline' } }, 'Local timeline', false],
 		[{ name: 'timeline', params: { type: 'federated' } }, 'Global timeline', false],
 		[{ name: 'timeline', params: { type: 'favourites' } }, 'Liked posts', false],

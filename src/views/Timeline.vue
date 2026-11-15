@@ -563,7 +563,7 @@ export default {
 		 * the view for a screen reader without changing what anyone sees.
 		 */
 		headingIsVisible() {
-			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky' || this.type === 'notifications'
+			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky'
 		},
 
 		/**
