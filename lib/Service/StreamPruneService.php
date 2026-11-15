@@ -342,7 +342,7 @@ class StreamPruneService {
 			// the outbound queue keeps its finished rows for a while so a post can
 			// say where it got to; pruning marks the exhausted ones and applies
 			// that same retention, nothing shorter
-			$this->requestQueueRequest->abandonExhausted();
+			$this->requestQueueRequest->abandonExhausted(RequestQueueService::MAX_TRIES, time() - RequestQueueService::MAX_AGE);
 			$pruned['requests'] = $this->requestQueueRequest->deleteFinished(time() - RequestQueueService::RETENTION_SECONDS);
 			$pruned['items'] = $this->streamQueueRequest->deleteExhausted()
 				+ $this->streamQueueRequest->deleteCompleted();

@@ -65,7 +65,6 @@ class BoundedQueriesTest extends TestCase {
 		'InstanceStatsRequest::remoteHosts' => 'one row per remote instance (GROUP BY host), for the instance statistics and /api/v1/instance/peers',
 		'RequestQueueRequest::countByStatus' => 'one row per delivery status (GROUP BY status): four at most',
 		'RequestQueueRequest::getByObject' => 'the deliveries of one activity: one per inbox it went to',
-		'RequestQueueRequest::getFromToken' => 'the deliveries of one activity: one per inbox it went to',
 		'RequestQueueRequest::getHeldByObject' => 'the held deliveries of one activity: one per inbox it went to',
 		'StreamMedia::updateLocalAttachmentCopies' => 'the local posts carrying one uploaded file',
 		'StreamTrendBuckets::trendHoursStoredSince' => 'the public statuses stored since the previous trends pass, twelve minutes before: the `creation` window is the bound',

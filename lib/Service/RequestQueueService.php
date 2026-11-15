@@ -60,6 +60,19 @@ class RequestQueueService {
 	public const MAX_TRIES = Backoff::OUTBOUND_MAX_TRIES;
 
 	/**
+	 * A request still on standby this long after it was queued is abandoned,
+	 * whatever its try count.
+	 *
+	 * The tries alone never end the rows of an instance that has gone away:
+	 * while the circuit breaker holds a host back its rows are postponed
+	 * without spending a try, and the breaker only lets one row through per
+	 * hold. Three days is the schedule above plus a cron interval per attempt,
+	 * with room to spare, so no row a reachable peer would still have taken
+	 * is cut short.
+	 */
+	public const MAX_AGE = 3 * 24 * 3600;
+
+	/**
 	 * How long a delivered or abandoned request is kept before it is purged.
 	 *
 	 * A finished row used to be deleted the moment it finished, which made the
@@ -234,7 +247,8 @@ class RequestQueueService {
 	 * @throws NoHighPriorityRequestException
 	 */
 	public function getPriorityRequest(string $token): RequestQueue {
-		$requests = $this->requestQueueRequest->getFromToken($token);
+		// the two most urgent rows are all the decision below looks at
+		$requests = $this->requestQueueRequest->getFromToken($token, -1, 2);
 
 		if (sizeof($requests) === 0) {
 			throw new EmptyQueueException();
@@ -293,6 +307,32 @@ class RequestQueueService {
 		}
 
 		return $this->requestQueueRequest->getFromToken($token, $status);
+	}
+
+	/** Whether anything under a token is still on standby. */
+	public function hasStandby(string $token): bool {
+		return $token !== '' && $this->requestQueueRequest->hasToken($token, RequestQueue::STATUS_STANDBY);
+	}
+
+	/**
+	 * Up to `$limit` standby rows under a token that are due now, and only the
+	 * ones never tried when `$neverTried` says so.
+	 *
+	 * @return list<RequestQueue>
+	 */
+	public function getDueFromToken(string $token, bool $neverTried, int $limit): array {
+		if ($token === '' || $limit < 1) {
+			return [];
+		}
+
+		return $this->requestQueueRequest->getDueFromToken($token, time(), $neverTried, $limit);
+	}
+
+	/**
+	 * Whether an author still has deliveries waiting or going out.
+	 */
+	public function hasPendingByAuthor(string $actorId): bool {
+		return $this->requestQueueRequest->hasPendingByAuthor($actorId);
 	}
 
 	/**

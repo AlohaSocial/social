@@ -193,8 +193,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_tag_hour` | The hourly buckets the trend windows are counted from (`StreamTrendBuckets`, `Version1000Date20261113200002`): per `hashtag` (VARCHAR 127, the width of `social_stream_tag.hashtag`) and `hour_start` (BIGINT, the Unix time the hour starts, indexed), how many public statuses published in that hour carry the tag (`uses`). A bucket is always recounted from the posts, never incremented; only the hours of the widest window and after are kept |
 | `social_tag_dirty` | The hours (`hour_start`, primary key) a deletion or an edit may have changed since their buckets were counted, marked by `StreamDeletion` and `StreamRequest::update()` while the row still says when it was published, and taken off by the next trends pass, which recounts them |
 | `social_instance` | Known federated instances (version, metadata) |
-| `social_req_queue` | Outbound ActivityPub delivery queue, indexed for the drain's own sort on `(status, priority, tries, last)` |
-| `social_host_breaker` | The delivery circuit breaker: one row per peer that failed within the last hour, with its consecutive failures and the moment it is worth asking again, in unix seconds. Read once per drain by `ActivityService` and by `StreamQueueService` (`HostBreaker`), so a row addressed to a dead peer is held back without spending a timeout; cleared when the peer answers, forgotten an hour after its last failure (`Cron\Queue`) |
+| `social_req_queue` | Outbound ActivityPub delivery queue, indexed for the drain's own sort on `(status, priority, tries, last)`. `creation` is when a row was queued, read on `(status, creation)` to give up on a row older than the whole retry schedule (`RequestQueueService::MAX_AGE`); `(author_prim, status)` says whether a deleted account still has deliveries waiting |
+| `social_host_breaker` | The delivery circuit breaker: one row per peer that failed within the last four hours (`HostBreaker::STRIKE_WINDOW`), with its consecutive failures and the moment it is worth asking again, in unix seconds. Read once per drain by `ActivityService` and by `StreamQueueService` (`HostBreaker`), so a row addressed to a dead peer is held back without spending a timeout; cleared when the peer answers, forgotten four hours after its last failure (`Cron\Queue`) |
 | `social_stream` | Core content table: posts, notes, activities. Nine JSON-in-TEXT columns (`to_array`, `cc`, `bcc`, `hashtags`, `tags`, `details`, `instances`, `attachments`, `cache`) beside the scalar ones; `source` holds the ActivityPub wire object verbatim, and `archived` — a post its author has put away. `count_replies`, `count_likes`, `count_boosts` and `count_dislikes` (INTEGER, default 0) are the post's counters, written only by `StreamRequest::recount()` and laid over the matching `details` keys on read. `poll_ends_at` (BIGINT, indexed, NULL on everything but a poll with an end) is a poll's `endTime` as a Unix time, copied out on every save and edit, so the closed-poll sweep reads exactly the polls that closed in its window, earliest first. `poll_ends_at` (BIGINT, indexed, NULL on everything but a poll with an end) is a poll's `endTime` as a Unix time, copied out on every save and edit, so the closed-poll sweep reads exactly the polls that closed in its window, earliest first. `author_host` (VARCHAR 191, indexed) is the lower-cased host of `attributed_to`, written on every save and author rewrite and backfilled by `Cron\StreamAuthorHosts`; NULL on a row the job has not reached, `''` for an id with no host. `root_prim` (VARCHAR 32, indexed) is the prim of the root of a direct message's thread, written when the message is stored (`ConversationsRequest::storeRoot()`) and backfilled by `Cron\ThreadRoots`; NULL on every other post and on a direct message the job has not reached. `sanitized` (SMALLINT, default 0, `Version1000Date20261110000002`) is the `HtmlSanitizer::version()` the stored `content` was sanitized under: `StreamRequest` sanitizes `content` on every insert and update and stamps it, and 0 is a row written before the column `source_digest` (TEXT, NULL until written, `Version1000Date20261113200001`) is what a read takes out of `source` beside the columns — the post's custom emoji and the like, share and reply totals its origin stated — as a small JSON object (`Stream::sourceDigestOf()`), written by `setPostFields()` on every insert and update with `source` and backfilled by `Cron\SourceDigests`; a row that has one is read without decoding `source`, a row that has none (NULL) is read out of `source` as before |
 | `social_discover_cat` | The subjects an instance says Explore is about: a name and the hashtags it means, in the order an administrator put them in |
 | `social_trend_review` | What a moderator has decided about something that is trending: one row per rejected (or approved) tag, link or status |
@@ -291,6 +291,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_ext_invite` | Invitation links for external users: the token as it is sent, who made it, how many registrations it admits (`max_uses`, 0 for any number), how many it has (`uses`) and when it expires (`expires`, unix seconds, 0 for never) |
 
 `Version1000Date20261114000002` adds `return_to`, `code_hash` and `code_attempts` to `social_ext_signup`, so a registration made from a phone app can be confirmed in the page it was made on and lead back to the app — see *Registering from an app* under [External users](#external-users). All three are empty or 0 for registrations made before, which then confirm by their link only.
+
+`Version1000Date20261116000001` adds `creation` to `social_req_queue` with the indexes `(status, creation)` and `(author_prim, status)`, and dates the rows already queued with the time of the upgrade — see *Delivering at scale*.
 
 `Version1000Date20260927000010` adds the three tables of self-registered external users, `social_ext_user`, `social_ext_signup` and `social_ext_invite` — see [External users](#external-users).
 
@@ -1524,6 +1526,10 @@ that holds nothing, so there it was per-pass still. It is in the database now
 (`social_host_breaker`, `HostBreakerRequest`), shared between the cron, the
 async worker and every `social:worker` process, with the wait doubling per
 consecutive failure up to an hour and clearing the moment the host answers. A
+strike counts for four hours (`HostBreaker::STRIKE_WINDOW`), longer than the
+longest hold: a host held for the hour is asked again only once it is over,
+and a strike that lapsed at the hour sent a dead host back to a one-minute
+hold every hour. A
 peer that answers a delivery 429 or 503 with `Retry-After` — seconds, or an
 HTTP date (`CurlService::retryAfter()`, carried on the
 `RequestContentException`) — is left alone at least as long as it asked, and
@@ -1532,7 +1538,29 @@ week does not take a peer out of federation for one; the strike counts as any
 other. A
 drain reads the failing hosts once, when it starts (`manageInit()` forgets the
 copy), and looks every row's host up in that before it spends a timeout on it;
-a healthy host costs no write at all, and one that fails costs one. The logic
+a healthy host costs no write at all, and one that fails costs one.
+
+A row held back by the breaker is postponed without spending a try, so the try
+count alone never ends the rows of an instance that has gone away. Every row
+records when it was queued (`creation`), and one still on standby
+`RequestQueueService::MAX_AGE` (three days: the 49.6-hour schedule plus a cron
+interval per attempt) after that is abandoned like one that spent its tries
+(`RequestQueueRequest::abandonExhausted()`). The drain sorts by priority, then
+never-attempted rows, then whatever has waited longest since its last attempt
+or hold (`getStandby()`): sorted by the try count, the held rows of dead
+instances, which keep `tries = 0`, came ahead of every retry to a healthy
+host. A deleted local account keeps its row, and the key its `Delete` is
+signed with, while it has deliveries queued (`AccountService::
+manageDeletedActors()`); purged after the hour it used to be kept, every
+`Delete` still waiting for a server that was down had nothing to be signed
+with and was dropped.
+
+The inline delivery and the async drain read only what they act on: the two
+most urgent rows of a token (`getPriorityRequest()`), whether anything of it
+is still on standby (`RequestQueueRequest::hasToken()`), and one round's
+40 due rows (`getDueFromToken()`). A post followed from ten thousand servers
+used to load every row of its fan-out, each with the signed activity, twice
+in the request that made the post and twice more per async round. The logic
 is `HostBreaker`, and the **inbound stream queue uses the same table**: a fetch
 of a post or of a reply's parent from a host behind the breaker is not made — a
 `Fetch` item is postponed until the breaker closes without spending a try

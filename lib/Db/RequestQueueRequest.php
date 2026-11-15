@@ -54,10 +54,11 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		$qb = $this->getRequestQueueInsertSql();
 		foreach ([
 			'token', 'author', 'author_prim', 'activity', 'object_id_prim', 'instance',
-			'priority', 'status', 'tries', 'last',
+			'priority', 'status', 'tries', 'last', 'creation',
 		] as $field) {
 			$qb->setValue($field, $qb->createParameter($field));
 		}
+		$qb->setParameter('creation', new DateTime('now'), IQueryBuilder::PARAM_DATE);
 
 		foreach (array_chunk($queues, self::INSERT_CHUNK) as $chunk) {
 			$this->dbConnection->beginTransaction();
@@ -111,7 +112,8 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 			)
 			->setValue('priority', $qb->createNamedParameter($queue->getPriority()))
 			->setValue('status', $qb->createNamedParameter($queue->getStatus()))
-			->setValue('tries', $qb->createNamedParameter($queue->getTries()));
+			->setValue('tries', $qb->createNamedParameter($queue->getTries()))
+			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 		$qb->executeStatement();
 	}
 
@@ -126,7 +128,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		// what the drain has given up on is marked first: the query below cannot
 		// return those rows any more, and the author is entitled to see that a
 		// server never got their post rather than watch the row vanish
-		$this->abandonExhausted($backoff->maxTries());
+		$this->abandonExhausted($backoff->maxTries(), time() - RequestQueueService::MAX_AGE);
 
 		$qb = $this->getRequestQueueSelectSql();
 		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
@@ -134,13 +136,17 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		// in PHP afterwards: one dead instance otherwise fills the whole window
 		// with rows that are not due, and starves every other delivery
 		$this->limitToQueueDue($qb, $backoff);
-		// what is most urgent first, then what has been tried least, then the
-		// oldest attempt. 'id asc' alone handed the window to whatever was
-		// queued earliest regardless of priority; `tries` comes before `last`
-		// because a row that was never attempted has a NULL `last`, and where
-		// NULL sorts differs between MySQL and PostgreSQL.
+		// what is most urgent first, then what has never been attempted, then
+		// whatever has waited longest since its last attempt or hold. 'id asc'
+		// alone handed the window to whatever was queued earliest regardless
+		// of priority. A row the breaker held back keeps `tries = 0`, so the
+		// try count is no measure of how long a row has waited: ordered by it,
+		// the held rows of dead instances sorted ahead of every retry to a
+		// healthy one. NULL sorts first on MySQL and SQLite and last on
+		// PostgreSQL, so the never-attempted rows are told apart explicitly.
+		$last = $qb->getColumnName('last', 'rq');
 		$qb->orderBy('rq.priority', 'desc');
-		$qb->addOrderBy('rq.tries', 'asc');
+		$qb->addOrderBy($qb->createFunction('CASE WHEN ' . $last . ' IS NULL THEN 0 ELSE 1 END'), 'asc');
 		$qb->addOrderBy('rq.last', 'asc');
 		$qb->addOrderBy('rq.id', 'asc');
 		$qb->setMaxResults(self::STANDBY_BATCH);
@@ -301,10 +307,14 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	/**
 	 * Return Queue from database based on the token
 	 *
+	 * @param int $limit how many rows at most, 0 for all of them: a post's
+	 *                   fan-out is a row per inbox, each carrying the signed
+	 *                   activity
+	 *
 	 * @return list<RequestQueue>
 	 * @throws Exception
 	 */
-	public function getFromToken(string $token, int $status = -1): array {
+	public function getFromToken(string $token, int $status = -1, int $limit = 0): array {
 		$qb = $this->getRequestQueueSelectSql();
 		$qb->limitToToken($token);
 
@@ -313,6 +323,62 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		}
 
 		$qb->orderBy('priority', 'desc');
+		if ($limit > 0) {
+			$qb->addOrderBy('id', 'asc');
+			$qb->setMaxResults($limit);
+		}
+
+		$requests = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$requests[] = $this->parseRequestQueueSelectSql($data);
+		}
+		$cursor->closeCursor();
+
+		return $requests;
+	}
+
+	/** Whether anything under a token is in that state, without reading the rows. */
+	public function hasToken(string $token, int $status): bool {
+		$qb = $this->getQueryBuilder();
+		$qb->select('id')
+			->from(self::TABLE_REQUEST_QUEUE)
+			->where($qb->expr()->eq('token', $qb->createNamedParameter($token)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter($status, IQueryBuilder::PARAM_INT)))
+			->setMaxResults(1);
+
+		$cursor = $qb->executeQuery();
+		$found = $cursor->fetchOne();
+		$cursor->closeCursor();
+
+		return $found !== false;
+	}
+
+	/**
+	 * Up to `$limit` standby rows under a token that are due at `$now`, most
+	 * urgent first.
+	 *
+	 * A row whose `last` is still ahead is held back on purpose and left
+	 * out; so is every row already tried, when `$neverTried` asks for that.
+	 *
+	 * @return list<RequestQueue>
+	 * @throws Exception
+	 */
+	public function getDueFromToken(string $token, int $now, bool $neverTried, int $limit): array {
+		$qb = $this->getRequestQueueSelectSql();
+		$expr = $qb->expr();
+		$qb->limitToToken($token);
+		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
+		$qb->andWhere($expr->orX(
+			$expr->isNull('rq.last'),
+			$expr->lte('rq.last', $qb->createNamedParameter(new DateTime('@' . $now), IQueryBuilder::PARAM_DATE))
+		));
+		if ($neverTried) {
+			$qb->andWhere($expr->eq('rq.tries', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+		}
+		$qb->orderBy('rq.priority', 'desc');
+		$qb->addOrderBy('rq.id', 'asc');
+		$qb->setMaxResults($limit);
 
 		$requests = [];
 		$cursor = $qb->executeQuery();
@@ -502,21 +568,65 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	/**
 	 * Marks what the drain has given up on, rather than deleting it.
 	 *
+	 * That is a row that has spent its tries, and one queued before
+	 * `$queuedBefore`: a row whose host the breaker keeps holding back is
+	 * postponed without spending a try, so for an instance that has gone away
+	 * the age is what ends it. Both read on an index (`social_rq_tries`,
+	 * `social_rq_sc`); a row queued before its creation was recorded has none
+	 * and is left to its tries.
+	 *
 	 * The row stays so that the post it belongs to can say a server never got
 	 * it; `deleteFinished()` takes it away with the delivered ones once the
 	 * retention has passed.
 	 *
+	 * @param int $queuedBefore timestamp, or 0 to give up on tries alone
+	 *
 	 * @return int rows marked
 	 */
-	public function abandonExhausted(int $maxTries = RequestQueueService::MAX_TRIES): int {
+	public function abandonExhausted(int $maxTries = RequestQueueService::MAX_TRIES, int $queuedBefore = 0): int {
 		$qb = $this->getRequestQueueUpdateSql();
 		$qb->set('status', $qb->createNamedParameter(RequestQueue::STATUS_ABANDONED));
 		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
 		$qb->andWhere(
 			$qb->expr()->gte('tries', $qb->createNamedParameter($maxTries, IQueryBuilder::PARAM_INT))
 		);
+		$abandoned = $qb->executeStatement();
 
-		return $qb->executeStatement();
+		if ($queuedBefore > 0) {
+			$qb = $this->getRequestQueueUpdateSql();
+			$qb->set('status', $qb->createNamedParameter(RequestQueue::STATUS_ABANDONED));
+			$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
+			$qb->andWhere($qb->expr()->isNotNull('creation'));
+			$qb->andWhere($qb->expr()->lt('creation', $qb->createNamedParameter(
+				new DateTime('@' . $queuedBefore), IQueryBuilder::PARAM_DATE
+			)));
+			$abandoned += $qb->executeStatement();
+		}
+
+		return $abandoned;
+	}
+
+	/**
+	 * Whether an author still has deliveries waiting or going out.
+	 *
+	 * Read on `social_rq_as`: a deleted account keeps its row, and with it the
+	 * key its `Delete` is signed with, until this says no.
+	 */
+	public function hasPendingByAuthor(string $actorId): bool {
+		$qb = $this->getQueryBuilder();
+		$qb->select('id')
+			->from(self::TABLE_REQUEST_QUEUE)
+			->where($qb->expr()->eq('author_prim', $qb->createNamedParameter($qb->prim($actorId))))
+			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(
+				[RequestQueue::STATUS_STANDBY, RequestQueue::STATUS_RUNNING], IQueryBuilder::PARAM_INT_ARRAY
+			)))
+			->setMaxResults(1);
+
+		$cursor = $qb->executeQuery();
+		$found = $cursor->fetchOne();
+		$cursor->closeCursor();
+
+		return $found !== false;
 	}
 
 	/**
