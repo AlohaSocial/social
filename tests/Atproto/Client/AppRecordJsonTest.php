@@ -158,14 +158,32 @@ class AppRecordJsonTest extends TestCase {
 		}
 	}
 
-	public function testDisabledSchemaValidationStillStoresKnownRecordsAndReportsUnknown(): void {
-		$record = '{"$type":"app.bsky.graph.list","extra":{}}';
-		$created = $this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"app.bsky.graph.list","rkey":"first","validate":false,"record":' . $record . '}');
+	public function testDisabledSchemaValidationStoresOpaqueRecordsAndReportsUnknown(): void {
+		$record = '{"$type":"com.example.notes.entry","extra":{}}';
+		$created = $this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"first","validate":false,"record":' . $record . '}');
 		$this->assertSame('unknown', $created['validationStatus']);
-		$updated = $this->call('com.atproto.repo.putRecord', '{"repo":"' . self::DID . '","collection":"app.bsky.graph.list","rkey":"first","validate":false,"record":' . $record . '}');
+		$updated = $this->call('com.atproto.repo.putRecord', '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"first","validate":false,"record":' . $record . '}');
 		$this->assertSame('unknown', $updated['validationStatus']);
-		$batch = $this->call('com.atproto.repo.applyWrites', '{"repo":"' . self::DID . '","validate":false,"writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"app.bsky.graph.list","rkey":"second","value":' . $record . '}]}');
+		$batch = $this->call('com.atproto.repo.applyWrites', '{"repo":"' . self::DID . '","validate":false,"writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"com.example.notes.entry","rkey":"second","value":' . $record . '}]}');
 		$this->assertSame('unknown', $batch['results'][0]['validationStatus']);
+	}
+
+	/** A record Social reads back is checked against its schema whatever the app asked. */
+	public function testDisabledSchemaValidationDoesNotSkipARecordSocialReads(): void {
+		$record = '{"$type":"app.bsky.graph.list","extra":{}}';
+		foreach ([
+			'{"repo":"' . self::DID . '","collection":"app.bsky.graph.list","rkey":"first","validate":false,"record":' . $record . '}' => 'com.atproto.repo.createRecord',
+			'{"repo":"' . self::DID . '","validate":false,"writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"app.bsky.graph.list","rkey":"second","value":' . $record . '}]}' => 'com.atproto.repo.applyWrites',
+		] as $body => $method) {
+			try {
+				$this->call($method, $body);
+				$this->fail($method . ' stored a list that does not fit its lexicon');
+			} catch (\OCA\Social\Atproto\Xrpc\XrpcException $e) {
+				$this->assertSame(400, $e->status, $method);
+			}
+		}
+		$this->assertNull($this->store->getRecord(self::DID, 'app.bsky.graph.list', 'first'));
+		$this->assertNull($this->store->getRecord(self::DID, 'app.bsky.graph.list', 'second'));
 	}
 
 	public function testPutRecordAndApplyWritesKeepItToo(): void {
