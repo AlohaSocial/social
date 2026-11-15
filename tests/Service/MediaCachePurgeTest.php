@@ -76,7 +76,7 @@ class MediaCachePurgeTest extends TestCase {
 			$this->written[$key] = $value;
 		});
 
-		$this->service = new MediaPurgeService($request, $files, $config, new NullLogger());
+		$this->service = new MediaPurgeService($request, $files, $config, $this->createStub(\OCA\Social\Db\ScheduledStatusesRequest::class), new NullLogger());
 	}
 
 	/** A cached remote copy, `$daysAgo` old, with a full copy and a preview. */

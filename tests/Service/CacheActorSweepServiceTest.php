@@ -60,7 +60,8 @@ class CacheActorSweepServiceTest extends TestCase {
 			// is what this test is about, and every other caller uses the same
 			new MediaPurgeService(
 				$this->cacheDocumentsRequest, $this->cacheDocumentService,
-				$this->createStub(\OCA\Social\Service\ConfigService::class), new NullLogger()
+				$this->createStub(\OCA\Social\Service\ConfigService::class),
+				$this->createStub(\OCA\Social\Db\ScheduledStatusesRequest::class), new NullLogger()
 			),
 			new NullLogger(),
 			$time

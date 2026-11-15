@@ -316,6 +316,53 @@ class CacheDocumentsRequestTest extends TestCase {
 	}
 
 	/**
+	 * An upload has no parent; what ties it to a post is the media link,
+	 * and to a Bluesky record the blob registration. Only an old one that
+	 * neither names is unattached.
+	 */
+	public function testAnOldUploadThatNothingNamesIsUnattached(): void {
+		$did = 'did:plc:itestcachedocsunatt00000';
+		$connection = Server::get(IDBConnection::class);
+		$blobs = Server::get(\OCA\Social\Db\AtprotoBlobRequest::class);
+		$names = ['lonely', 'posted', 'blob', 'fresh', 'banner'];
+		$documents = [];
+		foreach ($names as $name) {
+			$documents[$name] = $this->document($name, [
+				'parent' => ($name === 'banner') ? self::ACTOR : '',
+				'account' => self::ACCOUNT,
+				'localCopy' => 'uuid-' . $name,
+			]);
+		}
+		$qb = $connection->getQueryBuilder();
+		$qb->update(CoreRequestBuilder::TABLE_CACHE_DOCUMENTS)
+			->set('creation', $qb->createNamedParameter(new DateTime('-30 days'), IQueryBuilder::PARAM_DATE))
+			->where($qb->expr()->in('id_prim', $qb->createNamedParameter(
+				array_map(static fn (string $name): string => md5(self::BASE . '/documents/' . $name), ['lonely', 'posted', 'blob', 'banner']),
+				IQueryBuilder::PARAM_STR_ARRAY
+			)));
+		$qb->executeStatement();
+		$connection->insertIgnoreConflict(CoreRequestBuilder::TABLE_STREAM_MEDIA, [
+			'stream_id_prim' => md5(self::POST), 'doc_nid' => (int)$documents['posted']->getNid(),
+		]);
+
+		try {
+			$blobs->put(new \OCA\Social\Atproto\Model\BlobRef(
+				$did, \OCA\Social\Atproto\Protocol\Cid::forRawDigest(hash('sha256', 'unattached', true)),
+				self::BASE . '/documents/blob', 'image/png', 5
+			));
+
+			$this->assertSame(['lonely'], $this->ours($this->documents->getUnattachedUploads(7, 1000)));
+			$this->assertSame([], $this->ours($this->documents->getUnattachedUploads(7, 1000, (int)$documents['lonely']->getNid())));
+		} finally {
+			$blobs->deleteByDid($did);
+			$qb = $connection->getQueryBuilder();
+			$qb->delete(CoreRequestBuilder::TABLE_STREAM_MEDIA)
+				->where($qb->expr()->eq('stream_id_prim', $qb->createNamedParameter(md5(self::POST))));
+			$qb->executeStatement();
+		}
+	}
+
+	/**
 	 * The sweep reads the orphans a page at a time in nid order, and a page
 	 * starts after the last row of the one before: a row that would not go
 	 * is not read again at the head of every page.

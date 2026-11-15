@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Db\ScheduledStatusesRequest;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\CacheDocumentService;
@@ -28,6 +29,7 @@ use Psr\Log\NullLogger;
 class MediaPurgeServiceTest extends TestCase {
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
 	private CacheDocumentService|Stub $cacheDocumentService;
+	private ScheduledStatusesRequest|Stub $scheduledStatusesRequest;
 	/** @var list<string> what was removed, in order */
 	private array $removed = [];
 	private MediaPurgeService $service;
@@ -42,9 +44,10 @@ class MediaPurgeServiceTest extends TestCase {
 			}
 		);
 
+		$this->scheduledStatusesRequest = $this->createStub(ScheduledStatusesRequest::class);
 		$this->service = new MediaPurgeService(
 			$this->cacheDocumentsRequest, $this->cacheDocumentService,
-			$this->createStub(\OCA\Social\Service\ConfigService::class), new NullLogger()
+			$this->createStub(\OCA\Social\Service\ConfigService::class), $this->scheduledStatusesRequest, new NullLogger()
 		);
 	}
 
@@ -183,5 +186,41 @@ class MediaPurgeServiceTest extends TestCase {
 		);
 
 		$this->assertSame(2, $this->service->sweepOrphans(30, 500));
+	}
+
+	/**
+	 * An upload no post was made with goes, with its files, except one a
+	 * waiting post names: that post has not been made yet.
+	 */
+	public function testAnUnattachedUploadGoesUnlessAWaitingPostNamesIt(): void {
+		$this->scheduledStatusesRequest->method('mediaNids')->willReturn([7 => true]);
+		$this->cacheDocumentsRequest->expects($this->once())->method('getUnattachedUploads')
+			->with(8, 500, 0)
+			->willReturn([$this->documentAt('a', 5), $this->documentAt('waiting', 7)]);
+		$deleted = [];
+		$this->cacheDocumentsRequest->method('deleteById')->willReturnCallback(
+			static function (string $id) use (&$deleted): void {
+				$deleted[] = $id;
+			}
+		);
+
+		$this->assertSame(1, $this->service->sweepUnattached(8, 500));
+		$this->assertSame(['a'], $deleted);
+		$this->assertSame(['full', 'small'], $this->removed);
+	}
+
+	public function testTheUnattachedSweepReadsOnPageAfterPage(): void {
+		$pages = [0 => [$this->documentAt('a', 3), $this->documentAt('b', 4)], 4 => [$this->documentAt('c', 9)]];
+		$asked = [];
+		$this->cacheDocumentsRequest->method('getUnattachedUploads')->willReturnCallback(
+			static function (int $days, int $limit, int $after) use ($pages, &$asked): array {
+				$asked[] = $after;
+
+				return $pages[$after] ?? [];
+			}
+		);
+
+		$this->assertSame(3, $this->service->sweepUnattached(8, 2, time() + 60));
+		$this->assertSame([0, 4], $asked);
 	}
 }

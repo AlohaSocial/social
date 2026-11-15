@@ -273,6 +273,34 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	}
 
 	/**
+	 * The uploads every waiting post names, as nid => true.
+	 *
+	 * Read in pages by id; the table holds what people have scheduled, which
+	 * each account is limited in.
+	 *
+	 * @return array<int, true>
+	 */
+	public function mediaNids(int $page = 500): array {
+		$nids = [];
+		$after = 0;
+		do {
+			$qb = $this->getScheduledSelectSql();
+			$qb->andWhere($qb->expr()->gt('ss.id', $qb->createNamedParameter($after, IQueryBuilder::PARAM_INT)));
+			$qb->orderBy('ss.id', 'asc');
+			$qb->setMaxResults($page);
+			$rows = $this->getScheduledFromRequest($qb);
+			foreach ($rows as $scheduled) {
+				$after = max($after, $scheduled->getId());
+				foreach ($scheduled->paramMediaIds() as $nid) {
+					$nids[$nid] = true;
+				}
+			}
+		} while (count($rows) >= $page);
+
+		return $nids;
+	}
+
+	/**
 	 * Takes a row out of the table for a publisher, and says whether this
 	 * caller is the one who got it.
 	 *

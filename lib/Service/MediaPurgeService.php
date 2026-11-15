@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Db\ScheduledStatusesRequest;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -37,6 +38,7 @@ class MediaPurgeService {
 		private CacheDocumentsRequest $cacheDocumentsRequest,
 		private CacheDocumentService $cacheDocumentService,
 		private ConfigService $configService,
+		private ScheduledStatusesRequest $scheduledStatusesRequest,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -401,10 +403,8 @@ class MediaPurgeService {
 	 * the avatar of an actor evicted before this sweep existed, the picture of
 	 * a story whose day was up.
 	 *
-	 * Rows with *no* parent are deliberately left alone. For a local upload
-	 * that is not evidence of anything: nothing in the schema points from a
-	 * post back at the attachment it shows, so "parentless" would sweep away
-	 * the pictures of live posts.
+	 * Rows with *no* parent are left to `sweepUnattached()`: a local upload
+	 * never has one.
 	 *
 	 * Page after page of `$limit`, each read after the last row of the one
 	 * before, until a page comes back short or `$deadline` has passed: a
@@ -438,6 +438,54 @@ class MediaPurgeService {
 
 		if ($swept > 0) {
 			$this->logger->info('swept documents whose parent is gone', [
+				'days' => $days, 'documents' => $swept,
+			]);
+		}
+
+		return $swept;
+	}
+
+	/**
+	 * The uploads nothing was ever made with.
+	 *
+	 * `POST /api/v1/media` stores a file before there is a post to carry it,
+	 * and one never followed by a post stayed for good. An upload older than
+	 * `$days` that no post, Bluesky record or waiting post names goes; see
+	 * `CacheDocumentsRequest::getUnattachedUploads()`. `$days` should outlast
+	 * the composer's drafts, which keep their uploads for a week.
+	 *
+	 * Paged like `sweepOrphans()`.
+	 *
+	 * @param int $deadline a timestamp past which no further page is read; 0
+	 *                      for one page
+	 *
+	 * @return int how many rows went
+	 */
+	public function sweepUnattached(int $days, int $limit, int $deadline = 0): int {
+		$scheduled = $this->scheduledStatusesRequest->mediaNids();
+		$swept = 0;
+		$after = 0;
+		do {
+			$page = $this->cacheDocumentsRequest->getUnattachedUploads($days, $limit, $after);
+			foreach ($page as $document) {
+				$after = max($after, (int)$document->getNid());
+				if (isset($scheduled[(int)$document->getNid()])) {
+					continue;
+				}
+
+				try {
+					$this->purge($document);
+					$swept++;
+				} catch (Throwable $e) {
+					$this->logger->warning('could not remove an unattached upload', [
+						'document' => $document->getId(), 'exception' => $e,
+					]);
+				}
+			}
+		} while (count($page) >= $limit && $after > 0 && time() < $deadline);
+
+		if ($swept > 0) {
+			$this->logger->info('swept uploads no post was made with', [
 				'days' => $days, 'documents' => $swept,
 			]);
 		}
