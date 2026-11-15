@@ -139,13 +139,10 @@ import GalleryCarousel from './GalleryCarousel.vue'
 import ZoomableImage from './ZoomableImage.vue'
 import GalleryMedia from './GalleryMedia.vue'
 import { DEFAULT_RATIO, ratioOf } from './GalleryRatio.js'
-import { nameForTransition, withViewTransition } from '../utils/viewTransition.js'
+import { morph } from '../utils/viewTransition.js'
 
-/** one name per document: only one lightbox is ever open */
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { useServerData } from '../composables/useServerData.js'
-
-const MEDIA_TRANSITION = 'social-media'
 
 /** from here on the set is paged through rather than laid out side by side */
 const CAROUSEL_FROM = 2
@@ -379,30 +376,18 @@ export default {
 		},
 
 		async showModal(index) {
-			const thumbnail = this.frameAt(index)
-			const release = nameForTransition(thumbnail, MEDIA_TRANSITION)
-
-			await withViewTransition(async () => {
+			await morph(this.frameAt(index), async () => {
 				this.current = index
 				this.modal = true
 				await this.$nextTick()
-				nameForTransition(/** @type {HTMLElement|undefined} */ (this.$refs.viewer) ?? null, MEDIA_TRANSITION)
-			})
-
-			release()
+			}, () => /** @type {HTMLElement|undefined} */ (this.$refs.viewer) ?? null)
 		},
 
 		async closeModal() {
-			const release = nameForTransition(/** @type {HTMLElement|undefined} */ (this.$refs.viewer) ?? null, MEDIA_TRANSITION)
-			const thumbnail = this.frameAt(this.current)
-
-			await withViewTransition(async () => {
+			await morph(/** @type {HTMLElement|undefined} */ (this.$refs.viewer) ?? null, async () => {
 				this.modal = false
 				await this.$nextTick()
-				nameForTransition(thumbnail, MEDIA_TRANSITION)
-			})
-
-			release()
+			}, () => this.frameAt(this.current))
 		},
 	},
 }
