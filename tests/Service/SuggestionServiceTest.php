@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\DiscoveryRequest;
+use OCA\Social\External\ExternalUserBackend;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\Suggestion;
@@ -18,6 +19,8 @@ use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\ColleagueService;
 use OCA\Social\Service\DirectoryService;
 use OCA\Social\Service\SuggestionService;
+use OCP\IUser;
+use OCP\IUserManager;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
@@ -54,6 +57,7 @@ class SuggestionServiceTest extends TestCase {
 	private array $colleagues = [];
 	/** @var string the user id the colleague lookup was told to leave out */
 	private string $colleaguesExcept = '';
+	private IUserManager|Stub $userManager;
 	/** @var string[][] the prim lists the graph walk and the fallback were asked for */
 	private array $asked = [];
 
@@ -109,8 +113,9 @@ class SuggestionServiceTest extends TestCase {
 		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getFromId')->willReturn($viewer);
 
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->service = new SuggestionService(
-			$this->discoveryRequest, $directoryService, $colleagueService, $actorsRequest
+			$this->discoveryRequest, $directoryService, $colleagueService, $actorsRequest, $this->userManager
 		);
 	}
 
@@ -166,7 +171,8 @@ class SuggestionServiceTest extends TestCase {
 		$colleagues = $this->createStub(ColleagueService::class);
 		$colleagues->method('accounts')->willReturn([]);
 		(new SuggestionService(
-			$this->discoveryRequest, $directoryService, $colleagues, $this->createStub(ActorsRequest::class)
+			$this->discoveryRequest, $directoryService, $colleagues, $this->createStub(ActorsRequest::class),
+			$this->createStub(IUserManager::class)
 		))->suggestions(self::VIEWER, SuggestionService::LIMIT);
 
 		$this->assertSame(
@@ -319,5 +325,21 @@ class SuggestionServiceTest extends TestCase {
 		$this->service->suggestions(self::VIEWER, 10);
 
 		$this->assertSame('alice', $this->colleaguesExcept);
+	}
+
+	/**
+	 * An external user is confined to Aloha Social: the accounts this
+	 * Nextcloud's people named on their profiles would tell them who works
+	 * here.
+	 */
+	public function testAnExternalUserIsSuggestedNoColleagues(): void {
+		$backend = $this->createStub(ExternalUserBackend::class);
+		$user = $this->createStub(IUser::class);
+		$user->method('getBackend')->willReturn($backend);
+		$this->userManager->method('get')->willReturnMap([['alice', $user]]);
+		$this->colleagues = ['colleague'];
+		$this->active = ['stranger'];
+
+		$this->assertSame([$this->id('stranger')], $this->suggested());
 	}
 }
