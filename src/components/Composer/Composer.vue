@@ -260,6 +260,8 @@
 					v-model:options="pollOptions"
 					v-model:multiple="pollMultiple"
 					v-model:expiresIn="pollExpiresIn"
+					:valid="pollIsValid"
+					:attempted="pollAttempted"
 					@remove="togglePoll" />
 
 				<EventEditor
@@ -680,7 +682,7 @@ import { useAccountStore } from '../../store/account.js'
 import { useTimelineStore } from '../../store/timeline.js'
 import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
 import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
-import { statusPayload } from '../../utils/statusPayload.js'
+import { pollIsComplete, statusPayload } from '../../utils/statusPayload.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
 import { datePickerModule, isTooSoon, proposedSchedule } from '../../utils/schedule.js'
@@ -1066,6 +1068,8 @@ export default {
 			resumedAudienceFor: '',
 			/** whether sending was tried while the event was incomplete */
 			eventAttempted: false,
+			/** whether sending was tried with the poll incomplete */
+			pollAttempted: false,
 			onOutsideInteraction: null,
 			onBeforeUnload: null,
 			stopLeaveGuard: null,
@@ -1262,6 +1266,9 @@ export default {
 			if (!this.eventIsValid) {
 				return false
 			}
+			if (!this.pollIsValid) {
+				return false
+			}
 
 			if (this.statusIsEmpty) {
 				return false
@@ -1276,6 +1283,10 @@ export default {
 
 		statusIsEmpty() {
 			return this.statusText.trim().length === 0 && this.mediaIds.length === 0 && !this.showEvent
+		},
+
+		pollIsValid() {
+			return !this.showPoll || pollIsComplete(this.pollOptions)
 		},
 
 		eventIsValid() {
@@ -1827,6 +1838,7 @@ export default {
 			this.replyPolicy = 'everyone'
 			this.moreOptionsOpen = false
 			this.eventAttempted = false
+			this.pollAttempted = false
 			clearDraft(this.draftContext)
 			this.updateStatusContent()
 		},
@@ -2427,6 +2439,9 @@ export default {
 		async createPost() {
 			if (!this.eventIsValid) {
 				this.eventAttempted = true
+			}
+			if (!this.pollIsValid) {
+				this.pollAttempted = true
 			}
 			if (this.editItem) {
 				if (this.canPost) {

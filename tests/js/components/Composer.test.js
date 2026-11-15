@@ -735,6 +735,19 @@ describe('Composer', () => {
 			expect(canPost(wrapper)).toBe(true)
 		})
 
+		it('not with a poll that has fewer than two options', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'Which one?')
+			wrapper.vm.showPoll = true
+			wrapper.vm.pollOptions = ['tea', '']
+			await flushPromises()
+			expect(canPost(wrapper)).toBe(false)
+
+			wrapper.vm.pollOptions = ['tea', 'coffee']
+			await flushPromises()
+			expect(canPost(wrapper)).toBe(true)
+		})
+
 		it('not while an attachment is still uploading', async () => {
 			const { wrapper, store } = mountComposer()
 			await setContent(wrapper, 'Look at this')
@@ -2243,13 +2256,20 @@ describe('Composer', () => {
 			})
 		})
 
-		it('sends no poll when the editor is closed or has fewer than two options', async () => {
+		it('holds a post with fewer than two options back instead of sending it without the poll', async () => {
 			const { wrapper, store } = mountComposer()
-			await setContent(wrapper, 'no poll here')
+			await setContent(wrapper, 'which one?')
 
 			await wrapper.find('button[aria-label="Add poll"]').trigger('click')
 			await wrapper.findAll('.poll-editor__option input')[0].setValue('Only one')
 
+			await wrapper.vm.createPost()
+			await flushPromises()
+
+			expect(store.post).not.toHaveBeenCalled()
+			expect(wrapper.find('.poll-editor__error').exists()).toBe(true)
+
+			await wrapper.find('.poll-editor__remove').trigger('click')
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 

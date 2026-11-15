@@ -3,6 +3,22 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+/** What the server takes in one poll option (`PostService::POLL_MAX_CHARACTERS_PER_OPTION`). */
+export const POLL_MAX_CHARACTERS_PER_OPTION = 100
+
+/**
+ * Whether a poll can be sent as it is: two options at least that say
+ * something, none longer than the server takes. An incomplete poll is not
+ * left out of the post, it holds the post back.
+ *
+ * @param {string[]} options the options as typed
+ * @return {boolean} whether it is complete
+ */
+export function pollIsComplete(options) {
+	const filled = options.map((option) => option.trim()).filter((option) => option !== '')
+	return filled.length >= 2 && filled.every((option) => [...option].length <= POLL_MAX_CHARACTERS_PER_OPTION)
+}
+
 /**
  * The body of `POST /api/v1/statuses` for what the composer holds.
  *
