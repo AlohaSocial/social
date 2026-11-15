@@ -107,6 +107,8 @@ describe('Discover', () => {
 		const wrapper = mount(Discover, { shallow: true, global: { plugins: [createPinia()], stubs: { PageHeader: false } } })
 
 		expect(wrapper.find('h1').text()).toBe('Discover')
+		// for screen readers: the sidebar already says which page this is
+		expect(wrapper.find('h1').classes()).toContain('hidden-visually')
 		expect(wrapper.findAll('h1')).toHaveLength(1)
 		expect(wrapper.findAll('h2').length).toBeGreaterThan(0)
 		expect(wrapper.findAll('h3')).toHaveLength(0)

@@ -579,10 +579,7 @@ export default {
 		 * the view for a screen reader without changing what anyone sees.
 		 */
 		headingIsVisible() {
-			// Photos and Videos are views of their own rather than a filter of
-			// a list you were already on, so they say which one you are
-			// looking at
-			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky' || this.type === 'notifications' || this.isScopedPage
+			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky' || this.type === 'notifications'
 		},
 
 		/**

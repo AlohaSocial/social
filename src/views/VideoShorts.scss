@@ -15,26 +15,22 @@
 	background: var(--color-main-background);
 	color: var(--color-main-text);
 
+	/* the scopes in the middle of the page, "New short" at the end; the
+	   title is for screen readers only */
 	&__header {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
 		gap: 8px;
 		padding: 8px 16px 0;
 	}
 
 	&__heading-row {
 		display: flex;
+		grid-row: 1;
+		grid-column: 3;
+		justify-self: end;
 		align-items: center;
-		justify-content: space-between;
-		gap: 8px 16px;
-	}
-
-	&__heading {
-		margin: 0;
-		color: var(--color-main-text);
-		font-size: 22px;
-		font-weight: 700;
 	}
 
 
@@ -117,6 +113,8 @@
 	/* Choose which videos fill the player. */
 	&__scopes {
 		display: flex;
+		grid-row: 1;
+		grid-column: 2;
 		flex-wrap: wrap;
 		width: fit-content;
 		max-width: 100%;
@@ -568,6 +566,7 @@
 	background: var(--social-on-dark-ground);
 
 	.shorts__header {
+		display: flex;
 		position: absolute;
 		z-index: 5;
 		inset-block-start: 0;
@@ -591,15 +590,6 @@
 	.shorts__heading-row {
 		order: 2;
 		flex: 0 0 auto;
-	}
-
-	.shorts__heading {
-		position: absolute;
-		inline-size: 1px;
-		block-size: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
 	}
 
 	.shorts__scopes {
@@ -819,11 +809,5 @@
 
 	.shorts--phone .shorts__sheet {
 		border-block-start: 1px solid CanvasText;
-	}
-}
-
-@media (width < 1024px) {
-	.shorts__heading {
-		margin-inline-start: 36px;
 	}
 }

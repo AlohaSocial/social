@@ -313,13 +313,13 @@ describe('Timeline', () => {
 		[{ name: 'timeline', params: { type: 'federated' } }, 'Global timeline', false],
 		[{ name: 'timeline', params: { type: 'favourites' } }, 'Liked posts', false],
 		[{ name: 'timeline', params: { type: 'bookmarks' } }, 'Bookmarks', false],
-		// a page of its own like Photos and Videos, so it says which one you
-		// are reading
+		[{ name: 'timeline', params: { type: 'photos' } }, 'Photos', false],
+		[{ name: 'timeline', params: { type: 'videos' } }, 'Videos', false],
 	])('names the timeline %o for a reader who cannot see which one it is', (route, heading, visible) => {
 		const wrapper = mountTimeline(route)
 		const title = wrapper.find('h1')
 
-		// every view has a heading now; only the two that always showed one stay visible
+		// every view has a heading; the sidebar already says which of these is open
 		expect(title.text()).toBe(heading)
 		expect(title.classes('hidden-visually')).toBe(!visible)
 	})

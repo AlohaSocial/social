@@ -4,7 +4,7 @@
 -->
 <template>
 	<div class="discover">
-		<PageHeader :title="t('social', 'Discover')" clearNavigation />
+		<PageHeader :title="t('social', 'Discover')" clearNavigation hideTitle />
 
 		<!-- the same control the timelines and a profile are switched with:
 		     four lists of one screen, chosen while reading rather than

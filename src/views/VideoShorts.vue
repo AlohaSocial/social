@@ -11,7 +11,7 @@
 		:aria-label="t('social', 'Videos, one at a time')">
 		<header ref="header" class="shorts__header">
 			<div class="shorts__heading-row">
-				<h1 class="shorts__heading">
+				<h1 class="shorts__heading hidden-visually">
 					{{ t('social', 'Shorts') }}
 				</h1>
 				<NcButton
