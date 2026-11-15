@@ -427,7 +427,8 @@ import { useInstanceStore } from '../store/instance.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
 import { pageIdentity } from '../services/pageOrder.js'
-import { isEntryActive, MY_FEED_COVERS } from '../utils/navigationActive.js'
+import { isCurrentLocation, isEntryActive, MY_FEED_COVERS } from '../utils/navigationActive.js'
+import { scrollToTop } from '../utils/scroller.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { afterFirstTimeline } from '../services/boot.js'
@@ -1663,6 +1664,11 @@ export default {
 			}
 
 			event?.preventDefault()
+			// a second press on the page already open goes back to its top
+			if (event && isCurrentLocation(this.$router, this.$route, to)) {
+				scrollToTop()
+				return
+			}
 			this.$router.push(to)
 		},
 
