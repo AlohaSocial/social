@@ -485,6 +485,23 @@ class SignatureServiceTest extends TestCase {
 	}
 
 	/**
+	 * The signature covers `digest`; an unsigned `Content-Digest` of the same
+	 * algorithm that matches a swapped body must not replace it.
+	 */
+	public function testAnUnsignedContentDigestDoesNotStandInForTheSignedDigest(): void {
+		$signedBody = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($signedBody, self::$privateKey, [], '(request-target) host date digest');
+		$swappedBody = '{"type":"Delete"}';
+		$headers['content-digest'] = 'sha-256=:' . base64_encode(hash('sha256', $swappedBody, true)) . ':';
+		$headers['content-length'] = (string)strlen($swappedBody);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+
+		$this->expectException(SignatureException::class);
+		$this->expectExceptionMessage('digest does not match the body');
+		$this->service->checkRequest($this->incomingRequest($headers), $swappedBody);
+	}
+
+	/**
 	 * hs2019 names no hash: the key type decides, and for the RSA keys actors
 	 * publish that is SHA-256.
 	 */

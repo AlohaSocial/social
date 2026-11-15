@@ -711,6 +711,10 @@ class SignatureService {
 	 * and has to match: an unrecognised algorithm on its own is not a pass,
 	 * because then nothing binds the body to the signature.
 	 *
+	 * Every entry of both headers is checked, not one per algorithm: the
+	 * signature has to cover only one of the two headers, so an entry of the
+	 * other one must never stand in for an entry of the signed one.
+	 *
 	 * @throws SignatureException
 	 */
 	private function checkDigest(IRequest $request, string $data): void {
@@ -724,7 +728,7 @@ class SignatureService {
 		}
 
 		$checked = 0;
-		foreach ($digests as $algorithm => $sent) {
+		foreach ($digests as [$algorithm, $sent]) {
 			$expected = self::DIGEST_ALGORITHMS[$algorithm] ?? '';
 			if ($expected === '') {
 				continue;
@@ -741,16 +745,16 @@ class SignatureService {
 
 		if ($checked === 0) {
 			throw new SignatureException(
-				'no digest algorithm we can compute: ' . self::excerpt(implode(', ', array_keys($digests)))
+				'no digest algorithm we can compute: ' . self::excerpt(implode(', ', array_column($digests, 0)))
 			);
 		}
 	}
 
 	/**
-	 * `algorithm=base64` entries of a Digest or Content-Digest header, keyed by
-	 * lowercased algorithm name.
+	 * `algorithm=base64` entries of a Digest or Content-Digest header, as
+	 * pairs of lowercased algorithm name and value, in the order sent.
 	 *
-	 * @return array<string, string>
+	 * @return list<array{0: string, 1: string}>
 	 */
 	private function parseDigestHeader(string $header): array {
 		$digests = [];
@@ -770,7 +774,7 @@ class SignatureService {
 			}
 
 			if ($value !== '') {
-				$digests[$algorithm] = $value;
+				$digests[] = [$algorithm, $value];
 			}
 		}
 
