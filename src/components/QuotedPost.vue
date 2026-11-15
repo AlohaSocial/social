@@ -129,17 +129,17 @@ export default {
 </script>
 
 <style scoped lang="scss">
+@use '../styles/embed.scss' as embed;
+
 /**
- * Somebody else's post inside this one: set in, ruled off and a shade darker,
- * so it cannot be read as something the author of the outer post wrote.
+ * Somebody else's post inside this one: in the frame every embed has, and
+ * ruled off at its start, so it cannot be read as something the author of
+ * the outer post wrote.
  */
 .quoted-post {
-	margin: 8px 0 10px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border);
+	@include embed.frame;
+	margin-inline: 0;
 	border-inline-start: 3px solid var(--color-border-dark);
-	border-radius: var(--border-radius-large, 8px);
-	background: var(--color-background-hover);
 	font-size: 14px;
 
 	&__author-link {

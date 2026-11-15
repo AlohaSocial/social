@@ -229,17 +229,15 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+@use '../styles/embed.scss' as embed;
+
 .post-event {
+	@include embed.frame;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	flex-wrap: wrap;
 	gap: 8px 16px;
-	margin-block: 0 10px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large);
-	background: var(--color-background-dark);
 }
 
 .post-event__facts {

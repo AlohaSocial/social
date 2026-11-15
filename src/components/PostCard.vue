@@ -111,19 +111,17 @@ export default {
 </script>
 
 <style scoped lang="scss">
+@use '../styles/embed.scss' as embed;
+
 .post-card {
+	@include embed.frame($padded: false);
 	display: flex;
-	margin-top: 8px;
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large, 8px);
 	overflow: hidden;
 	color: var(--color-main-text);
 	text-decoration: none;
-	background: var(--color-background-hover);
 
 	&:hover,
 	&:focus {
-		border-color: var(--color-primary-element);
 		text-decoration: none;
 	}
 
@@ -139,7 +137,7 @@ export default {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 10px 12px;
+		padding: embed.$padding;
 		min-width: 0;
 	}
 
