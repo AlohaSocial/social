@@ -119,6 +119,11 @@ class ClientService {
 			}
 		}
 
+		// as Mastodon validates it: shown to people as a link to the app
+		if ($client->getAppWebsite() !== '' && self::websiteLink($client->getAppWebsite()) === '') {
+			throw new ClientException('invalid website');
+		}
+
 		$problem = self::migrationScopeProblem($client->getAppScopes(), $client->getAppRedirectUris());
 		if ($problem !== null) {
 			throw new ClientException($problem);
@@ -128,6 +133,23 @@ class ClientService {
 		$client->setAppClientSecret($this->token(40));
 
 		$this->clientRequest->saveApp($client);
+	}
+
+	/**
+	 * An application's website as it may be offered as a link: an `http` or
+	 * `https` address with a host, or '' for anything else. Registration
+	 * refuses anything else now; rows registered before it did are read
+	 * through this too.
+	 */
+	public static function websiteLink(string $website): string {
+		$website = trim($website);
+		if (preg_match('/^https?:\/\/[^\/\s]/i', $website) !== 1
+			|| preg_match('/[\x00-\x20\x7f]/', $website) === 1
+			|| (string)parse_url($website, PHP_URL_HOST) === '') {
+			return '';
+		}
+
+		return $website;
 	}
 
 	/**
