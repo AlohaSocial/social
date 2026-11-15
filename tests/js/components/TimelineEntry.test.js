@@ -800,7 +800,7 @@ describe('a notification in the list', () => {
 			const css = pointed()
 
 			expect(css).toMatch(/box-shadow: inset 0 0 0 1px transparent;\s*transition: box-shadow \.1s linear, background-color \.1s linear;/)
-			expect(css).toMatch(/&:hover,\s*&:focus-within \{\s*background-color: color-mix\(in srgb, var\(--color-primary-element\) 3%, transparent\);\s*box-shadow: inset 0 0 0 1px var\(--color-border\);/)
+			expect(css).toMatch(/&:hover,\s*&:focus-within \{\s*background-color: color-mix\(in srgb, var\(--color-primary-element\) 6%, transparent\);\s*box-shadow: inset 0 0 0 1px color-mix\(in srgb, var\(--color-primary-element\) 25%, var\(--color-border\)\);/)
 		})
 
 		it('drops the pill, wakes the controls and brings the ones without a count in from the end', () => {
