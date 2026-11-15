@@ -159,7 +159,7 @@ export default {
 	}
 
 	&--standalone.skeleton--rows {
-		--social-column: 616px;
+		--social-column: var(--social-reading-column);
 	}
 
 	&--standalone.skeleton--video {
