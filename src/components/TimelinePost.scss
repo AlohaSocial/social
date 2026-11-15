@@ -168,6 +168,17 @@
 			border-radius: 0;
 			vertical-align: -.2em;
 		}
+
+		/* a post that is only one to three emoji is drawn large, the way a
+		   messenger draws one; the emoji are sized in em, so they follow */
+		:deep(.message-content--jumbo) {
+			font-size: 2.5em;
+			line-height: 1.3;
+
+			img.custom-emoji {
+				height: 1.1em;
+			}
+		}
 	}
 
 	/*

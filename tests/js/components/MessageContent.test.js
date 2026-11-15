@@ -7,7 +7,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AccountHoverCard from '../../../src/components/AccountHoverCard.vue'
-import MessageContent, { emojifyPlain } from '../../../src/components/MessageContent.js'
+import MessageContent, { emojifyPlain, isJumboEmoji } from '../../../src/components/MessageContent.js'
 import { createPinia } from 'pinia'
 
 const Empty = { template: '<div />' }
@@ -305,6 +305,48 @@ describe('MessageContent', () => {
 
 			expect(wrapper.find('script').exists()).toBe(false)
 			expect(wrapper.find('img.custom-emoji').attributes('src')).toBe(evil.url)
+		})
+	})
+
+	describe('jumbo emoji', () => {
+		const blobcat = { shortcode: 'blobcat', url: 'https://remote.example/emoji/blobcat.png' }
+
+		it.each([
+			['😀'],
+			['👍🏽 🎉'],
+			['🇩🇪🇫🇷'],
+			['❤️‍🔥'],
+			['👨‍👩‍👧‍👦🏳️‍🌈1️⃣'],
+			['🏴󠁧󠁢󠁳󠁣󠁴󠁿'],
+		])('draws %s large', (text) => {
+			expect(isJumboEmoji(text)).toBe(true)
+		})
+
+		it.each([
+			[''],
+			['hi 😀'],
+			['😀😀😀😀'],
+			['#️'],
+			['42'],
+		])('draws %s at text size', (text) => {
+			expect(isJumboEmoji(text)).toBe(false)
+		})
+
+		it('counts the post\'s own custom emoji, and only those', () => {
+			expect(isJumboEmoji(':blobcat: 😀', [blobcat])).toBe(true)
+			expect(isJumboEmoji(':BlobCat:', [blobcat])).toBe(true)
+			expect(isJumboEmoji(':missing:', [blobcat])).toBe(false)
+			expect(isJumboEmoji(':blobcat::blobcat::blobcat::blobcat:', [blobcat])).toBe(false)
+		})
+
+		it('marks the content of an emoji-only post', () => {
+			expect(mountContent('<p>🎉 🎉</p>').classes()).toContain('message-content--jumbo')
+			expect(mountContent('<p>:blobcat:</p>', { emojis: [blobcat] }).classes()).toContain('message-content--jumbo')
+		})
+
+		it('leaves a post with words, a mention or a link at text size', () => {
+			expect(mountContent('<p>yay 🎉</p>').classes()).not.toContain('message-content--jumbo')
+			expect(mountContent('<p>🎉 <a href="https://example.org">x</a></p>').classes()).not.toContain('message-content--jumbo')
 		})
 	})
 
