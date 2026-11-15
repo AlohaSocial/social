@@ -464,4 +464,20 @@ describe('TimelineSwitcher', () => {
 			expect(timeline).toMatch(/\.social__wrapper > :first-child \{\s*margin-top: var\(--social-toggle-clearance\);/)
 		})
 	})
+
+	it('folds to icons when the page asks, naming each option in a tooltip', () => {
+		const wrapper = mount(TimelineSwitcher, {
+			props: { options: OPTIONS, value: 'first', label: 'Which posts to show', compact: true },
+			global: { mocks: { $router: { push: vi.fn() } } },
+		})
+
+		expect(wrapper.classes()).toContain('switcher--compact')
+		expect(wrapper.findAll('.switcher__option').map((option) => option.attributes('title'))).toEqual(['First', 'Second', 'Third'])
+		// still named for a screen reader, whatever is drawn
+		expect(wrapper.findAll('.switcher__label').map((label) => label.text())).toEqual(['First', 'Second', 'Third'])
+
+		const open = mountSwitcher('first').wrapper
+		expect(open.classes()).not.toContain('switcher--compact')
+		expect(open.find('.switcher__option').attributes('title')).toBeUndefined()
+	})
 })

@@ -22,6 +22,7 @@
 				:options="scopes"
 				:value="scope"
 				:label="t('social', 'Which posts to show')"
+				:compact="scopesCompact"
 				@intent="prefetchScope" />
 		</div>
 
@@ -237,6 +238,7 @@ import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
+import { scrollOffset, scroller } from '../utils/scroller.js'
 
 // only drawn when somebody asks to review who is waiting
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
@@ -248,6 +250,9 @@ const FirstRun = defineAsyncComponent(() => import(/* webpackChunkName: "first-r
 
 /** the card that says a ranked feed has few posts to offer */
 const COVERAGE_NOTICE = 'recommendation-coverage-v1'
+// how far down the scopes fold to icons, and how near the top they open again
+const SCOPES_FOLD_AT = 120
+const SCOPES_OPEN_AT = 40
 
 export default {
 	name: 'Timeline',
@@ -280,6 +285,8 @@ export default {
 	data() {
 		return {
 			infoHidden: false,
+			/** whether the reader has scrolled far enough for the scopes to fold to icons */
+			scopesCompact: false,
 			selectedPhotoLayout: photoLayout(),
 			/** the pending fetch-ahead of the other scopes, or 0 */
 			/** the title of the list being read, once the server has said */
@@ -785,10 +792,14 @@ export default {
 
 	mounted() {
 		eventBus.on('post-published', this.onPostPublished)
+		this.scopeScroller = scroller()
+		this.scopeScroller?.addEventListener('scroll', this.onScopeScroll, { passive: true })
 	},
 
 	beforeUnmount() {
 		eventBus.off('post-published', this.onPostPublished)
+		this.scopeScroller?.removeEventListener('scroll', this.onScopeScroll)
+		cancelAnimationFrame(this.scopeFrame)
 		// navigating away mid-celebration must not leave the flag standing for
 		// whatever timeline mounts next
 		if (this.celebratingFirstPost) {
@@ -797,6 +808,23 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * Folds the scopes to icons once the reader is well into the feed and
+		 * opens them again near the top. The two thresholds are apart so a
+		 * reader resting on one does not make the row flicker.
+		 */
+		onScopeScroll() {
+			cancelAnimationFrame(this.scopeFrame)
+			this.scopeFrame = requestAnimationFrame(() => {
+				const offset = scrollOffset()
+				if (offset > SCOPES_FOLD_AT) {
+					this.scopesCompact = true
+				} else if (offset < SCOPES_OPEN_AT) {
+					this.scopesCompact = false
+				}
+			})
+		},
+
 		/** Asks whether the learning notice, when due, belongs to this page. */
 		claimInterestsNotice() {
 			this.interestsNoticeHere = this.interestsNoticeDue
