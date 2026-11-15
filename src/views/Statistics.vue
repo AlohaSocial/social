@@ -1967,7 +1967,7 @@ export default {
 .stats__composition-band {
 	height: 100%;
 	background: var(--series-colour);
-	transition: flex-basis .2s ease;
+	transition: flex-basis var(--social-motion-base) var(--social-ease);
 }
 
 .stats__platform-list {
@@ -2722,7 +2722,7 @@ export default {
 	height: max(2px, var(--height));
 	border-radius: 3px 3px 0 0;
 	background: var(--color-primary-element);
-	transition: height .3s cubic-bezier(.22, 1, .36, 1);
+	transition: height var(--social-motion-slow) var(--social-ease);
 }
 
 .stats__bar--alt {

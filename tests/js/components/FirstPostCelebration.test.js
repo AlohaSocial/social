@@ -170,4 +170,18 @@ describe('FirstPostCelebration', () => {
 
 		expect(wrapper.find('.first-post__banner').text()).toContain('first post')
 	})
+
+	it('lets the flower from the logo bloom for a first post', () => {
+		const wrapper = mount(FirstPostCelebration)
+
+		expect(wrapper.find('.first-post__banner .blooming-flower').exists()).toBe(true)
+		expect(wrapper.find('.first-post__banner').text()).not.toContain('🎉')
+	})
+
+	it('keeps its own emoji for the other moments', () => {
+		const wrapper = mount(FirstPostCelebration, { props: { occasion: 'anniversary' } })
+
+		expect(wrapper.find('.blooming-flower').exists()).toBe(false)
+		expect(wrapper.find('.first-post__banner').text()).toContain('🎂')
+	})
 })

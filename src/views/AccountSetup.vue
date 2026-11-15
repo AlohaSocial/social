@@ -513,7 +513,7 @@ export default {
 		background: var(--color-main-background);
 		text-align: center;
 		color: var(--color-main-text);
-		transition: border-color .15s ease, background-color .15s ease;
+		transition: border-color var(--social-motion-fast) var(--social-ease), background-color var(--social-motion-fast) var(--social-ease);
 
 		&:hover {
 			background: var(--color-background-hover);

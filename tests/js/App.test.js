@@ -898,5 +898,24 @@ describe('App', () => {
 
 			expect(startViewTransition).toHaveBeenCalledTimes(1)
 		})
+
+		// the card that was pressed becomes the post at the head of the
+		// thread, rather than the page sliding away from under it
+		it('carries a pressed post card into the thread it opens', async () => {
+			const card = document.createElement('article')
+			card.dataset.socialStatus = '42'
+			document.body.append(card)
+			let named = ''
+			startViewTransition.mockImplementation(() => {
+				named = card.style.viewTransitionName
+			})
+			mountApp()
+
+			card.click()
+			resolve({ name: 'single-post', params: { id: '42', account: 'a' } }, feed('federated'))
+
+			expect(named).toMatch(/^social-morph-\d+$/)
+			card.remove()
+		})
 	})
 })

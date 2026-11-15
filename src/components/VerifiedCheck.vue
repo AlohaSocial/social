@@ -93,7 +93,7 @@ export default {
 	   hides exactly all of it */
 	stroke-dasharray: 26;
 	stroke-dashoffset: 26;
-	animation: verified-draw .45s .1s ease-out forwards;
+	animation: verified-draw var(--social-motion-slow) .1s var(--social-ease) forwards;
 }
 
 @keyframes verified-draw {

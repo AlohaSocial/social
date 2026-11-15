@@ -991,7 +991,7 @@ export default {
 @media (prefers-reduced-motion: no-preference) {
 	.social-admin__section,
 	.social-admin__group-head {
-		animation: section-arrive .26s ease-out both;
+		animation: section-arrive var(--social-motion-base) var(--social-ease) both;
 		animation-delay: calc(min(var(--entry-index, 0), 7) * 35ms);
 	}
 }

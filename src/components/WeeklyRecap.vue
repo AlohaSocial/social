@@ -16,6 +16,16 @@
 			{{ t('social', 'See what other people on your instance shared') }}
 		</NcButton>
 		<NcButton
+			v-else
+			variant="tertiary"
+			:disabled="sharing"
+			@click="share">
+			<template #icon>
+				<ImageOutline :size="20" />
+			</template>
+			{{ t('social', 'Share as image') }}
+		</NcButton>
+		<NcButton
 			variant="tertiary"
 			:title="t('social', 'Hide this week')"
 			:aria-label="t('social', 'Hide this week')"
@@ -33,8 +43,12 @@ import { generateUrl } from '@nextcloud/router'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import ChartLine from 'vue-material-design-icons/ChartLine.vue'
 import Close from 'vue-material-design-icons/Close.vue'
+import ImageOutline from 'vue-material-design-icons/ImageOutline.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import eventBus from '../services/eventBus.js'
+import { describeFile } from '../services/fileDescriptions.js'
 import logger from '../services/logger.js'
+import { renderRecapImage } from '../utils/recapImage.js'
 import { mayHave } from '../services/startupHints.js'
 
 /** where a dismissal is remembered, as the week it was dismissed in */
@@ -64,6 +78,7 @@ export default {
 	components: {
 		ChartLine,
 		Close,
+		ImageOutline,
 		NcButton,
 	},
 
@@ -73,6 +88,7 @@ export default {
 			thisWeek: 0,
 			lastWeek: 0,
 			dismissed: false,
+			sharing: false,
 		}
 	},
 
@@ -109,6 +125,13 @@ export default {
 
 			return n('social', '%n the week before.', '%n the week before.', this.lastWeek)
 		},
+
+		/** @return {string} what the shared picture shows, for its description */
+		imageDescription() {
+			const summary = [this.headline, this.aside].filter(Boolean).join(' ')
+
+			return t('social', 'Weekly recap from {instance}: {summary}', { instance: window.location.host, summary })
+		},
 	},
 
 	mounted() {
@@ -142,6 +165,31 @@ export default {
 				window.localStorage.setItem(DISMISSED_KEY, this.thisWeekKey())
 			} catch {
 				// nothing here depends on it having worked
+			}
+		},
+
+		/**
+		 * Draws the week as a picture and opens the composer with it
+		 * attached and described, so posting it is the reader's choice and
+		 * the words are still theirs to change.
+		 */
+		async share() {
+			this.sharing = true
+			try {
+				const file = await renderRecapImage({
+					count: this.thisWeek,
+					headline: this.headline,
+					aside: this.aside,
+					instance: window.location.host,
+				})
+				if (file === null) {
+					logger.debug('This browser cannot draw the weekly recap')
+					return
+				}
+
+				eventBus.emit('composer-open', { files: [describeFile(file, this.imageDescription)] })
+			} finally {
+				this.sharing = false
 			}
 		},
 

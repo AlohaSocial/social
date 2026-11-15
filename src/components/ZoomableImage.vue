@@ -367,7 +367,7 @@ export default {
 	   from the controls and the double press are worth easing, and those set
 	   the same property, so the transition is kept short enough not to lag a
 	   drag noticeably */
-	transition: transform .12s ease-out;
+	transition: transform var(--social-motion-fast) var(--social-ease);
 	transform-origin: center center;
 	user-select: none;
 }
