@@ -41,16 +41,7 @@
 				</NcButton>
 			</div>
 			<!-- a finished list with nobody in it used to be a blank panel -->
-			<NcEmptyContent
-				v-else-if="users.length === 0"
-				:name="isFollowers ? t('social', 'No followers yet') : t('social', 'Not following anyone yet')"
-				:description="isFollowers
-					? t('social', 'People who follow this account will show up here.')
-					: t('social', 'Accounts this account follows will show up here.')">
-				<template #icon>
-					<AccountMultipleOutline :size="20" />
-				</template>
-			</NcEmptyContent>
+			<EmptyContent v-else-if="users.length === 0" :item="emptyState" />
 		</template>
 	</div>
 </template>
@@ -60,9 +51,9 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import AccountMultipleOutline from 'vue-material-design-icons/AccountMultipleOutline.vue'
 import EyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import EmptyContent from '../components/EmptyContent.vue'
 import UserEntry from '../components/UserEntry.vue'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
@@ -78,7 +69,7 @@ export const MAX_REFILLS = 15
 export default {
 	name: 'ProfileFollowers',
 	components: {
-		AccountMultipleOutline,
+		EmptyContent,
 		EyeOffOutline,
 		NcButton,
 		NcEmptyContent,
@@ -104,6 +95,18 @@ export default {
 
 	computed: {
 		...mapStores(useAccountStore),
+
+		/** @return {object} a finished list with nobody in it */
+		emptyState() {
+			return {
+				illustration: 'nobody-yet',
+				title: this.isFollowers ? t('social', 'No followers yet') : t('social', 'Not following anyone yet'),
+				description: this.isFollowers
+					? t('social', 'People who follow this account will show up here.')
+					: t('social', 'Accounts this account follows will show up here.'),
+			}
+		},
+
 		/** @return {string} */
 		profileAccount() {
 			const account = String(this.$route.params.account ?? '')

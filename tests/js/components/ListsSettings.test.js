@@ -92,6 +92,7 @@ describe('ListsSettings', () => {
 		const wrapper = await mountLists()
 
 		expect(wrapper.text()).toContain('You have no lists yet.')
+		expect(wrapper.findComponent({ name: 'NobodyYet' }).exists()).toBe(true)
 	})
 
 	it('lists the group ones first, since nobody made those', async () => {
