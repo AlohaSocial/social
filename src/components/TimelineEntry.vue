@@ -1330,6 +1330,123 @@ export default {
 	}
 }
 
+/*
+ * Swell. With a pointer, a row has no flat hover fill and its actions no pill:
+ * the row's floor swells into a soft hill under the actions, deep where they
+ * are and fading into a light tint everywhere else, and the actions arrive in
+ * it. Where they float over the top end of the row (the rule above), the hill
+ * hangs from the top edge and the timestamp they would cover steps aside;
+ * where they keep a row at the foot (reactions, counts, Activities) it rises
+ * from the bottom. In with a little overshoot; out in a tenth of a second and
+ * flat, so a pointer crossing the feed leaves nothing behind.
+ */
+@property --swell-w {
+	syntax: '<length>';
+	inherits: false;
+	initial-value: 0px;
+}
+
+@property --swell-h {
+	syntax: '<length>';
+	inherits: false;
+	initial-value: 0px;
+}
+
+@property --swell-depth {
+	syntax: '<percentage>';
+	inherits: false;
+	initial-value: 0%;
+}
+
+@media (hover: hover) {
+	.timeline-entry:not(.timeline-entry--direct) {
+		// the middle of the actions, from the row's end edge
+		--swell-x: calc(100% - 112px);
+		--swell-y: 100%;
+		background-image: radial-gradient(var(--swell-w) var(--swell-h) at var(--swell-x) var(--swell-y), color-mix(in srgb, var(--color-primary-element) var(--swell-depth), transparent) 0 68%, transparent 100%);
+		transition: background-color .1s linear, --swell-depth .1s linear, --swell-w 0s .1s, --swell-h 0s .1s;
+
+		&:hover,
+		&:focus-within {
+			background-color: color-mix(in srgb, var(--color-primary-element) 4%, transparent);
+			--swell-w: 300px;
+			--swell-h: 72px;
+			--swell-depth: 16%;
+			transition: background-color .2s ease, --swell-depth .15s ease, --swell-w .5s cubic-bezier(.3, 1.25, .5, 1), --swell-h .5s cubic-bezier(.3, 1.25, .5, 1);
+		}
+
+		// its own rule: a browser without `:has()` drops the selector, and it
+		// must not take the hover case with it
+		&:has(.post-actions-reveal--held) {
+			background-color: color-mix(in srgb, var(--color-primary-element) 4%, transparent);
+			--swell-w: 300px;
+			--swell-h: 72px;
+			--swell-depth: 16%;
+		}
+
+		&:dir(rtl) {
+			--swell-x: 112px;
+		}
+
+		// the hill is the actions' ground now; the pill's own surface goes
+		.wrapper :deep(.post-actions-reveal::before) {
+			display: none;
+		}
+
+		// they arrive with the hill, wherever on the row the pointer came in
+		.wrapper :deep(.post-actions > *) {
+			transform: translateY(var(--swell-arrive, 4px));
+			transition: transform .1s linear;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions .button-vue__icon),
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions .action-item),
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions .actions) {
+			opacity: 1;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > *) {
+			transform: none;
+			transition: transform .32s cubic-bezier(.2, .8, .2, 1) .06s;
+		}
+	}
+
+	// the actions float over the top end of the row: the hill hangs from the
+	// top, they drop into it, and the timestamp under them steps aside
+	.timeline-entry:not(.notification, .timeline-entry--direct):not(:has(.reaction-bar, .post-action-count)) {
+		--swell-y: 0%;
+		--swell-arrive: -4px;
+
+		.wrapper :deep(.post-timestamp),
+		.wrapper :deep(.post-given) {
+			transition: opacity .1s linear;
+		}
+
+		&:is(:hover, :focus-within) .wrapper :deep(.post-timestamp),
+		&:is(:hover, :focus-within) .wrapper :deep(.post-given) {
+			opacity: 0;
+		}
+	}
+}
+
+@media (hover: hover) and (prefers-reduced-motion: reduce) {
+	.timeline-entry:not(.timeline-entry--direct),
+	.timeline-entry:not(.timeline-entry--direct):is(:hover, :focus-within) {
+		transition: none;
+
+		.wrapper :deep(.post-actions > *) {
+			transform: none;
+			transition: none;
+		}
+	}
+}
+
+@media (forced-colors: active) {
+	.timeline-entry:not(.timeline-entry--direct) {
+		background-image: none;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.timeline-entry:not(.timeline-entry--direct) {
 		transition: none;
