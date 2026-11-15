@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use InvalidArgumentException;
+use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -181,11 +182,15 @@ class BlocklistSubscriptionService {
 		}
 
 		try {
-			$stream = $this->curl->openStream($url, ['Accept' => 'application/json, text/csv, text/plain'], '', self::TIMEOUT)['stream'];
+			$stream = $this->curl->openStream($url, ['Accept' => 'application/json, text/csv, text/plain'], '', self::TIMEOUT, BlocklistImportService::MAX_BYTES)['stream'];
 			// one byte past the ceiling at most, which is enough for parse()
 			// to refuse the list as too large without it all being in memory
 			$body = (string)stream_get_contents($stream, BlocklistImportService::MAX_BYTES + 1);
 			fclose($stream);
+		} catch (RequestResultSizeException $e) {
+			return $this->recorded($id, $dryRun, [
+				'error' => 'the list is larger than ' . intdiv(BlocklistImportService::MAX_BYTES, 1024 * 1024) . ' MB',
+			]);
 		} catch (Throwable $e) {
 			$this->logger->notice('could not read a subscribed block list', [
 				'source' => $id, 'url' => $url, 'exception' => $e,

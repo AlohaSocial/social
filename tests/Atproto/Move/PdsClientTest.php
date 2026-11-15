@@ -17,6 +17,7 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
+use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -206,6 +207,24 @@ class PdsClientTest extends TestCase {
 			$this->assertSame($slug, $e->errorCode);
 		}
 		$this->assertSame($before, glob(sys_get_temp_dir() . '/social-atproto-pds-*') ?: [], 'nothing is left behind');
+	}
+
+	/** The ceiling is handed to the transfer, which is ended there. */
+	public function testAnAnswerEndedAtTheCeilingIsTooLarge(): void {
+		$curl = $this->createMock(CurlService::class);
+		$curl->method('openStream')->willReturnCallback(function (string $url, array $headers, string $onBehalfOf, int $timeout, ?int $max = null): array {
+			$this->assertSame(100, $max);
+
+			throw new RequestResultSizeException();
+		});
+		$client = new PdsClient($curl, $this->createMock(IConfig::class), $this->createMock(DurableCache::class), new NullLogger());
+
+		try {
+			$client->bytes('https://pds.example.com', 'com.atproto.sync.getRepo', ['did' => 'did:plc:a'], 100);
+			$this->fail('taken');
+		} catch (MoveFailure $e) {
+			$this->assertSame('repo-too-large', $e->errorCode);
+		}
 	}
 
 	public function testARefusedByteAnswerCarriesItsStatus(): void {

@@ -1100,6 +1100,23 @@ class DocumentServiceTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The origin check is on the URL asked for; a redirect from there would
+	 * take the anonymous proxy anywhere, so every hop is held to it too.
+	 */
+	public function testAPlaylistFileIsOpenedWithRedirectsHeldToItsOrigin(): void {
+		$playlist = new Document();
+		$playlist->setUrl(self::PLAYLIST);
+		$playlist->setMediaType('application/x-mpegURL');
+		$playlist->setLocalCopy(Document::COPY_STREAMED);
+		$this->cacheDocumentsRequest->method('getByNid')->willReturn($playlist);
+		$this->cacheService->expects($this->once())->method('openRemoteFile')
+			->with($this->anything(), 'bytes=0-', null, true)
+			->willReturn(['stream' => fopen('php://memory', 'r'), 'status' => 200, 'headers' => []]);
+
+		$this->service->openPlaylistFile('42', 'https://peer.example/static/seg-1.ts', 'bytes=0-');
+	}
+
 	public function testAFileIsOnlyServedThroughADocumentThatIsAPlaylist(): void {
 		$video = new Document();
 		$video->setUrl('https://peer.example/static/video.mp4');

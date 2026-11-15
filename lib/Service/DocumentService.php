@@ -647,7 +647,7 @@ class DocumentService {
 
 		return array_merge(
 			['type' => $segment->getMediaType()],
-			$this->cacheService->openRemoteFile($segment, $range)
+			$this->cacheService->openRemoteFile($segment, $range, null, true)
 		);
 	}
 

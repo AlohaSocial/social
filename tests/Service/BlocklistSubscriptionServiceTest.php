@@ -17,6 +17,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Tests\Helper\EndlessStream;
+use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -192,6 +193,18 @@ class BlocklistSubscriptionServiceTest extends TestCase {
 	 * A list is read no further than one byte past the import ceiling, and
 	 * refused as too large, rather than buffered whole first.
 	 */
+	public function testAListEndedAtTheCeilingIsSaidToBeTooLarge(): void {
+		$this->curl->method('openStream')->willReturnCallback(function (string $url, array $headers, string $onBehalfOf, int $timeout, ?int $max = null): array {
+			$this->assertSame(BlocklistImportService::MAX_BYTES, $max);
+
+			throw new RequestResultSizeException();
+		});
+
+		$result = $this->service->fetch('mastodon.social');
+
+		$this->assertStringContainsString('larger than', $result['error']);
+	}
+
 	public function testAListLargerThanTheCeilingIsRefusedWithoutReadingItAll(): void {
 		$asked = [];
 		$this->curl->method('openStream')->willReturnCallback(static function (string $url, array $headers, string $onBehalfOf, int $timeout) use (&$asked): array {

@@ -13,6 +13,7 @@ use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Tools\Exceptions\RequestContentException;
+use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -119,9 +120,11 @@ class PdsClient {
 		try {
 			// a stream rather than a document: a repository is not held to the
 			// download ceiling, only to $max
-			$answer = $this->curl->openStream($pds . '/xrpc/' . $method . '?' . http_build_query($query), $headers, '', self::LONG_TIMEOUT);
+			$answer = $this->curl->openStream($pds . '/xrpc/' . $method . '?' . http_build_query($query), $headers, '', self::LONG_TIMEOUT, $max);
 		} catch (RequestContentException $e) {
 			return ['status' => $e->getCode(), 'path' => '', 'size' => 0, 'type' => ''];
+		} catch (RequestResultSizeException $e) {
+			throw new MoveFailure($method === 'com.atproto.sync.getRepo' ? 'repo-too-large' : 'blob-too-large', $method . ' answered more than ' . $max . ' bytes');
 		} catch (Throwable $e) {
 			throw $this->unreachable($pds, $e);
 		}
