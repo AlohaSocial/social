@@ -1335,7 +1335,7 @@ export default {
 		&:hover,
 		&:focus-within {
 			background-color: var(--color-main-background);
-			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
+			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow) 70%, transparent);
 			translate: 0 -3px;
 			transition: box-shadow .25s ease, translate .25s cubic-bezier(.2, .8, .2, 1), background-color .2s ease;
 		}
@@ -1344,7 +1344,7 @@ export default {
 		// must not take the hover case with it
 		&:has(.post-actions-reveal--held) {
 			background-color: var(--color-main-background);
-			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
+			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow) 70%, transparent);
 			translate: 0 -3px;
 		}
 
