@@ -17,6 +17,7 @@ use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Exceptions\InvalidScopeException;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -549,6 +550,15 @@ class ClientService {
 	 */
 	public function isSuspendedUser(string $userId): bool {
 		return $this->moderation?->isSuspendedUser($userId) ?? false;
+	}
+
+	/**
+	 * Whether this local account, already read for the request, is suspended
+	 * here: the same answer as `isSuspendedUser()` without reading the account
+	 * a second time.
+	 */
+	public function isSuspendedAccount(Person $account): bool {
+		return $this->moderation?->isSuspended($account->getId()) ?? false;
 	}
 
 	/**

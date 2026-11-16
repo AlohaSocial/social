@@ -148,9 +148,6 @@ abstract class MastodonApiController extends Controller {
 	protected function initViewer(bool $exception = false, bool $publicRoute = false): bool {
 		try {
 			$userId = $this->currentSession();
-			if ($this->clientService->isSuspendedUser($userId)) {
-				throw new AccountSuspendedException();
-			}
 
 			$this->logger->debug('[' . static::class . '] initViewer: ' . $userId);
 
@@ -166,6 +163,9 @@ abstract class MastodonApiController extends Controller {
 			$account = ($this->bearer === '')
 				? $this->ownAccountOf($userId)
 				: $this->accountService->getActorFromUserId($userId);
+			if ($this->clientService->isSuspendedAccount($account)) {
+				throw new AccountSuspendedException();
+			}
 			$this->logger->debug('[' . static::class . '] Actor retrieved/created', [
 				'userId' => $userId,
 				'username' => $account->getPreferredUsername()

@@ -103,14 +103,14 @@ abstract class ClientApiController extends Controller {
 	protected function initViewer(array $scopes, bool $required = true, bool $whileSuspended = false): void {
 		try {
 			$userId = $this->currentSession($scopes);
-			if (!$whileSuspended && $this->clientService->isSuspendedUser($userId)) {
-				throw new AccountSuspendedException();
-			}
 			// a token is only issued to an account, so a caller without one
 			// came with their Nextcloud session and has not set up here yet
 			$account = ($this->bearer === '')
 				? $this->ownAccountOf($userId)
 				: $this->accountService->getActorFromUserId($userId);
+			if (!$whileSuspended && $this->clientService->isSuspendedAccount($account)) {
+				throw new AccountSuspendedException();
+			}
 			$this->viewer = $this->prepareViewer($account);
 		} catch (InsufficientScopeException $e) {
 			throw $e;

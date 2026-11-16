@@ -175,7 +175,7 @@ class ClientApiControllerTest extends TestCase {
 
 	public function testASuspendedAccountIsRefusedWithAForbiddenNotADeadToken(): void {
 		$this->token(['read']);
-		$this->clientService->method('isSuspendedUser')->with('alice')->willReturn(true);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 
 		$response = $this->controller('Bearer t')->probe(['read']);
 
@@ -187,14 +187,14 @@ class ClientApiControllerTest extends TestCase {
 	public function testASuspendedSessionIsRefusedToo(): void {
 		$this->user = $this->createMock(IUser::class);
 		$this->user->method('getUID')->willReturn('alice');
-		$this->clientService->method('isSuspendedUser')->with('alice')->willReturn(true);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->probe(['read'])->getStatus());
 	}
 
 	public function testASuspendedAccountKeepsTheRoutesThatSayItMay(): void {
 		$this->token(['read']);
-		$this->clientService->method('isSuspendedUser')->willReturn(true);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 
 		$response = $this->controller('Bearer t')->probe(['read'], true, true);
 
@@ -203,7 +203,7 @@ class ClientApiControllerTest extends TestCase {
 
 	public function testAnOptionalViewerLeavesASuspendedAccountAnonymous(): void {
 		$this->token(['read']);
-		$this->clientService->method('isSuspendedUser')->willReturn(true);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 
 		$response = $this->controller('Bearer t')->probe(['read'], false);
 

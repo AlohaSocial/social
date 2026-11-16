@@ -1262,7 +1262,7 @@ class ApiControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('alice')->setAuthScopes(['read']);
 		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
-		$this->clientService->method('isSuspendedUser')->with('alice')->willReturn(true);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 		$logger = $this->createMock(LoggerInterface::class);
 		$logger->expects($this->never())->method('error');
 		$logger->expects($this->never())->method('warning');
