@@ -274,15 +274,6 @@
 
 	}
 
-	/* with the numbers shown, every action keeps a slot of one width, its
-	   glyph at the start and its count after it, whether it has a count or
-	   not: a glyph then sits in the same place on every post down the feed
-	   instead of moving with the counts beside it */
-	.post-footer:has(.post-action-count) .post-action-group {
-		inline-size: calc(var(--default-clickable-area, 34px) + 36px);
-		justify-content: flex-start;
-	}
-
 	/* it had a top margin from when it was a row of its own */
 	.post-footer :deep(.reaction-bar) {
 		margin-top: 0;
