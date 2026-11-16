@@ -469,7 +469,7 @@ export default {
 	.social__search-section {
 		margin-bottom: calc(var(--default-grid-baseline) * 6);
 		/* dimmed while a refined term is being searched: see --refreshing */
-		transition: opacity .2s ease;
+		transition: opacity var(--social-motion-base) var(--social-ease);
 
 		h2 {
 			font-size: 15px;
@@ -516,7 +516,7 @@ export default {
 	 */
 	.result-enter-active,
 	.result-move {
-		transition: opacity .2s ease, transform .2s ease;
+		transition: opacity var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease);
 	}
 
 	.result-enter-from {
@@ -531,7 +531,7 @@ export default {
 	}
 
 	.empty-enter-active {
-		transition: opacity .2s ease, transform .2s ease;
+		transition: opacity var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease);
 	}
 
 	.empty-enter-from,
@@ -541,7 +541,7 @@ export default {
 	}
 
 	.empty-leave-active {
-		transition: opacity .15s ease;
+		transition: opacity var(--social-motion-fast) var(--social-ease);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

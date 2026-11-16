@@ -329,4 +329,16 @@ describe('the registration page', () => {
 		expect(failed.text()).toContain('This confirmation link is not valid any more.')
 		expect(button(failed, 'Register again')).toBeDefined()
 	})
+
+	// a new account is the moment the flower is for; it says nothing a
+	// screen reader would read, the sentence beside it does that
+	it('lets the flower bloom over a new account, and only there', async () => {
+		const created = await page({ ...OPEN, result: { state: 'created', handle: 'alice' } })
+		const flower = created.find('.signup__bloom')
+		expect(flower.exists()).toBe(true)
+		expect(flower.attributes('aria-hidden')).toBe('true')
+
+		const waiting = await page({ ...OPEN, result: { state: 'approval' } })
+		expect(waiting.find('.signup__bloom').exists()).toBe(false)
+	})
 })

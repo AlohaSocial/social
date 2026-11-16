@@ -571,7 +571,7 @@ export default {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 	gap: var(--default-grid-baseline);
-	transition: opacity .15s ease;
+	transition: opacity var(--social-motion-fast) var(--social-ease);
 }
 
 /* the previous window's ranking, while the next one is on its way */
@@ -652,7 +652,7 @@ export default {
 	height: 100%;
 	border-radius: 2px;
 	background-color: var(--color-primary-element);
-	transition: width .3s ease;
+	transition: width var(--social-motion-slow) var(--social-ease);
 }
 
 .trending__follow {

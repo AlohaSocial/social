@@ -6,6 +6,7 @@
 import { createApp } from 'vue'
 import pinia from './store/index.js'
 import Dashboard from './views/Dashboard.vue'
+import './styles/motion.css'
 
 const requestToken = window.OC?.requestToken
 if (requestToken) {

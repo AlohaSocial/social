@@ -14,7 +14,8 @@
 				:style="piece.style" />
 		</div>
 		<p class="first-post__banner" aria-hidden="true">
-			<span class="first-post__emoji">{{ emoji }}</span>
+			<BloomingFlower v-if="occasion === 'first-post'" :size="22" class="first-post__emoji" />
+			<span v-else class="first-post__emoji">{{ emoji }}</span>
 			{{ message }}
 		</p>
 		<!-- a live region is only reliably announced when it is already on the
@@ -27,6 +28,8 @@
 </template>
 
 <script>
+import BloomingFlower from './BloomingFlower.vue'
+
 /**
  * The one-time flourish for the first post a reader ever publishes here.
  *
@@ -81,6 +84,10 @@ function makePiece(id) {
 
 export default {
 	name: 'FirstPostCelebration',
+
+	components: {
+		BloomingFlower,
+	},
 
 	props: {
 		/**
@@ -221,7 +228,7 @@ export default {
 	/* the post underneath is the point: nothing here ever takes a click */
 	pointer-events: none;
 	opacity: 1;
-	transition: opacity .3s ease;
+	transition: opacity var(--social-motion-base) var(--social-ease);
 }
 
 .first-post--leaving {
@@ -272,7 +279,7 @@ export default {
 	font-weight: 600;
 	text-align: center;
 	/* the same curve the empty-content artwork settles on */
-	animation: first-post-settle .45s cubic-bezier(.22, 1, .36, 1) both;
+	animation: first-post-settle var(--social-motion-slow) var(--social-ease) both;
 }
 
 .first-post__emoji {

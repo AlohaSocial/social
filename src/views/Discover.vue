@@ -706,7 +706,7 @@ export default {
 		border-radius: var(--border-radius-large);
 		padding: calc(var(--default-grid-baseline) * 3);
 		cursor: pointer;
-		transition: background-color .15s ease;
+		transition: background-color var(--social-motion-fast) var(--social-ease);
 
 		&:hover,
 		&:focus-visible {

@@ -10,6 +10,7 @@
 
 		<!-- what the confirmation link or the form came to -->
 		<template v-if="outcome">
+			<BloomingFlower v-if="outcome.state === 'created'" :size="48" class="signup__bloom" />
 			<NcNoteCard :type="outcome.state === 'error' ? 'error' : 'success'">
 				{{ outcomeText }}
 			</NcNoteCard>
@@ -273,6 +274,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
+import BloomingFlower from '../components/BloomingFlower.vue'
 import { signupUrl } from '../services/externalApi.js'
 import { fetchChallenge, startSolving } from '../services/proofOfWork.js'
 import { progressOf } from '../utils/proofOfWork.js'
@@ -322,6 +324,7 @@ export default {
 		NcPasswordField,
 		NcTextField,
 		ArrowLeft,
+		BloomingFlower,
 	},
 
 	data() {
@@ -652,6 +655,11 @@ export default {
 	&__heading {
 		margin-block-end: calc(var(--default-grid-baseline) * 3);
 		text-align: center;
+	}
+
+	&__bloom {
+		display: block;
+		margin: 0 auto calc(var(--default-grid-baseline) * 3);
 	}
 
 	&__lede {

@@ -42,11 +42,16 @@ export function canViewTransition() {
  * otherwise hold the browser on the old picture, which is a freeze rather than
  * an animation, and a freeze is worse than a cut.
  *
+ * An element carried across the change (see `sharedElements.js`) lands once
+ * the new page is drawn, and gives its name back when the animation is over.
+ *
  * @param {() => Promise<void>} update lets the router through and settles when the DOM has
+ * @param {{land: () => void, release: () => void}|null} [shared] what is carried across, if anything
  * @return {Promise<void>} when the picture has been taken and the navigation may continue
  */
-export function startPageTransition(update) {
+export function startPageTransition(update, shared = null) {
 	if (!canViewTransition()) {
+		shared?.release()
 		return update()
 	}
 
@@ -59,10 +64,15 @@ export function startPageTransition(update) {
 			}
 		}
 
-		document.startViewTransition(async () => {
+		const transition = document.startViewTransition(async () => {
 			settle()
 			await update()
+			shared?.land()
 		})
+
+		if (shared) {
+			Promise.resolve(transition?.finished).then(shared.release, shared.release)
+		}
 
 		// the browser holds the old picture until the callback settles; this is
 		// the longest that may take before the change is simply made

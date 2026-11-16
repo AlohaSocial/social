@@ -170,21 +170,21 @@ export default {
 
 .rolling-count--up {
 	.rolling-count__value--current {
-		animation: rolling-count-enter-up .28s cubic-bezier(.4, 0, .2, 1);
+		animation: rolling-count-enter-up var(--social-motion-base) var(--social-ease);
 	}
 
 	.rolling-count__value--leaving {
-		animation: rolling-count-leave-up .28s cubic-bezier(.4, 0, .2, 1) forwards;
+		animation: rolling-count-leave-up var(--social-motion-base) var(--social-ease) forwards;
 	}
 }
 
 .rolling-count--down {
 	.rolling-count__value--current {
-		animation: rolling-count-enter-down .28s cubic-bezier(.4, 0, .2, 1);
+		animation: rolling-count-enter-down var(--social-motion-base) var(--social-ease);
 	}
 
 	.rolling-count__value--leaving {
-		animation: rolling-count-leave-down .28s cubic-bezier(.4, 0, .2, 1) forwards;
+		animation: rolling-count-leave-down var(--social-motion-base) var(--social-ease) forwards;
 	}
 }
 

@@ -31,7 +31,13 @@
 			     Nextcloud's would open over the top of the profile they are
 			     already reading -->
 			<NcAvatar
-				v-if="nextcloudUserOf(accountInfo) !== ''"
+				v-if="patternAvatarUrl(accountInfo) !== ''"
+				:url="patternAvatarUrl(accountInfo)"
+				:disableMenu="true"
+				:disableTooltip="true"
+				:size="128" />
+			<NcAvatar
+				v-else-if="nextcloudUserOf(accountInfo) !== ''"
 				:user="nextcloudUserOf(accountInfo)"
 				:disableMenu="true"
 				:disableTooltip="true"
@@ -587,6 +593,7 @@ import axios from '@nextcloud/axios'
 import BlueskyBadge from './BlueskyBadge.vue'
 import FollowButton from './FollowButton.vue'
 import { isBlueskyAccount, nextcloudUserOf, qualifiedHandle } from '../utils/accountLocality.js'
+import { patternAvatarUrl } from '../utils/patternAvatar.js'
 import { focusedElement, returnFocusTo } from '../utils/focus.js'
 import FeaturedTags from './FeaturedTags.vue'
 import ProfileHighlights from './ProfileHighlights.vue'
@@ -1095,6 +1102,7 @@ export default {
 	methods: {
 		accountAvatarUrl,
 		nextcloudUserOf,
+		patternAvatarUrl,
 
 		/**
 		 * Asks who the reader follows that also follows this account.

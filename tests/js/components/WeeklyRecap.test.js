@@ -8,8 +8,14 @@ import axios from '@nextcloud/axios'
 import { createPinia, setActivePinia } from 'pinia'
 import WeeklyRecap from '../../../src/components/WeeklyRecap.vue'
 import { useSettingsStore } from '../../../src/store/settings.js'
+import eventBus from '../../../src/services/eventBus.js'
+import { descriptionOf } from '../../../src/services/fileDescriptions.js'
+import { renderRecapImage } from '../../../src/utils/recapImage.js'
 
 vi.mock('@nextcloud/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
+vi.mock('../../../src/utils/recapImage.js', () => ({
+	renderRecapImage: vi.fn(async () => new File(['png'], 'weekly-recap.png', { type: 'image/png' })),
+}))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -133,6 +139,49 @@ describe('WeeklyRecap', () => {
 			const second = await mountRecap({ enabled: true, this_week: 1, last_week: 3 })
 
 			expect(second.find('.weekly-recap').exists()).toBe(true)
+		})
+	})
+
+	describe('sharing the week', () => {
+		it('opens the composer with the week drawn as a picture, described', async () => {
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			const wrapper = await mountRecap({ enabled: true, this_week: 3, last_week: 5 })
+
+			const share = wrapper.findAll('button').find((button) => button.text() === 'Share as image')
+			await share.trigger('click')
+			await flushPromises()
+			eventBus.off('composer-open', opened)
+
+			expect(renderRecapImage).toHaveBeenCalledWith(expect.objectContaining({
+				count: 3,
+				headline: 'You posted 3 times this week.',
+				aside: '5 the week before.',
+			}))
+			const [{ files }] = opened.mock.calls[0]
+			expect(files).toHaveLength(1)
+			expect(files[0].type).toBe('image/png')
+			expect(descriptionOf(files[0])).toBe(`Weekly recap from ${window.location.host}: You posted 3 times this week. 5 the week before.`)
+		})
+
+		// a picture of "you have not posted" is nothing anybody wants to post
+		it('is not offered for a quiet week', async () => {
+			const wrapper = await mountRecap({ enabled: true, this_week: 0, last_week: 4 })
+
+			expect(wrapper.text()).not.toContain('Share as image')
+		})
+
+		it('opens nothing where the browser cannot draw the picture', async () => {
+			renderRecapImage.mockResolvedValueOnce(null)
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			const wrapper = await mountRecap({ enabled: true, this_week: 3, last_week: 0 })
+
+			await wrapper.findAll('button').find((button) => button.text() === 'Share as image').trigger('click')
+			await flushPromises()
+			eventBus.off('composer-open', opened)
+
+			expect(opened).not.toHaveBeenCalled()
 		})
 	})
 
