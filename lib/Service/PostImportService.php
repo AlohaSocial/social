@@ -688,7 +688,7 @@ class PostImportService {
 			return self::MAX_JSON;
 		}
 
-		return (int)max(0, min(self::MAX_JSON, intdiv((int)$limit - memory_get_usage(), self::JSON_MEMORY_FACTOR)));
+		return max(0, min(self::MAX_JSON, intdiv((int)$limit - memory_get_usage(), self::JSON_MEMORY_FACTOR)));
 	}
 
 	/**
