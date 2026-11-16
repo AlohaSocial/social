@@ -656,11 +656,10 @@ class OAuthController extends Controller {
 
 	/**
 	 * The application's website as the consent page may link it: an `http` or
-	 * `https` address, or nothing. The registration takes any string there,
-	 * and the page offers it as a link to click.
+	 * `https` address, or nothing.
 	 */
 	private function websiteLink(string $website): string {
-		return preg_match('/^https?:\/\/[^\/]/i', $website) === 1 ? $website : '';
+		return ClientService::websiteLink($website);
 	}
 
 	/**

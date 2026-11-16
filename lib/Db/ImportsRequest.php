@@ -106,6 +106,23 @@ class ImportsRequest extends CoreRequestBuilder {
 		return $found !== false;
 	}
 
+	/**
+	 * One account's runs still marked running that have not written their
+	 * progress since `$before`: a run writes it every couple of seconds, so
+	 * these are runs whose process died without recording an outcome.
+	 *
+	 * @return ImportJob[]
+	 */
+	public function getStaleRunning(string $userId, int $before): array {
+		$qb = $this->getQueryBuilder();
+		$this->select($qb)
+			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter(ImportJob::STATUS_RUNNING)))
+			->andWhere($qb->expr()->lt('updated', $qb->createNamedParameter(new DateTime('@' . $before), IQueryBuilder::PARAM_DATE)));
+
+		return $this->rows($qb);
+	}
+
 	public function delete(int $id): bool {
 		$qb = $this->getQueryBuilder();
 		$qb->delete(self::TABLE_IMPORTS)

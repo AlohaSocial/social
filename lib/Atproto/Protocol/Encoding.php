@@ -117,7 +117,7 @@ final class Encoding {
 	}
 
 	public static function base64UrlDecode(string $text): string {
-		if (!preg_match('/^[A-Za-z0-9_-]*$/', $text)) {
+		if (!preg_match('/^[A-Za-z0-9_-]*$/D', $text)) {
 			throw new InvalidArgumentException('Not base64url');
 		}
 		$decoded = base64_decode(strtr($text, '-_', '+/'), true);

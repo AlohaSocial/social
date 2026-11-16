@@ -13,25 +13,48 @@ use ArrayIterator;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCP\DB\IResult;
+use OCP\DB\QueryBuilder\IQueryFunction;
 use PDO;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Traversable;
 
 /**
- * The inboxes a post is delivered to, told apart in PHP.
+ * The inboxes a post is delivered to.
  *
- * The statement selects distinct (shared inbox, inbox) pairs, so a follower
- * on a server without a shared inbox is a row of their own: an account with
- * ten thousand such followers hands back ten thousand rows. Each one used to
- * be checked against the inboxes kept so far with `in_array()`, which is
- * fifty million comparisons on every post that account writes. The statement
- * itself is run against a database in tests/Integration/Db/FollowLifecycleTest.
+ * The statement groups the followers by their delivery inbox, the shared one
+ * where there is one: grouped as distinct (shared inbox, inbox) pairs it was
+ * a row per follower. A follower on a server without a shared inbox is still
+ * a row of their own, so an account with ten thousand such followers hands
+ * back ten thousand rows. Each one used to be checked against the inboxes
+ * kept so far with `in_array()`, which is fifty million comparisons on every
+ * post that account writes. The statement itself is run against a database
+ * in tests/Integration/Db/FollowLifecycleTest.
  */
 #[AllowMockObjectsWithoutExpectations]
 class FollowerInboxesTest extends TestCase {
+	/** @var list<string> what the statement selected and grouped by */
+	private array $selected = [];
+	/** @var list<string> */
+	private array $grouped = [];
+
 	/**
-	 * @param list<array{shared_inbox: string, inbox: string}> $rows what the statement returns
+	 * The rows the statement hands back for these followers, ungrouped: each
+	 * as COALESCE(NULLIF(shared_inbox, ''), inbox) makes it.
+	 *
+	 * @param list<array{shared_inbox: string, inbox: string}> $followers
+	 *
+	 * @return list<array{delivery_inbox: string}>
+	 */
+	private static function rowsOf(array $followers): array {
+		return array_map(
+			static fn (array $follower): array => ['delivery_inbox' => $follower['shared_inbox'] !== '' ? $follower['shared_inbox'] : $follower['inbox']],
+			$followers
+		);
+	}
+
+	/**
+	 * @param list<array{delivery_inbox: string}> $rows what the statement returns
 	 *
 	 * @return string[]
 	 */
@@ -112,9 +135,28 @@ class FollowerInboxesTest extends TestCase {
 		};
 
 		$qb = $this->createStub(SocialQueryBuilder::class);
-		foreach (['selectDistinct', 'addSelect', 'from', 'innerJoin', 'where', 'andWhere'] as $method) {
+		foreach (['from', 'innerJoin', 'where', 'andWhere'] as $method) {
 			$qb->method($method)->willReturnSelf();
 		}
+		$qb->method('getColumnName')->willReturnCallback(static fn (string $column, string $alias = ''): string => $alias . '.' . $column);
+		$qb->method('createFunction')->willReturnCallback(function (string $call): IQueryFunction {
+			$function = $this->createStub(IQueryFunction::class);
+			$function->method('__toString')->willReturn($call);
+
+			return $function;
+		});
+		$qb->method('selectAlias')->willReturnCallback(function ($select, string $alias) use ($qb) {
+			$this->selected[] = $select . ' AS ' . $alias;
+
+			return $qb;
+		});
+		$qb->method('groupBy')->willReturnCallback(function (...$by) use ($qb) {
+			foreach ($by as $column) {
+				$this->grouped[] = (string)$column;
+			}
+
+			return $qb;
+		});
 		$qb->method('expr')->willReturn(new FakeExpressions());
 		$qb->method('prim')->willReturnCallback(static fn (string $id): string => md5($id));
 		$qb->method('createNamedParameter')->willReturnCallback(static fn ($value): string => "'" . (string)$value . "'");
@@ -129,15 +171,27 @@ class FollowerInboxesTest extends TestCase {
 		return $request->getFollowerInboxes('https://cloud.example/@alice');
 	}
 
+	/**
+	 * A hundred thousand followers on a few hundred servers are a few hundred
+	 * rows: the delivery inbox is worked out and grouped in the query.
+	 */
+	public function testTheDatabaseGroupsTheFollowersByTheirDeliveryInbox(): void {
+		$this->inboxesFrom([]);
+
+		$inbox = "COALESCE(NULLIF(ca.shared_inbox, ''), ca.inbox)";
+		$this->assertSame([$inbox . ' AS delivery_inbox'], $this->selected);
+		$this->assertSame([$inbox], $this->grouped);
+	}
+
 	public function testASharedInboxIsDeliveredToOnceAndAPersonalOneWhereThereIsNone(): void {
 		$this->assertSame(
 			['https://mastodon.example/inbox', 'https://small.example/users/carol/inbox'],
-			$this->inboxesFrom([
+			$this->inboxesFrom(self::rowsOf([
 				['shared_inbox' => 'https://mastodon.example/inbox', 'inbox' => 'https://mastodon.example/users/a/inbox'],
 				['shared_inbox' => 'https://mastodon.example/inbox', 'inbox' => 'https://mastodon.example/users/b/inbox'],
 				['shared_inbox' => '', 'inbox' => 'https://small.example/users/carol/inbox'],
 				['shared_inbox' => '', 'inbox' => ''],
-			])
+			]))
 		);
 	}
 
@@ -151,7 +205,7 @@ class FollowerInboxesTest extends TestCase {
 	public function testTenThousandFollowersAreToldApartInLinearTime(): void {
 		$rows = [];
 		for ($i = 0; $i < 10000; $i++) {
-			$rows[] = ['shared_inbox' => '', 'inbox' => 'https://host' . $i . '.example/users/someone/inbox'];
+			$rows[] = ['delivery_inbox' => 'https://host' . $i . '.example/users/someone/inbox'];
 		}
 		$rows = array_merge($rows, $rows);
 

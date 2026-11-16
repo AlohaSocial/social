@@ -195,11 +195,16 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	 * MAX_TRIES and never removed, so the parent it was fetching never
 	 * arrived. The outbound queue has had this since it had the same problem.
 	 *
+	 * The attempt that died counts as a try: an item whose processing takes
+	 * the process down with it never reaches `setAsFailure()`, and would
+	 * otherwise come back for ever.
+	 *
 	 * @return int the number of items re-queued
 	 */
 	public function resetStaleRunning(int $before): int {
 		$qb = $this->getStreamQueueUpdateSql();
-		$qb->set('status', $qb->createNamedParameter(StreamQueue::STATUS_STANDBY));
+		$qb->set('status', $qb->createNamedParameter(StreamQueue::STATUS_STANDBY))
+			->set('tries', $qb->func()->add('tries', $qb->expr()->literal(1)));
 		$qb->limitToStatus(StreamQueue::STATUS_RUNNING);
 		$qb->andWhere(
 			$qb->expr()->lt('last', $qb->createNamedParameter(

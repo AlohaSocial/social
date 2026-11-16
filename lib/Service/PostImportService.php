@@ -20,6 +20,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
+use OCP\Util;
 use Psr\Log\LoggerInterface;
 use Throwable;
 use ZipArchive;
@@ -163,6 +164,15 @@ class PostImportService {
 
 	/** How large a file inside an archive may be before it is left alone. */
 	private const MAX_FILE = 200 * 1024 * 1024;
+
+	/**
+	 * The largest list of posts read, whatever memory there is: a list is
+	 * read and decoded whole, and decoded JSON takes several times the room
+	 * of its text.
+	 */
+	private const MAX_JSON = 256 * 1024 * 1024;
+	/** How many bytes of memory decoding one byte of JSON is reckoned to take. */
+	private const JSON_MEMORY_FACTOR = 10;
 
 	/**
 	 * Every file in the archive being read, built the first time an attachment
@@ -601,8 +611,8 @@ class PostImportService {
 			}
 
 			foreach (self::OUTBOX_PATHS as $candidate) {
-				$found = $zip->getFromName($candidate);
-				if ($found !== false) {
+				$found = $this->readJson($zip, $candidate);
+				if ($found !== null) {
 					$contents = $found;
 					break;
 				}
@@ -618,6 +628,7 @@ class PostImportService {
 				throw $this->whyNotAnExport($zip);
 			}
 		} else {
+			$this->assertJsonFits((int)@filesize($path), basename($path));
 			$contents = file_get_contents($path);
 			if ($contents === false) {
 				throw new MoveErrorException('the file could not be read', 'export-unreadable');
@@ -639,6 +650,48 @@ class PostImportService {
 	}
 
 	/**
+	 * One list of posts out of an archive, or null when it is not there.
+	 * Its declared size is checked before it is read: `getFromName()`
+	 * allocates that much and inflates no further, and a list too large to
+	 * decode within the memory limit would end the run with a fatal error,
+	 * not a refusal.
+	 *
+	 * @throws MoveErrorException file-too-large
+	 */
+	private function readJson(ZipArchive $zip, string $name): ?string {
+		$stat = $zip->statName($name);
+		if ($stat === false) {
+			return null;
+		}
+		$this->assertJsonFits((int)($stat['size'] ?? 0), $name);
+
+		$contents = $zip->getFromName($name);
+
+		return ($contents === false) ? null : $contents;
+	}
+
+	/** @throws MoveErrorException file-too-large */
+	private function assertJsonFits(int $size, string $name): void {
+		$ceiling = $this->jsonCeiling();
+		if ($size > $ceiling) {
+			throw new MoveErrorException(
+				$name . ' is larger than the ' . intdiv($ceiling, 1024 * 1024) . ' MB this server can read in one go',
+				'file-too-large'
+			);
+		}
+	}
+
+	/** The largest list of posts this process has the memory to decode. */
+	private function jsonCeiling(): int {
+		$limit = Util::computerFileSize((string)ini_get('memory_limit'));
+		if ($limit === false || $limit <= 0) {
+			return self::MAX_JSON;
+		}
+
+		return max(0, min(self::MAX_JSON, intdiv((int)$limit - memory_get_usage(), self::JSON_MEMORY_FACTOR)));
+	}
+
+	/**
 	 * The videos a PeerTube export names, or `[]` when this is not one.
 	 *
 	 * Looked for by suffix rather than by exact name, like every other file in
@@ -655,8 +708,8 @@ class PostImportService {
 			return [];
 		}
 
-		$contents = $zip->getFromName($name);
-		if ($contents === false) {
+		$contents = $this->readJson($zip, $name);
+		if ($contents === null) {
 			return [];
 		}
 
@@ -697,8 +750,8 @@ class PostImportService {
 				continue;
 			}
 
-			$contents = $zip->getFromIndex($i);
-			if ($contents === false) {
+			$contents = $this->readJson($zip, $name);
+			if ($contents === null) {
 				continue;
 			}
 
@@ -1347,8 +1400,10 @@ class PostImportService {
 
 		// when it was written, not when it was imported: an archive that
 		// arrived as today's posts would be a timeline of somebody's whole
-		// history, in one minute, in the wrong order
-		$note->setPublished(gmdate('Y-m-d\TH:i:s\Z', $post['published']));
+		// history, in one minute, in the wrong order. Never later than now:
+		// the date is the post's place in every timeline, and one dated in
+		// the future would sit above every real post until then
+		$note->setPublished(gmdate('Y-m-d\TH:i:s\Z', min($post['published'], time())));
 		$note->convertPublished();
 
 		// a reply keeps its parent where the archive holds both: the thread is

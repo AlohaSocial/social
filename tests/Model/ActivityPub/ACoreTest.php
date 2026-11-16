@@ -150,6 +150,30 @@ class ACoreTest extends TestCase {
 		$item->checkOrigin($id);
 	}
 
+	/**
+	 * A service on another port of a Fediverse host is not that host's
+	 * instance, and an origin with a port holds ids to that port.
+	 */
+	public function testCheckOriginComparesThePortToo(): void {
+		$item = new ACore();
+		$item->setOrigin('mastodon.social', 1, 0);
+		$item->checkOrigin('https://MASTODON.social:443/users/alice');
+
+		try {
+			$item->checkOrigin('https://mastodon.social:8443/users/alice');
+			$this->fail('an id on another port passed the origin check');
+		} catch (InvalidOriginException $e) {
+		}
+
+		$ported = new ACore();
+		$ported->setOrigin('mastodon.social:8443', 1, 0);
+		$ported->checkOrigin('https://mastodon.social:8443/users/alice');
+		$this->assertSame('mastodon.social', $ported->getOrigin(), 'the origin a block list reads is the host');
+
+		$this->expectException(InvalidOriginException::class);
+		$ported->checkOrigin('https://mastodon.social/users/alice');
+	}
+
 	public function testCheckActorAcceptsTheSameActor(): void {
 		$item = new ACore();
 

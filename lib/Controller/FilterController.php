@@ -267,14 +267,14 @@ class FilterController extends ClientApiController {
 	 * `filter_action: hide` — the filtered status is dropped rather than
 	 * blurred — so it maps onto the action rather than being stored twice.
 	 *
-	 * @param array<mixed> $context
+	 * @param array<mixed>|string $context
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/filters')]
 	public function createV1(
 		string $phrase = '',
-		array $context = [],
+		array|string $context = [],
 		mixed $irreversible = false,
 		mixed $whole_word = false,
 		mixed $expires_in = null,
@@ -308,7 +308,7 @@ class FilterController extends ClientApiController {
 	 * here — a client that sends only `phrase` must not thereby clear the
 	 * contexts or the expiry.
 	 *
-	 * @param array<mixed>|null $context
+	 * @param array<mixed>|string|null $context
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -316,7 +316,7 @@ class FilterController extends ClientApiController {
 	public function updateV1(
 		int $id,
 		?string $phrase = null,
-		?array $context = null,
+		array|string|null $context = null,
 		mixed $irreversible = null,
 		mixed $whole_word = null,
 		mixed $expires_in = null,
@@ -439,18 +439,18 @@ class FilterController extends ClientApiController {
 	 * Mastodon; `filter_action` defaults to `warn`, and an absent `expires_in`
 	 * means a filter that never expires.
 	 *
-	 * @param array<mixed> $context
-	 * @param array<mixed> $keywords_attributes
+	 * @param array<mixed>|string $context
+	 * @param array<mixed>|string $keywords_attributes
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v2/filters')]
 	public function create(
 		string $title = '',
-		array $context = [],
+		array|string $context = [],
 		string $filter_action = '',
 		mixed $expires_in = null,
-		array $keywords_attributes = [],
+		array|string $keywords_attributes = [],
 	): DataResponse {
 		try {
 			$this->initViewer(['write:filters', 'write']);
@@ -491,8 +491,8 @@ class FilterController extends ClientApiController {
 	 * entry with an `id` changes that keyword, one with `_destroy` removes it,
 	 * one without an id adds it, and a keyword nobody named is untouched.
 	 *
-	 * @param array<mixed>|null $context
-	 * @param array<mixed>|null $keywords_attributes
+	 * @param array<mixed>|string|null $context
+	 * @param array<mixed>|string|null $keywords_attributes
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -500,9 +500,9 @@ class FilterController extends ClientApiController {
 	public function update(
 		int $id,
 		?string $title = null,
-		?array $context = null,
+		array|string|null $context = null,
 		?string $filter_action = null,
-		?array $keywords_attributes = null,
+		array|string|null $keywords_attributes = null,
 	): DataResponse {
 		try {
 			$this->initViewer(['write:filters', 'write']);
@@ -762,11 +762,11 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * @param array<mixed> $keywordAttributes
+	 * @param array<mixed>|string $keywordAttributes
 	 *
 	 * @throws Exception
 	 */
-	private function applyKeywordAttributes(Filter $filter, array $keywordAttributes): void {
+	private function applyKeywordAttributes(Filter $filter, array|string $keywordAttributes): void {
 		$actorId = $this->viewer->getId();
 
 		foreach ($this->keywordAttributes($keywordAttributes) as $attributes) {
@@ -818,13 +818,13 @@ class FilterController extends ClientApiController {
 	 * sends a list, form encoding sends `keywords_attributes[0][keyword]`,
 	 * which PHP hands over as an array keyed by the index.
 	 *
-	 * @param array<mixed> $raw
+	 * @param array<mixed>|string $raw
 	 *
 	 * @return array<array<string, mixed>>
 	 */
-	private function keywordAttributes(array $raw): array {
+	private function keywordAttributes(array|string $raw): array {
 		$entries = [];
-		foreach ($raw as $entry) {
+		foreach (is_array($raw) ? $raw : [] as $entry) {
 			if (is_array($entry)) {
 				$entries[] = $entry;
 			}
@@ -852,8 +852,8 @@ class FilterController extends ClientApiController {
 	 *
 	 * @throws InvalidResourceException
 	 */
-	private function contexts(array $raw): array {
-		$contexts = Filter::normaliseContexts($raw);
+	private function contexts(array|string $raw): array {
+		$contexts = Filter::normaliseContexts(self::listParam($raw));
 		if ($contexts === []) {
 			throw new InvalidResourceException(
 				'context must name at least one of ' . implode(', ', Filter::CONTEXTS)

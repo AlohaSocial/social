@@ -44,6 +44,9 @@ use ReflectionProperty;
  * still shows up as growth. Each new post has its own author for the same
  * reason.
  *
+ * Every request reads its viewer's moderation decision once, whatever the
+ * page holds, so that an account suspended here is refused.
+ *
  * The counts are the same on every database: what differs between SQLite,
  * MySQL and PostgreSQL is the plan of each query, which `QueryPlanTest` pins.
  */
@@ -125,8 +128,8 @@ class QueryBudgetTest extends ReaderTestCase {
 	 */
 	public static function homePaths(): array {
 		return [
-			'fast path, read off the recipient rows' => [true, 27],
-			'join path, the fallback' => [false, 14],
+			'fast path, read off the recipient rows' => [true, 28],
+			'join path, the fallback' => [false, 15],
 		];
 	}
 
@@ -160,7 +163,7 @@ class QueryBudgetTest extends ReaderTestCase {
 		$authors = 0;
 
 		$this->assertFlatCostWithin(
-			'public', 11,
+			'public', 12,
 			function (int $count) use (&$authors): void {
 				for ($i = 0; $i < $count; $i++, $authors++) {
 					$this->post($this->remoteActor('public' . $authors), 'public post ' . $authors);
@@ -181,7 +184,7 @@ class QueryBudgetTest extends ReaderTestCase {
 		$authors = 0;
 
 		$this->assertFlatCostWithin(
-			'notifications', 12,
+			'notifications', 13,
 			function (int $count) use (&$authors): void {
 				for ($i = 0; $i < $count; $i++, $authors++) {
 					$author = $this->remoteActor('mention' . $authors);
@@ -204,7 +207,7 @@ class QueryBudgetTest extends ReaderTestCase {
 		$boosts = 0;
 
 		$this->assertFlatCostWithin(
-			'account boosts', 13,
+			'account boosts', 14,
 			function (int $count) use (&$boosts, $booster): void {
 				for ($i = 0; $i < $count; $i++, $boosts++) {
 					$this->boost($booster, $this->post($this->remoteActor('boosted' . $boosts), 'boosted post ' . $boosts));
@@ -220,7 +223,7 @@ class QueryBudgetTest extends ReaderTestCase {
 		$posts = 0;
 
 		$this->assertFlatCostWithin(
-			'account statuses', 13,
+			'account statuses', 14,
 			function (int $count) use (&$posts, $author): void {
 				for ($i = 0; $i < $count; $i++, $posts++) {
 					$this->post($author, 'profile post ' . $posts);
@@ -247,7 +250,7 @@ class QueryBudgetTest extends ReaderTestCase {
 			// replies a viewer may see are paged by nid first, over the key
 			// alone, and then read whole, which keeps the large columns out of
 			// the DISTINCT the recipient join needs.
-			'status and context', 20,
+			'status and context', 22,
 			function (int $count) use (&$replies, $root): void {
 				for ($i = 0; $i < $count; $i++, $replies++) {
 					$this->post(
@@ -274,7 +277,7 @@ class QueryBudgetTest extends ReaderTestCase {
 		$word = 'budgetword' . bin2hex(random_bytes(3));
 
 		$this->assertFlatCostWithin(
-			'search', 10,
+			'search', 11,
 			function (int $count) use (&$authors, $word): void {
 				for ($i = 0; $i < $count; $i++, $authors++) {
 					$this->post($this->remoteActor('found' . $authors), $word . ' number ' . $authors);

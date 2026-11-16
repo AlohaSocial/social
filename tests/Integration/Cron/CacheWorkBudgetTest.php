@@ -411,7 +411,8 @@ class CacheWorkBudgetTest extends TestCase {
 		$removed = 3 * AccountService::DELETED_ACTOR_BATCH - $this->seededWhere(CoreRequestBuilder::TABLE_ACTORS);
 		$this->assertLessThanOrEqual(AccountService::DELETED_ACTOR_BATCH, $removed);
 		$this->assertGreaterThan(0, $removed);
-		// the batch, read once, and a delete each: 501 today
+		// the batch, read once, which of it still has deliveries queued, read
+		// once, and a delete each: 502 today
 		$this->assertWithinBudget($run, AccountService::DELETED_ACTOR_BATCH, 1, 3);
 	}
 

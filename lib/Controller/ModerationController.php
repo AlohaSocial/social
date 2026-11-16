@@ -263,13 +263,23 @@ class ModerationController extends Controller {
 		]);
 	}
 
-	/** Takes one post down, whoever wrote it. */
+	/**
+	 * Takes one post down, whoever wrote it, within the rule account actions
+	 * follow: not a moderator's own, and an administrator's only by an
+	 * administrator.
+	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/statuses/remove')]
 	public function statusRemove(string $streamId): DataResponse {
 		$streamId = trim($streamId);
 		if ($streamId === '') {
 			return new DataResponse(['error' => 'no post given'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$author = $this->moderationService->authorOf($streamId);
+		$refused = ($author === '') ? null : $this->refusal($author);
+		if ($refused !== null) {
+			return $refused;
 		}
 
 		$this->moderationService->removeStream($streamId);
@@ -355,6 +365,10 @@ class ModerationController extends Controller {
 	public function reviewApprove(int $id): DataResponse {
 		try {
 			$held = $this->postReviewService->heldPost($id);
+			$refused = $this->refusal($held->getActorId());
+			if ($refused !== null) {
+				return $refused;
+			}
 			$author = $this->accountService->getFromId($held->getActorId());
 			$this->postReviewService->approve($id, $author);
 
@@ -369,6 +383,10 @@ class ModerationController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/review/{id}/reject')]
 	public function reviewReject(int $id, string $comment = ''): DataResponse {
 		try {
+			$refused = $this->refusal($this->postReviewService->heldPost($id)->getActorId());
+			if ($refused !== null) {
+				return $refused;
+			}
 			$this->postReviewService->reject($id, trim($comment));
 
 			return new DataResponse(['rejected' => (string)$id]);

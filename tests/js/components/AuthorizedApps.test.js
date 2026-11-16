@@ -87,6 +87,18 @@ describe('the authorized apps', () => {
 		expect(wrapper.text()).toContain('Last used')
 	})
 
+	it('links the website an app gave only when it is a web address', async () => {
+		get.mockResolvedValue({ data: [app(), app({ id: 5, website: 'javascript:alert(1)' })] })
+
+		const wrapper = mount(AuthorizedApps)
+		await flushPromises()
+
+		const [tusky, other] = rows(wrapper)
+		expect(tusky.find('a.apps__website').attributes('href')).toBe('https://tusky.app/')
+		expect(other.find('a').exists()).toBe(false)
+		expect(other.find('.apps__website').text()).toBe('javascript:alert(1)')
+	})
+
 	it('says when a sign-in runs out however much it is used', async () => {
 		get.mockResolvedValue({ data: [app({ expires_at: 1788536000 })] })
 

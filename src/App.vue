@@ -117,8 +117,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import Navigation from './components/Navigation.vue'
 import { isPhone, onPhoneChange } from './services/phone.js'
 import ShortcutHelp from './components/ShortcutHelp.vue'
-import SetupChecks from './components/SetupChecks.vue'
-import CloudAddressSetup from './components/CloudAddressSetup.vue'
 import { listenForShortcuts } from './services/shortcuts.js'
 import { skeletonFor } from './utils/skeleton.js'
 import { isSamePage, pageDirection } from './services/pageOrder.js'
@@ -138,6 +136,10 @@ import { useServerData } from './composables/useServerData.js'
 // one page load in an account's life: not worth a place in the entry every
 // other load pays for, so it arrives as its own chunk when it is needed
 const AccountSetup = defineAsyncComponent(() => import(/* webpackChunkName: "account-setup" */'./views/AccountSetup.vue'))
+// shown to an administrator only, and only while the instance is not set up:
+// every other visit to the app need not download them
+const SetupChecks = defineAsyncComponent(() => import(/* webpackChunkName: "setup" */'./components/SetupChecks.vue'))
+const CloudAddressSetup = defineAsyncComponent(() => import(/* webpackChunkName: "setup" */'./components/CloudAddressSetup.vue'))
 // the emoji picker is most of a megabyte; it travels in its own chunk and is
 // fetched the first time somebody presses "add a reaction"
 const ReactionPicker = defineAsyncComponent(() => import(/* webpackChunkName: "reaction-picker" */'./components/ReactionPicker.vue'))

@@ -26,6 +26,12 @@ class FakeResult {
 		return array_shift($this->rows) ?? false;
 	}
 
+	public function fetchOne() {
+		$row = array_shift($this->rows);
+
+		return ($row === null) ? false : reset($row);
+	}
+
 	/** @return array<array<string, mixed>> */
 	public function fetchAll(): array {
 		$rows = $this->rows;

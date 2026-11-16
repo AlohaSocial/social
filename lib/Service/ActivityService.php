@@ -596,10 +596,20 @@ class ActivityService {
 			return;
 		}
 
-		$requests = $this->requestQueueService->getRequestFromToken($token, RequestQueue::STATUS_STANDBY);
-		if (sizeof($requests) > 0) {
+		if ($this->requestQueueService->hasStandby($token)) {
 			$this->curlService->asyncWithToken($token);
 		}
+	}
+
+	/**
+	 * Which of these authors still have deliveries waiting or going out: a
+	 * deleted account's signing key is kept until it has none.
+	 *
+	 * @param string[] $actorIds
+	 * @return array<string, true> actor id => true
+	 */
+	public function withPendingDeliveries(array $actorIds): array {
+		return $this->requestQueueService->authorsWithPending($actorIds);
 	}
 
 	public function manageInit() {
@@ -863,7 +873,21 @@ class ActivityService {
 			return;
 		}
 
-		if ($failure instanceof ActorDoesNotExistException || $failure instanceof RequestResultSizeException) {
+		if ($failure instanceof ActorDoesNotExistException) {
+			// the local account the activity is signed as is gone, key and
+			// all: nothing can send this any more. A deleted account is kept
+			// while it has deliveries waiting, so this is not the normal end
+			// of its `Delete` and is worth an administrator's attention.
+			$this->logger->warning(
+				'A queued delivery has no local account left to sign it, dropping the request: ' . $url,
+				['author' => $queue->getAuthor(), 'exception' => $failure]
+			);
+			$this->requestQueueService->deleteRequest($queue);
+
+			return;
+		}
+
+		if ($failure instanceof RequestResultSizeException) {
 			$this->logger->notice(
 				'Error while managing request: ' . $url . ' ' . get_class($failure) . ': '
 				. $failure->getMessage()

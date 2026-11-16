@@ -34,6 +34,10 @@ class FakeExpressionBuilder {
 		return $x . ' < ' . $y;
 	}
 
+	public function in($x, $y, $type = null): string {
+		return $x . ' IN (' . implode(',', (array)$y) . ')';
+	}
+
 	public function isNull($x): string {
 		return $x . ' IS NULL';
 	}

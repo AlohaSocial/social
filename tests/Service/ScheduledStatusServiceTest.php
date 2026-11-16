@@ -17,9 +17,9 @@ use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
-use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\ScheduledStatus;
 use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\HeldPost;
@@ -33,6 +33,8 @@ use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
+use OCP\IUser;
+use OCP\IUserManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -58,6 +60,7 @@ class ScheduledStatusServiceTest extends TestCase {
 	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
 	private ScheduledStatusService $service;
 
+	private IUserManager&Stub $userManager;
 	/** the row the service handed to save(), as save() saw it */
 	private ?ScheduledStatus $saved = null;
 	/** @var Post[] the posts createPost() was handed */
@@ -83,8 +86,6 @@ class ScheduledStatusServiceTest extends TestCase {
 		$assembly = new StatusAssemblyService(
 			$this->documentService,
 			$this->streamService,
-			$this->cacheDocumentsRequest,
-			$this->createStub(IURLGenerator::class),
 			new NullLogger()
 		);
 
@@ -96,7 +97,8 @@ class ScheduledStatusServiceTest extends TestCase {
 			$assembly,
 			$this->createStub(IURLGenerator::class),
 			$time,
-			new NullLogger()
+			new NullLogger(),
+			$this->userManager = $this->createStub(IUserManager::class)
 		);
 	}
 
@@ -568,6 +570,53 @@ class ScheduledStatusServiceTest extends TestCase {
 		$this->assertSame([self::NOW, ScheduledStatusService::PUBLISH_PER_RUN], $asked);
 	}
 
+	/**
+	 * A disabled user's waiting posts are held, not published and not
+	 * dropped, and their account is left out of the next read so their posts
+	 * do not take everybody else's place in the window.
+	 */
+	public function testTheWaitingPostsOfADisabledUserAreHeld(): void {
+		$this->accountService->method('getFromId')->willReturnCallback(function (string $id): Person {
+			$actor = new Person();
+			$actor->setId($id);
+			$actor->setUserId(($id === self::BOB) ? 'bob' : 'alice');
+			$actor->setPreferredUsername(($id === self::BOB) ? 'bob' : 'alice');
+
+			return $actor;
+		});
+		$disabled = $this->createStub(IUser::class);
+		$disabled->method('isEnabled')->willReturn(false);
+		$enabled = $this->createStub(IUser::class);
+		$enabled->method('isEnabled')->willReturn(true);
+		$this->userManager->method('get')->willReturnCallback(
+			static fn (string $uid): IUser => ($uid === 'alice') ? $disabled : $enabled
+		);
+		$this->capturePosts();
+
+		$reads = [];
+		$this->scheduledRequest->method('getDue')->willReturnCallback(
+			function (int $now, int $limit, array $except) use (&$reads): array {
+				$reads[] = $except;
+
+				return ($except === [])
+					? [$this->waiting(1, ['text' => 'a'], self::ALICE), $this->waiting(2, ['text' => 'b'], self::ALICE)]
+					: [$this->waiting(3, ['text' => 'from bob'], self::BOB)];
+			}
+		);
+		$claimed = [];
+		$this->scheduledRequest->method('claim')->willReturnCallback(function (int $id) use (&$claimed): bool {
+			$claimed[] = $id;
+
+			return true;
+		});
+
+		$this->assertSame(1, $this->service->publishDue());
+
+		$this->assertSame([3], $claimed, 'the disabled user\'s posts stay in the table');
+		$this->assertSame([[], [self::ALICE]], $reads, 'read again without the held account, once');
+		$this->assertSame('from bob', $this->posts[0]->getContent());
+	}
+
 	public function testADuePostIsPublishedThroughTheSamePathAnImmediatePostTakes(): void {
 		$this->expectActorLookup();
 		$this->capturePosts();
@@ -715,17 +764,16 @@ class ScheduledStatusServiceTest extends TestCase {
 		$this->assertSame(['fine'], $published);
 	}
 
-	public function testAttachmentsAreCarriedOntoThePublishedPostInTheFederationFormat(): void {
+	public function testAttachmentsAreResolvedForTheAudienceThePostGoesOutTo(): void {
 		$this->expectActorLookup();
 		$this->capturePosts();
-		$document = (new Document())->setMediaType('image/jpeg');
-		$document->setNid(7);
+		$attachment = (new MediaAttachment())->setId('7');
 		$asked = [];
-		$this->documentService->method('getMediaFromArray')
-			->willReturnCallback(function (array $ids, string $account) use (&$asked, $document): array {
-				$asked = [$ids, $account];
+		$this->documentService->method('mediaAttachmentsForEdit')
+			->willReturnCallback(function (array $ids, string $account, string $visibility) use (&$asked, $attachment): array {
+				$asked = [$ids, $account, $visibility];
 
-				return [$document];
+				return [$attachment];
 			});
 		$this->scheduledRequest->method('getDue')->willReturn([
 			$this->waiting(1, ['text' => 'look', 'media_ids' => ['7'], 'visibility' => 'public']),
@@ -734,34 +782,8 @@ class ScheduledStatusServiceTest extends TestCase {
 
 		$this->service->publishDue();
 
-		$this->assertSame([[7], 'alice'], $asked);
-		$this->assertCount(1, $this->posts[0]->getMedias());
-		$this->assertSame(ACore::FORMAT_ACTIVITYPUB, $this->posts[0]->getMedias()[0]->getExportFormat());
-	}
-
-	/**
-	 * Whether an attachment may be kept by a shared proxy is decided by the
-	 * visibility of the post it ends up on, which is only known here.
-	 */
-	public function testAttachmentsOfAPublicPostAreMarkedPublicWhenItGoesOut(): void {
-		$this->expectActorLookup();
-		$this->capturePosts();
-		$document = (new Document())->setMediaType('image/jpeg');
-		$document->setNid(7);
-		$this->documentService->method('getMediaFromArray')->willReturn([$document]);
-		$updated = [];
-		$this->cacheDocumentsRequest->method('update')
-			->willReturnCallback(function (Document $document) use (&$updated): void {
-				$updated[] = $document->isPublic();
-			});
-		$this->scheduledRequest->method('getDue')->willReturn([
-			$this->waiting(1, ['text' => 'look', 'media_ids' => ['7'], 'visibility' => 'public']),
-		]);
-		$this->scheduledRequest->method('claim')->willReturn(true);
-
-		$this->service->publishDue();
-
-		$this->assertSame([true], $updated);
+		$this->assertSame([[7], 'alice', Stream::TYPE_PUBLIC], $asked);
+		$this->assertSame([$attachment], $this->posts[0]->getMedias());
 	}
 
 	public function testAReplyIsPublishedAgainstThePostItAnswers(): void {
@@ -781,11 +803,11 @@ class ScheduledStatusServiceTest extends TestCase {
 	}
 
 	/**
-	 * The post being answered is likelier to be gone here than on an immediate
-	 * reply — it had until the scheduled time to be deleted. The reply still
-	 * goes out rather than being lost with it.
+	 * The post being answered had until the scheduled time to be deleted, and
+	 * without it nothing says how wide the reply may go: a reply to a direct
+	 * message would otherwise go out to the author's default audience.
 	 */
-	public function testAReplyToAPostThatWasDeletedMeanwhileIsStillPublished(): void {
+	public function testAReplyToAPostThatWasDeletedMeanwhileIsNotPublished(): void {
 		$this->expectActorLookup();
 		$this->capturePosts();
 		$this->streamService->method('getStreamByNid')
@@ -795,10 +817,9 @@ class ScheduledStatusServiceTest extends TestCase {
 		]);
 		$this->scheduledRequest->method('claim')->willReturn(true);
 
-		$this->assertSame(1, $this->service->publishDue());
+		$this->assertSame(0, $this->service->publishDue());
 
-		$this->assertSame('', $this->posts[0]->getReplyTo());
-		$this->assertSame('agreed', $this->posts[0]->getContent());
+		$this->assertSame([], $this->posts);
 	}
 
 	public function testEachPostIsPublishedAsItsOwnAuthor(): void {

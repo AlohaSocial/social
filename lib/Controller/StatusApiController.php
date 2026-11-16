@@ -11,7 +11,6 @@ namespace OCA\Social\Controller;
 
 use Exception;
 use OCA\Social\Atproto\Publisher\Publisher;
-use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\PostHeldException;
@@ -19,11 +18,9 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
-use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Filter;
-use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
@@ -102,7 +99,6 @@ class StatusApiController extends MastodonApiController {
 		private ActionService $actionService,
 		private PostService $postService,
 		private PollService $pollService,
-		private CacheDocumentsRequest $cacheDocumentsRequest,
 		private FilterService $filterService,
 		private ScheduledStatusService $scheduledStatusService,
 		private ModerationService $moderationService,
@@ -245,20 +241,14 @@ class StatusApiController extends MastodonApiController {
 				// the uploader's own media, not the team's: an upload belongs
 				// to the person who made it whatever account the post ends up
 				// attributed to, and looking it up as the team would find
-				// nothing
-				$documents = $this->documentService->getMediaFromArray(
+				// nothing. In the order the client sent them, and an id that is
+				// not one of their uploads refuses the post rather than
+				// publishing a different set from the one they chose.
+				$post->setMedias($this->documentService->mediaAttachmentsForEdit(
 					$status->getMediaIds(),
-					$this->viewer->getPreferredUsername()
-				);
-				$this->scopeMediaToVisibility($documents, $post->getType());
-				$post->setMedias(
-					array_map(function (Document $document): MediaAttachment {
-						return $document->convertToMediaAttachment(
-							$this->urlGenerator,
-							ACore::FORMAT_ACTIVITYPUB
-						);
-					}, $documents)
-				);
+					$this->viewer->getPreferredUsername(),
+					$post->getType()
+				));
 			}
 
 			$post->setQuotedId($status->getQuotedId());
@@ -347,33 +337,6 @@ class StatusApiController extends MastodonApiController {
 		}
 
 		return $visibility;
-	}
-
-	/**
-	 * Records on a post's attachments whether the post itself is world-readable.
-	 *
-	 * The `public` flag on a cached document is a hint about the audience, not
-	 * access control: `/media/{uuid}` serves any local copy to whoever holds its
-	 * unguessable uuid, the way Mastodon does (see `mediaOpen()`), because that
-	 * is how remote servers fetch attachments for their own readers. What the
-	 * flag decides is how the bytes may be cached on the way — a shared proxy
-	 * may keep a public attachment, only the reader's browser a non-public one.
-	 * Which post an upload belongs to is only known when that post is created,
-	 * which is where this runs.
-	 *
-	 * @param Document[] $documents
-	 */
-	private function scopeMediaToVisibility(array $documents, string $visibility): void {
-		$public = in_array($visibility, [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true);
-
-		foreach ($documents as $document) {
-			if ($document->isPublic() === $public) {
-				continue;
-			}
-
-			$document->setPublic($public);
-			$this->cacheDocumentsRequest->update($document);
-		}
 	}
 
 	/**

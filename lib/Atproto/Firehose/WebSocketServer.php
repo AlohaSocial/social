@@ -21,12 +21,17 @@ use RuntimeException;
  * frames because what a firehose needs of RFC 6455 is a page of it, and a
  * page this app owns is one it can bound: a slow consumer whose output
  * buffer fills past OUTPUT_LIMIT is dropped, as the reference relay drops
- * a slow PDS, a request longer than REQUEST_LIMIT never upgrades, and
- * past MAX_SUBSCRIBERS in all or MAX_PER_ADDRESS from one address a
- * connection is answered 503 and closed before it is read.
+ * a slow PDS, a request longer than REQUEST_LIMIT never upgrades, a
+ * connection that has not finished its handshake after HANDSHAKE_TIMEOUT
+ * seconds is closed, and past MAX_SUBSCRIBERS in all or MAX_PER_ADDRESS
+ * from one address a connection is answered 503 and closed.
  *
  * Connections are plain TCP; the web server in front terminates TLS and
- * proxies the upgrade (contrib/webserver).
+ * proxies the upgrade (contrib/webserver). The address a connection is
+ * counted under is its peer's, or, when the peer is a proxy (the loopback
+ * or one the trusted-proxy check names), the last address in its
+ * `X-Forwarded-For` that is not a proxy. An IPv6 address is counted with
+ * the rest of its /64, which one host can hold all of.
  */
 class WebSocketServer {
 	public const PATH = '/xrpc/com.atproto.sync.subscribeRepos';
@@ -37,6 +42,8 @@ class WebSocketServer {
 	public const MAX_SUBSCRIBERS = 256;
 	/** connections held from one address: a relay opens one, a few on a retry */
 	public const MAX_PER_ADDRESS = 8;
+	/** seconds a connection may take to send its upgrade request */
+	public const HANDSHAKE_TIMEOUT = 10;
 	private const OPCODE_BINARY = 0x2;
 	private const OPCODE_CLOSE = 0x8;
 	private const OPCODE_PING = 0x9;
@@ -59,6 +66,7 @@ class WebSocketServer {
 		private readonly ?Closure $authorize = null,
 		private readonly ?Closure $onMessage = null,
 		private readonly bool $eventStreams = false,
+		private readonly ?Closure $trustedProxy = null,
 	) {
 		$this->dataOpcode = $binaryFrames ? self::OPCODE_BINARY : 0x1;
 		$socket = @stream_socket_server('tcp://' . $bind, $errno, $error);
@@ -77,6 +85,7 @@ class WebSocketServer {
 	 * @return Subscriber[]
 	 */
 	public function serve(float $timeout): array {
+		$this->closeUnfinishedHandshakes();
 		$read = [$this->socket];
 		foreach ($this->subscribers as $subscriber) {
 			$read[] = $subscriber->socket;
@@ -136,6 +145,21 @@ class WebSocketServer {
 		$this->flush($subscriber);
 	}
 
+	/**
+	 * Closes the WebSocket connections nothing was heard from for $seconds:
+	 * a client answers a ping with a pong, so one that stays silent across
+	 * several pings is gone, or holding its place without reading. An event
+	 * stream cannot answer, and is left alone.
+	 */
+	public function closeIdle(int $seconds): void {
+		$now = time();
+		foreach ($this->subscribers as $subscriber) {
+			if ($subscriber->upgraded && !$subscriber->eventStream && $now - $subscriber->lastSeen > $seconds) {
+				$this->close($subscriber, 'idle');
+			}
+		}
+	}
+
 	public function ping(Subscriber $subscriber): void {
 		if (!$subscriber->closed) {
 			$subscriber->output .= $subscriber->eventStream ? ": thump\n\n" : self::frame(self::OPCODE_PING, '');
@@ -187,16 +211,75 @@ class WebSocketServer {
 		$this->subscribers[$subscriber->id] = $subscriber;
 	}
 
-	/** How many connections are held from an address, upgraded or not. */
+	/** How many connections are held from an address's bucket, upgraded or not. */
 	private function heldFrom(string $address, int $except = 0): int {
+		$bucket = self::bucket($address);
 		$held = 0;
 		foreach ($this->subscribers as $subscriber) {
-			if ($subscriber->id !== $except && $subscriber->address === $address) {
+			if ($subscriber->id !== $except && self::bucket($subscriber->address) === $bucket) {
 				$held++;
 			}
 		}
 
 		return $held;
+	}
+
+	/**
+	 * What connections are counted under: an IPv4 address as it is, an IPv6
+	 * address by its /64.
+	 */
+	public static function bucket(string $address): string {
+		if (!str_contains($address, ':')) {
+			return $address;
+		}
+		$packed = @inet_pton(trim($address, '[]'));
+		if ($packed === false || strlen($packed) !== 16) {
+			return $address;
+		}
+		if (str_starts_with($packed, str_repeat("\0", 10) . "\xff\xff")) {
+			return (string)inet_ntop(substr($packed, 12));
+		}
+
+		return inet_ntop(substr($packed, 0, 8) . str_repeat("\0", 8)) . '/64';
+	}
+
+	/** Whether connections from $address come through a proxy whose `X-Forwarded-For` is believed. */
+	private function isTrustedProxy(string $address): bool {
+		$address = trim($address, '[]');
+		if ($address === '::1' || (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false && str_starts_with($address, '127.'))) {
+			return true;
+		}
+
+		return $this->trustedProxy !== null && filter_var($address, FILTER_VALIDATE_IP) !== false && ($this->trustedProxy)($address) === true;
+	}
+
+	/**
+	 * The client behind a chain of proxies: walking `X-Forwarded-For` from
+	 * the right, the first address that is not a proxy. Null when the
+	 * header is malformed before such an address, or names only proxies.
+	 */
+	private function forwardedClient(string $forwardedFor): ?string {
+		$addresses = array_reverse(array_map('trim', explode(',', $forwardedFor)));
+		foreach ($addresses as $address) {
+			if (filter_var($address, FILTER_VALIDATE_IP) === false) {
+				return null;
+			}
+			if (!$this->isTrustedProxy($address)) {
+				return $address;
+			}
+		}
+
+		return null;
+	}
+
+	/** Closes the connections that did not finish their upgrade request in time. */
+	private function closeUnfinishedHandshakes(): void {
+		$now = time();
+		foreach ($this->subscribers as $subscriber) {
+			if (!$subscriber->upgraded && $now - $subscriber->connectedAt > self::HANDSHAKE_TIMEOUT) {
+				$this->refuse($subscriber, 408, 'Request Timeout');
+			}
+		}
 	}
 
 	/** The address of a peer name as `stream_socket_get_name()` gives it: `ip:port` or `[ipv6]:port`. */
@@ -217,6 +300,7 @@ class WebSocketServer {
 			return false;
 		}
 		$subscriber->input .= $chunk;
+		$subscriber->lastSeen = time();
 		if (!$subscriber->upgraded) {
 			return $this->handshake($subscriber);
 		}
@@ -309,12 +393,8 @@ class WebSocketServer {
 			}
 		}
 		$forwardedFor = $headers['x-forwarded-for'] ?? '';
-		if ($forwardedFor !== '') {
-			$addresses = array_map('trim', explode(',', $forwardedFor));
-			$forwardedAddress = end($addresses);
-			if (is_string($forwardedAddress) && filter_var($forwardedAddress, FILTER_VALIDATE_IP) !== false) {
-				$subscriber->address = $forwardedAddress;
-			}
+		if ($forwardedFor !== '' && $this->isTrustedProxy($subscriber->address)) {
+			$subscriber->address = $this->forwardedClient($forwardedFor) ?? $subscriber->address;
 		}
 		if ($this->heldFrom($subscriber->address, $subscriber->id) >= $this->maxPerAddress) {
 			$this->refuse($subscriber, 503, 'Service Unavailable');

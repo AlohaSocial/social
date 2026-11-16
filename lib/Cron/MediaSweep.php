@@ -55,6 +55,12 @@ class MediaSweep extends TimedJob {
 	 */
 	public const DAYS = 30;
 
+	/**
+	 * How old an upload no post was made with has to be before it goes: the
+	 * composer keeps a draft, and the uploads it names, for a week.
+	 */
+	public const UNATTACHED_DAYS = 8;
+
 	/** Rows per page, of each kind. */
 	public const BATCH = 500;
 
@@ -87,6 +93,9 @@ class MediaSweep extends TimedJob {
 		foreach ([
 			'sweepOrphans' => fn (): int => $this->mediaPurgeService->sweepOrphans(
 				self::DAYS, self::BATCH, $this->time->getTime() + self::SECONDS
+			),
+			'sweepUnattached' => fn (): int => $this->mediaPurgeService->sweepUnattached(
+				self::UNATTACHED_DAYS, self::BATCH, $this->time->getTime() + self::SECONDS
 			),
 			'fillMissingMediaTypes' => fn (): int => $this->documentService->fillMissingMediaTypes(self::BATCH),
 			'purgeMediaCache' => fn (): int => (int)($this->mediaPurgeService->purgeCacheAsConfigured(

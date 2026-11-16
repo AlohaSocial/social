@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\Atproto\Move\BlueskyAfterMoveOut;
 use OCA\Social\Exceptions\AccountNotSetUpException;
+use OCA\Social\Exceptions\AccountSuspendedException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\MoveErrorException;
 use OCA\Social\Model\ImportJob;
@@ -68,6 +69,12 @@ use Throwable;
 class MigrationController extends ClientApiController {
 	/** A refused upload says which limit it hit rather than "failed". */
 	private const IMPORT_MAX_SIZE = 100 * 1024 * 1024;
+	/**
+	 * The largest list of accounts, posts or domains taken: the run reads
+	 * the whole file into memory, and the most entries it works through
+	 * (`MigrationService::MAX_IMPORT_ENTRIES`) fit in a fraction of this.
+	 */
+	private const LIST_MAX_SIZE = 10 * 1024 * 1024;
 
 	public function __construct(
 		IRequest $request,
@@ -96,7 +103,7 @@ class MigrationController extends ClientApiController {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/export')]
 	public function export(): Response {
 		try {
-			$userId = $this->caller(['read']);
+			$userId = $this->caller(['read'], true);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
@@ -309,7 +316,7 @@ class MigrationController extends ClientApiController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/migration/move-in/callback')]
 	public function moveInFinishCallback(string $code = '', string $state = '', string $error = ''): RedirectResponse {
-		if ($this->userId !== null) {
+		if ($this->sessionRefusal() === null) {
 			try {
 				if ($error !== '') {
 					throw new InvalidResourceException('the old server answered: ' . $error);
@@ -326,8 +333,9 @@ class MigrationController extends ClientApiController {
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/move')]
 	public function moveStatus(): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		try {
@@ -355,8 +363,9 @@ class MigrationController extends ClientApiController {
 	#[UserRateLimit(limit: 5, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move')]
 	public function moveOut(string $target = '', string $confirm = '', string $bluesky = BlueskyAfterMoveOut::DEACTIVATE): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		try {
@@ -388,8 +397,9 @@ class MigrationController extends ClientApiController {
 	#[PasswordConfirmationRequired]
 	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/migration/move')]
 	public function undoMove(): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		try {
@@ -482,8 +492,9 @@ class MigrationController extends ClientApiController {
 	#[UserRateLimit(limit: 120, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/people/find')]
 	public function switchFind(array $handles = []): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		try {
@@ -502,8 +513,9 @@ class MigrationController extends ClientApiController {
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/announcement')]
 	public function switchAnnouncement(): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		try {
@@ -589,12 +601,12 @@ class MigrationController extends ClientApiController {
 		// names no list asks for all of `read`, and is a 404 after that
 		try {
 			$userId = match ($kind) {
-				'following', 'followers' => $this->caller(['read:follows']),
-				'blocks', 'domain_blocks' => $this->caller(['read:blocks']),
-				'mutes' => $this->caller(['read:mutes']),
-				'lists' => $this->caller(['read:lists']),
-				'bookmarks' => $this->caller(['read:bookmarks']),
-				default => $this->caller(['read']),
+				'following', 'followers' => $this->caller(['read:follows'], true),
+				'blocks', 'domain_blocks' => $this->caller(['read:blocks'], true),
+				'mutes' => $this->caller(['read:mutes'], true),
+				'lists' => $this->caller(['read:lists'], true),
+				'bookmarks' => $this->caller(['read:bookmarks'], true),
+				default => $this->caller(['read'], true),
 			};
 		} catch (Throwable $e) {
 			return $this->error($e);
@@ -637,9 +649,10 @@ class MigrationController extends ClientApiController {
 		if ($file === [] || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
 			return self::refusal('no file was uploaded', 'no-file', Http::STATUS_BAD_REQUEST);
 		}
-		if (($file['size'] ?? 0) > self::IMPORT_MAX_SIZE) {
+		$maxSize = $kind === ImportJob::KIND_POSTS ? self::IMPORT_MAX_SIZE : self::LIST_MAX_SIZE;
+		if (($file['size'] ?? 0) > $maxSize) {
 			return self::refusal(
-				'this file is larger than ' . (self::IMPORT_MAX_SIZE / 1024 / 1024) . ' MB',
+				'this file is larger than ' . ($maxSize / 1024 / 1024) . ' MB',
 				'file-too-large',
 				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
 			);
@@ -669,8 +682,9 @@ class MigrationController extends ClientApiController {
 	 * @param callable(string, string): array $import
 	 */
 	private function fromUpload(callable $import, string $failure): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		$file = $_FILES['file'] ?? [];
@@ -803,8 +817,9 @@ class MigrationController extends ClientApiController {
 	 * @param callable(string): string[] $action
 	 */
 	private function aliasAction(callable $action): DataResponse {
-		if ($this->userId === null) {
-			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		$signedOut = $this->sessionRefusal();
+		if ($signedOut !== null) {
+			return $signedOut;
 		}
 
 		try {
@@ -812,6 +827,22 @@ class MigrationController extends ClientApiController {
 		} catch (Throwable $e) {
 			return $this->refused($e, Http::STATUS_UNPROCESSABLE_ENTITY, 'changing the aliases failed', ['userId' => $this->userId]);
 		}
+	}
+
+	/**
+	 * The refusal for a route that takes the Nextcloud session, or null when
+	 * somebody is signed in whose account may use it: an account suspended
+	 * here keeps only the export.
+	 */
+	private function sessionRefusal(): ?DataResponse {
+		if ($this->userId === null) {
+			return self::refusal('not logged in', 'not-signed-in', Http::STATUS_UNAUTHORIZED);
+		}
+		if ($this->clientService->isSuspendedUser($this->userId)) {
+			return self::refusal((new AccountSuspendedException())->getMessage(), 'account-suspended', Http::STATUS_FORBIDDEN);
+		}
+
+		return null;
 	}
 
 	/** A refusal this controller knows by itself, as the Migration page reads it. */
@@ -834,6 +865,9 @@ class MigrationController extends ClientApiController {
 		if ($e instanceof AccountNotSetUpException) {
 			return self::notSetUp($e);
 		}
+		if ($e instanceof AccountSuspendedException) {
+			return self::refusal($e->getMessage(), 'account-suspended', Http::STATUS_FORBIDDEN);
+		}
 
 		$this->logger->error($failure, $context + ['exception' => $e]);
 
@@ -845,9 +879,11 @@ class MigrationController extends ClientApiController {
 	 * scopes the route needs.
 	 *
 	 * @param string[] $scopes
+	 * @param bool $whileSuspended a route a suspended account keeps: the
+	 *                             export of its own data
 	 */
-	private function caller(array $scopes): string {
-		$this->initViewer($scopes);
+	private function caller(array $scopes, bool $whileSuspended = false): string {
+		$this->initViewer($scopes, true, $whileSuspended);
 
 		return $this->viewer()->getUserId();
 	}

@@ -955,6 +955,30 @@ class DocumentServiceTest extends TestCase {
 		$this->service->mediaAttachmentsForEdit(['11'], 'alice', Stream::TYPE_PUBLIC);
 	}
 
+	public function testMediaIdsRefuseAnIdThatIsNotAnUploadHere(): void {
+		$this->cacheDocumentsRequest->method('getFromArray')->willReturn([$this->upload(11, 'Mine')]);
+
+		$this->expectException(InvalidActionException::class);
+		$this->service->mediaAttachmentsForEdit(['11', '99'], 'alice', Stream::TYPE_PUBLIC);
+	}
+
+	public function testMediaIdsRefuseMoreThanAPostCarries(): void {
+		$this->cacheDocumentsRequest->expects($this->never())->method('getFromArray');
+
+		$this->expectException(InvalidActionException::class);
+		$this->service->mediaAttachmentsForEdit(range(1, Stream::MAX_ATTACHMENTS + 1), 'alice', Stream::TYPE_PUBLIC);
+	}
+
+	public function testAnUploadAlreadyScopedRightIsNotWrittenAgain(): void {
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/media/x');
+		$upload = $this->upload(11, 'Mine');
+		$upload->setPublic(true);
+		$this->cacheDocumentsRequest->method('getFromArray')->willReturn([$upload]);
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
+
+		$this->service->mediaAttachmentsForEdit(['11'], 'alice', Stream::TYPE_PUBLIC);
+	}
+
 	public function testEditMediaIdsCanExplicitlyRemoveAllAttachments(): void {
 		$this->cacheDocumentsRequest->expects($this->never())->method('getFromArray');
 
@@ -1098,6 +1122,23 @@ class DocumentServiceTest extends TestCase {
 			'/proxy?u=' . rawurlencode('https://peer.example/static/streaming-playlists/hls/720.m3u8'),
 			$answer['playlist']
 		);
+	}
+
+	/**
+	 * The origin check is on the URL asked for; a redirect from there would
+	 * take the anonymous proxy anywhere, so every hop is held to it too.
+	 */
+	public function testAPlaylistFileIsOpenedWithRedirectsHeldToItsOrigin(): void {
+		$playlist = new Document();
+		$playlist->setUrl(self::PLAYLIST);
+		$playlist->setMediaType('application/x-mpegURL');
+		$playlist->setLocalCopy(Document::COPY_STREAMED);
+		$this->cacheDocumentsRequest->method('getByNid')->willReturn($playlist);
+		$this->cacheService->expects($this->once())->method('openRemoteFile')
+			->with($this->anything(), 'bytes=0-', null, true)
+			->willReturn(['stream' => fopen('php://memory', 'r'), 'status' => 200, 'headers' => []]);
+
+		$this->service->openPlaylistFile('42', 'https://peer.example/static/seg-1.ts', 'bytes=0-');
 	}
 
 	public function testAFileIsOnlyServedThroughADocumentThatIsAPlaylist(): void {

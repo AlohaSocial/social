@@ -167,6 +167,38 @@ class ClientServiceTest extends TestCase {
 	}
 
 	/** @return array<string, array{string}> */
+	public static function refusedWebsiteProvider(): array {
+		return [
+			'javascript' => ['javascript:alert(1)'],
+			'data' => ['data:text/html,<script>alert(1)</script>'],
+			'a custom scheme' => ['tusky://about'],
+			'no host' => ['https:///about'],
+			'not a url' => ['the best app'],
+			'a space inside' => ['https://app.example/a b'],
+		];
+	}
+
+	#[DataProvider('refusedWebsiteProvider')]
+	public function testCreateAppRefusesAWebsiteThatIsNotAWebAddress(string $website): void {
+		$client = $this->registeredClient();
+		$client->setAppWebsite($website);
+		$this->clientRequest->expects($this->never())->method('saveApp');
+
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage('invalid website');
+		$this->service->createApp($client);
+	}
+
+	public function testCreateAppTakesAWebAddressOrNoWebsite(): void {
+		foreach (['https://tusky.app', 'http://localhost:8080/', ''] as $website) {
+			$client = $this->registeredClient();
+			$client->setAppWebsite($website);
+			$this->service->createApp($client);
+		}
+		$this->addToAssertionCount(1);
+	}
+
+	/** @return array<string, array{string}> */
 	public static function acceptableRedirectUriProvider(): array {
 		return [
 			'out of band' => ['urn:ietf:wg:oauth:2.0:oob'],

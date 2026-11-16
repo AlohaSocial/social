@@ -190,14 +190,14 @@ describe('DirectMessages', () => {
 			status: '@bob@remote.example Hello',
 			visibility: 'direct',
 			in_reply_to_id: '11',
-		})
+		}, { headers: { 'Idempotency-Key': expect.any(String) } })
 
 		// the Mac's own shortcut for "send"
 		post.mockClear()
 		await wrapper.find('.direct-messages__message-form textarea').setValue('Again')
 		await wrapper.find('.direct-messages__message-form textarea').trigger('keydown.enter', { metaKey: true })
 		await flushPromises()
-		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', expect.objectContaining({ status: '@bob@remote.example Again' }))
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', expect.objectContaining({ status: '@bob@remote.example Again' }), { headers: { 'Idempotency-Key': expect.any(String) } })
 	})
 
 	it('opens a recipient search with no social visibility controls', async () => {
@@ -659,6 +659,7 @@ describe('DirectMessages', () => {
 		expect(post).toHaveBeenCalledWith(
 			'/index.php/apps/social/api/v1/statuses',
 			expect.objectContaining({ status: '@bob@remote.example @carol@remote.example both of you' }),
+			{ headers: { 'Idempotency-Key': expect.any(String) } },
 		)
 	})
 
@@ -707,7 +708,7 @@ describe('DirectMessages', () => {
 		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', {
 			status: '@bob@remote.example Hello there',
 			visibility: 'direct',
-		})
+		}, { headers: { 'Idempotency-Key': expect.any(String) } })
 		expect(wrapper.vm.messageText).toBe('')
 	})
 
@@ -726,7 +727,7 @@ describe('DirectMessages', () => {
 		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', {
 			status: '@carol@elsewhere.example A private note',
 			visibility: 'direct',
-		})
+		}, { headers: { 'Idempotency-Key': expect.any(String) } })
 	})
 
 	it('ignores a recipient left over after leaving the new-message panel', async () => {
@@ -742,7 +743,7 @@ describe('DirectMessages', () => {
 			status: '@bob@remote.example A reply to Bob',
 			visibility: 'direct',
 			in_reply_to_id: '11',
-		})
+		}, { headers: { 'Idempotency-Key': expect.any(String) } })
 	})
 
 	// A conversation is a thread, and two people can have several: the server
@@ -1140,7 +1141,7 @@ describe('DirectMessages', () => {
 			await wrapper.find('.direct-messages__message-form textarea').setValue('Hello')
 			await wrapper.find('.direct-messages__message-form').trigger('submit')
 			await flushPromises()
-			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', expect.objectContaining({ visibility: 'direct' }))
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', expect.objectContaining({ visibility: 'direct' }), { headers: { 'Idempotency-Key': expect.any(String) } })
 
 			vi.advanceTimersByTime(30 * 1000)
 			await flushPromises()

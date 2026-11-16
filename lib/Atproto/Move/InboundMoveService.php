@@ -669,6 +669,15 @@ class InboundMoveService {
 	 *
 	 * @throws XrpcException
 	 */
+	/**
+	 * Refuses a token that is not a current session of a move here.
+	 *
+	 * @throws XrpcException
+	 */
+	public function assertSession(string $authorization): void {
+		$this->authenticate($authorization);
+	}
+
 	private function authenticate(string $authorization): Move {
 		$claims = $this->sessions->claims($authorization, SessionService::ACCESS_SCOPE);
 		$move = $this->moves->get((int)($claims['mv'] ?? 0));

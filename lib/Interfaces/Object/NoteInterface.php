@@ -203,7 +203,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			'actor' => $activity->getActorId(),
 			'author' => $author,
 			'object' => $item->getId(),
-			'origin' => $activity->getRoot()->getOrigin(),
+			'origin' => $activity->getRoot()->getOriginAuthority(),
 			'updated' => $item->getUpdated(),
 			'received' => $activity->getRoot()->getOriginCreationTime(),
 			'activity' => $replay,

@@ -24,6 +24,8 @@ use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Traits\TStringTools;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -57,6 +59,7 @@ class PollService {
 		private ConfigService $configService,
 		private LoggerInterface $logger,
 		private ?ITimeFactory $timeFactory = null,
+		private ?ILockingProvider $locks = null,
 	) {
 	}
 
@@ -71,6 +74,12 @@ class PollService {
 	 * on does not tell everybody about a poll from last year.
 	 */
 	public const SWEEP_FLOOR = 86400;
+
+	/** The lock one poll's votes are counted under, followed by its nid. */
+	private const VOTE_LOCK = 'social/poll-vote/';
+	/** How long a vote waits for another one on the same poll, in microseconds. */
+	protected const VOTE_LOCK_WAIT = 3000000;
+	private const VOTE_LOCK_STEP = 50000;
 
 	public function getPoll(int|string $nid, ?Person $viewer = null): Question {
 		$stream = $this->streamRequest->getStreamByNid($nid);
@@ -100,6 +109,22 @@ class PollService {
 	 */
 	public function vote(Person $viewer, int|string $nid, array $choices): Question {
 		$poll = $this->getPoll($nid, $viewer);
+
+		// read again under the poll's lock: "already voted" and the counts
+		// both have to be what the previous vote left, or two requests at
+		// once both pass the check and the second write loses the first's
+		return $this->exclusively(
+			$poll,
+			fn (): Question => $this->voteOn($viewer, $this->getPoll($nid, $viewer), $choices)
+		);
+	}
+
+	/**
+	 * @param int[] $choices option indices
+	 *
+	 * @throws InvalidActionException
+	 */
+	private function voteOn(Person $viewer, Question $poll, array $choices): Question {
 
 		if ($poll->isExpired($this->now())) {
 			throw new InvalidActionException('this poll has ended');
@@ -167,20 +192,76 @@ class PollService {
 			return false;
 		}
 
-		$option = $target->findOption($note->getName());
-		if ($option === null || $target->isExpired($this->now())) {
-			return true; // a vote, but not a countable one — consume silently
-		}
+		return $this->exclusively($target, function () use ($note, $target): bool {
+			// the counts as the previous vote left them
+			try {
+				$fresh = $this->streamRequest->getStreamById($target->getId());
+			} catch (StreamNotFoundException $e) {
+				return true;
+			}
+			if (!$fresh instanceof Question) {
+				return true;
+			}
 
-		$voter = $note->getAttributedTo();
-		// a single-choice poll gives one vote per account, not one per option
-		if (!$target->isMultiple() && $this->hasAnyVote($voter, $target)) {
+			$option = $fresh->findOption($note->getName());
+			if ($option === null || $fresh->isExpired($this->now())) {
+				return true; // a vote, but not a countable one — consume silently
+			}
+
+			$voter = $note->getAttributedTo();
+			// a single-choice poll gives one vote per account, not one per option
+			if (!$fresh->isMultiple() && $this->hasAnyVote($voter, $fresh)) {
+				return true;
+			}
+
+			$this->countVotes($voter, $fresh, [$option]);
+
 			return true;
+		});
+	}
+
+	/**
+	 * Runs `$work` holding the poll's vote lock, so votes on one poll are
+	 * checked and counted one at a time. Waits up to `VOTE_LOCK_WAIT` for a
+	 * vote already being counted; a lock provider that fails outright is not
+	 * a reason to refuse the vote.
+	 *
+	 * @template T
+	 * @param callable(): T $work
+	 * @return T
+	 *
+	 * @throws InvalidActionException another vote held the poll for too long
+	 */
+	private function exclusively(Question $poll, callable $work): mixed {
+		if ($this->locks === null) {
+			return $work();
 		}
 
-		$this->countVotes($voter, $target, [$option]);
+		$lock = self::VOTE_LOCK . $poll->getNid();
+		$acquired = false;
+		for ($waited = 0; ; $waited += self::VOTE_LOCK_STEP) {
+			try {
+				$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+				$acquired = true;
+				break;
+			} catch (LockedException $e) {
+				if ($waited >= static::VOTE_LOCK_WAIT) {
+					throw new InvalidActionException('this poll is busy counting another vote, try again');
+				}
+				usleep(self::VOTE_LOCK_STEP);
+			} catch (\Throwable $e) {
+				$this->logger->info('could not lock a poll for counting a vote', ['poll' => $poll->getId(), 'exception' => $e]);
+				break;
+			}
+		}
 
-		return true;
+		try {
+			return $work();
+		} finally {
+			if ($acquired) {
+				$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+			}
+		}
 	}
 
 	/**

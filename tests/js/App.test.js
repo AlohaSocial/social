@@ -425,9 +425,12 @@ describe('App', () => {
 		expect(accountStore.fetchCurrentAccountInfo).not.toHaveBeenCalled()
 	})
 
-	it('warns administrators about a broken .well-known setup', () => {
+	it('warns administrators about a broken .well-known setup', async () => {
 		setServerData({ isAdmin: true, checks: { success: false, checks: { wellknown: false } } })
 		const wrapper = mountApp()
+		// the setup screens are their own chunk
+		await vi.dynamicImportSettled()
+		await flushPromises()
 		expect(wrapper.find('.setup h3').text()).toBe('.well-known/webfinger isn\'t properly set up!')
 		expect(wrapper.find('.setup a.external_link').attributes('href')).toContain('admin-setup-well-known-URL')
 		expect(wrapper.find('.router-view-stub').exists()).toBe(true)
@@ -716,7 +719,7 @@ describe('App', () => {
 			sections: { stories: true, section_photos: true, section_videos: true, section_news: true },
 		}
 
-		it('draws the setup form from the payload the server sends', () => {
+		it('draws the setup form from the payload the server sends', async () => {
 			setInitialState('social', 'serverData', {
 				...setupPayload,
 				proposedCloudAddress: 'https://cloud.example.org',
@@ -725,6 +728,8 @@ describe('App', () => {
 			})
 			window._nc_initial_state?.clear()
 			const wrapper = mountApp()
+			await vi.dynamicImportSettled()
+			await flushPromises()
 
 			expect(wrapper.find('.setup h2').text()).toBe('Confirm the address of this server')
 			expect(wrapper.find('input.setup-input').element.value).toBe('https://cloud.example.org')
@@ -732,9 +737,11 @@ describe('App', () => {
 			expect(wrapper.find('.router-view-stub').exists()).toBe(false)
 		})
 
-		it('proposes the address of the page when the server has nothing better', () => {
+		it('proposes the address of the page when the server has nothing better', async () => {
 			setServerData({ setup: true, isAdmin: true })
 			const wrapper = mountApp()
+			await vi.dynamicImportSettled()
+			await flushPromises()
 
 			expect(wrapper.find('input.setup-input').element.value).toBe('https://cloud.example.org')
 		})
@@ -743,6 +750,8 @@ describe('App', () => {
 			setServerData({ setup: true, isAdmin: true, proposedCloudAddress: 'https://social.example.org' })
 			const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { cloudAddress: 'https://social.example.org' } })
 			const wrapper = mountApp()
+			await vi.dynamicImportSettled()
+			await flushPromises()
 			const reload = vi.spyOn(wrapper.vm, 'reloadTo').mockImplementation(() => {})
 
 			await wrapper.find('form').trigger('submit')
@@ -752,9 +761,12 @@ describe('App', () => {
 			expect(reload).toHaveBeenCalledWith('/index.php/apps/social/')
 		})
 
-		it('also shows the .well-known warning on the setup form', () => {
+		it('also shows the .well-known warning on the setup form', async () => {
 			setServerData({ setup: true, isAdmin: true, checks: { success: false, checks: { wellknown: false } } })
-			expect(mountApp().find('form h3').text()).toBe('.well-known/webfinger isn\'t properly set up!')
+			const wrapper = mountApp()
+			await vi.dynamicImportSettled()
+			await flushPromises()
+			expect(wrapper.find('form h3').text()).toBe('.well-known/webfinger isn\'t properly set up!')
 		})
 
 		it('tells regular users to wait for the administrator', () => {

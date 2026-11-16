@@ -47,7 +47,7 @@ trait MediaUnderText {
 	 *                                                   newest first
 	 */
 	private function seedMediaUnderText(string $base, Person $author): array {
-		$published = time();
+		$published = time() - 100;
 		$seeded = ['photos' => [], 'videos' => []];
 		foreach ([['image', 'photos', 3], ['video', 'videos', 2]] as [$type, $kind, $count]) {
 			for ($i = 0; $i < $count; $i++) {

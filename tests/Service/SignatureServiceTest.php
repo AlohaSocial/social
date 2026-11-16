@@ -485,6 +485,23 @@ class SignatureServiceTest extends TestCase {
 	}
 
 	/**
+	 * The signature covers `digest`; an unsigned `Content-Digest` of the same
+	 * algorithm that matches a swapped body must not replace it.
+	 */
+	public function testAnUnsignedContentDigestDoesNotStandInForTheSignedDigest(): void {
+		$signedBody = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($signedBody, self::$privateKey, [], '(request-target) host date digest');
+		$swappedBody = '{"type":"Delete"}';
+		$headers['content-digest'] = 'sha-256=:' . base64_encode(hash('sha256', $swappedBody, true)) . ':';
+		$headers['content-length'] = (string)strlen($swappedBody);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+
+		$this->expectException(SignatureException::class);
+		$this->expectExceptionMessage('digest does not match the body');
+		$this->service->checkRequest($this->incomingRequest($headers), $swappedBody);
+	}
+
+	/**
 	 * hs2019 names no hash: the key type decides, and for the RSA keys actors
 	 * publish that is SHA-256.
 	 */
@@ -1505,11 +1522,11 @@ class SignatureServiceTest extends TestCase {
 		\OC::$server->register(IAppDataFactory::class, $factory);
 	}
 
-	private function note(): Note {
+	private function note(string $actor = self::LOCAL_ACTOR): Note {
 		$note = new Note();
-		$note->setId('https://cloud.example.com/apps/social/@alice/1');
-		$note->setActorId(self::LOCAL_ACTOR);
-		$note->setAttributedTo(self::LOCAL_ACTOR);
+		$note->setId($actor . '/1');
+		$note->setActorId($actor);
+		$note->setAttributedTo($actor);
 		$note->setContent('<p>Hello fediverse</p>');
 		$note->setPublished('2026-09-07T10:00:00Z');
 		$note->setTo(ACore::CONTEXT_PUBLIC);
@@ -1539,78 +1556,134 @@ class SignatureServiceTest extends TestCase {
 
 	public function testCheckObjectVerifiesASignedObjectAndStampsItsOrigin(): void {
 		$this->registerContextCache();
-		$signed = $this->note();
-		$this->service->signObject($this->person(self::LOCAL_ACTOR, self::$publicKey, self::$privateKey), $signed);
+		$signed = $this->note(self::REMOTE_ACTOR);
+		$this->service->signObject($this->person(self::REMOTE_ACTOR, self::$publicKey, self::$privateKey), $signed);
 		$received = new Note();
 		$received->setSource(json_encode($signed, JSON_UNESCAPED_SLASHES));
-		$received->setActorId(self::LOCAL_ACTOR);
+		$received->setActorId(self::REMOTE_ACTOR);
 		$this->cacheActorService->expects($this->once())
 			->method('getFromId')
-			->with(self::LOCAL_ACTOR, false)
-			->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+			->with(self::REMOTE_ACTOR, false)
+			->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 
 		$this->assertTrue($this->service->checkObject($received));
-		$this->assertSame(self::CLOUD_HOST, $received->getOrigin());
+		$this->assertSame('remote.example', $received->getOrigin());
 		$this->assertSame(SignatureService::ORIGIN_SIGNATURE, $received->getOriginSource());
 		$this->assertSame((new DateTime($signed->getSignature()->getCreated()))->getTimestamp(), $received->getOriginCreationTime());
 	}
 
 	public function testCheckObjectRejectsATamperedObjectAfterRefreshingTheKey(): void {
 		$this->registerContextCache();
-		$signed = $this->note();
-		$this->service->signObject($this->person(self::LOCAL_ACTOR, self::$publicKey, self::$privateKey), $signed);
+		$signed = $this->note(self::REMOTE_ACTOR);
+		$this->service->signObject($this->person(self::REMOTE_ACTOR, self::$publicKey, self::$privateKey), $signed);
 		$json = json_decode(json_encode($signed, JSON_UNESCAPED_SLASHES), true);
 		$json['content'] = '<p>Tampered</p>';
 		$received = new Note();
 		$received->setSource(json_encode($json, JSON_UNESCAPED_SLASHES));
-		$received->setActorId(self::LOCAL_ACTOR);
+		$received->setActorId(self::REMOTE_ACTOR);
 		$lookups = [];
 		$this->cacheActorService->expects($this->exactly(2))
 			->method('getFromId')
 			->willReturnCallback(function (...$args) use (&$lookups) {
 				$lookups[] = $args;
 
-				return $this->person(self::LOCAL_ACTOR, self::$publicKey);
+				return $this->person(self::REMOTE_ACTOR, self::$publicKey);
 			});
 
 		$this->assertFalse($this->service->checkObject($received));
 		$this->assertSame('', $received->getOrigin());
 		// the second lookup must bypass the cache, or the refresh is not a refresh
-		$this->assertSame([[self::LOCAL_ACTOR, false], [self::LOCAL_ACTOR, true]], $lookups);
+		$this->assertSame([[self::REMOTE_ACTOR, false], [self::REMOTE_ACTOR, true]], $lookups);
 	}
 
 	public function testCheckObjectRejectsASignatureFromAnotherKey(): void {
 		$this->registerContextCache();
-		$signed = $this->note();
-		$this->service->signObject($this->person(self::LOCAL_ACTOR, self::$publicKey, self::$privateKey), $signed);
+		$signed = $this->note(self::REMOTE_ACTOR);
+		$this->service->signObject($this->person(self::REMOTE_ACTOR, self::$publicKey, self::$privateKey), $signed);
 		$received = new Note();
 		$received->setSource(json_encode($signed, JSON_UNESCAPED_SLASHES));
-		$received->setActorId(self::LOCAL_ACTOR);
-		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::LOCAL_ACTOR, self::$otherPublicKey));
+		$received->setActorId(self::REMOTE_ACTOR);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$otherPublicKey));
 
 		$this->assertFalse($this->service->checkObject($received));
 	}
 
 	public function testCheckObjectWithoutSignatureIsFalse(): void {
-		$received = $this->note();
+		$received = $this->note(self::REMOTE_ACTOR);
 		$received->setSource(json_encode($received, JSON_UNESCAPED_SLASHES));
 		$this->cacheActorService->expects($this->never())->method('getFromId');
 
 		$this->assertFalse($this->service->checkObject($received));
 	}
 
+	/**
+	 * A local actor's LD signature travels with every activity it sends, so
+	 * an inbound document carrying one is never taken as vouching for it.
+	 */
+	public function testCheckObjectNeverVerifiesALocalActorsSignature(): void {
+		$this->registerContextCache();
+		$signed = $this->note();
+		$this->service->signObject($this->person(self::LOCAL_ACTOR, self::$publicKey, self::$privateKey), $signed);
+		$received = new Note();
+		$received->setSource(json_encode($signed, JSON_UNESCAPED_SLASHES));
+		$received->setActorId(self::LOCAL_ACTOR);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->assertFalse($this->service->checkObject($received));
+		$this->assertSame('', $received->getOrigin());
+	}
+
+	public function testAnInboundActivityForALocalActorIsRefused(): void {
+		$activity = $this->note();
+
+		$this->expectException(InvalidOriginException::class);
+		$this->service->assertRemoteActor($activity);
+	}
+
+	public function testAnInboundActivityForARemoteActorPasses(): void {
+		$this->service->assertRemoteActor($this->note(self::REMOTE_ACTOR));
+
+		$this->assertFalse($this->service->isLocalActor(self::REMOTE_ACTOR));
+	}
+
+	public function testAnActorOnAnotherPortOfThisHostIsNotLocal(): void {
+		$this->assertTrue($this->service->isLocalActor('https://CLOUD.example.com/apps/social/@alice'));
+		$this->assertTrue($this->service->isLocalActor('https://cloud.example.com:443/apps/social/@alice'));
+		$this->assertFalse($this->service->isLocalActor('https://cloud.example.com:8443/users/bob'));
+
+		$this->cloudAuthority = self::CLOUD_HOST . ':8443';
+		$this->assertTrue($this->service->isLocalActor('https://cloud.example.com:8443/apps/social/@alice'));
+		$this->assertFalse($this->service->isLocalActor(self::LOCAL_ACTOR));
+	}
+
+	public function testCheckObjectRefusesTheSameSignatureSpelledDifferently(): void {
+		$this->registerContextCache();
+		$received = $this->receivedSignedNote();
+		$this->cacheActorService->method('getFromId')
+			->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+		$this->assertTrue($this->service->checkObject($received));
+
+		$json = json_decode($received->getSource(), true);
+		$json['signature']['signatureValue'] = rtrim($json['signature']['signatureValue'], '=') . "\n";
+		$respelled = new Note();
+		$respelled->setSource(json_encode($json, JSON_UNESCAPED_SLASHES));
+		$respelled->setActorId(self::REMOTE_ACTOR);
+
+		$this->assertFalse($this->service->checkObject($respelled));
+	}
+
 	/** A note the way it arrives on the wire, signed with the class key pair. */
 	private function receivedSignedNote(?string $created = null): Note {
-		$signed = $this->note();
+		$signed = $this->note(self::REMOTE_ACTOR);
 		if ($created === null) {
-			$this->service->signObject($this->person(self::LOCAL_ACTOR, self::$publicKey, self::$privateKey), $signed);
+			$this->service->signObject($this->person(self::REMOTE_ACTOR, self::$publicKey, self::$privateKey), $signed);
 		} else {
 			// signObject() with a chosen creation time: `created` is part of what
 			// is signed, so an expired-window test needs a genuine old signature
 			$signature = new LinkedDataSignature();
 			$signature->setPrivateKey(self::$privateKey);
 			$signature->setType('RsaSignature2017');
-			$signature->setCreator(self::LOCAL_ACTOR . '#main-key');
+			$signature->setCreator(self::REMOTE_ACTOR . '#main-key');
 			$signature->setCreated($created);
 			$signature->setObject(json_decode(json_encode($signed), true));
 			$signature->sign();
@@ -1619,7 +1692,7 @@ class SignatureServiceTest extends TestCase {
 
 		$received = new Note();
 		$received->setSource(json_encode($signed, JSON_UNESCAPED_SLASHES));
-		$received->setActorId(self::LOCAL_ACTOR);
+		$received->setActorId(self::REMOTE_ACTOR);
 
 		return $received;
 	}
@@ -1628,7 +1701,7 @@ class SignatureServiceTest extends TestCase {
 		$this->registerContextCache();
 		$received = $this->receivedSignedNote();
 		$this->cacheActorService->method('getFromId')
-			->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+			->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 
 		$this->assertTrue($this->service->checkObject($received), 'first delivery is accepted');
 		$this->assertFalse($this->service->checkObject($received), 'the same signature must not verify twice');
@@ -1640,7 +1713,7 @@ class SignatureServiceTest extends TestCase {
 			gmdate(SignatureService::DATE_OBJECT, time() - SignatureService::LD_WINDOW - 3600)
 		);
 		$this->cacheActorService->method('getFromId')
-			->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+			->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 
 		$this->assertFalse($this->service->checkObject($received));
 		$this->assertSame('', $received->getOrigin());
@@ -1651,7 +1724,7 @@ class SignatureServiceTest extends TestCase {
 		$this->registerContextCache();
 		$received = $this->receivedSignedNote('now');
 		$this->cacheActorService->method('getFromId')
-			->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+			->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 
 		$this->expectException(DateTimeException::class);
 		$this->service->checkObject($received);
@@ -1979,7 +2052,7 @@ class SignatureServiceTest extends TestCase {
 		$this->registerContextCache();
 		$this->clock->set(FrozenClock::at('2026-10-31T23:59:59Z')->getTime());
 		$received = $this->receivedSignedNote(gmdate(SignatureService::DATE_OBJECT, $this->clock->getTime() + $offset));
-		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 
 		$this->assertSame($accepted, $this->service->checkObject($received));
 	}
@@ -1988,7 +2061,7 @@ class SignatureServiceTest extends TestCase {
 		$this->registerContextCache();
 		$start = $this->clock->getTime();
 		$received = $this->receivedSignedNote(gmdate(SignatureService::DATE_OBJECT, $start));
-		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 		$this->assertTrue($this->service->checkObject($received));
 
 		foreach ([1, SignatureService::LD_WINDOW, SignatureService::LD_WINDOW + 1] as $offset) {
@@ -2049,7 +2122,7 @@ class SignatureServiceTest extends TestCase {
 		$this->registerContextCache();
 		$start = $this->clock->getTime();
 		$received = $this->receivedSignedNote(gmdate(SignatureService::DATE_OBJECT, $start + SignatureService::LD_WINDOW));
-		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 		$this->assertTrue($this->service->checkObject($received));
 
 		foreach ([2 * SignatureService::LD_WINDOW, 2 * SignatureService::LD_WINDOW + 1] as $offset) {

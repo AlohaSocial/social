@@ -228,7 +228,8 @@ class ActorsRequest extends ActorsRequestBuilder {
 	 *
 	 * Deleted rows are skipped, which is what makes deleting an account
 	 * something a person can do and then carry on: a deleted actor is kept for
-	 * an hour before `manageDeletedActors()` purges it, so that the handle
+	 * at least an hour, and while its deliveries are still queued, before
+	 * `manageDeletedActors()` purges it, so that the handle
 	 * cannot be taken by somebody else straight away — and while it sat there,
 	 * this method went on answering with it. The person who had just deleted
 	 * their account was shown the account they had deleted, and `createActor()`

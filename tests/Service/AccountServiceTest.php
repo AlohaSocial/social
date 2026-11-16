@@ -855,6 +855,22 @@ class AccountServiceTest extends TestCase {
 		$this->assertSame(1, $this->service->manageDeletedActors());
 	}
 
+	/**
+	 * A deleted account whose `Delete` is still queued for a server that was
+	 * down keeps its key: purged, every remaining delivery had nothing to be
+	 * signed with and was dropped.
+	 */
+	public function testManageDeletedActorsKeepsAnAccountWithDeliveriesQueued(): void {
+		$gone = $this->alice();
+		$this->actorsRequest->method('getDeletedBefore')->willReturn([$gone]);
+		$this->activityService->expects($this->once())->method('withPendingDeliveries')
+			->with([$gone->getId()])
+			->willReturn([$gone->getId() => true]);
+		$this->actorsRequest->expects($this->never())->method('delete');
+
+		$this->assertSame(0, $this->service->manageDeletedActors());
+	}
+
 	public function testBlindKeyRotationWithoutActorsDoesNothing(): void {
 		$this->actorsRequest->method('walk')->willReturn([]);
 		$this->signatureService->expects($this->never())->method('generateKeys');

@@ -16,6 +16,7 @@ use OCA\Social\Exceptions\UrlCloudException;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\LinkedDataSignature;
 use OCA\Social\Security\HtmlSanitizer;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Nid;
 use OCA\Social\Tools\Traits\TArrayTools;
@@ -367,11 +368,13 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	 * @throws InvalidOriginException
 	 */
 	public function checkOrigin(string $id) {
-		$host = parse_url($id, PHP_URL_HOST);
-		$origin = $this->getRoot()
-			->getOrigin();
+		// host and port: a service on another port of a host is not the
+		// instance on its default one
+		$authority = strtolower(ConfigService::authorityOf($id));
+		$origin = strtolower($this->getRoot()
+			->getOriginAuthority());
 
-		if ($id !== '' && $origin === $host && $host !== '') {
+		if ($id !== '' && $authority !== '' && $origin === $authority) {
 			return;
 		}
 

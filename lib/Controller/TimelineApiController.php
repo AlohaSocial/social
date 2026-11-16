@@ -137,9 +137,6 @@ class TimelineApiController extends MastodonApiController {
 					ProbeOptions::FAVOURITES
 				], true
 			)) {
-				$this->logger->error('[' . static::class . '] Unknown timeline requested', [
-					'timeline' => $timeline
-				]);
 				throw new UnknownProbeException('unknown timeline');
 			}
 
@@ -211,11 +208,8 @@ class TimelineApiController extends MastodonApiController {
 
 			return $this->tagged($response);
 		} catch (Throwable $e) {
-			$this->logger->error('[' . static::class . '] Timeline request failed', [
-				'timeline' => $timeline,
-				'exception' => $e->getMessage(),
-				'trace' => $e->getTraceAsString()
-			]);
+			// a 401 or an unknown timeline is the client's to fix; error()
+			// logs what answers 500, with its trace
 			return $this->error($e);
 		}
 	}
@@ -381,14 +375,14 @@ class TimelineApiController extends MastodonApiController {
 	/**
 	 * How far through each timeline the reader has got.
 	 *
-	 * @param array $timeline the timelines asked about; all of them when empty
+	 * @param array<mixed>|string $timeline the timelines asked about; all of them when empty
 	 *
 	 * @return DataResponse
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/markers')]
-	public function markersGet(array $timeline = []): DataResponse {
+	public function markersGet(array|string $timeline = []): DataResponse {
 		try {
 			$this->initViewer(true);
 
@@ -396,7 +390,7 @@ class TimelineApiController extends MastodonApiController {
 			// and `[]` is not something a client can read `home.last_read_id`
 			// out of
 			return new DataResponse(
-				(object)$this->markerService->get($this->currentSession(), $timeline),
+				(object)$this->markerService->get($this->currentSession(), self::listParam($timeline)),
 				Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
@@ -449,12 +443,14 @@ class TimelineApiController extends MastodonApiController {
 		int|string $max_id = 0,
 		int|string $min_id = 0,
 		int|string $since_id = 0,
-		array $types = [],
-		array $exclude_types = [],
+		array|string $types = [],
+		array|string $exclude_types = [],
 		string $account_id = '',
 	): DataResponse {
 		try {
 			$this->initViewer(true);
+			$types = self::listParam($types);
+			$exclude_types = self::listParam($exclude_types);
 
 			if ($account_id !== '') {
 				// the notifications one account caused: Mastodon's `account_id`

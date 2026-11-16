@@ -25,14 +25,22 @@ use OCA\Social\Db\HostBreakerRequest;
  * survives the pass and the process — and a host that keeps failing is left
  * alone for longer each time, up to an hour, which is the difference between
  * a dead instance costing a few seconds a day and costing the whole budget.
- * Strikes older than the ceiling no longer count.
+ * Strikes older than `STRIKE_WINDOW` no longer count.
  */
 class HostBreaker {
 	/** How long a host that has just failed is left alone, in seconds. */
 	public const BASE = 60;
 
-	/** The ceiling on that, and how long a strike counts. */
+	/** The ceiling on that. */
 	public const MAX = 3600;
+
+	/**
+	 * How long a strike counts. Longer than the ceiling: a host held back for
+	 * the full hour is asked again only once the hour is over, and a strike
+	 * that had lapsed by then sent a dead host back to a one-minute hold,
+	 * every hour, for ever.
+	 */
+	public const STRIKE_WINDOW = 4 * self::MAX;
 
 	/** @var array<string, int> the hosts this drain has found to be failing itself, and until when */
 	private array $failing = [];
@@ -91,7 +99,7 @@ class HostBreaker {
 	public function open(string $host, int $atLeast = 0): void {
 		$now = time();
 		$state = $this->state();
-		$strikes = (($state[$host]['last_failure'] ?? 0) > $now - self::MAX)
+		$strikes = (($state[$host]['last_failure'] ?? 0) > $now - self::STRIKE_WINDOW)
 			? $state[$host]['strikes'] + 1
 			: 1;
 		$for = min(self::MAX, max(self::BASE * (int)(2 ** min(6, $strikes - 1)), $atLeast));
@@ -124,12 +132,12 @@ class HostBreaker {
 	}
 
 	/**
-	 * Forgets the hosts that have not failed for longer than the ceiling. A
-	 * cheap DELETE on an index, for the cron to run each pass.
+	 * Forgets the hosts that have not failed for longer than a strike counts.
+	 * A cheap DELETE on an index, for the cron to run each pass.
 	 */
 	public function forgetRecovered(): void {
 		try {
-			$this->hostBreakerRequest->forgetBefore(time() - self::MAX);
+			$this->hostBreakerRequest->forgetBefore(time() - self::STRIKE_WINDOW);
 		} catch (\Throwable $e) {
 		}
 	}
@@ -138,7 +146,7 @@ class HostBreaker {
 	private function state(): array {
 		if ($this->state === null) {
 			try {
-				$this->state = $this->hostBreakerRequest->failingSince(time() - self::MAX);
+				$this->state = $this->hostBreakerRequest->failingSince(time() - self::STRIKE_WINDOW);
 			} catch (\Throwable $e) {
 				// the table not there yet (an upgrade not run) or the database
 				// having a moment: the per-drain list is the fallback

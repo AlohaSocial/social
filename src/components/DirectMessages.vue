@@ -433,6 +433,7 @@ import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { fullDateTime, shortAgo } from '../utils/relativeTime.js'
 import { nextCursor } from '../utils/linkHeader.js'
+import { idempotencyKeeper } from '../utils/idempotency.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import { addressFoundIn, completeAddress, isLocalAccount } from '../utils/accountLocality.js'
 import logger from '../services/logger.js'
@@ -517,7 +518,7 @@ export default {
 		// user id, which a username chosen on the setup screen need not be
 		const { username: ownUsername } = useCurrentUser()
 
-		return { ownUsername }
+		return { ownUsername, idempotency: idempotencyKeeper() }
 	},
 
 	data() {
@@ -1229,11 +1230,15 @@ export default {
 				// A new-message composer can be opened while another thread remains
 				// selected in the route. That thread is not the parent of this post.
 				const replyTo = newRecipient ? null : this.activeConversation?.last_status?.id
-				await axios.post(generateUrl('apps/social/api/v1/statuses'), {
+				const body = {
 					status: `${this.routingMentions(recipient)} ${text}`,
 					visibility: 'direct',
 					...(replyTo ? { in_reply_to_id: replyTo } : {}),
+				}
+				await axios.post(generateUrl('apps/social/api/v1/statuses'), body, {
+					headers: { 'Idempotency-Key': this.idempotency.keyFor(body) },
 				})
+				this.idempotency.sent()
 				clearDraft(draftContext)
 				if (this.messageDraftContext === draftContext) {
 					this.messageText = ''

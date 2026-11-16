@@ -22,7 +22,7 @@
 				:value="option"
 				type="text"
 				:placeholder="t('social', 'Poll option {number}', { number: index + 1 })"
-				maxlength="100"
+				:maxlength="maxCharacters"
 				@input="setOption(index, valueOf($event))">
 			<NcButton
 				v-if="options.length > 2"
@@ -72,6 +72,9 @@
 				</option>
 			</select>
 		</div>
+		<p v-if="!valid && attempted" class="poll-editor__error" role="status">
+			{{ t('social', 'Give the poll at least two options.') }}
+		</p>
 	</div>
 </template>
 
@@ -80,6 +83,7 @@ import { translate as t } from '@nextcloud/l10n'
 import Close from 'vue-material-design-icons/Close.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { checkedOf, valueOf } from '../../utils/dom.js'
+import { POLL_MAX_CHARACTERS_PER_OPTION } from '../../utils/statusPayload.js'
 
 /** What Mastodon accepts, and so what a poll written here may have. */
 const MIN_OPTIONS = 2
@@ -119,6 +123,18 @@ export default {
 			type: Number,
 			default: 86400,
 		},
+
+		/** whether the poll can be sent as it is */
+		valid: {
+			type: Boolean,
+			default: true,
+		},
+
+		/** whether sending was tried with the poll incomplete */
+		attempted: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	emits: ['update:options', 'update:multiple', 'update:expiresIn', 'remove'],
@@ -127,6 +143,11 @@ export default {
 		/** @return {number} how many options a poll may have */
 		maxOptions() {
 			return MAX_OPTIONS
+		},
+
+		/** @return {number} how long one option may be */
+		maxCharacters() {
+			return POLL_MAX_CHARACTERS_PER_OPTION
 		},
 	},
 
@@ -232,6 +253,12 @@ export default {
 		select {
 			margin: 0;
 		}
+	}
+
+	&__error {
+		margin: 4px 0 0;
+		color: var(--color-error);
+		font-size: 0.85rem;
 	}
 }
 </style>

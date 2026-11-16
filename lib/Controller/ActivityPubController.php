@@ -347,6 +347,7 @@ class ActivityPubController extends Controller {
 			$this->inboxLimiter->assertOriginAllowed($origin);
 
 			$activity = $this->importService->importFromJson($body);
+			$this->signatureService->assertRemoteActor($activity);
 			if (!$this->signatureService->checkObject($activity)) {
 				// no Linked Data signature to vouch for the object, so the only
 				// thing standing behind this activity is the key that signed the
@@ -356,7 +357,10 @@ class ActivityPubController extends Controller {
 				} catch (InvalidOriginException $e) {
 					return $this->acceptForwarded($activity, $origin, $e);
 				}
-				$activity->setOrigin($origin, SignatureService::ORIGIN_HEADER, $requestTime);
+				// the signer is the actor here, and its address keeps the port
+				$activity->setOrigin(
+					ConfigService::authorityOf($signer) ?: $origin, SignatureService::ORIGIN_HEADER, $requestTime
+				);
 			}
 
 			// A Linked Data signature moves the origin off the host that
@@ -434,6 +438,7 @@ class ActivityPubController extends Controller {
 			$this->cacheActorService->getFromLocalAccount($username);
 
 			$activity = $this->importService->importFromJson($body);
+			$this->signatureService->assertRemoteActor($activity);
 			if (!$this->signatureService->checkObject($activity)) {
 				// no Linked Data signature to vouch for the object, so the only
 				// thing standing behind this activity is the key that signed the
@@ -443,7 +448,10 @@ class ActivityPubController extends Controller {
 				} catch (InvalidOriginException $e) {
 					return $this->acceptForwarded($activity, $origin, $e);
 				}
-				$activity->setOrigin($origin, SignatureService::ORIGIN_HEADER, $requestTime);
+				// the signer is the actor here, and its address keeps the port
+				$activity->setOrigin(
+					ConfigService::authorityOf($signer) ?: $origin, SignatureService::ORIGIN_HEADER, $requestTime
+				);
 			}
 
 			// A Linked Data signature moves the origin off the host that

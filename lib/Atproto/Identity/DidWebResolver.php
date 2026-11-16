@@ -44,7 +44,7 @@ final class DidWebResolver {
 		$status = 0;
 		try {
 			$body = $curl->doRequest('get', $url, [
-				'timeout' => 5,
+				'timeout' => 3,
 				'json_headers' => false,
 				'headers' => ['Accept' => 'application/did+json, application/json'],
 				'max_redirects' => 0,

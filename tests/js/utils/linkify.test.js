@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { describe, expect, it } from 'vitest'
-import { entitiesIn, linkifyRuns } from '../../../src/utils/linkify.js'
+import { countableLength, entitiesIn, linkifyRuns } from '../../../src/utils/linkify.js'
 
 /**
  * These are the cases `tests/Service/LinkifyServiceTest.php` runs, in the same
@@ -96,5 +96,21 @@ describe('linkifyRuns', () => {
 
 		expect(runs.map((run) => run.text).join('')).toBe('see https://example.invalid/a.')
 		expect(runs[runs.length - 1]).toEqual({ type: 'text', text: '.' })
+	})
+})
+
+/** The cases of `LinkifyServiceTest::countedLengths()`, so the two cannot drift. */
+describe('countableLength — the same count the server holds a post to', () => {
+	const long = 'https://example.org/' + 'a'.repeat(80)
+	it.each([
+		['plain text', 'hello there', 11],
+		['a long URL counts as 23', 'see ' + long, 4 + 23],
+		['and so does a short one', 'see https://a.io', 4 + 23],
+		['a URL closing a sentence keeps its full stop', 'see ' + long + '.', 4 + 23 + 1],
+		['a remote mention counts as its name', 'hi @bob@remote.example', 3 + 4],
+		['a local mention counts as written', 'hi @bob', 7],
+		['multi-byte characters are characters', 'héllo 🐈', 7],
+	])('%s', (name, text, expected) => {
+		expect(countableLength(text)).toBe(expected)
 	})
 })

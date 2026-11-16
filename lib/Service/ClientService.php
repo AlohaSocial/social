@@ -17,6 +17,7 @@ use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Exceptions\InvalidScopeException;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -93,6 +94,7 @@ class ClientService {
 		private LoggerInterface $logger,
 		private EnabledUserService $enabledUsers,
 		private ?ITimeFactory $timeFactory = null,
+		private ?ModerationService $moderation = null,
 	) {
 		$this->clientRequest = $clientRequest;
 		$this->secretHasher = $secretHasher;
@@ -118,6 +120,11 @@ class ClientService {
 			}
 		}
 
+		// as Mastodon validates it: shown to people as a link to the app
+		if ($client->getAppWebsite() !== '' && self::websiteLink($client->getAppWebsite()) === '') {
+			throw new ClientException('invalid website');
+		}
+
 		$problem = self::migrationScopeProblem($client->getAppScopes(), $client->getAppRedirectUris());
 		if ($problem !== null) {
 			throw new ClientException($problem);
@@ -127,6 +134,23 @@ class ClientService {
 		$client->setAppClientSecret($this->token(40));
 
 		$this->clientRequest->saveApp($client);
+	}
+
+	/**
+	 * An application's website as it may be offered as a link: an `http` or
+	 * `https` address with a host, or '' for anything else. Registration
+	 * refuses anything else now; rows registered before it did are read
+	 * through this too.
+	 */
+	public static function websiteLink(string $website): string {
+		$website = trim($website);
+		if (preg_match('/^https?:\/\/[^\/\s]/i', $website) !== 1
+			|| preg_match('/[\x00-\x20\x7f]/', $website) === 1
+			|| (string)parse_url($website, PHP_URL_HOST) === '') {
+			return '';
+		}
+
+		return $website;
 	}
 
 	/**
@@ -518,6 +542,23 @@ class ClientService {
 	 */
 	public function getFromClientId(string $clientId): SocialClient {
 		return $this->clientRequest->getFromClientId($clientId);
+	}
+
+	/**
+	 * Whether the Nextcloud user behind a token or a session holds an account
+	 * suspended here, which the client API refuses whatever it is asked.
+	 */
+	public function isSuspendedUser(string $userId): bool {
+		return $this->moderation?->isSuspendedUser($userId) ?? false;
+	}
+
+	/**
+	 * Whether this local account, already read for the request, is suspended
+	 * here: the same answer as `isSuspendedUser()` without reading the account
+	 * a second time.
+	 */
+	public function isSuspendedAccount(Person $account): bool {
+		return $this->moderation?->isSuspended($account->getId()) ?? false;
 	}
 
 	/**

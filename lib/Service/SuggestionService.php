@@ -12,9 +12,11 @@ namespace OCA\Social\Service;
 use Exception;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\DiscoveryRequest;
+use OCA\Social\External\ExternalUserBackend;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\Suggestion;
+use OCP\IUserManager;
 
 /**
  * Accounts to follow: `GET /api/v2/suggestions`.
@@ -49,6 +51,7 @@ class SuggestionService {
 		private DirectoryService $directoryService,
 		private ColleagueService $colleagueService,
 		private ActorsRequest $actorsRequest,
+		private IUserManager $userManager,
 	) {
 	}
 
@@ -102,6 +105,10 @@ class SuggestionService {
 	 * carries; a viewer with no local actor row -- a bearer token for an account
 	 * that was deleted, say -- simply has no colleagues to leave out.
 	 *
+	 * An external user gets none: their account is confined to Aloha Social,
+	 * and a list of the accounts this Nextcloud's people named on their
+	 * profiles would tell them who works here.
+	 *
 	 * @return string[]
 	 */
 	private function colleaguePrims(string $viewerId): array {
@@ -109,6 +116,9 @@ class SuggestionService {
 			$exceptUserId = $this->actorsRequest->getFromId($viewerId)->getUserId();
 		} catch (Exception $e) {
 			$exceptUserId = '';
+		}
+		if ($exceptUserId !== '' && ExternalUserBackend::isExternal($this->userManager->get($exceptUserId))) {
+			return [];
 		}
 
 		return array_map(

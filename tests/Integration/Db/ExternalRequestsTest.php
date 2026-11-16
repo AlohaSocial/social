@@ -132,7 +132,23 @@ class ExternalRequestsTest extends TestCase {
 		$this->assertSame(1, $this->signups->countFromIpSince('ip', 1000));
 		$this->assertSame(1, $this->signups->purgeUnverifiedBefore(1000));
 		$this->assertNotNull($this->signups->get($waiting));
-		$this->assertSame(2, $this->signups->count());
+		$this->assertSame(1, $this->signups->countUnverified(), 'the confirmed one is not counted');
+	}
+
+	public function testTheOldestUnconfirmedRegistrationsAreForgottenFirst(): void {
+		$older = $this->signups->create('itest_older', 'older@example.org', 'H', 'a', false, false, 0, 'ip', 100);
+		$waiting = $this->signups->create('itest_waiting', 'w@example.org', 'H', '', true, true, 0, 'ip', 50);
+		$old = $this->signups->create('itest_old', 'old@example.org', 'H', 'b', false, false, 0, 'ip', 200);
+		$new = $this->signups->create('itest_new', 'new@example.org', 'H', 'c', false, false, 0, 'ip', 300);
+
+		$this->assertSame(0, $this->signups->purgeOldestUnverified(0));
+		$this->assertSame(2, $this->signups->purgeOldestUnverified(2));
+		$this->assertNull($this->signups->get($older));
+		$this->assertNull($this->signups->get($old));
+		$this->assertNotNull($this->signups->get($new));
+		$this->assertNotNull($this->signups->get($waiting), 'a confirmed registration is never forgotten');
+		$this->assertSame(1, $this->signups->purgeOldestUnverified(5));
+		$this->assertSame(0, $this->signups->countUnverified());
 	}
 
 	/**
@@ -144,7 +160,7 @@ class ExternalRequestsTest extends TestCase {
 		$this->signups->createPlaceholder('ip', 1000);
 
 		$this->assertSame(2, $this->signups->countFromIpSince('ip', 1000));
-		$this->assertSame(2, $this->signups->count());
+		$this->assertSame(2, $this->signups->countUnverified());
 		$this->assertNull($this->signups->getByEmail('dave@example.org'));
 		$this->assertNull($this->signups->getByTokenHash(''));
 		$this->assertSame(0, $this->signups->countAwaitingApproval());

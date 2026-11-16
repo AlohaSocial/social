@@ -188,6 +188,27 @@ class SearchServiceTest extends TestCase {
 		$this->assertSame([], $service->searchUri('https://remote.example/users/bob', false));
 	}
 
+	/**
+	 * Nextcloud's own search bar is asked about every search in every app:
+	 * an address typed there is not sent anywhere, not even later.
+	 */
+	public function testASearchThatMayNotQueueAsksNoOtherServer(): void {
+		$queue = $this->createMock(RemoteFetchQueue::class);
+		$service = new SearchService(
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			null, $queue
+		);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->cacheActorService->expects($this->never())->method('getFromAccount');
+		$this->cacheActorService->method('getCachedFromId')->willThrowException(new CacheActorDoesNotExistException());
+		$this->cacheActorService->method('searchCachedAccounts')->willReturn([]);
+		$queue->expects($this->never())->method('resolveActors');
+		$queue->expects($this->never())->method('resolveAccounts');
+
+		$this->assertSame([], $service->searchUri('https://remote.example/users/bob', false, false));
+		$this->assertSame([], $service->searchAccounts('alice@customer.example', 5, '', false, false));
+	}
+
 	public function testACacheOnlySearchAnswersACachedActorWithoutQueueing(): void {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$service = new SearchService(

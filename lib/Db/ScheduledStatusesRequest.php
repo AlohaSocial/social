@@ -254,9 +254,13 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	 * for a week must publish what it can and come back for the rest, rather
 	 * than start a run it cannot finish and publish nothing.
 	 *
+	 * @param string[] $exceptActors the actor ids whose posts are held back
+	 *                               and left out, so they do not fill the
+	 *                               window run after run
+	 *
 	 * @return ScheduledStatus[]
 	 */
-	public function getDue(int $now, int $limit = 50): array {
+	public function getDue(int $now, int $limit = 50, array $exceptActors = []): array {
 		$qb = $this->getScheduledSelectSql();
 		$qb->andWhere(
 			$qb->expr()->lte(
@@ -264,12 +268,46 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 				$qb->createNamedParameter($this->dateTime($now), IQueryBuilder::PARAM_DATE)
 			)
 		);
+		if ($exceptActors !== []) {
+			$qb->andWhere($qb->expr()->notIn(
+				'ss.actor_id_prim',
+				$qb->createNamedParameter(array_map(fn (string $id): string => $qb->prim($id), $exceptActors), IQueryBuilder::PARAM_STR_ARRAY)
+			));
+		}
 
 		$qb->orderBy('ss.scheduled_at', 'asc');
 		$qb->addOrderBy('ss.id', 'asc');
 		$qb->setMaxResults($limit);
 
 		return $this->getScheduledFromRequest($qb);
+	}
+
+	/**
+	 * The uploads every waiting post names, as nid => true.
+	 *
+	 * Read in pages by id; the table holds what people have scheduled, which
+	 * each account is limited in.
+	 *
+	 * @return array<int, true>
+	 */
+	public function mediaNids(int $page = 500): array {
+		$nids = [];
+		$after = 0;
+		do {
+			$qb = $this->getScheduledSelectSql();
+			$qb->andWhere($qb->expr()->gt('ss.id', $qb->createNamedParameter($after, IQueryBuilder::PARAM_INT)));
+			$qb->orderBy('ss.id', 'asc');
+			$qb->setMaxResults($page);
+			$rows = $this->getScheduledFromRequest($qb);
+			foreach ($rows as $scheduled) {
+				$after = max($after, $scheduled->getId());
+				foreach ($scheduled->paramMediaIds() as $nid) {
+					$nids[$nid] = true;
+				}
+			}
+		} while (count($rows) >= $page);
+
+		return $nids;
 	}
 
 	/**

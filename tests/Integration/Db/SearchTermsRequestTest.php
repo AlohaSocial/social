@@ -28,9 +28,10 @@ use PHPUnit\Framework\TestCase;
  * and a prefix find, and the backfill that indexes posts stored before the
  * table existed.
  *
- * The posts are published in this run's own second, decades ahead: a nid is
+ * The posts are published in this run's own second, decades back: a nid is
  * the publication second with a random suffix, so every nid range below
- * holds this test's posts and no other.
+ * holds this test's posts and no other. A date ahead of now would not do, as
+ * its nid is composed from now.
  */
 class SearchTermsRequestTest extends TestCase {
 	private const BASE = 'https://cloud.example.org/sterms';
@@ -52,7 +53,7 @@ class SearchTermsRequestTest extends TestCase {
 		$this->searchTermsRequest = Server::get(SearchTermsRequest::class);
 		$this->streamRequest = Server::get(StreamRequest::class);
 		$this->connection = Server::get(IDBConnection::class);
-		$this->second = 4_000_000_000 + random_int(0, 100_000) * 100;
+		$this->second = 500_000_000 + random_int(0, 100_000) * 100;
 		$this->ready = (string)Server::get(ConfigService::class)->getAppValue(SearchTermsRequest::READY);
 		$this->cleanup();
 	}

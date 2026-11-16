@@ -134,6 +134,23 @@ class RequestQueueLifecycleTest extends TestCase {
 		$this->assertSame(0, Server::get(DeliveryService::class)->forObject(self::AUTHOR . '/notes/never')['total']);
 	}
 
+	/** Waiting or going out keeps a deleted account's key; delivered does not. */
+	public function testTheAuthorsWithDeliveriesStillToGoAreFoundTogether(): void {
+		$other = self::AUTHOR . '-nobody';
+		$this->assertSame([], $this->service->authorsWithPending([self::AUTHOR, $other]));
+
+		$token = $this->enqueue();
+		$this->assertSame([self::AUTHOR => true], $this->service->authorsWithPending([self::AUTHOR, $other]), 'standby');
+
+		$queue = $this->service->getRequestFromToken($token, RequestQueue::STATUS_STANDBY)[0];
+		$this->service->initRequest($queue);
+		$this->assertSame([self::AUTHOR => true], $this->service->authorsWithPending([$other, self::AUTHOR]), 'running');
+
+		$this->service->endRequest($queue, true);
+		$this->assertSame([], $this->service->authorsWithPending([self::AUTHOR, $other]), 'delivered');
+		$this->assertSame([], $this->service->authorsWithPending([]));
+	}
+
 	public function testAFailureGoesBackToStandbyWithOneMoreTry(): void {
 		$token = $this->enqueue();
 		$queue = $this->service->getRequestFromToken($token, RequestQueue::STATUS_STANDBY)[0];

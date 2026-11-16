@@ -88,6 +88,74 @@ class ImageMetadataServiceTest extends TestCase {
 		$this->assertSame($plain, $this->service->strip($plain, 'image/jpeg'));
 	}
 
+	/**
+	 * A camera appends secondary images after the primary one's end, with an
+	 * `MPF` segment pointing at them, and a phone appends a Motion Photo's
+	 * video there; each carries metadata of its own.
+	 */
+	public function testNothingAfterTheEndOfThePrimaryImageIsKept(): void {
+		$secondary = "\xFF\xD8" . $this->segment(0xE1, $this->exifPayload()) . "\xFF\xD9";
+		$motionPhoto = "\x00\x00\x00\x18ftypmp42" . str_repeat("\x00", 8) . '©xyz+52.52+013.40/';
+		$jpeg = "\xFF\xD8"
+			. $this->segment(0xE2, "MPF\x00II*\x00" . str_repeat("\x00", 8))
+			. $this->segment(0xDB, str_repeat("\x01", 64))
+			. "\xFF\xDA" . "\x00\x0C" . str_repeat("\x11", 10)
+			. str_repeat("\x7F", 32)
+			. "\xFF\xD9"
+			. $secondary
+			. $motionPhoto;
+
+		$stripped = $this->service->strip($jpeg, 'image/jpeg');
+
+		$this->assertStringEndsWith(str_repeat("\x7F", 32) . "\xFF\xD9", $stripped);
+		$this->assertStringNotContainsString("Exif\x00\x00", $stripped);
+		$this->assertStringNotContainsString('+52.52', $stripped);
+		$this->assertStringNotContainsString("MPF\x00", $stripped);
+	}
+
+	/**
+	 * A progressive JPEG has several scans and segments between them; the
+	 * entropy coded data of a scan holds stuffed `FF 00` bytes and restart
+	 * markers, none of which ends it.
+	 */
+	public function testEveryScanOfAProgressiveJpegIsKeptAndMetadataBetweenThemGoes(): void {
+		$scan = static fn (string $fill): string => "\xFF\xDA" . "\x00\x0C" . str_repeat("\x11", 10)
+			. $fill . "\xFF\x00" . $fill . "\xFF\xD0" . $fill;
+		$jpeg = "\xFF\xD8"
+			. $this->segment(0xDB, str_repeat("\x01", 64))
+			. $scan(str_repeat("\x21", 8))
+			. $this->segment(0xC4, str_repeat("\x02", 20))
+			. $this->segment(0xFE, 'between the scans')
+			. $scan(str_repeat("\x22", 8))
+			. "\xFF\xD9";
+
+		$stripped = $this->service->strip($jpeg, 'image/jpeg');
+
+		$this->assertSame(
+			str_replace($this->segment(0xFE, 'between the scans'), '', $jpeg),
+			$stripped
+		);
+	}
+
+	/** A file whose structure cannot be followed is re-encoded rather than copied as it is. */
+	public function testAJpegThatCannotBeWalkedIsReEncodedWithoutItsMetadata(): void {
+		$image = imagecreatetruecolor(16, 8);
+		ob_start();
+		imagejpeg($image, null, 90);
+		$jpeg = (string)ob_get_clean();
+		// a byte that is not a marker where the next segment should start,
+		// followed by an Exif block the walk would never reach
+		$broken = substr($jpeg, 0, 2) . "\x00" . $this->segment(0xE1, $this->exifPayload()) . substr($jpeg, 2);
+
+		$stripped = $this->service->strip($broken, 'image/jpeg');
+
+		$this->assertStringNotContainsString("Exif\x00\x00", $stripped);
+		$decoded = @imagecreatefromstring($stripped);
+		if ($decoded !== false) {
+			$this->assertSame(16, imagesx($decoded));
+		}
+	}
+
 	public function testOrientationIsReadBeforeItIsStripped(): void {
 		$rotated = $this->jpegWithMetadata(6);
 

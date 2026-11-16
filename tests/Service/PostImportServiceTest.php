@@ -190,6 +190,23 @@ class PostImportServiceTest extends TestCase {
 		], $values);
 	}
 
+	/**
+	 * The date is a post's place in every timeline: one dated in the future
+	 * would sit above every real post until then, so it is dated now.
+	 */
+	public function testAPostDatedInTheFutureIsDatedNow(): void {
+		$path = $this->outbox([
+			$this->note('https://old.example/users/alice/statuses/9', ['published' => '2099-01-01T00:00:00Z']),
+		]);
+		$before = time();
+
+		$this->service->import($this->alice(), $path);
+
+		$this->assertCount(1, $this->written);
+		$this->assertGreaterThanOrEqual($before, $this->written[0]->getPublishedTime());
+		$this->assertLessThanOrEqual(time(), $this->written[0]->getPublishedTime());
+	}
+
 	public function testItWritesEachPostAsALocalPostDatedWhenItWasWritten(): void {
 		$path = $this->outbox([
 			$this->note('https://old.example/users/alice/statuses/1'),
@@ -1097,6 +1114,39 @@ class PostImportServiceTest extends TestCase {
 		@unlink((string)$json);
 
 		$this->assertSame(array_keys($cases), $codes);
+	}
+
+	/**
+	 * A list of posts too large to decode within the memory limit is refused
+	 * by name before it is read, rather than ending the run with a fatal
+	 * error that leaves the import marked running.
+	 */
+	public function testAListOfPostsTooLargeToDecodeIsRefusedBeforeItIsRead(): void {
+		// the suite runs with 512M, which leaves room to decode a few tens of MB
+		$limit = \OCP\Util::computerFileSize((string)ini_get('memory_limit'));
+		if ($limit === false || $limit <= 0 || $limit > 640 * 1024 * 1024) {
+			$this->markTestSkipped('needs a memory limit of at most 640M');
+		}
+		// written without holding it in memory
+		$big = (string)tempnam(sys_get_temp_dir(), 'social-big-outbox');
+		$handle = fopen($big, 'wb');
+		ftruncate($handle, 64 * 1024 * 1024);
+		fclose($handle);
+		$path = (string)tempnam(sys_get_temp_dir(), 'social-big') . '.zip';
+		$this->temps[] = $path;
+		$this->temps[] = $big;
+		$zip = new ZipArchive();
+		$zip->open($path, ZipArchive::CREATE);
+		$zip->addFile($big, 'outbox.json');
+		$zip->close();
+
+		try {
+			$this->service->import($this->alice(), $path);
+			$this->fail('the oversized list was read');
+		} catch (MoveErrorException $e) {
+			$this->assertSame('file-too-large', $e->errorCode);
+			$this->assertStringContainsString('outbox.json', $e->getMessage());
+		}
 	}
 
 	/** @param array<string, string> $known */

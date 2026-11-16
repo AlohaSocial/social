@@ -1064,6 +1064,7 @@ export default {
 					showSuccess(t('social', 'The post is back on your profile'))
 				} else {
 					this.timelineStore.removeStatus(this.item)
+					this.timelineStore.forgetBoosts(this.item)
 					showSuccess(t('social', 'Archived. It is off your profile and out of the timelines; nobody else was told.'))
 				}
 			} catch (error) {

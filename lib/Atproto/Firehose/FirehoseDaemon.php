@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Firehose;
 
+use Closure;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Service\ConfigService;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\IConfig;
+use OCP\Security\Ip\IFactory;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -25,6 +28,16 @@ use Psr\Log\LoggerInterface;
  * what the table still holds (the replay window), and told with an
  * `#info OutdatedCursor` when it asked for more than that; one that asked
  * for a future sequence number is refused with `FutureCursor`.
+ *
+ * A replay is sent a batch at a time, between the rounds that serve
+ * everybody else, and the next batch only once the subscriber has read
+ * most of the last (REPLAY_LOW_WATER): a long backlog reaches a consumer
+ * as fast as it reads, holds no other subscriber up, and does not fill the
+ * output buffer past the point where a slow consumer is dropped. One
+ * address may ask for REPLAYS_PER_ADDRESS replays per REPLAY_WINDOW.
+ *
+ * Every subscriber is pinged each PING_INTERVAL seconds, and one that has
+ * not answered anything for IDLE_TIMEOUT is closed.
  *
  * Polling, every POLL_IDLE seconds when nothing happened and at once after
  * something did: one code path, no shared memory, and a restart loses
@@ -42,11 +55,22 @@ class FirehoseDaemon {
 	public const GAP_GRACE = 2;
 	private const POLL_IDLE = 0.25;
 	private const BATCH = 200;
+	/** bytes left unread in a replaying subscriber's buffer below which its next batch is sent */
+	private const REPLAY_LOW_WATER = 1024 * 1024;
+	/** replays one address may ask for per REPLAY_WINDOW seconds */
+	private const REPLAYS_PER_ADDRESS = 6;
+	private const REPLAY_WINDOW = 60;
+	private const PING_INTERVAL = 30;
+	private const IDLE_TIMEOUT = 120;
 
 	private bool $stopping = false;
 	/** the first sequence number of the gap being waited on, 0 when none */
 	private int $missing = 0;
 	private int $missingSince = 0;
+	/** @var array<string, list<int>> when each address bucket last asked for a replay */
+	private array $replays = [];
+	private int $lastPing = 0;
+	private bool $warnedUnforwarded = false;
 
 	public function __construct(
 		private AtprotoConfig $config,
@@ -54,6 +78,8 @@ class FirehoseDaemon {
 		private ConfigService $configService,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private ?IConfig $systemConfig = null,
+		private ?IFactory $ipFactory = null,
 	) {
 	}
 
@@ -65,7 +91,7 @@ class FirehoseDaemon {
 	 * @return int the exit code
 	 */
 	public function run(string $bind, int $maxSeconds, bool $once, callable $say): int {
-		$server = new WebSocketServer($bind);
+		$server = new WebSocketServer($bind, trustedProxy: $this->trustedProxyCheck());
 		$this->listenForStop();
 		$started = $this->time->getTime();
 		$deadline = $maxSeconds > 0 ? $started + $maxSeconds : 0;
@@ -78,18 +104,26 @@ class FirehoseDaemon {
 			if ($deadline > 0 && $now >= $deadline) {
 				break;
 			}
-			foreach ($server->serve(self::POLL_IDLE) as $subscriber) {
-				$this->welcome($server, $subscriber, $head);
+			foreach ($server->serve($this->replayPending($server, $head) ? 0.0 : self::POLL_IDLE) as $subscriber) {
+				$this->welcome($server, $subscriber, $head, $now);
 			}
 
 			$latest = $this->events->latestSeq();
 			if ($latest > $head) {
 				$head = $this->broadcast($server, $head, $now);
 			}
+			$this->replay($server, $head);
+			if ($now - $this->lastPing >= self::PING_INTERVAL) {
+				foreach ($server->subscribers() as $subscriber) {
+					$server->ping($subscriber);
+				}
+				$server->closeIdle(self::IDLE_TIMEOUT);
+				$this->lastPing = $now;
+			}
 			if ($now % 15 === 0) {
 				$this->report($head, count($server->subscribers()), $started);
 			}
-			if ($once && $latest <= $head) {
+			if ($once && $latest <= $head && !$this->replayPending($server, $head)) {
 				break;
 			}
 		}
@@ -105,7 +139,11 @@ class FirehoseDaemon {
 	 * A subscriber that just upgraded: replayed from its cursor, or started
 	 * live.
 	 */
-	private function welcome(WebSocketServer $server, Subscriber $subscriber, int $head): void {
+	private function welcome(WebSocketServer $server, Subscriber $subscriber, int $head, int $now): void {
+		if (!$this->warnedUnforwarded && !isset($subscriber->headers['x-forwarded-for']) && $this->isLoopback($subscriber->address)) {
+			$this->warnedUnforwarded = true;
+			$this->logger->warning('Firehose connection from ' . $subscriber->address . ' without X-Forwarded-For: every client behind the web server is counted as one address. Add the header to the subscribeRepos proxy (contrib/webserver).');
+		}
 		if ($subscriber->cursor === null) {
 			$subscriber->sent = $head;
 
@@ -117,28 +155,73 @@ class FirehoseDaemon {
 
 			return;
 		}
+		if ($subscriber->cursor < $head && !$this->mayReplay($subscriber->address, $now)) {
+			$server->send($subscriber, DagCbor::encode(['op' => -1]) . DagCbor::encode(['error' => 'RateLimitExceeded', 'message' => 'Too many replays from this address; try again in a minute.']));
+			$server->close($subscriber, 'too many replays');
+
+			return;
+		}
 		$oldest = $this->events->oldestSeq();
 		if ($oldest > 0 && $subscriber->cursor < $oldest - 1) {
 			$server->send($subscriber, DagCbor::encode(['op' => 1, 't' => '#info']) . DagCbor::encode(['name' => 'OutdatedCursor', 'message' => 'Requested cursor exceeded limit. Possibly missing events']));
 		}
 		$subscriber->sent = $subscriber->cursor;
-		$this->catchUp($server, $subscriber, $head);
+	}
+
+	/** Whether the address may start another replay now, counting it when it may. */
+	private function mayReplay(string $address, int $now): bool {
+		$bucket = WebSocketServer::bucket($address);
+		$recent = array_values(array_filter($this->replays[$bucket] ?? [], static fn (int $at): bool => $now - $at < self::REPLAY_WINDOW));
+		foreach ($this->replays as $other => $times) {
+			if ($other !== $bucket && array_filter($times, static fn (int $at): bool => $now - $at < self::REPLAY_WINDOW) === []) {
+				unset($this->replays[$other]);
+			}
+		}
+		if (count($recent) >= self::REPLAYS_PER_ADDRESS) {
+			$this->replays[$bucket] = $recent;
+
+			return false;
+		}
+		$recent[] = $now;
+		$this->replays[$bucket] = $recent;
+
+		return true;
+	}
+
+	/** Whether a subscriber behind the head can be sent its next batch now. */
+	private function replayPending(WebSocketServer $server, int $head): bool {
+		foreach ($server->subscribers() as $subscriber) {
+			if ($subscriber->sent < $head && strlen($subscriber->output) < self::REPLAY_LOW_WATER) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
-	 * Sends the subscriber everything between where it is and $upTo.
+	 * One batch of the backlog to each subscriber that is behind the head
+	 * and has read most of what it was sent.
 	 */
-	private function catchUp(WebSocketServer $server, Subscriber $subscriber, int $upTo): void {
-		while (!$subscriber->closed && $subscriber->sent < $upTo) {
+	private function replay(WebSocketServer $server, int $head): void {
+		foreach ($server->subscribers() as $subscriber) {
+			if ($subscriber->sent >= $head || strlen($subscriber->output) >= self::REPLAY_LOW_WATER) {
+				continue;
+			}
 			$batch = $this->events->after($subscriber->sent, self::BATCH);
 			if ($batch === []) {
-				$subscriber->sent = $upTo;
-
-				return;
+				$subscriber->sent = $head;
+				continue;
 			}
 			foreach ($batch as $event) {
+				if ($subscriber->closed || $event->seq > $head) {
+					break;
+				}
 				$server->send($subscriber, $event->frame());
 				$subscriber->sent = $event->seq;
+				if (strlen($subscriber->output) >= self::REPLAY_LOW_WATER) {
+					break;
+				}
 			}
 		}
 	}
@@ -156,11 +239,8 @@ class FirehoseDaemon {
 				break;
 			}
 			foreach ($server->subscribers() as $subscriber) {
-				if ($subscriber->sent < $head) {
-					// fell behind: a replay takes it to here
-					$this->catchUp($server, $subscriber, $head);
-				}
-				if ($subscriber->sent < $event->seq) {
+				// one still being replayed gets this frame from its replay
+				if ($subscriber->sent === $head) {
 					$server->send($subscriber, $event->frame());
 					$subscriber->sent = $event->seq;
 				}
@@ -229,6 +309,48 @@ class FirehoseDaemon {
 			'head' => (int)($status['head'] ?? 0),
 			'subscribers' => (int)($status['subscribers'] ?? 0),
 		];
+	}
+
+	/**
+	 * The proxies besides the loopback whose `X-Forwarded-For` is believed:
+	 * the server's `trusted_proxies`.
+	 *
+	 * @return Closure(string): bool|null
+	 */
+	private function trustedProxyCheck(): ?Closure {
+		if ($this->systemConfig === null || $this->ipFactory === null) {
+			return null;
+		}
+		$ranges = [];
+		foreach ((array)$this->systemConfig->getSystemValue('trusted_proxies', []) as $range) {
+			try {
+				$ranges[] = $this->ipFactory->rangeFromString((string)$range);
+			} catch (\InvalidArgumentException) {
+			}
+		}
+		if ($ranges === []) {
+			return null;
+		}
+		$factory = $this->ipFactory;
+
+		return static function (string $address) use ($ranges, $factory): bool {
+			try {
+				$ip = $factory->addressFromString($address);
+			} catch (\InvalidArgumentException) {
+				return false;
+			}
+			foreach ($ranges as $range) {
+				if ($range->contains($ip)) {
+					return true;
+				}
+			}
+
+			return false;
+		};
+	}
+
+	private function isLoopback(string $address): bool {
+		return $address === '::1' || str_starts_with($address, '127.');
 	}
 
 	private function listenForStop(): void {

@@ -479,8 +479,8 @@ describe('Composer', () => {
 			await setContent(wrapper, `${MENTION_BOB}hi`)
 
 			expect(MENTION_BOB.length).toBeGreaterThan(150)
-			// '@bob@remote.example' + nbsp + 'hi'
-			expect(wrapper.find('.char-ring').attributes('style')).toContain('--char-progress: 0.044')
+			// '@bob' (a remote mention counts as its name) + nbsp + 'hi'
+			expect(wrapper.find('.char-ring').attributes('style')).toContain('--char-progress: 0.014')
 			expect(canPost(wrapper)).toBe(true)
 		})
 
@@ -717,6 +717,22 @@ describe('Composer', () => {
 			expect(input(wrapper).classes()).toContain('too-long')
 		})
 
+		it('counts the content warning towards the 500 characters', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'a'.repeat(490))
+			expect(canPost(wrapper)).toBe(true)
+
+			await addWarning(wrapper, 'b'.repeat(11))
+			await flushPromises()
+			expect(canPost(wrapper)).toBe(false)
+		})
+
+		it('counts a long link as 23 characters, as the server does', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'a'.repeat(470) + ' https://example.org/' + 'x'.repeat(80))
+			expect(canPost(wrapper)).toBe(true)
+		})
+
 		it('not as a direct message without anyone mentioned', async () => {
 			const { wrapper } = mountComposer({ defaultVisibility: 'direct' })
 			await setContent(wrapper, 'psst, secret')
@@ -732,6 +748,19 @@ describe('Composer', () => {
 		it('as a direct message once the autocomplete inserted a mention', async () => {
 			const { wrapper } = mountComposer({ defaultVisibility: 'direct' })
 			await setContent(wrapper, `${MENTION_BOB}secret`)
+			expect(canPost(wrapper)).toBe(true)
+		})
+
+		it('not with a poll that has fewer than two options', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'Which one?')
+			wrapper.vm.showPoll = true
+			wrapper.vm.pollOptions = ['tea', '']
+			await flushPromises()
+			expect(canPost(wrapper)).toBe(false)
+
+			wrapper.vm.pollOptions = ['tea', 'coffee']
+			await flushPromises()
 			expect(canPost(wrapper)).toBe(true)
 		})
 
@@ -1145,6 +1174,25 @@ describe('Composer', () => {
 			eventBus.emit('composer-published', { context: '' })
 			await flushPromises()
 			expect(typed(wrapper)).toBe('A new thought')
+		})
+
+		it('sends a retried post with the key of the attempt whose answer was lost', async () => {
+			const { wrapper, store } = mountComposer()
+			store.post.mockResolvedValueOnce(undefined)
+			await setContent(wrapper, 'Did this go out?')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			const [first, second] = store.post.mock.calls.map((call) => call[1].idempotencyKey)
+			expect(first).toEqual(expect.any(String))
+			expect(second).toBe(first)
+
+			await setContent(wrapper, 'Did this go out?')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			expect(store.post.mock.calls[2][1].idempotencyKey).not.toBe(first)
 		})
 
 		it('keeps a refused quick post and hands its draft to the full modal', async () => {
@@ -2243,13 +2291,20 @@ describe('Composer', () => {
 			})
 		})
 
-		it('sends no poll when the editor is closed or has fewer than two options', async () => {
+		it('holds a post with fewer than two options back instead of sending it without the poll', async () => {
 			const { wrapper, store } = mountComposer()
-			await setContent(wrapper, 'no poll here')
+			await setContent(wrapper, 'which one?')
 
 			await wrapper.find('button[aria-label="Add poll"]').trigger('click')
 			await wrapper.findAll('.poll-editor__option input')[0].setValue('Only one')
 
+			await wrapper.vm.createPost()
+			await flushPromises()
+
+			expect(store.post).not.toHaveBeenCalled()
+			expect(wrapper.find('.poll-editor__error').exists()).toBe(true)
+
+			await wrapper.find('.poll-editor__remove').trigger('click')
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
@@ -2562,6 +2617,17 @@ describe('Composer', () => {
 			expect(wrapper.findComponent(PreviewGridItem).exists()).toBe(false)
 			expect(canPost(wrapper)).toBe(false)
 			expect(store.refreshTimeline).toHaveBeenCalled()
+		})
+
+		it('leaves a ranked list where the reader is in it after posting', async () => {
+			const { wrapper, store } = mountComposer()
+			store.type = 'interests'
+			await setContent(wrapper, 'Hello')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(store.post).toHaveBeenCalled()
+			expect(store.refreshTimeline).not.toHaveBeenCalled()
 		})
 
 		it('posts on Ctrl+Enter but not on Enter alone', async () => {
@@ -3718,7 +3784,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
-			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ post_as: expect.anything() }))
+			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ post_as: expect.anything() }), { idempotencyKey: expect.any(String) })
 		})
 
 		it('names the team when the post is written as one', async () => {
@@ -3731,7 +3797,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ post_as: 'press' }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ post_as: 'press' }), { idempotencyKey: expect.any(String) })
 		})
 	})
 
@@ -3744,7 +3810,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
 
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ reply_policy: 'mentioned' }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ reply_policy: 'mentioned' }), { idempotencyKey: expect.any(String) })
 			expect(wrapper.vm.replyPolicy).toBe('everyone')
 		})
 
@@ -3758,7 +3824,7 @@ describe('Composer', () => {
 			await flushPromises()
 
 			expect(wrapper.findComponent({ name: 'ReplyPolicySelect' }).exists()).toBe(false)
-			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ reply_policy: expect.anything() }))
+			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ reply_policy: expect.anything() }), { idempotencyKey: expect.any(String) })
 		})
 	})
 
@@ -3799,7 +3865,7 @@ describe('Composer', () => {
 			await submitButton(wrapper).trigger('click')
 			await vi.waitUntil(() => store.post.mock.calls.length > 0, { timeout: 3000 })
 
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Toss for it: 🪙 heads' }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Toss for it: 🪙 heads' }), { idempotencyKey: expect.any(String) })
 			expect(feel).toHaveBeenCalledWith('roll')
 		})
 
@@ -3830,7 +3896,7 @@ describe('Composer', () => {
 			expect(renderTextCard).toHaveBeenCalledWith('Friday!', expect.objectContaining({ id: 'account' }), { width: 1080, height: 1080 })
 			expect(store.createMedia).toHaveBeenCalledWith(expect.objectContaining({ name: 'card.png' }))
 			expect(store.describeMedia).toHaveBeenCalledWith({ id: 'media-1', description: 'Friday!' })
-			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Friday!', media_ids: ['media-1'] }))
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Friday!', media_ids: ['media-1'] }), { idempotencyKey: expect.any(String) })
 		})
 
 		it('does not post at all when the card could not be drawn', async () => {

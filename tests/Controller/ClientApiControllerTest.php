@@ -173,6 +173,44 @@ class ClientApiControllerTest extends TestCase {
 		$this->assertSame(MastodonApiController::APP_TOKEN_NAMES_NOBODY, $response->getData()['error']);
 	}
 
+	public function testASuspendedAccountIsRefusedWithAForbiddenNotADeadToken(): void {
+		$this->token(['read']);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
+
+		$response = $this->controller('Bearer t')->probe(['read']);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertSame('Your login is currently disabled', $response->getData()['error']);
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
+	}
+
+	public function testASuspendedSessionIsRefusedToo(): void {
+		$this->user = $this->createMock(IUser::class);
+		$this->user->method('getUID')->willReturn('alice');
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->probe(['read'])->getStatus());
+	}
+
+	public function testASuspendedAccountKeepsTheRoutesThatSayItMay(): void {
+		$this->token(['read']);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
+
+		$response = $this->controller('Bearer t')->probe(['read'], true, true);
+
+		$this->assertSame('alice', $response->getData()['viewer']);
+	}
+
+	public function testAnOptionalViewerLeavesASuspendedAccountAnonymous(): void {
+		$this->token(['read']);
+		$this->clientService->method('isSuspendedAccount')->willReturn(true);
+
+		$response = $this->controller('Bearer t')->probe(['read'], false);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertNull($response->getData()['viewer']);
+	}
+
 	public function testAnOptionalViewerLeavesACallerWithoutCredentialsAnonymous(): void {
 		$this->assertNull($this->controller()->probe(['read'], false)->getData()['viewer']);
 	}
@@ -233,9 +271,9 @@ class ClientApiControllerTest extends TestCase {
 class ProbeController extends ClientApiController {
 	public bool $failPreparing = false;
 
-	public function probe(array $scopes, bool $required = true): DataResponse {
+	public function probe(array $scopes, bool $required = true, bool $whileSuspended = false): DataResponse {
 		try {
-			$this->initViewer($scopes, $required);
+			$this->initViewer($scopes, $required, $whileSuspended);
 
 			return new DataResponse(['viewer' => $this->viewer?->getPreferredUsername()], Http::STATUS_OK);
 		} catch (Throwable $e) {

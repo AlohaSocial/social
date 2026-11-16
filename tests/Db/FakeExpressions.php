@@ -67,6 +67,10 @@ class FakeExpressions {
 		return $x . ' NOT LIKE ' . $y;
 	}
 
+	public function literal($input, $type = null): string {
+		return (string)$input;
+	}
+
 	public function andX(...$parts): string {
 		return '(' . implode(' AND ', $this->parts($parts, 'andX')) . ')';
 	}

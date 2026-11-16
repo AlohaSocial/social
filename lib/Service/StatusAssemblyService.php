@@ -11,16 +11,13 @@ namespace OCA\Social\Service;
 
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
-use OCA\Social\Db\CacheDocumentsRequest;
-use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
-use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Model\StatusParams;
-use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -39,8 +36,6 @@ class StatusAssemblyService {
 	public function __construct(
 		private DocumentService $documentService,
 		private StreamService $streamService,
-		private CacheDocumentsRequest $cacheDocumentsRequest,
-		private IURLGenerator $urlGenerator,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -122,6 +117,9 @@ class StatusAssemblyService {
 	/**
 	 * The same assembly an immediate post gets, reading from stored `params`
 	 * instead of from the live request.
+	 *
+	 * @throws StreamNotFoundException the post it replies to is not one the
+	 *                                 author can see any more
 	 */
 	public function fromParams(Person $actor, StatusParams $params): Post {
 		$post = new Post($actor);
@@ -168,56 +166,30 @@ class StatusAssemblyService {
 
 		$mediaIds = $params->paramMediaIds();
 		if ($mediaIds !== []) {
-			$documents = $this->documentService->getMediaFromArray(
-				$mediaIds, $actor->getPreferredUsername()
-			);
-			$this->scopeMediaToVisibility($documents, $post->getType());
-			$post->setMedias(
-				array_map(function (Document $document): MediaAttachment {
-					return $document->convertToMediaAttachment(
-						$this->urlGenerator, ACore::FORMAT_ACTIVITYPUB
-					);
-				}, $documents)
-			);
+			$post->setMedias($this->documentService->mediaAttachmentsForEdit(
+				$mediaIds, $actor->getPreferredUsername(), $post->getType()
+			));
 		}
 
 		$replyTo = (int)$params->paramString('in_reply_to_id');
 		if ($replyTo > 0) {
+			// Read as the author: the cron and a moderator's approval run with
+			// another viewer or none, and a followers-only or direct parent is
+			// invisible to either. A parent the author can no longer see, or
+			// that was deleted while this waited, fails the post rather than
+			// letting it go out on its own: the audience of a reply is decided
+			// by its parent, and without it a reply to a direct message would
+			// be published to the author's default audience.
+			$this->streamService->setViewer($actor);
 			try {
 				$post->setReplyTo($this->streamService->getStreamByNid($replyTo)->getId());
 			} catch (Throwable $e) {
-				// The post being replied to was deleted while this one waited,
-				// which is likelier here than on an immediate post. The reply
-				// still goes out, as a post of its own, rather than being lost
-				// with it.
 				$this->logger->debug('[StatusAssemblyService] the post ' . $replyTo . ' replied to is gone');
+
+				throw new StreamNotFoundException(PostService::REPLY_PARENT_NOT_FOUND);
 			}
 		}
 
 		return $post;
-	}
-
-	/**
-	 * Records on a post's attachments whether the post itself is
-	 * world-readable, which decides how the bytes may be cached on the way to a
-	 * reader.
-	 *
-	 * The twin of `StatusApiController::scopeMediaToVisibility()`, which does this
-	 * for an immediate post and is private to the controller. Both exist
-	 * because the answer is only known when the post is created.
-	 *
-	 * @param Document[] $documents
-	 */
-	private function scopeMediaToVisibility(array $documents, string $visibility): void {
-		$public = in_array($visibility, [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true);
-
-		foreach ($documents as $document) {
-			if ($document->isPublic() === $public) {
-				continue;
-			}
-
-			$document->setPublic($public);
-			$this->cacheDocumentsRequest->update($document);
-		}
 	}
 }

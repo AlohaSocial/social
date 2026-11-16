@@ -14,6 +14,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\AccountNotSetUpException;
+use OCA\Social\Exceptions\AccountSuspendedException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -87,6 +88,7 @@ use Throwable;
  */
 abstract class MastodonApiController extends Controller {
 	use OwnAccount;
+	use ListParameter;
 
 	/**
 	 * The entity tag of the poll being answered, held between the check and
@@ -161,6 +163,9 @@ abstract class MastodonApiController extends Controller {
 			$account = ($this->bearer === '')
 				? $this->ownAccountOf($userId)
 				: $this->accountService->getActorFromUserId($userId);
+			if ($this->clientService->isSuspendedAccount($account)) {
+				throw new AccountSuspendedException();
+			}
 			$this->logger->debug('[' . static::class . '] Actor retrieved/created', [
 				'userId' => $userId,
 				'username' => $account->getPreferredUsername()
@@ -201,6 +206,12 @@ abstract class MastodonApiController extends Controller {
 		} catch (InsufficientScopeException $e) {
 			// the token is fine, its grant is not — tell the client which scope it lacks
 			if ($exception) {
+				throw $e;
+			}
+		} catch (AccountSuspendedException $e) {
+			// signed in and refused: a route anybody may read answers them as
+			// it answers anybody
+			if ($exception && !$publicRoute) {
 				throw $e;
 			}
 		} catch (AccountNotSetUpException $e) {
@@ -552,6 +563,7 @@ abstract class MastodonApiController extends Controller {
 		[AccountDoesNotExistException::class, Http::STATUS_UNAUTHORIZED],
 		// allowed to ask, not allowed to have
 		[UnauthorizedFediverseException::class, Http::STATUS_FORBIDDEN],
+		[AccountSuspendedException::class, Http::STATUS_FORBIDDEN],
 		[TooManyRequestsException::class, Http::STATUS_TOO_MANY_REQUESTS],
 		[FollowLimitException::class, Http::STATUS_TOO_MANY_REQUESTS],
 		// this server could do it, and cannot right now: Mastodon answers a

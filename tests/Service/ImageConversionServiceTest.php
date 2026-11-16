@@ -167,6 +167,21 @@ class ImageConversionServiceTest extends TestCase {
 		$this->assertSame('image/avif', $mime);
 	}
 
+	/**
+	 * XMP is declared as a `mime` item, which can carry where the picture was
+	 * taken. One that nothing here can re-encode is refused, as a HEIC is
+	 * that nothing can read, rather than stored and federated as it is.
+	 */
+	public function testAnAvifWithXmpThatCannotBeReEncodedIsRefused(): void {
+		$avif = "\x00\x00\x00\x20" . 'ftypavif' . str_repeat("\x00", 16)
+			. "\x00\x00\x00\x15infe\x02\x00\x00\x00\x00\x02\x00\x00mime\x00" . str_repeat("\x42", 64);
+
+		$this->expectException(CacheContentMimeTypeException::class);
+		$this->expectExceptionMessageMatches('/AVIF/');
+
+		$this->service->prepareForStorage($avif, 'image/avif');
+	}
+
 	public function testAFormatThisDoesNotHandleIsPassedStraightThrough(): void {
 		[$content, $mime] = $this->service->prepareForStorage('some video bytes', 'video/mp4');
 

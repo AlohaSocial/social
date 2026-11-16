@@ -736,6 +736,39 @@ class MigrationServiceTest extends TestCase {
 		$this->assertSame([], $result['failed']);
 	}
 
+	/**
+	 * Every entry is a lookup, a fetch and a delivery to a server the file
+	 * names: one import works through as many as a move-in follows, and
+	 * counts the rest as skipped.
+	 */
+	public function testImportFollowsStopsAtTheCapAndCountsTheRestAsSkipped(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->followService->expects($this->exactly(MigrationService::MAX_IMPORT_ENTRIES))->method('followAccount');
+		$csv = '';
+		for ($i = 0; $i < MigrationService::MAX_IMPORT_ENTRIES + 3; $i++) {
+			$csv .= 'user' . $i . "@remote.example\n";
+		}
+
+		$result = $this->service->importFollows('alice', $csv);
+
+		$this->assertSame(MigrationService::MAX_IMPORT_ENTRIES, $result['followed']);
+		$this->assertSame(3, $result['skipped']);
+	}
+
+	public function testImportBlocksStopsAtTheCapToo(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->cacheActorService->method('getFromAccount')->willReturn($this->person(self::CAROL, 'carol@remote.example'));
+		$this->relationshipService->expects($this->exactly(MigrationService::MAX_IMPORT_ENTRIES))->method('block');
+		$csv = '';
+		for ($i = 0; $i < MigrationService::MAX_IMPORT_ENTRIES + 1; $i++) {
+			$csv .= 'user' . $i . "@remote.example\n";
+		}
+
+		$result = $this->service->importBlocks('alice', $csv);
+
+		$this->assertSame(1, $result['skipped']);
+	}
+
 	public function testImportFollowsContinuesPastAFailureAndReportsIt(): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
 		$this->followService->method('followAccount')

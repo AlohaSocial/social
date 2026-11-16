@@ -61,6 +61,16 @@ class AuthorizedAppsControllerTest extends TestCase {
 		]], $response->getData());
 	}
 
+	/** An app registered before the website was checked may carry anything there, and it is shown as a link. */
+	public function testAWebsiteThatIsNotAWebAddressIsNotOffered(): void {
+		$this->asSession('alice');
+		$client = new SocialClient();
+		$client->setAuthId(4)->setAppName('Evil')->setAppWebsite('javascript:alert(1)')->setToken('hashed');
+		$this->clientService->method('getAuthorizationsOf')->willReturn([$client]);
+
+		$this->assertSame('', $this->controller()->index()->getData()[0]['website']);
+	}
+
 	/**
 	 * The token is stored hashed and nothing on this page wants it; a list of
 	 * tokens is the one thing this route must never be.

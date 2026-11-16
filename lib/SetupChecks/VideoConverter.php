@@ -53,7 +53,7 @@ class VideoConverter implements ISetupCheck {
 	public function run(): SetupResult {
 		if (!$this->videoTranscodeService->isAvailable()) {
 			return SetupResult::warning(
-				$this->l10n->t('ffmpeg was not found, so videos are stored as they were uploaded. iPhone .mov videos and HEVC videos will not play on other servers — Pixelfed refuses anything that is not an MP4 — or in Chrome and Firefox. Install ffmpeg on this server and Aloha Social converts them to H.264 in an MP4 by itself.'),
+				$this->l10n->t('ffmpeg was not found, so videos and sound files are stored as they were uploaded, including any location and device data in them. iPhone .mov videos and HEVC videos will not play on other servers — Pixelfed refuses anything that is not an MP4 — or in Chrome and Firefox. Install ffmpeg on this server and Aloha Social removes that data and converts them to H.264 in an MP4 by itself.'),
 				self::DOC
 			);
 		}

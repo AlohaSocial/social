@@ -232,6 +232,10 @@ final class HtmlSanitizer {
 			return '';
 		}
 
+		// the walk below recurses once per level, and the HTML5 parser, unlike
+		// libxml's, builds a tree of any depth: deeper than libxml's own 256
+		// levels, the content is lifted up to that depth
+		self::flattenBeyond($root, 256);
 		self::sanitizeChildren($root, $base);
 
 		$result = '';
@@ -241,6 +245,55 @@ final class HtmlSanitizer {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Lifts the content of every element nested deeper than `$limit` up to
+	 * that depth, without recursing, so the walk that follows is bounded.
+	 *
+	 * Elements are emptied and removed one level at a time rather than
+	 * detached as a subtree: PHP frees a detached subtree recursively, and a
+	 * deep enough one crashes the process the same way the walk would.
+	 */
+	private static function flattenBeyond(DOMNode|\Dom\Node $root, int $limit): void {
+		$stack = [[$root, 0]];
+		while ($stack !== []) {
+			[$node, $depth] = array_pop($stack);
+			if ($depth >= $limit) {
+				self::liftDescendants($node);
+				continue;
+			}
+
+			foreach ($node->childNodes as $child) {
+				if (self::isElement($child)) {
+					$stack[] = [$child, $depth + 1];
+				}
+			}
+		}
+	}
+
+	/**
+	 * Replaces each element below `$node` by its own children until `$node`
+	 * holds no element at all.
+	 */
+	private static function liftDescendants(DOMNode|\Dom\Node $node): void {
+		$child = $node->firstChild;
+		while ($child !== null) {
+			if (!self::isElement($child)) {
+				$child = $child->nextSibling;
+				continue;
+			}
+
+			$first = $child->firstChild;
+			while ($child->firstChild !== null) {
+				/** @psalm-suppress InvalidArgument a child comes from the same parser as its parent */
+				$node->insertBefore($child->firstChild, $child);
+			}
+			$next = $first ?? $child->nextSibling;
+			/** @psalm-suppress InvalidArgument a child comes from the same parser as its parent */
+			$node->removeChild($child);
+			$child = $next;
+		}
 	}
 
 	/**

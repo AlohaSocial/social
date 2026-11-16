@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { statusPayload } from '../../../src/utils/statusPayload.js'
+import { pollIsComplete, statusPayload } from '../../../src/utils/statusPayload.js'
 
 /**
  * @param {object} overrides what differs from a plain public post
@@ -102,5 +102,20 @@ describe('statusPayload', () => {
 		expect(statusPayload(post())).not.toHaveProperty('reply_policy')
 		expect(statusPayload(post({ replyPolicy: 'everyone' }))).not.toHaveProperty('reply_policy')
 		expect(statusPayload(post({ replyPolicy: 'followers' })).reply_policy).toBe('followers')
+	})
+})
+
+describe('whether a poll can be sent', () => {
+	it('needs two options that say something', () => {
+		expect(pollIsComplete(['', ''])).toBe(false)
+		expect(pollIsComplete(['yes', ''])).toBe(false)
+		expect(pollIsComplete(['yes', '   '])).toBe(false)
+		expect(pollIsComplete(['yes', 'no'])).toBe(true)
+		expect(pollIsComplete(['yes', '', 'no'])).toBe(true)
+	})
+
+	it('refuses an option longer than the server takes', () => {
+		expect(pollIsComplete(['a'.repeat(100), 'no'])).toBe(true)
+		expect(pollIsComplete(['a'.repeat(101), 'no'])).toBe(false)
 	})
 })

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use InvalidArgumentException;
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Lexicon\Lexicon;
@@ -941,7 +942,7 @@ class WriteService {
 			$type = (string)($write['$type'] ?? '');
 			$collection = (string)($write['collection'] ?? '');
 			$rkey = (string)($write['rkey'] ?? '');
-			$record = is_array($write['value'] ?? null) ? DagCbor::fromLexJson($write['value']) : [];
+			$record = is_array($write['value'] ?? null) ? self::lexRecord($write['value']) : [];
 			if (!in_array($type, ['com.atproto.repo.applyWrites#create', 'com.atproto.repo.applyWrites#update', 'com.atproto.repo.applyWrites#delete'], true)) {
 				throw XrpcException::invalidRequest('Unknown write ' . $type);
 			}
@@ -1003,7 +1004,7 @@ class WriteService {
 		}
 		if ($repoWrites !== []) {
 			try {
-				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation($validate), $repoWrites), $swapCommit);
+				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation(self::validationFor($write->collection, $validate)), $repoWrites), $swapCommit);
 				if ($commit !== null) {
 					$committed = ['cid' => $commit->commitCid->toString(), 'rev' => $commit->rev];
 				}
@@ -1572,13 +1573,30 @@ class WriteService {
 	}
 
 	/**
+	 * A record from an app as the repository models it (links, bytes, empty
+	 * maps), refused when it holds what a repository cannot: a float, a bad
+	 * link or bytes, text that is not UTF-8, nesting too deep.
+	 *
+	 * @throws XrpcException
+	 */
+	private static function lexRecord(array $value): array {
+		try {
+			$record = DagCbor::fromLexJson($value);
+			DagCbor::encode($record);
+		} catch (InvalidArgumentException $e) {
+			throw XrpcException::invalidRequest('The record cannot be stored: ' . $e->getMessage());
+		}
+
+		return is_array($record) ? $record : get_object_vars($record);
+	}
+
+	/**
 	 * A record kept as the app wrote it: made, or replaced under its key.
 	 *
 	 * @throws XrpcException
 	 */
 	private function keep(ClientSession $session, string $collection, string $rkey, array $record, bool $replace = true, ?string $swapCommit = null, ?bool $validate = null): StoredRecord {
-		// links, bytes and empty maps as the repository models them
-		$record = DagCbor::fromLexJson($record);
+		$record = self::lexRecord($record);
 		$did = $session->identity->did;
 		if (in_array($collection, self::GATES, true)) {
 			$gated = Syntax::parseAtUri((string)($record['post'] ?? ''));
@@ -1609,7 +1627,7 @@ class WriteService {
 		$write = !$replace || $was === null
 			? RepoWrite::create($collection, $record, '', $rkey)
 			: RepoWrite::update($collection, $rkey, $record, $was->localId);
-		$this->writeRaw($session, $write->withValidation($validate), $swapCommit);
+		$this->writeRaw($session, $write->withValidation(self::validationFor($collection, $validate)), $swapCommit);
 
 		$kept = $this->repositories->getRecord($did, $collection, $rkey)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
@@ -1672,7 +1690,19 @@ class WriteService {
 		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'commit' => $this->commit($session), 'validationStatus' => $this->validationStatus($record, $validate)];
 	}
 
+	/**
+	 * The validation a write gets. Social reads the records it keeps as
+	 * written (lists, starter packs, gates, profile links), so an app's
+	 * `validate: false` does not skip their schema there; it only applies to
+	 * collections Social has no role for, which the opaque quota bounds.
+	 */
+	private static function validationFor(string $collection, ?bool $validate): ?bool {
+		return $validate === false && in_array($collection, self::KEPT_AS_WRITTEN, true) ? null : $validate;
+	}
+
 	private function validationStatus(StoredRecord $record, ?bool $validate): string {
+		$validate = self::validationFor($record->collection, $validate);
+
 		return $validate !== false && $this->lexicon->hasRecordSchema($record->collection) ? 'valid' : 'unknown';
 	}
 

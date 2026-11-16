@@ -16,6 +16,8 @@ namespace Dom {
 		public readonly string $nodeName;
 		public readonly ?Node $parentNode;
 		public readonly NodeList $childNodes;
+		public readonly ?Node $firstChild;
+		public readonly ?Node $nextSibling;
 
 		public function insertBefore(Node $node, ?Node $child): Node {}
 		public function removeChild(Node $child): Node {}
