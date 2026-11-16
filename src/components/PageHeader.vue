@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<header class="page-header" :class="{ 'page-header--clear-navigation': clearNavigation, 'page-header--hide-title': hideTitle }">
+	<header class="page-header" :class="{ 'page-header--clear-navigation': clearNavigation, 'page-header--hide-title': hideTitle, 'page-header--bare': bare }">
 		<div class="page-header__copy">
 			<h1 class="page-header__title" :class="{ 'hidden-visually': hideTitle }" dir="auto">
 				{{ title }}
@@ -17,12 +17,19 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed, useSlots } from 'vue'
+
+const props = defineProps({
 	title: { type: String, required: true },
 	description: { type: String, default: '' },
 	clearNavigation: { type: Boolean, default: false },
 	hideTitle: { type: Boolean, default: false },
 })
+
+const slots = useSlots()
+
+/** nothing in it to see: the title is for screen readers and nothing else is there */
+const bare = computed(() => props.hideTitle && !props.description && !slots.actions)
 </script>
 
 <style scoped lang="scss">
@@ -62,6 +69,11 @@ defineProps({
 
 .page-header--hide-title .page-header__copy {
 	flex: 0 0 auto;
+}
+
+/* takes no room, so whatever comes next is the page's first row */
+.page-header--bare {
+	margin-block-end: 0;
 }
 
 @include layout.below(layout.$folded) {

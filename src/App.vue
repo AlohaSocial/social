@@ -15,6 +15,7 @@
 		<Navigation v-if="!serverData.public" @search="search" />
 		<PhoneBar v-if="!serverData.public && phone" />
 		<ShortcutHelp :open="shortcutHelpOpen" @close="shortcutHelpOpen = false" />
+		<CommandPalette v-if="paletteOpen && !serverData.public" @close="paletteOpen = false" />
 		<!-- one emoji picker for the page, fetched the first time a reaction
 		     bar asks for one; see ReactionPicker for why it is not on the card.
 		     Rendered, even unopened, it is the chunk and all its emoji data -->
@@ -150,6 +151,8 @@ const MiniPlayer = defineAsyncComponent(() => import(/* webpackChunkName: "watch
 const TimelineSkeleton = defineAsyncComponent(() => import(/* webpackChunkName: "skeleton" */'./components/TimelineSkeleton.vue'))
 // drawn on a phone-sized screen only, so a wider one never downloads it
 const PhoneBar = defineAsyncComponent(() => import(/* webpackChunkName: "phone-bar" */'./components/PhoneBar.vue'))
+// ⌘K / Ctrl+K: nothing of it is fetched until somebody presses it
+const CommandPalette = defineAsyncComponent(() => import(/* webpackChunkName: "command-palette" */'./components/CommandPalette.vue'))
 
 /**
  * How long a page may take to arrive before the wait is drawn. Below this a
@@ -162,6 +165,7 @@ export default {
 	components: {
 		AccountSetup,
 		CloudAddressSetup,
+		CommandPalette,
 		NcContent,
 		NcAppContent,
 		NcButton,
@@ -186,6 +190,7 @@ export default {
 			infoHidden: false,
 			state: [],
 			shortcutHelpOpen: false,
+			paletteOpen: false,
 			stopShortcuts: null,
 			/** whether the screen is phone-sized, which is when the bottom bar is drawn */
 			phone: isPhone(),
@@ -261,6 +266,7 @@ export default {
 		this.watchNavigation()
 		eventBus.on('shortcut:help', this.toggleShortcutHelp)
 		eventBus.on('shortcut:home', this.goHome)
+		eventBus.on('shortcut:palette', this.togglePalette)
 		eventBus.on(REACTION_PICK, this.onFirstReactionAsk)
 	},
 
@@ -272,6 +278,7 @@ export default {
 		this.disarmPending()
 		eventBus.off('shortcut:help', this.toggleShortcutHelp)
 		eventBus.off('shortcut:home', this.goHome)
+		eventBus.off('shortcut:palette', this.togglePalette)
 		eventBus.off(REACTION_PICK, this.onFirstReactionAsk)
 	},
 
@@ -406,6 +413,10 @@ export default {
 
 		toggleShortcutHelp() {
 			this.shortcutHelpOpen = !this.shortcutHelpOpen
+		},
+
+		togglePalette() {
+			this.paletteOpen = !this.paletteOpen
 		},
 
 		goHome() {

@@ -24,3 +24,15 @@ export function scrollOffset() {
 
 	return column === null ? window.scrollY : column.scrollTop
 }
+
+/**
+ * Takes the reader back to the top of the page: smoothly, or at once for a
+ * reader who asked for less motion.
+ */
+export function scrollToTop() {
+	const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
+	const target = scroller() ?? window
+	if (typeof target.scrollTo === 'function') {
+		target.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+	}
+}

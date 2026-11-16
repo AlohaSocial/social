@@ -37,6 +37,14 @@ vi.mock('../../src/components/PhoneBar.vue', async () => {
 
 	return { __esModule: true, default: { name: 'PhoneBar', render: () => h('nav', { class: 'phone-bar-chunk' }) } }
 })
+// and for the command palette's
+const paletteChunk = vi.hoisted(() => ({ loads: 0 }))
+vi.mock('../../src/components/CommandPalette.vue', async () => {
+	paletteChunk.loads++
+	const { h } = await import('vue')
+
+	return { __esModule: true, default: { name: 'CommandPalette', emits: ['close'], render: () => h('div', { class: 'command-palette-chunk' }) } }
+})
 vi.mock('../../src/services/phone.js', () => ({
 	PHONE_WIDTH: 600,
 	isPhone: () => phoneBar.phone,
@@ -315,6 +323,44 @@ describe('App', () => {
 		await nextTick()
 
 		expect(wrapper.find('.phone-bar-chunk').exists()).toBe(false)
+	})
+
+	it('fetches the command palette only once somebody presses its chord, and toggles it', async () => {
+		const wrapper = mountApp()
+		await flushPromises()
+
+		expect(paletteChunk.loads).toBe(0)
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true }))
+		await flushPromises()
+
+		expect(paletteChunk.loads).toBe(1)
+		expect(wrapper.find('.command-palette-chunk').exists()).toBe(true)
+
+		wrapper.findComponent({ name: 'CommandPalette' }).vm.$emit('close')
+		await nextTick()
+
+		expect(wrapper.find('.command-palette-chunk').exists()).toBe(false)
+	})
+
+	it('opens no command palette while the shortcuts are off', async () => {
+		const wrapper = mountApp()
+		settingsStore.setServerDataEntry({ key: 'keyboardShortcuts', value: false })
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
+		await flushPromises()
+
+		expect(wrapper.find('.command-palette-chunk').exists()).toBe(false)
+	})
+
+	it('opens no command palette for a visitor', async () => {
+		setServerData({ public: true })
+		const wrapper = mountApp()
+
+		eventBus.emit('shortcut:palette')
+		await flushPromises()
+
+		expect(wrapper.find('.command-palette-chunk').exists()).toBe(false)
 	})
 
 	it('draws no phone bar for a visitor, even on a phone', async () => {

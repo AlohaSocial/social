@@ -4,12 +4,13 @@
 -->
 <template>
 	<div class="discover">
-		<PageHeader :title="t('social', 'Discover')" clearNavigation hideTitle />
+		<PageHeader :title="t('social', 'Discover')" hideTitle />
 
 		<!-- the same control the timelines and a profile are switched with:
 		     four lists of one screen, chosen while reading rather than
 		     navigated to -->
 		<TimelineSwitcher
+			besideToggle
 			:options="tabs"
 			:value="active"
 			:label="t('social', 'What to discover')"
