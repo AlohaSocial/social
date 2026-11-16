@@ -614,26 +614,40 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Whether an author still has deliveries waiting or going out.
+	 * Which of these authors still have deliveries waiting or going out, a
+	 * query per 500 of them.
 	 *
 	 * Read on `social_rq_as`: a deleted account keeps its row, and with it the
-	 * key its `Delete` is signed with, until this says no.
+	 * key its `Delete` is signed with, until this leaves it out.
+	 *
+	 * @param string[] $actorIds
+	 * @return array<string, true> actor id => true
 	 */
-	public function hasPendingByAuthor(string $actorId): bool {
-		$qb = $this->getQueryBuilder();
-		$qb->select('id')
-			->from(self::TABLE_REQUEST_QUEUE)
-			->where($qb->expr()->eq('author_prim', $qb->createNamedParameter($qb->prim($actorId))))
-			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(
-				[RequestQueue::STATUS_STANDBY, RequestQueue::STATUS_RUNNING], IQueryBuilder::PARAM_INT_ARRAY
-			)))
-			->setMaxResults(1);
+	public function authorsWithPending(array $actorIds): array {
+		$found = [];
+		foreach (array_chunk(array_values(array_unique($actorIds)), 500) as $chunk) {
+			$qb = $this->getQueryBuilder();
+			$byPrim = [];
+			foreach ($chunk as $actorId) {
+				$byPrim[$qb->prim($actorId)] = $actorId;
+			}
+			$qb->selectDistinct('author_prim')
+				->from(self::TABLE_REQUEST_QUEUE)
+				->where($qb->expr()->in('author_prim', $qb->createNamedParameter(array_keys($byPrim), IQueryBuilder::PARAM_STR_ARRAY)))
+				->andWhere($qb->expr()->in('status', $qb->createNamedParameter(
+					[RequestQueue::STATUS_STANDBY, RequestQueue::STATUS_RUNNING], IQueryBuilder::PARAM_INT_ARRAY
+				)));
 
-		$cursor = $qb->executeQuery();
-		$found = $cursor->fetchOne();
-		$cursor->closeCursor();
+			$cursor = $qb->executeQuery();
+			while (($prim = $cursor->fetchOne()) !== false) {
+				if (isset($byPrim[(string)$prim])) {
+					$found[$byPrim[(string)$prim]] = true;
+				}
+			}
+			$cursor->closeCursor();
+		}
 
-		return $found !== false;
+		return $found;
 	}
 
 	/**

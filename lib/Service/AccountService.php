@@ -1478,8 +1478,15 @@ class AccountService {
 	 */
 	public function manageDeletedActors(): int {
 		$deleted = 0;
-		foreach ($this->actorsRequest->getDeletedBefore(time() - self::TIME_RETENTION, self::DELETED_ACTOR_BATCH) as $item) {
-			if ($this->activityService->hasPendingDeliveries($item->getId())) {
+		$accounts = $this->actorsRequest->getDeletedBefore(time() - self::TIME_RETENTION, self::DELETED_ACTOR_BATCH);
+		if ($accounts === []) {
+			return 0;
+		}
+		$pending = $this->activityService->withPendingDeliveries(
+			array_map(static fn (Person $account): string => $account->getId(), $accounts)
+		);
+		foreach ($accounts as $item) {
+			if (isset($pending[$item->getId()])) {
 				continue;
 			}
 			$this->actorsRequest->delete($item->getPreferredUsername());

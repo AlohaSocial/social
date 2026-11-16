@@ -602,11 +602,14 @@ class ActivityService {
 	}
 
 	/**
-	 * Whether an author still has deliveries waiting or going out: a deleted
-	 * account's signing key is kept until it has none.
+	 * Which of these authors still have deliveries waiting or going out: a
+	 * deleted account's signing key is kept until it has none.
+	 *
+	 * @param string[] $actorIds
+	 * @return array<string, true> actor id => true
 	 */
-	public function hasPendingDeliveries(string $actorId): bool {
-		return $this->requestQueueService->hasPendingByAuthor($actorId);
+	public function withPendingDeliveries(array $actorIds): array {
+		return $this->requestQueueService->authorsWithPending($actorIds);
 	}
 
 	public function manageInit() {

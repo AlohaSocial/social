@@ -329,10 +329,13 @@ class RequestQueueService {
 	}
 
 	/**
-	 * Whether an author still has deliveries waiting or going out.
+	 * Which of these authors still have deliveries waiting or going out.
+	 *
+	 * @param string[] $actorIds
+	 * @return array<string, true> actor id => true
 	 */
-	public function hasPendingByAuthor(string $actorId): bool {
-		return $this->requestQueueRequest->hasPendingByAuthor($actorId);
+	public function authorsWithPending(array $actorIds): array {
+		return $this->requestQueueRequest->authorsWithPending($actorIds);
 	}
 
 	/**

@@ -863,9 +863,9 @@ class AccountServiceTest extends TestCase {
 	public function testManageDeletedActorsKeepsAnAccountWithDeliveriesQueued(): void {
 		$gone = $this->alice();
 		$this->actorsRequest->method('getDeletedBefore')->willReturn([$gone]);
-		$this->activityService->expects($this->once())->method('hasPendingDeliveries')
-			->with($gone->getId())
-			->willReturn(true);
+		$this->activityService->expects($this->once())->method('withPendingDeliveries')
+			->with([$gone->getId()])
+			->willReturn([$gone->getId() => true]);
 		$this->actorsRequest->expects($this->never())->method('delete');
 
 		$this->assertSame(0, $this->service->manageDeletedActors());
