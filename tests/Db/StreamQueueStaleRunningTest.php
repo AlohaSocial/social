@@ -33,8 +33,8 @@ class StreamQueueStaleRunningTest extends TestCase {
 		$set = [];
 		$queryBuilder = $this->createMock(IQueryBuilder::class);
 		$queryBuilder->method('expr')->willReturn(new class extends FakeExpressions {
-			public function literal(mixed $value): string {
-				return (string)$value;
+			public function literal($input, $type = null): string {
+				return (string)$input;
 			}
 		});
 		$queryBuilder->method('createNamedParameter')->willReturnCallback(
