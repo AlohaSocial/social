@@ -29,3 +29,35 @@ export function dismissInfoCard(id) {
 		sessionDismissed.add(key)
 	}
 }
+
+/** the claims of a browser that will not keep them in session storage */
+const sessionPages = new Map()
+
+/**
+ * Claims a one-time notice for one page of this browser session.
+ *
+ * The first page to ask gets the notice, and keeps it across a reload; every
+ * other page is told no until the session ends, so a notice that waits for an
+ * answer is not repeated above each feed the reader opens meanwhile.
+ *
+ * @param {string} id the versioned notice identity
+ * @param {string} page what identifies the page asking
+ * @return {boolean} whether this page may show the notice
+ */
+export function claimNoticeForPage(id, page) {
+	const key = keyFor(id)
+	let owner
+	try {
+		owner = sessionStorage.getItem(key)
+		if (owner === null) {
+			sessionStorage.setItem(key, page)
+		}
+	} catch {
+		owner = sessionPages.get(key) ?? null
+		if (owner === null) {
+			sessionPages.set(key, page)
+		}
+	}
+
+	return owner === null || owner === page
+}

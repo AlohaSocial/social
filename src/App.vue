@@ -821,6 +821,13 @@ a.external_link {
 	 */
 	--social-column: 900px;
 	--social-column-gutter: calc(var(--default-grid-baseline, 4px) * 2);
+	/*
+	 * The column a feed of text is read in. A feed page narrows
+	 * `--social-column` to it, and what stands above the posts there --
+	 * notices, the scope switcher, state cards -- is capped at it, so on a
+	 * page of tiles or videos they still line up with each other.
+	 */
+	--social-reading-column: 616px;
 }
 
 img.emoji {

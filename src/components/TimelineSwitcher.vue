@@ -5,7 +5,7 @@
 <template>
 	<div
 		class="switcher"
-		:class="{ 'switcher--more-left': overflowLeft, 'switcher--more-right': overflowRight }"
+		:class="{ 'switcher--more-left': overflowLeft, 'switcher--more-right': overflowRight, 'switcher--compact': compact }"
 		role="radiogroup"
 		:aria-label="label"
 		@keydown="onKeydown"
@@ -28,6 +28,7 @@
 				type="button"
 				:aria-checked="option.value === value"
 				:tabindex="option.value === value ? 0 : -1"
+				:title="compact ? option.label : undefined"
 				@click="show(index)"
 				@pointerenter="$emit('intent', option.value)"
 				@focus="$emit('intent', option.value)"
@@ -102,6 +103,15 @@ export default {
 		label: {
 			type: String,
 			required: true,
+		},
+
+		/**
+		 * Icons only, the labels back on hover or focus: for a switcher that
+		 * stays on screen while the page scrolls under it.
+		 */
+		compact: {
+			type: Boolean,
+			default: false,
 		},
 	},
 
@@ -569,6 +579,26 @@ export default {
 	// only with less room around each
 	.switcher .switcher__option--short {
 		padding: 0 10px;
+	}
+}
+
+/* the same giving way as on a phone, asked for by the page while it scrolls;
+   a pointer over the row or focus in it brings the words back */
+.switcher--compact:not(:hover, :focus-within) {
+	.switcher__option {
+		padding: 0 14px;
+	}
+
+	.switcher__label {
+		@include layout.visually-hidden;
+	}
+
+	.switcher__option--short .switcher__icon {
+		display: none;
+	}
+
+	.switcher__short {
+		display: inline;
 	}
 }
 

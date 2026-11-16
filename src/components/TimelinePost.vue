@@ -16,6 +16,7 @@
 		<TimelinePostHeader
 			:item="item"
 			:hideAuthor="hideAuthor"
+			:compactAuthor="compactAuthor"
 			:postHref="postHref"
 			:isBoosted="isBoosted"
 			:isLiked="isLiked"
@@ -485,6 +486,12 @@ export default {
 		},
 
 		hideAuthor: {
+			type: Boolean,
+			default: false,
+		},
+
+		/** whether the post above is by the same author, who is then not named again on screen */
+		compactAuthor: {
 			type: Boolean,
 			default: false,
 		},
