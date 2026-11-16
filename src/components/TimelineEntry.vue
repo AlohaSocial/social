@@ -1332,35 +1332,39 @@ export default {
 
 /*
  * The row, pointed at. At rest it is only the post, and its counts where the
- * reader has the numbers on. Pointed at or focused, it takes a hairline frame
- * touched with the accent, a light tint and a soft shadow beneath it, its controls come to full strength beside their counts,
- * and the ones without a count slide in at the end of the row: where the
- * reader has the numbers off, that is all of them, over the timestamp, which
- * steps aside. No pill. In over about 250 ms; out flat in 100 ms, so a
- * pointer crossing the feed leaves nothing behind. Touch screens keep their
- * always-visible row.
+ * reader has the numbers on. Pointed at or focused, it rises a little off the
+ * page like a card lifted from a table: up 3px, onto a soft shadow, on the
+ * page's own ground so the shadow has an edge to fall from. Its controls come
+ * to full strength beside their counts, and the ones without a count slide
+ * in at the end of the row: where the reader has the numbers off, that is
+ * all of them, over the timestamp, which steps aside. No pill, no tint, no
+ * frame. In over about 250 ms; out in 100 ms. The lift is `translate`, not
+ * `transform`, which the row's scroll-driven rise already uses. Touch
+ * screens keep their always-visible row.
  */
 @media (hover: hover) {
 	.timeline-entry:not(.timeline-entry--direct) {
-		// a softer corner than a card's, for a frame that comes and goes
+		// a softer corner than a card's, for an edge that comes and goes
 		border-radius: 12px;
-		// the frame, and a soft shadow under the row, both there at rest at
-		// nothing so that they grow rather than appear
-		box-shadow: inset 0 0 0 1px transparent, 0 2px 6px -6px transparent;
-		transition: box-shadow .1s linear, background-color .1s linear;
+		// the shadow is there at rest at nothing, so that it grows rather
+		// than appears
+		box-shadow: 0 1px 2px transparent, 0 2px 6px -6px transparent;
+		transition: box-shadow .1s linear, translate .1s linear, background-color .1s linear;
 
 		&:hover,
 		&:focus-within {
-			background-color: color-mix(in srgb, var(--color-primary-element) 6%, transparent);
-			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 25%, var(--color-border)), 0 10px 20px -12px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
-			transition: box-shadow .25s ease, background-color .2s ease;
+			background-color: var(--color-main-background);
+			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
+			translate: 0 -3px;
+			transition: box-shadow .25s ease, translate .25s cubic-bezier(.2, .8, .2, 1), background-color .2s ease;
 		}
 
 		// its own rule: a browser without `:has()` drops the selector, and it
 		// must not take the hover case with it
 		&:has(.post-actions-reveal--held) {
-			background-color: color-mix(in srgb, var(--color-primary-element) 6%, transparent);
-			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 25%, var(--color-border)), 0 10px 20px -12px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
+			background-color: var(--color-main-background);
+			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
+			translate: 0 -3px;
 		}
 
 		.wrapper :deep(.post-actions-reveal::before) {
@@ -1419,6 +1423,7 @@ export default {
 @media (hover: hover) and (prefers-reduced-motion: reduce) {
 	.timeline-entry:not(.timeline-entry--direct),
 	.timeline-entry:not(.timeline-entry--direct):is(:hover, :focus-within) {
+		translate: none;
 		transition: none;
 
 		.wrapper :deep(.post-actions > :first-child),
