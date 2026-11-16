@@ -287,6 +287,10 @@ export default {
 			infoHidden: false,
 			/** whether the reader has scrolled far enough for the scopes to fold to icons */
 			scopesCompact: false,
+			/** @type {Element|null} the column whose scrolling folds the scopes */
+			scopeScroller: null,
+			/** the frame the next scroll check is waiting for */
+			scopeFrame: 0,
 			selectedPhotoLayout: photoLayout(),
 			/** the pending fetch-ahead of the other scopes, or 0 */
 			/** the title of the list being read, once the server has said */
