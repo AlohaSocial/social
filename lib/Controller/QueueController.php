@@ -145,16 +145,13 @@ class QueueController extends Controller {
 	 * round a row already tried is left out too: it failed in an earlier
 	 * round, and its retry follows the cron's backoff.
 	 *
+	 * Only the first `$limit` are read: a post's fan-out is a row per inbox,
+	 * each carrying the signed activity, and a round delivers ASYNC_ROWS.
+	 *
 	 * @return list<RequestQueue>
 	 */
-	protected function due(string $token, int $round): array {
-		$now = time();
-
-		return array_values(array_filter(
-			$this->requestQueueService->getRequestFromToken($token, RequestQueue::STATUS_STANDBY),
-			static fn (RequestQueue $request): bool => $request->getLast() <= $now
-				&& ($round === 0 || $request->getTries() === 0)
-		));
+	protected function due(string $token, int $round, int $limit = self::ASYNC_ROWS): array {
+		return $this->requestQueueService->getDueFromToken($token, $round > 0, $limit);
 	}
 
 	/**
@@ -163,7 +160,7 @@ class QueueController extends Controller {
 	 * than a loop here, so no worker is held for more than MAX_DURATION.
 	 */
 	protected function nextRound(string $token, int $round): void {
-		if ($round + 1 >= self::MAX_ROUNDS || $this->due($token, $round + 1) === []) {
+		if ($round + 1 >= self::MAX_ROUNDS || $this->due($token, $round + 1, 1) === []) {
 			return;
 		}
 

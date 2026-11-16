@@ -17,6 +17,7 @@ use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Question\ConfirmationQuestion;
 
 /**
  * The base class every `occ social:*` command extends.
@@ -110,6 +111,31 @@ abstract class SocialCommand extends Command {
 		}
 
 		return $helper;
+	}
+
+	/**
+	 * Asks before something that cannot be undone, unless `--force` was given.
+	 *
+	 * Under `occ --no-interaction` a ConfirmationQuestion answers itself with
+	 * its default, so without `--force` that is refused rather than taken as
+	 * a no that a script could not tell from success.
+	 *
+	 * @return bool|null true to go ahead, false when the answer was no, null
+	 *                   when there is nobody to ask and no `--force`
+	 */
+	protected function confirmDestructive(InputInterface $input, OutputInterface $output, string $question): ?bool {
+		if ($input->hasOption('force') && $input->getOption('force')) {
+			return true;
+		}
+		if (!$input->isInteractive()) {
+			$output->writeln('<error>Refusing to run non-interactively without --force: there is nobody here to confirm.</error>');
+
+			return null;
+		}
+
+		return (bool)$this->questionHelper()->ask(
+			$input, $output, new ConfirmationQuestion($question . ' (y/N) ', false, '/^(y|Y)/i')
+		);
 	}
 
 	protected function writeArrayInOutputFormat(InputInterface $input, OutputInterface $output, iterable $items, string $prefix = '  - '): void {

@@ -119,7 +119,7 @@ class SocialDeleteRoundTripTest extends TestCase {
 		);
 		$requestQueueService->method('getPriorityRequest')
 			->willThrowException(new NoHighPriorityRequestException());
-		$requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$requestQueueService->method('hasStandby')->willReturn(false);
 
 		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudHost')->willReturn(self::SENDER_HOST);

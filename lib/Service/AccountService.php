@@ -67,7 +67,11 @@ class AccountService {
 	/** ...and how many pages one cron pass may walk before giving the run back. */
 	private const LOCAL_ACTOR_PAGES = 10;
 
-	/** How long a soft-deleted actor is kept before `manageDeletedActors()` purges it. */
+	/**
+	 * How long a soft-deleted actor is kept at least before
+	 * `manageDeletedActors()` purges it; one with deliveries still queued is
+	 * kept until they have gone.
+	 */
 	public const TIME_RETENTION = 3600;
 
 	/** Deleted local accounts removed per cron pass; the rest wait a pass. */
@@ -1458,6 +1462,12 @@ class AccountService {
 	 * Removes the local accounts whose deletion is older than the grace
 	 * period, a bounded batch per pass.
 	 *
+	 * An account that still has deliveries queued — its `Delete` to a server
+	 * that was down, say — is kept a pass longer: every one of them is signed
+	 * with its key when it goes out, and a delivery whose key is gone is
+	 * dropped. The queue gives up on a row after `RequestQueueService::
+	 * MAX_AGE` at the latest, so this keeps an account for days, not for ever.
+	 *
 	 * Asks the database for those rows only: reading every local account, key
 	 * pair included, to find the handful marked deleted is a memory-limit
 	 * fatal on a large instance, which kills the whole cron run rather than
@@ -1469,6 +1479,9 @@ class AccountService {
 	public function manageDeletedActors(): int {
 		$deleted = 0;
 		foreach ($this->actorsRequest->getDeletedBefore(time() - self::TIME_RETENTION, self::DELETED_ACTOR_BATCH) as $item) {
+			if ($this->activityService->hasPendingDeliveries($item->getId())) {
+				continue;
+			}
 			$this->actorsRequest->delete($item->getPreferredUsername());
 			$deleted++;
 		}

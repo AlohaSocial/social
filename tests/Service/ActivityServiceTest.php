@@ -47,6 +47,7 @@ use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FediverseDirectoryService;
+use OCA\Social\Service\HostBreaker;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -203,7 +204,7 @@ class ActivityServiceTest extends TestCase {
 	private function expectQueuedWithoutInlineDelivery(): void {
 		$this->requestQueueService->method('generateRequestQueue')->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 	}
 
 	/**
@@ -224,7 +225,7 @@ class ActivityServiceTest extends TestCase {
 			// send, and callers key off that
 			->willReturnCallback(fn (array $instancePaths): string => $instancePaths === [] ? '' : self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 	}
 
 	// createActivity()
@@ -252,7 +253,7 @@ class ActivityServiceTest extends TestCase {
 			)
 			->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->with(self::TOKEN, RequestQueue::STATUS_STANDBY)->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->with(self::TOKEN)->willReturn(false);
 
 		$activity = null;
 		$token = $this->service->createActivity($alice, $note, $activity);
@@ -349,7 +350,7 @@ class ActivityServiceTest extends TestCase {
 			}), self::ALICE_ID)
 			->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 
 		$this->assertSame(self::TOKEN, $this->service->updateActivity($alice, $note));
 
@@ -379,7 +380,7 @@ class ActivityServiceTest extends TestCase {
 				return self::TOKEN;
 			});
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 
 		$this->service->updateActivity($this->alice(), $note);
 
@@ -408,7 +409,7 @@ class ActivityServiceTest extends TestCase {
 				return self::TOKEN;
 			});
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 
 		$this->service->updateActivity($alice, $update);
 
@@ -431,7 +432,7 @@ class ActivityServiceTest extends TestCase {
 				return self::TOKEN;
 			});
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 
 		$this->service->updateActivity($this->alice(), $note);
 
@@ -463,7 +464,7 @@ class ActivityServiceTest extends TestCase {
 			)
 			->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 
 		$this->assertSame(self::TOKEN, $this->service->deleteActivity($note));
 
@@ -525,7 +526,7 @@ class ActivityServiceTest extends TestCase {
 
 	public function testADeferredRequestStartsDeliveryOnlyAfterRelease(): void {
 		$this->requestQueueService->method('generateRequestQueue')->willReturn(self::TOKEN);
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 		$starts = 0;
 		$this->requestQueueService->method('getPriorityRequest')->willReturnCallback(static function () use (&$starts): never {
 			$starts++;
@@ -686,7 +687,7 @@ class ActivityServiceTest extends TestCase {
 			}
 		);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 
 		foreach ($items as $item) {
 			$this->service->updateActivity($this->alice(), $item);
@@ -968,7 +969,7 @@ class ActivityServiceTest extends TestCase {
 	public function testRequestWithoutAnyTargetNeedsNoToken(): void {
 		$this->requestQueueService->method('generateRequestQueue')->willReturn('');
 		$this->requestQueueService->expects($this->never())->method('getPriorityRequest');
-		$this->requestQueueService->expects($this->never())->method('getRequestFromToken');
+		$this->requestQueueService->expects($this->never())->method('hasStandby');
 		$this->curlService->expects($this->never())->method('asyncWithToken');
 
 		$like = new Like();
@@ -1047,9 +1048,9 @@ class ActivityServiceTest extends TestCase {
 		$this->curlService->expects($this->once())->method('retrieveJson')->willReturn([]);
 		$this->requestQueueService->expects($this->once())->method('endRequest')->with($this->identicalTo($direct), true);
 		$this->requestQueueService->expects($this->once())
-			->method('getRequestFromToken')
-			->with(self::TOKEN, RequestQueue::STATUS_STANDBY)
-			->willReturn([$this->queue('https://other.example/inbox')]);
+			->method('hasStandby')
+			->with(self::TOKEN)
+			->willReturn(true);
 		$this->curlService->expects($this->once())->method('asyncWithToken')->with(self::TOKEN);
 
 		$like = new Like();
@@ -1064,7 +1065,7 @@ class ActivityServiceTest extends TestCase {
 		$this->requestQueueService->method('generateRequestQueue')->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willReturn($this->queue());
 		$this->curlService->method('retrieveJson')->willReturn([]);
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->method('hasStandby')->willReturn(false);
 		$this->curlService->expects($this->never())->method('asyncWithToken');
 
 		$like = new Like();
@@ -1079,7 +1080,7 @@ class ActivityServiceTest extends TestCase {
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
 		$this->requestQueueService->expects($this->never())->method('initRequest');
 		$this->curlService->expects($this->never())->method('retrieveJson');
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->queue()]);
+		$this->requestQueueService->method('hasStandby')->willReturn(true);
 		$this->curlService->expects($this->once())->method('asyncWithToken')->with(self::TOKEN);
 
 		$note = $this->note();
@@ -1091,7 +1092,7 @@ class ActivityServiceTest extends TestCase {
 	public function testRequestReturnsTokenWhenQueueTurnsOutEmpty(): void {
 		$this->requestQueueService->method('generateRequestQueue')->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new EmptyQueueException());
-		$this->requestQueueService->expects($this->never())->method('getRequestFromToken');
+		$this->requestQueueService->expects($this->never())->method('hasStandby');
 		$this->curlService->expects($this->never())->method('asyncWithToken');
 
 		$note = $this->note();
@@ -1125,7 +1126,7 @@ class ActivityServiceTest extends TestCase {
 			->with($this->isArray(), $this->isInstanceOf(Create::class), self::ALICE_ID, 0)
 			->willReturn(self::TOKEN);
 		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->queue()]);
+		$this->requestQueueService->method('hasStandby')->willReturn(true);
 		$this->curlService->expects($this->once())->method('asyncWithToken')->with(self::TOKEN);
 
 		$this->service->createActivity($this->alice(), $this->note());
@@ -1528,6 +1529,21 @@ class ActivityServiceTest extends TestCase {
 	}
 
 	/**
+	 * A delivery with no local account left to sign it cannot go out, but it
+	 * is not dropped quietly: a deleted account is kept while it has
+	 * deliveries, so this means one was lost.
+	 */
+	public function testADeliveryWithNoAccountToSignItIsDroppedWithAWarning(): void {
+		$queue = $this->queue();
+		$this->signatureService->method('signRequest')->willThrowException(new ActorDoesNotExistException('Actor not found'));
+		$this->requestQueueService->expects($this->once())->method('deleteRequest')->with($this->identicalTo($queue));
+		$this->logger->expects($this->once())->method('warning');
+
+		$this->service->manageInit();
+		$this->service->manageRequest($queue);
+	}
+
+	/**
 	 * @return array<string, array{int}>
 	 */
 	public static function transientHttpStatusProvider(): array {
@@ -1724,15 +1740,34 @@ class ActivityServiceTest extends TestCase {
 		$this->assertEqualsWithDelta(time() + 8 * ActivityService::BREAKER_BASE, $this->breakerRows['remote.example']['open_until'], 2);
 	}
 
-	/** Strikes older than the ceiling are forgotten: a host that failed yesterday starts again at one. */
+	/** Strikes older than the strike window are forgotten: a host that failed yesterday starts again at one. */
 	public function testOldStrikesDoNotCount(): void {
 		$this->curlService->method('retrieveJson')->willThrowException(new RequestNetworkException());
-		$this->breakerRows['remote.example'] = ['strikes' => 6, 'open_until' => 0, 'last_failure' => time() - 2 * ActivityService::BREAKER_MAX];
+		$this->breakerRows['remote.example'] = ['strikes' => 6, 'open_until' => 0, 'last_failure' => time() - HostBreaker::STRIKE_WINDOW - 1];
 
 		$this->service->manageInit();
 		$this->service->manageRequest($this->queue());
 
 		$this->assertSame(1, $this->breakerRows['remote.example']['strikes']);
+	}
+
+	/**
+	 * A host held for the full hour is asked again only once the hour is
+	 * over. Its strikes still count then: lapsed at the ceiling, a dead host
+	 * went back to a one-minute hold every hour and was asked dozens of
+	 * times a day.
+	 */
+	public function testAHostHeldForTheFullHourStaysAtTheCeiling(): void {
+		$this->curlService->method('retrieveJson')->willThrowException(new RequestNetworkException());
+		$this->breakerRows['remote.example'] = [
+			'strikes' => 7, 'open_until' => time() - 60, 'last_failure' => time() - ActivityService::BREAKER_MAX - 60,
+		];
+
+		$this->service->manageInit();
+		$this->service->manageRequest($this->queue());
+
+		$this->assertSame(8, $this->breakerRows['remote.example']['strikes']);
+		$this->assertEqualsWithDelta(time() + ActivityService::BREAKER_MAX, $this->breakerRows['remote.example']['open_until'], 2);
 	}
 
 	public function testAHostThatAnswersIsClearedAndAHealthyOneCostsNoWrite(): void {

@@ -532,9 +532,13 @@ class FollowsRequest extends FollowsRequestBuilder {
 	 *
 	 * The fan-out only ever needed the inboxes, and there are as many of those
 	 * as there are instances involved — not as many as there are followers.
-	 * The rows are distinct pairs, so a follower without a shared inbox still
-	 * brings one row each; they are told apart by key, which costs the same
-	 * however many there are.
+	 * Each follower's delivery inbox — the shared one where there is one, the
+	 * personal one otherwise — is worked out and grouped in the query, so a
+	 * hundred thousand followers on a few hundred Mastodon servers are a few
+	 * hundred rows. Grouped as distinct (shared, personal) pairs they were a
+	 * row per follower, since every personal inbox is different. A follower
+	 * without a shared inbox still brings one row each; they are told apart
+	 * by key, which costs the same however many there are.
 	 *
 	 * @return string[] the shared inbox where there is one, the personal inbox otherwise
 	 */
@@ -542,21 +546,22 @@ class FollowsRequest extends FollowsRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$expr = $qb->expr();
 
-		$qb->selectDistinct('ca.shared_inbox')
-			->addSelect('ca.inbox')
+		$inbox = $qb->createFunction(
+			'COALESCE(NULLIF(' . $qb->getColumnName('shared_inbox', 'ca') . ", ''), "
+			. $qb->getColumnName('inbox', 'ca') . ')'
+		);
+		$qb->selectAlias($inbox, 'delivery_inbox')
 			->from(self::TABLE_FOLLOWS, 'f')
 			->innerJoin('f', self::TABLE_CACHE_ACTORS, 'ca', $expr->eq('ca.id_prim', 'f.actor_id_prim'))
 			->where($expr->eq('f.object_id_prim', $qb->createNamedParameter($qb->prim($actorId))))
 			->andWhere($expr->eq('f.type', $qb->createNamedParameter(Follow::TYPE)))
-			->andWhere($expr->eq('f.accepted', $qb->createNamedParameter('1')));
+			->andWhere($expr->eq('f.accepted', $qb->createNamedParameter('1')))
+			->groupBy($inbox);
 
 		$inboxes = [];
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {
-			$inbox = (string)($data['shared_inbox'] ?? '');
-			if ($inbox === '') {
-				$inbox = (string)($data['inbox'] ?? '');
-			}
+			$inbox = (string)($data['delivery_inbox'] ?? '');
 			if ($inbox !== '') {
 				$inboxes[$inbox] = $inbox;
 			}

@@ -78,7 +78,7 @@ class QueueControllerTest extends TestCase {
 	public function testACallThisServerDidNotSignIsRefusedBeforeTheQueueIsRead(): void {
 		foreach (['', 'deadbeef', $this->signer->sign('another-token')] as $signature) {
 			$this->signature = $signature;
-			$this->requestQueueService->expects($this->never())->method('getRequestFromToken');
+			$this->requestQueueService->expects($this->never())->method('getDueFromToken');
 
 			$response = $this->controller->asyncForRequest('tok');
 
@@ -88,9 +88,7 @@ class QueueControllerTest extends TestCase {
 	}
 
 	public function testAnUnknownTokenGetsARealResponseInsteadOfExit(): void {
-		$this->requestQueueService->method('getRequestFromToken')
-			->with('tok', RequestQueue::STATUS_STANDBY)
-			->willReturn([]);
+		$this->stubDue([]);
 		$this->activityService->expects($this->never())->method('manageInit');
 
 		$response = $this->controller->asyncForRequest('tok');
@@ -105,7 +103,7 @@ class QueueControllerTest extends TestCase {
 	public function testRowsThatAreHeldBackAreNotDrained(): void {
 		$held = new RequestQueue('{}', new InstancePath('https://remote.example/inbox', InstancePath::TYPE_INBOX), 'alice');
 		$held->setLast(time() + 600);
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([$held]);
+		$this->stubDue([$held]);
 		$this->activityService->expects($this->never())->method('manageRequests');
 
 		$response = $this->controller->asyncForRequest('tok');
@@ -193,6 +191,26 @@ class QueueControllerTest extends TestCase {
 		$this->controller->handBackOne((new RequestQueue())->setToken('tok'), new \RuntimeException('boom'));
 		$this->addToAssertionCount(1);
 	}
+	/**
+	 * Answers `getDueFromToken()` from these rows the way its query does: due
+	 * by `last`, never tried when asked, at most `$limit`.
+	 *
+	 * @param list<RequestQueue> $rows
+	 */
+	private function stubDue(array $rows): void {
+		$this->requestQueueService->method('getDueFromToken')->willReturnCallback(
+			static function (string $token, bool $neverTried, int $limit) use ($rows): array {
+				$due = array_values(array_filter(
+					$rows,
+					static fn (RequestQueue $row): bool => $row->getLast() <= time()
+						&& (!$neverTried || $row->getTries() === 0)
+				));
+
+				return array_slice($due, 0, $limit);
+			}
+		);
+	}
+
 	private function row(int $tries = 0, int $last = 0): RequestQueue {
 		$row = new RequestQueue('{}', new InstancePath('https://host.example/inbox', InstancePath::TYPE_INBOX), 'alice');
 		$row->setTries($tries);
@@ -207,7 +225,7 @@ class QueueControllerTest extends TestCase {
 	 * it is signed.
 	 */
 	public function testARoundIsRefusedUnlessItsOwnNumberWasSigned(): void {
-		$this->requestQueueService->expects($this->never())->method('getRequestFromToken');
+		$this->requestQueueService->expects($this->never())->method('getDueFromToken');
 		$cases = [
 			['5', $this->signer->sign('tok')],
 			['5', $this->signer->sign('tok', 4)],
@@ -228,7 +246,7 @@ class QueueControllerTest extends TestCase {
 	public function testASignedFollowUpRoundIsServed(): void {
 		$this->round = '3';
 		$this->signature = $this->signer->sign('tok', 3);
-		$this->requestQueueService->expects($this->once())->method('getRequestFromToken')->willReturn([]);
+		$this->requestQueueService->expects($this->once())->method('getDueFromToken')->willReturn([]);
 
 		$this->assertSame(Http::STATUS_OK, $this->controller->asyncForRequest('tok')->getStatus());
 	}
@@ -239,7 +257,7 @@ class QueueControllerTest extends TestCase {
 	 * minutes -- the round starts the next one.
 	 */
 	public function testARoundThatLeavesUntriedRowsStartsTheNext(): void {
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->row(), $this->row(1)]);
+		$this->stubDue([$this->row(), $this->row(1)]);
 		$this->curlService->expects($this->once())->method('asyncWithToken')->with('tok', 1);
 
 		$this->controller->nextRoundNow('tok', 0);
@@ -251,22 +269,21 @@ class QueueControllerTest extends TestCase {
 	 * whose remaining hosts are down does not spin.
 	 */
 	public function testOnlyFailedOrHeldRowsStartNoRound(): void {
-		$this->requestQueueService->method('getRequestFromToken')
-			->willReturn([$this->row(1), $this->row(3), $this->row(0, time() + 600)]);
+		$this->stubDue([$this->row(1), $this->row(3), $this->row(0, time() + 600)]);
 		$this->curlService->expects($this->never())->method('asyncWithToken');
 
 		$this->controller->nextRoundNow('tok', 0);
 	}
 
 	public function testTheLastRoundLeavesTheRestToTheCron(): void {
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->row()]);
+		$this->stubDue([$this->row()]);
 		$this->curlService->expects($this->never())->method('asyncWithToken');
 
 		$this->controller->nextRoundNow('tok', QueueController::MAX_ROUNDS - 1);
 	}
 
 	public function testANextRoundThatCannotBeStartedIsLoggedAndLeftToTheCron(): void {
-		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->row()]);
+		$this->stubDue([$this->row()]);
 		$this->curlService->method('asyncWithToken')->willThrowException(new SocialAppConfigException('no url'));
 		$this->logger->expects($this->once())->method('warning');
 
@@ -282,9 +299,7 @@ class QueueControllerTest extends TestCase {
 		$fresh = $this->row();
 		$failed = $this->row(1);
 		$held = $this->row(0, time() + 600);
-		$this->requestQueueService->method('getRequestFromToken')
-			->with('tok', RequestQueue::STATUS_STANDBY)
-			->willReturn([$fresh, $failed, $held]);
+		$this->stubDue([$fresh, $failed, $held]);
 
 		$this->assertSame([$fresh, $failed], $this->controller->dueNow('tok', 0));
 		$this->assertSame([$fresh], $this->controller->dueNow('tok', 1));

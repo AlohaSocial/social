@@ -39,14 +39,20 @@ prints nothing.
 Delete a local Aloha Social account.
 
 ```
-php occ social:account:delete <account>
+php occ social:account:delete [-f|--force] <account>
 ```
 
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `account` | Yes | Local Aloha Social account (the handle / preferred username) |
 
-Prints nothing on success.
+| Option | Value | Description |
+|--------|-------|-------------|
+| `-f`, `--force` | none | Delete without asking. Required with `--no-interaction`, which otherwise refuses with exit code 1 |
+
+Asks before it deletes: the account's posts go, and its deletion is sent to
+every server that knows it, which cannot be undone. Prints the handle once it
+is deleted. A handle with no local account is an error (exit code 1).
 
 ---
 
@@ -1295,7 +1301,7 @@ Delete everything an instance already sent this one. Blocking the domain
 before the block.
 
 ```
-php occ social:domain:purge [-b|--batches BATCHES] [--check] <domain>
+php occ social:domain:purge [-b|--batches BATCHES] [--check] [-f|--force] <domain>
 ```
 
 | Argument | Required | Description |
@@ -1306,6 +1312,7 @@ php occ social:domain:purge [-b|--batches BATCHES] [--check] <domain>
 |--------|-------|-------------|
 | `-b`, `--batches` | required | Stop after this many batches of 50 accounts instead of running to the end. Without it the command runs until nothing of the domain is left |
 | `--check` | none | Only report whether anything of the domain is still stored; deletes nothing |
+| `-f`, `--force` | none | Purge without asking. Required with `--no-interaction`, which otherwise refuses with exit code 1 |
 
 **What goes.** For every account of that instance still known here: its cached
 actor, its posts (with their recipient, tag, action, card, revision and cached
@@ -1315,8 +1322,8 @@ still queued towards it. Leaving the follows behind kept the instance in the
 delivery fan-out of every local post.
 
 **This cannot be undone.** Unblocking the domain lets it reach the instance
-again; it does not restore anything deleted here. The command says so before it
-exits.
+again; it does not restore anything deleted here. The command says so and asks
+before it deletes anything.
 
 **Safe to interrupt and safe to repeat.** Each pass asks what of the domain is
 still stored rather than counting off a position, so a run that is killed half

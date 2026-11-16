@@ -22,6 +22,7 @@ use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
+use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -80,6 +81,9 @@ class ScheduledStatusService {
 	 */
 	public const PUBLISH_PER_RUN = 50;
 
+	/** How many times one run reads again after finding accounts to hold. */
+	private const HELD_ROUNDS = 5;
+
 	public function __construct(
 		private ScheduledStatusesRequest $scheduledRequest,
 		private AccountService $accountService,
@@ -89,6 +93,7 @@ class ScheduledStatusService {
 		private IURLGenerator $urlGenerator,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private IUserManager $userManager,
 	) {
 	}
 
@@ -275,33 +280,29 @@ class ScheduledStatusService {
 	/**
 	 * Publishes everything that is due, and says how many went out.
 	 *
+	 * The posts of an account whose Nextcloud user is disabled are held: left
+	 * waiting, not published and not dropped, and published once the user is
+	 * enabled again if they are still due. Their account is left out of the
+	 * next read, so a disabled user with many waiting posts does not take the
+	 * place of everybody else's.
+	 *
 	 * @return int the posts published, which is what the job logs
 	 */
 	public function publishDue(int $limit = self::PUBLISH_PER_RUN): int {
 		$published = 0;
-		foreach ($this->scheduledRequest->getDue($this->time->getTime(), $limit) as $scheduled) {
-			if (!$this->scheduledRequest->claim($scheduled->getId())) {
-				// another worker got there first; it is publishing this one
-				continue;
+		$held = [];
+		for ($round = 0; $round < self::HELD_ROUNDS; $round++) {
+			$holding = count($held);
+			foreach ($this->scheduledRequest->getDue($this->time->getTime(), $limit, array_keys($held)) as $scheduled) {
+				if (isset($held[$scheduled->getActorId()])) {
+					continue;
+				}
+				if ($this->publishOne($scheduled, $held)) {
+					$published++;
+				}
 			}
-
-			try {
-				$this->publish($scheduled);
-				$published++;
-			} catch (Throwable $e) {
-				// The row is already gone, so this post is not published and
-				// will not be retried. That is the deliberate side of the
-				// trade: the alternative — publish, then delete — federates the
-				// post twice whenever a worker dies in between, and a duplicate
-				// post cannot be taken back, while a failed one is at least
-				// here. At warning, because Nextcloud's default loglevel is 2
-				// and an author has no other way to find out.
-				$this->logger->warning(
-					'[ScheduledStatusService] could not publish scheduled status '
-					. $scheduled->getId() . ' of ' . $scheduled->getActorId()
-					. ': ' . $e->getMessage(),
-					['exception' => $e, 'scheduled' => $scheduled->getId()]
-				);
+			if (count($held) === $holding) {
+				break;
 			}
 		}
 
@@ -309,12 +310,70 @@ class ScheduledStatusService {
 	}
 
 	/**
+	 * Publishes one due post unless its account is held.
+	 *
+	 * @param array<string, true> $held the actor ids found held so far; one
+	 *                                  found now is added
+	 */
+	private function publishOne(ScheduledStatus $scheduled, array &$held): bool {
+		try {
+			$actor = $this->accountService->getFromId($scheduled->getActorId());
+		} catch (Throwable $e) {
+			$actor = null;
+		}
+		if ($actor !== null && $this->isDisabled($actor)) {
+			$held[$scheduled->getActorId()] = true;
+
+			return false;
+		}
+
+		if (!$this->scheduledRequest->claim($scheduled->getId())) {
+			// another worker got there first; it is publishing this one
+			return false;
+		}
+
+		try {
+			$this->publish($scheduled, $actor);
+
+			return true;
+		} catch (Throwable $e) {
+			// The row is already gone, so this post is not published and
+			// will not be retried. That is the deliberate side of the
+			// trade: the alternative — publish, then delete — federates the
+			// post twice whenever a worker dies in between, and a duplicate
+			// post cannot be taken back, while a failed one is at least
+			// here. At warning, because Nextcloud's default loglevel is 2
+			// and an author has no other way to find out.
+			$this->logger->warning(
+				'[ScheduledStatusService] could not publish scheduled status '
+				. $scheduled->getId() . ' of ' . $scheduled->getActorId()
+				. ': ' . $e->getMessage(),
+				['exception' => $e, 'scheduled' => $scheduled->getId()]
+			);
+		}
+
+		return false;
+	}
+
+	/** Whether the account belongs to a Nextcloud user that is disabled. */
+	private function isDisabled(Person $actor): bool {
+		$userId = $actor->getUserId();
+		if ($userId === '' || str_starts_with($userId, 'team/') || str_starts_with($userId, 'channel/')) {
+			return false;
+		}
+
+		$user = $this->userManager->get($userId);
+
+		return $user !== null && !$user->isEnabled();
+	}
+
+	/**
 	 * Publishes one waiting post, down the path an immediate post takes.
 	 *
 	 * @throws \Exception whatever `createPost()` refuses it for
 	 */
-	private function publish(ScheduledStatus $scheduled): void {
-		$actor = $this->accountService->getFromId($scheduled->getActorId());
+	private function publish(ScheduledStatus $scheduled, ?Person $actor = null): void {
+		$actor ??= $this->accountService->getFromId($scheduled->getActorId());
 
 		// reviewed when it was scheduled (`schedule()`)
 		$this->postService->createPost(

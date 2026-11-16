@@ -45,7 +45,8 @@ class DomainPurge extends SocialCommand {
 				'stop after this many batches of ' . DomainPurgeService::BATCH
 				. ' accounts instead of running to the end'
 			)
-			->addOption('check', '', InputOption::VALUE_NONE, 'only report whether anything is left');
+			->addOption('check', '', InputOption::VALUE_NONE, 'only report whether anything is left')
+			->addOption('force', 'f', InputOption::VALUE_NONE, 'purge without asking (required with --no-interaction)');
 	}
 
 	#[\Override]
@@ -59,6 +60,21 @@ class DomainPurge extends SocialCommand {
 						? $domain . ' still has data on this instance'
 						: 'nothing of ' . $domain . ' is left on this instance'
 				);
+
+				return 0;
+			}
+
+			// unblocking does not undo this, so it is said before the rows
+			// are gone rather than after
+			$confirmed = $this->confirmDestructive(
+				$input, $output,
+				'Delete every account and post of ' . $domain . ' held here? Unblocking the domain does not restore what was deleted.'
+			);
+			if ($confirmed === null) {
+				return 1;
+			}
+			if (!$confirmed) {
+				$output->writeln('cancelled, nothing was deleted.');
 
 				return 0;
 			}
@@ -77,10 +93,6 @@ class DomainPurge extends SocialCommand {
 			// there is nothing left to find
 			$output->writeln('<comment>more is left; run the command again to continue</comment>');
 		}
-
-		// unblocking does not undo this, and the message is the one place an
-		// admin sees that before the rows are gone rather than after
-		$output->writeln('<info>this cannot be undone: unblocking the domain does not restore what was deleted</info>');
 
 		return 0;
 	}

@@ -12,6 +12,7 @@ namespace OCA\Social\Migration;
 use Closure;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Tools\Nid;
 use OCP\DB\ISchemaWrapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IAppConfig;
@@ -36,8 +37,11 @@ use OCP\Migration\SimpleMigrationStep;
  * Run again, it finds nothing to fill and sets both flags again.
  */
 class Version1000Date20261013100500 extends SimpleMigrationStep {
-	/** How many rows one statement fills in. */
+	/** How many rows one page reads. */
 	private const BATCH = 5000;
+
+	/** How many of them one UPDATE names: past a thousand the IN list is logged as an error. */
+	private const CHUNK = 1000;
 
 	public function __construct(
 		private IDBConnection $connection,
@@ -61,12 +65,18 @@ class Version1000Date20261013100500 extends SimpleMigrationStep {
 	 * up at once.
 	 */
 	public function fill(IOutput $output): void {
+		// paged on the primary key from where the last page ended: `archived`
+		// has no index, and asking for the first NULL rows again each time
+		// walked past every row already filled, so the whole backfill was
+		// quadratic in the size of the table
 		$filled = 0;
+		$after = '0';
 		while (true) {
 			$qb = $this->connection->getQueryBuilder();
 			$qb->select('nid')
 				->from(CoreRequestBuilder::TABLE_STREAM)
 				->where($qb->expr()->isNull('archived'))
+				->andWhere($qb->expr()->gt('nid', $qb->createNamedParameter($after)))
 				->orderBy('nid', 'asc')
 				->setMaxResults(self::BATCH);
 			$cursor = $qb->executeQuery();
@@ -76,16 +86,17 @@ class Version1000Date20261013100500 extends SimpleMigrationStep {
 				break;
 			}
 
-			$update = $this->connection->getQueryBuilder();
-			$update->update(CoreRequestBuilder::TABLE_STREAM)
-				->set('archived', $update->createNamedParameter(false, IQueryBuilder::PARAM_BOOL))
-				->where($update->expr()->in('nid', $update->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY)))
-				->andWhere($update->expr()->isNull('archived'));
-			$done = $update->executeStatement();
-			$filled += $done;
-			if ($done === 0) {
-				// nothing of the page took the value: do not spin on it
-				break;
+			foreach ($nids as $nid) {
+				$after = (Nid::compare($after, $nid) > 0) ? $after : $nid;
+			}
+
+			foreach (array_chunk($nids, self::CHUNK) as $chunk) {
+				$update = $this->connection->getQueryBuilder();
+				$update->update(CoreRequestBuilder::TABLE_STREAM)
+					->set('archived', $update->createNamedParameter(false, IQueryBuilder::PARAM_BOOL))
+					->where($update->expr()->in('nid', $update->createNamedParameter($chunk, IQueryBuilder::PARAM_STR_ARRAY)))
+					->andWhere($update->expr()->isNull('archived'));
+				$filled += $update->executeStatement();
 			}
 		}
 

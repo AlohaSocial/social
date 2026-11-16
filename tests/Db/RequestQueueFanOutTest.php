@@ -76,9 +76,10 @@ class RequestQueueFanOutTest extends TestCase {
 
 	public function testTheWholeFanOutIsWrittenFromOneStatementInOneTransaction(): void {
 		$this->queryBuilder->expects($this->once())->method('insert');
-		// ten columns, named once: the values are bound per row
-		$this->queryBuilder->expects($this->exactly(10))->method('setValue');
-		$this->queryBuilder->expects($this->exactly(10 * 20))->method('setParameter');
+		// eleven columns, named once: the values are bound per row, and the
+		// time they were queued once for all of them
+		$this->queryBuilder->expects($this->exactly(11))->method('setValue');
+		$this->queryBuilder->expects($this->exactly(10 * 20 + 1))->method('setParameter');
 		$this->queryBuilder->expects($this->exactly(20))->method('executeStatement');
 		$this->connection->expects($this->once())->method('beginTransaction');
 		$this->connection->expects($this->once())->method('commit');
@@ -113,6 +114,30 @@ class RequestQueueFanOutTest extends TestCase {
 		$this->assertSame(2000000000, $bound[0][0]->getTimestamp());
 		$this->assertSame(IQueryBuilder::PARAM_DATE, $bound[0][1]);
 		$this->assertSame([null, IQueryBuilder::PARAM_NULL], $bound[1]);
+	}
+
+	/**
+	 * Every row says when it was queued: the try count alone never ends the
+	 * rows of a host the breaker keeps holding back, and the age does.
+	 */
+	public function testEveryRowIsWrittenWithTheTimeItWasQueued(): void {
+		$bound = [];
+		$this->queryBuilder->method('setParameter')->willReturnCallback(
+			function (string $name, mixed $value, mixed $type = null) use (&$bound) {
+				if ($name === 'creation') {
+					$bound[] = [$value, $type];
+				}
+
+				return $this->queryBuilder;
+			}
+		);
+
+		$this->request->multiple($this->fanOut(3));
+
+		$this->assertCount(1, $bound);
+		$this->assertInstanceOf(\DateTime::class, $bound[0][0]);
+		$this->assertEqualsWithDelta(time(), $bound[0][0]->getTimestamp(), 2);
+		$this->assertSame(IQueryBuilder::PARAM_DATE, $bound[0][1]);
 	}
 
 	/** A fan-out larger than one chunk is committed in chunks, not in one lock. */
