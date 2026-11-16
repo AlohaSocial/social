@@ -152,7 +152,7 @@ describe('the loading timeline', () => {
 		})
 
 		it('reads the feed column for rows and the wide one for videos', () => {
-			expect(source).toMatch(/&--standalone\.skeleton--rows \{\s*--social-column: 616px;/)
+			expect(source).toMatch(/&--standalone\.skeleton--rows \{\s*--social-column: var\(--social-reading-column\);/)
 			expect(source).toMatch(/&--standalone\.skeleton--video \{\s*--social-column: 1440px;/)
 		})
 	})

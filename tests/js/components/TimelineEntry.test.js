@@ -832,3 +832,55 @@ describe('a notification in the list', () => {
 		})
 	})
 })
+
+/**
+ * A post that follows another by the same author, shortly after: the face and
+ * the name are the post above's, so this one keeps their room and a thin line
+ * down it rather than drawing them again.
+ */
+describe('a post that continues a run by its author', () => {
+	const PostStub = { name: 'TimelinePost', props: ['item', 'type', 'compactAuthor'], template: '<div class="timeline-post-stub" />' }
+
+	function mountRun(props = {}) {
+		const pinia = createPinia()
+		setActivePinia(pinia)
+		useTimelineStore().addToStatuses(storedPost)
+
+		return mount(TimelineEntry, {
+			props: { item: post, type: 'home', ...props },
+			global: {
+				plugins: [pinia],
+				mocks: { $route: { name: 'timeline', params: { type: 'home' } } },
+				stubs: { TimelinePost: PostStub, TimelineAvatar: TimelineAvatarStub, RouterLink: RouterLinkStub },
+			},
+		})
+	}
+
+	it('keeps the face\'s room without the face, and leaves the name to a screen reader', () => {
+		const wrapper = mountRun({ grouped: true })
+
+		expect(wrapper.classes()).toContain('timeline-entry--grouped')
+		expect(wrapper.findComponent(TimelineAvatarStub).exists()).toBe(false)
+		expect(wrapper.find('.entry__thread').attributes('aria-hidden')).toBe('true')
+		expect(wrapper.findComponent(PostStub).props('compactAuthor')).toBe(true)
+	})
+
+	it('draws the face and the name at the head of a run', () => {
+		const wrapper = mountRun()
+
+		expect(wrapper.classes()).not.toContain('timeline-entry--grouped')
+		expect(wrapper.findComponent(TimelineAvatarStub).exists()).toBe(true)
+		expect(wrapper.find('.entry__thread').exists()).toBe(false)
+		expect(wrapper.findComponent(PostStub).props('compactAuthor')).toBe(false)
+	})
+
+	it('joins the run with a line in the face\'s column, gone on a phone and solid in a forced palette', () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+		const runs = source.slice(source.indexOf('.entry__thread {'))
+
+		expect(runs).toMatch(/&:has\(\+ \.timeline-entry--grouped\) \{\s*margin-bottom: 0;\s*&::after \{\s*content: none;/)
+		expect(runs).toMatch(/inset-inline-start: 27px;/)
+		expect(runs).toMatch(/@include layout\.below\(layout\.\$phone\) \{[^}]*content: none;/)
+		expect(runs).toMatch(/@media \(forced-colors: active\) \{[^}]*background: CanvasText;/)
+	})
+})
