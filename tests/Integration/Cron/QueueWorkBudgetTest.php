@@ -143,10 +143,12 @@ class QueueWorkBudgetTest extends TestCase {
 			. 'something in the pass grows with the backlog'
 		);
 		// two a delivery — claiming the row and recording it delivered — and
-		// three a batch: giving up on the exhausted rows, reading the due ones,
-		// reading the breaker
-		$this->assertLessThanOrEqual(2 * RequestQueueRequest::STANDBY_BATCH + 3, $small - $empty);
-		// the housekeeping of a pass, with nothing to deliver: 8 today
-		$this->assertLessThanOrEqual(10, $empty);
+		// four a batch: giving up on the rows that spent their tries and on
+		// those queued longer than RequestQueueService::MAX_AGE (one statement
+		// each, so each reads its own index), reading the due ones, reading
+		// the breaker
+		$this->assertLessThanOrEqual(2 * RequestQueueRequest::STANDBY_BATCH + 4, $small - $empty);
+		// the housekeeping of a pass, with nothing to deliver: 9 today
+		$this->assertLessThanOrEqual(11, $empty);
 	}
 }
