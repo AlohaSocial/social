@@ -81,7 +81,7 @@ class AppPasswordService {
 	 */
 	public function verify(string $userId, string $password): ?int {
 		$password = strtolower(trim($password));
-		if (preg_match('/^[a-z2-7]{4}(-[a-z2-7]{4}){3}$/', $password) !== 1) {
+		if (preg_match('/^[a-z2-7]{4}(-[a-z2-7]{4}){3}$/D', $password) !== 1) {
 			return null;
 		}
 		foreach ($this->request->getAppPasswords($userId) as $row) {

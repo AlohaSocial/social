@@ -25,7 +25,7 @@ class DidWebResolverTest extends TestCase {
 			'get',
 			'https://example.org/users/alice/did.json',
 			$this->callback(static fn (array $options): bool => $options['max_redirects'] === 0
-				&& $options['timeout'] === 5
+				&& $options['timeout'] === 3
 				&& $options['headers']['Accept'] === 'application/did+json, application/json'),
 			$this->anything(),
 			$this->anything(),

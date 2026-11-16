@@ -166,7 +166,7 @@ class ChatSender {
 			}
 			return null;
 		}
-		if (!ReactionService::isUsableOutboundEmoji($emoji) || preg_match('/^\\X$/u', $emoji) !== 1) {
+		if (!ReactionService::isUsableOutboundEmoji($emoji) || preg_match('/^\\X$/uD', $emoji) !== 1) {
 			throw new ItemUnknownException('Bluesky chat reactions must be one Unicode emoji');
 		}
 		if (!$this->poller->isOn()) {

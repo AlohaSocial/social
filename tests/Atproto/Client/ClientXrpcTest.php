@@ -282,6 +282,35 @@ class ClientXrpcTest extends TestCase {
 		$this->client->upload($path, $move + ['content-type' => 'image/png']);
 	}
 
+	public function testAnUploadOrImportWithoutATokenIsRefusedFromTheHeadersAlone(): void {
+		$this->sessions->expects($this->never())->method('authenticate');
+		$this->inbound->expects($this->never())->method('assertSession');
+		foreach ([fn () => $this->client->uploader([]), fn () => $this->client->importer(['authorization' => ' '])] as $call) {
+			try {
+				$call();
+				$this->fail('accepted');
+			} catch (XrpcException $e) {
+				$this->assertSame(401, $e->status);
+				$this->assertSame('AuthenticationRequired', $e->error);
+			}
+		}
+	}
+
+	public function testAMoveSessionIsCheckedBeforeItsUploadIsRead(): void {
+		$this->inbound->expects($this->exactly(2))->method('assertSession')->with('Bearer move')
+			->willThrowException(new XrpcException(401, 'ExpiredToken', 'Token has been revoked'));
+		$this->inbound->expects($this->never())->method('upload');
+		$this->inbound->expects($this->never())->method('importRepo');
+		foreach ([fn () => $this->client->uploader(['authorization' => 'Bearer move']), fn () => $this->client->importer(['authorization' => 'Bearer move'])] as $call) {
+			try {
+				$call();
+				$this->fail('accepted');
+			} catch (XrpcException $e) {
+				$this->assertSame('ExpiredToken', $e->error);
+			}
+		}
+	}
+
 	public function testOnlyAnAccountMovingHereImportsARepository(): void {
 		try {
 			$this->client->importRepo($this->file('car'), ['authorization' => 'Bearer t']);

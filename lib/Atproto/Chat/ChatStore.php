@@ -262,7 +262,7 @@ class ChatStore {
 		$actorDid = (string)($reaction['sender']['did'] ?? '');
 		$emoji = trim((string)($reaction['value'] ?? ''));
 		if (!Syntax::isDid($sender) || $messageId === '' || !Syntax::isDid($actorDid)
-			|| !ReactionService::isUsableEmoji($emoji) || preg_match('/^\\X$/u', $emoji) !== 1) {
+			|| !ReactionService::isUsableEmoji($emoji) || preg_match('/^\\X$/uD', $emoji) !== 1) {
 			return false;
 		}
 		if ($added && $this->blocklist->isBlockedDid($actorDid)) {

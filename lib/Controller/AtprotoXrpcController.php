@@ -113,31 +113,34 @@ class AtprotoXrpcController extends Controller {
 	}
 
 	/**
-	 * `com.atproto.repo.uploadBlob`: the body is copied to a file as it
-	 * arrives, never held in memory, and refused past the largest blob a
-	 * record may name.
+	 * `com.atproto.repo.uploadBlob`: the token is checked first, then the
+	 * body is copied to a file as it arrives, never held in memory, and
+	 * refused past the largest blob a record may name.
 	 *
 	 * @throws XrpcException
 	 */
 	private function upload(): Response {
+		$accept = $this->client->uploader($this->headers());
 		$path = $this->received(ClientXrpc::MAX_UPLOAD, new XrpcException(413, 'BlobTooLarge', 'This file is too large'));
 		try {
-			return $this->answer($this->client->upload($path, $this->headers()));
+			return $this->answer($accept($path));
 		} finally {
 			@unlink($path);
 		}
 	}
 
 	/**
-	 * `com.atproto.repo.importRepo`: the CAR is copied to a file as it
-	 * arrives, and refused past the largest repository taken.
+	 * `com.atproto.repo.importRepo`: the token is checked first, then the
+	 * CAR is copied to a file as it arrives, and refused past the largest
+	 * repository taken.
 	 *
 	 * @throws XrpcException
 	 */
 	private function importRepo(): Response {
+		$accept = $this->client->importer($this->headers());
 		$path = $this->received(RepoArchive::MAX_BYTES, new XrpcException(413, 'PayloadTooLarge', 'This repository is too large to move here'));
 		try {
-			return $this->answer($this->client->importRepo($path, $this->headers()));
+			return $this->answer($accept($path));
 		} finally {
 			@unlink($path);
 		}

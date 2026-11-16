@@ -70,6 +70,17 @@ class SyntaxTest extends TestCase {
 		$this->assertFalse(Cid::isValid('QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'), 'CIDv0 is not allowed');
 	}
 
+	public function testATrailingNewlineIsRefusedByEveryGrammar(): void {
+		$this->assertFalse(Syntax::isHandle("alice.example.com\n"));
+		$this->assertFalse(Syntax::isDid("did:plc:ewvi7nxzyoun6zhxrhs64oiz\n"));
+		$this->assertFalse(Syntax::isNsid("app.bsky.feed.post\n"));
+		$this->assertFalse(Syntax::isRecordKey("abc\n"));
+		$this->assertFalse(Syntax::isAtUri("at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.bsky.feed.post/3jqfcqzm3fo2j\n"));
+		$this->assertFalse(Tid::isValid("3jqfcqzm3fo2j\n"));
+		$this->assertFalse(Syntax::isDatetime("1985-04-12T23:20:50.123Z\n"));
+		$this->assertFalse(Syntax::isLanguage("en\n"));
+	}
+
 	public function testAnAtUriIsTakenApart(): void {
 		$this->assertSame(
 			['authority' => 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'collection' => 'app.bsky.feed.post', 'rkey' => '3jqfcqzm3fo2j'],

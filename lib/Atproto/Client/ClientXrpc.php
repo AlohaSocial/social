@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use Closure;
 use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
@@ -297,26 +298,52 @@ class ClientXrpc {
 	 * @throws XrpcException
 	 */
 	public function upload(string $path, array $headers): array {
+		return $this->uploader($headers)($path);
+	}
+
+	/**
+	 * Who may upload, checked from the headers alone so that a request
+	 * without a valid token is refused before its body is read. The token is
+	 * verified once, here: a DPoP proof and a service-auth token are single
+	 * use. The answer takes the file the body was copied to.
+	 *
+	 * @param array<string, string> $headers lower-cased names
+	 * @return Closure(string): array
+	 * @throws XrpcException
+	 */
+	public function uploader(array $headers): Closure {
 		if (!$this->config->isEnabled()) {
 			throw XrpcException::notImplemented(self::UPLOAD);
 		}
-		if ($this->inbound->owns((string)($headers['authorization'] ?? ''))) {
-			return $this->inbound->upload($path, (string)$headers['authorization']);
+		$authorization = (string)($headers['authorization'] ?? '');
+		if (trim($authorization) === '') {
+			throw XrpcException::authenticationRequired();
 		}
-		$size = (int)filesize($path);
-		$sniffed = (string)mime_content_type($path);
-		$session = $this->grants->uploader((string)($headers['authorization'] ?? ''));
+		if ($this->inbound->owns($authorization)) {
+			$this->inbound->assertSession($authorization);
+
+			return fn (string $path): array => $this->inbound->upload($path, $authorization);
+		}
+		$session = $this->grants->uploader($authorization);
+		$granted = $session !== null;
 		if ($session === null) {
 			$session = $this->signedIn($headers, self::UPLOAD, 'POST');
-			self::assertAllowed($session->permissions()->mayUpload($sniffed), 'upload files of this type');
 		} else {
 			$this->assertNotSuspended($session);
 		}
-		if ($size > (str_starts_with($sniffed, 'video/') ? self::MAX_UPLOAD : self::MAX_BLOB)) {
-			throw new XrpcException(413, 'BlobTooLarge', 'This file is too large');
-		}
 
-		return $this->writes->upload($session, $path, (string)($headers['content-type'] ?? ''));
+		return function (string $path) use ($session, $granted, $headers): array {
+			$size = (int)filesize($path);
+			$sniffed = (string)mime_content_type($path);
+			if (!$granted) {
+				self::assertAllowed($session->permissions()->mayUpload($sniffed), 'upload files of this type');
+			}
+			if ($size > (str_starts_with($sniffed, 'video/') ? self::MAX_UPLOAD : self::MAX_BLOB)) {
+				throw new XrpcException(413, 'BlobTooLarge', 'This file is too large');
+			}
+
+			return $this->writes->upload($session, $path, (string)($headers['content-type'] ?? ''));
+		};
 	}
 
 	/**
@@ -327,12 +354,29 @@ class ClientXrpc {
 	 * @throws XrpcException
 	 */
 	public function importRepo(string $path, array $headers): array {
+		return $this->importer($headers)($path);
+	}
+
+	/**
+	 * Who may import a repository, checked from the headers alone, before
+	 * the CAR is read. The answer takes the file it was copied to.
+	 *
+	 * @param array<string, string> $headers lower-cased names
+	 * @return Closure(string): array
+	 * @throws XrpcException
+	 */
+	public function importer(array $headers): Closure {
 		if (!$this->config->isEnabled()) {
 			throw XrpcException::notImplemented(self::IMPORT);
 		}
 		$authorization = (string)($headers['authorization'] ?? '');
+		if (trim($authorization) === '') {
+			throw XrpcException::authenticationRequired();
+		}
 		if ($this->inbound->owns($authorization)) {
-			return $this->inbound->importRepo($path, $authorization);
+			$this->inbound->assertSession($authorization);
+
+			return fn (string $path): array => $this->inbound->importRepo($path, $authorization);
 		}
 		$this->signedIn($headers, self::IMPORT, 'POST');
 

@@ -21,6 +21,7 @@ use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Atproto\Xrpc\XrpcService;
 use OCA\Social\Controller\AtprotoXrpcController;
 use OCA\Social\Db\AtprotoBlobRequest;
@@ -164,6 +165,20 @@ class AtprotoXrpcControllerTest extends TestCase {
 			$this->assertSame(503, $response->getStatus());
 			$this->assertSame('KeysSealed', $response->getData()['error']);
 			$this->assertStringContainsString('occ social:atproto:keys:reseal', $response->getData()['message']);
+		}
+	}
+
+	public function testAnUploadOrImportIsRefusedBeforeItsBodyIsRead(): void {
+		$client = $this->createMock(ClientXrpc::class);
+		$client->expects($this->once())->method('uploader')->willThrowException(XrpcException::authenticationRequired());
+		$client->expects($this->once())->method('importer')->willThrowException(XrpcException::authenticationRequired());
+		$client->expects($this->never())->method('upload');
+		$client->expects($this->never())->method('importRepo');
+
+		foreach ([ClientXrpc::UPLOAD, ClientXrpc::IMPORT] as $method) {
+			$response = $this->controller(null, $client)->procedure($method);
+			$this->assertSame(401, $response->getStatus(), $method);
+			$this->assertSame('AuthenticationRequired', $response->getData()['error'], $method);
 		}
 	}
 

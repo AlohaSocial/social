@@ -170,6 +170,94 @@ class FirehoseDaemonTest extends TestCase {
 	}
 
 	/**
+	 * A backlog far past what a subscriber's buffer may hold is replayed
+	 * whole to a consumer that keeps reading, and a live subscriber
+	 * connected at the same time is not held up by it.
+	 */
+	public function testABacklogLargerThanTheBufferIsReplayedToAConsumerThatReads(): void {
+		$block = str_repeat('x', 512 * 1024);
+		for ($i = 0; $i < 40; $i++) {
+			$cid = Cid::forDagCbor(DagCbor::encode(['n' => $i]));
+			$this->events->commit(self::DID, $cid, '3kznmn7xqxl' . sprintf('%02d', $i), null, null, [], [$cid->toString() => $block . $i]);
+		}
+		$replaying = null;
+		$received = '';
+		$live = null;
+		for ($call = 3; $call < 50; $call++) {
+			$this->script[$call] = function () use ($call, &$replaying, &$received, &$live): void {
+				if ($call === 3) {
+					$replaying = $this->connect('?cursor=0');
+					stream_set_blocking($replaying, false);
+				}
+				if ($call === 4) {
+					$live = $this->connect('');
+				}
+				if ($call === 6) {
+					$this->events->identity(self::DID, 'alice.example.org');
+				}
+				if ($replaying !== null) {
+					while (($chunk = fread($replaying, 1 << 20)) !== false && $chunk !== '') {
+						$received .= $chunk;
+					}
+				}
+			};
+		}
+
+		$this->daemon()->run($this->bind, 50, false, static function (): void {
+		});
+
+		$this->assertSame([41], self::seqs($this->framesOf($live)), 'the live subscriber got the new frame while the replay went on');
+		stream_set_blocking($replaying, true);
+		$buffer = $received;
+		$end = strpos($buffer, "\r\n\r\n");
+		$buffer = substr($buffer, (int)$end + 4);
+		$seqs = [];
+		$at = 0;
+		while ($at + 2 <= strlen($buffer)) {
+			$opcode = ord($buffer[$at]) & 0x0f;
+			$length = ord($buffer[$at + 1]) & 0x7f;
+			$at += 2;
+			if ($length === 126) {
+				$length = unpack('n', substr($buffer, $at, 2))[1];
+				$at += 2;
+			} elseif ($length === 127) {
+				$length = unpack('J', substr($buffer, $at, 8))[1];
+				$at += 8;
+			}
+			$payload = substr($buffer, $at, $length);
+			$at += $length;
+			if ($opcode === 0x2 && strlen($payload) === $length) {
+				$offset = 0;
+				DagCbor::decodeAt($payload, $offset);
+				$seqs[] = DagCbor::decodeAt($payload, $offset)['seq'];
+			}
+		}
+		fclose($replaying);
+		$this->assertSame(range(1, 41), $seqs);
+	}
+
+	/** One address may start only so many replays a minute; the rest are told so and closed. */
+	public function testReplaysFromOneAddressAreLimited(): void {
+		$this->events->identity(self::DID, 'alice.social.example.com');
+		$this->events->identity(self::DID, 'alice.example.org');
+		$clients = [];
+		$this->script[3] = function () use (&$clients): void {
+			for ($i = 0; $i < 7; $i++) {
+				$clients[] = $this->connect('?cursor=0');
+			}
+		};
+
+		$this->daemon()->run($this->bind, 20, false, static function (): void {
+		});
+
+		$frames = array_map(fn ($client): array => $this->framesOf($client), $clients);
+		for ($i = 0; $i < 6; $i++) {
+			$this->assertSame([1, 2], self::seqs($frames[$i]));
+		}
+		$this->assertSame('RateLimitExceeded', $frames[6][0]['body']['error']);
+	}
+
+	/**
 	 * A commit frame as the daemon serves it: the body the repository
 	 * wrote, the row's sequence number added, the CAR's root the commit.
 	 */

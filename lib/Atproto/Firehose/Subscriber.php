@@ -37,6 +37,8 @@ final class Subscriber {
 	/** the last sequence number sent, so the next is the one after */
 	public int $sent = 0;
 	public int $connectedAt;
+	/** when anything was last read from the connection */
+	public int $lastSeen;
 
 	/**
 	 * @param resource $socket
@@ -46,5 +48,6 @@ final class Subscriber {
 		public $socket,
 	) {
 		$this->connectedAt = time();
+		$this->lastSeen = $this->connectedAt;
 	}
 }

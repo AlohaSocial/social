@@ -641,10 +641,20 @@ checks, and the card refuses to switch Bluesky on while one fails:
   ```
 
   Apache needs `mod_proxy_wstunnel` for the first of them; nginx the
-  `Upgrade`/`Connection` headers the shipped block sets.
+  `Upgrade`/`Connection` headers the shipped block sets, and
+  `X-Forwarded-For`: without it every relay reaches the daemon from the
+  loopback and counts as one address (the daemon logs a warning when it sees
+  that).
 - **The firehose daemon.** `occ social:atproto:serve` is a long-running process
   that serves the event stream relays subscribe to. It holds at most 256
-  connections, 8 from one address, and answers 503 past that. Under systemd:
+  connections, 8 from one address (an IPv6 address counts with its /64), and
+  answers 503 past that. The address is the connection's peer, or, when the peer
+  is the loopback or in the server's `trusted_proxies`, the client its proxy
+  names in `X-Forwarded-For`. A connection that has not sent its upgrade request
+  within 10 seconds is closed, every subscriber is pinged every 30 seconds and
+  closed after two minutes without an answer, a replay from a cursor is sent as
+  fast as the relay reads it without holding up anybody else, and one address may
+  start 6 replays a minute. Under systemd:
 
   ```
   [Unit]

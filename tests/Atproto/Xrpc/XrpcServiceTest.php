@@ -32,6 +32,11 @@ use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
+use OCP\ICache;
+use OCP\ICacheFactory;
+use OCP\IRequest;
+use OCP\Security\RateLimiting\ILimiter;
+use OCP\Security\RateLimiting\IRateLimitExceededException;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -160,6 +165,45 @@ class XrpcServiceTest extends TestCase {
 	public function testResolveHandleFindsAnExternalAtprotoHandle(): void {
 		$this->handles->expects($this->once())->method('resolve')->with('alice.example.org')->willReturn(self::DID);
 		$this->assertSame(['did' => self::DID], $this->xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'Alice.Example.Org']));
+	}
+
+	public function testAnIdentityAnotherServerAnsweredIsRememberedAndLookupsAreBudgetedPerAddress(): void {
+		$stored = [];
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturnCallback(static function (string $key) use (&$stored): mixed {
+			return $stored[$key] ?? null;
+		});
+		$cache->method('set')->willReturnCallback(static function (string $key, mixed $value) use (&$stored): bool {
+			$stored[$key] = $value;
+
+			return true;
+		});
+		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory->method('createDistributed')->willReturn($cache);
+		$request = $this->createMock(IRequest::class);
+		$request->method('getRemoteAddress')->willReturn('203.0.113.7');
+		$limiter = $this->createMock(ILimiter::class);
+		$limiter->expects($this->exactly(2))->method('registerAnonRequest')
+			->with($this->anything(), $this->greaterThan(0), $this->greaterThan(0), '203.0.113.7')
+			->willReturnOnConsecutiveCalls(null, $this->throwException($this->createMock(IRateLimitExceededException::class)));
+		$this->handles->expects($this->once())->method('resolve')->with('alice.example.org')->willReturn(null);
+		$xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $this->createMock(ConfigService::class), $this->moderation, $this->identityRequest, $this->handles, $this->plc, $this->curl, $cacheFactory, $limiter, $request);
+
+		foreach ([1, 2] as $attempt) {
+			try {
+				$xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'alice.example.org']);
+				$this->fail('resolved');
+			} catch (XrpcException $e) {
+				$this->assertSame('HandleNotFound', $e->error, 'a miss is remembered too, attempt ' . $attempt);
+			}
+		}
+		try {
+			$xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'bob.example.org']);
+			$this->fail('resolved');
+		} catch (XrpcException $e) {
+			$this->assertSame(429, $e->status);
+			$this->assertSame('RateLimitExceeded', $e->error);
+		}
 	}
 
 	public function testResolveIdentityVerifiesAnExternalHandleAgainstItsPlcDocument(): void {

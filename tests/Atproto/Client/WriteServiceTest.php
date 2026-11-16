@@ -349,6 +349,63 @@ class WriteServiceTest extends TestCase {
 		]);
 	}
 
+	/**
+	 * @return array<string, array{0: mixed}>
+	 */
+	public static function unstorableValues(): array {
+		return [
+			'float' => [1.5],
+			'bad link' => [['$link' => 'x']],
+			'bad bytes' => [['$bytes' => '***']],
+			'not UTF-8' => ["\xff"],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('unstorableValues')]
+	public function testARecordARepositoryCannotHoldIsAnInvalidRequest(mixed $value): void {
+		$collection = 'com.example.notes.entry';
+		$this->repositories->expects($this->never())->method('write');
+		foreach (['create', 'apply'] as $method) {
+			try {
+				if ($method === 'create') {
+					$this->writes->create($this->session, ['repo' => self::DID, 'collection' => $collection, 'rkey' => 'first', 'record' => ['$type' => $collection, 'value' => $value]]);
+				} else {
+					$this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+						['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $collection, 'rkey' => 'first', 'value' => ['$type' => $collection, 'value' => $value]],
+					]]);
+				}
+				$this->fail($method . ' must refuse the record');
+			} catch (XrpcException $e) {
+				$this->assertSame(400, $e->status, $method);
+				$this->assertSame('InvalidRequest', $e->error, $method);
+				$this->assertStringContainsString('cannot be stored', $e->getMessage(), $method);
+			}
+		}
+	}
+
+	public function testValidateFalseDoesNotSkipTheSchemaOfARecordSocialReads(): void {
+		$opaque = 'com.example.notes.entry';
+		$list = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
+		$validations = [];
+		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, $key, array $writes) use (&$validations): CommitResult {
+			foreach ($writes as $write) {
+				$validations[$write->collection] = $write->validate;
+				$bytes = DagCbor::encode($write->record);
+				$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, $write->localId, 0);
+			}
+
+			return new CommitResult($did, Cid::forRaw('batch'), '3kbatch', 2, []);
+		});
+		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'validate' => false, 'writes' => [
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'app.bsky.graph.list', 'rkey' => Tid::next(), 'value' => $list],
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $opaque, 'rkey' => 'first', 'value' => ['$type' => $opaque, 'title' => 'One']],
+		]]);
+
+		$this->assertSame(['app.bsky.graph.list' => null, $opaque => false], $validations);
+		$this->assertSame('valid', $answer['results'][0]['validationStatus']);
+		$this->assertSame('unknown', $answer['results'][1]['validationStatus']);
+	}
+
 	public function testApplyWritesCanAtomicallyStoreCustomCollections(): void {
 		$collection = 'com.example.notes.entry';
 		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
