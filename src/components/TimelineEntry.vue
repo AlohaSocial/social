@@ -1314,7 +1314,7 @@ export default {
 /*
  * The row, pointed at. At rest it is only the post, and its counts where the
  * reader has the numbers on. Pointed at or focused, it takes a hairline frame
- * touched with the accent and a light tint, its controls come to full strength beside their counts,
+ * touched with the accent, a light tint and a soft shadow beneath it, its controls come to full strength beside their counts,
  * and the ones without a count slide in at the end of the row: where the
  * reader has the numbers off, that is all of them, over the timestamp, which
  * steps aside. No pill. In over about 250 ms; out flat in 100 ms, so a
@@ -1325,21 +1325,23 @@ export default {
 	.timeline-entry:not(.timeline-entry--direct) {
 		// a softer corner than a card's, for a frame that comes and goes
 		border-radius: 12px;
-		box-shadow: inset 0 0 0 1px transparent;
+		// the frame, and a soft shadow under the row, both there at rest at
+		// nothing so that they grow rather than appear
+		box-shadow: inset 0 0 0 1px transparent, 0 2px 6px -6px transparent;
 		transition: box-shadow .1s linear, background-color .1s linear;
 
 		&:hover,
 		&:focus-within {
 			background-color: color-mix(in srgb, var(--color-primary-element) 6%, transparent);
-			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 25%, var(--color-border));
-			transition: box-shadow .2s ease, background-color .2s ease;
+			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 25%, var(--color-border)), 0 10px 20px -12px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
+			transition: box-shadow .25s ease, background-color .2s ease;
 		}
 
 		// its own rule: a browser without `:has()` drops the selector, and it
 		// must not take the hover case with it
 		&:has(.post-actions-reveal--held) {
 			background-color: color-mix(in srgb, var(--color-primary-element) 6%, transparent);
-			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 25%, var(--color-border));
+			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-element) 25%, var(--color-border)), 0 10px 20px -12px color-mix(in srgb, var(--color-box-shadow, rgb(0 0 0 / .5)) 70%, transparent);
 		}
 
 		.wrapper :deep(.post-actions-reveal::before) {
