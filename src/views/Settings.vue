@@ -166,6 +166,7 @@ import { n, t } from '@nextcloud/l10n'
 import { useServerData } from '../composables/useServerData.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { currentSection, scrollToSection, watchSections } from '../services/sectionRail.js'
+import { matchesQuery } from '../services/settingsSearch.js'
 
 // The forms, switches and lists below are only ever drawn on this page, so
 // they travel in a chunk of their own rather than in the entry every reader
@@ -188,17 +189,6 @@ const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpac
 const NotificationPolicySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationPolicySettings.vue'))
 const ExternalStorage = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ExternalStorage.vue'))
 const InviteSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InviteSettings.vue'))
-
-/**
- * Lower case and without accents, so "benachrichtigung" finds
- * "Benachrichtigungen" and "e" finds "é".
- *
- * @param {string} text what to compare
- * @return {string}
- */
-function folded(text) {
-	return String(text).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-}
 
 /**
  * Settings: what this app holds about how the reader uses it.
@@ -609,11 +599,7 @@ export default {
 		 * @return {object[]}
 		 */
 		matches() {
-			const words = folded(this.query).split(/\s+/).filter(Boolean)
-			return this.sections.filter((section) => {
-				const text = folded(`${section.title} ${section.lede} ${this.groupOf(section.id).title}`)
-				return words.every((word) => text.includes(word))
-			})
+			return this.sections.filter((section) => matchesQuery(this.query, `${section.title} ${section.lede} ${this.groupOf(section.id).title}`))
 		},
 
 		/** @return {object[]} the sections drawn: the search's, or the open group's */

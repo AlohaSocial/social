@@ -6,14 +6,13 @@
 	<div class="social__requests">
 		<NcLoadingIcon v-if="loading" class="social__requests-loading" :size="32" />
 
-		<NcEmptyContent
+		<EmptyContent
 			v-else-if="requests.length === 0"
-			:name="t('social', 'Nothing is waiting')"
-			:description="t('social', 'When your settings hold a notification back, the person who sent it shows up here.')">
-			<template #icon>
-				<IconInboxOutline :size="20" />
-			</template>
-		</NcEmptyContent>
+			:item="{
+				illustration: 'quiet-timeline',
+				title: t('social', 'Nothing is waiting'),
+				description: t('social', 'When your settings hold a notification back, the person who sent it shows up here.'),
+			}" />
 
 		<template v-else>
 			<div class="social__requests-all">
@@ -68,11 +67,10 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { n, t } from '@nextcloud/l10n'
-import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import ActorAvatar from './ActorAvatar.vue'
+import EmptyContent from './EmptyContent.vue'
 import logger from '../services/logger.js'
 import { showError } from '../services/toast.js'
 import { htmlToPlainText } from '../utils/plainText.js'
@@ -96,9 +94,8 @@ export default {
 
 	components: {
 		ActorAvatar,
-		IconInboxOutline,
+		EmptyContent,
 		NcButton,
-		NcEmptyContent,
 		NcLoadingIcon,
 	},
 

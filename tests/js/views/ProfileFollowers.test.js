@@ -119,6 +119,7 @@ describe('ProfileFollowers', () => {
 			await flushPromises()
 
 			expect(wrapper.find('.empty-content-stub').exists() || wrapper.text()).toContain('No followers yet')
+			expect(wrapper.findComponent({ name: 'NobodyYet' }).exists()).toBe(true)
 			expect(wrapper.find('.followers-error').exists()).toBe(false)
 		})
 

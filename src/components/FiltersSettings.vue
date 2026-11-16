@@ -21,9 +21,9 @@
 		<p v-if="loading" class="filters__hint">
 			{{ t('social', 'Loading your filters …') }}
 		</p>
-		<p v-else-if="filters.length === 0" class="filters__hint">
-			{{ t('social', 'You have no filters. A filter is a word or a phrase you would rather not read: a post carrying it is folded away behind the filter’s name, or taken out of your timelines altogether.') }}
-		</p>
+		<EmptyContent
+			v-else-if="filters.length === 0"
+			:item="{ illustration: 'quiet-timeline', description: t('social', 'You have no filters. A filter is a word or a phrase you would rather not read: a post carrying it is folded away behind the filter’s name, or taken out of your timelines altogether.') }" />
 
 		<ul v-else class="filters__list">
 			<li
@@ -127,6 +127,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import IconDelete from 'vue-material-design-icons/Delete.vue'
 import IconPencil from 'vue-material-design-icons/Pencil.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
+import EmptyContent from './EmptyContent.vue'
 import FilterForm from './FilterForm.vue'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
@@ -156,6 +157,7 @@ export default {
 	name: 'FiltersSettings',
 
 	components: {
+		EmptyContent,
 		FilterForm,
 		IconDelete,
 		IconPencil,

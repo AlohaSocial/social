@@ -80,6 +80,7 @@ describe('the filtered notifications page', () => {
 		await flushPromises()
 
 		expect(wrapper.text()).toContain('Nothing is waiting')
+		expect(wrapper.findComponent({ name: 'QuietTimeline' }).exists()).toBe(true)
 		expect(rows(wrapper)).toHaveLength(0)
 	})
 

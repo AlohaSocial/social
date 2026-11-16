@@ -3066,11 +3066,14 @@ keep it in `localStorage` under `social.notificationsFilter`, inside a
 not fit the reading column, so the row scrolls at its natural widths rather
 than shrinking them or hiding them at a viewport breakpoint.
 
-*Grouping* is `groupNotifications()` in the same service: consecutive favourites
-or boosts of one status, and consecutive follows, become one card carrying
-`accounts` (everyone in it) and `ids` (every row it stands for). Only
-consecutive ones — folding across something that happened in between would
-reorder what happened. `TimelineEntry` draws up to `GROUP_FACES` overlapping
+*Grouping* is `groupNotifications()` in the same service: the favourites or
+boosts of one status, and the follows, on the loaded pages become one card
+carrying `accounts` (everyone in it) and `ids` (every row it stands for). The
+card keeps the place of its newest member, so what is folded into it is only
+ever older. The web app groups on the client from `/api/v1/notifications`
+rather than reading `/api/v2/notifications`: the list is a timeline of the
+timeline store, paged, pushed and marked read by notification id, and the v2
+groups would need a second store shape for one page. `TimelineEntry` draws up to `GROUP_FACES` overlapping
 avatars and `notificationSummary()` writes "Anna, Bob and 3 others liked your
 post"; `newestIdOf()` is what keeps the read marker covering every folded row.
 
@@ -3091,11 +3094,13 @@ reader for `SEEN_AFTER` (two seconds) with the tab visible**, and it is read up
 to the newest card on it at that moment. It used to be read by an
 `immediate: true` watcher, i.e. by rendering — and the marker is the
 server-side Mastodon one every client shares, so a tab opened in the background
-cleared the reader's phone for notifications no human had seen. The "New" and
-"Earlier" headings are drawn against `notificationsStore.fetchLastRead()`
+cleared the reader's phone for notifications no human had seen. The "New"
+heading over the unread run is drawn against `notificationsStore.fetchLastRead()`
 (`GET /api/v1/markers`), read once when the page opens and then frozen in the
 component: a boundary that followed the marker would rub itself out as the page
-was read.
+was read. Below it the cards are headed by the local day they arrived —
+*Today*, *This week* (the six days before), *Earlier* — by `dayHeadings()` in
+the same service, one heading where each run starts.
 
 **The home feed's line is the server's marker too.** The *You're all caught
 up* line on My Feed (`caughtUpAt`, `.timeline-caughtup`: a small still
@@ -3510,6 +3515,16 @@ the 60vh of height is room for the scenes only. NcEmptyContent pins any SVG in
 its icon slot to 64px with `!important`, so `EmptyContent` overrides that for the
 scene. The stock undraw pictures these replaced were licensed to this app by
 permission and are gone; anything new has to be ours.
+
+Every empty list goes through `EmptyContent`, so they all read the same way: a
+drawing, at most a title and one sentence, and at most one action. Beside the
+timelines that is follow requests and the held notification requests, a
+profile's followers, following, collections and tagged photos, and the Lists
+and Filters settings. The sections of Settings that list the reader's own
+posts (drafts, scheduled, waiting for review, archived) keep a line of text:
+a group of them is usually empty all at once, and four drawings stacked on one
+page would be louder than what they say. So do the four cards of the Blocking
+page, for the same reason.
 
 **The Aloha look.** The same palette, used sparingly, in four more places:
 
@@ -3981,6 +3996,8 @@ it is never requested on another person's profile, so followed/private posts
 cannot leak into a public page.
 
 **The tab also decides how it is drawn**, and there is nothing beside it to say otherwise: Posts is what somebody wrote, so it is a list of posts; Photos and Videos are what they showed, so they are grids. There used to be a grid/list switch here, remembered across profiles, and it could disagree with the tab — `ProfileMediaGrid` kept only the posts carrying a picture, so Posts showed sixteen of them as a list and three as a grid, with nothing to say where the other thirteen had gone. One question, one answer. The empty state comes from `TimelineList` in both views for the same reason: the grid carried one of its own that said "No photos yet" whatever the tab was, so an account with no videos was told it had no photos.
+
+**The pictures above the posts.** On the Posts tab of an account whose profile shows Photos, `ProfileMosaic.vue` draws up to three rows of three of its newest pictures above the pinned posts, headed by a link to the Photos tab. It reads them as that tab's first page, fetched ahead with `prefetchTimeline({ type: 'account', account, params: { media: 'image' } })` and read back with `getHeldTimeline()`, so opening Photos afterwards puts the same page on screen without a request, and coming back to Posts finds it held. Fewer pictures than fill a row draw nothing: one square over a list of posts is not a preview of anything.
 
 **The Videos view.** The sidebar's `Videos`, directly under Photos, is the same
 page again with `only_video` — this app's own narrowing of `only_media`, because
