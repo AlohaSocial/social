@@ -356,6 +356,17 @@ class InstanceServiceTest extends TestCase {
 	 * client told the app's larger value would send a file only to have it
 	 * thrown away. Both instance entities carry the lower one.
 	 */
+	public function testTheConfigurationSaysWhetherForYouLearns(): void {
+		$this->theming([]);
+		$this->configService->method('getAppValueBool')->willReturnCallback(fn (string $key): bool => in_array(
+			$key, [ConfigService::SOCIAL_INTERESTS, ConfigService::REC_LEARNING_PAUSED], true
+		));
+
+		$configuration = $this->service->createLocal()->getConfiguration();
+
+		$this->assertSame(['enabled' => true, 'learning_paused' => true], $configuration['interests']);
+	}
+
 	public function testTheAdvertisedSizeLimitsAreCappedByPhpsUploadLimit(): void {
 		\OC::$server->register(PhpIni::SERVICE, new PhpIni([
 			'upload_max_filesize' => '2M',

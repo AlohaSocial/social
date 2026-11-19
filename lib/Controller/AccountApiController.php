@@ -40,6 +40,7 @@ use OCA\Social\Service\FollowList\FollowListService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\HiddenCollectionsService;
 use OCA\Social\Service\InstanceService;
+use OCA\Social\Service\InterestService;
 use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationService;
@@ -106,6 +107,7 @@ class AccountApiController extends MastodonApiController {
 		private FollowListService $followLists,
 		private BlueskyFeeds $blueskyFeeds,
 		private HiddenCollectionsService $hiddenCollections,
+		private InterestService $interestService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -549,6 +551,10 @@ class AccountApiController extends MastodonApiController {
 				// this app's own: whether like, boost and follower numbers are
 				// left out, read-only here and written at `PATCH /api/v1/social/counts`
 				'reading:hide:counts' => $this->countsService->hides($this->currentSession()),
+				// this app's own: whether what this reader does is learned from
+				// for For you right now, read-only here and written at
+				// `PUT /api/v1/interests/settings`
+				'reading:learn' => $this->interestService->isLearning($this->currentSession()),
 			], Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);

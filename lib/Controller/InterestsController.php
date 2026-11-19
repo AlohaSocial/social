@@ -97,11 +97,13 @@ class InterestsController extends ClientApiController {
 	}
 
 	/**
-	 * What the web interface saw the reader do while they scrolled.
+	 * What a client saw the reader do while they scrolled.
 	 *
-	 * 204 whether or not anything was learned: a reader who paused learning
-	 * or looked only at untagged posts has done nothing wrong, and the page
-	 * sends these from `pagehide`, where nobody reads the answer anyway.
+	 * 204 once the events are taken, whether or not any of them taught
+	 * anything. 403 with a `reason` when nothing this reader does is learned
+	 * from, so a client stops collecting: `learning_off`, `learning_paused`,
+	 * or `notice_pending` while learning waits for the reader to see what it
+	 * learns from.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -112,6 +114,13 @@ class InterestsController extends ClientApiController {
 		try {
 			$this->initViewer(['write:statuses']);
 			$this->assertEnabled();
+			$settings = $this->interestService->settingsFor($this->viewer()->getUserId());
+			if (!$settings['active']) {
+				return new DataResponse([
+					'error' => 'Nothing is learned from this account\'s reading',
+					'reason' => self::notLearningReason($settings),
+				], Http::STATUS_FORBIDDEN);
+			}
 			$this->interestService->recordEvents($this->viewer(), is_array($events) ? $events : []);
 
 			return new DataResponse(null, Http::STATUS_NO_CONTENT);
@@ -241,6 +250,22 @@ class InterestsController extends ClientApiController {
 		} catch (Throwable $e) {
 			return $this->error($this->translate($e));
 		}
+	}
+
+	/**
+	 * Why a reader whose settings are not `active` is not learned from.
+	 *
+	 * @param array{learning: bool, paused: bool, instancePaused: bool, noticeAcknowledged: bool} $settings
+	 */
+	public static function notLearningReason(array $settings): string {
+		if (!$settings['learning']) {
+			return 'learning_off';
+		}
+		if ($settings['paused'] || $settings['instancePaused']) {
+			return 'learning_paused';
+		}
+
+		return 'notice_pending';
 	}
 
 	/** @throws ItemNotFoundException the administrator switched it off */

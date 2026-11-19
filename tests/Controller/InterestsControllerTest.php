@@ -35,6 +35,8 @@ class InterestsControllerTest extends TestCase {
 	private InterestFeedService|MockObject $feedService;
 	private bool $signedIn = true;
 	private bool $enabled = true;
+	/** @var array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool, active: bool} */
+	private array $settings = ['enabled' => true, 'learning' => true, 'paused' => false, 'instancePaused' => false, 'languages' => [], 'noticeAcknowledged' => true, 'active' => true];
 	private array $params = [];
 	private string $uri = '/index.php/apps/social/api/v1/timelines/interests?limit=2';
 
@@ -59,6 +61,7 @@ class InterestsControllerTest extends TestCase {
 
 		$this->interestService ??= $this->createMock(InterestService::class);
 		$this->interestService->method('isEnabled')->willReturnCallback(fn (): bool => $this->enabled);
+		$this->interestService->method('settingsFor')->willReturnCallback(fn (): array => $this->settings);
 		$this->feedService ??= $this->createMock(InterestFeedService::class);
 
 		$filters = $this->createStub(FilterService::class);
@@ -109,6 +112,24 @@ class InterestsControllerTest extends TestCase {
 			->with($this->isInstanceOf(Person::class), $events);
 
 		$this->assertSame(Http::STATUS_NO_CONTENT, $this->controller()->signals($events)->getStatus());
+	}
+
+	public function testSignalsWhileNotLearningAreA403WithTheReason(): void {
+		$this->interestService->expects($this->never())->method('recordEvents');
+		$event = [['status_id' => '1', 'kind' => 'open']];
+
+		foreach ([
+			'learning_off' => ['learning' => false],
+			'learning_paused' => ['paused' => true],
+			'notice_pending' => ['noticeAcknowledged' => false],
+		] as $reason => $override) {
+			$this->settings = array_merge($this->settings, $override, ['active' => false]);
+			$response = $this->controller()->signals($event);
+
+			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus(), $reason);
+			$this->assertSame($reason, $response->getData()['reason']);
+			$this->settings = array_merge($this->settings, ['learning' => true, 'paused' => false, 'noticeAcknowledged' => true]);
+		}
 	}
 
 	public function testSignalsThatAreNotAListAreNothing(): void {

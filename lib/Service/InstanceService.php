@@ -392,6 +392,13 @@ class InstanceService {
 			'translation' => [
 				'enabled' => $this->translationService->isAvailable(),
 			],
+			// For you as the administrator set it for everybody: a client
+			// collects nothing for it where it is off or learning is paused.
+			// Each reader's own answer is `reading:learn` in /api/v1/preferences.
+			'interests' => [
+				'enabled' => $this->configService->getAppValueBool(ConfigService::SOCIAL_INTERESTS),
+				'learning_paused' => $this->configService->getAppValueBool(ConfigService::REC_LEARNING_PAUSED),
+			],
 		];
 	}
 
