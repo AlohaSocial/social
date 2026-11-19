@@ -167,17 +167,23 @@ class InterestService {
 	 * The reader's own switches, with the administrator's default filled in
 	 * for somebody who never touched theirs.
 	 *
-	 * @return array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool}
+	 * `active` is the one answer a client needs: whether anything this reader
+	 * does is learned from right now. Learning that comes only from the
+	 * administrator's default starts once the reader has seen the notice that
+	 * says what is learned; a reader who switched learning on chose it.
+	 *
+	 * @return array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool, active: bool}
 	 */
 	public function settingsFor(string $userId): array {
 		$learning = $this->userValue($userId, self::KEY_LEARNING);
-		if ($learning === '') {
+		$chosen = $learning !== '';
+		if (!$chosen) {
 			$learning = $this->configService->getAppValueBool(ConfigService::SOCIAL_INTERESTS_DEFAULT) ? '1' : '0';
 		}
 
 		$languages = json_decode($this->userValue($userId, self::KEY_LANGUAGES), true);
 
-		return [
+		$settings = [
 			'enabled' => $this->isEnabled(),
 			'learning' => $learning === '1',
 			'paused' => $this->userValue($userId, self::KEY_PAUSED_AT) !== '',
@@ -185,6 +191,11 @@ class InterestService {
 			'languages' => is_array($languages) ? array_values(array_filter($languages, 'is_string')) : [],
 			'noticeAcknowledged' => $this->userValue($userId, self::KEY_NOTICE) === '1',
 		];
+		$settings['active'] = $settings['enabled'] && $settings['learning']
+			&& !$settings['paused'] && !$settings['instancePaused']
+			&& ($chosen || $settings['noticeAcknowledged']);
+
+		return $settings;
 	}
 
 	/**
@@ -207,9 +218,7 @@ class InterestService {
 			return false;
 		}
 
-		$settings = $this->settingsFor($userId);
-
-		return $settings['enabled'] && $settings['learning'] && !$settings['paused'] && !$settings['instancePaused'];
+		return $this->settingsFor($userId)['active'];
 	}
 
 	/**

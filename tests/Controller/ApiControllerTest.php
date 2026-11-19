@@ -192,6 +192,7 @@ class ApiControllerTest extends TestCase {
 	private \OCA\Social\Service\NotificationDeliveryService|Stub $notificationDeliveryService;
 	private \OCA\Social\Service\AiContentService|Stub $aiContentService;
 	private \OCA\Social\Service\CountsService|Stub $countsService;
+	private \OCA\Social\Service\InterestService|Stub $interestService;
 	private FeedDisplayService|Stub $feedDisplayService;
 	private \OCA\Social\Service\RemoteFetchQueue|MockObject $remoteFetchQueue;
 	private \OCA\Social\Service\FollowList\FollowListService|MockObject $followLists;
@@ -202,6 +203,7 @@ class ApiControllerTest extends TestCase {
 	/** what the AI switch stub answers for the viewer */
 	private bool $hidesAi = false;
 	private bool $hidesCounts = true;
+	private bool $learns = false;
 	private bool $hidesRepliesInFeeds = false;
 	/** @var array<string, mixed> what the delivery service answers for the viewer */
 	private array $delivery = [];
@@ -363,6 +365,8 @@ class ApiControllerTest extends TestCase {
 		$this->counts = $this->createMock(\OCA\Social\Service\Counts\CountService::class);
 		$this->countsService = $this->createStub(\OCA\Social\Service\CountsService::class);
 		$this->countsService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesCounts);
+		$this->interestService = $this->createStub(\OCA\Social\Service\InterestService::class);
+		$this->interestService->method('isLearning')->willReturnCallback(fn (string $userId): bool => $this->learns);
 		$this->feedDisplayService = $this->createStub(FeedDisplayService::class);
 		$this->feedDisplayService->method('hidesReplies')->willReturnCallback(fn (string $userId): bool => $this->hidesRepliesInFeeds);
 		$this->feedDisplayService->method('filterBlueskyHomePosts')->willReturnArgument(0);
@@ -500,6 +504,7 @@ class ApiControllerTest extends TestCase {
 			'notificationDeliveryService' => $this->notificationDeliveryService,
 			'aiContentService' => $this->aiContentService,
 			'countsService' => $this->countsService,
+			'interestService' => $this->interestService,
 			'feedDisplayService' => $this->feedDisplayService,
 			'remoteFetchQueue' => $this->remoteFetchQueue,
 			'followLists' => $this->followLists,
@@ -3563,6 +3568,15 @@ class ApiControllerTest extends TestCase {
 
 		$this->hidesCounts = false;
 		$this->assertFalse($this->controller()->preferences()->getData()['reading:hide:counts']);
+	}
+
+	public function testPreferencesSayWhetherReadingIsLearnedFrom(): void {
+		$this->loggedInAs();
+
+		$this->assertFalse($this->controller()->preferences()->getData()['reading:learn']);
+
+		$this->learns = true;
+		$this->assertTrue($this->controller()->preferences()->getData()['reading:learn']);
 	}
 
 	public function testPreferencesReportNoLanguageAsNullRatherThanEmpty(): void {
