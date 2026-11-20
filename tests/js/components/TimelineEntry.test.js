@@ -793,7 +793,7 @@ describe('a notification in the list', () => {
 	describe('pointed at', () => {
 		const pointed = () => {
 			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
-			return source.slice(source.indexOf(' * The row, pointed at.'))
+			return source.slice(source.indexOf('@media (hover: hover) {\n\t.timeline-entry:not(.timeline-entry--direct) {'))
 		}
 
 		it('rises off the page onto a soft shadow, with no tint and no frame', () => {
