@@ -22,11 +22,10 @@ use Throwable;
 
 /**
  * A person's blocks of Bluesky accounts, published as `app.bsky.graph.block`
- * records when they choose to (D16). On Bluesky a block is a public record,
- * and only a published one stops the blocked account from replying to,
- * quoting or mentioning the person there; so it is the person's choice, off
- * until they make it. Turned on, every block of a Bluesky account they hold
- * is published, and each one after; turned off, every published block goes.
+ * records when they choose to (D16). On Bluesky a block is public, and only a
+ * published one stops replies, quotes and mentions there, so it is opt-in.
+ * On, every Bluesky block they hold is published, and each new one; off,
+ * every published block is withdrawn.
  */
 class BlueskyBlocks {
 	public const COLLECTION = 'app.bsky.graph.block';

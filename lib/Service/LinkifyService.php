@@ -13,26 +13,15 @@ use OCA\Social\Security\HtmlSanitizer;
 
 /**
  * Turns the plain text somebody typed into the HTML every other implementation
- * publishes: paragraphs, and links for URLs, mentions and hashtags.
+ * publishes: paragraphs, and links for URLs, mentions and hashtags. Peers
+ * render `content` as given and linkify nothing themselves.
  *
- * Outbound content used to be `nl2br(htmlentities($content))`, so a post left
- * this instance as a wall of escaped text. Mastodon, GoToSocial, Pleroma and
- * the rest all send `content` as HTML and render what they are given without
- * looking for anything to linkify, so every link, mention and hashtag written
- * here arrived on every peer as dead text — a mention was not clickable, a
- * hashtag did not reach a tag timeline, and a URL was not a URL.
- *
- * **Escaping.** The text is escaped first and markup is only ever built around
- * the escaped pieces; nothing is un-escaped and no markup is assembled by
- * interpolating raw input. A `<script>` somebody types is `&lt;script&gt;` in
- * the output whatever else is going on around it.
- *
- * **Agreement with `tag`.** The entities are found once, by
- * {@see self::entitiesIn()}, and that same list is what `PostService` extracts
- * recipients and hashtags from and what `StreamService` builds the `tag` array
- * out of. A link is only ever emitted for an entity that has a `tag` entry, so
- * the markup cannot name somebody the `tag` array does not, which is what a
- * receiving instance checks a mention against before it notifies anybody.
+ * The text is escaped first and markup is only built around escaped pieces,
+ * never by interpolating raw input. The entities are found once, by
+ * {@see self::entitiesIn()}, the same list `PostService` takes recipients and
+ * hashtags from and `StreamService` builds the `tag` array from; a link is
+ * only emitted for an entity with a `tag` entry, which is what a receiving
+ * instance checks a mention against.
  */
 class LinkifyService {
 	public const TYPE_URL = 'url';
@@ -45,21 +34,11 @@ class LinkifyService {
 	public const TYPE_HASHTAG = 'hashtag';
 
 	/**
-	 * The one pass over the text.
-	 *
-	 * URLs come first in the alternation so that everything inside one belongs
-	 * to it: `https://example.invalid/#section` is a link and not a link
-	 * followed by a hashtag, and `https://example.invalid/@bob` names no
-	 * account.
-	 *
-	 * A mention is not preceded by a word character, which is what keeps
-	 * `frank@example.org` an email address rather than a mention of `example`;
-	 * a hashtag is not preceded by a word character either (`issue#42`) nor by
-	 * `&`, which would make an HTML entity into one.
-	 *
-	 * Neither handle nor tag may end in punctuation — the domain is spelled out
-	 * as labels rather than as "any run of dots and letters" — so a sentence
-	 * ending in `@bob@example.invalid.` mentions the right person.
+	 * The one pass over the text. URLs come first in the alternation, so
+	 * `https://example.invalid/#section` and `.../@bob` stay links. A mention
+	 * is not preceded by a word character (`frank@example.org` is an email
+	 * address); nor is a hashtag (`issue#42`), which also may not follow `&`.
+	 * Neither may end in punctuation, so `@bob@example.invalid.` ends a sentence.
 	 */
 	private const PATTERN = '~'
 		. '(?P<url>\bhttps?://[^\s<>"]+)'
@@ -116,10 +95,8 @@ class LinkifyService {
 
 	/**
 	 * The length of a post's text as Mastodon counts it against
-	 * `max_characters`: every URL as URL_LENGTH characters, and a mention of
-	 * an account elsewhere as its `@name` alone. A client counts this way
-	 * because the instance says so, and a server counting raw characters
-	 * refused posts the client had shown as fitting.
+	 * `max_characters`: every URL as URL_LENGTH characters, and a remote
+	 * mention as its `@name` alone, as clients are told to count.
 	 */
 	public static function countableLength(string $text): int {
 		$length = mb_strlen($text);
@@ -177,11 +154,8 @@ class LinkifyService {
 	}
 
 	/**
-	 * The href each entity may be linked to, keyed by lower-cased name.
-	 *
-	 * An entity with no entry gets no link: a mention of somebody who could not
-	 * be resolved has no `tag` entry either, and a link to an actor this
-	 * instance never found would be a link to nowhere.
+	 * The href each entity may be linked to, keyed by lower-cased name. An
+	 * entity with no `tag` entry (an unresolved mention) gets no link.
 	 *
 	 * @param array<int, array<string, string>> $tags
 	 * @return array{mention: array<string, string>, hashtag: array<string, string>}
@@ -224,15 +198,10 @@ class LinkifyService {
 			return $this->escape($entity['text']);
 		}
 
-		// Mastodon's own classes: `u-url mention` is what marks an h-card link
-		// to an actor, `mention hashtag` with `rel="tag"` what marks a tag. The
-		// frontend reads the same two, so a post written here renders the way
-		// one from a peer does.
-		//
-		// The label is the whole handle as it was typed rather than Mastodon's
-		// shortened `@bob`: the composer rebuilds its text from this HTML when
-		// a post is edited, and a label without the domain would turn every
-		// remote mention into a local one on the first edit.
+		// Mastodon's own classes: `u-url mention` for an actor, `mention
+		// hashtag` with `rel="tag"` for a tag; the frontend reads the same.
+		// The label is the whole handle as typed, since the composer rebuilds
+		// its text from this HTML on edit and would lose the domain.
 		return $entity['type'] === self::TYPE_MENTION
 			? $this->anchor($href, $entity['text'], 'u-url mention')
 			: $this->anchor($href, $entity['text'], 'mention hashtag', 'tag');
@@ -257,8 +226,7 @@ class LinkifyService {
 
 	/**
 	 * Blank-line-separated blocks become paragraphs and every other newline a
-	 * break, which is the shape Mastodon publishes and the only one a peer
-	 * renders as written — a bare newline in HTML is whitespace.
+	 * break, as Mastodon publishes; a bare newline in HTML is whitespace.
 	 */
 	private function paragraphs(string $html): string {
 		$blocks = preg_split('~\R[ \t]*\R\s*~u', trim($html, "\r\n")) ?: [];

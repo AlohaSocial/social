@@ -36,11 +36,9 @@ use Psr\Log\LoggerInterface;
  *
  * Local content is never touched. Disabled by default (`retention_days` = 0).
  *
- * Two smaller sweeps run on every pass whatever `retention_days` says: the
- * queue rows nothing will act on again, and the in-app notification rows
- * older than `notification_retention_days` (default 90) — local rows about a
- * local user's post that nothing reads once they have scrolled out of the
- * notifications timeline.
+ * Two smaller sweeps run on every pass regardless: queue rows nothing will
+ * act on again, and in-app notification rows older than
+ * `notification_retention_days` (default 90).
  */
 class StreamPruneService {
 	public const CHUNK = 500;
@@ -192,14 +190,10 @@ class StreamPruneService {
 	}
 
 	/**
-	 * Where today's walk got to, or null to start from the oldest row.
-	 *
-	 * Kept rows — every post by an author somebody here follows, everything
-	 * liked or replied to — are most of the old table, and each chunk used
-	 * to start from the oldest row and judge all of them again. The walk now
-	 * carries on from the last row it judged, within a run and across the
-	 * runs of a day; a new day starts it again, so a post that lost its
-	 * protection goes at most a day later than it could.
+	 * Where today's walk got to, or null to start from the oldest row. Kept
+	 * rows are most of the old table, so the walk continues from the last row
+	 * judged within a day; a new day starts over, so a post that lost its
+	 * protection goes at most a day late.
 	 *
 	 * @return array{creation: string, id_prim: string}|null
 	 */
@@ -329,10 +323,9 @@ class StreamPruneService {
 	}
 
 	/**
-	 * Queue rows nothing will ever act on again: the deliveries and the cache
-	 * items that have exhausted their retries, and the items an older version
-	 * of the app left behind marked as done. Both drains skip all of them, so
-	 * without this they stay in the table for good.
+	 * Queue rows nothing will ever act on again: deliveries and cache items
+	 * that exhausted their retries, and items marked done. Both drains skip
+	 * them.
 	 *
 	 * @return array{requests: int, items: int}
 	 */

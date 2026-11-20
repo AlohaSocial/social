@@ -65,11 +65,6 @@ use OCP\Util;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-/**
- * Class LocalController
- *
- * @package OCA\Social\Controller
- */
 class LocalController extends Controller {
 	/** Ceiling for a banner fetched by URL. */
 	private const BANNER_MAX_SIZE = 10 * 1024 * 1024;
@@ -108,7 +103,6 @@ class LocalController extends Controller {
 
 	/**
 	 * Upload a banner/header image for the current user's profile.
-	 *
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/banner')]
@@ -137,17 +131,10 @@ class LocalController extends Controller {
 			|CacheContentSizeException
 			|InvalidResourceException $e
 		) {
-			// the file is the problem, not the server: a picture that is not
-			// one, is of a type this app refuses, or is too big. A 500 here
-			// told the reader the server had broken and put a fault in the
-			// log for something they can fix by choosing another file.
-			//
-			// `message` carries the reason, because `error` deliberately does
-			// not: `fail()` answers a fixed string so that a @PublicPage route
-			// cannot leak an internal one. These four are raised about the file
-			// the caller just sent and say nothing else, so the caller is the
-			// one person entitled to read them -- and without that, "too big"
-			// and "not an image" reached the page as the same blank failure.
+			// the file is the problem, not the server: not a picture, a refused
+			// type, or too big. `message` carries the reason, which `fail()`
+			// leaves out of `error` on a public route; these four say nothing
+			// but what is wrong with the caller's own file.
 			return $this->fail(
 				$e,
 				['message' => $this->uploadFailureMessage($e)] + $this->uploadFailureCode($e),
@@ -165,17 +152,9 @@ class LocalController extends Controller {
 
 	/**
 	 * The uploaded banner's temporary path, or an exception saying what the
-	 * reader can do about it.
-	 *
-	 * `$_FILES` is not a witness on its own. PHP throws the whole request body
-	 * away when it is bigger than `post_max_size` -- `$_FILES` and `$_POST`
-	 * both arrive empty -- so a file too big by a factor of five looks exactly
-	 * like no file at all. Both used to be `no banner file provided` and a
-	 * **500**: the reader was told the server had broken, about a photo from
-	 * their own phone, and the fix was theirs all along.
-	 *
-	 * The size actually allowed is the smallest of three numbers and is rarely
-	 * the one this app advertises, so it is read rather than assumed.
+	 * reader can do about it. An empty `$_FILES` may mean the body exceeded
+	 * `post_max_size`, so the real limit (the smallest of three) is read
+	 * rather than assumed.
 	 *
 	 * @throws CacheContentSizeException the file is larger than this server takes
 	 * @throws RefusalException there is no usable file in the request: no-file, upload-interrupted
@@ -298,12 +277,10 @@ class LocalController extends Controller {
 				'host' => $host,
 			]);
 
-			// The download goes through the app's own HTTP client rather than a
-			// hand-rolled curl handle. That is what makes the checks above hold:
-			// the client re-checks the target on every redirect it follows and
-			// pins the resolved address, so a 302 to 127.0.0.1 or to a cloud
-			// metadata endpoint is refused instead of fetched. It also applies
-			// the instance access list and the configured size ceiling.
+			// the app's own HTTP client re-checks the target on every redirect
+			// and pins the resolved address, so a 302 to 127.0.0.1 or a
+			// metadata endpoint is refused; it also applies the access list
+			// and the size ceiling
 			$content = $this->cacheDocumentService->retrieveContent($url);
 			if (strlen($content) > self::BANNER_MAX_SIZE) {
 				throw new Exception('Banner image is too large');
@@ -345,7 +322,6 @@ class LocalController extends Controller {
 	/**
 	 * Delete your own post.
 	 *
-	 *
 	 * @param string $id
 	 *
 	 * @return DataResponse
@@ -371,12 +347,9 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * Creates the reader's account, with the handle they chose.
-	 *
-	 * The one place an actor is made for a logged-in person: the setup screen
-	 * asks, they answer. The handle has to be theirs to take
-	 * (`AccountService::assertHandleAvailable()`); the account comes back as
-	 * the client entity so the page can carry on without a reload.
+	 * Creates the reader's account, with the handle they chose
+	 * (`AccountService::assertHandleAvailable()`), from the setup screen. The
+	 * account comes back as the client entity so the page needs no reload.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/account/create')]
@@ -406,9 +379,8 @@ class LocalController extends Controller {
 
 	/**
 	 * Names the account the reader already has elsewhere on their Nextcloud
-	 * profile, and creates nothing here. What the people on this Nextcloud
-	 * need is to find them, and the `fediverse` profile field is where
-	 * Discover looks.
+	 * profile, and creates nothing here: the `fediverse` profile field is
+	 * where Discover looks.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/account/link')]
@@ -427,24 +399,14 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * Deletes the reader's own Social account, keeping their Nextcloud one —
+	 * Deletes the reader's own Social account, keeping their Nextcloud one,
 	 * unless they are a self-registered external user, whose Nextcloud account
 	 * exists for Social only and is deleted with it (`userDeleted`).
 	 *
-	 * The same deletion `occ social:account:delete` does: the posts go, the
-	 * follows go, and a `Delete` goes out to every server that knew the
-	 * account. Until now it was that command and nothing else, so a person who
-	 * wanted their fediverse presence gone and their Nextcloud account kept had
-	 * to ask an administrator — which means explaining to a colleague why.
-	 *
-	 * `confirm` has to be the handle being deleted, and it is deliberately not
-	 * a password: an account signed in through SSO has none to give, and
-	 * asking for one would have made this an administrator's job again for
-	 * exactly the installations that federate most.
-	 *
-	 * **It cannot be undone.** The handle is held for the retention hour so
-	 * nobody else can take it the moment it is let go; a new account under a
-	 * different handle can be made straight away.
+	 * The same deletion as `occ social:account:delete`: posts and follows go,
+	 * and a `Delete` goes out to every server that knew the account.
+	 * `confirm` is the handle, not a password, since SSO accounts have none.
+	 * Cannot be undone; the handle is held for the retention hour.
 	 */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 3, period: 3600)]
@@ -460,10 +422,8 @@ class LocalController extends Controller {
 			$user = $this->userManager->get($this->userId);
 			if (ExternalUserBackend::isExternal($user)) {
 				$externalDeletion = true;
-				// Let Nextcloud own the deletion lifecycle. Its UserDeletedEvent
-				// listener removes and federates the Social actor once the hosting
-				// account has actually been removed. Deleting the actor first here
-				// made this path run Social cleanup twice.
+				// Nextcloud owns the deletion: its UserDeletedEvent listener
+				// removes and federates the Social actor once the account is gone
 				$this->accountService->assertOwnAccountDeletionConfirmed($this->userId, $confirm);
 				$this->userSession->logout();
 				$sessionEnded = true;
@@ -482,10 +442,8 @@ class LocalController extends Controller {
 			// help there is
 			return new DataResponse(['status' => -1, 'error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (\Throwable $e) {
-			// Core or app listeners can throw an Error as well as an Exception.
-			// If Core removed the user before a listener failed, finish the
-			// session and report completion instead of rendering an Internal
-			// Server Error after the account is already gone.
+			// listeners can throw an Error too; if the user is already gone,
+			// finish the session and report completion
 			if ($externalDeletion && $this->userId !== null && $this->userManager->get($this->userId) === null) {
 				if (!$sessionEnded) {
 					$this->userSession->logout();
@@ -576,19 +534,9 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * One local account, as a profile page shows it.
-	 *
-	 * A local read, so the limits are the ones a reader browsing profiles
-	 * stays under rather than `globalAccountInfo`'s — that one costs six
-	 * outbound fetches and can afford to be strict. Bounded all the same: a
-	 * name that is here and a name that is not answer differently, so with no
-	 * limit at all this route reads out the instance's user list to anybody
-	 * who asks it fast enough.
-	 *
-	 * A name nobody holds is a 404 and is not written to the log. It was a 500
-	 * with a warning line, which is an internal failure rather than a question
-	 * with the answer "no" — and a line per miss makes an enumeration sweep
-	 * into a way of filling the disk.
+	 * One local account, as a profile page shows it. Rate limited, more
+	 * loosely than `globalAccountInfo`, so the route cannot be used to read
+	 * out the user list. A name nobody holds is a 404 and is not logged.
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
@@ -614,18 +562,11 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * Everything known about one account, resolving an unknown handle remotely.
-	 *
-	 * A handle this instance has never seen costs a host-meta, a WebFinger and four
-	 * signed actor fetches — six outbound requests at a ten-second timeout, aimed at
-	 * a host the caller names and signed by a named local actor. `OStatusController::getLink`
-	 * throttles a single WebFinger lookup for the same reason.
-	 *
-	 * It is a GET without a CSRF check, so a page on another site can send a
-	 * signed-in reader's browser here with any handle in the address. Other
-	 * servers are therefore asked only by a request that shows it is not that
-	 * (`mayAskOtherServers()`); any other request is answered from what this
-	 * server holds.
+	 * Everything known about one account, resolving an unknown handle
+	 * remotely: up to six outbound requests, hence throttled like
+	 * `OStatusController::getLink`. A GET without CSRF, so other servers are
+	 * only asked when `mayAskOtherServers()` says the request is genuine;
+	 * otherwise it answers from what this server holds.
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
@@ -659,16 +600,8 @@ class LocalController extends Controller {
 			if ($isLocal && $this->userId === $username) {
 				$this->logger->debug('[LocalController] Local account detected', ['username' => $username]);
 				try {
-					// Reading a profile does not make one. This used to create
-					// the actor when the reader asked about their own account,
-					// which is a Fediverse identity -- handle, RSA key pair and
-					// all -- minted because a page was opened rather than
-					// because anybody asked for it, and it is what made the
-					// setup screen answer "that handle is taken" to the handle
-					// it had just offered. The route is public as well, so the
-					// creation was one `$this->userId === $username` check away
-					// from anonymous visitors forcing an identity onto every
-					// Nextcloud user and learning which usernames exist.
+					// reading a profile does not create one; the route is
+					// public, so it must never mint an identity for a user
 					$this->accountService->getActorFromUserId($username);
 					$this->accountService->cacheLocalActorByUsername($username);
 					$this->logger->debug('[LocalController] Local actor ensured', ['username' => $username]);
@@ -720,16 +653,9 @@ class LocalController extends Controller {
 
 	/**
 	 * The actor an id names, resolving it remotely only for a caller with a
-	 * session.
-	 *
-	 * The three routes below are public, and the id comes from the query string.
-	 * Resolving an unknown one means fetching whatever URL the caller wrote,
-	 * storing the actor, and downloading its icon into appdata — so an
-	 * unauthenticated caller could use the instance as an HTTP reflector and
-	 * fill its disk with bytes of their choosing, a request at a time. Actors
-	 * this instance already knows stay readable by anyone (public profiles and
-	 * avatars have to work without a login); discovering a new one requires a
-	 * session.
+	 * session. The routes below are public and the id comes from the query
+	 * string, so resolving for anyone would let them make this instance
+	 * fetch and store arbitrary URLs.
 	 *
 	 * @throws CacheActorDoesNotExistException
 	 * @throws Exception
@@ -756,10 +682,8 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * The cached copy of a local account, rebuilt when it has gone missing.
-	 *
-	 * The page this app renders needs the same thing, so the lookup lives in
-	 * `AccountService` where both can reach it.
+	 * The cached copy of a local account, rebuilt when it has gone missing
+	 * (in `AccountService`, which the rendered page uses too).
 	 *
 	 * @throws CacheActorDoesNotExistException
 	 */
@@ -768,12 +692,8 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * One cached actor's avatar.
-	 *
-	 * The ceiling is the one `/media/{uuid}` carries and for the same reason:
-	 * stored bytes handed to anybody holding the address. Generous, because a
-	 * timeline draws forty to sixty of these at once and a reader scrolling is
-	 * not an attack.
+	 * One cached actor's avatar, rate limited like `/media/{uuid}`. Generous,
+	 * since a timeline draws forty to sixty at once.
 	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
@@ -878,13 +798,9 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * @throws AccountDoesNotExistException
-	 */
-	/**
 	 * Whether this request may have other servers asked on its behalf: one
-	 * the web app sent, with its request token, or one carrying a bearer
-	 * token. Neither can be made by a link or a page on another site, which
-	 * is all a GET with no CSRF check otherwise guards against.
+	 * the web app sent with its request token, or one with a bearer token.
+	 * Neither can be forged by a link or a page on another site.
 	 */
 	private function mayAskOtherServers(): bool {
 		return $this->request->passesCSRFCheck()

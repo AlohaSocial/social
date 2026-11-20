@@ -15,18 +15,13 @@ use OCP\Security\ICrypto;
 /**
  * Proof that a request to `/async/request/{token}` came from this server.
  *
- * The route has to be public — the server calls itself over HTTP, with no
- * session — and a token is enough to have it spend up to a minute and a half
- * of a PHP worker delivering. So the call carries an HMAC of the token and
- * the time it was made under the instance secret, which nothing outside
- * `config.php` can produce, and a request without a valid one, or one made
- * more than MAX_AGE ago, is refused before the queue is read.
- *
- * The header reads `<unix time>.<hex HMAC>`.
- *
- * A follow-up round of the same drain (`QueueController::MAX_ROUNDS`) names
- * its number in `ROUND_HEADER`, and the number is signed with the token, so
- * a signature for one round cannot start another.
+ * The route is public (the server calls itself with no session), and a token
+ * can make it spend up to a minute and a half delivering. So the call carries
+ * `<unix time>.<hex HMAC>` of the token and time under the instance secret; a
+ * missing, invalid or older-than-MAX_AGE one is refused before the queue is
+ * read. A follow-up round (`QueueController::MAX_ROUNDS`) names its number in
+ * `ROUND_HEADER`, signed with the token, so one round's signature cannot
+ * start another.
  */
 class AsyncRequestSigner {
 	public const HEADER = 'X-Social-Async-Signature';

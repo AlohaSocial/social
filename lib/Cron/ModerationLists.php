@@ -17,9 +17,8 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Keeps the lists of accounts to mute or block people subscribe to in step:
- * every few hours, each subscriber's lists read again
- * (`ModerationListService::refresh()`).
+ * Keeps the subscribed mute and block lists in step, rereading each
+ * subscriber's lists every few hours (`ModerationListService::refresh()`).
  */
 class ModerationLists extends TimedJob {
 	private const INTERVAL = 6 * 3600;

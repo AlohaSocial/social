@@ -20,13 +20,9 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 
 /**
- * The Sections card of the Social settings page.
- *
- * Administrators only, like ServerSettingsController and for the same reason:
- * this controller carries none of the relaxing attributes, so a group the
- * Social section was delegated to -- a moderator -- does not reach it. What
- * the app offers everybody is a decision about the instance, not about a
- * report.
+ * The Sections card of the Social settings page. Administrators only, like
+ * ServerSettingsController: no relaxing attributes, so a delegated moderator
+ * does not reach it.
  */
 class SectionsController extends Controller {
 	public function __construct(
@@ -39,7 +35,7 @@ class SectionsController extends Controller {
 	/**
 	 * Writes every setting on the card, or none of them.
 	 *
-	 * @param bool $stories whether stories are offered
+	 * @param bool $stories whether shorts are offered
 	 * @param bool $photos whether the Photos timeline is offered
 	 * @param bool $videos whether the Videos timeline is offered
 	 * @param string[] $groupLists the Nextcloud groups whose members get a list for them

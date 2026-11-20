@@ -10,9 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Command\Alias;
 
 /**
- * `occ social:note:boost`, the name `social:debug:note:boost` had before the debugging commands
- * moved under `social:debug:`, kept so existing scripts still run. Hidden
- * from `occ list`.
+ * `occ social:note:boost`, the old name of `social:debug:note:boost`, kept so
+ * existing scripts still run. Hidden from `occ list`.
  *
  * A subclass rather than Symfony's `setAliases()`: `occ list` prints an alias
  * beside the command it belongs to, and this name is meant to stay out of it.

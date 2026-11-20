@@ -83,19 +83,14 @@ class OAuthController extends Controller {
 
 	/**
 	 * What this software is called on NodeInfo. The schema wants
-	 * `^[a-z0-9-]+$`, and crawlers group instances by this string, so it is a
-	 * constant: the theming title that used to go here put every Nextcloud
-	 * under its own "software" and made the app invisible in every statistic.
-	 * The human title travels as `metadata.nodeName`.
+	 * `^[a-z0-9-]+$` and crawlers group instances by it, so it is a constant;
+	 * the human title travels as `metadata.nodeName`.
 	 */
 	private const REPOSITORY = 'https://github.com/alohasocial/social';
 
 	/**
-	 * The NodeInfo schemas this instance serves, oldest first.
-	 *
-	 * Read by `WebfingerHandler` to build the discovery document, so that the
-	 * versions advertised and the versions actually served cannot drift apart
-	 * again -- which is the whole of what went wrong with 2.1.
+	 * The NodeInfo schemas this instance serves, oldest first. Read by
+	 * `WebfingerHandler` so the versions advertised are the versions served.
 	 */
 	public const NODEINFO_SCHEMAS = ['2.0', '2.1'];
 
@@ -109,14 +104,8 @@ class OAuthController extends Controller {
 
 	/**
 	 * `/.well-known/nodeinfo/2.1`: 2.0 plus `software.repository` and
-	 * `software.homepage`.
-	 *
-	 * The document was built and tested from the day it was written and could
-	 * not be fetched by anybody: the method had no route attribute, so
-	 * Nextcloud registered no URL for it, and the discovery document named
-	 * only 2.0. Both are needed -- a crawler reads the discovery document and
-	 * follows what it finds, so a route nothing points at is as unreachable as
-	 * no route at all.
+	 * `software.homepage`. Needs both the route and an entry in the discovery
+	 * document, since crawlers follow only what that names.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -173,13 +162,10 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * Registers a client app. Public, so it carries a limit of its own for a
-	 * caller with a session and one without: every registration is a row
-	 * that stays until the sweep in `Cron\Queue` finds it never authorized.
-	 *
-	 * A registration the service refuses -- no name, no redirect URI, or one
-	 * with a scheme a browser would run rather than follow -- is a 422, which
-	 * is how Mastodon answers a registration that fails validation.
+	 * Registers a client app. Public, so it carries its own rate limits: every
+	 * registration is a row that stays until the sweep in `Cron\Queue` finds
+	 * it never authorized. A registration the service refuses is a 422, as
+	 * Mastodon answers one that fails validation.
 	 *
 	 * @param array|string $redirect_uris
 	 */
@@ -194,11 +180,8 @@ class OAuthController extends Controller {
 		string $website = '',
 		string $scopes = 'read',
 	): DataResponse {
-		// Mastodon's own API takes several redirect URIs, newline-separated in a
-		// single `redirect_uris` field. Wrapping the whole block into one entry
-		// meant `ClientService::confirmData()` compared a single URI against a
-		// string holding all of them, so a client registered with more than one
-		// could never authorize with any of them.
+		// Mastodon takes several redirect URIs, newline-separated in a single
+		// `redirect_uris` field
 		if (!is_array($redirect_uris)) {
 			$redirect_uris = preg_split('/\r\n|\r|\n/', (string)$redirect_uris);
 		}
@@ -229,18 +212,12 @@ class OAuthController extends Controller {
 
 		return new DataResponse(
 			[
-				// A string, as every id in Mastodon's API is. This one is a
-				// database row number and the temptation is to answer with the
-				// number; a client that decodes the response into a typed
-				// struct declares `id: String` because that is what Mastodon
-				// sends, and a JSON number fails to decode. The registration
-				// then succeeds with a 200 that the client cannot read, and
-				// its sign-in stops with nothing in any log to show for it.
+				// a string, as every id in Mastodon's API is: typed clients
+				// declare `id: String` and fail to decode a number
 				'id' => (string)$client->getId(),
 				'name' => $client->getAppName(),
-				// null rather than '' where the client registered no website:
-				// Mastodon sends null, and a client that decodes this field as
-				// a URL fails on the empty string, which is not one.
+				// null rather than '' where the client registered no website,
+				// as Mastodon sends; '' fails a client decoding a URL
 				'website' => $client->getAppWebsite() === '' ? null : $client->getAppWebsite(),
 				// lists, as Mastodon 4.3 sends them: a client decoding the
 				// answer into `[String]` fails on one space-separated string
@@ -248,10 +225,8 @@ class OAuthController extends Controller {
 				'redirect_uris' => array_values($client->getAppRedirectUris()),
 				'client_id' => $client->getAppClientId(),
 				'client_secret' => $client->getAppClientSecret(),
-				// Mastodon's Application entity always carries these two, and a
-				// client that decodes the answer into a typed struct fails
-				// without them. `redirect_uri` is the first of what was
-				// registered, which is what Mastodon reports.
+				// Mastodon's Application entity always carries these two;
+				// `redirect_uri` is the first registered, as Mastodon reports
 				'redirect_uri' => $client->getAppRedirectUris()[0] ?? '',
 				'vapid_key' => $this->vapidService->publicKey(),
 			], Http::STATUS_OK
@@ -395,20 +370,11 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The consent page.
-	 *
-	 * Everything that can be wrong with the request — an unknown `client_id`, a
-	 * `response_type` that is not `code`, a `redirect_uri` or scope the client
-	 * never registered — is answered the way `authorizing()` answers it. Left
-	 * to escape, each of them reached the browser as a Nextcloud HTML error
-	 * page (with a stack trace where debug is on) rather than as something the
-	 * client can read.
-	 *
-	 * Somebody whose first visit is from an app has no account here yet; once
-	 * the request has passed every check, the page asks them for a username
-	 * first (`setup`), and reloading it after the account is made shows the
-	 * consent for that account, from the same address and so with the same
-	 * request.
+	 * The consent page. Every problem with the request (unknown `client_id`,
+	 * a `response_type` other than `code`, an unregistered `redirect_uri` or
+	 * scope) is answered as `authorizing()` answers it, not as a Nextcloud
+	 * error page. Somebody without an account here is first asked for a
+	 * username (`setup`); reloading then shows the consent for that account.
 	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
@@ -460,9 +426,8 @@ class OAuthController extends Controller {
 			if ($actor === null) {
 				$this->provideSetup($user);
 			} else {
-				// which account is about to be handed over: on a server where
-				// somebody holds more than one, the name of the application
-				// alone does not answer the question being asked
+				// which account is about to be handed over, for somebody who
+				// holds more than one
 				$this->initialState->provideInitialState('account', [
 					'uid' => $user->getUID(),
 					'displayName' => $this->accountDisplayName($actor, $user),
@@ -473,13 +438,8 @@ class OAuthController extends Controller {
 			$this->initialState->provideInitialState('redirectUri', $redirect_uri);
 			$this->initialState->provideInitialState('denyUrl', $this->denyUrl($redirect_uri, $state));
 
-			// as a guest page, not inside the app: this asks somebody to hand
-			// an application their account, and the navigation, the search bar
-			// and the rest of the app around that question are both a
-			// distraction and a way to wander off mid-consent. It is also what
-			// puts the box in the middle of the screen -- the app's own
-			// content area is a flex container, so a page mounted into it
-			// takes the width of its contents and sits against the left edge.
+			// as a guest page, not inside the app: the app's navigation would
+			// distract from the consent, and the guest layout centres the box
 			$response = new TemplateResponse(Application::APP_ID, 'oauth2', [
 				'request'
 					=> [
@@ -496,16 +456,10 @@ class OAuthController extends Controller {
 					]
 			], TemplateResponse::RENDER_AS_GUEST);
 
-			// Nextcloud's default policy is `form-action 'self'`, and a browser
-			// applies that to where a form submission *ends up*, not only to
-			// where it is sent. Granting an application whose redirect_uri is
-			// anywhere but this server therefore submitted the form, took the
-			// 303 to the client, and had the navigation blocked -- no error, no
-			// page, the button apparently doing nothing.
-			//
-			// The URI is the one already registered for this client and
-			// confirmed against the request above, so this widens the policy to
-			// exactly the destination the code was always going to be sent to.
+			// Nextcloud's default `form-action 'self'` also applies to where a
+			// submission ends up, so the redirect to the client would be
+			// blocked. The URI is the one registered and checked above, so
+			// this widens the policy to exactly that destination.
 			$response->setContentSecurityPolicy($this->consentPolicy($redirect_uri));
 
 			return $response;
@@ -527,9 +481,8 @@ class OAuthController extends Controller {
 
 	/**
 	 * What the sign-in page needs to ask for a username before the consent,
-	 * the way the app's own setup page asks (`NavigationController`): the
-	 * handle to suggest and the hosts the addresses end in. Creating the
-	 * account is `LocalController::accountCreate()`, as from that page.
+	 * as the app's own setup page does (`NavigationController`). The account
+	 * is created by `LocalController::accountCreate()`.
 	 */
 	private function provideSetup(IUser $user): void {
 		try {
@@ -549,13 +502,9 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The name to show for the account being handed over.
-	 *
-	 * `Person::getDisplayName()` falls back to the handle when the profile
-	 * carries no name of its own, which on the consent page reads as the
-	 * username twice over -- once as the name and once as the handle under it.
-	 * The Nextcloud account's name is what the rest of the server would show
-	 * next to that same avatar, so it stands in.
+	 * The name to show for the account being handed over. The Nextcloud
+	 * account's name stands in where the profile has none, since
+	 * `Person::getDisplayName()` would fall back to the handle and show it twice.
 	 */
 	private function accountDisplayName(Person $actor, IUser $user): string {
 		$name = $actor->getDisplayName();
@@ -568,12 +517,8 @@ class OAuthController extends Controller {
 
 	/**
 	 * The consent page's policy: the default one, plus the client's own
-	 * redirect URI as a form-action destination.
-	 *
-	 * Out-of-band needs nothing added -- that answer is a page on this server.
-	 * A custom scheme (`tusky://…`) is passed through as it is: a browser
-	 * matches form-action against the scheme, and an application that
-	 * registered one is exactly the case this exists for.
+	 * redirect URI as a form-action destination. Out-of-band needs nothing
+	 * added; a custom scheme (`tusky://…`) is allowed as a scheme-source.
 	 */
 	private function consentPolicy(string $redirectUri): ContentSecurityPolicy {
 		$policy = new ContentSecurityPolicy();
@@ -586,20 +531,10 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The redirect URI as a CSP source expression, which is not the URI.
-	 *
-	 * A mobile client registers a custom scheme -- `icecubesapp://` -- and
-	 * putting that in the policy verbatim writes `form-action 'self'
-	 * icecubesapp://`, which is not a valid source: a scheme-source is the
-	 * scheme and one colon. A browser drops the expression it cannot parse,
-	 * leaving `'self'`, and blocks the redirect to the client exactly as if
-	 * nothing had been added -- so the Authorize button goes on doing nothing,
-	 * for the one kind of client that most needs it to work.
-	 *
-	 * An `http`/`https` URI becomes its origin instead of the whole address:
-	 * a source expression carries no path, and the path is not ours to
-	 * constrain anyway -- the code goes to the URI the client registered,
-	 * which was checked before this page was drawn.
+	 * The redirect URI as a CSP source expression. A custom scheme becomes
+	 * `scheme:`, since `icecubesapp://` is not a valid source and a browser
+	 * would drop it; an `http`/`https` URI becomes its origin, as a source
+	 * carries no path.
 	 */
 	private function formActionSource(string $redirectUri): string {
 		if ($redirectUri === '' || $redirectUri === ClientService::REDIRECT_URI_OOB) {
@@ -607,11 +542,8 @@ class OAuthController extends Controller {
 			return '';
 		}
 
-		// Read with a pattern rather than parse_url(): the URI a mobile client
-		// registers is often `icecubesapp://` -- a scheme, two slashes and
-		// nothing else -- and parse_url() answers `false` for that, having no
-		// host to find. The scheme is then lost and this returns nothing,
-		// which is the whole widening silently not happening.
+		// a pattern rather than parse_url(), which returns false for a bare
+		// `icecubesapp://` with no host
 		if (preg_match('/^([a-zA-Z][a-zA-Z0-9+.\-]*):/', $redirectUri, $matches) !== 1) {
 			return '';
 		}
@@ -633,12 +565,8 @@ class OAuthController extends Controller {
 
 	/**
 	 * The PKCE transformation to record, for a request that carries a
-	 * challenge.
-	 *
-	 * An omitted method means `plain` in RFC 7636, which this server does not
-	 * implement and does not advertise; a client that sends a challenge with no
-	 * method is told so rather than silently granted a code that is not bound
-	 * to anything.
+	 * challenge. An omitted method means `plain` (RFC 7636), which this server
+	 * does not support, so the client is told rather than granted an unbound code.
 	 *
 	 * @throws ClientException
 	 */
@@ -664,25 +592,17 @@ class OAuthController extends Controller {
 
 	/**
 	 * RFC 6749 §3.1.2.3: the `redirect_uri` of a request has to be, exactly,
-	 * one the client registered. Compared as strings rather than by origin or
-	 * prefix -- a code sent to a path the client did not register is a code
-	 * sent to whoever controls that path.
+	 * one the client registered. Compared as strings, not by origin or prefix.
 	 */
 	private function isRegisteredRedirectUri(SocialClient $client, string $redirectUri): bool {
 		return in_array($redirectUri, $client->getAppRedirectUris(), true);
 	}
 
 	/**
-	 * Why an authorization request was not granted.
-	 *
-	 * The client's own mistakes -- an unknown client, a response type or
-	 * scope it may not ask for, a PKCE method nobody supports -- are this
-	 * app's refusals and say what was wrong, so the client is told them. A
-	 * reader who has no account here is told so, and where to set one up.
-	 * Anything else is this
-	 * server's failure, and its message describes the server rather than the
-	 * request: it goes to the log, and the client gets `server_error`, as
-	 * from `token()`.
+	 * Why an authorization request was not granted. The client's own mistakes
+	 * and a missing account are this app's refusals and are told as they are;
+	 * anything else is a server failure, logged, and answered `server_error`
+	 * as from `token()`.
 	 */
 	private function authorizationFailure(Throwable $e): DataResponse {
 		if ($e instanceof ClientException || $e instanceof ClientNotFoundException) {
@@ -715,15 +635,9 @@ class OAuthController extends Controller {
 
 	/**
 	 * Where refusing consent sends the browser: back to the client with
-	 * `error=access_denied`, which is the answer RFC 6749 §4.1.2.1 owes it.
-	 *
-	 * A client left without one waits for a redirect that never comes. The
-	 * out-of-band flow has nowhere to send it, so that lands on the app.
-	 *
-	 * So does a redirect URI the registration would refuse today: this is a
-	 * link the person clicks, and a `javascript:` URI registered before the
-	 * scheme was checked would run in their session rather than send them
-	 * anywhere.
+	 * `error=access_denied` (RFC 6749 §4.1.2.1). The out-of-band flow, and a
+	 * redirect URI registration would now refuse (such as `javascript:`), land
+	 * on the app instead.
 	 */
 	private function denyUrl(string $redirectUri, string $state): string {
 		if ($redirectUri === '' || $redirectUri === ClientService::REDIRECT_URI_OOB
@@ -762,9 +676,8 @@ class OAuthController extends Controller {
 	 * The consent to the scopes that need the password
 	 * (`ClientService::needsPasswordConfirmation()`): `write:migration`,
 	 * which lets another Aloha Social server move the account there, and the
-	 * `admin` scopes, which let an application use the administration API.
-	 * The same grant as `authorizing()`, behind Nextcloud's password
-	 * confirmation, as the Move button is.
+	 * `admin` scopes. The same grant as `authorizing()`, behind Nextcloud's
+	 * password confirmation.
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
@@ -833,14 +746,8 @@ class OAuthController extends Controller {
 				return new RedirectResponse($this->redirectWithCode($redirect_uri, $code, $state));
 			}
 
-			// The out-of-band flow: the code is shown to the person to paste
-			// into their client. This is reached by submitting the consent
-			// form, so what arrives here is a browser, and the answer has to
-			// be a page -- as a JSON body it rendered as `{"code":"..."}` on a
-			// blank white document, immediately after a consent screen that
-			// had promised the code would be shown to them. Somebody who does
-			// not recognise that as the code reads it as the button having
-			// done nothing.
+			// The out-of-band flow: the code is shown on a page for the person
+			// to paste into their client, since a browser submitted the form.
 			$this->initialState->provideInitialState('code', $code);
 			$this->initialState->provideInitialState('appName', $client->getAppName());
 
@@ -853,16 +760,10 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * The registered redirect URI with the authorization code — and the
-	 * client's `state` — appended to whatever query string it already had.
-	 *
-	 * Built with http_build_query rather than by concatenating '?code=': a
-	 * `redirect_uri` that already carries a query string (Elk registers one)
-	 * ended up with two `?` in it and the client could not read the code out of
-	 * it. `state` was dropped entirely, which is the value a web client
-	 * compares against what it stored to know the redirect is the answer to its
-	 * own request — a client that follows the spec rejects a redirect without
-	 * it, and one that does not is open to having a code injected.
+	 * The registered redirect URI with the authorization code and the
+	 * client's `state` appended to any query string it already has (Elk
+	 * registers one). A spec-following client rejects a redirect without
+	 * `state`.
 	 */
 	private function redirectWithCode(string $redirectUri, string $code, string $state): string {
 		$parameters = ['code' => $code];
@@ -894,20 +795,11 @@ class OAuthController extends Controller {
 	 * The token endpoint: the authorization-code, device-code,
 	 * `client_credentials` and `refresh_token` grants.
 	 *
-	 * The authorization-code grant has no `scope` parameter, and there never
-	 * was one in RFC 6749 §4.1.3. What the token carries is what the person
-	 * granted, which lives on the authorization the code names; comparing a
-	 * `scope` the client sent here against the *app row* refused every client
-	 * registered since authorizations moved to a table of their own, because
-	 * that column has had no writer since. Only the `refresh_token` grant
-	 * reads `scope`, which may narrow what was granted (RFC 6749 §6).
-	 *
-	 * A token issued for an account comes with a `refresh_token` and an
-	 * `expires_in`; see `ClientService::refresh()` and `expiresAt()`.
-	 *
-	 * The client may authenticate with its credentials in the body
-	 * (`client_secret_post`) or in an `Authorization: Basic` header
-	 * (`client_secret_basic`); both are what the discovery document advertises.
+	 * The token carries what the person granted on the authorization the code
+	 * names; only the `refresh_token` grant reads `scope`, which may narrow it
+	 * (RFC 6749 §6). A token for an account comes with a `refresh_token` and
+	 * an `expires_in`. Client credentials may come in the body or in an
+	 * `Authorization: Basic` header, as the discovery document advertises.
 	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
@@ -969,9 +861,8 @@ class OAuthController extends Controller {
 						);
 					}
 
-					// the code names the authorization, so what comes back is the
-					// account that granted it rather than whatever the app row
-					// last held -- and only against the redirect_uri it was sent to
+					// the code names the authorization, so the account is the one
+					// that granted it, and only against the redirect_uri it was sent to
 					$client = $this->clientService->exchangeCode($client, $code, $code_verifier, $redirect_uri);
 				} elseif ($grant_type === 'refresh_token') {
 					if ($refresh_token === '') {
@@ -1006,11 +897,8 @@ class OAuthController extends Controller {
 			}
 
 			$answer = [
-				// the scopes this token really carries, which is what
-				// checkTokenScope() enforces on every request made with it.
-				// Echoing the scope of the token *call* — 'read', for a
-				// client like Tusky that omits it — had clients hiding
-				// their compose button while writes in fact worked.
+				// the scopes this token really carries, as checkTokenScope()
+				// enforces them, not the scope of the token call
 				'access_token' => $client->getToken(),
 				'token_type' => 'Bearer',
 				'scope' => implode(' ', $client->getAuthScopes()),
@@ -1070,10 +958,9 @@ class OAuthController extends Controller {
 
 	/**
 	 * Token revocation (RFC 7009). Only the client the token was issued to may
-	 * revoke it. Always answers 200 for a token that (no longer) exists, so the
-	 * endpoint is not an oracle; wrong client credentials are throttled like the
-	 * token endpoint.
-	 *
+	 * revoke it. Always answers 200 for an unknown token, so the endpoint is
+	 * not an oracle; wrong client credentials are throttled like the token
+	 * endpoint.
 	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
@@ -1110,13 +997,8 @@ class OAuthController extends Controller {
 
 	/**
 	 * Every scope this server understands, in the order Mastodon lists them.
-	 *
-	 * The narrow ones are what the routes actually ask for; the broad ones are
-	 * what `checkTokenScope()` accepts in their place, so a client that asks
-	 * for `read` gets every `read:*` route — and a client that asks for
-	 * `read:lists` gets that one and no other. Published so a client can ask
-	 * for what it needs rather than for everything, which is the whole point of
-	 * the discovery document.
+	 * The narrow ones are what the routes ask for; `checkTokenScope()` accepts
+	 * the broad ones in their place.
 	 */
 	public const SCOPES = [
 		'read', 'write', 'follow', 'push',
@@ -1134,29 +1016,11 @@ class OAuthController extends Controller {
 	/**
 	 * RFC 8414: where the OAuth endpoints are, and what they take.
 	 *
-	 * A Mastodon 4.3 client asks for this before it registers an app, and a
-	 * server that answers it saves a round of guessing — the client learns the
-	 * authorization and token endpoints, the scopes it may ask for and the
-	 * response types that work, instead of assuming Mastodon's own paths.
-	 *
-	 * **The addresses have to match how the document was reached.** RFC 8414
-	 * §3.3 says the `issuer` must be the URL the metadata was fetched from
-	 * minus the well-known suffix, and a client that follows the spec rejects
-	 * a document whose issuer is anything else. A client asking
-	 * `https://cloud.example/.well-known/oauth-authorization-server` and being
-	 * told the issuer is `https://cloud.example/index.php/apps/social/` has
-	 * been handed a mismatch, and is right to refuse it -- which it does
-	 * before ever opening a browser, so nothing on this server sees it fail.
-	 *
-	 * So where the domain-root rewrite is in place, this answers with the root
-	 * addresses the client actually used. Where it is not, it answers with the
-	 * app's own, which is the honest answer for a client that found this
-	 * document under `/apps/social/` and the only reachable one.
-	 *
-	 * The rewrite cannot be detected from the request -- an internal proxy
-	 * hands PHP the app path either way -- so what decides is the check that
-	 * already probes it for the setup warning, read from its cache and never
-	 * run from here.
+	 * The `issuer` must be the URL the document was fetched from minus the
+	 * well-known suffix (§3.3), or a client rejects it. So where the
+	 * domain-root rewrite works, this answers with the root addresses, and
+	 * otherwise with the app's own. The rewrite cannot be detected from the
+	 * request, so the setup check's cached result decides.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1185,12 +1049,8 @@ class OAuthController extends Controller {
 
 		// One origin has one authorization server document, and AT Protocol
 		// requires its issuer to be the bare origin, so with Bluesky on the
-		// document is both servers': the Mastodon one's fields, and AT
-		// Protocol's added to them. A Mastodon client reads what it knows;
-		// the shared endpoints tell the two apart by what only AT Protocol
-		// sends. The issuer loses its trailing slash, which RFC 8414 never
-		// had: it is the address the document was fetched from, minus the
-		// well-known suffix.
+		// document carries both servers' fields. The issuer has no trailing
+		// slash: it is the fetch address minus the well-known suffix.
 		if ($this->atprotoConfig->isEnabled() && $this->checkService->clientApiRootIsKnownGood()) {
 			$atproto = $this->atprotoOAuth->metadata();
 			$metadata = array_merge($metadata, $atproto, [
@@ -1218,12 +1078,9 @@ class OAuthController extends Controller {
 
 	/**
 	 * The consent page for a Bluesky app's pushed request: the same page a
-	 * Mastodon app's is shown on, told what this one asks for.
-	 *
-	 * Somebody without an account here is asked for a username first, once
-	 * the request itself has been found good, as on `authorize()`. The
-	 * account's Bluesky identity is made when the consent is drawn for it
-	 * (`AuthorizationServer::pending()`), as on any first need of one.
+	 * Mastodon app's is shown on. Somebody without an account is asked for a
+	 * username first, as on `authorize()`; the Bluesky identity is made when
+	 * the consent is drawn (`AuthorizationServer::pending()`).
 	 */
 	private function atprotoAuthorize(string $clientId, string $requestUri): Response {
 		try {
@@ -1319,17 +1176,9 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * Who the token belongs to, in OpenID Connect's shape.
-	 *
-	 * Mastodon 4.3 added this so a client can show "signed in as …" without
-	 * spending a `read:accounts` call on `verify_credentials`. It answers from
-	 * the token alone and needs no scope beyond having one, which is what
-	 * OpenID Connect expects of it.
-	 *
-	 * The claims are the four Mastodon sends. `sub` is the actor's ActivityPub
-	 * id rather than the Nextcloud user id: it is the identifier that means
-	 * the same thing to everybody, and handing out an internal user id to
-	 * every client that asks is not something to do by accident.
+	 * Who the token belongs to, in OpenID Connect's shape, needing no scope
+	 * beyond having a token. The claims are the four Mastodon sends; `sub` is
+	 * the actor's ActivityPub id, not the internal Nextcloud user id.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1357,12 +1206,9 @@ class OAuthController extends Controller {
 
 	/**
 	 * The client credentials on this request, from the body or from an
-	 * `Authorization: Basic` header (RFC 6749 §2.3.1).
-	 *
-	 * The body wins where both are present, which is what the client meant by
-	 * sending it. The header's two halves are form-urlencoded before they are
-	 * base64'd, so they are decoded that way — a secret containing `+` or `%`
-	 * is otherwise not the secret that was issued.
+	 * `Authorization: Basic` header (RFC 6749 §2.3.1). The body wins; the
+	 * header's halves are form-urlencoded, so a secret with `+` or `%` is
+	 * decoded that way.
 	 *
 	 * @return array{0: string, 1: string}
 	 */

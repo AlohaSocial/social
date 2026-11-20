@@ -31,16 +31,11 @@ use Throwable;
 /**
  * What the reader wrote on this day in years gone by.
  *
- * Client-API routes, so the app's own frontend reaches them with its session
- * and a mobile client with the token it signed in with. Reading the memories
- * asks for `read:statuses`: the answer holds the caller's followers-only and
- * direct posts as well as their public ones, which is exactly what that scope
- * grants on the caller's own timelines.
- *
- * There is no account parameter, so there is nothing to point at somebody
- * else. That is the whole of the access control here, and it is why it has to
- * stay that way: the query behind it does not filter by audience, because it
- * is only ever asked about the caller.
+ * Client-API routes for the frontend's session and mobile clients' tokens.
+ * Reading asks for `read:statuses`, since the answer includes the caller's
+ * followers-only and direct posts. There is no account parameter: the query
+ * does not filter by audience because it only ever reads the caller's own
+ * posts, so it must stay that way.
  */
 class MemoriesController extends ClientApiController {
 	public function __construct(
@@ -84,11 +79,8 @@ class MemoriesController extends ClientApiController {
 	}
 
 	/**
-	 * How the reader's week went, if they asked to be told.
-	 *
-	 * Answers `enabled: false` and no numbers at all when they did not, so
-	 * that turning it off means the counts are not computed rather than
-	 * computed and hidden.
+	 * How the reader's week went, if they asked to be told; otherwise
+	 * `enabled: false` and nothing is computed.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

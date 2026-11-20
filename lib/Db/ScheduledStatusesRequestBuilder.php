@@ -12,11 +12,6 @@ namespace OCA\Social\Db;
 use OCA\Social\Model\Client\ScheduledStatus;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class ScheduledStatusesRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class ScheduledStatusesRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 

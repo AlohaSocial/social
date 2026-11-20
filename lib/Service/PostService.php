@@ -56,11 +56,9 @@ class PostService {
 	public const POLL_MAX_CHARACTERS_PER_OPTION = 100;
 
 	/**
-	 * How long a poll may run, in seconds, and the shortest it may run for.
-	 * Mastodon's own bounds, and what `InstanceService` advertises as
-	 * `polls.min_expiration`/`max_expiration`: a client offers exactly the
-	 * durations it is told about, so a ceiling of its own here silently turned
-	 * every longer poll a client offered into a shorter one.
+	 * How long a poll may run, in seconds, and the shortest it may run for:
+	 * Mastodon's own bounds, advertised by `InstanceService` as
+	 * `polls.min_expiration`/`max_expiration`, since clients offer exactly those.
 	 */
 	public const POLL_MIN_EXPIRATION = 300;
 	public const POLL_MAX_EXPIRATION = 2629746;
@@ -128,9 +126,8 @@ class PostService {
 		$parent = $this->replyParent($post);
 		if ($parent !== null) {
 			$post->setType(self::visibilityOfReply($post->getType(), $parent));
-			// an author who has blocked the replier, who a Bluesky thread lets
-			// reply, and who the author of one of this instance's own posts
-			// does, before anything is written
+			// before anything is written: an author who blocked the replier,
+			// a Bluesky threadgate, or a local post's reply rule
 			$this->blockedBy()?->assertMayReply($post->getActor(), $parent);
 			$refusal = $this->threadgates()?->refusal($post->getActor(), $parent) ?? '';
 			if ($refusal === '') {
@@ -168,15 +165,10 @@ class PostService {
 		$this->streamService->assignItem($note, $actor, $post->getType());
 
 		$note->setAttributedTo($actor->getId());
-		// The warning rides as the object's `summary`, which is what every other
-		// server reads it from — and unlike the content it is plain text
-		// wherever it is read: `spoiler_text` to a client, interpolated rather
-		// than rendered by this app's own frontend, escaped by the JSON encoder
-		// on the wire. Stored exactly as it was typed, therefore. Encoding it
-		// entity by entity federated `Bob&#039;s finale` to every other
-		// instance; flattening it with `strip_tags()` was worse, since a bare
-		// `<` reads as the start of a tag and ate the rest of the line — a
-		// warning of `I <3 cats` was stored as `I `. editPost() agrees.
+		// The warning is the object's `summary`, which is plain text wherever
+		// it is read, so it is stored exactly as typed: entity-encoding would
+		// federate `Bob&#039;s`, and `strip_tags()` would eat `I <3 cats`.
+		// editPost() agrees.
 		$note->setSpoilerText(ACore::withoutMarkup($post->getSpoilerText()));
 		$note->setSensitive($post->isSensitive());
 		$note->setAttachments($post->getMedias());
@@ -216,22 +208,18 @@ class PostService {
 		);
 		//		$this->streamService->addAttachments($note, $post->getDocuments());
 
-		// Last, because the links are built out of the `tag` array the three
-		// calls above assemble: a mention is only linked once it is known which
-		// actor it resolved to, and only a mention the tags vouch for is linked
-		// at all. Nothing here can name somebody the tags do not.
+		// last, because the links are built from the `tag` array assembled
+		// above: only a mention the tags vouch for is linked
 		$note->setContent($this->linkifyService->toHtml($post->getContent(), $note->getTags()));
 
-		// the stored source is what federates on Update, and for a poll it is
-		// the only place the options and their counts are kept. The language,
-		// the tags, the quote and its approval are snapshotted here too and
-		// written to their own columns by StreamRequest; both copies come from
-		// this one assembled object, so they cannot disagree.
+		// the stored source is what federates on Update, and for a poll the
+		// only place the options and counts are kept. The language, tags and
+		// quote are written to their own columns by StreamRequest from this
+		// same object, so they cannot disagree.
 		$this->snapshotSource($note);
 
-		// a video still to be converted holds the delivery back until it is,
-		// because the servers that refuse the original do so on arrival and
-		// are never asked again; 0, and nothing waits, for every other post
+		// a video still to be converted holds the delivery back, because servers
+		// that refuse the original never ask again; 0 for every other post
 		$holdUntil = $this->videoDeliveryHold->holdUntil($note);
 		$token = $this->activityService->createActivity($actor, $note, $activity, $holdUntil);
 		$linkCard = $post->getLinkCard();
@@ -253,17 +241,9 @@ class PostService {
 			$this->videoDeliveryHold->convertSoon($note);
 		}
 		$this->learnFromReply($actor, $post->getReplyTo());
-		// One counter, moved by one. This used to recompute all three with
-		// aggregate queries on **every post written** — including a
-		// `COUNT(*)` over `social_follow`, which for an account with a million
-		// followers is a million index entries counted so that the post count
-		// on a profile can go up.
-		//
-		// Only a post that names the public collection, because that is what
-		// the recount counts (`StreamRequest::countNotesFromActorId()` joins
-		// the public recipient row). Counting the others here meant the number
-		// climbed on every followers-only post and fell back at the next cron
-		// pass, so a profile's post count visibly wobbled.
+		// One counter, moved by one, and only for a post that names the public
+		// collection, which is what `StreamRequest::countNotesFromActorId()`
+		// recounts.
 		if ($note->addressesPublic()) {
 			$this->accountService->bumpActorCount($actor->getId(), 'count_posts', 1);
 		}
@@ -276,10 +256,8 @@ class PostService {
 
 		$this->logger->debug('Activity: ' . json_encode($activity));
 
-		// the one thing the rest of the server had no way to know. Dispatched
-		// after the post is stored and addressed, so a listener sees what was
-		// published rather than what was asked for — and never waits on
-		// delivery, which is a queue and other people's servers
+		// dispatched after the post is stored and addressed, so a listener sees
+		// what was published; never waits on delivery
 		$this->eventDispatcher->dispatchTyped(new PostPublishedEvent($note));
 
 		return $activity;
@@ -317,9 +295,8 @@ class PostService {
 
 	/**
 	 * The visibility a reply is published with: what was asked for, unless
-	 * the post it answers is a direct message -- then it is one too, as on
-	 * Mastodon. The conversation was addressed to named people, and an answer
-	 * that widened it would hand their words to readers they never addressed.
+	 * the post it answers is a direct message; then it is one too, as on
+	 * Mastodon, so an answer never widens the conversation.
 	 */
 	public static function visibilityOfReply(string $requested, Stream $parent): string {
 		if ($parent->getVisibility() === Stream::TYPE_DIRECT) {
@@ -330,20 +307,11 @@ class PostService {
 	}
 
 	/**
-	 * The post a reply answers, null for a post that answers none.
-	 *
-	 * @throws StreamNotFoundException
-	 */
-	/**
-	 * Puts a post past the review queue (`PostReviewService`): every post
-	 * written here goes through it, in `createPost()`, unless the post says
-	 * it is exempt (`Post::REVIEW_EXEMPT`). A post a rule holds is stored as
-	 * a request for a moderator (`REVIEW_HOLD`) or refused (`REVIEW_REFUSE`),
-	 * and either way nothing is published.
-	 *
-	 * Public for a post that is stored now and published later: a scheduled
-	 * post is reviewed when it is scheduled, while its author is there to be
-	 * told, and published exempt.
+	 * Puts a post past the review queue (`PostReviewService`), as
+	 * `createPost()` does unless the post is `Post::REVIEW_EXEMPT`. A held
+	 * post becomes a request for a moderator (`REVIEW_HOLD`) or is refused
+	 * (`REVIEW_REFUSE`); either way nothing is published. Public so a
+	 * scheduled post is reviewed when scheduled, while its author is there.
 	 *
 	 * @param string $inReplyToNid the nid of the post it answers, '' for none
 	 * @param int $scheduledAt when a scheduled post is to go out, kept with
@@ -529,9 +497,7 @@ class PostService {
 			$stream->setSpoilerText(ACore::withoutMarkup($spoilerText));
 		}
 
-		// an edit may write a shortcode that was not there before, and the tag
-		// is what makes it render — here and on every instance the Update
-		// reaches. Not an address, so this does not widen the audience.
+		// an edit may add a shortcode, and the tag is what makes it render
 		$this->streamService->addCustomEmojis($stream, $content, $stream->getSpoilerText());
 		if ($sensitive !== null) {
 			$stream->setSensitive($sensitive);
@@ -568,9 +534,8 @@ class PostService {
 			}
 			$stream->setDetailArray(Details::ATPROTO, $details);
 		} elseif ($spoilerText !== null) {
-			// A Fediverse client can explicitly add or remove the warning.
-			// Keep the Bluesky self-label in step, while retaining every other
-			// label the original Bluesky author supplied.
+			// a client can add or remove the warning: keep the Bluesky
+			// self-label in step and every other label the author supplied
 			$details = $stream->getDetails(Details::ATPROTO);
 			$labels = [];
 			foreach (is_array($details[Details::ATPROTO_SELF_LABELS] ?? null) ? $details[Details::ATPROTO_SELF_LABELS] : [] as $label) {
@@ -590,7 +555,7 @@ class PostService {
 		}
 
 		// a new list rather than changed objects: `$original` shares them, and
-		// the revision recorded below is the version with the old words
+		// the revision recorded below keeps the old words
 		if ($mediaAttributes !== []) {
 			$stream->setAttachments($this->documentService->applyMediaAttributes(
 				$stream->getAttachments(), $actor->getPreferredUsername(), $mediaAttributes
@@ -610,19 +575,14 @@ class PostService {
 			$stream->setDetailsAll($details);
 		}
 
-		// `published` stays the creation time. The edit used to be stamped
-		// there instead, and Mastodon — which reads an Update without
-		// `updated` as an implicit one — refreshed the poll counters and threw
-		// the new content away. UTC and second-resolution like `published`, but
-		// strictly later than the prior edit so remote peers can order updates.
+		// `published` stays the creation time: Mastodon reads an Update
+		// without `updated` as a counter refresh and drops the content.
+		// Strictly later than the prior edit so peers can order updates.
 		$stream->setUpdated(self::nextEditTimestamp($original));
 		$this->snapshotSource($stream);
 
-		// An edit can name a person who was not in the original audience.
-		// Persist that new recipient in `social_stream_dest` with the updated
-		// content in one transaction; otherwise the Update carries the new
-		// Mention and inbox path, but no local delivery/timeline destination is
-		// recorded for the newly named account.
+		// an edit can name somebody new: their `social_stream_dest` row is
+		// stored with the content in one transaction
 		$this->streamService->updateStream($stream, true);
 		if ($original->getInReplyTo() !== $stream->getInReplyTo()) {
 			$this->streamService->recountReplies($original->getInReplyTo());
@@ -653,11 +613,8 @@ class PostService {
 		}
 
 		$updated = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
-		// The reloaded post carries the instance paths it was created with —
-		// for a direct message, the inboxes of the people it names. The
-		// followers path expands to the shared inbox of every instance with a
-		// follower on it, so adding it unconditionally posted the whole edited
-		// text of a `direct` post to servers that were never recipients.
+		// the followers path expands to every instance with a follower, so it
+		// is only added where the post reaches followers (not for `direct`)
 		if ($this->streamService->reachesFollowers($updated)) {
 			$updated->addInstancePath(
 				new InstancePath(
@@ -668,16 +625,14 @@ class PostService {
 		$this->streamService->addChannelFollowers($updated);
 		$this->eventDispatcher->dispatchTyped(new PostEditedEvent($updated));
 
-		// Local subscribers must learn about the edit even when the remote
-		// request cannot be queued. The saved revision and source are already
-		// durable at this point, so tell the API client that retrying the edit
-		// itself is unnecessary and expose the federation failure as 503.
+		// local subscribers learn about the edit even when the remote request
+		// cannot be queued; the edit is saved, so the failure is a 503 that
+		// need not be retried
 		$this->notificationService->onStatusEdited($updated);
 
 		try {
 			// an edit to a post whose video is still being converted waits
-			// with it, and is rebuilt from the post when the conversion ends,
-			// so it cannot overtake the Create or carry the old file
+			// with it, so it cannot overtake the Create or carry the old file
 			$holdUntil = $this->videoDeliveryHold->holdUntil($updated);
 			$this->activityService->updateActivity($actor, $updated, $holdUntil);
 			if ($quotedAuthor !== null) {
@@ -698,9 +653,8 @@ class PostService {
 	}
 
 	/**
-	 * ActivityPub update timestamps have second precision. Advance past the
-	 * previous edit when two local edits happen within the same second so peers
-	 * can order the resulting Update activities reliably.
+	 * ActivityPub update timestamps have second precision: advance past the
+	 * previous edit so peers can order two edits in the same second.
 	 */
 	private static function nextEditTimestamp(Stream $previous): string {
 		$timestamp = time();
@@ -715,15 +669,9 @@ class PostService {
 	}
 
 	/**
-	 * Refuses a post longer than the limit this instance advertises as
-	 * `configuration.statuses.max_characters`, which nothing enforced: a client
-	 * that does not read the limit, or reads a different one, had its post
-	 * accepted and federated at whatever length it sent.
-	 *
-	 * Characters, not bytes, counted as Mastodon counts them and as the
-	 * instance tells clients to (LinkifyService::countableLength()) — and the
-	 * spoiler counts towards the same budget, the way Mastodon measures a
-	 * status.
+	 * Refuses a post longer than the advertised
+	 * `configuration.statuses.max_characters`, counted as Mastodon counts
+	 * (LinkifyService::countableLength()), the spoiler included.
 	 *
 	 * @throws InvalidActionException the refusal the client API answers 422 with
 	 */
@@ -738,19 +686,10 @@ class PostService {
 	}
 
 	/**
-	 * Gives an account a channel the first time it posts a video.
-	 *
-	 * PeerTube has no video without a channel and refuses a `Video` whose
-	 * `attributedTo` names no `Group`, so a video published without one is a
-	 * video no PeerTube can take. It is made **here**, when the post is
-	 * written, rather than when the post is serialised: a serialisation happens
-	 * once per instance the post is delivered to, and making an actor there
-	 * would be a write on a read path, forty times over.
-	 *
-	 * Lazily and silently: nobody should have to learn what a channel is in
-	 * order to post a video, and an account that never posts one never grows an
-	 * actor it did not ask for. A failure costs the PeerTube shape and not the
-	 * post — the `Note` still goes out, and Mastodon and Pixelfed both read it.
+	 * Gives an account a channel the first time it posts a video, since
+	 * PeerTube refuses a `Video` whose `attributedTo` names no `Group`. Made
+	 * when the post is written, not on each serialisation. A failure costs
+	 * only the PeerTube shape; the `Note` still goes out.
 	 */
 	private function ensureChannelForVideo(Post $post): void {
 		if (PeerTubeService::soleVideo($post->getMedias()) === null) {
@@ -771,26 +710,16 @@ class PostService {
 	}
 
 	/**
-	 * Puts the quoted post on the note and addresses its author.
-	 *
-	 * The quoted post is named by whatever the caller had: the numeric status
-	 * id a Mastodon client sends as `quote_id`, or an ActivityPub URI. Only a
-	 * post this instance holds can be quoted — the quote has to name a real
-	 * object for anyone else to resolve — and only one that is public or
-	 * unlisted, which is the rule `PinService::pin()` and
-	 * `BoostService::create()` apply: a quote carries the quoted post into the
-	 * quoter's audience, and a followers-only post has none of those readers.
-	 *
-	 * The author is addressed rather than merely notified: they are a recipient
-	 * of the post that carries their words, and their server is the one that
-	 * has to answer the QuoteRequest that follows — unless that server is this
-	 * one, in which case the approval is granted here and now.
+	 * Puts the quoted post on the note and addresses its author. The quoted
+	 * post is named by `quote_id` or an ActivityPub URI, must be held here and
+	 * must be public or unlisted (as `PinService::pin()` and
+	 * `BoostService::create()` require). The author is addressed because their
+	 * server answers the QuoteRequest, unless it is this one.
 	 *
 	 * @return ?Person the quoted author, when there is a quote and they are known
-	 * @throws InvalidActionException when the post may not be quoted — the
-	 *                                exception the client API already answers 422 with, which is what a
-	 *                                client can act on, and the one PinService::pin() raises for the
-	 *                                same refusal
+	 * @throws InvalidActionException when the post may not be quoted, which
+	 *                                the client API answers 422 with, as for
+	 *                                PinService::pin()
 	 */
 	private function applyQuote(Stream $note, string $quotedId, Person $quoter): ?Person {
 		if ($quotedId === '') {
@@ -808,9 +737,8 @@ class PostService {
 		$this->blockedBy()?->assertNotBlocked($quoter, [$quoted->getAttributedTo()]);
 
 		if (BlueskyIds::isPostId($quoted->getId())) {
-			// Bluesky asks nobody's permission to quote: the author's postgate
-			// decides, and the AppView applies it — a quote it shows detached
-			// is refused here instead
+			// on Bluesky the author's postgate decides and the AppView applies
+			// it: a quote it shows detached is refused here
 			$refusal = $quoted->getQuotePolicy() === Stream::QUOTE_POLICY_NOBODY
 				? Postgates::REFUSAL
 				: ($this->postgates()?->refusal($quoter, $quoted) ?? '');
@@ -832,13 +760,9 @@ class PostService {
 		}
 
 		if ($quoted->isLocal()) {
-			// this server is the quoted author's server, so the approval is
-			// ours to give and there is nobody to ask: sending a QuoteRequest
-			// here would be this instance posting to its own inbox and waiting
-			// for its own answer. The post is quotable — that was decided two
-			// lines up, by the same rule QuoteRequestInterface would apply —
-			// so stamp it now, before the source is snapshotted, and the very
-			// first delivery carries an approval every peer can dereference.
+			// the quoted author is local, so the approval is ours to give:
+			// stamp it now, before the source is snapshotted, so the first
+			// delivery carries it
 			$note->setQuoteAuthorization(
 				$quoted->getId() . '/quote_authorizations/'
 				. QuoteRequestInterface::stamp($note->getId())
@@ -873,15 +797,10 @@ class PostService {
 	}
 
 	/**
-	 * FEP-044f: ask the quoted author's server for permission.
-	 *
-	 * Mastodon 4.5 renders a quote inline only once the quoting post carries a
-	 * `quoteAuthorization`, and only grants one in answer to a QuoteRequest —
-	 * without this the quote federates as a bare link on every Mastodon
-	 * instance. The approval arrives later, as an `Accept{QuoteRequest}`, and
-	 * `QuoteRequestInterface` writes it onto the post.
-	 *
-	 * A failure here is not a failure of the post: it is already published.
+	 * FEP-044f: ask the quoted author's server for permission. Mastodon 4.5
+	 * renders a quote inline only with a `quoteAuthorization`, granted in an
+	 * `Accept{QuoteRequest}` that `QuoteRequestInterface` writes onto the
+	 * post. A failure here does not fail the published post.
 	 */
 	private function requestQuoteApproval(Person $actor, Stream $note, Person $author): void {
 		$request = new QuoteRequest();
@@ -912,9 +831,9 @@ class PostService {
 	}
 
 	/**
-	 * The stored wire object is what a reload reads the language and the edit
-	 * stamp from, and what a remote Update rewrites; a local edit has to
-	 * rewrite it the same way or the next re-export federates the old text.
+	 * The stored wire object is what a reload reads the language and edit
+	 * stamp from; a local edit rewrites it or the next re-export sends the
+	 * old text.
 	 */
 	private function snapshotSource(Stream $stream): void {
 		$stream->setSource($stream->wireSource());
@@ -937,12 +856,9 @@ class PostService {
 	}
 
 	/**
-	 * The poster's Nextcloud language, which is the best guess this app has
-	 * for the language they write in. `IFactory::getUserLanguage()` already
-	 * falls back to the instance default and then to English; a locale's
-	 * region is dropped unless it names a different written language, so
-	 * Mastodon's per-language filters — keyed by plain `de`, not `de-DE` —
-	 * still match the post.
+	 * The poster's Nextcloud language, the best guess for what they write in.
+	 * The region is dropped unless it names a different written language, so
+	 * Mastodon's per-language filters (`de`, not `de-DE`) match.
 	 */
 	private function defaultLanguageOf(Person $actor): string {
 		$user = ($actor->getUserId() !== '') ? $this->userManager->get($actor->getUserId()) : null;
@@ -957,19 +873,10 @@ class PostService {
 	}
 
 	/**
-	 * The hashtags and mentions the edited text names.
-	 *
-	 * An edit is a fresh parse of the text, so the `tag` array has to be one
-	 * too. Without it a hashtag written into a post gained no `Hashtag` tag:
-	 * it rendered as dead text, the post reached no tag timeline and no
-	 * follower of that tag, and a hashtag taken out of the text kept its tag
-	 * and its place in that timeline for ever.
-	 *
-	 * Mentions are only added. Addressing cannot be withdrawn — the post has
-	 * already been delivered to everyone it named — so a mention deleted from
-	 * the text keeps its tag, and only a name that is new to the post is
-	 * addressed. It does leave the client's `mentions`, as a mention Mastodon
-	 * finds gone from an edited text is kept only as a silent one.
+	 * The hashtags and mentions the edited text names, parsed afresh, so a
+	 * hashtag added or removed in an edit is linked and indexed accordingly.
+	 * Mentions are only added: the post was already delivered to everyone it
+	 * named, so a removed mention keeps its tag but leaves `mentions`.
 	 */
 	private function reapplyEntities(Stream $stream, string $content): void {
 		$linkedBefore = $this->linkifyService->mentionedHrefs(
@@ -986,8 +893,8 @@ class PostService {
 		}
 
 		if ($stream instanceof Note) {
-			// rebuilt rather than appended to, the way StreamService rebuilds
-			// the Emoji tags
+			// rebuilt rather than appended to, as StreamService rebuilds the
+			// Emoji tags
 			$stream->setTags(array_values(array_filter(
 				$stream->getTags(),
 				static fn (array $tag): bool => ($tag['type'] ?? '') !== 'Hashtag'
@@ -1019,14 +926,9 @@ class PostService {
 	}
 
 	/**
-	 * The accounts and hashtags written into the text itself.
-	 *
-	 * The entities come from `LinkifyService`, which is also what builds the
-	 * links in the published HTML: one parse, so what the post addresses, what
-	 * its `tag` array names and what its markup links can never be three
-	 * different lists. The pair of regular expressions this replaced read a
-	 * handle as "everything up to the next space", which swallowed the full
-	 * stop at the end of a sentence and addressed `bob@example.invalid.`.
+	 * The accounts and hashtags written into the text itself, from the same
+	 * `LinkifyService` parse that builds the published links, so addressing,
+	 * `tag` and markup always agree.
 	 */
 	public function fixRecipientAndHashtags(Post $post) {
 		foreach ($this->linkifyService->entitiesIn($post->getContent()) as $entity) {
@@ -1039,9 +941,8 @@ class PostService {
 	}
 
 	/**
-	 * A reply is the strongest thing a reader says about a post short of
-	 * writing one: its hashtags count for For you. Read as the viewer,
-	 * and never allowed to fail the post it is a side effect of.
+	 * A reply's hashtags count for the replier's For you. Read as the viewer,
+	 * and never allowed to fail the post.
 	 */
 	private function learnFromReply(Person $actor, string $replyTo): void {
 		if ($replyTo === '') {

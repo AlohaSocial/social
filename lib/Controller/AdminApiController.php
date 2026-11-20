@@ -36,35 +36,16 @@ use Throwable;
 /**
  * Mastodon's admin API: `/api/v1/admin/*`.
  *
- * Moderation existed here before this controller did — the admin panel silences
- * and suspends accounts, resolves reports and keeps the instance access list —
- * but every one of those was a `Moderation#*` route needing a Nextcloud session
- * *and* a CSRF token, which no API client has and none can obtain. A moderator
- * could act from a browser and from nowhere else.
+ * Only a Nextcloud administrator may reach it: every route begins with
+ * `initAdmin()`, which asks `IGroupManager::isAdmin()` about the user behind
+ * the token or session. An OAuth scope cannot be the check, since a client
+ * may register any scope string; the scope is still required on a bearer
+ * token, as Mastodon requires, and can only narrow what an administrator may
+ * do.
  *
- * ### Who may reach any of this
- *
- * A **Nextcloud administrator**, and nothing else. Every route begins with
- * `initAdmin()`, which resolves the Nextcloud user behind the request — the
- * token's user, or the session's — and then asks `IGroupManager::isAdmin()`
- * about *that user*. Anyone else is a 403, whatever they present.
- *
- * An OAuth scope is not, and cannot be, the check. This app's client
- * registration stores whatever scope string a client asks for: `admin:write`
- * on a token records that some client asked for it during an authorisation,
- * never that the user behind it may moderate anything. A scope check alone
- * would therefore have made every account on the instance an administrator of
- * it. The scope is still required on a bearer token, as Mastodon requires it —
- * it is what keeps an ordinary client's `read` token from reaching the admin
- * API on an administrator's behalf — but it is checked *after* the group, and
- * it can only ever narrow what an administrator may do.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like every other client-API
- * controller here: a bearer token carries no session and no CSRF token, so
- * `#[AdminRequired]` — which is what `ModerationController` relies on — would
- * refuse every real caller before the handler ran. Nothing is public in fact;
- * the administrator check simply happens in the handler rather than in the
- * middleware, and it happens on every single route.
+ * `#[PublicPage]` with `#[NoCSRFRequired]` like every other client-API
+ * controller, since `#[AdminRequired]` would refuse a bearer token; the
+ * administrator check happens in the handler on every route.
  *
  * Entities are documented in `AdminAccount`, `AdminReport` and
  * `AdminDomainBlock`; each emits every key Mastodon documents, with the empty
@@ -87,13 +68,9 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * A page of accounts, newest first.
-	 *
-	 * `email` and `ip` are accepted and match nothing: this instance holds
-	 * neither for a fediverse account, so a page filtered by one is empty
-	 * rather than unfiltered — a filter that was ignored would have shown a
-	 * moderator the whole instance as the answer to a question about one
-	 * account.
+	 * A page of accounts, newest first. `email` and `ip` are accepted and
+	 * match nothing, since this instance holds neither for a fediverse
+	 * account; the page is empty rather than unfiltered.
 	 *
 	 * @param string $origin `local`, `remote`, or empty for both
 	 * @param string $status `active`, `silenced`, `suspended`; `pending` and
@@ -124,9 +101,8 @@ class AdminApiController extends AdminApiControllerBase {
 				return new DataResponse([], Http::STATUS_OK);
 			}
 
-			// clamped here as well as in the service: the cursor is offered
-			// only when the page came back full, and a client asking for more
-			// than the instance will build would never be offered one
+			// clamped here too: the cursor is only offered when the page came
+			// back full
 			$limit = $this->limit($limit);
 			$page = $this->adminApiService->accountPage(
 				$this->origin($origin), $username, $display_name, $by_domain,
@@ -154,17 +130,9 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * The moderator's decision about an account.
-	 *
-	 * Answers `{}`, as Mastodon does. `report_id` resolves that report at the
-	 * same time — a decision taken from a report is the report handled, and
-	 * making the client send a second call for it leaves the two able to
-	 * disagree.
-	 *
-	 * A report about some other account is a 404 with nothing done, as on
-	 * Mastodon, which looks it up among the target's own reports: otherwise
-	 * any open report could be closed as a side effect of an unrelated
-	 * decision.
+	 * The moderator's decision about an account. Answers `{}`, as Mastodon
+	 * does. `report_id` resolves that report at the same time; a report about
+	 * another account is a 404 with nothing done.
 	 *
 	 * @param string $type `silence`, `suspend` or `none`
 	 * @param string $text the moderator's note, kept as the comment on the
@@ -172,11 +140,9 @@ class AdminApiController extends AdminApiControllerBase {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	// `{id}` accepts slashes here and on account(): a suspended account, whose
-	// cached actor the suspension purged, is named by its actor id and no
-	// longer by a numeric one. That makes account()'s `/api/v1/admin/accounts/{id}`
-	// match this url too, and only the verb keeps them apart — so every action
-	// route under `/api/v1/admin/accounts/{id}/` has to stay a POST.
+	// `{id}` accepts slashes here and on account(), since a suspended account
+	// is named by its actor id; account()'s route then matches this url too,
+	// so every action route under `/api/v1/admin/accounts/{id}/` must stay a POST.
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/admin/accounts/{id}/action', requirements: ['id' => '.+'])]
 	public function accountAction(
 		string $id,
@@ -205,13 +171,9 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Mastodon's "re-enable a disabled login".
-	 *
-	 * Nothing here can disable one — a fediverse account has no login of its
-	 * own, and the Nextcloud account behind a local one is enabled where
-	 * Nextcloud keeps it — so this answers with the account and changes
-	 * nothing. It exists because a moderation client calls it unconditionally
-	 * when clearing a strike, and a 404 there reads as "no such account".
+	 * Mastodon's "re-enable a disabled login". Nothing here can disable one,
+	 * so this answers with the account and changes nothing; moderation clients
+	 * call it when clearing a strike.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -257,11 +219,8 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Lifts "everything this account posts is sensitive".
-	 *
-	 * The counterpart of `action` with `sensitive`, which this app has had
-	 * since the tier between doing nothing and silencing was added. Without
-	 * this route an admin client could apply it and not take it off.
+	 * Lifts "everything this account posts is sensitive", the counterpart of
+	 * `action` with `sensitive`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -280,16 +239,11 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Deletes what an account posted here, without deleting the account.
-	 *
-	 * Mastodon's `DELETE /admin/accounts/{id}`, which removes the *data* — it
-	 * does not remove the person's login, and here it could not: an account on
-	 * this server is a Nextcloud account and the server owns it. What this
-	 * does is the suspension's destructive half: the posts go, the cached
-	 * actor goes, and a local account's deletion is federated as a `Delete`.
-	 *
-	 * Irreversible, which is why it is a separate verb from `action` rather
-	 * than a severity inside it.
+	 * Deletes what an account posted here, without deleting the account
+	 * (Mastodon's `DELETE /admin/accounts/{id}`; the Nextcloud account is the
+	 * server's). The suspension's destructive half: posts and cached actor go,
+	 * and a local account's deletion is federated. Irreversible, hence a
+	 * separate verb.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -307,8 +261,7 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * The account a write is about, once the caller is known to be allowed to
-	 * act on it.
+	 * The account a write is about, once the caller may act on it.
 	 *
 	 * @throws ItemNotFoundException
 	 * @throws ModerationNotAllowedException
@@ -321,10 +274,8 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * A page of reports, newest first.
-	 *
-	 * `resolved` follows Mastodon: absent means unresolved only, which is the
-	 * queue a moderator opens the panel to work through.
+	 * A page of reports, newest first. As in Mastodon, an absent `resolved`
+	 * means unresolved only.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -372,16 +323,8 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Changes what a report says it is about.
-	 *
-	 * A moderator reading a report often finds it filed under the wrong
-	 * category — "spam" for something that is harassment — and Mastodon lets
-	 * them correct it before deciding. Without this the category a reporter
-	 * chose was the category for ever.
-	 *
-	 * `rule_ids` is accepted and ignored: the rules a report names are the
-	 * reporter's, kept as they read when it was filed, and a rule's id is its
-	 * line number, which an edit of the rules shifts.
+	 * Changes a report's category. `rule_ids` is accepted and ignored: the
+	 * rules a report names are kept as they read when it was filed.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -482,15 +425,11 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Adds a domain block at one of the two tiers this instance has.
-	 *
-	 * `suspend` (the default) puts the domain on the deny list, which refuses
-	 * everything from it; `silence` keeps its accounts readable to whoever
-	 * follows them and takes them out of the public timelines. Mastodon's
-	 * `noop` has no list to go on here and is refused with a 422 rather than
-	 * quietly applied as something else. `private_comment` is kept for the
-	 * moderators, `public_comment` is what the published list shows; an
-	 * absent one leaves what is recorded as it is.
+	 * Adds a domain block at one of the two tiers this instance has: `suspend`
+	 * (the default) refuses everything from the domain; `silence` keeps its
+	 * accounts readable to followers and out of public timelines. Mastodon's
+	 * `noop` is refused with a 422. `private_comment` is for moderators,
+	 * `public_comment` for the published list; an absent one is left as is.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -514,8 +453,7 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Moves a block between the two tiers — a change of severity is a move
-	 * from one list to the other, the same severity again a no-op — and
+	 * Moves a block between the two tiers (the same severity is a no-op) and
 	 * rewrites whichever of the two reasons is sent.
 	 */
 	#[NoCSRFRequired]
@@ -556,18 +494,10 @@ class AdminApiController extends AdminApiControllerBase {
 	// The allowlist, which only means anything in allowlist federation
 
 	/**
-	 * The instances this server will talk to at all.
-	 *
-	 * Mastodon's other half of `domain_blocks`, and it means something only
-	 * when `access_type` is `none_but` — allowlist federation, which this app
-	 * has had all along with no API over it. An admin client could read the
-	 * deny list and not this one, so on an allowlisted instance it showed an
-	 * empty screen and no way to tell why.
-	 *
-	 * The ids are derived from the domain rather than stored: the access list
-	 * is a config array with no ids of its own, and giving it a table so a
-	 * client could address a row by number would be storing something for the
-	 * client's benefit alone. Every route here takes the domain itself too.
+	 * The instances this server will talk to at all: Mastodon's allowlist,
+	 * meaningful only when `access_type` is `none_but`. The ids are derived
+	 * from the domain, since the access list is a config array with no ids;
+	 * every route here also takes the domain itself.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -624,11 +554,8 @@ class AdminApiController extends AdminApiControllerBase {
 	// IP blocks and email-domain blocks
 
 	/**
-	 * The addresses this instance answers nothing from.
-	 *
-	 * Mastodon's list, with one severity: `no_access`. The other two police a
-	 * sign-up this instance has not — an account here is a Nextcloud account,
-	 * and the server decides who gets one.
+	 * The addresses this instance answers nothing from: Mastodon's list, with
+	 * one severity, `no_access`, since there is no sign-up here to police.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -657,14 +584,10 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Refuses an address or a range everything this app serves.
-	 *
-	 * `expires_in` is Mastodon's: seconds from now, or absent for a block that
-	 * does not lift itself. A severity this instance cannot honour is a
-	 * **422** rather than a row nothing will ever read — an admin told their
-	 * rule was stored would believe sign-ups from that range were being turned
-	 * away. So is a range wider than a /16 (IPv4) or a /32 (IPv6), or one
-	 * holding the caller's own address as the middleware sees it.
+	 * Refuses an address or a range everything this app serves. `expires_in`
+	 * is seconds from now, or absent for a permanent block. A severity this
+	 * instance cannot honour is a 422, as is a range wider than a /16 (IPv4)
+	 * or /32 (IPv6), or one holding the caller's own address.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -693,8 +616,8 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Changes one. The address is not among what can change: a block on a
-	 * different range is a different block, and Mastodon's own PUT keeps it.
+	 * Changes one. The address cannot change: a different range is a
+	 * different block, as in Mastodon.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -739,11 +662,9 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * The email domains this instance does not give fediverse accounts to.
-	 *
-	 * Mastodon refuses a sign-up at one of these. There is no sign-up here, so
-	 * what it refuses is the decision this app does make: whether a Nextcloud
-	 * account gets a fediverse identity — the same question one step later.
+	 * The email domains this instance does not give fediverse accounts to:
+	 * where Mastodon refuses a sign-up, this refuses a Nextcloud account a
+	 * fediverse identity.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -807,16 +728,9 @@ class AdminApiController extends AdminApiControllerBase {
 	// trends, as a moderation client asks for them
 
 	/**
-	 * The same three trend readers the public routes use, behind the admin
-	 * gate a moderation client expects them at.
-	 *
-	 * On Mastodon these carry a moderator's extra field — whether the trend is
-	 * allowed or pending review — and this instance reviews nothing: a trend
-	 * here is what the counts say. So they answer exactly what
-	 * `/api/v1/trends/*` answers, which is the honest thing to do with a route
-	 * whose only difference is a review queue that does not exist. They exist
-	 * because a moderation client asks for them by this path and a 404 reads
-	 * as "this server has no trends".
+	 * The same three trend readers the public routes use, at the admin path
+	 * moderation clients expect. This instance has no review queue, so they
+	 * answer exactly what `/api/v1/trends/*` answers.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -873,17 +787,10 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * Keeps something out of what is trending, or lets it back in.
-	 *
-	 * Six routes because Mastodon has six — approve and reject, for each of
-	 * tags, links and statuses — and one implementation, because what differs
-	 * between them is the word naming the kind.
-	 *
-	 * **Rejecting hides; approving grants nothing.** Trending here shows
-	 * everything nobody has objected to, which is what it did before this
-	 * existed, so an approval only records that a moderator has looked. The
-	 * other arrangement — nothing trends until approved — would have emptied
-	 * every instance's Explore page on upgrade.
+	 * Keeps something out of what is trending, or lets it back in: six routes
+	 * as in Mastodon (approve and reject for tags, links and statuses), one
+	 * implementation. Rejecting hides; approving only records that a moderator
+	 * looked, since everything not objected to trends.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -928,13 +835,9 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * The hashtags a moderator has decided about.
-	 *
-	 * Mastodon's `/admin/tags`, narrowed to the one thing this app stores
-	 * about a tag: whether it may trend. Its `usable` and `listable` are about
-	 * a tag row that can be disabled for *posting* and for *search*, which
-	 * this app has no equivalent of — a hashtag here is written by whoever
-	 * types it and exists because a post carries it.
+	 * The hashtags a moderator has decided about: Mastodon's `/admin/tags`,
+	 * narrowed to whether a tag may trend. This app has no equivalent of
+	 * `usable` and `listable`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -952,12 +855,8 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * One hashtag's decision, and `PUT` to change it.
-	 *
-	 * `trendable` is the one field that means anything here; `usable` and
-	 * `listable` are accepted and ignored, for the same reason `rule_ids` is
-	 * on a report — a client sending all three should not have the one that
-	 * works refused along with the two that do not.
+	 * One hashtag's decision, and `PUT` to change it. Only `trendable` means
+	 * anything; `usable` and `listable` are accepted and ignored.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1007,12 +906,9 @@ class AdminApiController extends AdminApiControllerBase {
 	// metrics
 
 	/**
-	 * One number a day over a window, for each key asked for.
-	 *
-	 * Mastodon's `Admin::Measure`. A key this instance cannot answer is a
-	 * **422** naming the ones it can, rather than a row of zeroes: answering
-	 * 0 to "how many accounts signed up through an invite" reads as "none
-	 * did", which is a different claim from "this instance has no invites".
+	 * One number a day over a window, for each key asked for (Mastodon's
+	 * `Admin::Measure`). A key this instance cannot answer is a 422 naming
+	 * the ones it can, rather than a misleading zero.
 	 *
 	 * @param string[]|string $keys
 	 */
@@ -1075,10 +971,8 @@ class AdminApiController extends AdminApiControllerBase {
 
 	/**
 	 * How much of each month's new local accounts is still posting later.
-	 *
-	 * Monthly, whatever `frequency` asks for: a cohort is a thing you read
-	 * over months, and a daily one on an instance with a handful of sign-ups a
-	 * month is a table of zeroes.
+	 * Monthly whatever `frequency` asks for, since daily cohorts on a small
+	 * instance are all zeroes.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1101,12 +995,8 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * A moment as a client writes one: an ISO date, or seconds since the
-	 * epoch, or nothing.
-	 *
-	 * Zero for anything unreadable, which the service refuses by name — a
-	 * window silently rounded to "the epoch until now" is a query nobody asked
-	 * for over every row there is.
+	 * A moment as a client writes one: an ISO date, seconds since the epoch,
+	 * or nothing. Zero for anything unreadable, which the service refuses.
 	 */
 	private function timestamp(string $written): int {
 		$written = trim($written);
@@ -1157,8 +1047,7 @@ class AdminApiController extends AdminApiControllerBase {
 	}
 
 	/**
-	 * A page with the `Link` header masto.js reads its cursor from — without
-	 * it a client shows the first page and stops.
+	 * A page with the `Link` header masto.js reads its cursor from.
 	 *
 	 * @param array<int|string> $ids the cursor ids of the page, in its order; empty when
 	 *                               the page has no cursor at all, which is what the

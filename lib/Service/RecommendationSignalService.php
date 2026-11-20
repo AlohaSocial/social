@@ -188,10 +188,9 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				} else {
 					$features = $this->features->extract($post);
 					$delta = $this->delta($kind, $event);
-					// Merely leaving a post on screen is not a reliable signal of
-					// interest: the reader may be reading slowly, interrupted, or
-					// scrolling past. Explicit actions and measured video playback
-					// carry the positive intent; a quick pass can still be negative.
+					// time on screen alone is not a signal of interest; explicit
+					// actions and measured video playback are, and a quick pass
+					// can still count against
 					if ($delta['topic'] !== 0.0) {
 						foreach ($features['topics'] as $topicId => $_feature) {
 							$signals[] = ['dimension' => 'topics', 'entity_key' => $topicId, 'delta' => $delta['topic']];
@@ -377,9 +376,8 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				if (!$matchesBody && !$matchesHeadline && !($exposure['exact'] ?? false)) {
 					continue;
 				}
-				// Each HMAC band tracks the same views. Use the largest band count
-				// per session (rather than summing all bands), then include repeats
-				// from that session in the penalty.
+				// each HMAC band tracks the same views: take the largest band
+				// count per session, then add that session's repeats
 				$impressionCount += $exposure['impressions'];
 				$updatedAt = max($updatedAt, $exposure['updated_at']);
 			}

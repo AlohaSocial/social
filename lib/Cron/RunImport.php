@@ -14,12 +14,8 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 
 /**
- * Runs one import an account asked for.
- *
- * Queued by `ImportQueueService::queue()` with the row's id, so — like the
- * other on-demand jobs — it is not in `info.xml`: it means nothing without
- * the row. Everything about the run, including how a failure is recorded,
- * is the service's; this only hands it the id.
+ * Runs one import an account asked for. Queued by `ImportQueueService::queue()`
+ * with the row's id, so it is not in `info.xml`.
  */
 class RunImport extends QueuedJob {
 	public function __construct(

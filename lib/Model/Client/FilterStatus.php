@@ -13,17 +13,10 @@ use JsonSerializable;
 use OCA\Social\Tools\Nid;
 
 /**
- * Mastodon's FilterStatus entity: one post a filter covers by name.
- *
- * The other half of a filter. A keyword catches whatever it matches, now and
- * in the future; a filter status catches one post and nothing else, which is
- * what a client's "filter this post" offers — a thread that has stopped being
- * worth reading, a picture somebody does not want to meet again.
- *
- * Its `id` is its own, not the post's: a client removes the entry with
- * `DELETE /api/v2/filters/statuses/{id}`, and the post keeps existing
- * afterwards. The post's id is its nid, held as the decimal string it is
- * because it does not fit a PHP int everywhere — see `Nid`.
+ * Mastodon's FilterStatus entity: one post a filter covers by name, what a
+ * client's "filter this post" offers. Its `id` is its own, removed with
+ * `DELETE /api/v2/filters/statuses/{id}`; the post's id is its nid as a
+ * decimal string (see `Nid`).
  */
 class FilterStatus implements JsonSerializable {
 	private int $id = 0;

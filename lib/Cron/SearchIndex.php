@@ -19,22 +19,16 @@ use Psr\Log\LoggerInterface;
 /**
  * Adds the posts stored before `social_search_term` existed to it.
  *
- * Queued once by `Version1000Date20261008000401`, so — like `DomainPurge` —
- * it is not registered in `info.xml`. It walks `social_stream` in nid order
- * from the cursor it keeps in the app settings, a chunk at a time and for a
- * bounded time per run, and puts itself back on the list until a chunk comes
- * back short: that is the newest post, and every post stored since the table
- * existed was indexed when it was stored. It then marks the index ready and
- * is not queued again; the search stops scanning from that request on.
+ * Queued once by `Version1000Date20261008000401`, so not in `info.xml`. It
+ * walks `social_stream` in nid order from a cursor in the app settings, a
+ * chunk at a time for a bounded time per run, and requeues itself until a
+ * chunk comes back short; then it marks the index ready and the search stops
+ * scanning.
  *
- * A run that fails keeps the cursor of the last chunk it finished, so the
- * next run repeats one chunk at most, and the unique (term, nid) index makes
- * the repeat harmless. A chunk that fails again and again is not repeated
- * for ever: after FAILURES_BEFORE_ISOLATING failures at the same cursor the
- * posts are indexed one at a time, and the one post a chunk of one fails on
- * is named in the log, counted in `search_index_skipped` and passed over.
- * Every failed run changes what the next one does, so no post can hold the
- * index back indefinitely.
+ * A failed run keeps the cursor of the last finished chunk; the unique
+ * (term, nid) index makes a repeat harmless. After FAILURES_BEFORE_ISOLATING
+ * failures at one cursor the posts are indexed one at a time, and a post that
+ * fails alone is logged, counted in `search_index_skipped` and passed over.
  */
 class SearchIndex extends QueuedJob {
 	/** Posts per chunk; each chunk's words go in as a few multi-row inserts. */

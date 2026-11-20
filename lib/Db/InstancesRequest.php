@@ -15,11 +15,6 @@ use OCA\Social\Model\Instance;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
-/**
- * Class InstancesRequest
- *
- * @package OCA\Social\Db
- */
 class InstancesRequest extends InstancesRequestBuilder {
 	use TArrayTools;
 

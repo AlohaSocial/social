@@ -316,12 +316,10 @@ class AtprotoAccountController extends Controller {
 
 	/**
 	 * Moves the viewer's Bluesky account to another PDS: the account is made
-	 * there now, the rest follows in the background. The other server is the
-	 * person's choice and is waited for in the request, so a few tries an
-	 * hour is all one account gets. Without a recovery key the person says
-	 * `without_recovery` first: only the other server controls the account
-	 * then. `announce` says where the account went once it moved: a
-	 * `post`, a `profile` field, or `none`.
+	 * there now, the rest follows in the background. The other server is
+	 * waited for in the request, so a few tries an hour per account. Without
+	 * a recovery key the person must send `without_recovery`. `announce`
+	 * says where the account went: a `post`, a `profile` field, or `none`.
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
@@ -358,10 +356,9 @@ class AtprotoAccountController extends Controller {
 	}
 
 	/**
-	 * Goes on with a move away that stopped for the viewer to decide —
-	 * pictures or videos did not arrive, or the repository there is not the
-	 * one here: `without_missing` switches without them, else they are
-	 * copied again.
+	 * Goes on with a move away that stopped for the viewer to decide (photos
+	 * or videos did not arrive, or the repository there differs):
+	 * `without_missing` switches without them, else they are copied again.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move/continue')]
@@ -466,8 +463,8 @@ class AtprotoAccountController extends Controller {
 	}
 
 	/**
-	 * The viewer's decision on a move here that stopped because pictures
-	 * or videos are missing: go on without them, or copy them again first.
+	 * The viewer's decision on a move here that stopped because photos or
+	 * videos are missing: go on without them, or copy them again first.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move-in/continue')]

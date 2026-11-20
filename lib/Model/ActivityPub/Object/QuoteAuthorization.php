@@ -13,14 +13,10 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * FEP-044f's stamp of approval, as a document a peer can fetch.
- *
- * The `Accept` that answers a `QuoteRequest` only names this object; Mastodon
- * fetches it before it will render a quote inline, and refuses the quote if
- * what comes back does not say — in its own words, from the quoted author's own
- * server — that this post may quote that one. So the three properties are the
- * whole point of the document: who granted it, the post that does the quoting,
- * and the post being quoted.
+ * FEP-044f's stamp of approval, as a document a peer can fetch. Mastodon
+ * fetches it before rendering a quote inline and requires it to name, from
+ * the quoted author's server, who granted it, the quoting post and the
+ * quoted post.
  */
 class QuoteAuthorization extends ACore implements JsonSerializable {
 	public const TYPE = 'QuoteAuthorization';

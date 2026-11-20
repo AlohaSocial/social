@@ -16,29 +16,15 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * What the instance has been doing, as Mastodon's admin metrics ask it.
+ * What the instance has been doing, as Mastodon's admin metrics ask it: a
+ * measure is one number a day over a window, a dimension a ranked list behind
+ * one number, and retention how much of each month's new accounts still posts.
  *
- * Three shapes, and they are Mastodon's: a **measure** is one number a day
- * over a window, a **dimension** is a ranked list of the things behind one
- * number, and **retention** is how much of each month's new accounts is still
- * posting later. A moderation client draws all three, and until now asked for
- * each of them and got a 404.
+ * A key this instance cannot answer is refused, not answered with zeroes,
+ * since `0` would claim "none" where the instance has no such thing.
  *
- * ### Which keys exist here, and which do not
- *
- * A key this instance cannot answer is **refused**, not answered with zeroes.
- * Mastodon's list is written for a server that owns its sign-up, its email
- * and its own media store; several of its keys describe things this app has
- * no row for. Answering `0` to "how many accounts signed up through an
- * invite" reads as "none did", which is a different claim from "this instance
- * has no invites", and it is the reading an admin acts on.
- *
- * ### Why the SQL is in here
- *
- * Same reason as `AdminApiService`: these counts are asked nowhere else, and
- * they are written against `IDBConnection` in `protected` methods so that what
- * decides which question gets asked can be tested without a database — the
- * standalone suite cannot even mock `IQueryBuilder`.
+ * The SQL is in `protected` methods against `IDBConnection`, as in
+ * `AdminApiService`, so key selection can be tested without a database.
  */
 class MetricsService {
 	/** A day, which is the grain Mastodon's measures are drawn at. */
@@ -94,9 +80,7 @@ class MetricsService {
 
 	/**
 	 * One measure a key, each as Mastodon's `Admin::Measure`.
-	 *
-	 * `previous_total` is the same span ending where this one starts, which is
-	 * the comparison the charts draw the arrow from.
+	 * `previous_total` is the same span ending where this one starts.
 	 *
 	 * @param string[] $keys
 	 *
@@ -164,13 +148,10 @@ class MetricsService {
 	}
 
 	/**
-	 * How much of each cohort of new local accounts is still posting later.
-	 *
-	 * Mastodon's `Admin::Cohort`, monthly: one row per month of sign-ups, and
-	 * within it one value per month since, counting the accounts of that
-	 * cohort that posted in it. `rate` is that count over the size of the
-	 * cohort, so the first value of every row is 1 or 0 — an account that
-	 * never posted at all is in the cohort and in none of its buckets.
+	 * How much of each cohort of new local accounts is still posting later
+	 * (Mastodon's `Admin::Cohort`, monthly): per sign-up month, one value per
+	 * month since, counting the cohort's accounts that posted in it. `rate` is
+	 * over the cohort size, so an account that never posted counts in no bucket.
 	 *
 	 * @throws InvalidResourceException
 	 */
@@ -203,11 +184,7 @@ class MetricsService {
 	}
 
 	/**
-	 * Why a key was refused, naming what this instance does have.
-	 *
-	 * The list is the answer: a client that asked for something Mastodon
-	 * documents deserves to be told which of its keys this server can draw,
-	 * rather than a bare "unknown".
+	 * Why a key was refused, naming the keys this instance does have.
 	 *
 	 * @param string[] $known
 	 */
@@ -299,11 +276,8 @@ class MetricsService {
 	}
 
 	/**
-	 * What this instance runs on.
-	 *
-	 * Mastodon lists the versions of its own dependencies here; the honest
-	 * equivalent is the app, the server it is an app of, and the two things
-	 * underneath that an admin would be asked for in a bug report.
+	 * What this instance runs on: the app, the server, and what an admin would
+	 * be asked for in a bug report.
 	 *
 	 * @return array<int, array{key: string, human_key: string, value: string}>
 	 */
@@ -353,10 +327,8 @@ class MetricsService {
 	// the queries
 
 	/**
-	 * Distinct local authors who posted on each day.
-	 *
-	 * "Active" as Mastodon counts it, which is not "logged in": this app has
-	 * no session of its own to count, and posting is the thing it can see.
+	 * Distinct local authors who posted on each day: "active" as Mastodon
+	 * counts it, since this app has no session of its own to count.
 	 *
 	 * @return array<string, int> Y-m-d => how many
 	 */
@@ -451,12 +423,9 @@ class MetricsService {
 	}
 
 	/**
-	 * The instances whose accounts posted most in the window.
-	 *
-	 * The host is read off the author's id in PHP rather than in SQL: there is
-	 * no host column, and four databases do not agree on how to cut one out of
-	 * a string. The set is one window of posts, which is what the chart is
-	 * about.
+	 * The instances whose accounts posted most in the window. The host is cut
+	 * from the author's id in PHP, since there is no host column and the
+	 * databases disagree on string functions.
 	 *
 	 * @return array<string, int>
 	 */
@@ -576,12 +545,9 @@ class MetricsService {
 	}
 
 	/**
-	 * The instance a scoped measure is about.
-	 *
-	 * Looser than the email-domain check, on purpose: a fediverse host may be
-	 * a single label with no dot in it — every instance on an internal network
-	 * is — and refusing those would leave an admin unable to ask about the
-	 * server sitting next to this one.
+	 * The instance a scoped measure is about. Looser than the email-domain
+	 * check: a fediverse host may be a single label with no dot, as on an
+	 * internal network.
 	 *
 	 * @throws InvalidResourceException
 	 */
@@ -607,11 +573,8 @@ class MetricsService {
 	}
 
 	/**
-	 * A moment as a bound parameter.
-	 *
-	 * The return is whatever `createNamedParameter()` hands back — a
-	 * `Parameter` on the real query builder, a string on some others — so it
-	 * is left untyped rather than narrowed to the one the doubles return.
+	 * A moment as a bound parameter, untyped because `createNamedParameter()`
+	 * returns different types on different builders.
 	 */
 	private function date(IQueryBuilder $qb, int $timestamp) {
 		return $qb->createNamedParameter(

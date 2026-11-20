@@ -102,11 +102,8 @@ class QueueStatus extends SocialCommand {
 	}
 
 	/**
-	 * What this instance has stopped trying to deliver.
-	 *
-	 * Printed even when nothing is currently failing, and printed separately:
-	 * an empty "failing" section on an instance that gave up on a peer
-	 * yesterday is the reassuring half of a bad answer.
+	 * What this instance has stopped trying to deliver, printed separately and
+	 * even when nothing is currently failing.
 	 *
 	 * @param array<string, mixed> $summary what FederationHealthService::summary() answers
 	 */

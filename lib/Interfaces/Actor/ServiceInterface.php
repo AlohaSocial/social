@@ -11,10 +11,5 @@ namespace OCA\Social\Interfaces\Actor;
 
 use OCA\Social\Interfaces\IActivityPubInterface;
 
-/**
- * Class ServiceInterface
- *
- * @package OCA\Social\Service\ActivityPub
- */
 class ServiceInterface extends PersonInterface implements IActivityPubInterface {
 }

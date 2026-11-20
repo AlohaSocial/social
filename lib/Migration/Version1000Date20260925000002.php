@@ -19,19 +19,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_cache_actor.account_lower`: the handle, lowercased, and indexed.
- *
- * The account search behind the composer's mention picker, `/api/v2/search`,
- * `/api/v1/accounts/search` and the unified search matched a prefix of
- * `account` case-insensitively — on MySQL by comparing it `COLLATE
- * utf8mb4_general_ci` — and the lookup of one account by its handle compared
- * `LOWER(account)`. `account` has no index, and neither comparison could have
- * used one: every keystroke was a scan of every cached actor. The lowercased
- * copy is compared as it stands (see `CacheActorsRequest::searchAccounts()`).
- *
- * Like `host`, it is derived from the handle, and written wherever the handle
- * is. A file of its own rather than lines in the squash, which every instance
- * that has upgraded has already recorded as run.
+ * `social_cache_actor.account_lower`: the handle, lowercased and indexed, so
+ * account search and handle lookups can use an index rather than scan every
+ * cached actor (see `CacheActorsRequest::searchAccounts()`). Derived from the
+ * handle like `host`. A step of its own, since the squash is already
+ * recorded as run on upgraded instances.
  */
 class Version1000Date20260925000002 extends SimpleMigrationStep {
 	/** Rows per backfill statement: three parameters a row, inside SQLite's 32,766. */
@@ -65,9 +57,8 @@ class Version1000Date20260925000002 extends SimpleMigrationStep {
 	}
 
 	/**
-	 * The rows written before the column existed, keyset-paged on the primary
-	 * key. A row not reached yet is only missing from a search — it is found
-	 * by its id everywhere else — and one pass of the upgrade reaches all.
+	 * Fills the rows written before the column existed, keyset-paged on the
+	 * primary key. A row not reached yet is only missing from search.
 	 */
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {

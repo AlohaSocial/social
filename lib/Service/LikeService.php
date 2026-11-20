@@ -29,11 +29,6 @@ use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
 
-/**
- * Class LikeService
- *
- * @package OCA\Social\Service
- */
 class LikeService {
 	use TStringTools;
 
@@ -60,8 +55,8 @@ class LikeService {
 	 * @throws Exception
 	 */
 	public function create(Person $actor, string $postId, string &$token = ''): ACore {
-		// a suspended account may not act: the check lives here rather than in
-		// StreamService, which ModerationService itself now depends on
+		// a suspended account may not act; checked here rather than in
+		// StreamService, which ModerationService depends on
 		$this->moderationService->assertNotSuspended($actor->getId());
 
 		/** @var Like $like */
@@ -204,12 +199,8 @@ class LikeService {
 	}
 
 	/**
-	 * Addresses a Like, or its Undo, at the inbox of the post's author.
-	 *
-	 * An author whose actor cannot be resolved used to be addressed by their
-	 * actor URL instead. That is not an inbox: the peer answers 4xx, the queue
-	 * row is deleted as permanently rejected, and the like is lost without a
-	 * word to anybody. There is nowhere to send it, so say so.
+	 * Addresses a Like, or its Undo, at the inbox of the post's author. An
+	 * author's actor URL is not an inbox, so an author with none is an error.
 	 *
 	 * @throws InvalidResourceException when the author publishes no inbox
 	 * @throws Exception when the author's actor cannot be resolved at all

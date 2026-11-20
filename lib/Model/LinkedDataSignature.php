@@ -16,11 +16,6 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class LinkedDataSignature
- *
- * @package OCA\Social\Model
- */
 class LinkedDataSignature implements JsonSerializable {
 	use TArrayTools;
 
@@ -181,13 +176,10 @@ class LinkedDataSignature implements JsonSerializable {
 			$hashHeader = $this->hashedCanonicalize($header, true);
 			$hashObject = $this->hashedCanonicalize($this->getObject());
 		} catch (Exception|\Error $e) {
-			// Normalisation refuses contexts that are not shipped with the app
-			// (SignatureService::documentLoader), so a document using one cannot be
-			// verified — which is a false result, not an error: the caller falls back
-			// to the HTTP-signature origin. The normaliser also fails with an
-			// Error on JSON-LD it does not expect — a context that is a NUL, an
-			// empty object where a type belongs — and that document is not
-			// verified either.
+			// normalisation refuses contexts the app does not ship
+			// (SignatureService::documentLoader) and throws an Error on
+			// unexpected JSON-LD; either is a false result, and the caller
+			// falls back to the HTTP-signature origin
 			return false;
 		}
 

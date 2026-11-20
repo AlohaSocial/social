@@ -25,10 +25,8 @@ class Status implements \JsonSerializable {
 	private ?array $event = null;
 	private int $inReplyToId = 0;
 	/**
-	 * The post this one quotes, as the client named it: the numeric status id
-	 * a Mastodon client sends, or an ActivityPub URI. Kept as a string for
-	 * exactly that reason — `(int)'https://…'` is 0, which is a quote of
-	 * whatever post happens to have that id.
+	 * The post this one quotes, as the client named it: a numeric status id
+	 * or an ActivityPub URI, hence a string (`(int)'https://…'` is 0).
 	 */
 	private string $quotedId = '';
 	/** who may quote the post being written: '', 'public', 'followers' or 'nobody' */
@@ -169,11 +167,8 @@ class Status implements \JsonSerializable {
 	}
 
 	/**
-	 * The team account this post is written as, when it is one.
-	 *
-	 * This app's own, not Mastodon's: Mastodon has no team accounts and a
-	 * client that has never heard of them sends nothing, which is what an
-	 * ordinary post is.
+	 * The team account this post is written as, when it is one. This app's
+	 * own; an ordinary client sends nothing.
 	 */
 	public function setPostAs(string $postAs): self {
 		$this->postAs = ltrim(trim($postAs), '@');
@@ -239,10 +234,8 @@ class Status implements \JsonSerializable {
 		$rule = $data['reply_policy'] ?? '';
 		$this->setReplyRule(is_scalar($rule) ? (string)$rule : '');
 
-		// what a video is called, and what it is. A `Note` has none of this and
-		// the composer never asked, so a video posted from here was published
-		// with its title guessed out of the first line of the post — which is
-		// right for somebody who wrote one and wrong for somebody who did not.
+		// the video's title, category and licence, so a video's title need not
+		// be guessed from the first line of the post
 		foreach (['video_title' => 'title', 'video_category' => 'category', 'video_licence' => 'licence'] as $field => $key) {
 			$value = $data[$field] ?? '';
 			if (is_scalar($value) && trim((string)$value) !== '') {

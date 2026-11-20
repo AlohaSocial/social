@@ -24,13 +24,11 @@ use Throwable;
 /**
  * Bluesky labelers a person subscribes to (§12.2), and what their labels do.
  *
- * Bluesky's own moderation service is always applied, at the moment a post
- * is read (`PostMapper`), and cannot be removed; this is for the others. A
- * labeler's labels reach this instance because every feed read asks for the
+ * Bluesky's own moderation service is always applied when a post is read
+ * (`PostMapper`); this is for the others. Every feed read asks for the
  * labelers anybody here subscribes to (`atproto-accept-labelers`); the
- * choice per label — ignore, warn, hide — is each person's own and applies
- * when they read, the way their word filters do. A label's default is the
- * one its labeler declares.
+ * setting per label (ignore, warn, hide) is each person's own, defaulting to
+ * what the labeler declares, and applies when they read.
  */
 class LabelerService {
 	public const SETTINGS = ['ignore', 'warn', 'hide'];

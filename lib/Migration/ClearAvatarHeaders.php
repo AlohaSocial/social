@@ -19,17 +19,11 @@ use OCP\Migration\IRepairStep;
 
 /**
  * Takes the header off every cached local actor whose header is its own
- * avatar.
- *
- * The header used to fall back to the avatar, and the cached copy of a local
- * actor stored that fallback in its source document as if it were a banner;
- * rebuilding the cache reads the header back from there, so it never went
- * away by itself. A header that is the account's icon, or Nextcloud's avatar
- * route of its handle, is removed from the stored document. A banner the
- * account uploaded is a media URL of this app and is left alone.
- *
- * Only local rows are read, paged on the primary key, and the marker keeps a
- * later upgrade from reading them again.
+ * avatar: an older fallback was stored in the source document as a banner and
+ * is read back on every rebuild. A header that is the account's icon, or
+ * Nextcloud's avatar route of its handle, is removed; an uploaded banner (a
+ * media URL of this app) stays. Local rows only, paged on the primary key,
+ * and a marker keeps later upgrades from repeating it.
  */
 class ClearAvatarHeaders implements IRepairStep {
 	/** Rows read per round trip. */
