@@ -15,19 +15,10 @@ use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
  * Mastodon's List entity: a user-made group of accounts they follow, with a
- * timeline of its own.
+ * timeline of its own. Not `List`, a reserved word in PHP.
  *
- * Named MastodonList and not List because `list` is a reserved word in PHP and
- * `class List` does not parse.
- *
- * `id` is a string in the JSON and an integer in the row, as every other id a
- * Mastodon client is handed is: `social_list.id` is the cursor and the path
- * segment, and a client compares it as an opaque string.
- *
- * `ownerId` is not part of the entity a client sees. It is carried so that the
- * one row a request names can be checked against the account that asked before
- * anything is done with it — see ListsRequest, where the check is a SQL
- * predicate rather than a comparison made after the row was read.
+ * `ownerId` is not shown to clients; it lets ListsRequest check ownership in
+ * SQL before anything is done with the row.
  */
 class MastodonList implements JsonSerializable {
 	use TArrayTools;
@@ -98,11 +89,8 @@ class MastodonList implements JsonSerializable {
 	}
 
 	/**
-	 * Anything that is not one of the three is stored as the default rather
-	 * than as itself: the column would otherwise hold a value that no client
-	 * and no query here knows how to read. Callers that must refuse an unknown
-	 * policy — the two write routes do, with a 422 — ask isRepliesPolicy()
-	 * first.
+	 * Anything but the three policies is stored as the default; the write
+	 * routes check isRepliesPolicy() first to answer 422.
 	 */
 	public function setRepliesPolicy(string $repliesPolicy): self {
 		$this->repliesPolicy = self::isRepliesPolicy($repliesPolicy)
@@ -186,12 +174,9 @@ class MastodonList implements JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's four keys, and two of this app's own: a client reads
-	 * `replies_policy` and `exclusive` off this to draw the list's settings,
-	 * and the owner is not among them. `nextcloud_group` is the group a list
-	 * follows, or null -- what tells this app's own client to draw the group
-	 * icon and not offer to edit the members; `public` whether anyone may
-	 * see the list and who is on it. A Mastodon client ignores both.
+	 * Mastodon's four keys plus two of this app's own, which Mastodon clients
+	 * ignore: `nextcloud_group`, the group a list follows (members not
+	 * editable), and `public`.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

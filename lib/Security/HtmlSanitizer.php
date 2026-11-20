@@ -15,26 +15,15 @@ use DOMNode;
 use DOMText;
 
 /**
- * Allowlist sanitizer for HTML received from remote instances.
+ * Allowlist sanitizer for HTML received from remote instances, which ends up
+ * in every local reader's timeline.
  *
- * Mastodon and its relatives ship post bodies and profile bios as HTML. That
- * HTML ends up in the timeline of every local reader, so it has to be treated
- * as hostile: anything not explicitly permitted is removed.
- *
- * The allowlist mirrors what Mastodon itself accepts on ingest, so posts keep
- * their lists, quotes and code blocks instead of being flattened to text, while
- * everything with script potential — event handler attributes, `javascript:`
- * URLs, `<img>`, `<style>`, `<form>` — is dropped.
- *
- * Unknown elements are unwrapped rather than deleted: `<div>hello</div>` still
- * yields "hello". Only the elements whose *content* is itself dangerous or
- * meaningless without the element (`<script>`, `<style>`, …) are removed with
- * their children.
- *
- * Implemented on a DOM parser rather than with regular expressions: a parser
- * sees the same tree the browser will, which is what makes an allowlist
- * trustworthy against malformed or deliberately confusing markup — the HTML5
- * one where PHP has it, see `sanitizeWith()`.
+ * The allowlist mirrors what Mastodon accepts on ingest (lists, quotes, code
+ * blocks) and drops anything with script potential. Unknown elements are
+ * unwrapped; only elements whose content is dangerous or meaningless
+ * (`<script>`, `<style>`, …) are removed with their children. It walks a DOM
+ * tree, the HTML5 parser where PHP has one (see `sanitizeWith()`), so it sees
+ * what the browser will.
  */
 final class HtmlSanitizer {
 	/**
@@ -132,12 +121,10 @@ final class HtmlSanitizer {
 	];
 
 	/**
-	 * Class names a `<span>` or `<a>` may carry.
-	 *
-	 * Mastodon marks mentions, hashtags and shortened links this way, and the
-	 * frontend renders them accordingly. Anything else is stripped so remote
-	 * markup cannot borrow the look of local UI. `src/utils/sanitizeHtml.js`
-	 * keeps the same list, and its test reads this one to hold them in step.
+	 * Class names a `<span>` or `<a>` may carry: Mastodon's markers for
+	 * mentions, hashtags and shortened links. Anything else is stripped so
+	 * remote markup cannot imitate local UI. `src/utils/sanitizeHtml.js` keeps
+	 * the same list, and its test holds them in step.
 	 *
 	 * @var list<string>
 	 */
@@ -170,14 +157,10 @@ final class HtmlSanitizer {
 	/**
 	 * `sanitize()` with the parser chosen by the caller.
 	 *
-	 * PHP 8.4's `Dom\HTMLDocument` parses and serialises as an HTML5 browser
-	 * does; `DOMDocument` is libxml's HTML4 parser, whose tree and output can
-	 * differ from what the browser builds out of the same bytes, which is the
-	 * opening mutation XSS needs. The HTML5 parser is used wherever PHP has
-	 * it. Where it does not, the HTML4 result is sanitised again until it no
-	 * longer changes, so markup that libxml itself reads back differently
-	 * from how it wrote it is caught; how a browser reads it is only the
-	 * HTML5 parser's to promise.
+	 * PHP 8.4's `Dom\HTMLDocument` parses as an HTML5 browser does and is used
+	 * wherever available. libxml's HTML4 `DOMDocument` can build a different
+	 * tree from the same bytes (the opening for mutation XSS), so its result
+	 * is sanitised again until it stops changing.
 	 *
 	 * @internal public for the tests, which run every case through both parsers
 	 */
@@ -458,21 +441,14 @@ final class HtmlSanitizer {
 	}
 
 	/**
-	 * What a link in remote HTML is written out as, or null when it cannot
-	 * be kept.
+	 * What a link in remote HTML is written out as, or null when it cannot be
+	 * kept.
 	 *
-	 * A link without a scheme resolves against the page it is shown on, and
-	 * that page is this server: `href="/logout"` in a remote post pointed at
-	 * this instance, `//evil.example` at whatever host it names. A relative
-	 * link is therefore resolved against `$base`, the address of the post or
-	 * profile it came in, and a protocol-relative one is given `https:`.
-	 * Without an http(s) base there is nothing to resolve against and the
-	 * link is not kept. A fragment-only link stays as it is: it does not
-	 * leave the page.
-	 *
-	 * Browsers skip whitespace and control characters and read `\` as `/` in
-	 * an http(s) URL, so `/\evil.example` is protocol-relative to them; the
-	 * URL is looked at the way they look at it.
+	 * Relative links would point at this server, so they are resolved against
+	 * `$base` (the post's or profile's address) and protocol-relative ones get
+	 * `https:`; without an http(s) base they are dropped. Fragment-only links
+	 * stay. The URL is read as browsers read it: whitespace and control
+	 * characters skipped, `\` as `/`.
 	 */
 	public static function resolveUrl(string $url, string $base): ?string {
 		if (!self::isAllowedUrl($url)) {

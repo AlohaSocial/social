@@ -80,55 +80,26 @@ class Instance implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The Mastodon version advertised to API clients, Pleroma-style: clients
-	 * gate features on the version, so a plain app version would make them
-	 * treat the API as ancient. Only the /api/v1/instance entity carries it —
-	 * NodeInfo keeps reporting the real app version.
+	 * The Mastodon version advertised to API clients, Pleroma-style, as
+	 * clients gate features on it; NodeInfo reports the real app version.
 	 *
-	 * The claim has to be one this app can honour, because a client believes
-	 * it. It said `3.5.0` for a long time, and the reason was sound when it was
-	 * written: `4.x` switches Tusky and Ivory onto a feature set this app did
-	 * not have, and a feature a client offers and the server cannot do is a
-	 * broken button rather than an absent one.
-	 *
-	 * That is no longer where the app is. Everything `4.x` turns on is here:
-	 * editing with `GET /statuses/{id}/source` and `/history`, v2 filters
-	 * applied server-side, `/api/v2/instance`, and
-	 * `/api/v1/notifications/unread_count`. Claiming 3.5.0 was hiding all of
-	 * them — a client that believes the string never asks.
-	 *
-	 * The streaming API and Web Push are available: `urls.streaming_api` points
-	 * at the host served by the optional `social:mastodon:stream` daemon, and
-	 * the VAPID public key is advertised in both instance API versions. The
-	 * stream requires the daemon and the web-server proxy route to be enabled;
-	 * Web Push subscriptions are handled by `/api/v1/push/subscription`.
-	 *
-	 * **4.3 now, and it was 4.2 while the 4.3 surface was already being
-	 * served**: grouped notifications (`/api/v2/notifications` and its four
-	 * routes), the notification policy and its requests inbox, and a real
-	 * translation through `OCP\TaskProcessing`. A client reads this string
-	 * before it asks, so claiming 4.2 meant every one of those was built and
-	 * never reached. Raising it is a promise about the whole 4.3 client
-	 * surface, which is why it waited until that surface was there.
+	 * Clients believe it, so it may only claim what the app serves: 4.3 covers
+	 * editing (`/source`, `/history`), server-side v2 filters,
+	 * `/api/v2/instance`, `unread_count`, grouped notifications, the
+	 * notification policy and requests inbox, and translation. Streaming
+	 * needs the optional `social:mastodon:stream` daemon and its proxy route;
+	 * Web Push is served at `/api/v1/push/subscription`.
 	 */
 	public const COMPAT_VERSION = '4.3.0';
 
 	/**
-	 * The API generations this server implements, as Mastodon 4.3 reports them.
+	 * The API generations this server implements, as Mastodon 4.3 reports
+	 * them. Clients that know `api_versions` read it instead of the version
+	 * string, which is unreliable for a fork.
 	 *
-	 * A client that knows about `api_versions` reads it *instead of* parsing
-	 * the version string, because a fork can implement Mastodon's API at a
-	 * generation that has nothing to do with its own version number — which is
-	 * exactly this app's situation. Absent, a 4.3 client falls back to the
-	 * string, and a fork's string is the least reliable thing about it.
-	 *
-	 * `mastodon: 3` is what 4.3 reports. It is the API generation, not the
-	 * release: 4.3 and 4.4 both say 3, and 4.5 says 4.
-	 *
-	 * `aloha_social` is this app's own generation, for what a client cannot
-	 * learn from `mastodon` because older versions of this app reported the
-	 * same number without it. It is raised when such a behaviour is added;
-	 * a client gates on `>=`:
+	 * `mastodon: 3` is the API generation of 4.3 and 4.4 (4.5 says 4).
+	 * `aloha_social` is this app's own, raised when a behaviour clients may
+	 * gate on (`>=`) is added:
 	 *
 	 * - 1: `/api/v2/search` honours `account_id`, `offset`, `max_id` and
 	 *   `min_id` for `statuses`.
@@ -140,12 +111,8 @@ class Instance implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether a client should offer the translate button.
-	 *
-	 * True when this Nextcloud has a translation provider — see
-	 * `TranslationService`. It was hard-coded `false` for as long as
-	 * `POST /statuses/{id}/translate` returned the post unchanged, which was
-	 * the honest answer then and is the wrong one now.
+	 * Whether a client should offer the translate button: true when this
+	 * Nextcloud has a translation provider (`TranslationService`).
 	 */
 	public function setTranslationEnabled(bool $translationEnabled): self {
 		$this->translationEnabled = $translationEnabled;
@@ -386,15 +353,11 @@ class Instance implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's V1::Instance entity — the very first request every client
-	 * makes, and the one that decides whether it will talk to this server at
-	 * all.
-	 *
-	 * `urls`, `stats` and `configuration` are cast to objects: an empty PHP
-	 * array json-encodes as `[]`, and a client that decodes `stats.user_count`
-	 * out of a dictionary — masto.js and every typed client do — fails on a
-	 * list and reports the instance as unreachable. `contact_account` is
-	 * always present (null when unset) for the same reason.
+	 * Mastodon's V1::Instance entity, the first request every client makes.
+	 * `urls`, `stats` and `configuration` are cast to objects, since an empty
+	 * PHP array encodes as `[]` and typed clients fail on it;
+	 * `contact_account` is always present (null when unset) for the same
+	 * reason.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

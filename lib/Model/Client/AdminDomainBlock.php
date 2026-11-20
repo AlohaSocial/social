@@ -13,31 +13,17 @@ use JsonSerializable;
 
 /**
  * Mastodon's `Admin::DomainBlock`: one entry of the instance-wide access list
- * that `FediverseService` keeps — not the per-account domain blocks of
- * `/api/v1/domain_blocks`, which are one user hiding a server from themselves.
+ * `FediverseService` keeps (not a user's own `/api/v1/domain_blocks`), with
+ * its `social_server_block` row where there is one, else empty values:
  *
- * The two lists store a hostname each; what else is known about an entry is
- * a row of `social_server_block` (`ServerBlockRequest`), and an entry without
- * one carries the empty value of each field rather than an invented one:
+ *  - `severity` is `suspend` for the deny list (refused outright, so
+ *    `reject_media` and `reject_reports` are `true`), `silence` otherwise.
+ *  - `private_comment` and `public_comment` are the reasons, `null` if none.
+ *  - `obfuscate` is always `false`.
+ *  - `created_at` is the epoch when not recorded, as the field is a date.
  *
- *  - `severity` is `suspend` for the deny list, which refuses the domain
- *    outright — `FediverseService::authorized()` throws before anything is
- *    read or delivered — so `reject_media` and `reject_reports` are `true`;
- *    and `silence` for the silenced list, which refuses nothing.
- *  - `private_comment` is the reason the moderators keep for themselves,
- *    `public_comment` the one `/api/v1/instance/domain_blocks` shows; `null`
- *    when none was given.
- *  - `obfuscate` is `false`: the published list names domains as they are.
- *  - `created_at` is when the row was recorded, or the epoch for an entry
- *    added without one (by `occ`, or before reasons were stored) — the epoch
- *    is how this API says "not recorded" in a field Mastodon declares as a
- *    date and clients decode as one.
- *
- * `id` is derived from the domain rather than stored: the first eight hex
- * digits of its md5, as a decimal string, so it is numeric the way every other
- * id on this API is, stable for as long as the entry names the same domain,
- * and unchanged by other entries being added or removed — which a position in
- * the list would not be. Routes that take an id accept the domain itself too.
+ * `id` is the first eight hex digits of the domain's md5 as a decimal string:
+ * numeric and stable. Routes that take an id accept the domain too.
  */
 class AdminDomainBlock implements JsonSerializable {
 	/** The tier an entry on the deny list is: nothing from the domain gets in. */

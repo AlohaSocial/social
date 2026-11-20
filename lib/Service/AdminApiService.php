@@ -34,39 +34,17 @@ use OCP\Settings\IManager as ISettingsManager;
 use Psr\Log\LoggerInterface;
 
 /**
- * What `/api/v1/admin/*` reads and decides, over the moderation this app
- * already had.
+ * What `/api/v1/admin/*` reads and decides. Decisions go through
+ * `ModerationService`, reports through `ReportService` and the access list
+ * through `FediverseService`; this adds the reads a moderation client needs.
  *
- * Nothing here is a second implementation of moderation: a decision is taken
- * by `ModerationService`, a report is resolved through `ReportService`, and
- * the instance access list is `FediverseService`'s. What this service adds is
- * the reading a moderation client does — which accounts are there, under which
- * decision, and which reports are open — because none of it existed as a query
- * anybody could ask.
+ * The SQL is in `protected` methods against `IDBConnection` so tests can
+ * double them; the standalone suite cannot load DBAL to mock `IQueryBuilder`.
  *
- * ### Why the SQL is in here
- *
- * The three reads below are the only ones in the app that ask their questions
- * (every account under a decision; a page of reports with who is handling it),
- * and they are written against `IDBConnection` in `protected` methods so the
- * policy above them can be tested without a database — the standalone suite
- * cannot even mock `IQueryBuilder`, because DBAL is not loadable in it, so a
- * test doubles these methods instead.
- *
- * ### Who counts as a moderator
- *
- * Whoever may open the Social section of the admin settings, asked of the
- * Nextcloud user behind the request: a Nextcloud administrator, or a member
- * of a group the administrator has handed that section to under
- * Administration privileges. Nextcloud's own delegation answers it
- * (`IManager::getAllowedAdminSettings()`), so this API and the panel cannot
- * disagree about who may act, and moderating no longer means administering
- * the whole server.
- *
- * An OAuth scope is not an answer to the question: this app's OAuth
- * registration accepts any scope string a client asks for, so `admin:write`
- * on a token says only that a client asked for it, never that the user behind
- * it may moderate anything.
+ * A moderator is whoever may open the Social admin settings section: a
+ * Nextcloud administrator or a member of a group it is delegated to
+ * (`IManager::getAllowedAdminSettings()`), so this API and the panel agree.
+ * OAuth scopes do not count: this app grants any scope a client asks for.
  */
 class AdminApiService {
 	/** What Mastodon defaults and caps a page of the admin account list at. */
@@ -134,16 +112,9 @@ class AdminApiService {
 	}
 
 	/**
-	 * Whether the Nextcloud user behind the request may use any of this.
-	 *
-	 * Asked of the user id, never of the token: see the class docblock.
-	 *
-	 * A Nextcloud administrator always may. So may whoever the administrator
-	 * has delegated the Social settings section to, which is the whole of the
-	 * moderator role — there is no second list to keep in step, and an
-	 * administrator stays a moderator because they can delegate the section
-	 * to themselves anyway, and pretending otherwise would only hide who
-	 * holds what.
+	 * Whether the Nextcloud user behind the request may use any of this,
+	 * asked of the user, never of the token: an administrator, or whoever the
+	 * Social settings section is delegated to.
 	 */
 	public function isAdministrator(string $userId): bool {
 		if ($userId === '') {
@@ -165,19 +136,9 @@ class AdminApiService {
 	}
 
 	/**
-	 * Refuses a moderator's action against an account they may not act on.
-	 *
-	 * Being handed the Social section is not being handed the server: a
-	 * moderator who is not a Nextcloud administrator may not silence, suspend
-	 * or purge an administrator's account, which would let the person the
-	 * administrator delegated to take the administrator off the instance. And
-	 * nobody acts on their own account, administrator or not — lifting a
-	 * decision against yourself is the obvious case, and deleting your own
-	 * posts through the moderation tools leaves a record that says a
-	 * moderator did it.
-	 *
-	 * Only a local account has a Nextcloud user behind it; a remote one is
-	 * never refused here.
+	 * Refuses a moderator's action against an account they may not act on: a
+	 * non-administrator may not act on an administrator's account, and nobody
+	 * on their own. Remote accounts are never refused here.
 	 *
 	 * @throws ModerationNotAllowedException
 	 */
@@ -258,25 +219,12 @@ class AdminApiService {
 	/**
 	 * A page of accounts, newest first, with the cursor ids that page it.
 	 *
-	 * Two of Mastodon's filters answer nothing here and say so by answering
-	 * with no accounts rather than with all of them: `pending` and `disabled`
-	 * are states this app does not have (there is no registration to approve
-	 * and no login to disable from a fediverse account), and a filter that was
-	 * ignored would have shown a moderator the whole instance under the
-	 * heading of accounts awaiting approval. `email` and `ip` are the same
-	 * case, and are handled by the caller for the same reason.
-	 *
-	 * `silenced` and `suspended` are read from the decisions rather than from
-	 * the accounts: suspending an account deletes its cached actor, so an
-	 * account under the decision a moderator is most likely to be looking for
-	 * is exactly the one the account table no longer holds. Those two are
-	 * therefore unpaged beyond `limit` — the decisions of an instance are a
-	 * handful of rows — and come back with no cursors at all rather than with
-	 * ones that would page something else.
-	 *
-	 * The cursors are the nids of the *rows*, not of the entities: an account
-	 * whose cached actor cannot be read is left out of the page, and a cursor
-	 * that skipped it would send the client back to the same page for ever.
+	 * `pending` and `disabled` are states this app does not have, so they
+	 * answer no accounts rather than all of them (the caller does the same for
+	 * `email` and `ip`). `silenced` and `suspended` are read from the
+	 * decisions, as a suspension deletes the cached actor; they are a handful
+	 * of rows, unpaged beyond `limit` and without cursors. Cursors are row
+	 * nids, so an unreadable account cannot stall paging.
 	 *
 	 * @param bool|null $local true for local accounts, false for remote, null
 	 *                         for both — Mastodon's `origin`
@@ -337,11 +285,8 @@ class AdminApiService {
 
 	/**
 	 * One account, by the numeric id this API emits, its ActivityPub id, or a
-	 * handle.
-	 *
-	 * The ActivityPub id is accepted because it is the only handle left on an
-	 * account whose cached actor a suspension purged — without it a suspension
-	 * could be applied over this API and never lifted over it.
+	 * handle. The ActivityPub id is the only handle left on an account whose
+	 * cached actor a suspension purged, so it is needed to lift one.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -389,21 +334,10 @@ class AdminApiService {
 	}
 
 	/**
-	 * Applies a moderator's decision.
-	 *
-	 * `silence` and `suspend` are `ModerationService`'s, unchanged — the
-	 * suspension that purges the account's posts and relationships here is the
-	 * same one the admin panel applies, because it is the same call.
-	 *
-	 * `none` is Mastodon's own: record a warning and take no action. It used
-	 * to lift whatever stood instead, because a warning is a strike in a
-	 * history this app did not keep — now that it does, `none` means what a
-	 * client sending it means, the account is told, and lifting is what the
-	 * `unsilence` and `unsuspend` routes are for. Whatever stands is left
-	 * standing, as it is on Mastodon.
-	 *
-	 * `$text` is what the moderator wrote: the comment on a decision that
-	 * stands, and the whole of a warning.
+	 * Applies a moderator's decision. `silence` and `suspend` are
+	 * `ModerationService`'s, the same calls the admin panel makes. `none` is
+	 * Mastodon's: record a warning, tell the account, and leave whatever
+	 * stands. `$text` is the comment on the decision, or the whole warning.
 	 *
 	 * @param string $type one of ACTION_NONE, ACTION_SILENCE, ACTION_SUSPEND
 	 * @param int $reportId the report this came from, or 0
@@ -426,10 +360,8 @@ class AdminApiService {
 
 				return $account->setLevel($type);
 			case 'sensitive':
-				// the tier between doing nothing and silencing: every post
-				// this account makes from now on is marked sensitive, and it
-				// stays in the timelines. It was refused by name here until
-				// the app had it, and the refusal outlived the gap.
+				// the tier between doing nothing and silencing: every post this
+				// account makes from now on is marked sensitive
 				$this->moderationService->forceSensitive($account->getActorId(), true);
 
 				return $account;
@@ -445,11 +377,8 @@ class AdminApiService {
 	}
 
 	/**
-	 * Lifts a silence, and only a silence.
-	 *
-	 * A suspended account is left suspended, as it is on Mastodon: the two
-	 * decisions are lifted by their own routes, so a client that means to
-	 * unsilence cannot lift a suspension by accident.
+	 * Lifts a silence, and only a silence: a suspension has its own route, as
+	 * on Mastodon.
 	 */
 	public function unsilence(AdminAccount $account): AdminAccount {
 		if ($account->isSilenced()) {
@@ -502,14 +431,10 @@ class AdminApiService {
 	}
 
 	/**
-	 * Deletes what an account posted here, leaving the account itself.
-	 *
-	 * The destructive half of a suspension without the refusal that goes with
-	 * one: the posts go, the cached actor goes, and a local account's deletion
-	 * is federated. Mastodon's `DELETE /admin/accounts/{id}` means exactly
-	 * this — it removes the data, not the login — and here it could not mean
-	 * anything else, because an account on this server is a Nextcloud account
-	 * that the server owns.
+	 * Deletes what an account posted here, leaving the account itself: the
+	 * posts and cached actor go, and a local account's deletion is federated.
+	 * This is what Mastodon's `DELETE /admin/accounts/{id}` means; the
+	 * Nextcloud login is the server's.
 	 */
 	public function purge(AdminAccount $account): AdminAccount {
 		$this->moderationService->purgeActor($account->getActorId());
@@ -606,13 +531,8 @@ class AdminApiService {
 	 *                                   block
 	 */
 	/**
-	 * Every domain this instance holds at arm's length, at whichever tier.
-	 *
-	 * Two lists become one answer: the deny list as `suspend`, the silenced
-	 * list as `silence`. A Mastodon admin client showed only the first and
-	 * called every entry a suspension, while the silence tier was there in
-	 * the web UI and in `occ social:fediverse` all along — a feature present
-	 * in one door and absent from the other.
+	 * Every domain this instance holds at arm's length: the deny list as
+	 * `suspend`, the silenced list as `silence`.
 	 *
 	 * @return AdminDomainBlock[]
 	 */
@@ -751,21 +671,12 @@ class AdminApiService {
 	}
 
 	/**
-	 * The severity as one of the two this instance has, or a refusal.
-	 *
-	 * Mastodon knows a third, `noop`, which records a domain without doing
-	 * anything to it; there is no such list here, and a 200 that had quietly
-	 * applied something else would tell the client the domain was under a
-	 * block it is not.
+	 * The severity as `suspend` or `silence`, or a refusal: Mastodon's `noop`
+	 * has no list here.
 	 */
 	/**
-	 * The instances this server will talk to, when it is on an allowlist.
-	 *
-	 * Mastodon's `domain_allows` is the other half of `domain_blocks`, and it
-	 * only means anything in "allowlist federation" — which this app has had
-	 * all along as `access_type: none_but`, with no API over it. An admin
-	 * client could see the deny list and not the allow list, so on an
-	 * allowlisted instance it showed an empty screen and no way to tell why.
+	 * The instances this server talks to in allowlist mode (`access_type:
+	 * none_but`), as Mastodon's `domain_allows`.
 	 *
 	 * @return array<int, array{id: string, domain: string, created_at: string}>
 	 */
@@ -824,13 +735,8 @@ class AdminApiService {
 	}
 
 	/**
-	 * The id Mastodon's entity needs, derived rather than stored.
-	 *
-	 * The access list is a config array of domains with no ids of its own, and
-	 * giving it a table so an admin client could address a row by number would
-	 * be storing something for the client's benefit alone. The hash is stable,
-	 * which is all an id has to be, and `domainAllow()` takes the domain
-	 * itself as well — so a client that read the list can act on it either way.
+	 * The id Mastodon's entity needs, derived from the domain as the access
+	 * list has no ids; `domainAllow()` also takes the domain itself.
 	 *
 	 * @return array{id: string, domain: string, created_at: string}
 	 */
@@ -862,10 +768,8 @@ class AdminApiService {
 	}
 
 	/**
-	 * Puts a domain on the list its severity names and takes it off the other.
-	 *
-	 * In that order: a domain that is on neither list loses its recorded
-	 * reasons, and a move between the tiers must not pass through that.
+	 * Puts a domain on the list its severity names, then takes it off the
+	 * other, since a domain on neither list loses its recorded reasons.
 	 */
 	private function applySeverity(string $domain, string $severity): void {
 		if ($severity === AdminDomainBlock::SEVERITY_SILENCE) {
@@ -880,26 +784,14 @@ class AdminApiService {
 	}
 
 	/**
-	 * Refuses every domain-block route while the instance federates by an
-	 * allow list.
-	 *
-	 * The same app value holds both lists, and in allow-list mode its entries
-	 * are the only domains this instance talks to. Served as domain blocks
-	 * they would read as their own opposite, and a client that then "blocked"
-	 * a domain would have added it to the list of the allowed — so the routes
-	 * refuse rather than answer something a moderator would act on.
+	 * Refuses every domain-block route in allow-list mode, where the shared
+	 * list holds the allowed domains and would read as its opposite.
 	 *
 	 * @throws \InvalidArgumentException
 	 */
 	/**
-	 * The mirror of `assertBlockList()`, and it matters for the same reason.
-	 *
-	 * One app value holds both lists and only the mode says which it is. In
-	 * block-list mode its entries are the domains this instance **refuses** —
-	 * served as `domain_allows` they would read as their own opposite, and a
-	 * moderator reading "allowed: evil.example" would be reading the exact
-	 * inverse of the truth. Worse, a client that then removed an entry to
-	 * "disallow" it would have unblocked it.
+	 * The mirror of `assertBlockList()`: in block-list mode the shared list
+	 * holds refused domains, which must not be served as `domain_allows`.
 	 *
 	 * @throws \InvalidArgumentException
 	 */
@@ -997,13 +889,9 @@ class AdminApiService {
 	}
 
 	/**
-	 * The actor id behind an account reference, and '' when nothing was asked
-	 * for.
-	 *
-	 * An account that cannot be resolved becomes an id nothing can equal,
-	 * rather than no filter at all: "the reports about an account this
-	 * instance has never heard of" is an empty list, and answering it with
-	 * every report on the instance would be the filter silently falling off.
+	 * The actor id behind an account reference, '' when none was asked for.
+	 * An unresolvable account becomes an id nothing equals, so the filter
+	 * yields nothing instead of falling away.
 	 */
 	private function actorIdOf(string $reference): string {
 		if (trim($reference) === '') {
@@ -1019,12 +907,8 @@ class AdminApiService {
 
 	/**
 	 * The reports of a page as the entities a moderation client reads, with
-	 * every account of the page resolved in one query.
-	 *
-	 * The two moderators stay on the row rather than on the `Report` model:
-	 * that model is the reporter's entity, serialised as Mastodon's `Report`
-	 * over `POST /api/v1/reports`, and who is handling a complaint is not
-	 * something the person who filed it is shown.
+	 * every account resolved in one query. The moderators stay on the row,
+	 * not on the `Report` model, which the reporter is shown.
 	 *
 	 * @param array<int, array<string, mixed>> $rows
 	 *
@@ -1069,10 +953,8 @@ class AdminApiService {
 
 		$actor = $actors[$actorId] ?? null;
 		if ($actor === null) {
-			// a report outlives the account it is about — a suspension purges
-			// the cached actor and keeps the report — so the entity is built
-			// from the id the report was filed against, which is what a
-			// moderator acts on
+			// a report outlives the cached actor it is about, so the entity is
+			// built from the id the report was filed against
 			return AdminAccount::fromDecision(
 				new Moderation($actorId, $this->moderationService->levelOf($actorId)),
 				$this->isLocalActor($actorId)
@@ -1102,11 +984,7 @@ class AdminApiService {
 
 	/**
 	 * The reported posts, as the Status entities Mastodon carries in the
-	 * report.
-	 *
-	 * A post that is no longer here is left out rather than sent as an id with
-	 * nothing behind it: the commonest reason for one to be missing is that a
-	 * moderator has already taken it down.
+	 * report; posts no longer here (usually taken down) are left out.
 	 *
 	 * @return array<int, mixed>
 	 */
@@ -1146,12 +1024,8 @@ class AdminApiService {
 	}
 
 	/**
-	 * A page of accounts, with the decision standing against each.
-	 *
-	 * A LEFT JOIN rather than a second query filtered in PHP: `status=active`
-	 * has to be a predicate of the page, or a page of forty accounts could
-	 * come back with three in it and the client would read that as the end of
-	 * the list.
+	 * A page of accounts with the decision standing against each, by LEFT
+	 * JOIN so `status=active` filters within the page and pages stay full.
 	 *
 	 * @return array<int, array<string, mixed>>
 	 */
@@ -1233,11 +1107,9 @@ class AdminApiService {
 	}
 
 	/**
-	 * A page of reports, newest first.
-	 *
-	 * Read here rather than through `ReportsRequest` because the moderator
-	 * columns are not in that builder's select and because none of these
-	 * filters exist there; the writes still go through it.
+	 * A page of reports, newest first, read here because `ReportsRequest`
+	 * selects neither the moderator columns nor these filters; writes still
+	 * go through it.
 	 *
 	 * @return array<int, array<string, mixed>>
 	 */

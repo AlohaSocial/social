@@ -10,13 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Security;
 
 /**
- * What a per-address limit counts a client's address as.
- *
- * An IPv4 address is one client. An IPv6 client is normally given a whole
- * /64 and can pick any of its 2^64 addresses, so counting single IPv6
- * addresses would hand everybody an endless supply of fresh buckets: an IPv6
- * address counts as its /64. An IPv4 address written as IPv6 (`::ffff:a.b.c.d`)
- * counts as the IPv4 address it is.
+ * What a per-address limit counts a client's address as: an IPv4 address as
+ * itself (also when written as `::ffff:a.b.c.d`), an IPv6 address as its
+ * /64, since one client usually holds a whole /64.
  */
 final class ClientAddress {
 	/**

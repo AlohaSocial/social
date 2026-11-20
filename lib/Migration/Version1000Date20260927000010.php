@@ -16,17 +16,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * The three tables of self-registered external users.
- *
- * `social_ext_user` is the login of an external user: the Nextcloud user id,
- * which is also their handle, and the password hash. Everything else about
- * the person (email, display name, preferences) lives where it does for any
- * Nextcloud user. `social_ext_signup` is a registration that is waiting for
- * its email to be confirmed or for an administrator to approve it, and
- * `social_ext_invite` an invitation link.
- *
- * Guarded like the squash, so running it twice asks for nothing the second
- * time.
+ * The three tables of self-registered external users: `social_ext_user`
+ * (the Nextcloud user id, which is also the handle, and the password hash),
+ * `social_ext_signup` (a registration awaiting email confirmation or
+ * approval) and `social_ext_invite` (an invitation link). Guarded, so a
+ * second run does nothing.
  */
 class Version1000Date20260927000010 extends SimpleMigrationStep {
 	/**
