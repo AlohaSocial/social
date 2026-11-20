@@ -27,18 +27,18 @@ describe('startup hints', () => {
 	})
 
 	it('follows what changed in the session', () => {
-		useSettingsStore().setServerData({ public: false, startup: { recap_enabled: false } })
+		useSettingsStore().setServerData({ public: false, startup: { has_stories: false } })
 
-		setHint('recap_enabled', true)
+		setHint('has_stories', true)
 
-		expect(mayHave('recap_enabled')).toBe(true)
+		expect(mayHave('has_stories')).toBe(true)
 	})
 
 	it('has nothing to correct on a page that carried no hints', () => {
 		useSettingsStore().setServerData({ public: true })
 
-		setHint('recap_enabled', false)
+		setHint('has_stories', false)
 
-		expect(mayHave('recap_enabled')).toBe(true)
+		expect(mayHave('has_stories')).toBe(true)
 	})
 })

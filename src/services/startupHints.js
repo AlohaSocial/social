@@ -7,8 +7,7 @@ import { useSettingsStore } from '../store/settings.js'
 
 /**
  * What the page says the app need not ask for (`StartupHintsService`):
- * `has_announcements`, `has_stories`, `recap_enabled`, `has_memories` and
- * `has_teams`, each `false` only where the answer is certainly empty.
+ * `has_announcements`, `has_stories`, `has_memories` and `has_teams`, each `false` only where the answer is certainly empty.
  *
  * @param {string} name the hint
  * @return {boolean} whether to ask the server; true where the page said nothing
