@@ -90,8 +90,8 @@ export default {
 					icon: 'Heart',
 					accounts: this.favourited,
 					label: this.hidesCounts
-						? t('social', 'Favorited by')
-						: n('social', 'Favorited by %n person', 'Favorited by %n people', this.status.favourites_count ?? 0),
+						? t('social', 'Liked by')
+						: n('social', 'Liked by %n person', 'Liked by %n people', this.status.favourites_count ?? 0),
 					visible: this.favourited.length > 0,
 				},
 				{

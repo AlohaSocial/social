@@ -165,7 +165,7 @@ class MastodonPushNotification extends QueuedJob {
 	private function title(IL10N $l10n, string $subject, string $account): ?string {
 		return match ($subject) {
 			'mention' => $l10n->t('%s mentioned you in a post', [$account]),
-			'favourite' => $l10n->t('%s favorited your post', [$account]),
+			'favourite' => $l10n->t('%s liked your post', [$account]),
 			'reblog' => $l10n->t('%s boosted your post', [$account]),
 			'follow' => $l10n->t('%s is now following you', [$account]),
 			'follow_request' => $l10n->t('%s wants to follow you', [$account]),
