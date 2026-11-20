@@ -7,18 +7,10 @@ import { ref } from 'vue'
 import { useAccountStore } from '../store/account.js'
 
 /**
- * Following somebody from a list of strangers.
- *
- * `FollowButton` cannot do this job: it waits for a relationship the account
- * store has never fetched for an account nobody here follows, so in a list of
- * search results or suggestions it renders nothing at all. Every such list
- * therefore grew its own copy of the same three lines — the handle a request
- * is in flight for, the handles already taken, and a call to the store — and
- * the copies had begun to drift.
- *
- * A handle is what these lists carry, and it is the only durable reference to
- * somebody on another server: the account has no local id until this instance
- * has heard of them, which following is precisely what causes.
+ * Following somebody from a list of strangers, by handle. `FollowButton`
+ * waits for a relationship the store never fetches for such accounts, so it
+ * renders nothing in search results or suggestions; and a remote account has
+ * no local id until following makes this instance hear of it.
  *
  * @return {{following: import('vue').Ref<string>, followed: import('vue').Ref<string[]>, follow: (account: object) => Promise<void>, isFollowed: (account: object) => boolean, isPending: (account: object) => boolean}}
  *         the state a row needs to draw its own button
@@ -47,8 +39,7 @@ export function useFollowByHandle() {
 				followed.value = [...followed.value, handle]
 			}
 		} finally {
-			// whatever happened, this row is no longer waiting: a failure that
-			// left the spinner on was the one thing worse than a failure
+			// whatever happened, this row is no longer waiting
 			following.value = ''
 		}
 	}
@@ -64,9 +55,8 @@ export function useFollowByHandle() {
 	}
 
 	/**
-	 * A row with no handle is never the row that is waiting: idle is also the
-	 * empty string, and without this such a row draws a spinner that never
-	 * stops.
+	 * A row with no handle is never the one waiting: idle is also the empty
+	 * string, and such a row would otherwise spin forever.
 	 *
 	 * @param {object} account the row's account
 	 * @return {boolean} whether their request is in flight

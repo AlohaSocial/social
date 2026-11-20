@@ -13,16 +13,10 @@ use Closure;
 use InvalidArgumentException;
 
 /**
- * A stored tree edited in place: the nodes on the path to each key
- * written are read from the block store, changed and encoded again, and
- * every other node is kept by its CID and never read. What a commit
- * costs is then the depth of the tree, not the size of the repository.
- *
- * The edits are the reference implementation's: a key goes into the node
- * of its layer, splitting the sub-tree below its place; a key leaves it
- * and the sub-trees on either side merge; a root that lost its entries
- * is trimmed. The tree that leaves here is, node for node, the one
- * `Mst::build()` makes from the same records, which the tests pin.
+ * A stored tree edited in place: only the nodes on the path to each written key
+ * are read and encoded again, so a commit costs the depth of the tree, not the
+ * size of the repository. The result is node for node the tree `Mst::build()`
+ * makes from the same records, which the tests pin.
  */
 final class MstEditor {
 	private const MAX_DEPTH = 64;

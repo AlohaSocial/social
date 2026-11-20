@@ -24,17 +24,10 @@ use Throwable;
 use ZipArchive;
 
 /**
- * The account's own data, out of the app and back into it.
- *
- * Nextcloud can already export a whole account, `SocialMigrator` included —
- * but only if the admin installed the user migration app, and only from the
- * command line or that app's own page. Taking a copy of what you wrote should
- * not depend on either, so this drives the very same migrator into a zip file
- * the user can download, and reads one back.
- *
- * It is the migrator that decides what travels and what does not — the private
- * key never does, see the class comment there — and this adds only the
- * manifest that says which version wrote the archive and for whom.
+ * The account's own data, out of the app and back into it: drives
+ * `SocialMigrator` into a zip file the user can download, and reads one back,
+ * without needing the user migration app. The migrator decides what travels
+ * (never the private key); this adds only the manifest.
  */
 class MigrationArchiveService {
 	public const MANIFEST = ZipImportSource::MANIFEST;
@@ -110,9 +103,7 @@ class MigrationArchiveService {
 		if (!$source->pathExists(SocialMigrator::PATH_ACTOR_PUBLIC)) {
 			$zip->close();
 
-			// said plainly rather than as "nothing was imported": the likeliest
-			// mistake is picking the wrong zip, and only naming what was missing
-			// tells somebody that
+			// said plainly: the likeliest mistake is picking the wrong zip
 			throw new MoveErrorException(
 				'this archive holds no Aloha Social data (' . SocialMigrator::PATH_ACTOR_PUBLIC . ' is not in it)',
 				'archive-not-social'
@@ -138,11 +129,7 @@ class MigrationArchiveService {
 	}
 
 	/**
-	 * What the downloaded file is called.
-	 *
-	 * The account and the day are in the name, because these end up in a
-	 * downloads folder next to each other and a file called `export.zip` says
-	 * nothing about which account or which week it holds.
+	 * What the downloaded file is called, with the account and the day.
 	 *
 	 * @param string $userId whose archive
 	 * @return string the file name

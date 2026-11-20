@@ -10,32 +10,18 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 /**
- * Removes the metadata a camera writes into a picture, before the picture is
- * stored or federated.
+ * Removes the metadata a camera writes into an image, such as the GPS
+ * position in Exif, before it is stored or federated.
  *
- * A photo off a phone carries an Exif block, and that block routinely carries
- * the coordinates the photo was taken at. Until this existed the app wrote the
- * uploaded bytes through untouched and served them as the attachment's `url`,
- * so posting a picture published where it was taken to every follower and every
- * peer that mirrors it. Nothing warned anybody, and nothing could be undone
- * afterwards -- the copies are already out.
+ * The container is rewritten without the metadata segments rather than the
+ * pixels re-encoded, so it is lossless, for JPEG, PNG and WebP. The exception
+ * is an Exif `Orientation` other than upright, which only the tag records:
+ * the caller rotates, which re-encodes (see `orientation()`).
  *
- * The work is done on the container, not on the pixels. Re-encoding a JPEG to
- * launder it costs a generation of quality on every upload and would make the
- * app the reason people's pictures look worse than they did on their phone; the
- * metadata lives in identifiable, skippable segments, so it is cheaper and
- * lossless to walk the file and not copy them. Three formats are handled that
- * way (JPEG, PNG, WebP). The one case that cannot be lossless is an Exif
- * `Orientation` other than "upright": the tag is the only record that the
- * picture is meant to be rotated, so dropping it silently turns every portrait
- * photo on its side. There the caller is told to rotate, which means a re-encode
- * -- see `orientation()`.
- *
- * What is deliberately kept: the ICC colour profile (dropping it shifts colour
- * on a wide-gamut photo), and everything structural -- animation, transparency,
- * the palette. What goes: Exif in all its spellings, XMP, IPTC/Photoshop
- * resources, JPEG comments, PNG text chunks and timestamps, and whatever a
- * JPEG carries after the end of its primary image.
+ * Kept: the ICC colour profile and everything structural (animation,
+ * transparency, palette). Removed: Exif, XMP, IPTC/Photoshop resources, JPEG
+ * comments, PNG text chunks and timestamps, and anything after a JPEG's
+ * primary image.
  */
 class ImageMetadataService {
 	/** Exif orientation meaning "as shot, no rotation needed". */
@@ -68,7 +54,7 @@ class ImageMetadataService {
 	/** RIFF chunks inside a WebP that carry metadata. */
 	private const WEBP_DROP_CHUNKS = ['EXIF', 'XMP '];
 
-	/** IPTC's two `DigitalSourceType` terms for a picture a model produced. */
+	/** IPTC's two `DigitalSourceType` terms for an image a model produced. */
 	public const SOURCE_TRAINED = 'trainedAlgorithmicMedia';
 	public const SOURCE_COMPOSITE = 'compositeWithTrainedAlgorithmicMedia';
 
@@ -88,13 +74,10 @@ class ImageMetadataService {
 	private const SOURCE_OCCURRENCES = 16;
 
 	/**
-	 * The picture with its metadata removed, or the bytes unchanged when the
-	 * format is not one handled here.
-	 *
-	 * Never throws: a picture that cannot be parsed is a picture that is stored
-	 * as it arrived, which is what happened to every upload before this
-	 * existed. The caller decides whether an unknown format may be stored at
-	 * all -- that is the mime allow-list's job, not this one's.
+	 * The image with its metadata removed, or the bytes unchanged when the
+	 * format is not one handled here. Never throws: an image that cannot be
+	 * parsed is stored as it arrived; the mime allow-list decides which
+	 * formats may be stored.
 	 */
 	public function strip(string $content, string $mime): string {
 		return match ($mime) {
@@ -109,12 +92,8 @@ class ImageMetadataService {
 
 	/**
 	 * The Exif orientation of a JPEG, or `ORIENTATION_NORMAL` when it says
-	 * nothing.
-	 *
-	 * Read before stripping, because stripping is what removes it. A value
-	 * other than 1 means the pixels are stored rotated and only the tag says
-	 * so, so the caller has to turn the pixels the right way up before the tag
-	 * is dropped.
+	 * nothing. Read before stripping removes it: a value other than 1 means
+	 * the caller has to turn the pixels upright first.
 	 */
 	public function orientation(string $content, string $mime): int {
 		if ($mime !== 'image/jpeg') {
@@ -135,23 +114,16 @@ class ImageMetadataService {
 	}
 
 	/**
-	 * The machine-generation provenance a picture states about itself:
-	 * `SOURCE_TRAINED`, `SOURCE_COMPOSITE`, or '' when it states none.
+	 * The machine-generation provenance an image states about itself:
+	 * `SOURCE_TRAINED`, `SOURCE_COMPOSITE`, or '' when it states none. Read
+	 * before stripping, like the orientation.
 	 *
-	 * Read before stripping, like the orientation, because XMP is one of the
-	 * blocks `strip()` removes. Two places are looked in. The IPTC property
-	 * `DigitalSourceType` in XMP, written by the generators that label their
-	 * output (as an attribute or an element, prefixed `Iptc4xmpExt:` or not,
-	 * valued with the IPTC NewsCodes URL or the bare term). And the same term
-	 * anywhere in the bytes under its `digitalsourcetype/` path, which is how
-	 * a C2PA manifest in a JUMBF segment carries it: the manifest is CBOR and
-	 * parsing it properly would be a library for one string, so the string is
-	 * searched for as bytes instead. Case never matters for the term.
-	 *
-	 * Bounded on purpose: the two searches are linear passes over bytes that
-	 * are already in memory, and the XMP value is only looked for in a short
-	 * window after each of the first few occurrences of the property name,
-	 * so no pattern ever runs over the whole file.
+	 * Looked for as IPTC `DigitalSourceType` in XMP (attribute or element,
+	 * with or without the `Iptc4xmpExt:` prefix, URL or bare term), and as the
+	 * term under its `digitalsourcetype/` path anywhere in the bytes, which is
+	 * how a C2PA manifest carries it without parsing CBOR. Case-insensitive,
+	 * and bounded: linear passes, with the XMP value looked for only in a
+	 * short window after the first few occurrences of the property name.
 	 */
 	public function digitalSourceType(string $content, string $mime): string {
 		if (!str_starts_with($mime, 'image/')) {
@@ -214,18 +186,11 @@ class ImageMetadataService {
 
 	/**
 	 * Walks the JPEG segment list and copies everything but the metadata.
-	 *
-	 * A JPEG is a run of `FF <marker> <big-endian length> <payload>` segments.
-	 * Each `SOS` (start of scan) is followed by entropy coded data, which ends
-	 * at the next marker that is not a stuffed `FF 00` or a restart; a
-	 * progressive JPEG has several scans with segments between them. The
-	 * primary image ends at `EOI`, and nothing after it is copied: that is
-	 * where a camera appends the secondary images an `MPF` segment points at
-	 * and a phone appends a Motion Photo's video, each with metadata of its
-	 * own.
-	 *
-	 * A file whose structure cannot be followed is re-encoded rather than
-	 * copied, since the part that could not be read may hold the metadata.
+	 * Each `SOS` is followed by entropy-coded data up to the next marker that
+	 * is not a stuffed `FF 00` or a restart, and nothing after `EOI` is copied:
+	 * that is where MPF secondary images and Motion Photo videos go, each with
+	 * metadata of its own. A file whose structure cannot be followed is
+	 * re-encoded, as the unreadable part may hold metadata.
 	 */
 	private function stripJpeg(string $content): string {
 		if (strlen($content) < 4 || substr($content, 0, 2) !== "\xFF\xD8") {
@@ -313,9 +278,9 @@ class ImageMetadataService {
 	}
 
 	/**
-	 * The pixels of a JPEG written out afresh, which carries no metadata at
-	 * all, or `$fallback` -- what the walk copied before it lost its way, which
-	 * carries none either -- when the picture does not decode.
+	 * The pixels of a JPEG written out afresh, without metadata, or
+	 * `$fallback` (what the walk copied, which has none either) when the
+	 * image does not decode.
 	 */
 	private function reencodeJpeg(string $content, string $fallback): string {
 		$image = @imagecreatefromstring($content);
@@ -331,11 +296,8 @@ class ImageMetadataService {
 	}
 
 	/**
-	 * Copies the PNG chunk stream, dropping the chunks that hold metadata.
-	 *
-	 * A PNG is an 8-byte signature and then `<length> <type> <data> <crc>`
-	 * chunks. Dropping a whole chunk needs no checksum work: each carries its
-	 * own CRC and the ones that are kept are copied with it.
+	 * Copies the PNG chunk stream, dropping the chunks that hold metadata;
+	 * each chunk carries its own CRC, so nothing needs recomputing.
 	 */
 	private function stripPng(string $content): string {
 		$signature = "\x89PNG\r\n\x1a\n";
@@ -371,13 +333,9 @@ class ImageMetadataService {
 	}
 
 	/**
-	 * Rewrites the RIFF chunk list of a WebP without its metadata chunks.
-	 *
-	 * Two things have to be kept honest afterwards: the RIFF size in the header
-	 * counts the bytes that follow it, and the extended header `VP8X` carries
-	 * flag bits announcing that an Exif or XMP chunk is present. A viewer that
-	 * trusts those flags and finds no chunk is entitled to complain, so they are
-	 * cleared.
+	 * Rewrites the RIFF chunk list of a WebP without its metadata chunks,
+	 * fixing the RIFF size in the header and clearing the `VP8X` flags that
+	 * announce Exif or XMP chunks.
 	 */
 	private function stripWebp(string $content): string {
 		if (strlen($content) < 12
@@ -470,11 +428,8 @@ class ImageMetadataService {
 	}
 
 	/**
-	 * Reads tag 0x0112 out of IFD0 of a TIFF header.
-	 *
-	 * Hand-parsed rather than handed to `exif_read_data()`: that needs the file
-	 * on disk and the ext/exif extension, and this runs on bytes that are still
-	 * in memory. Only one tag is wanted and it is always in the first IFD.
+	 * Reads tag 0x0112 out of IFD0 of a TIFF header, by hand, as
+	 * `exif_read_data()` needs a file on disk and ext/exif.
 	 */
 	private function orientationFromExif(string $exif): int {
 		if (strlen($exif) < 8) {

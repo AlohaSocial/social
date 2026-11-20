@@ -16,18 +16,10 @@ use OCP\UserMigration\UserMigrationException;
 use ZipArchive;
 
 /**
- * A zip file that `SocialMigrator` can export into.
- *
- * The migrator was written for Nextcloud's whole-account export, which is an
- * app the admin has to install and a job the user cannot start for themselves.
- * The same code writes this archive: one migrator, one set of file names, so
- * an archive from the Migration page and one from `occ user:export` hold the
- * Social data in exactly the same shape and either can be read back here.
- *
- * Only what the migrator actually asks for is implemented. `copyFolder()`
- * belongs to migrators that carry files out of the user's storage; this app
- * has none, and a silent no-op there would produce an archive that says it
- * holds something it does not.
+ * A zip file that `SocialMigrator` can export into, so an archive from the
+ * Migration section of Settings and one from `occ user:export` hold the
+ * Social data in the same shape. Only what the migrator asks for is
+ * implemented; `copyFolder()` throws rather than silently doing nothing.
  */
 class ZipExportDestination implements IExportDestination {
 	/** @var array<string, int> */
@@ -49,18 +41,10 @@ class ZipExportDestination implements IExportDestination {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * Through a temporary file rather than through a string. `ZipArchive` will
-	 * take a stream, but only one that stays open until `close()`, and the one
-	 * this is handed is the caller's and is closed as soon as this returns — so
-	 * the bytes are copied, a chunk at a time, to a file the zip reads at
-	 * `close()` instead. What arrives here is an attachment as often as it is an
-	 * outbox, and an attachment is a video: `stream_get_contents()` of one is
-	 * two gigabytes of memory, which is what the streaming half of this
-	 * interface exists to avoid.
-	 *
-	 * The temporary file has to outlive this call, so it is left to
-	 * `ITempManager` to clean up at the end of the request, which is after the
-	 * archive has been closed and handed over.
+	 * Copied a chunk at a time to a temporary file the zip reads at `close()`,
+	 * as `ZipArchive` needs a stream open until then and this one is the
+	 * caller's; an attachment may be a video. `ITempManager` removes the file
+	 * at the end of the request, after the archive is handed over.
 	 */
 	#[\Override]
 	public function addFileAsStream(string $path, $stream): void {

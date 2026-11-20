@@ -13,17 +13,9 @@ use JsonSerializable;
 
 /**
  * Mastodon's Translation entity: what one status says, in another language.
- *
- * It is deliberately not a Status. A translation has no id, no author, no
- * counters and no date — putting the translated words into a Status entity
- * would hand the client something it could store in a timeline, and the next
- * refresh would replace it with the original with no sign that anything had
- * happened. Mastodon returns this narrow shape for exactly that reason, and a
- * client shows it under the post rather than instead of it.
- *
- * `detected_source_language` is what the post itself declared where it
- * declared anything: this app stores a status language from `contentMap`, and
- * a value that came off the wire is a better answer than a guess made here.
+ * Not a Status, which a client could store in a timeline in place of the
+ * original. `detected_source_language` is the language the post declared,
+ * where it declared one.
  */
 class Translation implements JsonSerializable {
 	private string $content = '';
@@ -96,11 +88,8 @@ class Translation implements JsonSerializable {
 	}
 
 	/**
-	 * The keys Mastodon defines, all of them, every time.
-	 *
-	 * `media_attachments` and `poll` are lists a client iterates rather than
-	 * tests for, so they are always present and empty when there is nothing to
-	 * translate; `poll` is null, because a client reads an object there.
+	 * The keys Mastodon defines, all of them, every time: `media_attachments`
+	 * is always a list, and `poll` is null when there is nothing to translate.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

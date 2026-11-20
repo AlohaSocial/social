@@ -12,29 +12,21 @@ namespace OCA\Social\Service;
 use stdClass;
 
 /**
- * Whether a reader is shown how many likes, dislikes, boosts and followers
- * things have, and how many times a video was watched — and, when not, the
- * status numbers taken out of what they are sent.
+ * Whether a reader is shown how many likes, dislikes, boosts and views things
+ * have, and stripping the status numbers when not.
  *
- * Hidden unless the reader turned them back on: a number next to a post is
- * a score, and a score is pressure. The switch is stored the other way round
- * (`show_counts`), so every account starts hidden without a migration.
- *
- * Follower, following and post counts are sent as they are: they describe
- * the account rather than rank a post, a reader's own follower count is
- * theirs to know, and a client that is told 0 shows "0 followers" as a fact.
- * The web app leaves other people's follower number off their profile for a
- * reader who hides the numbers (`serverData.hideCounts`).
+ * Hidden unless the reader turned them on; stored inverted (`show_counts`) so
+ * every account starts hidden. Follower, following and post counts are sent
+ * as they are, since they describe the account; the web app hides other
+ * people's follower count itself (`serverData.hideCounts`).
  */
 class CountsService {
 	/** The per-user switch: `'1'` shows the numbers, anything else hides them. */
 	public const USER_KEY = 'show_counts';
 
 	/**
-	 * On a status: the numbers that rank it, the reply count among them — a
-	 * reader who hides the numbers asked not to be shown how much attention a
-	 * post got, and a busy thread is that too. `dislikes_count` is null on
-	 * anything but a video.
+	 * The status numbers that rank it, replies included. `dislikes_count` is null
+	 * on anything but a video.
 	 */
 	private const STATUS_COUNTS = ['favourites_count', 'reblogs_count', 'replies_count', 'dislikes_count', 'quotes_count'];
 
@@ -68,16 +60,11 @@ class CountsService {
 	}
 
 	/**
-	 * A response body with the status numbers taken out, wherever they are:
-	 * a status at any depth (a boost's `reblog`, a quote, a notification's
-	 * `status`). An account's numbers are left as they are.
-	 *
-	 * Set to 0 rather than removed: the Mastodon entities declare them, and a
-	 * client that decodes into a typed struct fails on a missing field. A
-	 * `dislikes_count` of null stays null, which is what says "not a video".
-	 *
-	 * Takes and answers the decoded form of the body — objects as `stdClass` —
-	 * so that an empty object stays `{}` when it is encoded again.
+	 * A response body with the status numbers set to 0 at any depth (a boost's
+	 * `reblog`, a quote, a notification's `status`); account numbers are left.
+	 * Zeroed rather than removed, as typed clients need the declared fields; a
+	 * null `dislikes_count` stays null. Works on the decoded body (`stdClass`
+	 * objects) so `{}` stays `{}`.
 	 */
 	public function strip(mixed $data): mixed {
 		if (is_array($data)) {
@@ -98,9 +85,8 @@ class CountsService {
 				}
 			}
 
-			// how many watched a video ranks it as much as its likes do. Not
-			// zeroed: the video blocks are this app's own, and a missing
-			// number there means "nobody counted", which a client leaves out
+			// View counts rank a video too. Removed, not zeroed: the video blocks are
+			// this app's own, and a missing number means "not counted".
 			if (($data->video_card ?? null) instanceof stdClass) {
 				$data->video_card->views = null;
 			}

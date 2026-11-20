@@ -60,8 +60,7 @@
 						<span class="short__source-name">{{ t('social', 'Record') }}</span>
 						<span class="short__source-hint">{{ t('social', 'with your camera') }}</span>
 					</button>
-					<!-- a browser offers the camera only over https, and a Record
-					     button that silently is not there is a puzzle -->
+					<!-- the camera needs https; say so rather than leave out the Record button -->
 					<div
 						v-else-if="needsSecureContext"
 						class="short__source short__source--record short__source--unavailable">
@@ -431,21 +430,16 @@ const NUDGE = 0.5
 let serial = 0
 
 /**
- * Posting a short, the way short-video apps do it.
+ * Posting a short, in one dialog with three steps. The video comes from a
+ * file, a drop or the camera; it is trimmed with two handles over a strip of
+ * stills and a cover is picked from any frame, beside what the post says and
+ * who sees it. The video is edited in the browser (`utils/shortVideo.js`) and
+ * goes up as an ordinary video attachment, so a kept short federates as a post
+ * with a video.
  *
- * One dialog, three steps: where the video comes from (a file, a drop, or the
- * camera), then the video itself -- trimmed with two handles over a strip of
- * stills, a cover picked from any frame -- beside what the post says and who
- * sees it. Everything that changes the video happens in the browser
- * (`utils/shortVideo.js`), so what goes up is what the writer watched, and it
- * goes up as an ordinary video attachment on an ordinary post: a kept short is
- * a post with a video, and federates as one.
- *
- * A short has one of two lifetimes, chosen at the top. Kept is a video on the
- * writer's profile. Twenty-four hours is for followers only and may also be a
- * picture or words on a card; it goes through the stories API, and a picture
- * or a card continues into the picture editor (StoryComposerDialog), which
- * this dialog opens in its own place.
+ * A 24-hour short is for followers only and may also be a picture or a card;
+ * it goes through the stories API, and a picture or card continues in
+ * StoryComposerDialog, opened in this dialog's place.
  */
 export default {
 	name: 'ShortComposerDialog',

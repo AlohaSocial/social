@@ -28,13 +28,8 @@ use OCP\IRequest;
  * The Server and About this server cards of the Social settings page, the
  * relays, and the Retry button of the Deliveries card.
  *
- * Administrators only, and not by accident: this controller carries none of
- * the relaxing attributes, so the server dispatches it for an administrator
- * with a session and a CSRF token and for nobody else. In particular a group
- * the Social section was delegated to — a moderator — passes
- * `ModerationController` and not this. Whether a peer's unsigned fetches are
- * answered, or how large an upload may be, is a decision about the server,
- * not about a report.
+ * Administrators only: none of the relaxing attributes, so a delegated
+ * moderator passes `ModerationController` and not this.
  */
 class ServerSettingsController extends Controller {
 	public function __construct(
@@ -163,12 +158,9 @@ class ServerSettingsController extends Controller {
 	}
 
 	/**
-	 * The relays this instance subscribes to.
-	 *
-	 * A decision about the server rather than about a report, so it sits here
-	 * with the rest of the Server card and not in `ModerationController`: a
-	 * relay changes what everybody's federated timeline holds and where every
-	 * public post written here is sent.
+	 * The relays this instance subscribes to. Here rather than in
+	 * `ModerationController`: a relay changes everybody's federated timeline and
+	 * where every public post goes.
 	 */
 	#[FrontpageRoute(verb: 'GET', url: '/admin/relays')]
 	public function relays(): DataResponse {
@@ -176,19 +168,15 @@ class ServerSettingsController extends Controller {
 	}
 
 	/**
-	 * Subscribes to one, by the address of its actor.
-	 *
-	 * Answers with the row as it now stands, which will say `pending`: the
-	 * `Follow` has gone out and the relay answers in its own time, usually
-	 * seconds and sometimes when a human has looked at it.
+	 * Subscribes to one, by the address of its actor. The row answered says
+	 * `pending` until the relay accepts the `Follow`.
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/admin/relays')]
 	public function relaySubscribe(string $address = ''): DataResponse {
 		try {
 			return new DataResponse($this->relayService->subscribe($address), Http::STATUS_OK);
 		} catch (InvalidResourceException $e) {
-			// the message says what is wrong with the address, which is the
-			// whole of the help there is
+			// the message says what is wrong with the address
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
@@ -204,14 +192,10 @@ class ServerSettingsController extends Controller {
 	}
 
 	/**
-	 * Queues every failing delivery to one instance for a full run of
-	 * retries again, the ones given up on included — what `occ
-	 * social:queue:retry --instance HOST --force` does, through the same
-	 * service, and bounded by the same limit.
-	 *
-	 * A decision about the server rather than about a report, like the
-	 * relays: what goes out of the delivery queue and how often. Rate-limited,
-	 * because each press walks the queue table looking for the host's rows.
+	 * Queues every failing delivery to one instance for a full run of retries
+	 * again, given-up ones included, like
+	 * `occ social:queue:retry --instance HOST --force`. Rate-limited, since each
+	 * press walks the queue table.
 	 *
 	 * @param string $instance the host the deliveries were for
 	 */

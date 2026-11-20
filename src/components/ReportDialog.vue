@@ -78,12 +78,9 @@ import { focusedElement, returnFocusTo } from '../utils/focus.js'
 let instances = 0
 
 /**
- * Reporting an account, or one of its posts, to the moderators.
- *
- * The categories are the server's (Mastodon's four); "breaks the server
- * rules" asks which rules, and is offered only where the server has rules.
- * An account on another server can be reported there as well, whichever
- * network it is on: the server forwards the report in its own name.
+ * Reporting an account, or one of its posts, to the moderators. The rules
+ * choice appears only where the server has rules; a remote account's report
+ * can be forwarded to its server.
  */
 export default {
 	name: 'ReportDialog',

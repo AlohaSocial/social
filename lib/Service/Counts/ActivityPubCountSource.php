@@ -17,15 +17,10 @@ use OCP\AppFramework\Http;
 /**
  * The counts of a post on the fediverse, from the document its own server
  * serves at the post's `id`: the `totalItems` of its `likes`, `shares` and
- * `replies` collections, where it states them (`Stream::statedCount()`).
- *
- * Nothing federates a count — a `Like` travels to the post's server and is
- * totalled there — so this instance hears of no change to a remote post's
- * counts unless it asks. An answer that names some other document (a
- * redirect to a page, a post that moved) or none at all leaves what is
- * stored as it was. A post its server says is not there (404) or gone (410)
- * is not asked about again for a long while (`CountWriter::stampGone()`):
- * the answer will not change, and each ask is a signed request.
+ * `replies` (`Stream::statedCount()`). Counts are never pushed, so they must
+ * be asked for. An answer naming another document leaves the stored counts
+ * alone; a 404 or 410 stops asking for a long while
+ * (`CountWriter::stampGone()`).
  */
 class ActivityPubCountSource implements CountSource {
 	/** Documents asked for in one round of requests. */
@@ -54,8 +49,7 @@ class ActivityPubCountSource implements CountSource {
 	#[\Override]
 	public function refresh(array $posts, ?int $timeout = null): int {
 		$answered = 0;
-		// A visible read can need three dependent rounds. Use the caller's
-		// timeout as one budget across those rounds, not once per round.
+		// One timeout budget across up to three dependent rounds.
 		$deadline = $timeout === null ? null : hrtime(true) + ($timeout * 1_000_000_000);
 		$firstRound = true;
 		foreach (array_chunk($posts, self::PARALLEL) as $chunk) {
@@ -86,9 +80,7 @@ class ActivityPubCountSource implements CountSource {
 				}
 			}
 
-			// Some servers embed totalItems, while others only give the
-			// collection URL. Resolve those URLs together so the visible-post
-			// refresh does not make one sequential request per counter.
+			// Collections given only by URL are fetched together.
 			if ($collections !== []) {
 				$requestTimeout = self::remainingTimeout($deadline, $timeout);
 				$collectionAnswers = $requestTimeout === 0 ? [] : $this->curl->retrieveObjectsMany(array_keys($collections), ['timeout' => $requestTimeout]);
@@ -121,10 +113,8 @@ class ActivityPubCountSource implements CountSource {
 						}
 					}
 				}
-				// A few servers expose `totalItems` only on the first page, not
-				// on the collection root referenced by the post. Read those first
-				// pages together; counting their `items` would only be a partial
-				// total and would understate the post's reactions.
+				// Some servers state `totalItems` only on the first page; counting `items`
+				// would understate it.
 				if ($firstPages !== []) {
 					$requestTimeout = self::remainingTimeout($deadline, $timeout);
 					$pageAnswers = $requestTimeout === 0 ? [] : $this->curl->retrieveObjectsMany(array_keys($firstPages), ['timeout' => $requestTimeout]);

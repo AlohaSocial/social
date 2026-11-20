@@ -29,18 +29,9 @@ use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
 
 /**
- * The other half of PeerTube's two counters, in the outgoing direction.
- *
- * `DislikeInterface` has stored and counted arriving dislikes since the video
- * work, and nothing in the app could send one or showed the number — so a
- * video watched here could be liked but not disliked, and the count its author
- * cares about was a count of everybody except this instance's viewers.
- *
- * **Videos only.** Mastodon has never had a dislike and is not getting one
- * from here: a dislike button under a written post is a product this app is
- * not, and a `Dislike` sent to a server that has no model for it is a delivery
- * that is logged as unknown and dropped. PeerTube has one, publishes the
- * counter, and is where the activity means something.
+ * Sending PeerTube's dislike; `DislikeInterface` stores and counts arriving
+ * ones. Videos only: Mastodon has no dislike and would drop the activity,
+ * while PeerTube publishes the counter.
  */
 class DislikeService {
 	use TStringTools;
@@ -169,10 +160,8 @@ class DislikeService {
 	}
 
 	/**
-	 * Addresses the activity at the inbox of the post's author, exactly as a
-	 * Like is addressed — see `LikeService::assignInstance()` for why an
-	 * unresolvable author is a refusal rather than a delivery to their actor
-	 * URL.
+	 * Addresses the activity at the inbox of the post's author, as a Like is;
+	 * see `LikeService::assignInstance()`.
 	 *
 	 * @throws InvalidResourceException when the author publishes no inbox
 	 */

@@ -15,8 +15,7 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Drops `social_portfolio`, the table of the portfolio pages, a feature that
- * was removed. Guarded, so an instance that never had it is left alone.
+ * Drops the unused `social_portfolio` table, where it exists.
  */
 class Version1000Date20261114000001 extends SimpleMigrationStep {
 	#[\Override]

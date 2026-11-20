@@ -15,30 +15,17 @@ use OCA\Social\Model\Client\Story;
 
 /**
  * What `/api/v2/config` answers: the numbers and switches the Pixelfed app
- * reads once, on launch, before it will draw anything.
+ * reads on launch before it draws anything, deciding how many pictures may be
+ * picked, how long a caption may be, and which screens to offer.
  *
- * It is a bootstrap call, not a feature. The app asks for it first and uses the
- * answer to decide how many pictures its picker may select, how long a caption
- * may be, and which screens to offer at all -- so a wrong number here is a
- * client that lets somebody compose a post the server will refuse, and a missing
- * one is an app that will not start.
- *
- * **Every value is derived, never restated.** The ceilings come from the same
- * constants the server enforces and the mime list is asked of the one place that
- * decides what an upload may be. A second copy of any of them would drift, and
- * the failure that causes is the worst kind: the client says yes and the server
- * says no, with nothing in between to explain it.
- *
- * The feature switches say what this app actually does, not what Pixelfed does.
- * Announcing a screen that is not there is worse than not announcing it: the app
- * draws the tab, the reader taps it, and it is empty for a reason nobody can
- * see.
+ * Every limit is derived from what the server enforces, never restated, so
+ * the client cannot allow what the server refuses. The feature switches say
+ * what this app does, so the app draws no empty screens.
  */
 class PixelfedConfigService {
 	/**
-	 * What a caption may be, which is Mastodon's status limit here and is the
-	 * same number `/api/v1/instance` reports. Pixelfed's own default is 500 as
-	 * well.
+	 * What a caption may be: the status limit `/api/v1/instance` reports, also
+	 * Pixelfed's default.
 	 */
 	private const MAX_CAPTION_LENGTH = InstanceService::MAX_CHARACTERS;
 
@@ -70,9 +57,8 @@ class PixelfedConfigService {
 		$maxUpload = $this->instanceService->imageSizeLimit();
 
 		return [
-			// Registration is Nextcloud's business, not this app's: an account
-			// here exists because a Nextcloud user does. Saying otherwise would
-			// have the app offer a sign-up form that cannot work.
+			// accounts here come from Nextcloud users, so the app must not offer a
+			// sign-up form
 			'open_registration' => false,
 			'uploader' => [
 				// Pixelfed counts in kilobytes here, which is the one place its
@@ -81,12 +67,9 @@ class PixelfedConfigService {
 				'max_caption_length' => self::MAX_CAPTION_LENGTH,
 				'max_altext_length' => self::MAX_ALTTEXT_LENGTH,
 				'album_limit' => Stream::MAX_ATTACHMENTS,
-				// A client may act on these by skipping its own compression, so
-				// they say what this instance actually does. Nothing is
-				// recompressed unless an administrator asked for it: metadata
-				// is stripped losslessly and a picture is re-encoded only when
-				// it has to be rotated — or when `image_max_edge` is set, which
-				// is the case these two report.
+				// A client may skip its own compression on these, so they say what this
+				// instance does: pictures are re-encoded only to rotate them or when
+				// `image_max_edge` is set, which these two report.
 				'image_quality' => $this->optimisesImages()
 					? $this->configService->getAppValueInt(ConfigService::SOCIAL_IMAGE_QUALITY) : 100,
 				'optimize_image' => $this->optimisesImages(),
@@ -118,8 +101,7 @@ class PixelfedConfigService {
 				'polls' => true,
 				'bookmarks' => true,
 				'mobile_apis' => true,
-				// and what it does not, said out loud rather than left for a
-				// client to discover by tapping
+				// and what it does not, stated explicitly
 				'circles' => false,
 				'direct_messages' => true,
 				'live_streaming' => false,

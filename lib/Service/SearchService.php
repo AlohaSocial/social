@@ -78,33 +78,17 @@ class SearchService {
 	 * @return Person[]
 	 */
 	/**
-	 * A post named by its address, fetched from the server that holds it.
+	 * A post named by its address, fetched from the server that holds it, for
+	 * `resolve=true` ("I have a link, go and get it").
 	 *
-	 * `resolve=true` is a reader saying "I have a link, go and get it" — it is
-	 * how somebody replies to or boosts a post they found in a browser, and
-	 * without it that is impossible: the post is on another server and nothing
-	 * here has ever had a reason to ask for it.
+	 * Guards against an open proxy: the route is rate-limited, `CurlService`
+	 * enforces the access list and pins the resolved address, and the
+	 * document must claim the id it was fetched from (as
+	 * `StreamQueueService::cacheItem()` checks).
 	 *
-	 * Fetching an address a reader supplies is the part that needs care, and
-	 * three things already stand between this and an open proxy: the route is
-	 * rate-limited per user, `CurlService` refuses an instance the access list
-	 * bars and pins the address it resolved across redirects, and the document
-	 * that comes back has to *claim the id it was fetched from*. That last one
-	 * is what stops somebody hosting a document that says it is a post of
-	 * yours; it is the same check `StreamQueueService::cacheItem()` makes when
-	 * it walks up a thread.
-	 *
-	 * A post this instance already holds is returned without asking anybody.
-	 *
-	 * `$asViewer` decides whether that last sentence is subject to who is
-	 * asking, and it has to, because the two callers are asking different
-	 * questions. A reader pasting an address wants a post *they* may read, so
-	 * the search route passes `true`: without it, an address typed into the
-	 * search box answered with a followers-only or direct post the reader was
-	 * never sent — the content search above it is viewer-scoped and finds
-	 * nothing, which is exactly what makes this run. `RelayService` is asking
-	 * whether the *instance* already holds an object at all, on nobody's
-	 * behalf, and passes `false`.
+	 * A post already held is returned without fetching. `$asViewer` is `true`
+	 * for the search route, so only posts the reader may see are returned;
+	 * `RelayService` passes `false`, asking on nobody's behalf.
 	 */
 	public function resolveStatus(string $uri, bool $asViewer = false): ?Stream {
 		// `getTypeFromSearch()` is no use here: it answers SEARCH_ALL for plain
@@ -124,24 +108,17 @@ class SearchService {
 			$object = AP::instance()->getItemFromData($data);
 
 			if ($object->getId() !== $uri) {
-				// A document is only evidence about itself — with one
-				// exception this app has to make: a PeerTube watch page is
-				// `/w/{shortUUID}`, which is the address a person copies out
-				// of their browser and *not* the object's own id. PeerTube
-				// answers an ActivityPub request there with the video whose id
-				// is the long form, so the document is trusted when it names
-				// the address it was fetched from among its own `url` links —
-				// which is the same evidence, one level in.
+				// A document is only evidence about itself, with one exception:
+				// a PeerTube watch page (`/w/{shortUUID}`) is not the object's
+				// id, so the document is trusted when it lists the fetched
+				// address among its own `url` links.
 				if (!$this->claimsUrl($data, $uri)) {
 					throw new InvalidOriginException('the document does not claim the address it came from');
 				}
 			}
 
-			// Every type another server `Create`s into a timeline, not only the
-			// two this app writes itself. Pasting a PeerTube video's address
-			// found nothing at all, although the very same object would have
-			// been stored had it arrived by following the channel — the inbox
-			// and the search disagreed about what a post is.
+			// every type another server `Create`s into a timeline, as the inbox
+			// accepts, PeerTube videos included
 			if (!in_array($object->getType(), array_merge([Note::TYPE, Question::TYPE], AP::NOTE_LIKE_TYPES), true)) {
 				throw new InvalidResourceException('not a post');
 			}
@@ -168,13 +145,8 @@ class SearchService {
 	}
 
 	/**
-	 * Whether a fetched document names the address it was fetched from.
-	 *
-	 * For a PeerTube `Video` that is the `text/html` link in its `url` list —
-	 * the short `/w/xxx` watch page a person copies out of their browser,
-	 * which is not the object's id. Checked against the links the document
-	 * itself publishes, so what is trusted is still only the document's own
-	 * word about itself.
+	 * Whether a fetched document names the address it was fetched from: for a
+	 * PeerTube `Video`, the `text/html` watch page among its `url` links.
 	 *
 	 * @param array<string, mixed> $data
 	 */
@@ -249,13 +221,10 @@ class SearchService {
 	/**
 	 * The accounts known here by a name or handle.
 	 *
-	 * `$resolve` is Mastodon's: whether other servers are asked at all. With
-	 * it, an exact handle this instance has never seen is looked up on its
-	 * server, and Bluesky's typeahead adds the accounts it finds, stored so
-	 * a client has an id for each. Without it — what a client's
-	 * autocomplete sends, once per keystroke — the answer is what is cached
-	 * here, and a complete `user@host` that is not is queued for
-	 * `Cron\ResolveActor`, so a search a little later finds it.
+	 * With Mastodon's `$resolve`, an exact unknown handle is looked up on its
+	 * server and Bluesky's typeahead results are added (stored, so each has an
+	 * id). Without it, as autocomplete sends, only the cache answers, and an
+	 * unknown complete `user@host` is queued for `Cron\ResolveActor`.
 	 *
 	 * @param int|null $limit how many accounts a paging caller needs, null for all of them
 	 * @param string $followedBy when set, only the accounts this actor follows

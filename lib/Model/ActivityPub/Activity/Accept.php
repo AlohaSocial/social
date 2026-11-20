@@ -12,11 +12,6 @@ namespace OCA\Social\Model\ActivityPub\Activity;
 use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
-/**
- * Class Accept
- *
- * @package OCA\Social\Model\ActivityPub\Activity
- */
 class Accept extends ACore implements JsonSerializable {
 	public const TYPE = 'Accept';
 

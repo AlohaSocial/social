@@ -50,27 +50,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Everything one account leaves behind, in one list.
+ * Everything one account leaves behind, in one list shared by deletion
+ * (`PersonInterface::delete()`) and suspension
+ * (`ModerationService::purgeActor()`), so a new table has one place to be
+ * registered. The posts are not in it: a deletion handles them separately
+ * (`PersonInterface::deleteStreamFromActor()`).
  *
- * There were two of these lists — one in `PersonInterface::delete()` for an
- * account that is gone, one in `ModerationService::purgeActor()` for one a
- * moderator has suspended — and they had drifted in both directions: a
- * suspended account went on holding likes and boosts that counted on other
- * people's posts, on filing reports and on being named in other people's
- * pictures, while a deleted one left its domain blocks, its notes, its albums,
- * its stories and half a dozen newer tables behind. The rule is the one the
- * older comment already stated and could not enforce: whichever list was
- * forgotten is the row that outlives the account.
- *
- * So there is one list, and a table added tomorrow has one place to be
- * registered. The posts themselves are not in it: a deletion rewrites what
- * addressed the account and may have to finish in a job (see
- * `PersonInterface::deleteStreamFromActor()`), which a suspension does not do,
- * and that is the only part of the two paths that legitimately differs.
- *
- * Every step is caught on its own and none depends on an earlier one, so
- * running it twice on the same account is a no-op rather than a failure, and
- * one table that cannot be written does not leave the rest behind.
+ * Every step is caught on its own and independent, so running it twice is a
+ * no-op and one failing table does not leave the rest behind.
  */
 class ActorCascadeService {
 	public function __construct(
@@ -141,34 +128,28 @@ class ActorCascadeService {
 	 */
 	private function steps(string $actorId, bool $reversible, string $userId): array {
 		$steps = [
-			// its Bluesky identity: the DID is tombstoned on a deletion and
-			// left alone on a suspension, which can be lifted
+			// Its Bluesky identity: the DID is tombstoned on a deletion and left alone
+			// on a suspension, which can be lifted.
 			'atproto' => fn () => $this->atproto->purge($actorId, $reversible),
-			// what it did to other people's posts: its likes and boosts, its
-			// bookmarks and poll votes, its emoji reactions, and what it has
-			// watched — all of which went on counting on posts that are not
-			// its own
+			// What it did to other people's posts: likes, boosts, bookmarks, poll
+			// votes, emoji reactions and watch progress.
 			'actions' => fn () => $this->actionsRequest->deleteByActor($actorId),
 			'reactions' => fn () => $this->reactionsRequest->deleteByActor($actorId),
 			'streamActions' => fn () => $this->streamActionsRequest->deleteByActor($actorId),
 			'streamViews' => fn () => $this->streamViewsRequest->deleteByActor($actorId),
 			'watch' => fn () => $this->watchRequest->deleteRelatedId($actorId),
 			'storyInteractions' => fn () => $this->storyInteractionsRequest->deleteByActor($actorId),
-			// both directions of the follow relationship: what it followed and
-			// what followed it, which is what keeps an account in the delivery
-			// fan-out and in other people's timelines
+			// Both directions of follows, which keep it in fan-outs and timelines.
 			'follows' => fn () => $this->followsRequest->deleteRelatedId($actorId),
-			// the blocks and mutes it holds, the instances it blocked and the
-			// notes it wrote
+			// Its blocks and mutes, the instances it blocked and the notes it wrote.
 			'relations' => fn () => $this->actorRelationRequest->deleteRelatedId($actorId),
 			'muteExpiry' => fn () => $this->muteExpiryRequest->deleteRelatedId($actorId),
 			'domainBlocks' => fn () => $this->domainBlocksRequest->deleteRelatedId($actorId),
 			'notes' => fn () => $this->accountNotesRequest->deleteRelatedId($actorId),
 			// the reports about it and the ones it filed
 			'reports' => fn () => $this->reportsRequest->deleteRelatedId($actorId),
-			// what it had made for itself alone: its keyword filters, its
-			// lists, how far it had read its conversations, the hashtags it
-			// pinned, the announcements it had dismissed
+			// What it made for itself: filters, lists, conversation read markers,
+			// featured hashtags, dismissed announcements.
 			'filters' => fn () => $this->filtersRequest->deleteRelatedId($actorId),
 			'lists' => fn () => $this->listsRequest->deleteRelatedId($actorId),
 			'conversations' => fn () => $this->conversationsRequest->deleteRelatedId($actorId),
@@ -181,30 +162,26 @@ class ActorCascadeService {
 				}
 			},
 			'announcements' => fn () => $this->announcementsRequest->deleteRelatedId($actorId),
-			// the posts it had asked to have published later, which are the one
-			// thing here that would otherwise go *out* under an account nothing
-			// is serving any more
+			// Scheduled posts, which would otherwise go out under a dead account.
 			'scheduled' => fn () => $this->scheduledStatusesRequest->deleteRelatedId($actorId),
-			// the albums it curated, which are pages of its own posts, and its
-			// live stories, which must not outlive it
+			// The albums it curated and its live shorts.
 			'collections' => fn () => $this->collectionsRequest->deleteRelatedId($actorId),
 			'stories' => fn () => $this->storiesRequest->deleteRelatedId($actorId),
-			// where it is named in somebody else's picture
+			// Where it is tagged in somebody else's photo.
 			'mediaTags' => fn () => $this->mediaTagsRequest->deleteByActor($actorId),
-			// and the tags it put on pictures, whoever they name
+			// The tags it put on photos, whoever they name.
 			'mediaTagsMade' => fn () => $this->mediaTagsRequest->deleteByTagger($actorId),
 			// the hashtags it followed, as the ones it featured
 			'followedTags' => fn () => $this->followedTagsRequest->deleteByActor($actorId),
-			// the approvals it was given for its quotes; the ones about its
-			// posts go with the posts (`StreamDeletion::deleteRelatedTo()`)
+			// The quote approvals it was given; those about its posts go with the posts
+			// (`StreamDeletion::deleteRelatedTo()`).
 			'quoteGrants' => fn () => $this->quoteGrantRequest->deleteByActor($actorId),
-			// the channels it owned, and its own row as a channel; the channel
-			// accounts are deleted with it (`AccountService::deleteActor()`)
+			// Its channels and its own channel row; the channel accounts are deleted
+			// with it (`AccountService::deleteActor()`).
 			'channels' => fn () => $this->channelsRequest->deleteRelatedId($actorId),
 			// which of a team's posts it wrote; the posts stay the team's
 			'teamPosts' => fn () => $this->teamsRequest->deleteByAuthor($actorId),
-			// what it posted from Files and the imports it ran, kept by its
-			// Nextcloud user
+			// What it posted from Files and its imports, kept by Nextcloud user.
 			'filesPosts' => function () use ($userId): void {
 				if ($userId !== '') {
 					$this->fileCommentsRequest->deleteByUser($userId);
@@ -215,30 +192,23 @@ class ActorCascadeService {
 					$this->importsRequest->deleteByUser($userId);
 				}
 			},
-			// the memory of what it brought over from another server, which
-			// names posts that go with it
+			// The record of what it imported from another server.
 			'imported' => fn () => $this->importedPostsRequest->deleteByActor($actorId),
 			'deviceAuthorizations' => function () use ($userId): void {
 				if ($userId !== '') {
 					$this->deviceAuthorizations->deleteByUser($userId);
 				}
 			},
-			// and anything of its own still waiting for a moderator: nobody is
-			// going to approve the unpublished posts of an account that is not
-			// there, and leaving them would leave a queue of decisions that
-			// cannot be taken
+			// Its posts still waiting for a moderator.
 			'held' => fn () => $this->postHoldsRequest->deleteByActor($actorId),
 			// deliveries still queued towards it
 			'queue' => fn () => $this->requestQueueRequest->deleteByAuthor($actorId),
-			// its cached avatar and header: the files first, because the rows
-			// are the only thing that remembers their names
+			// Its cached avatar and header: files first, as only the rows know their names.
 			'documents' => fn () => $this->deleteDocuments($actorId),
-			// a local account has no cached copy; deleting one that is not
-			// there is not a failure
+			// A local account has no cached copy; that is not a failure.
 			'cachedActor' => fn () => $this->cacheActorsRequest->deleteCacheById($actorId),
-			// this instance's verification of it, and the record that says so
-			// on Bluesky; resolved here, as the verification needs services
-			// that need this one
+			// This instance's verification of it and the Bluesky record of it; resolved
+			// lazily because of a service cycle.
 			'verification' => fn () => $this->container?->get(VerificationService::class)->unverify($actorId),
 		];
 
@@ -246,25 +216,19 @@ class ActorCascadeService {
 			return $steps;
 		}
 
-		// A suspension can be lifted, and what it takes it never gives back.
-		// So it takes only what belongs to the account: a block or a mute
-		// somebody else holds over it is theirs, and so is a note they wrote
-		// about it or a report they filed — none of which a decision about
-		// this account may quietly undo.
+		// A suspension can be lifted, so it takes only what belongs to the account:
+		// blocks, mutes, notes and reports others hold about it stay theirs.
 		$steps['relations'] = fn () => $this->actorRelationRequest->deleteByActor($actorId);
 		$steps['muteExpiry'] = fn () => $this->muteExpiryRequest->deleteByActor($actorId);
-		// approvals of quotes and attributions of team posts are other
-		// accounts' records too
+		// Quote approvals and team post attributions are other accounts' records too.
 		unset($steps['notes'], $steps['reports'], $steps['verification'], $steps['quoteGrants'], $steps['teamPosts'], $steps['channels']);
 
 		return $steps;
 	}
 
 	/**
-	 * The files of the cached documents hanging off an actor, then their rows.
-	 *
-	 * A file that cannot be removed is not a reason to keep the row: the row
-	 * goes, and the file is what `occ social:media:usage` reports.
+	 * The files of the cached documents hanging off an actor, then their rows;
+	 * a file that cannot be removed does not keep its row.
 	 */
 	private function deleteDocuments(string $actorId): void {
 		foreach ($this->cacheDocumentsRequest->getByParent($actorId) as $document) {

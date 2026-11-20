@@ -18,12 +18,8 @@
 import { translate as t } from '@nextcloud/l10n'
 
 /**
- * The butterfly beside the name of an account that lives on Bluesky.
- *
- * Sized to the text it sits in and never wider than that, so a byline with
- * it is exactly as tall as one without. The meaning is in the label: the
- * glyph alone says nothing to a screen reader. Whether the account is
- * verified, by whom, is `VerifiedBadge`'s, beside it.
+ * The butterfly beside the name of an account that lives on Bluesky, sized to
+ * the text so the byline keeps its height, with a label for screen readers.
  */
 export default {
 	name: 'BlueskyBadge',

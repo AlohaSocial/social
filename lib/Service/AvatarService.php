@@ -24,18 +24,12 @@ use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
- * The profile picture, as a Mastodon client sends it on `update_credentials`.
- *
- * Unlike the banner, this is not the app's own picture: it is the Nextcloud
- * account's avatar, the one the whole server shows, and the actor document
- * points at this app's avatar route of the username for it (`published()`).
- * So it is written where it lives and the actor cache is refreshed;
- * `DocumentService::cacheLocalAvatarByUsername()` notices the version core
- * bumped and re-caches the icon.
- *
- * `avatar` used to be accepted and dropped. A client's profile editor sends the
- * whole form in one PATCH, so somebody changing their picture and their bio
- * together got a 200 and a new bio over the old picture.
+ * The profile picture a Mastodon client sends on `update_credentials`. It is
+ * the Nextcloud account's avatar, which the actor points at through this
+ * app's route of the username (`published()`), so it is written to Nextcloud
+ * and the actor cache is refreshed;
+ * `DocumentService::cacheLocalAvatarByUsername()` re-caches the icon when
+ * core bumps the version.
  */
 class AvatarService {
 	/**
@@ -60,15 +54,10 @@ class AvatarService {
 	}
 
 	/**
-	 * The avatar a local account publishes, found by its username.
-	 *
-	 * Nextcloud's own avatar route is addressed by the login, which need not
-	 * be the username, so the account's icon points here instead. What is
-	 * served is what that route would serve this reader -- core keeps a
-	 * private avatar to the people who know the user -- except that a visitor
-	 * gets the generated initials where the account does not publish its
-	 * picture (`AccountService::mayPublish()`), which is the same rule that
-	 * decides whether the actor has an icon at all.
+	 * The avatar a local account publishes, by username, since Nextcloud's
+	 * own route names the login. Serves what core would serve this reader,
+	 * except that visitors get the generated initials where the account does
+	 * not publish its picture (`AccountService::mayPublish()`).
 	 *
 	 * @throws NotFoundException no account here by that name has a Nextcloud avatar
 	 * @throws SocialAppConfigException
@@ -94,15 +83,9 @@ class AvatarService {
 	}
 
 	/**
-	 * Takes the account's settings again from the database before the picture
-	 * is changed.
-	 *
-	 * Nextcloud numbers the picture's address (`?v=`) from its copy of the
-	 * user's settings, which this process read once and keeps. Another
-	 * process may have moved the number since — a web request that drew the
-	 * initials again after a name change, a cron pass — and a picture set
-	 * from a stale copy gets a number a peer has already seen: the actor is
-	 * told, but the picture is never fetched again.
+	 * Reloads the account's settings before the picture changes: Nextcloud
+	 * derives the avatar's `?v=` from its cached copy, and a stale number
+	 * would leave peers never re-fetching the picture.
 	 */
 	private function freshPictureVersion(string $userId): void {
 		$this->userConfig->clearCache($userId, true);
@@ -140,16 +123,9 @@ class AvatarService {
 	}
 
 	/**
-	 * Takes the account's own picture away, leaving the generated initials.
-	 *
-	 * Mastodon's `DELETE /api/v1/profile/avatar`, which is how a client offers
-	 * "remove picture" — without it a client can only replace one picture with
-	 * another, and an account that wanted none was stuck with whatever it last
-	 * uploaded.
-	 *
-	 * Removing a picture that was never set is not an error: the account ends
-	 * up in the state that was asked for either way, and a client that retries
-	 * a failed delete must not be told the second attempt was wrong.
+	 * Takes the account's own picture away, leaving the generated initials
+	 * (Mastodon's `DELETE /api/v1/profile/avatar`). Removing a picture that
+	 * was never set is not an error, so retries succeed.
 	 *
 	 * @throws InvalidActionException the backend owns the avatar
 	 */
@@ -174,11 +150,10 @@ class AvatarService {
 	}
 
 	/**
-	 * Stores a file this server already holds as the account's avatar: the
-	 * picture a Bluesky app uploaded for the profile it then saves. The same
-	 * checks as an upload, but no upload to be one. Nextcloud keeps square
-	 * avatars only, so one that is not is cut to its middle square, which is
-	 * what Bluesky shows of it in a circle anyway.
+	 * Stores a file this server already holds as the account's avatar (an
+	 * image a Bluesky app uploaded for its profile), with the upload checks.
+	 * Nextcloud keeps square avatars only, so it is cut to its middle square,
+	 * which is what Bluesky shows in a circle anyway.
 	 *
 	 * @throws InvalidActionException the backend owns the avatar, or the bytes
 	 *                                are not a picture this can store
@@ -229,15 +204,9 @@ class AvatarService {
 	}
 
 	/**
-	 * The picture an export archive carried, put back — but never over one the
-	 * account already has.
-	 *
-	 * An imported archive is read alongside whatever is already here, and the
-	 * avatar of a Nextcloud account is the account's rather than this app's:
-	 * core's own migrator carries it, and the order the migrators run in is not
-	 * this app's to decide. So a picture that is already there wins, and the
-	 * archived one is only used where the account has none of its own — the
-	 * generated initials -- which is the case where it would otherwise be lost.
+	 * Restores the avatar an export archive carried, but only over the
+	 * generated initials: core's own migrator carries the avatar too and may
+	 * run in either order, so an existing picture wins.
 	 *
 	 * @return bool whether the avatar was written
 	 */
@@ -270,9 +239,8 @@ class AvatarService {
 			throw new InvalidActionException('unknown account');
 		}
 
-		// LDAP, SAML and friends serve the picture from elsewhere. Saying so is
-		// the point: the profile looks unchanged either way, and only a refusal
-		// tells the user why.
+		// LDAP, SAML and similar backends serve the picture from elsewhere;
+		// only a refusal tells the user why nothing changed.
 		if (!$user->canChangeAvatar()) {
 			throw new InvalidActionException(
 				'the avatar of this account is managed outside Nextcloud and cannot be changed here'

@@ -9,14 +9,9 @@ import { reactive } from 'vue'
  * The small player a video goes on playing in when the reader leaves its
  * watch page while it plays.
  *
- * One for the page, held here rather than in a component, because the watch
- * page that hands a video over is gone by the time the player shows it, and
- * the watch page that takes it back has only just arrived. `App.vue` draws it
- * (`MiniPlayer.vue`) for as long as `status` is set, so it survives every
- * navigation inside the app.
- *
- * It only ever holds a video somebody was already watching: nothing here
- * starts one, and closing it stops it.
+ * Held outside any component so it outlives the watch pages that hand videos
+ * over and take them back. `App.vue` draws it (`MiniPlayer.vue`) while
+ * `status` is set.
  *
  * @type {{status: object|null, position: number, playing: boolean}}
  */

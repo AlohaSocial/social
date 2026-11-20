@@ -23,17 +23,12 @@ use Throwable;
  * Bluesky's suggested starter packs (`app.bsky.unspecced.getSuggestedStarterPacks`),
  * read in as starter packs beside the fediverse's collections.
  *
- * Asked of the AppView signed out, so every instance reads the same list,
- * once a day with the collections (`CollectionPackService::refresh()`). A
- * pack's members are its list's (`app.bsky.graph.getList`), at most as
- * many as a starter pack here holds, each stored in the actor cache from
- * the profile the list answers with, so an opened pack draws from the
- * cache. A member the instance blocks, or that Bluesky's moderation limits,
- * is left out; a pack whose creator is either is not offered.
- *
- * Bluesky asks no consent of an account to be in a starter pack, which is a
- * public list by design, so there is nothing to verify the way a
- * fediverse collection's `featureAuthorization` is.
+ * Asked of the AppView signed out, once a day with the collections
+ * (`CollectionPackService::refresh()`). Members come from the pack's list
+ * (`app.bsky.graph.getList`), capped at a starter pack's size and cached as
+ * actors. Members blocked here or limited by Bluesky moderation are left out,
+ * and so is a pack whose creator is. Bluesky starter packs are public lists,
+ * so there is no consent to verify as for `featureAuthorization`.
  */
 class SuggestedStarterPacks {
 	/** The `origin` of a pack read from here. */
@@ -54,10 +49,9 @@ class SuggestedStarterPacks {
 	}
 
 	/**
-	 * Reads the suggested packs again, stores them, and removes the ones
-	 * Bluesky no longer suggests. An AppView that does not answer throws,
-	 * and what was read last time stays; so does a pack still suggested
-	 * whose list could not be read.
+	 * Reads the suggested packs again, stores them, and removes the ones Bluesky
+	 * no longer suggests. If the AppView does not answer this throws and the
+	 * last list stays; so does a pack whose list could not be read.
 	 *
 	 * @return array{packs: int, members: int}
 	 */

@@ -12,9 +12,7 @@ export { useSettingsStore } from './settings.js'
 export { useTimelineStore } from './timeline.js'
 
 /**
- * The one Pinia every entry point installs.
- *
- * Each store registers itself the first time a component asks for it, so this
- * file no longer lists the modules — what it holds is whatever the page used.
+ * The one Pinia every entry point installs. Each store registers itself the
+ * first time a component uses it.
  */
 export default createPinia()

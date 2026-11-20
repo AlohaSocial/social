@@ -67,19 +67,12 @@ use Throwable;
 /**
  * What a Bluesky app writes, as the Social action it stands for (§16.5).
  *
- * What Social has a counterpart for reaches a repository only through
- * `RecordMapper`, so an app's `createRecord` is not stored as it came: a
- * post becomes a Social post, a like a like, a repost a boost, a follow a
- * follow, a profile record the profile — and the record the publisher then
- * writes for it is the answer. The app shows what it gets back; the text may
- * differ where Social's mapping does (a long post cut with a link, say).
- * Lists, starter packs, feed generators and gates, and collections without a
- * local Social projection, are kept as written. A curate list and its members
- * are the person's list here as well (`BlueskyListImport`). Who may send the person direct
- * messages (`chat.bsky.actor.declaration`) is the setting here, which
- * writes the record (`ChatDeclaration`). Blocks are handled as account
- * relationships, list blocks are refused, and a post can only be public:
- * that is what goes to Bluesky (D8).
+ * Records Social has a counterpart for (posts, likes, reposts, follows, the
+ * profile) become Social actions and reach the repository only through
+ * `RecordMapper`, so the answer is the record the publisher wrote, which may
+ * differ from what the app sent. Lists, starter packs, feed generators,
+ * gates and unknown collections are kept as written. Blocks are account
+ * relationships, list blocks are refused, and posts can only be public (D8).
  */
 class WriteService {
 	/**
@@ -286,10 +279,8 @@ class WriteService {
 			$swapRecords[$collection . '/' . $rkey] = $swapRecord;
 		}
 		$hasConditionalWrite = $swapCommit !== null || array_key_exists('swapRecord', $body);
-		// A put can change both Social-side state (posts, profile rows, queued
-		// federation work) and the ATProto repository. Keep both in one database
-		// transaction even when the client did not request compare-and-swap.
-		// The CAS fields are optional in the Lexicon; atomicity is not.
+		// Social-side state and the repository change in one transaction even
+		// without compare-and-swap: the CAS fields are optional, atomicity is not.
 		$ownsBatch = !$this->repositories->batchActive();
 		if ($this->repositories->batchActive() && $hasConditionalWrite) {
 			throw XrpcException::invalidRequest('Conditional putRecord checks cannot be nested inside another repository batch');
@@ -325,9 +316,8 @@ class WriteService {
 		} catch (Throwable $e) {
 			if ($ownsBatch) {
 				$this->activities->discardDeferredDeliveries();
-				// A reviewed post is intentionally kept in the moderation queue
-				// before XRPC returns an error. Commit that queue entry even though
-				// no repository record is written.
+				// Commit the moderation queue entry of a held post even though no record
+				// is written and XRPC returns an error.
 				if (self::isHeld($e)) {
 					$this->repositories->commitBatch();
 				} else {
@@ -818,11 +808,9 @@ class WriteService {
 	 * `com.atproto.repo.applyWrites`: Social actions and their repository
 	 * records share one transaction and one repository commit.
 	 *
-	 * A post the review rules hold ends the batch where it stands: the writes
-	 * before it are committed with the queue entry, so a thread keeps the
-	 * posts above the held one and their gates, and the held post and every
-	 * write after it (its gates, the replies below it) are not applied. The
-	 * app is told so in the error.
+	 * A post the review rules hold ends the batch: the writes before it are
+	 * committed with the queue entry, and the held post and every write after it
+	 * are not applied, which the error tells the app.
 	 *
 	 * @throws XrpcException
 	 */
@@ -923,9 +911,8 @@ class WriteService {
 	}
 
 	/**
-	 * Keep app-owned records in one repository commit. These records have no
-	 * ActivityPub action to perform, so their batch can use the repository's
-	 * transaction directly.
+	 * Keeps app-owned records in one repository commit, using the repository's
+	 * transaction directly since they have no ActivityPub action.
 	 *
 	 * @param array<array<string, mixed>> $writes
 	 * @throws XrpcException
@@ -1033,9 +1020,9 @@ class WriteService {
 	}
 
 	/**
-	 * `com.atproto.repo.uploadBlob`, from the file the body was copied to:
-	 * kept byte for byte and named by its original CID. Normal Social uploads
-	 * still use their own metadata removal and publishing conversions.
+	 * `com.atproto.repo.uploadBlob`, from the file the body was copied to: kept
+	 * byte for byte and named by its original CID, without the metadata removal
+	 * and conversions of composer uploads.
 	 *
 	 * @param string $mime what the app said it is; what is stored is sniffed
 	 * @throws XrpcException
@@ -1377,10 +1364,9 @@ class WriteService {
 	}
 
 	/**
-	 * Stores the Bluesky posts a record replies to, quotes, likes or reposts
-	 * before the repository lock is taken, so the batch holding it does not
-	 * wait on the AppView. What cannot be read is left to the write itself,
-	 * which refuses it.
+	 * Stores the Bluesky posts a record refers to before the repository lock is
+	 * taken, so the batch does not wait on the AppView. What cannot be read is
+	 * refused by the write itself.
 	 */
 	private function fetchNamedPosts(string $collection, mixed $record): void {
 		if (!is_array($record)) {
@@ -1691,10 +1677,9 @@ class WriteService {
 	}
 
 	/**
-	 * The validation a write gets. Social reads the records it keeps as
-	 * written (lists, starter packs, gates, profile links), so an app's
-	 * `validate: false` does not skip their schema there; it only applies to
-	 * collections Social has no role for, which the opaque quota bounds.
+	 * The validation a write gets. Records Social reads (lists, starter packs,
+	 * gates, profile links) are always schema-checked; an app's `validate: false`
+	 * applies only to opaque collections, which the opaque quota bounds.
 	 */
 	private static function validationFor(string $collection, ?bool $validate): ?bool {
 		return $validate === false && in_array($collection, self::KEPT_AS_WRITTEN, true) ? null : $validate;

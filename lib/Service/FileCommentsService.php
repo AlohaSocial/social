@@ -33,21 +33,12 @@ use Throwable;
 /**
  * Replies to a post made from Files, shown as comments on the file.
  *
- * A picture posted from Files (with "Share to Aloha Social", or with the
- * composer's file picker) keeps a link to the file it was copied from. A
- * public or unlisted reply to that post is copied onto the file as a
- * comment, so the conversation can be read in the Files sidebar beside the
- * picture it is about. The other way, a comment the post's author writes on
- * the file goes out as their reply.
- *
- * **Only the post's author speaks for the post.** Everybody else who can see
- * the file comments on it the way they always did, and those comments stay
- * on this server: a colleague with access to a shared folder must not find
- * that a remark of theirs went out to the fediverse.
- *
- * **Only replies anybody could read are copied in.** Everybody who can open
- * the file reads its comments, and they are not the people a followers-only
- * or direct reply was addressed to.
+ * A photo posted from Files keeps a link to the file it was copied from. A
+ * public or unlisted reply to that post is copied onto the file as a comment;
+ * a comment the post's author writes on the file goes out as their reply.
+ * Only the author speaks for the post: other people's comments stay on this
+ * server. Only replies anybody could read are copied in, since everybody who
+ * can open the file reads its comments.
  *
  * Nothing here may fail what it hangs off: a reply that cannot be copied is
  * still a reply, and a comment that cannot be sent is still a comment.
@@ -127,11 +118,9 @@ class FileCommentsService {
 	}
 
 	/**
-	 * A reply reached the inbox, or was written here.
-	 *
-	 * Copied onto every file of the post it answers, or of the post at the
-	 * top of the thread when it answers a reply that was copied. The comment
-	 * written in Files that this reply was sent for is recorded against it
+	 * A reply reached the inbox, or was written here. Copied onto every file
+	 * of the post it answers (or of the thread's top post, for a reply to a
+	 * copied reply); a reply sent for a Files comment is recorded against it
 	 * rather than copied back.
 	 */
 	private function copyReplies(Stream $reply): void {
@@ -218,10 +207,8 @@ class FileCommentsService {
 	}
 
 	/**
-	 * A post or a reply is gone.
-	 *
-	 * A post that was made from files takes the copied replies with it; the
-	 * comments people wrote in Files themselves stay. A reply takes every
+	 * A post or a reply is gone. A post made from files takes the copied
+	 * replies with it; comments written in Files stay. A reply takes every
 	 * comment that stands for it.
 	 */
 	public function onDeleted(Stream $item): void {
@@ -375,11 +362,9 @@ class FileCommentsService {
 	}
 
 	/**
-	 * Sends a comment as the author's reply to the post the file was made into.
-	 *
-	 * With the visibility of the post it answers, and past the same review a
-	 * post written in the composer goes through: a comment the review would
-	 * hold stays a comment.
+	 * Sends a comment as the author's reply to the post the file was made
+	 * into, with that post's visibility and through the same review; a
+	 * comment the review would hold stays a comment.
 	 */
 	private function publish(IComment $comment, FilePost $link): void {
 		$actor = $this->accountService->getActorFromUserId($comment->getActorId());
@@ -453,13 +438,10 @@ class FileCommentsService {
 	}
 
 	/**
-	 * The comment that stands for a reply.
-	 *
-	 * Credited in its first line when it is somebody else's, since the Files
-	 * app only names the authors that are users of this server. A content
-	 * warning is shown in place of the text, which a comment has no way to
-	 * fold away, and the reply's address follows whenever the comment does
-	 * not hold all of it.
+	 * The comment that stands for a reply: credited in its first line when it
+	 * is somebody else's, since Files only names local users. A content
+	 * warning replaces the text, and the reply's address follows when the
+	 * comment does not hold all of it.
 	 */
 	private function messageOf(Stream $reply, string $authorUserId, bool $own): string {
 		$l = $this->l10nFactory->get('social', $this->l10nFactory->getUserLanguage($this->userManager->get($authorUserId)));
@@ -523,11 +505,9 @@ class FileCommentsService {
 	}
 
 	/**
-	 * Takes the meaning out of every `@` that would start a Nextcloud mention.
-	 *
-	 * A comment's mentions notify the users they name. A reply from another
-	 * server saying "@admin" would otherwise reach whoever is `admin` here.
-	 * A word joiner after the `@` is invisible and stops the parser.
+	 * Takes the meaning out of every `@` that would start a Nextcloud mention,
+	 * so a remote reply saying "@admin" notifies nobody here. A word joiner
+	 * after the `@` is invisible and stops the parser.
 	 */
 	public static function withoutMentions(string $text): string {
 		return (string)preg_replace('/(?<![\p{L}\p{N}_])@(?=[\p{L}\p{N}_"\'.\-])/u', "@\u{2060}", $text);
@@ -585,9 +565,8 @@ class FileCommentsService {
 	}
 
 	/**
-	 * Resolved when used: the post services reach the inbox interfaces, one
-	 * of which calls this class, and taking them in the constructor would be
-	 * a cycle.
+	 * Resolved when used: the post services reach the inbox interfaces, one of
+	 * which calls this class, so injecting them would be a cycle.
 	 */
 	private function postService(): PostService {
 		return $this->container->get(PostService::class);

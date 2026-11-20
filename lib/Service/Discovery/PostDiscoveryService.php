@@ -18,11 +18,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A hashtag's timeline and a search of posts, beyond what reached this
- * server: each network is asked (`PostSource`) in the background
- * (`Cron\FillPosts`), what it finds stored, and the timeline and the search
- * then read it as they read any post — nothing tells a reader where a post
- * was written.
+ * A hashtag's timeline and a post search beyond what reached this server:
+ * each network (`PostSource`) is asked in the background (`Cron\FillPosts`),
+ * and what it finds is stored and read like any other post.
  */
 class PostDiscoveryService {
 	public const TAG = 'tag';

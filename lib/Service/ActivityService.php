@@ -142,10 +142,9 @@ class ActivityService {
 	 * @throws SocialAppConfigException
 	 */
 	public function updateActivity(Person $actor, ACore $item, int $holdUntil = 0): string {
-		// An edit is read back from the database in the client format, whose
-		// `id` is the nid and which has no `type` and no `updated`. Wrapped as
-		// it was, the Update named no post a peer had, and every edit was
-		// dropped on arrival. The caller gets its post back as it handed it in.
+		// An edit is read back in the client format, whose `id` is the nid and
+		// which has no `type` or `updated`, so it is exported as ActivityPub for
+		// the Update; the caller gets its post back as it handed it in.
 		$format = $item->getExportFormat();
 		$item->setExportFormat(ACore::FORMAT_ACTIVITYPUB);
 		try {
@@ -175,19 +174,11 @@ class ActivityService {
 	}
 
 	/**
-	 * Sends a held post's deliveries, rebuilt from the post as it is now.
-	 *
-	 * A post carrying a video that is still being converted is queued with
-	 * its rows held back (`request()` with a `$holdUntil`). This is the other
-	 * end: the conversion has finished, or given up, and the stored post now
-	 * names whatever file there is to name. Each held `Create` and `Update` is
-	 * built again from it and signed again — the linked-data signature covers
-	 * the document, so the stored body cannot simply be patched — and the
-	 * rows are made due and drained at once.
-	 *
-	 * A post that was deleted while it waited has its held rows dropped:
-	 * delivering it now would put back on other servers what its author has
-	 * already taken down.
+	 * Sends a held post's deliveries, rebuilt from the post as it is now: a
+	 * post with a video being converted is queued held (`request()` with a
+	 * `$holdUntil`), and once the conversion is done or has given up each held
+	 * `Create` and `Update` is built and signed again, as the signature covers
+	 * the document. A post deleted while it waited has its held rows dropped.
 	 *
 	 * @return int how many rows were released
 	 */
@@ -277,14 +268,10 @@ class ActivityService {
 	}
 
 	/**
-	 * What tells one `Update` of an object from the next.
-	 *
-	 * An activity id has to be unique, and every edit of a post used to go
-	 * out as `<post>/activity#update`: a peer that remembers the activities it
-	 * has seen by id dropped the second edit as a repeat. Mastodon names its
-	 * own `#updates/<edited_at>`; the post's `updated` is the same thing here,
-	 * so a redelivery of one version keeps its id. An object with no such date
-	 * — an actor, a poll whose count moved — gets the time in milliseconds.
+	 * What tells one `Update` of an object from the next, as an activity id
+	 * must be unique and peers drop a repeated one. Like Mastodon's
+	 * `#updates/<edited_at>`, it is the post's `updated`, so a redelivery keeps
+	 * its id; an object with no such date gets the time in milliseconds.
 	 */
 	private function updateSerial(ACore $item): string {
 		$updated = ($item instanceof Stream) ? strtotime($item->getUpdated()) : false;
@@ -322,9 +309,8 @@ class ActivityService {
 		}
 
 		// A recipient may only pass an activity on (AP §7.1.2) if it carries the
-		// author's own signature over the document. Unsigned, a Delete of a
-		// reply cannot travel the way the reply itself did, so the post stays
-		// visible on every instance that only ever received it forwarded.
+		// author's own signature, so a Delete of a reply can travel the way the
+		// reply did.
 		try {
 			$this->signatureService->signObject(
 				$this->actorsRequest->getFromId($delete->getActorId()), $delete
@@ -341,20 +327,15 @@ class ActivityService {
 	}
 
 	/**
-	 * Addresses an activity the way the object it carries is addressed.
-	 *
-	 * An activity has an audience of its own (AP §6), and a Create, Update or
-	 * Delete that names nobody is one every reader has to open the object to
-	 * place — including this server, whose relay fan-out asks the activity
-	 * whether it is public.
+	 * Addresses an activity the way the object it carries is addressed (AP §6),
+	 * so readers, including this server's relay fan-out, need not open the
+	 * object to place it.
 	 */
 	/**
-	 * An actor has no audience of its own, so an `Update` of one copied none
-	 * and went out naming no recipient at all. A server that routes its shared
-	 * inbox by `to` and `cc` — Loops does — has nobody to hand such an
-	 * activity to and drops it. Addressed the way Mastodon addresses its own:
-	 * to the public, since a profile is public, and copied to the followers,
-	 * who are the ones holding a copy of it.
+	 * An actor has no audience of its own, so an `Update` of one is addressed
+	 * as Mastodon does: to the public and copied to the followers. A server
+	 * that routes its shared inbox by `to` and `cc`, such as Loops, drops an
+	 * activity addressed to nobody.
 	 */
 	private function addressActorUpdate(Person $actor, Update $update): void {
 		if (array_filter($update->getToAll()) !== [] || $update->getCcArray() !== []) {
@@ -421,13 +402,9 @@ class ActivityService {
 
 	/**
 	 * Queues an activity for every inbox it is addressed to, and starts the
-	 * delivery.
-	 *
-	 * With a `$holdUntil` in the future the rows are written with that as
-	 * their `last`, which keeps every drain off them until then, and nothing
-	 * is delivered inline or handed to the async worker. `releaseHeld()` sends
-	 * them sooner; left alone, the cron delivers them as they are once the
-	 * time has passed.
+	 * delivery. With a `$holdUntil` in the future the rows are written with
+	 * that as their `last`, keeping every drain off them until then;
+	 * `releaseHeld()` sends them sooner.
 	 *
 	 * @throws SocialAppConfigException
 	 */
@@ -629,12 +606,8 @@ class ActivityService {
 	}
 
 	/**
-	 * Whether an HTTP status from a peer is worth trying again later.
-	 *
-	 * 408 and 429 are explicitly temporary, and any 5xx is the peer's own
-	 * problem rather than something wrong with what we sent. Everything else
-	 * in the 4xx range means this activity will never be accepted, so there is
-	 * nothing to gain by keeping it queued.
+	 * Whether an HTTP status from a peer is worth trying again later: 408, 429
+	 * and any 5xx. Every other 4xx means the activity will never be accepted.
 	 */
 	private function isTransientHttpStatus(int $status): bool {
 		return $status === Http::STATUS_REQUEST_TIMEOUT
@@ -649,10 +622,8 @@ class ActivityService {
 	 *                   request, which runs on a three-second timeout
 	 *
 	 * @return bool whether the row was actually attempted. A caller that
-	 *              drains in a loop counts attempts, not rows: a batch of rows
-	 *              whose hosts all have an open breaker is skipped in
-	 *              milliseconds, and counting those as work is what made
-	 *              `social:worker` spin without ever sleeping.
+	 *              drains in a loop counts attempts, not rows, so rows skipped
+	 *              for an open breaker do not keep `social:worker` spinning.
 	 *
 	 * @throws SocialAppConfigException
 	 */
@@ -661,11 +632,8 @@ class ActivityService {
 			->getAddress();
 		$openUntil = $this->breaker()->openUntil($host);
 		if ($openUntil > 0) {
-			// held back until the breaker closes. A skipped row keeps `tries =
-			// 0` and its old `last`, which sorts it ahead of every row ever
-			// attempted and every newer row: a few hundred of them to dead
-			// instances filled the whole 200-row window on every pass and
-			// nothing else was ever fetched.
+			// held back until the breaker closes; postponed, as a skipped row
+			// would keep sorting ahead of every other and fill the drain's window
 			$this->requestQueueService->postponeRequest($queue, $openUntil);
 
 			return false;
@@ -703,20 +671,11 @@ class ActivityService {
 	}
 
 	/**
-	 * Delivers a batch of queued requests, several servers at a time.
-	 *
-	 * The rows go out in waves of up to `PARALLEL`, at most one per host in a
-	 * wave — a host is not asked twice at once, and once it has failed the
-	 * breaker holds the rest of its rows back without a timeout — through
-	 * `CurlService::sendMany()`. A wave costs about as long as its slowest
-	 * peer, so a dead one costs its timeout once, beside nineteen deliveries,
-	 * rather than in front of all of them. Every row is settled exactly as
-	 * `manageRequest()` settles one.
-	 *
-	 * Each wave goes to the hosts with the most rows still to send, and among
-	 * equals to the one whose row came first. Taken in batch order alone, a
-	 * batch holding each host's rows together ended in waves of a few hosts'
-	 * leftovers: fifty hosts of four rows each took twelve waves, not ten.
+	 * Delivers a batch of queued requests, several servers at a time, through
+	 * `CurlService::sendMany()`: waves of up to `PARALLEL`, at most one row per
+	 * host in a wave, so a dead host costs its timeout once beside the others.
+	 * Each wave goes to the hosts with the most rows left, ties by batch order.
+	 * Every row is settled as `manageRequest()` settles one.
 	 *
 	 * @param RequestQueue[] $queues each carrying the timeout it is sent with
 	 * @param int $deadline when to stop starting waves, or 0 for none
@@ -838,8 +797,7 @@ class ActivityService {
 
 		if ($failure instanceof UnauthorizedFediverseException) {
 			// nothing was sent: the domain is not one this instance federates
-			// with. Kept as delivered, it told the author their post had
-			// reached a server it was never offered to.
+			// with, so the row is dropped rather than recorded as delivered
 			$this->logger->notice(
 				'Delivery refused by the instance policy, dropping the request: ' . $url
 			);
@@ -849,10 +807,8 @@ class ActivityService {
 		}
 
 		if ($failure instanceof RequestContentException) {
-			// The peer answered, but not with a 2xx. Whether that is worth
-			// retrying depends entirely on the status: a 503 during an upgrade
-			// or a 429 from a rate limiter is temporary and used to cost us
-			// every activity queued for that instance, deleted on the spot.
+			// The peer answered, but not with a 2xx: whether to retry depends on the
+			// status, as a 503 during an upgrade or a 429 is temporary.
 			if ($this->isTransientHttpStatus($failure->getCode())) {
 				$this->logger->notice(
 					'Temporary error while managing request: HTTP ' . $failure->getCode() . ' - '
@@ -912,13 +868,9 @@ class ActivityService {
 	}
 
 	/**
-	 * Leaves a host alone after a failed delivery — unless it was the live one.
-	 *
-	 * The inline delivery has three seconds; the cron, the async drain and
-	 * `social:worker` have ten to thirty. A large but healthy peer that needs
-	 * four seconds under load fails only the live attempt, and holding the host
-	 * on the strength of that put every other path off it too — for up to an
-	 * hour, of which only a success anywhere clears the strike.
+	 * Leaves a host alone after a failed delivery, unless it was the live one:
+	 * the inline delivery has three seconds where the other paths have ten to
+	 * thirty, and a slow but healthy peer must not be held off all of them.
 	 */
 	private function holdHost(string $host, bool $live, int $retryAfter = 0): void {
 		if ($live) {
@@ -959,20 +911,10 @@ class ActivityService {
 	}
 
 	/**
-	 * The relay inboxes a *local, public* activity also goes to.
-	 *
-	 * Subscribing to a relay and sending it nothing is taking without giving:
-	 * the point of a relay is that every instance on it sees the others, and
-	 * an instance that only reads is invisible to all of them. Mastodon
-	 * delivers the same set — a public post and what happens to it afterwards
-	 * — and relays drop anything else.
-	 *
-	 * Local only, because a relay wants what *this* server wrote. Forwarding a
-	 * third party's activity on to a relay would put this instance's name on
-	 * somebody else's post and, where two instances both relay, loop it.
-	 *
-	 * Not public means not sent: a followers-only post has an audience that
-	 * was chosen, and a relay is the opposite of a chosen audience.
+	 * The relay inboxes a local, public activity also goes to, as Mastodon
+	 * sends them: a relay wants what this server wrote, so third parties'
+	 * activities are not forwarded (which could also loop), and a
+	 * followers-only post has a chosen audience.
 	 *
 	 * @return InstancePath[]
 	 */
@@ -1020,15 +962,10 @@ class ActivityService {
 	}
 
 	/**
-	 * Whether a delivery is addressed to this very instance.
-	 *
-	 * Everyone here already has the activity: recipients are written into
-	 * social_stream_dest when the item is saved, which is what puts it in a
-	 * local timeline — the HTTP round trip would only hand us back something we
-	 * wrote ourselves. Worse, it is a request the server has to be able to make
-	 * to its own public address, which behind a reverse proxy, split-horizon
-	 * DNS or an SSRF guard it often cannot: the delivery then fails fifteen
-	 * times and is dropped, while remote instances queue up behind it.
+	 * Whether a delivery is addressed to this very instance. Local recipients
+	 * already have the activity through social_stream_dest, and a request to
+	 * the server's own public address often fails behind a reverse proxy,
+	 * split-horizon DNS or an SSRF guard.
 	 */
 	private function isOurs(InstancePath $instancePath): bool {
 		$host = strtolower($instancePath->getAddress());
@@ -1037,15 +974,10 @@ class ActivityService {
 	}
 
 	/**
-	 * The hostnames this instance answers to.
-	 *
-	 * Two settings name this server and they are not the same one. The cloud
-	 * address is what `getCloudHost()` reads and what an administrator sets;
-	 * the social URL is what every local id and inbox is generated from
-	 * (`ConfigService::generateId()`), and it is taken from the web root. They
-	 * agree when the app configures itself, but the cloud address can be set
-	 * by hand to a different host — and then every inbox this server would be
-	 * posting to itself is on the *other* one, which the check missed.
+	 * The hostnames this instance answers to: the cloud address
+	 * (`getCloudHost()`, set by the administrator) and the social URL every
+	 * local id and inbox is generated from (`ConfigService::generateId()`),
+	 * which can differ when the cloud address is set by hand.
 	 *
 	 * @return string[] lowercased, empty when nothing is configured
 	 */
@@ -1082,17 +1014,10 @@ class ActivityService {
 	private function generateInstancePathsFollowers(InstancePath $instancePath): array {
 		$instancePaths = [];
 
-		// One row per distinct inbox, resolved in the database. This used to
-		// hydrate every follower into a Follow with a Person and its details
-		// just to read one string off each — a popular local actor's every post
-		// loaded its whole follower list into PHP memory, while the number of
-		// inboxes involved is the number of *instances*, not of followers.
-		//
-		// The shared inbox is used where the remote publishes one and its
-		// personal inbox otherwise: `endpoints.sharedInbox` is optional, and
-		// using the empty string unconditionally aimed the delivery at host ''
-		// — and, because the deduplication then treated '' as an inbox already
-		// seen, dropped every follower after the first one on any such instance.
+		// One row per distinct inbox, resolved in the database: the inboxes are
+		// as many as the instances, not the followers. The shared inbox where
+		// the remote publishes one, as `endpoints.sharedInbox` is optional, and
+		// the personal inbox otherwise.
 		foreach ($this->followsRequest->getFollowerInboxes($instancePath->getUri()) as $inbox) {
 			$instancePaths[] = new InstancePath(
 				$inbox, InstancePath::TYPE_GLOBAL, $instancePath->getPriority()
@@ -1103,15 +1028,9 @@ class ActivityService {
 	}
 
 	/**
-	 * Every server worth telling: one shared inbox per server heard from in
-	 * the last `ALL_SEEN_DAYS`, less the ones whose breaker is open.
-	 *
-	 * An activity addressed to everybody is an account deletion, and it used
-	 * to go to every shared inbox this instance had ever cached — servers gone
-	 * for years among them, each a queue row and, until the breaker learnt of
-	 * it, a timeout. A server that is down right now has its rows held back
-	 * by the breaker anyway, and one not heard from in three months is not
-	 * going to read a deletion either.
+	 * Every server worth telling, for an activity addressed to everybody (an
+	 * account deletion): one shared inbox per server heard from in the last
+	 * `ALL_SEEN_DAYS`, less the ones whose breaker is open.
 	 *
 	 * @return InstancePath[]
 	 */
@@ -1152,15 +1071,10 @@ class ActivityService {
 	}
 
 	/**
-	 * The bytes the delivery puts on the wire: the stored activity, as stored.
-	 *
-	 * They used to be decoded and re-encoded here, which defeated
-	 * `ForwardService` on purpose: it queues a third party's `getSource()`
-	 * verbatim so that their Linked Data signature still verifies on arrival,
-	 * and re-encoding -- key order, escaping, whitespace -- is exactly what
-	 * breaks such a signature. What this instance writes itself is encoded once,
-	 * with unescaped slashes, when it is queued (`generateRequestQueue()`), so
-	 * nothing it sends changes; the digest is computed over these same bytes.
+	 * The bytes the delivery puts on the wire: the stored activity, as stored,
+	 * so a third party's document `ForwardService` queues keeps its Linked Data
+	 * signature. This instance's own activities are encoded once when queued
+	 * (`generateRequestQueue()`); the digest is computed over these bytes.
 	 */
 	private function bodyFromQueue(RequestQueue $queue): string {
 		return $queue->getActivity();
@@ -1183,13 +1097,9 @@ class ActivityService {
 	}
 
 	/**
-	 * Stores what an outgoing activity is about, which is not the activity.
-	 *
-	 * There is no table for activities and there has never been one: a `Create`
-	 * or a `Like` is the envelope a thing travelled in, and nothing in this app
-	 * reads an envelope back. What is kept is what it carried — the post, the
-	 * like, the follow — each through the interface for its own type, which is
-	 * also what an inbox delivery goes through.
+	 * Stores what an outgoing activity is about, not the activity: no table
+	 * holds activities, so the post, like or follow it carries goes through
+	 * the interface for its own type, as an inbox delivery does.
 	 *
 	 * @param ACore $activity the activity about to go out
 	 */

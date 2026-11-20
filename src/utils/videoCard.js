@@ -101,14 +101,9 @@ export function chipsOf(entries) {
 }
 
 /**
- * The videos a chip keeps, in the order it shows them.
- *
- * Recently uploaded is by when the post was made — the upload — rather than
- * by `published`, which for a film put online today may be decades ago; it is
- * newest first, since For you ranks rather than dates.
- *
- * A video boosted by somebody the reader follows, and posted by somebody
- * else they follow, is one card: the first entry that carries it.
+ * The videos a chip keeps, in the order it shows them. Recently uploaded goes
+ * by when the post was made, not `published` (which can be a film's release
+ * date), newest first. A video in several entries is one card, the first.
  *
  * @param {import('../types/Mastodon.js').Status[]} entries the timeline, entries that are not videos included
  * @param {string} chip a chip's `value`

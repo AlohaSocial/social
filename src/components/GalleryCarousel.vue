@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- the whole gallery is one stop on the way through the post: arriving on
-	     it, the arrow keys page through the pictures without having to tab past
-	     one control per image -->
+	<!-- one tab stop for the whole gallery; the arrow keys page through it -->
 	<div
 		class="gallery"
 		role="group"
@@ -19,9 +17,9 @@
 		<div class="gallery__stage" :style="{ aspectRatio: String(stageRatio) }">
 			<!-- in a right-to-left page the slides run leftwards, and so does the track -->
 			<div class="gallery__track" :style="{ transform: `translateX(${(rtl ? 1 : -1) * current * 100}%)` }">
-				<!-- every picture stays mounted, so paging to one does not start
-				     its download; the ones off stage are taken out of the tab
-				     order and off the accessibility tree -->
+				<!-- every photo stays mounted, so paging to one does not start its
+				     download; the ones off stage are out of the tab order and the
+				     accessibility tree -->
 				<div
 					v-for="(attachment, index) in attachments"
 					:key="attachment.id ?? index"
@@ -39,8 +37,8 @@
 						@open="$emit('open', index)" />
 				</div>
 			</div>
-			<!-- paging wraps: a disabled control drops the focus of a reader who
-			     is holding the arrow key, mid-gallery -->
+			<!-- paging wraps: a disabled control would drop the focus of a reader
+			     holding the arrow key -->
 			<button
 				type="button"
 				class="gallery__step gallery__step--previous"
@@ -116,17 +114,15 @@ export default {
 	computed: {
 		/**
 		 * @return {boolean} whether the page reads right to left, where the
-		 * next picture is the one to the left
+		 * next photo is the one to the left
 		 */
 		rtl() {
 			return document.documentElement?.dir === 'rtl'
 		},
 
 		/**
-		 * @return {number} one shape for every slide. The pictures of a set
-		 * rarely share a ratio, and a stage that resized per slide would move
-		 * the rest of the timeline on every step, so they are fitted into the
-		 * shape of the first one instead of cropped to it.
+		 * @return {number} one shape for every slide, the first photo's, so
+		 * the timeline does not move on every step; the others are fitted into it
 		 */
 		stageRatio() {
 			return ratioOf(this.attachments[0] ?? null)
@@ -155,7 +151,7 @@ export default {
 	methods: {
 		t,
 		/**
-		 * @param {number} index which picture to bring on stage
+		 * @param {number} index which photo to bring on stage
 		 */
 		show(index) {
 			const total = this.attachments.length
@@ -177,7 +173,7 @@ export default {
 		/**
 		 * The element the viewer should grow out of, for the caller's transition.
 		 *
-		 * @param {number} index which picture is being opened
+		 * @param {number} index which photo is being opened
 		 * @return {?HTMLElement}
 		 */
 		frameAt(index) {
@@ -273,8 +269,8 @@ export default {
 		gap: 0;
 	}
 
-	/* The target is 24px; only its 6px marker is painted. Override the
-	   Nextcloud button minimum explicitly so dots cannot become 44px bars. */
+	/* the target is 24px and only its 6px marker is painted; the Nextcloud
+	   button minimum is overridden so dots do not become 44px bars */
 	&__dot {
 		display: grid;
 		place-items: center;

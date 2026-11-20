@@ -13,19 +13,14 @@ use DateTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The private notes one account keeps about others.
- *
- * A note is readable by the account that wrote it and by nobody else — not by
- * the account it is about, and never by another instance: nothing here is
- * federated, and no read in this class is written without the author's actor
- * id in the statement.
+ * The private notes one account keeps about others, readable only by their
+ * author: never federated, and every read here has the author's actor id in
+ * the statement.
  */
 class AccountNotesRequest extends AccountNotesRequestBuilder {
 	/**
-	 * One note per pair, so a second note about the same account replaces the
-	 * first. Written as an insert that falls back to an update on the unique
-	 * index rather than as a read followed by a write: two clients saving a
-	 * note at the same moment would otherwise both insert.
+	 * One note per pair, written as an insert falling back to an update on the
+	 * unique index, so two clients saving at once cannot both insert.
 	 */
 	public function save(string $actorId, string $objectId, string $note): void {
 		$qb = $this->getAccountNotesInsertSql();
@@ -57,12 +52,9 @@ class AccountNotesRequest extends AccountNotesRequestBuilder {
 		$qb->executeStatement();
 	}
 
-	/** '' when this account wrote no note about that one. */
 	/**
-	 * The viewer's notes about a *set* of accounts, keyed by account id.
-	 *
-	 * One query for a page of relationships rather than one per account: the
-	 * single-pair version above is for the routes that answer about one.
+	 * The viewer's notes about a set of accounts, keyed by account id, in one
+	 * query for a page of relationships.
 	 *
 	 * @param string[] $objectIds
 	 *
@@ -88,6 +80,7 @@ class AccountNotesRequest extends AccountNotesRequestBuilder {
 		return $notes;
 	}
 
+	/** '' when this account wrote no note about that one. */
 	public function getNote(string $actorId, string $objectId): string {
 		$qb = $this->getAccountNotesSelectSql();
 		$qb->andWhere($qb->expr()->eq('an.actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))))
@@ -107,9 +100,7 @@ class AccountNotesRequest extends AccountNotesRequestBuilder {
 
 	/**
 	 * Everything an account leaves behind here when it is deleted: the notes it
-	 * wrote, and the notes others wrote about it — the second half is not
-	 * tidiness, it is a row keyed by an actor id that is about to be somebody
-	 * else's if the name is ever reused.
+	 * wrote, and the notes about it, since its actor id may later be reused.
 	 */
 	public function deleteRelatedId(string $actorId): void {
 		$qb = $this->getAccountNotesDeleteSql();

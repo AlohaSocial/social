@@ -11,10 +11,5 @@ namespace OCA\Social\Tools\Exceptions;
 
 use Exception;
 
-/**
- * Class ArrayNotFoundException
- *
- * @package OCA\Social\Tools\Exceptions
- */
 class MalformedArrayException extends Exception {
 }

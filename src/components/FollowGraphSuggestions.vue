@@ -3,16 +3,10 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- nothing at all where there is nobody to ask for: this page is also
-	     served to a reader with no session, and a "follow more people" hint
-	     shown to somebody who cannot follow anybody is noise -->
+	<!-- nothing at all for a reader who cannot follow anybody, e.g. with no session -->
 	<section v-if="available" class="graph">
-		<!--
-			The whole method needs a starting handful of follows, and saying so
-			is the only honest empty state: "no suggestions" to somebody who
-			follows nobody reads as a verdict on them rather than as a
-			description of an empty graph.
-		-->
+		<!-- the suggestions need a few follows to start from, so say so rather
+		     than "no suggestions" -->
 		<p v-if="needs > 0" class="graph__hint">
 			{{ needsHint }}
 		</p>
@@ -28,8 +22,7 @@
 
 			<NcLoadingIcon v-else-if="loading" class="graph__loading" :size="32" />
 
-			<!-- two ways of looking at the same people: a list to read, or a
-			     sky to play with. Same buttons, same labels, same follow. -->
+			<!-- the same people as a list or as a sky, with the same follow -->
 			<template v-else-if="suggestions.length">
 				<div class="graph__views" role="radiogroup" :aria-label="t('social', 'Show as')">
 					<button
@@ -97,11 +90,8 @@ import { useFollowByHandle } from '../composables/useFollowByHandle.js'
 import { defineAsyncComponent } from 'vue'
 
 /**
- * "Whom to follow", asked of the fediverse rather than of this server.
- *
- * Behind a button rather than loaded with the page: the answer costs one
- * request to every server the reader follows somebody on, and spending that
- * on somebody who came to look at hashtags is not this app's to spend.
+ * "Whom to follow", asked of the fediverse. Loaded on demand: it costs a
+ * request to every server the reader follows somebody on.
  */
 export default {
 	name: 'FollowGraphSuggestions',
@@ -148,8 +138,7 @@ export default {
 	},
 
 	async mounted() {
-		// only to learn whether there is a graph at all, which the server
-		// answers without asking anybody anything
+		// only learns whether there is a graph; no other server is asked
 		await this.load(false)
 	},
 
@@ -158,8 +147,7 @@ export default {
 		n,
 
 		/**
-		 * A follow from the sky is the same follow the list makes, with the
-		 * chime and the tap it has everywhere else.
+		 * Follows from the sky, with the same chime and tap as everywhere else.
 		 *
 		 * @param {object} account the star pressed
 		 */

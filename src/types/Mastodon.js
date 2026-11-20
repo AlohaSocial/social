@@ -219,9 +219,8 @@
 /**
  * @typedef Reaction - one emoji under a post, and who used it
  *
- * Not a Mastodon entity: Mastodon has no reactions. The shape is the one the
- * Misskey-family servers and their clients use, and it is what this app's own
- * API answers — see docs/API.md.
+ * Not a Mastodon entity: the shape Misskey-family servers use, and what this
+ * app's API answers (docs/API.md).
  *
  * @property {string} name - a Unicode emoji or a custom emoji label
  * @property {number} count - how many accounts used it
@@ -261,7 +260,7 @@
  * @property {boolean} requested - Do you have a pending follow request for this user?
  * @property {boolean} domain_blocking - Are you blocking this user’s domain?
  * @property {boolean} endorsed - Are you featuring this user on your profile?
- * @property {string} note - This user’s profile bio
+ * @property {string} note - the reader's private note about this account
  */
 
 export default {}

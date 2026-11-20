@@ -15,17 +15,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Thumbnails for the actor icons cached before icons were stored with one.
- *
- * A new icon is written with a `CacheDocumentService::AVATAR_THUMBNAIL` px
- * resized copy; one cached earlier has the 800 px preview there, which is the
- * whole original for a 400 px avatar. `Cron\Cache` calls this once a pass:
- * `BATCH` icons in nid order from the `avatar_thumb_cursor` app setting, each
- * once, until a page comes back short and the cursor reads `done`.
- *
- * Only icons whose files are on disk are walked. One the media cache purge
- * took is given its thumbnail when it is fetched again on demand
- * (`DocumentService::restoreCopy()`), under the names its row already has.
+ * Thumbnails for actor icons cached without one: their resized copy is the
+ * 800 px preview rather than a `CacheDocumentService::AVATAR_THUMBNAIL` px
+ * one. `Cron\Cache` calls this each pass, `BATCH` icons from the
+ * `avatar_thumb_cursor` app setting, until it reads `done`. Icons whose files
+ * were purged get theirs when fetched again (`DocumentService::restoreCopy()`).
  */
 class AvatarThumbnailBackfill {
 	/** How many icons one pass looks at: each is a read and a resize of a small picture. */

@@ -16,21 +16,13 @@ use OCA\Social\Security\PrivateKeyCipher;
 use Psr\Log\LoggerInterface;
 
 /**
- * The instance's own `Application` actor and its key pair.
+ * The instance's own `Application` actor and its key pair, used to sign
+ * outbound fetches so no person's account is the instance's public face and
+ * an instance without accounts can still sign.
  *
- * Outbound fetches used to be signed with the key of the oldest local account,
- * which made one person this instance's public face on every peer, tied every
- * signed fetch to whether that one account was blocked remotely, and left an
- * instance with no Social accounts yet unable to sign at all — so
- * authorized-fetch peers answered 401 to everything.
- *
- * The key pair lives in the app config rather than in `oc_social_actor`. A row
- * there is a local account: it is listed by the directory, resolved by
- * webfinger, offered to the client API, counted in the instance statistics and
- * handed a followers collection and an outbox. The instance actor is none of
- * those things, and every one of those places would have needed a clause
- * excluding it. Two config values and one route are the whole of it, and there
- * is no migration to get wrong.
+ * The key pair lives in the app config rather than `oc_social_actor`: a row
+ * there is a local account, listed, resolved by WebFinger and counted, which
+ * the instance actor must not be.
  */
 class InstanceActorService {
 	/** The last path segment of the actor's id: `<social url>actor`, as Mastodon serves it. */
@@ -87,11 +79,8 @@ class InstanceActorService {
 
 	/**
 	 * The actor to sign an outbound fetch as, or null when this instance cannot
-	 * produce one — it does not know its own URL yet, or OpenSSL refused.
-	 *
-	 * Null means the fetch goes out unsigned, which is what it did before any
-	 * of this existed: against a peer that does not demand a signature it still
-	 * works, and a failure to sign must not become a failure to fetch.
+	 * produce one (no URL yet, or OpenSSL refused). Null sends the fetch
+	 * unsigned: a failure to sign must not become a failure to fetch.
 	 */
 	public function getSigningActor(): ?InstanceActor {
 		try {
@@ -131,16 +120,10 @@ class InstanceActorService {
 	}
 
 	/**
-	 * Generates and stores the pair.
-	 *
-	 * The generation is `SignatureService::generateKeys()` written out again
-	 * rather than called: `SignatureService` owns `HttpSignatureService`, which
-	 * is what needs this service, and a constructor cycle is not worth reusing
-	 * a dozen lines for.
-	 *
-	 * The private key is sealed with the instance secret, the way an actor's is
-	 * in `oc_social_actor` — a config dump alone must not be enough to sign as
-	 * this server.
+	 * Generates and stores the pair: `SignatureService::generateKeys()` written
+	 * out, since calling it would be a constructor cycle. The private key is
+	 * sealed with the instance secret, as an actor's is, so a config dump alone
+	 * cannot sign as this server.
 	 *
 	 * @return array{string, string}
 	 * @throws SignatureException
@@ -167,10 +150,8 @@ class InstanceActorService {
 			self::CONFIG_PRIVATE_KEY, $this->keyCipher->seal($privateKey)
 		);
 
-		// Two requests can reach this at the same moment on a fresh instance.
-		// Whichever pair was written last is the one the actor document will
-		// publish, so both sign with that one rather than with the one they
-		// happen to hold.
+		// Two requests may race here on a fresh instance; both sign with the pair
+		// written last, which is the one the actor document publishes.
 		return $this->storedKeyPair() ?? [$details['key'], $privateKey];
 	}
 

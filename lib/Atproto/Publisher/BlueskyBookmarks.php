@@ -31,12 +31,10 @@ use Throwable;
 
 /**
  * A person's bookmarks, the same in Social and in a Bluesky app signed in
- * here. A Bluesky bookmark lives at the AppView, privately, and is what the
- * app's bookmark button shows: one made here, of a post that is on Bluesky,
- * is told to it; one the app makes through this server is made here too.
- * The app's list of bookmarks is this person's bookmarks here
- * (`getBookmarks`), the posts that are on Bluesky among them, so the
- * bookmarks made before are in it as well.
+ * here. Bluesky keeps bookmarks privately at the AppView: one made here on a
+ * Bluesky post is sent there, one an app makes through this server is made
+ * here too, and the app's list (`getBookmarks`) is this person's bookmarks
+ * here that are on Bluesky.
  */
 class BlueskyBookmarks {
 	public const CREATE = 'app.bsky.bookmark.createBookmark';

@@ -114,13 +114,9 @@ import { errorOf } from '../../utils/serverError.js'
 import { showError, showSuccess } from '../../services/toast.js'
 
 /**
- * Everything the About this server page shows, in one place: the name, the
- * description, the contact, the rules, and the two legal links.
- *
- * The name and the links belong to Theming, and are shown here with a link
- * there rather than edited twice. The description and the contact are an
- * administrator's (`POST /admin/about`), so a delegate, who has no `settings`,
- * sees the rules, which moderators keep, and the rest read-only.
+ * Everything the About this server page shows. The name and the legal links
+ * are Theming's and only linked to here; a delegate, who has no `settings`,
+ * edits the rules and sees the rest read-only.
  */
 export default {
 	name: 'AboutSection',

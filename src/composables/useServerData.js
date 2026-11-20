@@ -76,9 +76,8 @@ export function useServerData() {
 	const serverData = computed(() => settingsStore.getServerData)
 
 	/**
-	 * The host of this instance, as the browser parses its address — so a
-	 * cloud address with a scheme, a port or a path still gives the bare host
-	 * that a handle is built from.
+	 * The bare host of this instance, even for a cloud address with a scheme,
+	 * port or path.
 	 */
 	const hostname = computed(() => {
 		const url = document.createElement('a')

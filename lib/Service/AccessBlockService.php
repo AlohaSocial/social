@@ -19,36 +19,17 @@ use OCP\ICacheFactory;
 /**
  * The two blocks that are about an address rather than an account.
  *
- * Mastodon keeps three lists here — IP blocks, email-domain blocks and
- * canonical email blocks — and all three exist to police a sign-up. This app
- * has no sign-up: an account is a Nextcloud account, and the server decides
- * who gets one. So two of the three are given the only meanings they can
- * honestly have here, and the third is not implemented at all rather than
- * stored and never consulted:
+ * Accounts are Nextcloud accounts, so Mastodon's sign-up blocks get the only
+ * meanings they can have here: an IP block at `no_access` is enforced on
+ * every route this app serves (the sign-up severities are refused, not
+ * stored), and an email-domain block refuses a fediverse identity to a
+ * Nextcloud account. Canonical email blocks are not implemented: this app
+ * never holds a deleted account's address.
  *
- * - An **IP block** at `no_access` is enforced on every route this app serves,
- *   which is what "no access" says. The two sign-up severities are refused
- *   rather than stored, because storing a rule nothing will ever read is worse
- *   than saying it cannot be honoured.
- * - An **email-domain block** refuses the one thing this app does decide:
- *   whether a Nextcloud account gets a fediverse identity. A server with open
- *   registration is where that matters, and it is the same question Mastodon
- *   is asking, one step later.
- * - A **canonical email block** is a hash of the address of a *deleted*
- *   Mastodon account, kept so the same person cannot sign up again. Nothing
- *   here deletes an account's address, because the address is not this app's
- *   to hold.
- *
- * The IP blocks are read on every request, so they are kept in Nextcloud's
- * distributed cache under a version that every write replaces: a block or a
- * lift is in force on the next request on every server sharing that cache.
- * A cache that is only local to each server (APCu alone on several web
- * servers, or `occ`, which does not share APCu with the web server) still
- * holds the server that wrote it to that; the others read the table again
- * once `IP_CACHE_TTL` has passed. Expiry needs no write: an
- * expired block lifts itself where it is read, cached or not. `occ
- * social:reset` empties the table without going through here, so what it
- * removes stays enforced for at most `IP_CACHE_TTL`.
+ * IP blocks are cached in the distributed cache under a version every write
+ * replaces. With a local-only cache, other servers (and `occ`) see a change
+ * after `IP_CACHE_TTL`, as does `occ social:reset`, which bypasses this
+ * class. An expired block lifts itself where it is read.
  */
 class AccessBlockService {
 	/** the widest IPv4 prefix a block may have: a /16, 65,536 addresses */
@@ -87,11 +68,9 @@ class AccessBlockService {
 	}
 
 	/**
-	 * Refuses an address or a range everything this app serves.
-	 *
-	 * A range wider than WIDEST_V4 or WIDEST_V6 is refused, and so is one
-	 * holding the caller's own address: either answers every request from
-	 * whole networks, the admin API that would lift it included.
+	 * Refuses an address or a range everything this app serves. A range wider
+	 * than WIDEST_V4 or WIDEST_V6, or one holding the caller's own address, is
+	 * refused, as it could lock out the admin API that would lift it.
 	 *
 	 * @param string $ip an address or a CIDR range, v4 or v6
 	 * @param int $expiresAt when it lifts itself, or 0 for never
@@ -126,8 +105,7 @@ class AccessBlockService {
 		}
 
 		if ($severity !== AccessBlock::SEVERITY_NO_ACCESS) {
-			// stored and never read would be worse: an admin would believe
-			// sign-ups from that range were being turned away
+			// Storing it unread would make an admin believe sign-ups were turned away.
 			throw new InvalidResourceException(
 				'this instance has no sign-up to apply "' . $severity . '" to; accounts are '
 				. 'Nextcloud accounts and the server decides who gets one. Use "no_access".'
@@ -156,11 +134,8 @@ class AccessBlockService {
 	}
 
 	/**
-	 * Whether this instance answers that address at all.
-	 *
-	 * An expired block does not: it lifts itself where it is read, so an
-	 * instance whose cron is broken does not go on refusing an address the
-	 * admin gave an end date to.
+	 * Whether this instance refuses that address. An expired block lifts itself
+	 * here, so a broken cron cannot extend it.
 	 */
 	public function isBlockedIp(string $ip, ?int $now = null): bool {
 		$ip = trim($ip);
@@ -182,13 +157,9 @@ class AccessBlockService {
 	}
 
 	/**
-	 * The IP blocks as the cache holds them, read from the table when it
-	 * does not: the range and the expiry of each, which is all
-	 * `isBlockedIp()` reads.
-	 *
-	 * The version is settled before the table is read. A write that lands
-	 * in between replaces it, so a list read before that write is stored
-	 * under a version nobody asks for again.
+	 * The IP blocks as the cache holds them, read from the table when it does
+	 * not. The version is settled before the table is read, so a list read
+	 * across a concurrent write is stored under a version nobody asks for.
 	 *
 	 * @return AccessBlock[]
 	 */
@@ -220,8 +191,8 @@ class AccessBlockService {
 	}
 
 	/**
-	 * The blocks a cached list names, or null for anything that is not one
-	 * whole: a list missing one of its entries would let that range in.
+	 * The blocks a cached list names, or null for anything not wholly valid: a
+	 * list missing an entry would let that range in.
 	 *
 	 * @return AccessBlock[]|null
 	 */
@@ -282,11 +253,8 @@ class AccessBlockService {
 	}
 
 	/**
-	 * Whether an address is at a blocked domain, subdomains included.
-	 *
-	 * Read the way a domain block reads them: blocking `mail.example` while
-	 * `a.mail.example` walks straight back in is not a block, and whoever runs
-	 * a throwaway-address service runs the subdomains too.
+	 * Whether an address is at a blocked domain, subdomains included, as a
+	 * domain block reads them.
 	 */
 	public function isBlockedEmail(string $email): bool {
 		$at = strrpos($email, '@');
@@ -310,10 +278,8 @@ class AccessBlockService {
 	}
 
 	/**
-	 * A hostname in the one form comparisons can be made in.
-	 *
-	 * The same shape `FediverseService` reduces an address to: lowercase,
-	 * unpadded, without the trailing dot of the absolute form.
+	 * A hostname in the form `FediverseService` compares: lowercase, trimmed,
+	 * without the trailing dot.
 	 */
 	public static function normaliseDomain(string $domain): string {
 		$domain = rtrim(strtolower(trim($domain)), '.');
@@ -322,11 +288,8 @@ class AccessBlockService {
 	}
 
 	/**
-	 * An address or range in the one form comparisons can be made in, or ''
-	 * for something that is neither.
-	 *
-	 * A bare address is stored as the range holding only itself, so there is
-	 * one shape to match against rather than two.
+	 * An address or range in one comparable form, or '' for neither; a bare
+	 * address becomes the range holding only itself.
 	 */
 	public static function normaliseRange(string $range): string {
 		$range = trim($range);
@@ -352,11 +315,8 @@ class AccessBlockService {
 	}
 
 	/**
-	 * Whether an address falls inside a range.
-	 *
-	 * Compared on the packed bytes rather than on the text, which is the only
-	 * way `::1` and `0:0:0:0:0:0:0:1` come out the same address — and the only
-	 * way a range means anything at all.
+	 * Whether an address falls inside a range, compared on the packed bytes so
+	 * `::1` and `0:0:0:0:0:0:0:1` are the same address.
 	 */
 	public static function inRange(string $ip, string $range): bool {
 		$packedIp = @inet_pton($ip);

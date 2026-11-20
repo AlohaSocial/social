@@ -22,21 +22,12 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 
-/**
- * Class Fediverse
- *
- * @package OCA\Social\Command
- */
 class Fediverse extends SocialCommand {
 	private const MAX_IMPORT_DOMAINS = 10000;
 
 	/**
-	 * The biggest CSV worth reading, in bytes.
-	 *
-	 * The cap above bounds unique domains and is reached by parsing the whole
-	 * file first, so a file of any size at all was read row by row before it
-	 * could be refused. Ten thousand hostnames is a few hundred kilobytes; a
-	 * published blocklist with comments is well inside this.
+	 * The biggest CSV worth reading, in bytes, checked before parsing; ten
+	 * thousand hostnames with comments is well inside it.
 	 */
 	private const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 
@@ -214,16 +205,10 @@ class Fediverse extends SocialCommand {
 	}
 
 	/**
-	 * Import a published block list into an administrator's existing one.
-	 *
-	 * The reading and the applying are `BlocklistImportService`, which the
-	 * admin page and the subscriptions use as well: a list imported by hand
-	 * and the same list subscribed to must not turn out to have been read
-	 * differently.
-	 *
-	 * Fail-closed, unlike a subscription: this is a file the administrator
-	 * chose, so a row that names no instance is something to look at rather
-	 * than something to skip past.
+	 * Import a published block list into an administrator's existing one,
+	 * through `BlocklistImportService` as the admin page and subscriptions do.
+	 * Fail-closed, unlike a subscription: a row naming no instance is an
+	 * error in a file the administrator chose.
 	 */
 	private function importAddresses(string $filePath, bool $dryRun): int {
 		// before the file is read at all: an allow list is the list of servers
@@ -326,14 +311,9 @@ class Fediverse extends SocialCommand {
 	}
 
 	/**
-	 * Asks before writing.
-	 *
-	 * Every domain added queues a `DomainPurge`, which deletes what this
-	 * instance holds of that server — so an import is a destructive operation
-	 * with a number in front of it, and the number is worth reading before it
-	 * runs. `--force` is how a script says it has read it; without one, a
-	 * non-interactive run says so and does nothing rather than answering its
-	 * own question.
+	 * Asks before writing: every domain added queues a `DomainPurge` that
+	 * deletes what this instance holds of that server. `--force` skips the
+	 * question; a non-interactive run without it does nothing.
 	 *
 	 * @param int $count how many domains the file holds
 	 *

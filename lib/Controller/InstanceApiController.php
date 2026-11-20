@@ -47,15 +47,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What this instance says about itself.
- *
- * `/api/v1/instance` is the first request every Mastodon client makes, and
- * what it answers decides whether the client will talk to this server at all —
- * so these routes are read by strangers, answer without a token, and describe
- * the server rather than anybody on it: its rules, the domains it blocks, its
- * policies, the servers it knows, the languages it can translate between, the
- * oEmbed a link to one of its posts unfurls into, and the custom emoji and
- * GIFs its posts may use.
+ * What this instance says about itself, answered without a token since
+ * `/api/v1/instance` is every Mastodon client's first request: its rules,
+ * blocked domains, policies, known servers, translation languages, oEmbed,
+ * and the custom emoji and GIFs its posts may use.
  */
 class InstanceApiController extends MastodonApiController {
 	public function __construct(
@@ -95,12 +90,7 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The instance's rules, as their own resource.
-	 *
-	 * They were already served *inside* the instance entity, out of the `rules`
-	 * app value — so the data was here and the route a client reads it from was
-	 * a 404. An instance that has set none answers `[]`, which is the truthful
-	 * answer and not an error.
+	 * The instance's rules, from the `rules` app value; `[]` when none are set.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -113,21 +103,11 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The instances this one has decided not to federate with, or keeps out
-	 * of its public timelines.
+	 * The instances this one does not federate with, or keeps out of its public
+	 * timelines, each `suspend` or `silence` with its public reason as `comment`.
 	 *
-	 * Mastodon publishes the list so that somebody choosing a server can see
-	 * who it will not talk to. That is a disclosure decision rather than a
-	 * lookup, so it is one an admin makes: with `publish_blocks` unset — the
-	 * default — this answers `[]`, which is what an instance that has not opted
-	 * in should say rather than refusing and inviting a client to guess.
-	 *
-	 * Every entry is `suspend` or `silence`, with its public reason as
-	 * `comment`; the private one is never part of it.
-	 *
-	 * Only ever in block-list mode. In allow-list mode the same column holds
-	 * the instances this server *does* talk to, and publishing that as a block
-	 * list would be exactly backwards.
+	 * Answers `[]` unless the admin set `publish_blocks`, and always in
+	 * allow-list mode, where the same column lists the instances it does talk to.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -145,13 +125,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The long form of what this instance is, as Mastodon's
-	 * `ExtendedDescription`.
-	 *
-	 * Taken from the `extended_description` app value, and falling back to the
-	 * short description the instance entity already carries — an empty page
-	 * where a server has written a description elsewhere is worse than
-	 * repeating it.
+	 * The long form of what this instance is (Mastodon's `ExtendedDescription`),
+	 * from the `extended_description` app value, falling back to the short
+	 * description.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -167,13 +143,8 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The server's privacy policy.
-	 *
-	 * Nextcloud's own, from Theming, rather than one kept by this app: a
-	 * server has one privacy policy, and a second one here would be a second
-	 * answer to the same question. A server that has published none answers
-	 * **404**, as Mastodon does — an empty document would read as a policy
-	 * that says nothing.
+	 * The server's privacy policy: Nextcloud's own, from Theming. A server
+	 * without one answers 404, as Mastodon does, rather than an empty document.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -205,18 +176,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * oEmbed for one of this server's own public posts.
-	 *
-	 * What it is for: a site that is handed the link to a post asks this to
-	 * find out who wrote it and where, instead of scraping the page. Mastodon
-	 * serves the same route.
-	 *
-	 * The rich response points only to the dedicated, public-only embed page;
-	 * it never frames the full application shell.
-	 *
-	 * Public posts only, and only this server's: an unlisted or followers-only
-	 * post is not something to hand to whoever asks, and a post of somebody
-	 * else's is theirs to describe.
+	 * oEmbed for a public post of this server's own, as Mastodon serves it.
+	 * The rich response frames only the public-only embed page, never the full
+	 * application shell.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -225,8 +187,7 @@ class InstanceApiController extends MastodonApiController {
 	public function oembed(string $url = '', string $format = 'json'): DataResponse {
 		try {
 			if ($format !== '' && strtolower($format) !== 'json') {
-				// the only format this serves; oEmbed says to answer 501 for
-				// one it does not, rather than to answer JSON anyway
+				// oEmbed says to answer 501 for an unsupported format.
 				return new DataResponse(
 					['error' => 'only the json format is served'], Http::STATUS_NOT_IMPLEMENTED
 				);
@@ -264,14 +225,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Which languages this server can translate between: for each language it
-	 * translates from, the ones it translates to.
-	 *
-	 * Read from the translation provider rather than declared here, so it is
-	 * the truth about this Nextcloud. An instance with no provider answers an
-	 * empty object, which is the same thing `translation.enabled: false` says
-	 * in `/api/v2/instance` — a client that reads either one stops offering
-	 * the button.
+	 * Which languages this server can translate between, read from the
+	 * translation provider. With no provider it answers an empty object,
+	 * matching `translation.enabled: false` in `/api/v2/instance`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -301,15 +257,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The instances this one has heard of.
-	 *
-	 * Mastodon's `/api/v1/instance/peers`, which instance browsers and
-	 * "about this server" pages read. A bare array of hostnames, which is what
-	 * the peer of every cached remote actor amounts to, and the same walk the
-	 * `domain_count` statistic uses — two walks would be two answers.
-	 *
-	 * Public, as Mastodon's is: it says who this instance federates with, not
-	 * who its users are.
+	 * The instances this one has heard of (Mastodon's `/api/v1/instance/peers`):
+	 * hostnames of cached remote actors, by the same walk as the `domain_count`
+	 * statistic. Public, as Mastodon's is.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -324,14 +274,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Mastodon's weekly activity series: twelve weeks of statuses, logins and
-	 * registrations.
-	 *
-	 * `registrations` is always `0` and says so in the docs: an account here is
-	 * a Nextcloud user, created by the server rather than by this app, so there
-	 * is no registration for it to count. `logins` is likewise not this app's
-	 * to know. What it does know is how many statuses were published in a week,
-	 * which is the series a client actually plots.
+	 * Mastodon's weekly activity series over twelve weeks. Only statuses are
+	 * counted: accounts are Nextcloud users, so `registrations` and `logins` are
+	 * always `0`.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -346,13 +291,8 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The emoji this instance publishes.
-	 *
-	 * Answered `[]` unconditionally until the instance had any: emoji from
-	 * every other server rendered here and this one could publish none, which
-	 * is the asymmetry somebody moving here notices first. Only the ones
-	 * marked visible are listed — that is what the field means, and a picker
-	 * is what reads this route.
+	 * The emoji this instance publishes; only the ones marked visible, as a
+	 * picker reads this route.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -364,13 +304,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The picture behind a shortcode.
-	 *
-	 * Unauthenticated, like `mediaOpen()` and for the same reason: this is
-	 * what a remote server dereferences out of an `Emoji` tag on a post it
-	 * received, and it has no token of ours to present. An emoji is published
-	 * by definition — it is on every post that uses it, everywhere that post
-	 * went — so there is nothing here to keep from anybody.
+	 * The image behind a shortcode. Unauthenticated, like `mediaOpen()`: remote
+	 * servers dereference it from an `Emoji` tag without a token, and an emoji is
+	 * public by nature.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -387,9 +323,8 @@ class InstanceApiController extends MastodonApiController {
 				Http::STATUS_OK,
 				['Content-Type' => $emoji->getMediaType()]
 			);
-			// the shortcode names one picture and replacing it is a deliberate
-			// act, so a day is cheap; a shared cache may keep it, since the
-			// route answers everybody the same bytes
+			// Replacing an emoji is deliberate, so a day is cheap; shared caches may
+			// keep it, as everybody gets the same bytes.
 			$response->cacheFor(86400, false, true);
 
 			return $response;
@@ -399,18 +334,9 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The instance's GIF library, or the part of it that matches `q`.
-	 *
-	 * A viewer is required: this is a picker inside the composer, not
-	 * something the public page needs, and there is no reason to hand the
-	 * whole library to anybody who asks.
-	 *
-	 * Paged, which it did not need to be while the library was whatever an
-	 * administrator had added: with the animated emoji in it there are 881,
-	 * and a grid of 881 is 881 pictures this instance would go and fetch
-	 * because somebody opened the picker. `limit` is how many to answer with
-	 * and `offset` where to carry on from, so the picker asks for the next
-	 * screenful when the reader scrolls to it.
+	 * The instance's GIF library, or the part of it that matches `q`, for the
+	 * composer's picker, so a viewer is required. Paged with `limit` and
+	 * `offset`: the animated emoji alone are 881 images.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -434,27 +360,17 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The bytes behind a slug.
-	 *
-	 * Unauthenticated, like `emojiOpen()`: the picker draws a grid of these
-	 * and they are the same bytes for everybody on the instance. Nothing here
-	 * is private — a library picture is one an administrator put there for
-	 * everybody — and requiring a session would mean the grid could not be
-	 * cached by anything.
+	 * The bytes behind a slug. Unauthenticated, like `emojiOpen()`: the same
+	 * bytes for everybody, so the grid can be cached.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/gif/{slug}')]
 	public function gifOpen(string $slug): Response {
 		try {
-			// Nothing here reads the session, and holding it is what made the
-			// picker unusable: PHP serialises requests that hold one, so the
-			// sixty thumbnails a picker draws went out one at a time — and for
-			// one of the shipped emoji this instance has not seen, each of
-			// those is a fetch from Google. Measured on a cold instance, the
-			// search that followed them waited forty seconds for its turn.
-			// Letting it go makes them parallel and costs nothing: these are
-			// the same bytes for everybody, which is why the route is public.
+			// Release the session lock: PHP serialises requests holding it, and the
+			// picker's sixty thumbnails (some fetched from Google on a cold instance)
+			// would otherwise load one at a time.
 			$this->session->close();
 
 			$gif = $this->gifService->bySlug($slug);
@@ -467,9 +383,8 @@ class InstanceApiController extends MastodonApiController {
 				Http::STATUS_OK,
 				['Content-Type' => $gif->getMediaType()]
 			);
-			// the slug names one picture and replacing it is a deliberate act,
-			// so a day is cheap; a shared cache may keep it, since the route
-			// answers everybody the same bytes
+			// Replacing an image is deliberate, so a day is cheap; shared caches may
+			// keep it, as everybody gets the same bytes.
 			$response->cacheFor(86400, false, true);
 
 			return $response;

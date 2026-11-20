@@ -21,27 +21,14 @@ use OCA\Social\Model\Details;
 use OCA\Social\Tools\Nid;
 
 /**
- * What a keyword filter does to what the viewer is shown.
+ * What a keyword filter does to what the viewer is shown (filters are stored
+ * by `FiltersRequest`). A `hide` match removes the status; a `warn` match
+ * keeps it with a `filtered` key telling the client to blur it. Unmatched
+ * statuses carry `filtered: []`, as the key is not optional.
  *
- * The filters themselves are stored by `FiltersRequest` and edited over
- * `/api/v2/filters`; this is the half that makes them more than a list. A
- * status the viewer has a `hide` filter for is removed from the timeline it
- * was filtered in; one matched by a `warn` filter stays, and is handed to the
- * client with the `filtered` key that tells it to blur the status and say
- * why. A status that matched nothing carries `filtered: []` — the key is not
- * optional, and its absence is read by clients as "nothing filtered", which is
- * the same answer for every viewer and therefore the wrong one.
- *
- * Filters are always the *viewer's*: every read is scoped by the actor id in
- * SQL, and the per-request cache below is keyed by it, so one account's
- * filters can never be applied to another account's timeline.
- *
- * One more filter rides through here that nobody typed: the viewer's switch
- * for posts made with AI (`AiContentService`). It is applied in the same two
- * places as a `hide` keyword filter and in every context at once — the keyword
- * filters' contexts are the reader's choice per filter, and this switch has no
- * such choice, so a list timeline that no keyword filter reaches is still
- * cleared by it.
+ * Filters are always the viewer's: reads are scoped by actor id in SQL and the
+ * cache is keyed by it. The viewer's AI switch (`AiContentService`) is applied
+ * here too, in every context.
  */
 class FilterService {
 	private const HIDDEN_ATPROTO_LABELS = ['!hide', '!takedown'];
@@ -143,10 +130,8 @@ class FilterService {
 	}
 
 	/**
-	 * One status, for the routes that answer with a single one. Null is "the
-	 * viewer hides this", which such a route answers 404 for — the same answer
-	 * as a status that does not exist, because a status the viewer has chosen
-	 * not to see is one they are not asking about.
+	 * One status, for routes that answer with a single one. Null means the
+	 * viewer hides it, answered with 404 like a missing status.
 	 */
 	public function applyToStatus(mixed $item, string $context, ?Person $viewer): ?array {
 		$statuses = $this->apply([$item], $context, $viewer);
@@ -155,14 +140,10 @@ class FilterService {
 	}
 
 	/**
-	 * The notifications that survive the viewer's `notifications` filters.
-	 *
-	 * The items are handed back as they came in, not exported: a notification
-	 * entity is built by `Stream::exportAsNotification()` and reshaping it here
-	 * would change what every client receives. So a `hide` filter drops the
-	 * notification, and a `warn` filter leaves it alone — carrying `filtered`
-	 * inside a notification's nested status needs that exporter to emit the
-	 * key, and it does not yet.
+	 * The notifications that survive the viewer's `notifications` filters,
+	 * returned unexported, as `Stream::exportAsNotification()` builds the
+	 * entity. A `hide` filter drops the notification; a `warn` filter leaves
+	 * it alone, as that exporter does not emit `filtered`.
 	 *
 	 * @param array<Stream> $notifications
 	 *
@@ -197,21 +178,10 @@ class FilterService {
 	}
 
 	/**
-	 * What matched, as Mastodon's `FilterResult` entities — one per filter that
-	 * matched, naming the filter and what matched it.
-	 *
-	 * Two things can match. A keyword matches the words of the status, and is
-	 * reported in `keyword_matches`. A filter may also name the status itself
-	 * — Mastodon's per-status filters, a client's "filter this post" — and
-	 * that is reported in `status_matches`, which carries the status id rather
-	 * than any text because there is no text to report: the filter matched the
-	 * post, not something in it.
-	 *
-	 * A status filter is matched against the boost's own id as well as the
-	 * boosted post's. Filtering a post the reader chose to be rid of and then
-	 * showing it again the moment somebody boosts it would be a filter that
-	 * does not work, and a boost carries no words of its own for a keyword to
-	 * catch.
+	 * What matched, as Mastodon's `FilterResult` entities, one per matching
+	 * filter: keyword matches in `keyword_matches`, and per-status filters
+	 * ("filter this post") in `status_matches`. A status filter also matches
+	 * a boost of that post, which has no words of its own.
 	 *
 	 * @param array $status a status entity
 	 * @param Filter[] $filters
@@ -334,14 +304,9 @@ class FilterService {
 	}
 
 	/**
-	 * The text a keyword is compared against: everything of the status a
-	 * reader would read, which is what Mastodon matches on too — the content
-	 * warning, the text, the descriptions of the attachments and the options
-	 * of a poll. Markup is not part of it: a keyword must not match an `href`
-	 * the reader never sees.
-	 *
-	 * A boost carries no text of its own, so it is the boosted status that is
-	 * read — filtering the wrapper on its own text would filter nothing at all.
+	 * The text a keyword is compared against, as on Mastodon: content warning,
+	 * text, attachment descriptions and poll options, without markup. A boost
+	 * is matched on the boosted status's text.
 	 */
 	public function searchableText(array $status): string {
 		$status = (isset($status['reblog']) && is_array($status['reblog'])) ? $status['reblog'] : $status;
@@ -364,18 +329,10 @@ class FilterService {
 	}
 
 	/**
-	 * The comparison a keyword stands for, as Mastodon builds it.
-	 *
-	 * Case never matters. `whole_word` puts a word boundary on each side — but
-	 * only on a side that starts or ends with a word character, because `\b`
-	 * before a `#` or after a `!` can never be satisfied and the keyword would
-	 * match nothing at all.
-	 *
-	 * Every pattern here carries `/u`, which in PHP sets PCRE2's UTF *and* UCP
-	 * flags: `\w` and `\b` then count `é` and `ß` as letters, so a whole-word
-	 * filter on "café" does not also match "cafés". Dropping `/u` would not
-	 * merely be a missed accent — it is what the byte-oriented `\b` reads a
-	 * word boundary in the middle of a character as.
+	 * The comparison a keyword stands for, as Mastodon builds it: always
+	 * case-insensitive; `whole_word` adds `\b` only on sides that are word
+	 * characters, since `\b` next to `#` or `!` never matches. `/u` makes
+	 * `\w` and `\b` Unicode-aware, so "café" does not match inside "cafés".
 	 */
 	public static function keywordRegex(FilterKeyword $keyword): string {
 		$quoted = preg_quote($keyword->getKeyword(), '/');
@@ -444,8 +401,7 @@ class FilterService {
 
 	/**
 	 * A copy of the item to compare keywords against, leaving the item itself
-	 * exactly as it was found: a notification is answered with the object it
-	 * came in as, and exporting it here would change what the client receives.
+	 * unchanged for the client.
 	 */
 	private function matchable(mixed $item): array {
 		if (is_array($item)) {

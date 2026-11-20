@@ -48,9 +48,8 @@ class RecommendationTimelineService {
 
 	/**
 	 * One ranker blends automatically learned hashtag and behavior signals with
-	 * content features, follows and freshness. Manual topic choices do not
-	 * configure or filter the automatic web feed.
-	 * Mobile API clients keep using the unchanged `/timelines/interests` contract.
+	 * content features, follows and freshness; manual topic choices do not
+	 * configure the web feed. Mobile API clients use `/timelines/interests`.
 	 *
 	 * @return array{items: list<Stream>, session_id: ?string, next_cursor: ?string, mode: string, algorithm_version: ?int, profile_version: int, cursor_expired: bool, coverage: array{state: string, known_eligible: ?int, returned: int, remote_refresh_queued: bool}}
 	 */

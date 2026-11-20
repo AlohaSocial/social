@@ -20,14 +20,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Keeps external users out of the system address book.
- *
- * Nextcloud writes a card there for every enabled user, and the contacts
- * menu, the share dialog's email and federated suggestions and every CardDAV
- * client read it. An external user's display name and email cannot be made
- * private, so the card is removed the moment it is written instead. A card's
- * name carries the user backend's (`Social:<uid>.vcf`), which is how it is
- * recognised without a lookup.
+ * Keeps external users out of the system address book, which the contacts
+ * menu, the share dialog and every CardDAV client read: their display name and
+ * email cannot be made private, so the card is removed as soon as it is
+ * written. It is recognised by its name, `Social:<uid>.vcf`.
  *
  * @template-implements IEventListener<CardCreatedEvent|CardUpdatedEvent>
  */

@@ -16,38 +16,21 @@ use OCA\Social\Tools\DbTime;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Mastodon's ScheduledStatus entity: a post that has been accepted but not
- * published, and the request that will be replayed when it is.
+ * Mastodon's ScheduledStatus entity: a post accepted but not yet published,
+ * and the request to replay when it is. `POST /api/v1/statuses` answers with
+ * it for `scheduled_at`; clients tell it from a Status by its keys.
  *
- * This is what `POST /api/v1/statuses` answers when the client sent
- * `scheduled_at`. A client tells the two entities apart by their keys — a
- * ScheduledStatus has `params` and no `content`, `account` or `created_at` —
- * so returning a Status there, which is what this app used to do, is not a
- * near miss: Tusky and Ivory decode the answer into the wrong type and the
- * post the user was told was scheduled is already public.
- *
- * `params` is kept as the client's own request rather than as typed fields.
- * Mastodon defines it as "the parameters that were used when scheduling the
- * status, to be used when the status is posted", its members are Mastodon's
- * and change with Mastodon's, and nothing on this side ever queries inside it.
- * `paramText()` and friends below are the only readers, and they are the job's.
- *
- * `actorId` is not part of the entity a client sees. It is carried so the one
- * row a request names can be checked against the account that asked before
- * anything is done with it — see ScheduledStatusesRequest, where that check is
- * a SQL predicate rather than a comparison made after the row was read.
+ * `params` is the client's own request, read only by `paramText()` and
+ * friends. `actorId` is not shown to clients; ScheduledStatusesRequest checks
+ * it as a SQL predicate.
  */
 class ScheduledStatus implements JsonSerializable, StatusParams {
 	use TArrayTools;
 	use TStatusParams;
 
 	/**
-	 * The keys `params` carries, in Mastodon's order.
-	 *
-	 * Every one of them is sent on every entity, `null` where the client said
-	 * nothing: a client that declares the member non-optional cannot decode an
-	 * entity that leaves it out, and "the client did not ask for a poll" is an
-	 * answer a scheduling UI draws.
+	 * The keys `params` carries, in Mastodon's order, each sent every time
+	 * (`null` when unset) since clients may declare them non-optional.
 	 */
 	private const PARAM_KEYS = [
 		'text', 'media_ids', 'poll', 'in_reply_to_id', 'quoted_status_id',
@@ -94,10 +77,8 @@ class ScheduledStatus implements JsonSerializable, StatusParams {
 
 	/**
 	 * Anything outside Mastodon's set and this app's `event` extension is
-	 * dropped rather than stored: `params` is echoed back to whoever asks for
-	 * the entity, so a client that could
-	 * put arbitrary keys in it would have a place to park arbitrary content
-	 * under this account's name.
+	 * dropped: `params` is echoed back, and must not hold arbitrary content under
+	 * the account's name.
 	 *
 	 * @param array<string, mixed> $params
 	 */
@@ -150,12 +131,9 @@ class ScheduledStatus implements JsonSerializable, StatusParams {
 	}
 
 	/**
-	 * Exactly Mastodon's four keys and nothing else.
-	 *
-	 * `media_attachments` is the same `MediaAttachment` entity a published
-	 * status carries, so a client draws the thumbnails of a waiting post with
-	 * the code it already has — and `params.media_ids` alone would make it
-	 * fetch each one.
+	 * Exactly Mastodon's four keys. `media_attachments` holds the
+	 * `MediaAttachment` entities, so clients can draw thumbnails without fetching
+	 * each of `params.media_ids`.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

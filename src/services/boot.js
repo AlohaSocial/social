@@ -4,15 +4,9 @@
  */
 
 /**
- * What waits for the timeline.
- *
- * Every page used to fire four requests at once as it mounted: the timeline,
- * the trending hashtags, the reader's lists and the unread badge. On a small
- * server the four ran each other down -- 2.3 to 3.4 seconds each in parallel
- * where the timeline alone takes 0.4 -- and the one the reader was actually
- * waiting for was slowed by three they were not. The timeline request goes
- * first now; the rest start once it has settled, or once the browser is idle
- * on a page that has no timeline to wait for.
+ * What waits for the timeline. Secondary requests (trending hashtags, lists,
+ * the unread badge) start once the first timeline request has settled, so on
+ * a small server they do not slow the one the reader is waiting for.
  */
 
 /** the timeline request seen first on this page, if one has been */
@@ -23,10 +17,9 @@ let settled = false
 const waiting = []
 
 /**
- * Runs `callback` when the browser has a moment: after the first paint, in
- * an idle slot where the browser offers one, and soon regardless where it
- * does not. `requestIdleCallback` is missing from Safari, and a page whose
- * main thread never goes idle would otherwise never boot.
+ * Runs `callback` in an idle slot, or soon regardless: `requestIdleCallback`
+ * is missing from Safari, and the timeout covers a main thread that is never
+ * idle.
  *
  * @param {() => void} callback what to run
  */
@@ -62,12 +55,8 @@ export function noteTimelineRequest(request) {
 
 /**
  * Runs `callback` once the page's first timeline request has settled, or,
- * on a page that sends none, once the browser is idle after the first paint.
- *
- * The decision is taken in that idle slot rather than at once: the sidebar
- * mounts before the timeline below it, so at mount time no request has been
- * sent yet and there is nothing to yield to. By the time the browser is idle,
- * the timeline -- if this page has one -- has asked.
+ * on a page that sends none, once the browser is idle. The check waits for
+ * the idle slot because the sidebar mounts before the timeline has asked.
  *
  * @param {() => void} callback what to run
  */

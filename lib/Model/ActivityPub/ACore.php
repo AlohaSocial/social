@@ -40,27 +40,13 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	public const CONTEXT_SECURITY = 'https://w3id.org/security/v1';
 
 	/**
-	 * The extension terms outgoing documents actually use, defined inline.
+	 * The extension terms outgoing documents use, with Mastodon's definitions.
+	 * The AS2 context defines none of them and its `@vocab: "_:"` turns them
+	 * into blank nodes, which strict JSON-LD consumers drop.
 	 *
-	 * Actors emit `manuallyApprovesFollowers`, `featured`, `alsoKnownAs`,
-	 * `discoverable` and `PropertyValue`/`value` attachments; notes emit
-	 * `sensitive`, `conversation`, `votersCount` and `Hashtag`/`Emoji` tags;
-	 * attachments emit `blurhash` and `focalPoint`. The shipped AS2 context
-	 * defines none of them, and because it sets `@vocab: "_:"` they expanded to
-	 * blank-node predicates — which a consumer that actually compacts JSON-LD
-	 * drops on the floor. Mastodon reads the raw keys and so never noticed;
-	 * strict JSON-LD implementations and bridges lost locked-account status,
-	 * pinned-post discovery, migration back-references and profile fields.
-	 *
-	 * These are Mastodon's own definitions, so a document from here expands to
-	 * the same IRIs as one from there.
-	 *
-	 * The object is inline rather than a URL on purpose: signature
-	 * normalisation resolves a `@context` only from the copies shipped with the
-	 * app (SignatureService::documentLoader), and an inline object needs no
-	 * resolving at all. It is also emitted unconditionally, which is what keeps
-	 * the bytes that are signed and the bytes that are sent expanding to the
-	 * same triples.
+	 * Inline rather than a URL so signature normalisation needs no resolving
+	 * (SignatureService::documentLoader), and always emitted so the signed
+	 * and sent bytes expand alike.
 	 */
 	public const CONTEXT_EXTENSIONS = [
 		'manuallyApprovesFollowers' => 'as:manuallyApprovesFollowers',
@@ -338,19 +324,10 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * An id for an activity that has no resource of its own — an Accept, a
-	 * Reject, an Undo — hung off the actor that performs it.
-	 *
-	 * `generateUniqueId('#accept/follows')` hung it off the cloud root instead:
-	 * everything after the `#` is a fragment, so
-	 * `https://cloud.example.com/#accept/follows/<uuid>` is the URL of the
-	 * Nextcloud landing page, which answers 200 with an HTML document. A peer
-	 * that dereferences activity ids, or that strips the fragment before
-	 * comparing them, sees every one of our Accepts as the same thing.
-	 *
-	 * Basing it on the actor is the shape Mastodon uses
-	 * (`https://host/users/alice#accepts/follows/1`): the fragment then hangs
-	 * off a URL that resolves to the actor performing the activity.
+	 * An id for an activity with no resource of its own (an Accept, Reject or
+	 * Undo), as a fragment of the acting actor's id, as Mastodon does
+	 * (`https://host/users/alice#accepts/follows/1`). A fragment of the cloud
+	 * root would resolve to the Nextcloud landing page.
 	 */
 	public function generateUniqueIdFromActor(string $actorId, string $base): void {
 		if ($actorId === '') {
@@ -384,14 +361,9 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * Holds an activity to the one actor it may act for.
-	 *
-	 * `checkOrigin()` stops at the host, which on a server with more than one
-	 * account is every account on it: it says the activity came from the right
-	 * instance, never from the right actor. Everything that acts on something
-	 * somebody owns — deleting an actor or a post, undoing a like or a follow,
-	 * accepting a follow request, rewriting a cached profile — needs the
-	 * stronger statement, and asks for it here.
+	 * Holds an activity to the one actor it may act for. `checkOrigin()` only
+	 * checks the host, which on a shared server covers every account, so
+	 * anything acting on something an actor owns checks here too.
 	 *
 	 * @param string $expectedActorId whose the thing being acted on is
 	 * @param string $actualActorId who the activity says is acting
@@ -570,22 +542,9 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * A URL as ActivityStreams actually sends one: a string, or a `Link`.
-	 *
-	 * `url` is defined as either, and several implementations use the object
-	 * form — Loops sends `"url": {"type": "Link", "href": "...",
-	 * "mediaType": "video/mp4"}` for a video, and Mastodon sends a list of
-	 * them for a post with more than one representation. `get()` answers an
-	 * empty string for anything that is not a scalar, so every one of those
-	 * silently became "this object has no url": a video with no address, a
-	 * post that linked to nothing, and nothing anywhere to say why.
-	 *
-	 * Only `AS_URL` is read this way. An id is a string by definition, and a
-	 * date or a name arriving as an object is a malformed document rather than
-	 * a shape to accommodate.
-	 *
-	 * Where several are offered the first usable one wins, which is what the
-	 * sender's order means.
+	 * A URL as ActivityStreams sends one: a string, a `Link` (Loops sends
+	 * `{"type": "Link", "href": …}` for a video), or a list of either, of
+	 * which the first usable one wins. Only `AS_URL` is read this way.
 	 *
 	 * @param array<string, mixed> $arr
 	 */
@@ -638,11 +597,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * One field of an incoming document, checked and normalised for what it is.
-	 *
-	 * Everything that reaches here came off the wire from a server this one
-	 * does not control, and each kind is checked against what this app will do
-	 * with it rather than against a general idea of well-formedness.
+	 * One field of an incoming document, checked and normalised against what
+	 * this app will do with it.
 	 *
 	 * @param int $as which kind of field it is
 	 * @param string $value the field as it arrived
@@ -654,13 +610,10 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	public function validateEntryString(int $as, string $value, bool $exception = true): string {
 		switch ($as) {
 			case self::AS_ID:
-				// An id has to be an absolute URI, and `parse_url()` on its own
-				// says nothing about that: it happily reads `javascript:` and
-				// `data:` as a scheme and a path, and this app puts ids in
-				// `href`s. http and https are what it fetches; `tag:` and `urn:`
-				// are what the fediverse actually sends for the ids it never
-				// dereferences — Mastodon names a conversation with a `tag:`
-				// URI — and neither of those does anything in a browser.
+				// An id must be an absolute URI; `parse_url()` alone accepts
+				// `javascript:` and `data:`, and ids end up in `href`s. http(s)
+				// is fetched; `tag:` and `urn:` (Mastodon names conversations
+				// with `tag:`) are never dereferenced and harmless in a browser.
 				if (in_array(strtolower((string)parse_url($value, PHP_URL_SCHEME)), self::ID_SCHEMES, true)) {
 					return $value;
 				}
@@ -669,11 +622,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 			case self::AS_TYPE:
 				return $value;
 			case self::AS_URL:
-				// `parse_url()` is not a check: it happily parses
-				// `javascript:alert(1)` into a scheme and a path. Every URL
-				// that reaches this app is either fetched by it or rendered as
-				// a link by a client, and neither is a thing to do with a
-				// scheme somebody else chose.
+				// `parse_url()` accepts `javascript:alert(1)`, and every URL here
+				// is either fetched or rendered as a link, so the scheme is checked.
 				$scheme = strtolower((string)parse_url($value, PHP_URL_SCHEME));
 				if (in_array($scheme, ['http', 'https'], true)) {
 					return $value;
@@ -685,16 +635,14 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 			case self::AS_STRING:
 				return self::asPlainText($value);
 			case self::AS_CONTENT:
-				// Remote HTML is rendered into every local reader's timeline.
-				// strip_tags() cannot do this job: it keeps attributes on the
-				// tags it allows, so `onclick` and `javascript:` survive it.
-				// A relative link in it belongs to the server the object came
-				// from, not to the one showing it.
+				// Remote HTML is rendered in local timelines; strip_tags() keeps
+				// attributes such as `onclick`, so it is sanitised, and relative
+				// links resolve against the object's own server.
 				return HtmlSanitizer::sanitize($value, $this->getId());
 			case self::AS_USERNAME:
 			case self::AS_ACCOUNT:
-				// a display name is prose as much as a bio is, and `Alice <3`
-				// came through strip_tags() as `Alice `
+				// a display name is prose, and strip_tags() turns `Alice <3`
+				// into `Alice `
 				return self::withoutMarkup($value);
 		}
 
@@ -716,21 +664,13 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * The same text with its tags taken out and nothing else lost.
+	 * The text with its tags removed and nothing else lost. Unlike
+	 * `strip_tags()`, a bare `<` is kept, so `I <3 cats` survives. A tag opened
+	 * with an attribute and never closed is dropped to the end (`<img src=x
+	 * onerror=…`); without an attribute, `a<b` stays.
 	 *
-	 * Only what really opens a tag goes. `strip_tags()` reads a bare `<` as
-	 * the start of one and drops the rest of the line with it, and these are
-	 * fields people write prose in: a content warning of `I <3 cats` was
-	 * stored as `I `, and `CW: 1<2 and 3` as `CW: 1`.
-	 *
-	 * A tag that is opened with an attribute and never closed goes too, to the
-	 * end of the text: `<img src=x onerror=…` has no `>` of its own, and a
-	 * renderer that put it into HTML would close it at the next `>` it wrote.
-	 * Without an attribute it is left alone, so `a<b` is still a name.
-	 *
-	 * This is a flattener and not a sanitiser: a plain-text field is escaped
-	 * by whatever renders it, and markup that is meant to stay markup goes
-	 * through AS_CONTENT, which sanitises it properly.
+	 * A flattener, not a sanitiser: plain text is escaped where it is
+	 * rendered, and markup goes through AS_CONTENT.
 	 */
 	public static function withoutMarkup(string $value): string {
 		return (string)preg_replace(
@@ -762,12 +702,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 					)
 				];
 
-				// An Emoji tag is nothing without its icon: the shortcode in
-				// the content is text, and the icon is the only thing that
-				// says what to draw instead. Dropping it — which is what
-				// keeping only these three keys did — left every emoji, ours
-				// and every peer's, unrenderable the moment the post went
-				// through this.
+				// an Emoji tag needs its icon, the only thing that says what to
+				// draw for the shortcode
 				$icon = $this->validateIconEntry($this->getArray('icon', $values, []));
 				if ($icon !== []) {
 					$tag['icon'] = $icon;
@@ -780,11 +716,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * The icon of a tag, reduced to the three keys a reader needs.
-	 *
-	 * Validated like everything else off the wire: the URL is a URL or the
-	 * icon is not kept, since an icon with no address is a broken image on
-	 * every instance the post reaches.
+	 * The icon of a tag, reduced to the three keys a reader needs; dropped
+	 * when its URL is not valid.
 	 */
 	private function validateIconEntry(array $icon): array {
 		if ($icon === []) {
@@ -828,11 +761,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 			}
 			$shortcode = trim((string)($tag['name'] ?? ''), ':');
 			$url = (string)($tag['icon']['url'] ?? '');
-			// the scheme is the guard, not the transport: this URL becomes the
-			// `src` of an image in every reader's browser, so `javascript:`
-			// and `data:` have no business here — while an instance served
-			// over plain http, which is every instance somebody is still
-			// setting up, has to be able to render its own emoji
+			// the scheme guards the image `src` against `javascript:` and
+			// `data:`; plain http is allowed for instances being set up
 			if ($shortcode === ''
 				|| !(str_starts_with($url, 'https://') || str_starts_with($url, 'http://'))) {
 				continue;
@@ -862,24 +792,17 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * The ids in an addressing field, whether it came as a list or as one bare
-	 * string. `to` and `cc` are lists in the vocabulary, but a single recipient —
-	 * `"to": "https://www.w3.org/ns/activitystreams#Public"` — is regularly sent
-	 * unwrapped. Read through `getArray()` the string was json-decoded, decoded to
-	 * nothing, and the post arrived with no recipients at all, which
-	 * `NoteInterface::estimateVisibility()` reads as a direct message.
-	 *
-	 * Handled here rather than in the trait: `getArray()` is shared by every
-	 * model and every database row parser, where a string is a JSON column.
+	 * The ids in an addressing field, whether a list or one bare string (a
+	 * single recipient is often sent unwrapped, and lost it would make a
+	 * public post look direct to `NoteInterface::estimateVisibility()`). Not
+	 * in the trait, whose `getArray()` treats a string as a JSON column.
 	 *
 	 * @return string[]
 	 */
 	private function validateRecipients(string $k, array $data): array {
-		// The public collection has three spellings in the vocabulary: the
-		// full IRI, the compacted `as:Public` and a bare `Public`. The short
-		// two are not http URIs, so they were dropped as ids and a public post
-		// was stored with no public recipient — a direct message. Mastodon
-		// accepts all three.
+		// The public collection has three spellings: the full IRI, `as:Public`
+		// and `Public`. The short two are not http URIs and would be dropped,
+		// so they are mapped here, as Mastodon accepts all three.
 		$recipients = array_map(
 			static fn ($recipient) => (is_string($recipient) && in_array($recipient, ['as:Public', 'Public'], true))
 				? self::CONTEXT_PUBLIC : $recipient,
@@ -890,16 +813,10 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	}
 
 	/**
-	 * A field of an incoming document as a list, whichever of the forms
-	 * ActivityStreams allows it came in.
-	 *
-	 * Every property that is not functional may be one value or a list of
-	 * them: `"attachment": {…}`, `"tag": {…}` and `"to": "…#Public"` are all
-	 * sent. Read through `getArray()`, a single object was walked value by
-	 * value — a string handed to a parser that wants an array, which is a
-	 * TypeError and a 500 for the whole delivery — and a single string was
-	 * json-decoded into nothing. This is for wire documents only; a database
-	 * row keeps `getArray()`, where a string is a JSON column.
+	 * A field of an incoming document as a list, whichever form it came in:
+	 * any non-functional property may be one value or a list. For wire
+	 * documents only; database rows keep `getArray()`, where a string is a
+	 * JSON column.
 	 *
 	 * @param array<array-key, mixed> $data
 	 *
@@ -919,11 +836,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	 */
 	#[\Override]
 	public function importFromDatabase(array $data) {
-		// A row is checked on the way out as it was on the way in. It is the
-		// same data, so nothing should change — but the rules have been
-		// tightened since rows were first written, and a row stored under the
-		// older ones is exactly what this would otherwise hand straight to a
-		// client.
+		// A row is checked on the way out as on the way in, as rows stored
+		// under older, looser rules must not reach a client unchecked.
 		$this->setNid($this->get('nid', $data, '0'));
 		$this->setId($this->validate(self::AS_ID, 'id', $data, ''));
 		$this->setType($this->validate(self::AS_TYPE, 'type', $data, ''));
@@ -1088,9 +1002,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		if (Nid::compare($this->getNid(), '0') > 0) {
 			$result['id'] = (string)$this->getNid();
 		}
-		// Stream NIDs routinely exceed JavaScript's exact-integer range even on
-		// 64-bit PHP. Keep them as decimal strings at the JSON boundary so a
-		// client can safely send the same identifier back to an API route.
+		// Stream NIDs exceed JavaScript's exact-integer range, so they are
+		// decimal strings at the JSON boundary.
 		$nid = $this->getNid();
 		$result['nid'] = (Nid::compare($nid, '0') > 0) ? (string)$nid : 0;
 

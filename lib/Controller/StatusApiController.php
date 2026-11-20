@@ -74,9 +74,9 @@ use Throwable;
  * who favourited, boosted or quoted it, its poll, and the one catch-all route
  * for favourite, boost, bookmark, pin and mute.
  *
- * `statusAction()`'s `/api/v1/statuses/{nid}/{act}` also matches the paths of
- * the routes declared before it; it has to stay the last of them, because the
- * routes of one controller are matched in declaration order.
+ * `statusAction()`'s `/api/v1/statuses/{nid}/{act}` also matches the paths
+ * of the routes declared before it, so it must stay last: a controller's
+ * routes are matched in declaration order.
  */
 class StatusApiController extends MastodonApiController {
 
@@ -154,14 +154,9 @@ class StatusApiController extends MastodonApiController {
 				}
 			}
 
-			// A `scheduled_at` is not a slow post: Mastodon answers it with a
-			// ScheduledStatus entity and publishes nothing until the time
-			// comes. The field used to be parsed and ignored, so a post
-			// scheduled for next Tuesday went out at once -- and the client was
-			// told it had been scheduled. This sits before the idempotency
-			// lookup, which remembers a published status by nid and has nothing
-			// to remember here.
-			// It is reviewed now, while its author is there to be told.
+			// Mastodon answers `scheduled_at` with a ScheduledStatus and publishes
+			// nothing yet; checked before the idempotency lookup, which only remembers
+			// published statuses. Reviewed now, while its author is there to be told.
 			if ($this->scheduledStatusService->requestedTime($data) > 0) {
 				try {
 					return new DataResponse(
@@ -177,9 +172,8 @@ class StatusApiController extends MastodonApiController {
 				}
 			}
 
-			// Tusky and Ivory send an Idempotency-Key and retry the post when
-			// the connection drops, so on a flaky mobile link the same post used
-			// to be created — and federated to every follower — several times.
+			// Tusky and Ivory retry with the same Idempotency-Key when the connection
+			// drops; without this the post would be created several times.
 			$idempotencyKey = $this->idempotencyKey();
 			$already = $this->statusForIdempotencyKey($idempotencyKey);
 			if ($already !== null) {
@@ -189,16 +183,9 @@ class StatusApiController extends MastodonApiController {
 			// Use the viewer that was already initialized
 			$author = $this->accountService->getActorFromUserId($this->currentSession());
 
-			// A post written as a team is attributed to the team's account and
-			// signed with its key: the team speaks, not the person at the
-			// keyboard. Who that person was is recorded below rather than
-			// published — outside the team, one voice is the point of having a
-			// team account; inside it, and to a moderator, the trail is.
-			//
-			// A handle that is not a team account of this instance, and one
-			// whose group this account is not in, are the same 404: which
-			// groups exist and what they post as is not a thing to confirm to
-			// somebody outside them.
+			// A post written as a team is attributed to the team's account and signed
+			// with its key; the writer is recorded below, not published. An unknown team
+			// handle and a team the account is not in are the same 404.
 			$actor = $author;
 			$postAs = $status->getPostAs();
 			if ($postAs !== '') {
@@ -223,9 +210,8 @@ class StatusApiController extends MastodonApiController {
 				)?->getId() ?? 0
 			);
 
-			// before the media is scoped: a reply to a direct message is a
-			// direct message whatever `visibility` says, and its attachments
-			// must not be made world-readable on the strength of the request
+			// Before the media is scoped: a reply to a direct message is direct whatever
+			// `visibility` says, so its attachments must not become world-readable.
 			if ($status->getInReplyToId() > 0) {
 				try {
 					$replyTo = $this->streamService->getStreamByNid($status->getInReplyToId());
@@ -238,12 +224,8 @@ class StatusApiController extends MastodonApiController {
 			}
 
 			if (!empty($status->getMediaIds())) {
-				// the uploader's own media, not the team's: an upload belongs
-				// to the person who made it whatever account the post ends up
-				// attributed to, and looking it up as the team would find
-				// nothing. In the order the client sent them, and an id that is
-				// not one of their uploads refuses the post rather than
-				// publishing a different set from the one they chose.
+				// The uploader's own media, even when posting as a team, in the client's
+				// order; an id that is not one of their uploads refuses the post.
 				$post->setMedias($this->documentService->mediaAttachmentsForEdit(
 					$status->getMediaIds(),
 					$this->viewer->getPreferredUsername(),
@@ -256,21 +238,15 @@ class StatusApiController extends MastodonApiController {
 			$post->setReplyRule($status->getReplyRule());
 			$post->setVideoMeta($status->getVideoMeta());
 
-			// a moved account may not post at all, and is told so before the
-			// review queue gets to hold something a moderator would then be
-			// shown from an account that has left
+			// A moved account may not post; checked before review would hold the post.
 			$this->moderationService->assertNotMoved($author);
-			// reviewed as the person who wrote it, not the team: first-post
-			// review is about an account nobody has vouched for yet, and a team
-			// account exists because an administrator made it
+			// Reviewed as the writer, not the team: first-post review is about an
+			// account nobody has vouched for.
 			$post->setAuthor($author);
 
-			// A post a rule holds is stored as a request inside createPost()
-			// and never reaches `social_stream`, so there is no row for a
-			// timeline to find. The 422 is what a client can be told with the
-			// vocabulary Mastodon's API has — `held_for_review` beside it is
-			// what this app's own composer reads to say something better than
-			// "failed".
+			// A held post is stored as a request and never reaches `social_stream`. The
+			// 422 is what Mastodon's API can say; `held_for_review` beside it is for
+			// this app's composer.
 			try {
 				$activity = $this->postService->createPost($post);
 			} catch (PostHeldException $e) {
@@ -314,15 +290,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The visibility a new status is posted with.
-	 *
-	 * A client that leaves the field out means "whatever this account posts
-	 * with", which is the account's own default — `source.privacy`, set through
-	 * `/api/v1/accounts/update_credentials` and `public` until someone changes
-	 * it. Anything this app does not know is refused rather than posted:
-	 * `Stream::visibilityFromClient()` maps an unknown value to `direct`, and a
-	 * direct message gets no recipient added, so those posts used to answer 200
-	 * and be delivered to nobody.
+	 * The visibility a new status is posted with: the account's default
+	 * (`source.privacy`) when the client sends none. Unknown values are refused,
+	 * since `Stream::visibilityFromClient()` would map them to a `direct` post
+	 * with no recipient.
 	 *
 	 * @throws InvalidActionException
 	 */
@@ -340,11 +311,8 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * This request's Idempotency-Key, scoped to whoever sent it.
-	 *
-	 * The key is only meaningful together with the credential that used it —
-	 * two clients are free to pick the same one — so what is stored is a digest
-	 * of both, which also keeps the bearer token itself out of the cache.
+	 * This request's Idempotency-Key, scoped to the credential that sent it, as
+	 * a digest of both so the bearer token stays out of the cache.
 	 */
 	private function idempotencyKey(): string {
 		$key = trim($this->request->getHeader('Idempotency-Key'));
@@ -386,8 +354,7 @@ class StatusApiController extends MastodonApiController {
 			return;
 		}
 
-		// in `DurableCache`, so a retried post is still recognised on an
-		// instance with no memory cache
+		// `DurableCache`, so retries are recognised without a memory cache.
 		$this->durableCache->set(self::IDEMPOTENCY_CACHE, $key, (string)$nid, self::IDEMPOTENCY_TTL);
 	}
 
@@ -465,11 +432,9 @@ class StatusApiController extends MastodonApiController {
 	/**
 	 * Mastodon's `media_attributes`, one entry per attachment.
 	 *
-	 * A JSON body sends a list of objects. A form body sends
-	 * `media_attributes[][id]=1&media_attributes[][description]=…`, which Rails
-	 * groups per attachment and PHP does not: every `[]` opens an entry of its
-	 * own, so an id and its description arrive as two. An entry naming an id
-	 * starts an attachment, and the entries after it fill that one in.
+	 * A form body (`media_attributes[][id]=1&media_attributes[][description]=…`)
+	 * opens a new entry for every `[]` in PHP, unlike Rails, so an entry naming
+	 * an id starts an attachment and the following entries fill it in.
 	 *
 	 * @return list<array<string, mixed>>
 	 */
@@ -514,27 +479,23 @@ class StatusApiController extends MastodonApiController {
 			$this->initViewer(false);
 
 			$item = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
-			// a boost is served with what it boosts, and one of a status the
-			// viewer may not see is no status of theirs, as on Mastodon
+			// A boost of a status the viewer may not see is not found, as on Mastodon.
 			if ($item->getType() === Announce::TYPE && !($item->getObject() instanceof Stream)) {
 				throw new StreamNotFoundException();
 			}
 			// Refresh the post from its origin when opened; the background count
-			// queue is deliberately much slower than an interactive read.
+			// queue is much slower than an interactive read.
 			$refreshed = $refresh_counts && $this->counts->refreshVisibleIfDue($item, $force_counts);
 			if ($refreshed) {
 				$item = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 			}
 			$item = $this->served($item);
-			// opening a post's own page is the one thing this app counts as
-			// having read it: not an impression in a timeline, which is a post
-			// scrolled past rather than read
+			// Opening a post's page counts as reading it; a timeline impression does not.
 			$this->viewCountService->seen($item, $this->viewer);
 			// and a video starts where the reader left it
 			$this->watchService->attachProgress($item, $this->viewer);
-			// and what its likes, boosts and replies are now where it lives,
-			// asked in the background; a client that knows the header asks
-			// for the post again a little later
+			// Remote counts are fetched in the background; a client that knows the
+			// header asks again a little later.
 			$response = new DataResponse($item, Http::STATUS_OK);
 			$queued = $refresh_counts && !$refreshed && $this->counts->seen([$item]);
 			$countedPost = $item->getType() === Announce::TYPE && $item->getObject() instanceof Stream
@@ -552,13 +513,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The counts of the statuses on a reader's screen, and nothing else: what
-	 * the web app polls to keep the numbers under visible posts current. Each
-	 * id is resolved as `statusGet()` resolves it, so one the caller may not
-	 * read is left out of the answer. Counts kept on another network are read
-	 * there when their on-screen window is out (`CountService::refreshVisibleMany()`).
-	 * Unlike `statusGet()`, it records no view: a post on screen has not been
-	 * opened.
+	 * The counts of the statuses on a reader's screen, which the web app polls.
+	 * Each id is resolved as `statusGet()` resolves it, unreadable ones left
+	 * out; counts kept on another network are refreshed when due
+	 * (`CountService::refreshVisibleMany()`). Records no view.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -643,8 +601,7 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * One status as a client is served it, dressed the way a timeline dresses
-	 * the same post.
+	 * One status as a client is served it, dressed as a timeline dresses it.
 	 */
 	private function served(Stream $item): Stream {
 		$item->setExportFormat(ACore::FORMAT_LOCAL);
@@ -654,13 +611,8 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The link preview of one status, on its own.
-	 *
-	 * The card is already inlined in the status entity, which is what most
-	 * clients read; this route was a **405** rather than a 404, because the
-	 * path matched the POST-only action route below and nothing answered a
-	 * GET. A status with no link answers `{}` — Mastodon's own answer, and not
-	 * an error: most statuses have no card.
+	 * The link preview of one status, on its own. A status with no link
+	 * answers `{}`, as Mastodon does.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -707,13 +659,12 @@ class StatusApiController extends MastodonApiController {
 				],
 				Http::STATUS_OK
 			);
-			// the rest of the conversation is being read in the background:
-			// a client that knows the header asks again a little later
+			// The rest of the conversation is being read in the background.
 			if ($context['filling'] ?? false) {
 				$response->addHeader('X-Social-Thread-Filling', '1');
 			}
-			// how many replies the thread's author hid: left out unless asked
-			// for with `with_hidden`, and then marked `hidden_by_author`
+			// Replies hidden by the thread's author: left out unless `with_hidden`
+			// asks, then marked `hidden_by_author`.
 			if (($context['hidden'] ?? 0) > 0) {
 				$response->addHeader('X-Social-Hidden-Replies', (string)$context['hidden']);
 			}
@@ -725,13 +676,8 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Deletes one of the viewer's own statuses.
-	 *
-	 * The app's own frontend has always had a delete (`DELETE /api/v1/post`,
-	 * behind the session and a CSRF token), but a client holding a bearer token
-	 * had no way to reach it: the route Mastodon deletes with did not exist, so
-	 * every client's delete button failed. Mastodon answers with the status that
-	 * was removed — that is what "delete & redraft" puts back in the composer.
+	 * Deletes one of the viewer's own statuses and answers with it, as Mastodon
+	 * does, for a client's "delete & redraft".
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -743,16 +689,14 @@ class StatusApiController extends MastodonApiController {
 
 			$item = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 			if ($item->getAttributedTo() !== $actor->getId()) {
-				// the same answer an unknown id gets: whether somebody else's
-				// post exists is not this route's to tell
+				// Same as an unknown id: whether somebody else's post exists is not told.
 				throw new StreamNotFoundException('Stream not found');
 			}
 
-			// exported before the delete, while the row is still there to read;
-			// not dressed, as a redraft takes the text and media and nothing else
+			// Exported before the delete; not dressed, as a redraft needs only text and media.
 			$item->setExportFormat(ACore::FORMAT_LOCAL);
 			$deleted = $item->exportAsLocal();
-			// with its source, as Mastodon answers a delete: what a redraft takes
+			// With its source, as Mastodon answers a delete.
 			$deleted['text'] = $this->asSourceText($item->getContent());
 
 			$this->streamService->deleteLocalItem($item, $item->getType());
@@ -764,14 +708,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The text of one of the viewer's own statuses, as it was written.
-	 *
-	 * Mastodon's StatusSource entity. Tusky and Ivory will not offer an edit
-	 * button without it, even though `PUT /api/v1/statuses/{id}` has worked
-	 * here all along: they fetch the source first, to have something to put in
-	 * the editor. The stored content is the HTML that was rendered from the
-	 * original text, so it is turned back: the line breaks that `nl2br()` wrote
-	 * become newlines again and the entities are decoded.
+	 * The text of one of the viewer's own statuses, as written (Mastodon's
+	 * StatusSource), which Tusky and Ivory need before offering edit. The stored
+	 * HTML is turned back: `nl2br()` breaks become newlines and entities are
+	 * decoded.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -799,19 +739,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Where one of the viewer's own posts got to: `/api/v1/statuses/{nid}/delivery`.
-	 *
-	 * This app's own route, not Mastodon's. When a post does not appear on
-	 * another server the author has no way of knowing whether it was sent, is
-	 * still queued, was refused or was given up on; the queue knows, and this is
-	 * the author asking it. Answered only for the author, as `/source` is --
-	 * which servers a post reached is a fact about their own account and nobody
-	 * else's -- and a 404 for anybody else, the same 404 as a post that does not
-	 * exist.
-	 *
-	 * The answer is as good as the retention: a delivered request is kept for
-	 * `RequestQueueService::RETENTION_SECONDS` and then purged, so the reply says
-	 * how long, and an old post reports nothing rather than reporting wrongly.
+	 * Where one of the viewer's own posts got to: `/api/v1/statuses/{nid}/delivery`
+	 * (this app's own route). Only for the author; anyone else gets the 404 of
+	 * a missing post. Delivered requests are purged after
+	 * `RequestQueueService::RETENTION_SECONDS`, which the reply states.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -844,20 +775,12 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Reacts to a status with an emoji.
+	 * Reacts to a status with an emoji. Answers the status, so a client redraws
+	 * the card from one response.
 	 *
-	 * **Declared before `statusAction()` on purpose.** That method's route is
-	 * `POST /api/v1/statuses/{nid}/{act}`, which matches this path too; within
-	 * one controller the attribute routes are offered to the matcher in
-	 * method-declaration order, so this one has to come first or it is never
-	 * reached. Moving it below `statusAction()` would turn a reaction into an
-	 * unknown action, which is a **400** and looks like a client bug.
-	 *
-	 * The emoji is a parameter rather than a path segment: one emoji can be a
-	 * long grapheme cluster, and percent-encoding a family-with-skin-tones
-	 * into a URL to get it back out again is a round trip with nothing to gain.
-	 *
-	 * Answers the status, so a client redraws the card from one response.
+	 * Declared before `statusAction()`, whose `POST /api/v1/statuses/{nid}/{act}`
+	 * matches this path too. The emoji is a parameter rather than a path segment
+	 * since it can be a long grapheme cluster.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -886,8 +809,7 @@ class StatusApiController extends MastodonApiController {
 				$this->reactionService->delete($actor, $post->getId(), $emoji);
 			}
 
-			// read back rather than patched in memory, so the count the client
-			// redraws is the one the next reader will be served
+			// Read back, so the client gets the count the next reader will be served.
 			$item = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 
 			return new DataResponse($this->served($item), Http::STATUS_OK);
@@ -898,12 +820,8 @@ class StatusApiController extends MastodonApiController {
 
 	/**
 	 * The emoji reactions on a status: each emoji, how many used it, and
-	 * whether the caller is one of them.
-	 *
-	 * The status is resolved through the visibility filter first, so one the
-	 * caller may not read is a **404** and none of its reactions is looked at
-	 * — who reacted to a post is as private as the post, the same rule
-	 * `favourited_by` follows.
+	 * whether the caller is one of them. A status the caller may not read is a
+	 * 404, as for `favourited_by`.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -923,23 +841,12 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * One status, in the reader's language.
+	 * One status, in the reader's language, as Mastodon's Translation entity.
 	 *
-	 * Declared before `statusAction()`, which routes
-	 * `/api/v1/statuses/{nid}/{act}` and would otherwise match this path
-	 * first: within a controller the order the methods are written in is the
-	 * order the routes are tried in.
-	 *
-	 * Answers Mastodon's Translation entity — not a Status. The two are
-	 * different things on purpose: a translation has no id, no author and no
-	 * counters, and a client shows it under the post rather than in place of
-	 * it.
-	 *
-	 * What translates it is whatever translation provider this Nextcloud has;
-	 * an instance with none says so in `configuration.translation.enabled` and
-	 * answers this with a 503, which is what Mastodon answers when its own
-	 * provider is unavailable. It never answers with the original text: that
-	 * is what this route used to do, and a reader could not tell.
+	 * Declared before `statusAction()`, which would otherwise match this path.
+	 * Uses this Nextcloud's translation provider; without one,
+	 * `configuration.translation.enabled` says so and this answers 503, never
+	 * the original text.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -949,9 +856,7 @@ class StatusApiController extends MastodonApiController {
 			$this->initViewer(true);
 			$post = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 
-			// the language asked for, else the one this reader reads Nextcloud
-			// in: a client that offers "translate" without a language picker
-			// means "into mine"
+			// The requested language, else the reader's Nextcloud language.
 			$target = ($lang !== '')
 				? $lang
 				: $this->l10nFactory->getUserLanguage($this->userSession->getUser());
@@ -970,16 +875,12 @@ class StatusApiController extends MastodonApiController {
 	// --- where somebody stopped watching ----------------------------------
 
 	/**
-	 * Remembers where the reader got to in a video.
-	 *
-	 * A two-hour talk watched in three sittings is three sittings of finding
-	 * the place again, which is what this is for. It is a fact about the
-	 * reader: never federated, never shown to anybody else, never counted into
-	 * anything.
+	 * Remembers where the reader got to in a video; private to the reader,
+	 * never federated or counted.
 	 *
 	 * Declared ahead of `statusAction()`, whose `/api/v1/statuses/{nid}/{act}`
-	 * matches this path too: the routes of one controller are matched in
-	 * declaration order, and a trait's methods come after the class's own.
+	 * matches this path too: routes are matched in declaration order, and a
+	 * trait's methods come after the class's own.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -1000,13 +901,9 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Counts a view of a video posted here, once the reader has watched a few
-	 * seconds of it (`VideoViewService::MIN_SECONDS`, the player's side of the
-	 * rule). At most one per viewer — the account, or the session of somebody
-	 * who is not signed in — per video and day; see `VideoViewService`.
-	 *
-	 * Answers whether the count moved, which is nothing a client has to act
-	 * on: a view that was not counted is not an error.
+	 * Counts a view of a video posted here once the reader has watched
+	 * `VideoViewService::MIN_SECONDS`; at most one per viewer (account or
+	 * session) per video and day. Answers whether the count moved.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -1070,14 +967,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The accounts that favourited a status, newest first.
-	 *
-	 * Mastodon's `favourited_by`, and the reason a tap on a favourite count is
-	 * not a dead end. The status is resolved through the visibility filter
-	 * first, so one the caller may not read is a **404** and no reaction of it
-	 * is looked at — the list of who liked a post is as private as the post.
-	 * Whoever liked it where it lives is in the list too (`InteractionService`);
-	 * `X-Social-Filling: 1` says that is being read just now.
+	 * The accounts that favourited a status, newest first (Mastodon's
+	 * `favourited_by`). A status the caller may not read is a 404. Remote likes
+	 * are included (`InteractionService`); `X-Social-Filling: 1` says they are
+	 * still being read.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -1095,8 +988,8 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Says, on an answer, that more of it is being read from elsewhere just
-	 * now: a client that knows the header asks again a little later.
+	 * Marks an answer as still being filled in from elsewhere; a client that
+	 * knows the header asks again a little later.
 	 */
 	private function filling(DataResponse $response, bool $filling): DataResponse {
 		if ($filling) {
@@ -1120,17 +1013,12 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The posts that quote one status, newest first — Mastodon 4.5's
+	 * The posts that quote one status, newest first: Mastodon 4.5's
 	 * `GET /api/v1/statuses/{id}/quotes`.
 	 *
-	 * The posts this server *holds*: a local quote, and a remote one that
-	 * reached somebody here. A quote written on a server nobody here follows
-	 * was approved and is real and is not in this list, because there is no
-	 * status entity to put in it — Mastodon's own answer has the same edge.
-	 * Read as the viewer, so a quote inside somebody's followers-only post is
-	 * not handed to a reader by a list about their own post. The quotes the
-	 * networks the post is on list are read in the background and stored,
-	 * so they are in the list the next time (`X-Social-Filling: 1`).
+	 * Only quotes this server holds, read as the viewer. Quotes listed by the
+	 * networks the post is on are fetched in the background
+	 * (`X-Social-Filling: 1`).
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -1153,15 +1041,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Who may quote one of the caller's own posts — Mastodon 4.5's
-	 * `PUT /api/v1/statuses/{id}/interaction_policy`.
-	 *
-	 * `quote_approval_policy` is `public`, `followers` or `nobody`. It decides
-	 * what happens to requests that arrive **from now on**; it does not reach
-	 * back and withdraw the permissions already given, because a quote that
-	 * has been published and read is not undone by a switch being flipped.
-	 * Taking one back is the route below, which says so and tells the other
-	 * server.
+	 * Who may quote one of the caller's own posts: Mastodon 4.5's
+	 * `PUT /api/v1/statuses/{id}/interaction_policy`. `quote_approval_policy` is
+	 * `public`, `followers` or `nobody` and applies to future requests only;
+	 * revoking a given permission is the route below.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -1177,8 +1060,7 @@ class StatusApiController extends MastodonApiController {
 			$status->import($input);
 
 			$actor = $this->accountService->getActorFromUserId($this->currentSession());
-			// each policy only when it was sent: this app's `reply_policy`
-			// alone leaves who may quote as it was
+			// Each policy only when sent.
 			if (array_key_exists('reply_policy', $input)) {
 				$item = $this->replyRules->setRule($nid, $actor, $status->getReplyRule() !== '' ? $status->getReplyRule() : Stream::REPLY_RULE_EVERYONE);
 			}
@@ -1200,13 +1082,10 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Takes one quote of one of the caller's own posts back — Mastodon 4.5's
-	 * `POST /api/v1/statuses/{id}/quotes/{quoting}/revoke`.
-	 *
-	 * A `Reject` naming the request that was accepted goes to the quoting
-	 * server, which is how FEP-044f withdraws a permission; the quote then
-	 * shows there as revoked rather than refused. A local quote is withdrawn
-	 * here directly, because there is nobody to tell.
+	 * Takes one quote of one of the caller's own posts back: Mastodon 4.5's
+	 * `POST /api/v1/statuses/{id}/quotes/{quoting}/revoke`. A remote quote gets
+	 * a `Reject` of the accepted request (FEP-044f); a local one is withdrawn
+	 * directly.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -1279,8 +1158,8 @@ class StatusApiController extends MastodonApiController {
 	}
 
 	/**
-	 * A reply to a post the writer cannot see because its author has blocked
-	 * them is refused with the reason, rather than posted as a new thread.
+	 * A reply to a post the writer cannot see because its author blocked them
+	 * is refused with the reason, not posted as a new thread.
 	 *
 	 * @throws \OCA\Social\Exceptions\BlockedByException
 	 */

@@ -58,9 +58,8 @@ class RelationshipService {
 	public function getRelated(Person $viewer, string $type, int $limit = 40): array {
 		$relations = $this->actorRelationRequest->getByActor($viewer->getId(), $type, $limit);
 
-		// one query, and no federated fetch on a miss: an account you have
-		// blocked or muted is an account you have seen, so it is cached — and a
-		// listing must not be able to hang on someone else's instance
+		// One query from the cache, no remote fetch: a listing must not hang on
+		// another instance, and anyone blocked or muted has been seen.
 		$cached = $this->cacheActorService->getCachedFromIds(
 			array_map(static fn (ActorRelation $relation): string => $relation->getObjectId(), $relations)
 		);
@@ -87,11 +86,10 @@ class RelationshipService {
 		$this->actorRelationRequest->save(
 			$viewer->getId(), $target->getId(), ActorRelation::TYPE_MUTE, $notifications
 		);
-		// their timelines hide different posts from now on, which no id the
-		// ETag is built from reflects — see TimelineRevisionService
+		// Timelines hide different posts now, which no ETag id reflects
+		// (TimelineRevisionService).
 		$this->timelineRevisionService->bumpForActor($viewer->getId());
-		// a Bluesky account's mute is told to the AppView, where a Bluesky
-		// app signed in here reads it
+		// A Bluesky account's mute goes to the AppView for Bluesky apps signed in here.
 		$this->container?->get(BlueskyMutes::class)->muted($viewer, $target);
 	}
 
@@ -108,18 +106,16 @@ class RelationshipService {
 		$this->timelineRevisionService->bumpForActor($viewer->getId());
 
 		if ($target->isLocal()) {
-			// what BlockInterface records when the block arrives from another
-			// instance: the blocked account's own reads -- notifications,
-			// suggestions, follow requests -- are filtered on this row, and a
-			// block between two accounts of this instance never arrives
+			// What BlockInterface records for a remote block: the blocked account's
+			// reads are filtered on this row, and a local-to-local block never arrives.
 			$this->actorRelationRequest->save($target->getId(), $viewer->getId(), ActorRelation::TYPE_BLOCKED_BY);
 			$this->timelineRevisionService->bumpForActor($target->getId());
 
 			return;
 		}
 
-		// a Bluesky account's block goes to Bluesky when the person publishes
-		// theirs; resolved here, as the Bluesky side needs services that need this one
+		// A Bluesky account's block goes to Bluesky; resolved lazily because of a
+		// service cycle.
 		$this->container?->get(BlueskyBlocks::class)->blocked($viewer, $target);
 
 		if ($this->configService->isBlockFederationEnabled()) {

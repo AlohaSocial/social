@@ -20,16 +20,11 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_cache_doc.cached`: when the copy now on disk was written, or null
- * where there is none -- never stored, or taken away by the media cache purge.
- *
- * The purge needs both halves and neither existing column has them. `caching`
- * is when a fetch was *started*, and is null on every attachment stored while
- * its post arrived, which is most of them; `creation` is when the row was
- * written and does not move when a purged copy is fetched again. Indexed,
- * because the purge reads the cached copies oldest first.
- *
- * Rows that hold a copy already are given the best time there is: `caching`
- * where a fetch recorded one, else `creation`, else now.
+ * where there is none (never stored, or purged by the media cache purge).
+ * Neither `caching` (when a fetch started, null for most attachments) nor
+ * `creation` (fixed when a purged copy is refetched) says this. Indexed for
+ * the purge's oldest-first read. Existing copies get `caching`, else
+ * `creation`, else now.
  */
 class Version1000Date20261102000001 extends SimpleMigrationStep {
 	public function __construct(

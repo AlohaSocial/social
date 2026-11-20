@@ -20,36 +20,25 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The starter packs other servers publish, read in: the collections of the
- * fediverse, and Bluesky's suggested starter packs.
+ * The starter packs other servers publish, read in: fediverse collections
+ * and Bluesky's suggested starter packs.
  *
- * Mastodon 4.6 calls them Collections and federates them as FEP-7aa9
- * `FeaturedCollection`s: a named, ordered list of accounts a curator
- * recommends, linked from the curator's actor as `featuredCollections`.
- * Each entry is a `FeaturedItem` naming the account (`featuredObject`) and
- * the account's own consent to be in it (`featureAuthorization`), which the
- * FEP requires a reader to check: an item whose authorization does not
- * resolve, is not a `FeatureAuthorization`, names another collection or
- * account, or does not live on the account's own server is left out. An
- * authorization whose server does not answer is neither: a member it
- * vouched for before stays, and a collection none of whose members could be
- * checked stays as it was read last time.
+ * Fediverse collections are FEP-7aa9 `FeaturedCollection`s (Mastodon 4.6),
+ * linked from the curator's actor as `featuredCollections`. Each item's
+ * `featureAuthorization` must resolve to the member's own consent on its own
+ * server, or the item is left out; a member whose server does not answer
+ * keeps its earlier standing.
  *
- * Which curators are read is the `starter_pack_sources` app value: a JSON
- * array of handles (`user@host`, every public collection of that account),
- * collection addresses (that one collection) and `bluesky:suggested`
- * (Bluesky's suggested starter packs, read by `SuggestedStarterPacks` while
- * Bluesky is on). Unset is the shipped list; `[]` reads nobody and removes
- * what was read. A collection that is not `discoverable`, is marked
- * `sensitive`, or has no verified member is not offered to somebody looking
- * for their first follows, and neither is an account this instance's
- * moderation keeps out (`StarterPackModeration`), as member or as curator.
+ * The `starter_pack_sources` app value lists handles, collection addresses
+ * and `bluesky:suggested`; unset is the shipped list, `[]` reads nobody. A
+ * collection that is not `discoverable`, is `sensitive`, or has no verified
+ * member is not offered, nor is an account moderation keeps out
+ * (`StarterPackModeration`).
  *
- * Read by `Cron\StarterPackSources` once a day and by
- * `occ social:starter-packs:refresh`; never on a page. A curator that cannot
- * be reached, or is not reached before the run's deadline, keeps what was
- * read from it last time. A member not in the actor cache yet is queued to
- * be fetched (`RemoteFetchQueue`) rather than fetched by the run.
+ * Read daily by `Cron\StarterPackSources` and by
+ * `occ social:starter-packs:refresh`, never on a page; an unreachable curator
+ * keeps what was read last, and uncached members are queued
+ * (`RemoteFetchQueue`).
  */
 class CollectionPackService {
 	/** The app value naming the curators and collections to read. */
@@ -288,8 +277,8 @@ class CollectionPackService {
 		}
 
 		$curator = $this->cacheActorService->getFromAccount($source);
-		// the actor document as it is now: a copy cached before the account
-		// had any collection carries no link to them
+		// the actor document as it is now: a cached copy may predate its
+		// collections
 		$document = $this->curlService->retrieveObject($curator->getId());
 		$listId = self::id($document['featuredCollections'] ?? '');
 		if ($listId === '') {
@@ -378,11 +367,9 @@ class CollectionPackService {
 	}
 
 	/**
-	 * The accounts of a collection whose consent to be in it holds, in the
-	 * curator's order: the first `MAX_ITEMS` this instance may offer.
-	 *
-	 * A member whose authorization's server did not answer stays if it was
-	 * in the pack before; when no member could be checked at all, the
+	 * The accounts of a collection whose consent holds, in the curator's order,
+	 * up to `MAX_ITEMS`. A member whose authorization's server did not answer
+	 * stays if it was there before; if no member could be checked, the
 	 * collection is not read this time.
 	 *
 	 * @param list<mixed> $items
@@ -461,10 +448,9 @@ class CollectionPackService {
 	}
 
 	/**
-	 * Whether two ids name one actor. Mastodon gives an account a second,
-	 * numbered address (`/ap/users/<n>`) beside `/users/<name>`, and one
-	 * document may name it by either; where the two differ, both are looked
-	 * up, and the cache knows an actor by every address it was fetched at.
+	 * Whether two ids name one actor: Mastodon gives an account a numbered
+	 * address (`/ap/users/<n>`) beside `/users/<name>`, and the cache knows an
+	 * actor by every address it was fetched at.
 	 */
 	private function sameActor(string $one, string $other): bool {
 		if ($one === '' || $other === '') {
@@ -499,10 +485,9 @@ class CollectionPackService {
 	}
 
 	/**
-	 * Removes the packs no source publishes any more: a collection a curator
-	 * read in full this pass no longer lists, and the collections of a
-	 * source taken out of the list. A curator that could not be reached
-	 * keeps its packs until it can be.
+	 * Removes the packs no source publishes any more: collections a curator read
+	 * in full no longer lists, and those of sources taken off the list. An
+	 * unreachable curator keeps its packs.
 	 *
 	 * @param list<string> $sources
 	 * @param array<string, true> $seen

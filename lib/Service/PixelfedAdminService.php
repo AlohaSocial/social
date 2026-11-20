@@ -21,23 +21,13 @@ use OCA\Social\Model\Client\AdminReport;
 use OCA\Social\Model\Moderation;
 
 /**
- * The administration screens of Pixelfed's app, answered from what this
- * instance actually has.
+ * The administration screens of Pixelfed's app, answered from this
+ * instance's moderation: accounts, reports, instances, domain blocks and the
+ * review queue (Pixelfed's autospam screen). What has no equivalent here,
+ * such as `no_autolink` or per-post flags, is answered as absent or a 422.
  *
- * Pixelfed's admin routes are its own — not Mastodon's — and its app shows
- * them to anybody the server calls an administrator. They are reshapes of
- * the moderation this instance already does: the account browser, the
- * reports queue, the instances it federates with and its two tiers of
- * domain block. What has no equivalent here is answered as absent rather
- * than invented: there is no per-account "unlisted" or "content warning"
- * flag, so those lists are empty and those actions a 422 that says so. The
- * autospam screen is not one of them any more — it draws this instance's own
- * review queue.
- *
- * Everything here goes through `AdminApiService`, which is where who may
- * moderate is decided and where every moderation decision is recorded, so a
- * takedown from the Pixelfed app is the same takedown as one from the
- * Mastodon API or the settings page.
+ * Everything goes through `AdminApiService`, which decides who may moderate
+ * and records every decision.
  */
 class PixelfedAdminService {
 	/** How many accounts, reports or instances one screen is handed. */
@@ -77,11 +67,8 @@ class PixelfedAdminService {
 	}
 
 	/**
-	 * The switches the app's settings screen draws, each with its real state.
-	 *
-	 * None of them can be flipped from here — see updateConfig() — but each
-	 * is answered truthfully, so the screen describes this instance rather
-	 * than a Pixelfed one.
+	 * The switches the app's settings screen draws, each with its real state;
+	 * none can be flipped from here (see updateConfig()).
 	 *
 	 * @return list<array{name: string, description: string, key: string, state: bool}>
 	 */
@@ -189,17 +176,11 @@ class PixelfedAdminService {
 	}
 
 	/**
-	 * The app's per-user actions, of which this instance has one.
-	 *
-	 * `delete` is the app's word for removing an account; what this instance
-	 * does with a local account it removes is suspend it, which takes its
-	 * posts down here and sends the same `Delete` to every peer that the
-	 * account's own deletion would. The flags — `unlisted`, `cw`,
-	 * `no_autolink` — are states an account does not have here, and
-	 * `verify_email` and `refresh_stats` are the server's.
-	 *
-	 * `$callerId` is the moderator, held to `AdminApiService::assertMayActOn()`
-	 * before anything is applied.
+	 * The app's per-user actions. `delete` suspends a local account, which
+	 * takes its posts down and federates the same `Delete` as an account
+	 * deletion. `no_autolink`, `verify_email` and `refresh_stats` have no
+	 * equivalent here. `$callerId` is held to
+	 * `AdminApiService::assertMayActOn()` first.
 	 *
 	 * @return array<string, mixed>
 	 * @throws InvalidArgumentException
@@ -215,11 +196,8 @@ class PixelfedAdminService {
 			return ['status' => 200, 'msg' => 'deleted'];
 		}
 
-		// Pixelfed's words for two things this instance does have. `unlisted`
-		// is the silence tier — an account out of the public timelines and
-		// readable by whoever deliberately follows it — and `cw` is marking
-		// everything it posts sensitive. Answered as a 422 until now, which
-		// was true of the words and not of the instance.
+		// Pixelfed's words for two things this instance has: `unlisted` is the
+		// silence tier, `cw` marks everything the account posts sensitive
 		if ($action === 'unlisted' || $action === 'unlist') {
 			$account = $this->actionable($reference, $callerId);
 			$this->adminApiService->act(
@@ -291,14 +269,9 @@ class PixelfedAdminService {
 	}
 
 	/**
-	 * The posts waiting for a moderator, as the app's autospam screen draws
-	 * them.
-	 *
-	 * Pixelfed's screen is a list of posts its bouncer caught, with "not spam"
-	 * and "delete" against each. That is the same queue this instance keeps —
-	 * a first post, or one that tripped a rule — so it is answered from it
-	 * rather than left empty. What differs is the vocabulary: Pixelfed scores,
-	 * this names the rule, and the rule is what the row says.
+	 * The posts waiting for a moderator, for the app's autospam screen: this
+	 * instance's review queue (first posts, posts that tripped a rule), with
+	 * the rule in place of Pixelfed's score.
 	 *
 	 * @return array{data: list<array<string, mixed>>}
 	 */
@@ -325,12 +298,9 @@ class PixelfedAdminService {
 	}
 
 	/**
-	 * The two buttons on that screen.
-	 *
-	 * `approve` (Pixelfed calls it "not spam") publishes the post; `delete`
-	 * refuses it, which tells its author and is recorded against them. A held
-	 * post that is neither is left waiting, which is also what happens when
-	 * nobody presses anything.
+	 * The two buttons on that screen: `approve` ("not spam") publishes the
+	 * post, `delete` refuses it, telling its author and recording it against
+	 * them.
 	 *
 	 * @return array{success: true}
 	 * @throws InvalidArgumentException

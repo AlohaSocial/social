@@ -131,27 +131,14 @@ class AccountApiController extends MastodonApiController {
 	 * Mastodon's profile update: `display_name`, `note` (the bio), `avatar` and
 	 * `header` (multipart), `locked` (manually approve followers),
 	 * `discoverable`, `indexable` and `bot` (the actor flags),
-	 * `hide_collections` (the follower and following lists shown to nobody
-	 * else, `HiddenCollectionsService`), `source[privacy]` (the default
-	 * audience) and `fields_attributes` (the profile metadata). Returns the
-	 * updated account entity.
+	 * `hide_collections` (`HiddenCollectionsService`), `source[privacy]` (the
+	 * default audience) and `fields_attributes`. Returns the updated account.
 	 *
-	 * Every field is optional and only what was sent is written, which is what
-	 * lets a client that edits one thing leave the rest alone. Three of them
-	 * used to be accepted and dropped — `display_name`, `avatar` and `bot` —
-	 * so a client's profile editor, which sends the whole form in one PATCH,
-	 * got a 200 and showed the name and picture unchanged.
-	 *
-	 * The name and the picture belong to the Nextcloud account rather than to
-	 * the actor, so they are written there and the actor cache is refreshed. A
-	 * backend that owns either of them (LDAP, SAML, anything provisioned from
-	 * elsewhere) makes this a **422** rather than a silent success: the profile
-	 * looks the same afterwards either way, and only one of those two tells the
-	 * user why.
-	 *
-	 * Every refusal is made before anything is written, and a part that fails
-	 * after the first was stored is logged rather than answered: the request
-	 * either changes nothing or answers 200 with what it stored.
+	 * Only what was sent is written. The name and avatar belong to the
+	 * Nextcloud account; a backend that owns them (LDAP, SAML) makes this a
+	 * 422. Every refusal happens before anything is written, and a later part
+	 * that fails is logged, so the request changes nothing or answers 200
+	 * with what it stored.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -169,10 +156,8 @@ class AccountApiController extends MastodonApiController {
 				: $multipart['fields'];
 			$files = ($multipart === null) ? $_FILES : $multipart['files'];
 
-			// Everything that can be refused is refused here, before anything
-			// is written: a picture that was sent and did not arrive, one that
-			// is not a picture, a name or an avatar the backend owns, an
-			// audience no post can have.
+			// everything that can be refused is refused here, before anything
+			// is written
 			$header = $files['header'] ?? [];
 			$avatar = $files['avatar'] ?? [];
 			$headerSent = $this->wasUploaded($header, 'header');
@@ -204,12 +189,9 @@ class AccountApiController extends MastodonApiController {
 				}
 			}
 
-			// The parts in the order they are written. The banner goes first:
-			// whether its bytes are an image this app stores is only known
-			// once they are stored, so a banner that is refused is refused
-			// before anything else is written. Mastodon sends both pictures
-			// on this route; the avatar is the Nextcloud account's picture,
-			// the one the whole server shows, and is written there.
+			// The parts in the order they are written. The banner goes first,
+			// since whether it is an image this app stores is only known once
+			// stored. The avatar is the Nextcloud account's picture.
 			$parts = [];
 			if ($headerSent) {
 				$parts['header'] = fn () => $this->bannerService->setFromTempFile($userId, $header['tmp_name']);
@@ -243,9 +225,7 @@ class AccountApiController extends MastodonApiController {
 				);
 			}
 
-			// a setting of this server's rather than of the profile: nothing
-			// is federated for it, and what other servers see is the
-			// collections themselves
+			// a setting of this server's, not federated
 			if (array_key_exists('hide_collections', $input)) {
 				$this->hiddenCollections->setHides($userId, $this->formBool($input['hide_collections']));
 			}
@@ -262,13 +242,9 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Writes the parts of a profile update in turn.
-	 *
-	 * A failure of the first part fails the request with nothing written. A
-	 * failure after that is logged and the rest is still written: the answer
-	 * is then a 200 whose account entity shows what was stored, which a client
-	 * can show, where a 500 after half a profile left it unable to tell what
-	 * had changed.
+	 * Writes the parts of a profile update in turn. A failure of the first
+	 * part fails the request with nothing written; a later failure is logged
+	 * and the rest still written, so the 200 shows what was stored.
 	 *
 	 * @param array<string, callable(): mixed> $parts by the field they write
 	 * @return bool whether anything was written
@@ -297,8 +273,7 @@ class AccountApiController extends MastodonApiController {
 
 	/**
 	 * Whether a picture arrived in this `$_FILES`-shaped entry. A picture that
-	 * was sent and did not arrive is an error rather than nothing: skipping it
-	 * answered 200 over the old picture.
+	 * was sent and did not arrive is an error, not nothing.
 	 *
 	 * @throws InvalidActionException
 	 * @throws UploadFailedException the upload failed on this side
@@ -308,17 +283,9 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Removes the account's avatar, leaving Nextcloud's generated initials.
-	 *
-	 * Mastodon's `DELETE /api/v1/profile/avatar`. `update_credentials` can
-	 * only replace a picture with another one — multipart has no way to send
-	 * "none" — so without this route a client can offer "change picture" and
-	 * not "remove picture", and an account that wanted none was stuck with
-	 * whatever it uploaded last.
-	 *
-	 * The avatar is the Nextcloud account's, shown by the whole server rather
-	 * than only here, which is why a backend that owns it (LDAP, SAML) refuses
-	 * this with a 422 instead of answering 200 over an unchanged picture.
+	 * Removes the account's avatar, leaving Nextcloud's generated initials
+	 * (Mastodon's `DELETE /api/v1/profile/avatar`; multipart cannot send
+	 * "none"). A backend that owns the avatar (LDAP, SAML) makes this a 422.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -335,11 +302,9 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Removes the account's banner, and tells the servers that hold a copy.
-	 *
-	 * Mastodon's `DELETE /api/v1/profile/header`. The banner is part of the
-	 * actor document, so taking it off this instance and not federating the
-	 * change would leave the profile with a banner everywhere else.
+	 * Removes the account's banner, and tells the servers that hold a copy
+	 * (Mastodon's `DELETE /api/v1/profile/header`), since the banner is part
+	 * of the actor document.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -369,30 +334,6 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * A local account as Mastodon's Account entity, with the gaps a brand-new
-	 * account has filled the way Mastodon fills them.
-	 *
-	 * `Person::exportAsLocal()` writes `""` where it has nothing: for
-	 * `last_status_at` when no post exists yet, for `avatar`/`header` while no
-	 * icon is cached. Mastodon sends `null` for the date and never an empty
-	 * image URL — a placeholder picture instead — and a strict decoder that
-	 * expects a date or a URL there fails the whole Account, which is the
-	 * first thing a client asks for after login. The stored source of the date
-	 * is `AccountService::addLocalActorDetailCount()`, the export is
-	 * `Person::exportAsLocal()`; until both emit what Mastodon does, this is
-	 * where the credentials routes put it right.
-	 *
-	 * @return array<string, mixed>
-	 */
-	/**
-	 * Mastodon's **CredentialAccount**: the Account entity plus `source`.
-	 *
-	 * Only the two credentials routes build one, because `source` is the
-	 * account's own copy of its settings and `source.follow_requests_count` is
-	 * nobody's business but theirs. It used to come out of the model on every
-	 * Account this app emitted, including other people's and anonymous reads.
-	 */
-	/**
 	 * The account's Bluesky handle and DID, for a local account that has
 	 * them; null otherwise.
 	 */
@@ -417,13 +358,17 @@ class AccountApiController extends MastodonApiController {
 		return ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle];
 	}
 
+	/**
+	 * Mastodon's CredentialAccount: the Account entity plus `source`, built
+	 * only for the two credentials routes, since `source` is the account's own
+	 * settings. An empty `last_status_at` becomes null, as Mastodon sends it.
+	 */
 	private function accountEntity(Person $account): array {
 		// the viewer is already in local format, see initViewer()
 		$data = $account->jsonSerialize();
 		$data['source'] = $account->exportSourceAsLocal();
 
-		// the default audience is the one setting this app keeps per user
-		// rather than on the actor: the model has no way to know it
+		// the default audience is kept per user, not on the actor
 		if ($account->isLocal()) {
 			$data['source']['privacy'] = $this->accountService->getDefaultPrivacy(
 				$this->currentSession()
@@ -448,22 +393,10 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Mastodon's sign-up route, which this server does not have.
-	 *
-	 * An account here is a Nextcloud account: the server creates it, through
-	 * whatever provisioning it is configured with, and this app is given one
-	 * that already exists. So there is nothing for this route to create — and
-	 * a **404** was the wrong way to say so, because a client reads it as "this
-	 * server is broken" and shows nothing a person can act on.
-	 *
-	 * A 403 in Mastodon's own error shape is read, shown, and says where to go
-	 * instead: the server's registration page when it has one, and otherwise
-	 * that an administrator creates accounts here. `registrations: false` in
-	 * the instance entity already says the same thing to a client that looks
-	 * before it asks; this is for the one that asks.
-	 *
-	 * The approval queue, the invites and the email confirmation Mastodon
-	 * builds on top of its sign-up are the server's too, for the same reason.
+	 * Mastodon's sign-up route, which this server does not have: accounts are
+	 * Nextcloud accounts, created by the server's own provisioning. Answers 403
+	 * in Mastodon's error shape, pointing at the server's registration page if
+	 * it has one, so a client can show something a person can act on.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -503,13 +436,9 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The viewer's own posting defaults, as Mastodon's `/api/v1/preferences`.
-	 *
-	 * Every value here is one the account already has somewhere — the default
-	 * audience it posts with, whether its posts are marked sensitive, the
-	 * language, and whether media and spoilers are expanded — and a client that
-	 * cannot read them guesses, which is how a client ends up posting publicly
-	 * for somebody whose default is followers-only.
+	 * The viewer's own posting defaults, as Mastodon's `/api/v1/preferences`:
+	 * default audience, sensitive flag, language, and whether media and
+	 * spoilers are expanded.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -526,25 +455,21 @@ class AccountApiController extends MastodonApiController {
 				'posting:default:sensitive' => (bool)($source['sensitive'] ?? false),
 				'posting:default:language' => ($source['language'] ?? '') !== ''
 					? $source['language'] : null,
-				// PeerTube's three NSFW policies, under the names Mastodon
-				// already has for the same three states: what this account
-				// chose, or what the instance does for somebody who has not.
-				// See `SensitiveMediaService`.
+				// PeerTube's three NSFW policies, under Mastodon's names for
+				// the same states; see `SensitiveMediaService`
 				'reading:expand:media' => $this->sensitiveMediaService->policyFor(
 					$this->currentSession()
 				),
-				// still Mastodon's default: a content warning is a different
-				// thing from sensitive media and this app keeps no preference
-				// about it
+				// a content warning is not sensitive media, and this app keeps
+				// no preference about it
 				'reading:expand:spoilers' => false,
 				// this app's own: when the bell rings, read-only here and
 				// written at `PATCH /api/v1/social/notification_delivery`
 				'notifications:delivery' => $this->notificationDeliveryService->of(
 					$this->currentSession()
 				)->toArray(),
-				// this app's own: whether posts labelled as made with AI are
-				// kept out of what this reader is shown, read-only here and
-				// written at `PATCH /api/v1/social/ai_content`
+				// this app's own: whether AI-labelled posts are hidden from this
+				// reader, written at `PATCH /api/v1/social/ai_content`
 				'reading:hide:ai' => $this->aiContentService->hides($this->currentSession()),
 				// this app's own: whether like, boost and follower numbers are
 				// left out, read-only here and written at `PATCH /api/v1/social/counts`
@@ -556,21 +481,11 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Records what this account wants done with sensitive media.
-	 *
-	 * Not a Mastodon route — Mastodon has no write for preferences, and its
-	 * own reading preferences are set on its web front end rather than through
-	 * the API. The value is Mastodon's all the same, so a client that reads
-	 * `/api/v1/preferences` and a client that writes here agree about what the
-	 * three words mean.
-	 *
-	 * `''` is a fourth thing and not a fourth policy: it puts the account back
-	 * to following whatever the instance does, which is different from
-	 * choosing what the instance happens to do today.
-	 *
-	 * `PublicPage` with no CSRF like every other route of this controller:
-	 * `currentSession()` is what authenticates, and it checks the CSRF token
-	 * itself for a caller with a session rather than a bearer token.
+	 * Records what this account wants done with sensitive media. Not a
+	 * Mastodon route, but Mastodon's values, so it agrees with
+	 * `/api/v1/preferences`. `''` means follow the instance default.
+	 * `PublicPage` without CSRF like every route of this controller:
+	 * `currentSession()` authenticates, and checks CSRF for a session caller.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -587,8 +502,7 @@ class AccountApiController extends MastodonApiController {
 
 			return new DataResponse([
 				'reading:expand:media' => $this->sensitiveMediaService->policyFor($userId),
-				// what was chosen, as it was chosen: a settings page has to be
-				// able to show "follow the instance" as the state it is
+				// as chosen, so a settings page can show "follow the instance"
 				'choice' => $this->sensitiveMediaService->choiceOf($userId),
 				'instance' => $this->sensitiveMediaService->instancePolicy(),
 			], Http::STATUS_OK);
@@ -600,19 +514,10 @@ class AccountApiController extends MastodonApiController {
 	/**
 	 * One account, by whatever reference the client holds.
 	 *
-	 * Every entity this app emits addresses an account by its numeric id, and
-	 * until this route existed there was nothing to do with one: tapping an
-	 * author, a mention, a boost or a notification asked for a profile that no
-	 * route answered.
-	 *
-	 * The only route of this app that is not a `#[FrontpageRoute]`: `{id}`
-	 * accepts slashes, so this url also matches `/api/v1/accounts/{account}/lists`
-	 * and `/api/v1/accounts/{account}/featured_tags`, which belong to other
-	 * controllers, and a route has to be offered to the matcher after the
-	 * routes it can swallow. Attribute routes are contributed one controller at
-	 * a time in whatever order the filesystem lists them, so it is declared in
-	 * `appinfo/routes.php` instead, which the server loads after all of them.
-	 * See the comment in that file.
+	 * Declared in `appinfo/routes.php` rather than as a `#[FrontpageRoute]`:
+	 * `{id}` accepts slashes, so it would swallow
+	 * `/api/v1/accounts/{account}/lists` and `.../featured_tags`, and must be
+	 * registered after those. See the comment in that file.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -631,12 +536,8 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The account behind a handle, without following it up remotely.
-	 *
-	 * Mastodon's `/accounts/lookup` is the cheap counterpart to `/search`: it
-	 * answers with an account or a 404, never with a list, and never reaches
-	 * out to another server. Clients use it to turn a `@user@host` someone
-	 * typed or pasted into something they can open.
+	 * The account behind a handle, without fetching it remotely. Mastodon's
+	 * `/accounts/lookup` answers one account or a 404, never a list.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -661,22 +562,10 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Mastodon's account search: what a composer calls to complete a `@handle`
-	 * as somebody types it.
-	 *
-	 * `/api/v2/search` answers accounts too, but no client uses it for
-	 * autocomplete — they call this one, and this app did not have it, so
-	 * mention completion failed in every client that offers it.
-	 *
-	 * `resolve` asks this instance to go and find an account it has never seen,
-	 * which is what makes completing a handle from another server work at all.
-	 * It fires only for a viewer, and only for something shaped like an
-	 * address or a handle, the same rule `/api/v2/search` follows. Without it
-	 * nothing is asked of another server, as in Mastodon: an autocomplete
-	 * asks once per keystroke.
-	 *
-	 * `following` narrows the answer to accounts the viewer follows, which is
-	 * what a client asks for when it is completing a reply rather than a search.
+	 * Mastodon's account search, which composers call to complete a `@handle`.
+	 * `resolve` fetches an unknown account, only for a viewer and only for
+	 * something shaped like an address or handle, as `/api/v2/search` does.
+	 * `following` narrows to accounts the viewer follows, for completing a reply.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -698,12 +587,8 @@ class AccountApiController extends MastodonApiController {
 				return new DataResponse([], Http::STATUS_OK);
 			}
 
-			// `following=true` is a client completing a reply rather than
-			// searching: it wants the people already in the conversation's
-			// reach, not everybody this instance has ever cached. The search
-			// itself is narrowed rather than its answer: filtering the first
-			// `limit` matches found nobody whenever the followed account was
-			// not among them.
+			// the search itself is narrowed, not its answer, so followed
+			// accounts outside the first `limit` matches are still found
 			$found = $this->searchService->searchAccounts($q, $limit, $following ? $this->viewer->getId() : '', $resolve);
 			if ($resolve && (str_starts_with($q, '@') || str_starts_with($q, 'http'))) {
 				$resolved = $this->searchService->searchUri($q);
@@ -729,11 +614,8 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Who, of the people the viewer follows, also follows each named account.
-	 *
-	 * Mastodon's `familiar_followers`, which draws the "followed by X and 3
-	 * others you know" line on a profile. Absent, that line is simply missing
-	 * from every profile a client shows.
+	 * Who, of the people the viewer follows, also follows each named account
+	 * (Mastodon's `familiar_followers`, the "followed by X and 3 others" line).
 	 *
 	 * @param array<mixed>|string $id one or more account ids
 	 */
@@ -765,12 +647,9 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The viewer's relationship with each of the accounts asked about.
-	 *
-	 * `$id` carries its own default because a request-bound array parameter is
-	 * filled in by the dispatcher, before the method's own try block: a client
-	 * that asks with no `id[]` at all used to raise a TypeError there and get a
-	 * Nextcloud error page instead of `{"error": …}`.
+	 * The viewer's relationship with each of the accounts asked about. `$id`
+	 * has a default because the dispatcher binds it before the method's try
+	 * block, where a missing `id[]` would be a TypeError.
 	 *
 	 * @param array<mixed>|string $id
 	 *
@@ -830,9 +709,7 @@ class AccountApiController extends MastodonApiController {
 		try {
 			$this->initViewer(false);
 
-			// `{account}` is whatever the client holds, which for every entity
-			// this app emits is the numeric id — not the acct handle this route
-			// used to insist on.
+			// `{account}` is whatever the client holds, usually the numeric id
 			$local = $this->cacheActorService->resolve($account, $this->viewer !== null);
 
 			if ($pinned) {
@@ -846,20 +723,16 @@ class AccountApiController extends MastodonApiController {
 			$remoteProfileFilling = false;
 			$syncState = null;
 			$remoteProfile = !$local->isLocal() && !BlueskyActorService::isBluesky($local);
-			// Bluesky profiles have no ActivityPub outbox. Read their public
-			// author feed into the shared stream before the ordinary profile
-			// timeline query; keep AppView's cursor behind the local max_id so
-			// clients continue paging through this endpoint as usual.
+			// Bluesky profiles have no ActivityPub outbox: read their author
+			// feed into the stream first, keeping AppView's cursor behind the
+			// local max_id so paging works as usual
 			if (BlueskyActorService::isBluesky($local) && !$min_id && !$since_id) {
 				$profileFilling = $this->blueskyFeeds->authorPage($local, $max_id ? (string)$max_id : '', $limit, $this->viewer);
 			} elseif ($remoteProfile && $this->viewer !== null && !$max_id && !$min_id && !$since_id) {
-				// only for a caller with a session: a sync fetches the account's
-				// outbox from its server and stores every post of it, so an
-				// anonymous caller could make this instance fetch and keep the
-				// posts of any account they can name. Only for the first page,
-				// which is where new posts appear, and in the background, at most
-				// once a quarter-hour per account: this page answers with what is
-				// stored, and the next look has what the sync found.
+				// only for a caller with a session, so anonymous callers cannot
+				// make this instance fetch and store any account's posts; only
+				// for the first page, in the background, at most once a
+				// quarter-hour per account
 				$syncState = $this->remoteFetchQueue->refreshTimelineState($local);
 				$remoteProfileFilling = in_array($syncState, ['queued', 'pending'], true);
 				$profileFilling = $remoteProfileFilling;
@@ -900,9 +773,8 @@ class AccountApiController extends MastodonApiController {
 					|| $remoteProfileFilling;
 				$profileFilling = $remoteProfileFilling || $profileFilling;
 			}
-			// The outbox job can finish before its media files have been cached.
-			// Keep the visible profile refreshing until those stored copies gain
-			// their local URLs, or the media worker records a permanent refusal.
+			// the outbox job can finish before its media is cached: keep the
+			// profile refreshing until the copies are local or refused
 			if ($remoteProfile) {
 				foreach ($shown as $post) {
 					if (!$post instanceof Stream) {
@@ -968,15 +840,11 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The accounts that follow an account.
-	 *
-	 * The ones this server knows come first, paged by their ids as always.
-	 * For an account on another server the ones its own network lists follow
-	 * after the last of them, read in the background and kept for an hour
-	 * (`X-Social-Filling: 1` while that read was just asked for); a page that
-	 * reaches into those is continued by the `max_id` of its last account.
-	 * An account that hides its list where it lives has it hidden here too,
-	 * and a local account that hides its lists shows them to itself only.
+	 * The accounts that follow an account. Those known here come first, paged
+	 * by id; for a remote account, the ones its own network lists follow, read
+	 * in the background and kept for an hour (`X-Social-Filling: 1` while
+	 * being read), paged by the last account's `max_id`. Hidden lists stay
+	 * hidden; a local account's hidden lists are shown to itself only.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1021,9 +889,8 @@ class AccountApiController extends MastodonApiController {
 				->setMinId($min_id)
 				->setSince($since);
 
-			// what the account's network lists is read for a caller with a
-			// session only: the read is a fetch from another server, and every
-			// account it names not cached here is fetched too
+			// the remote list is read for a session caller only: it fetches from
+			// another server, and every account it names not cached here too
 			if ($this->viewer === null || $actor->isLocal()) {
 				return $this->paged($this->cacheActorService->probeActors($options), $options->getLimit());
 			}
@@ -1049,13 +916,9 @@ class AccountApiController extends MastodonApiController {
 
 	/**
 	 * The accounts waiting for the viewer's approval to follow them, newest
-	 * first, a page at a time.
-	 *
-	 * Paged the way Mastodon pages it — `limit` (40, at most 80), `max_id` and
-	 * `min_id`, and a `Link` header — and, as in Mastodon, the cursor is the
-	 * follow request's and not the account's: see
-	 * FollowsRequest::getPendingByObjectId() for what it holds. `paged()` does
-	 * not fit, since it pages on the entities' own ids.
+	 * first, paged as Mastodon does (`limit` 40, at most 80, `max_id`,
+	 * `min_id`, `Link` header) on the follow request's cursor; see
+	 * FollowsRequest::getPendingByObjectId(). `paged()` does not fit.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1137,24 +1000,19 @@ class AccountApiController extends MastodonApiController {
 			$this->initViewer(true);
 			$target = $this->cacheActorService->resolve($id, $this->viewer !== null);
 
-			// one counter moved by one, rather than all three recomputed with
-			// aggregate queries: see `AccountService::bumpActorCount()`. Only
-			// for a follow that is new: the same call on an existing one is how
-			// a client changes the switches below
+			// one counter moved by one (`AccountService::bumpActorCount()`), only
+			// for a new follow: repeating it is how a client changes the switches
 			if ($this->followService->followAccount($this->viewer, $target->getAccount())) {
 				$this->accountService->bumpActorCount($this->viewer->getId(), 'count_following', 1);
 			}
 
-			// the bell on a profile, which Mastodon sends *with* the follow.
-			// Absent means "leave it as it is": a client re-following to change
-			// nothing else must not silently turn the bell off
+			// the bell on a profile, sent with the follow; absent means leave it
 			if ($notify !== null) {
 				$this->accountRelationService->setNotify($this->viewer, $target, $notify);
 			}
 
-			// and the other switch Mastodon sends with a follow: whether this
-			// account's boosts belong in the reader's timelines. Absent means
-			// the same thing it means for the bell
+			// whether this account's boosts go in the reader's timelines; absent
+			// means leave it
 			if ($reblogs !== null) {
 				$this->accountRelationService->setShowReblogs($this->viewer, $target, $reblogs);
 			}
@@ -1267,9 +1125,8 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The `since_id` of a follower or following page. Mastodon's name for
-	 * it is `since_id`, which is what a client sends; these two routes once
-	 * read only `since`, still accepted for a caller that learned that name.
+	 * The `since_id` of a follower or following page; `since` is also
+	 * accepted.
 	 */
 	private function sinceCursor(int|string $sinceId, int|string $since): int|string {
 		return (Nid::compare($sinceId, '0') > 0) ? $sinceId : $since;
@@ -1293,11 +1150,8 @@ class AccountApiController extends MastodonApiController {
 				$accounts[] = $person;
 			}
 
-			// No `Link` header: neither route takes a cursor, and the next page
-			// `paged()` would advertise is the one just sent — a client paging
-			// on the header scrolled the same block of blocked accounts for
-			// ever. Answering one page is the honest shape until
-			// RelationshipService can be asked for a cursored one.
+			// no `Link` header: neither route takes a cursor, so a next page
+			// would repeat this one
 			return new DataResponse($accounts, Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);

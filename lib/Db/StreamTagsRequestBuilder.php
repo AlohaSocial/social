@@ -12,11 +12,6 @@ namespace OCA\Social\Db;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
-/**
- * Class StreamDestRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class StreamTagsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
@@ -45,7 +40,7 @@ class StreamTagsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return IQueryBuilder
 	 */

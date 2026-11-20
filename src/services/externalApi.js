@@ -42,11 +42,8 @@ export function invitesUrl(path = '') {
 }
 
 /**
- * Asks for the password again where Nextcloud wants it recently confirmed.
- *
- * Nextcloud's own dialog, through the global it keeps for pages that do not
- * bundle `@nextcloud/password-confirmation`. Resolves at once when the
- * password was confirmed a moment ago, rejects when the dialog is dismissed.
+ * Asks for the password again where Nextcloud wants it recently confirmed,
+ * with Nextcloud's own dialog. Rejects when the dialog is dismissed.
  *
  * @return {Promise<void>}
  */

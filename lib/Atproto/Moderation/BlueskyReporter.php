@@ -26,11 +26,9 @@ use Throwable;
 
 /**
  * A report about a Bluesky account or post, passed on to Bluesky's
- * moderation service (§12.3) when the person asks for it — the `forward`
- * of a Mastodon report. Like the Fediverse forward it is made by this
- * instance, never by the reporter: the token is signed by the instance's
- * own `did:web` with its service key, so the moderators there see this
- * server and the comment, and no name.
+ * moderation service (§12.3) when the person asks for it, like the `forward`
+ * of a Mastodon report. It is signed by the instance's `did:web`, so the
+ * moderators see this server and the comment, not the reporter.
  */
 class BlueskyReporter {
 	private const METHOD = 'com.atproto.moderation.createReport';

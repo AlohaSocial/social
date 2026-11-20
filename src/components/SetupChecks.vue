@@ -23,13 +23,8 @@
 			<p>
 				{{ clientApiExplanation }}
 			</p>
-			<!--
-				What the probe actually saw. The whole reason this is here: a
-				missing rule and a rule whose proxy target is not this Nextcloud
-				both answer 404, so an administrator who has just pasted the
-				rules and still sees this warning would otherwise have nothing
-				to go on.
-			-->
+			<!-- what the probe saw: a missing rule and a rule proxying elsewhere both
+			     answer 404, so the warning alone says nothing -->
 			<p v-if="clientApiFinding" class="setup-checks__finding">
 				{{ clientApiFinding }}
 			</p>
@@ -100,8 +95,7 @@ export default {
 	computed: {
 		/**
 		 * The Apache rules, verbatim from contrib/webserver/apache-social-root.conf.
-		 * Kept short on purpose — an administrator who needs the whole file, or
-		 * nginx, follows the link underneath.
+		 * Kept short; the link underneath has the whole file and nginx.
 		 */
 		apacheRules() {
 			return [
@@ -189,13 +183,7 @@ export default {
 		margin-bottom: 8px;
 	}
 
-	// the rules are one long line each and wider than the column. They wrap
-	// rather than scroll out of sight, because a rule an administrator cannot
-	// see is a rule they will paste half of -- a soft wrap is not part of what
-	// gets copied, so the paste is still one line.
-	// what the probe saw, set apart from the prose around it: it is the one
-	// line on this card that is about this server rather than about the
-	// feature in general
+	// what the probe saw, set apart: the one line about this server
 	&__finding {
 		padding: 8px 12px;
 		border-inline-start: 4px solid var(--color-warning, var(--color-border));
@@ -204,6 +192,8 @@ export default {
 		overflow-wrap: anywhere;
 	}
 
+	// the rules wrap rather than scroll out of sight; a soft wrap is not
+	// copied, so the paste is still one line
 	&__config {
 		margin-bottom: 8px;
 		padding: 8px 12px;

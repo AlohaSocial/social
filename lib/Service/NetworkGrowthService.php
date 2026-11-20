@@ -15,27 +15,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Whether the network is growing, and how fast.
+ * Whether the fediverse is growing, and how fast, from Fediverse Observer's
+ * monthly series (FediDB has no history).
  *
- * `NetworkStatsService` says how big the fediverse is today. A single number
- * says nothing about the thing a person actually wants to know when they are
- * deciding whether to write here — whether this is somewhere more people are
- * arriving or somewhere they are leaving — and no amount of precision about
- * today answers it.
- *
- * **A second source, named as such.** FediDB publishes a snapshot and no
- * history at all, so the shape over time comes from **Fediverse Observer**,
- * whose public GraphQL API has a monthly series back to 2017. The two do not
- * agree — they crawl different servers and count dormant accounts differently,
- * and Observer's account total is more than twice FediDB's — so the numbers
- * are never mixed: the current figures stay FediDB's and the series stays
- * Observer's, each with its own name beside it. A page that averaged them
- * would produce a number neither of them would stand behind and nobody could
- * check.
- *
- * Kept for a day, because a monthly series changes monthly, and switched off
- * by the same app value as the figures above it: an administrator who does not
- * want this instance making outbound requests for a statistics page means both.
+ * The two surveys disagree, so numbers are never mixed: current figures stay
+ * FediDB's (`NetworkStatsService`), the series stays Observer's, each named.
+ * Cached for a day, and switched off by the same app value as the figures.
  */
 class NetworkGrowthService {
 	public const SOURCE_NAME = 'Fediverse Observer';
@@ -43,25 +28,15 @@ class NetworkGrowthService {
 	private const ENDPOINT = 'https://api.fediverse.observer/';
 
 	/**
-	 * How many months the page shows.
-	 *
-	 * Two years: enough for a shape and a year-over-year comparison, short
-	 * enough that the 2022 spike does not flatten everything since into a
-	 * line. The series itself goes back to 2017 and anybody who wants that can
-	 * follow the link.
+	 * How many months the page shows: enough for a year-over-year comparison
+	 * without the 2022 spike flattening everything since.
 	 */
 	public const MONTHS = 24;
 
 	/**
-	 * A month-over-month step this large is not something a federated network
-	 * does; it is the survey changing what it crawls.
-	 *
-	 * Observer's own series shows it plainly: 25,000 servers in January 2026
-	 * and 41,000 in March, 20 million accounts in December 2025 and 36 million
-	 * in February. Fifteen million people did not join the fediverse that
-	 * quarter — the crawler reached servers it had not reached before. A
-	 * comparison across such a step measures the survey and not the network,
-	 * so the app will not print one.
+	 * A month-over-month step (in percent) this large is the survey changing
+	 * what it crawls, not the network (e.g. 25,000 to 41,000 servers between
+	 * January and March 2026), so no comparison across it is printed.
 	 */
 	private const COVERAGE_STEP = 25.0;
 
@@ -84,11 +59,8 @@ class NetworkGrowthService {
 	}
 
 	/**
-	 * The last two years, oldest first, with what changed over the last month
-	 * and the last year.
-	 *
-	 * Oldest first because that is the order a chart is drawn in, and the page
-	 * should not have to reverse somebody else's answer.
+	 * The last two years, oldest first (chart order), with what changed over the
+	 * last month and the last year.
 	 *
 	 * @return array{
 	 *     months: list<array{month: string, servers: int, accounts: int, active: int, posts: int}>,
@@ -103,8 +75,7 @@ class NetworkGrowthService {
 
 		$months = $this->months();
 		if ($months === null || count($months) < 2) {
-			// one point is not a trend, and drawing it as one would be the page
-			// claiming to know something it does not
+			// One point is not a trend.
 			return null;
 		}
 
@@ -115,13 +86,10 @@ class NetworkGrowthService {
 			'months' => $months,
 			'change' => [
 				'month' => $this->changeOver($months, 1),
-				// withheld rather than shown with a caveat nobody reads: a
-				// year-over-year figure across a coverage change describes the
-				// survey, not the fediverse
+				// Withheld across a coverage change, which measures the survey.
 				'year' => $steady ? $year : [],
 			],
-			// so the page can say why the year is missing, rather than leaving
-			// a reader to wonder whether it is a bug
+			// So the page can say why the year is missing.
 			'coverage_changed' => !$steady,
 			'source' => self::SOURCE_NAME,
 			'source_url' => self::SOURCE_URL,
@@ -176,12 +144,8 @@ class NetworkGrowthService {
 	}
 
 	/**
-	 * What this app reads out of the answer.
-	 *
-	 * The series arrives newest first and is turned round here; a row with no
-	 * servers on it is a month the crawler has no answer for rather than a
-	 * month the fediverse did not exist, and is dropped rather than drawn as a
-	 * cliff.
+	 * What this app reads out of the answer, turned to oldest first. A month with
+	 * no servers is one the crawler has no answer for, and is dropped.
 	 *
 	 * @param array<string, mixed> $answer
 	 *
@@ -224,13 +188,9 @@ class NetworkGrowthService {
 	}
 
 	/**
-	 * Whether the series over this window is the same survey throughout.
-	 *
-	 * A step of more than a quarter from one month to the next is the crawler
-	 * changing what it reaches; see `COVERAGE_STEP`. Only the two figures that
-	 * move with coverage are looked at — the active and post counts swing for
-	 * ordinary reasons, and holding them to this would withhold a comparison
-	 * over a busy month.
+	 * Whether the series over this window is the same survey throughout (see
+	 * `COVERAGE_STEP`). Only servers and accounts are checked; active and post
+	 * counts swing for ordinary reasons.
 	 *
 	 * @param list<array{month: string, servers: int, accounts: int, active: int, posts: int}> $months
 	 */
@@ -255,14 +215,8 @@ class NetworkGrowthService {
 	}
 
 	/**
-	 * What changed between the last month in the series and the one this many
-	 * months before it, as a fraction.
-	 *
-	 * A fraction rather than a difference, because the four figures are orders
-	 * of magnitude apart and "up 3%" is the sentence a reader wants from all
-	 * four of them. Absent where the series does not reach back that far: a
-	 * year-over-year figure computed over eight months would be a number with
-	 * a wrong name on it.
+	 * The fractional change between the last month and the one `$back` months
+	 * before it; absent where the series does not reach back that far.
 	 *
 	 * @param list<array{month: string, servers: int, accounts: int, active: int, posts: int}> $months
 	 *

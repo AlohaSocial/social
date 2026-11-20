@@ -4,15 +4,12 @@
 -->
 <template>
 	<div class="upload-form">
-		<!-- v-if="false" meant the bar never appeared at all, and the progress
-		     it would have shown was the hard-coded 0.4 the composer passed -->
 		<div v-if="uploading" class="upload-progress">
 			<div class="upload-progress__icon">
 				<FileUpload :size="32" />
 			</div>
 
-			<!-- a moving bar says nothing to a screen reader: the same fraction
-			     is on the element itself, so it is read rather than watched -->
+			<!-- the same fraction is on the element itself for screen readers -->
 			<div
 				class="upload-progress__message"
 				role="progressbar"

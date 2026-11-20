@@ -13,21 +13,12 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * This instance's own actor: the identity that signs outbound fetches.
- *
- * A signed GET names a `keyId`, and the peer answers it only after
- * dereferencing that key's owner. Whoever that owner is therefore appears in
- * every peer's logs as this instance's reader, and if their account is blocked
- * or suspended anywhere, every signed fetch from here fails there. Neither is
- * true of an actor that belongs to the server rather than to a person — which
- * is what Mastodon serves at `/actor`, and what this is.
- *
- * The document is written out here rather than inherited from `Person` because
- * almost nothing `Person` emits is true of it: it has no outbox, no followers,
- * no following, no bio, no aliases and no webfinger account. An actor document
- * naming collections that no route serves is worse than one that omits them —
- * a peer that dereferences `outbox` gets a 404 and may conclude the actor is
- * gone.
+ * This instance's own actor, which signs outbound fetches, as Mastodon's
+ * `/actor`: a person signing them would appear in every peer's logs, and a
+ * block of them anywhere would fail every fetch there. Written out rather than
+ * inherited from `Person`, as it has no outbox, followers, following, bio,
+ * aliases or webfinger account, and naming collections no route serves would
+ * make peers think it gone.
  */
 class InstanceActor extends Application implements JsonSerializable {
 	public function __construct() {
@@ -59,11 +50,9 @@ class InstanceActor extends Application implements JsonSerializable {
 			'preferredUsername' => $this->getPreferredUsername(),
 			'name' => $this->getName(),
 			'url' => $this->getId(),
-			// An actor with no inbox is not an actor: Mastodon drops a fetched
-			// actor document whose `inbox` is blank, and would then have no key
-			// to check our signature against. The shared inbox is a real
-			// endpoint and the right one — anything addressed to this actor is
-			// addressed to the server.
+			// Mastodon drops a fetched actor without an `inbox`, and could then not
+			// check our signature; anything addressed to this actor is addressed to
+			// the server, so the shared inbox is the right one.
 			'inbox' => $this->getInbox(),
 			'endpoints' => ['sharedInbox' => $this->getSharedInbox()],
 			'publicKey' => [
@@ -71,11 +60,9 @@ class InstanceActor extends Application implements JsonSerializable {
 				'owner' => $this->getId(),
 				'publicKeyPem' => $this->getPublicKey(),
 			],
-			// Not a person: nothing here accepts a follow, nothing lists it in
-			// a directory, nothing indexes it. `manuallyApprovesFollowers` is
-			// the only way to say "do not show a Follow button" that every
-			// implementation reads, and no Follow addressed here is ever
-			// answered — the inbox has no local account to resolve it to.
+			// Not a person: `manuallyApprovesFollowers` is the one way every
+			// implementation reads to hide the Follow button, and no Follow
+			// addressed here is ever answered.
 			'manuallyApprovesFollowers' => true,
 			'discoverable' => false,
 			'indexable' => false,

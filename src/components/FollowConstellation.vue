@@ -77,17 +77,14 @@ const MAX_FRAMES = 240
 const DRAG_SLOP = 5
 
 /**
- * "People you might know" as a sky rather than a list.
+ * "People you might know" as a sky: the reader in the middle, the people
+ * they follow who led somewhere around them, and the suggestions at the edge
+ * tied to whoever they came through. Every star can be dragged, and pressing
+ * one follows it.
  *
- * The reader sits in the middle; the people they follow who led somewhere
- * sit around them; the suggestions float at the edge, tied to whoever they
- * came through. It settles by itself in a second or two, every star can be
- * dragged somewhere else, and pressing one follows it.
- *
- * Every star is a real button with a label that says who it is and why, so a
- * keyboard and a screen reader get the same list the list view gives them --
- * only laid out differently for everybody else. A reader who asked for less
- * motion gets the settled sky straight away.
+ * Every star is a button labelled with who it is and why, so keyboard and
+ * screen reader users get the same list as the list view. Reduced motion
+ * gets the settled sky at once.
  */
 export default {
 	name: 'FollowConstellation',

@@ -17,11 +17,10 @@ use OCP\AppFramework\Http\IOutput;
 use OCP\AppFramework\Http\Response;
 
 /**
- * A body sent while it is written, by a writer that pushes its bytes out
- * rather than being asked for them: a zip archive whose files are added
- * one after the other. Each write goes out at once, so what is held is
- * one write, never the whole; when the client goes away, the next write
- * throws `ClientGoneException` and the writer stops there.
+ * A body sent while it is written by a writer that pushes its bytes out (a
+ * zip archive file by file), so only one write is ever held. When the client
+ * goes away, the next write throws `ClientGoneException` and the writer
+ * stops.
  *
  * @template-extends Response<Http::STATUS_*, array<string, mixed>>
  */
@@ -46,8 +45,7 @@ class StreamedWriterResponse extends Response implements ICallbackResponse {
 
 	#[\Override]
 	public function callback(IOutput $output): void {
-		// output buffering would collect the writes into the whole this
-		// response exists not to hold
+		// output buffering would hold the whole body
 		while (ob_get_level() > 0) {
 			ob_end_flush();
 		}

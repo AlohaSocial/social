@@ -13,11 +13,6 @@ use JsonSerializable;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TStringTools;
 
-/**
- * Class StreamAction
- *
- * @package OCA\Social\Model
- */
 class StreamAction implements JsonSerializable {
 	use TArrayTools;
 	use TStringTools;

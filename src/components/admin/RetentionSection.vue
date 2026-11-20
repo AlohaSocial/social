@@ -60,7 +60,7 @@ export default {
 	},
 
 	computed: {
-		/** Anything that is not a day count is not sent, as it never was. */
+		/** Anything that is not a day count is not sent. */
 		isDayCount() {
 			const days = parseInt(this.value, 10)
 

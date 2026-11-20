@@ -3,10 +3,8 @@
  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- the same account as the other network sees it. The identity exists
-	     because this server offers one; the person can switch their
-	     presence there off, and take away the phrase that proves it is
-	     theirs without this server -->
+	<!-- the account as the Bluesky network sees it: the person can pause it there,
+	     and hold the phrase that proves it is theirs without this server -->
 	<div class="bluesky-settings">
 		<p v-if="blueskyError" class="bluesky-settings__hint">
 			{{ blueskyError }}
@@ -245,10 +243,8 @@
 						? t('social', 'The phrase you have stops working the moment a new one is made.')
 						: t('social', 'Twelve words that prove this Bluesky identity is yours even without this server. They are shown once, for you to write down.') }}
 				</p>
-				<!-- the instance key is listed first on the DID: it outranks
-				     the phrase for the directory's 72-hour window, and the
-				     phrase is this app's own encoding, not a BIP-39 seed, so
-				     the key is shown beside it in the forms other tools take -->
+				<!-- the phrase is this app's own encoding, not a BIP-39 seed, so the
+				     key it stands for is also shown in the forms other tools take -->
 				<p class="bluesky-settings__hint">
 					{{ t('social', 'Other Bluesky tools do not read the words themselves: the recovery tool below does, and when they are made you also see the key they stand for, written the way tools such as goat take it. This server\'s key ranks above it, so for 72 hours the server can undo a change made with the phrase, a move to another server included.') }}
 				</p>

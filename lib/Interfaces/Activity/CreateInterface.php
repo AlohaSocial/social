@@ -38,13 +38,10 @@ class CreateInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * A `Create` whose `object` is only its id.
-	 *
-	 * The vocabulary allows it and some servers send it; it used to be
-	 * dropped without a trace. The object is fetched from its origin instead,
-	 * through the same queue a forwarded post takes, and only when it lives on
-	 * the host the activity came from and its actor is on: anything else would
-	 * be this instance fetching on somebody else's behalf.
+	 * A `Create` whose `object` is only its id, which the vocabulary allows.
+	 * The object is fetched from its origin through the forwarded-post queue,
+	 * only when it lives on the activity's host along with its actor, so this
+	 * instance never fetches on somebody else's behalf.
 	 */
 	private function queueObjectFetch(ACore $item): void {
 		$objectId = $item->getObjectId();

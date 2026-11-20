@@ -15,22 +15,16 @@ use OCA\Social\Model\AccessBlock;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The blocks that are about an address rather than an account.
- *
- * A whole list at a time is how both are consulted — an IP block on every
- * request that reaches a guarded route, an email-domain block once when a
- * Nextcloud account first asks for a fediverse identity — so there is no
- * lookup by value here. Both lists are an admin-written handful, and the
- * service above caches the one that is read often.
+ * The blocks on an address rather than an account (IPs and e-mail domains).
+ * Each list is a short admin-written one read whole, so there is no lookup
+ * by value; the service above caches the one read often.
  */
 class AccessBlocksRequest extends CoreRequestBuilder {
 	private const COLUMNS = ['id', 'type', 'value', 'severity', 'comment', 'expires', 'creation'];
 
 	/**
-	 * Stores one, replacing whatever stood against the same value.
-	 *
-	 * An admin blocking something already blocked means to change the
-	 * severity, the comment or the expiry — not to be told it exists.
+	 * Stores one, replacing whatever stood against the same value, so blocking
+	 * again changes the severity, comment or expiry.
 	 */
 	public function save(AccessBlock $block): void {
 		$expires = $block->getExpires() === 0

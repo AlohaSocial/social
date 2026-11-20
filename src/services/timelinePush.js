@@ -7,31 +7,15 @@ import { listen } from '@nextcloud/notify_push'
 import eventBus, { TIMELINE_PUSHED } from './eventBus.js'
 
 /**
- * `listen()` has no counterpart: what it registers stays registered for the
- * life of the page. A component that called it per mount therefore left a
- * closure holding itself behind on every unmount — and every open thread
- * mounts a timeline list of its own — so after a few navigations one pushed
- * event ran the same timeline request several times over.
+ * Server push, registered once for the page (`listen()` cannot be undone)
+ * and handed on over the bus, which components can leave.
  *
- * So it is called once here, for the page, and the event is handed on over the
- * bus, which components can leave.
- *
- * The server pushes once per post that reaches the account, and each
- * subscriber answers a push with requests of its own.
- * Someone who follows a few hundred active accounts was pushed every few
- * seconds, in every open tab, hidden ones too. So the pushes are gathered
- * here before anybody hears of them: a run of them is handed on once it has
- * been quiet for `PUSH_SETTLE_MS` (and no later than `PUSH_MAX_WAIT_MS` after
- * the first, so a steady stream still gets through); a tab nobody is looking
- * at hands on nothing and catches up once when it is looked at again; and a
- * subscriber whose last answer is still on its way is not asked again until
- * it has arrived, and then once for everything pushed meanwhile.
- *
- * Each push says what arrived (`PushService`): a post for the home timeline,
- * a direct message, a notification. A subscriber names the kinds that can
- * change what it shows and hears of nothing else — the direct messages are
- * not read again because a followed account posted. A push that names no kind,
- * from a server or a notify_push older than that, is every kind.
+ * Pushes are gathered and handed on once they have been quiet for
+ * `PUSH_SETTLE_MS`, at most `PUSH_MAX_WAIT_MS` after the first. A hidden tab
+ * hands on nothing and catches up once when shown again, and a subscriber
+ * whose last answer is still on its way runs once more when it arrives.
+ * Each subscriber hears only of the kinds it names; a push that names no
+ * kind counts as every kind.
  */
 
 /** A post for the home timeline. */

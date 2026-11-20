@@ -29,14 +29,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Stories: one picture that stops existing after a day.
- *
- * Who may see one is the same question as who may see a followers-only post,
- * and it is answered the same way: the owner, and the accounts that follow
- * them. There is no public story. That is Pixelfed's rule and it is the one
- * people assume when they post something that disappears -- a story visible to
- * the open internet, cached by whatever crawled it, is exactly what the feature
- * promises not to be.
+ * Stories (24-hour shorts in the UI): one photo that stops existing after a
+ * day. Only the owner and the accounts that follow them may see one; there is
+ * no public story, as on Pixelfed.
  */
 class StoryService {
 	public function __construct(
@@ -56,52 +51,38 @@ class StoryService {
 	}
 
 	/**
-	 * The ActivityPub id a local story is published under.
-	 *
-	 * Built from the account and the row's own number, which is why it can
-	 * only be set once the row exists. It resolves: a peer that would rather
-	 * fetch a story than trust the copy it was handed gets it from
-	 * `ActivityPubController::story()`, under the same rule the API keeps —
-	 * the author, or somebody who follows them.
+	 * The ActivityPub id a local story is published under, built from the
+	 * account and the row's number, so it is set once the row exists. It
+	 * resolves through `ActivityPubController::story()`, for the author or a
+	 * follower.
 	 */
 	public function idOf(Person $owner, int $id): string {
 		return $this->configService->getSocialUrl() . '@' . $owner->getPreferredUsername() . '/stories/' . $id;
 	}
 
 	/**
-	 * The capability a story travels with: `bear:?t=<token>&u=<url>`.
-	 *
-	 * Pixelfed's inbox does not read a story out of the activity that carries
-	 * it. `StoryFetch` requires `object.object`, decodes it as a bearcap
-	 * (FEP-d8c2), and fetches what it names with the token — an `Add` without
-	 * one is dropped without a word, which is what this app's stories used to
-	 * be. The field order is Pixelfed's own `Bearcap::encode()`, and its
-	 * decoder splits on `&` without unescaping, so neither half may be
-	 * URL-encoded.
+	 * The capability a story travels with: `bear:?t=<token>&u=<url>` (FEP-d8c2).
+	 * Pixelfed's `StoryFetch` reads the story only through `object.object` as a
+	 * bearcap and drops an `Add` without one. The field order is Pixelfed's
+	 * `Bearcap::encode()`, and its decoder does not unescape, so neither half
+	 * may be URL-encoded.
 	 */
 	public function bearcapOf(string $storyId): string {
 		return 'bear:?t=' . $this->bearcapToken($storyId) . '&u=' . $storyId;
 	}
 
 	/**
-	 * The token that fetches one story, and nothing else.
-	 *
-	 * Derived rather than stored: a story lives a day and there would be one
-	 * row per story to write, expire and clean up for a value that can be
-	 * recomputed. Keyed on a secret of this instance's own, so a token cannot
-	 * be worked out from the story's address, and it stops working for every
-	 * story at once if that secret is ever changed.
+	 * The token that fetches one story, and nothing else: derived, not stored,
+	 * keyed on this instance's secret, so it cannot be worked out from the
+	 * story's address.
 	 */
 	public function bearcapToken(string $storyId): string {
 		return hash_hmac('sha256', $storyId, $this->configService->getStorySecret());
 	}
 
 	/**
-	 * Whether a token presented for a story is the one this instance minted.
-	 *
-	 * Compared in constant time: the comparison is against a secret-derived
-	 * value, and a fetch is something anybody may attempt as often as they
-	 * like.
+	 * Whether a token presented for a story is the one this instance minted,
+	 * compared in constant time.
 	 */
 	public function bearcapMatches(string $storyId, string $token): bool {
 		return $token !== '' && hash_equals($this->bearcapToken($storyId), $token);
@@ -147,17 +128,9 @@ class StoryService {
 	}
 
 	/**
-	 * Sends a story to the people who follow the account.
-	 *
-	 * An `Add` addressed to the followers collection, which is the verb
-	 * Pixelfed publishes a story with and the one its inbox handles — not a
-	 * `Create`, which would put it where posts go. A server that does not know
-	 * the type ignores it, which is the right outcome: a story is not a post
-	 * and should not become one.
-	 *
-	 * A failure here is not a failure of the story. It is up on this instance
-	 * either way, and a delivery that could not be queued is a delivery that
-	 * did not happen, not a story that did not.
+	 * Sends a story to the people who follow the account: an `Add` addressed
+	 * to the followers collection, as Pixelfed publishes one, not a `Create`.
+	 * A failure here loses the delivery, not the story.
 	 */
 	private function publish(Person $owner, Story $story): void {
 		try {
@@ -203,12 +176,8 @@ class StoryService {
 	 * One story as the wire carries it.
 	 */
 	public function asActivityPub(Person $owner, Story $story): ApStory {
-		// A story read straight off its row has no picture on it yet: the
-		// timeline paths hydrate before they hand one over and the fetch route
-		// does not, because it looks a story up by its address. A story
-		// serialised without its picture is not a story — the receiver has
-		// nothing to show and Pixelfed discards it — so the picture is put back
-		// here rather than depended on.
+		// A story read straight off its row (the fetch route) has no photo yet,
+		// and Pixelfed discards a story without one, so it is put back here.
 		if ($story->getMedia() === null) {
 			$this->attachMedia($story);
 		}
@@ -236,15 +205,9 @@ class StoryService {
 	}
 
 	/**
-	 * A story that arrived from another server.
-	 *
-	 * Kept only when somebody here follows its author. A story is published to
-	 * followers, so an instance that holds one for an account nobody here
-	 * follows is holding a picture it was never going to show — and an inbox
-	 * that stores whatever is sent to it is a place to put things.
-	 *
-	 * The expiry is the author's, bounded: this app holds no story longer than
-	 * a day whatever the sender says, and refuses one that is already past.
+	 * A story that arrived from another server, kept only when somebody here
+	 * follows its author. Its expiry is the author's, capped at a day; one
+	 * already past is refused.
 	 *
 	 * @throws InvalidResourceException when there is nobody here it is for
 	 */
@@ -310,12 +273,9 @@ class StoryService {
 	}
 
 	/**
-	 * Whether a reader may see one story.
-	 *
-	 * The author, or somebody who follows them — the same rule `forAccount()`
-	 * keeps for the client API, applied to the reader a signed fetch resolved
-	 * to. Whether an account even has a story up is told to its followers and
-	 * to nobody else, which is why a refusal is a 404 rather than a 403.
+	 * Whether a reader may see one story: the author or a follower, as
+	 * `forAccount()` decides for the client API. A refusal is a 404, as
+	 * whether an account has a story up is told only to its followers.
 	 */
 	public function mayRead(Story $story, Person $reader): bool {
 		if ($story->getOwnerId() === $reader->getId()) {
@@ -347,8 +307,8 @@ class StoryService {
 
 	/** @throws ItemNotFoundException */
 	public function delete(Person $owner, int $id): void {
-		// reads it first so that somebody else's id is a 404 rather than a
-		// delete that quietly matched nothing
+		// read first, so somebody else's id is a 404 rather than a delete that
+		// matched nothing
 		$story = $this->storiesRequest->getLiveById($id);
 		if ($story->getOwnerId() !== $owner->getId()) {
 			throw new ItemNotFoundException('unknown story');
@@ -429,9 +389,7 @@ class StoryService {
 		}
 
 		$this->storiesRequest->markSeen($id, $viewer->getId());
-		// a story from another server is counted there, not here: its author
-		// reads their own instance's number, and without a receipt sent to
-		// them watching it is invisible
+		// a story from another server is counted there, not here
 		$this->storyInteractionService->sendView($viewer, $story);
 
 		return $this->hydrate($story, $viewer);
@@ -439,11 +397,8 @@ class StoryService {
 
 	/** Deletes what has expired. Called from cron. */
 	/**
-	 * Who watched one of the owner's own stories.
-	 *
-	 * Owner only, and the same 404 as an unknown id for anybody else: who
-	 * watched is told to the poster and to nobody else, the way the view count
-	 * is.
+	 * Who watched one of the owner's own stories; anybody else gets the 404 of
+	 * an unknown id.
 	 *
 	 * @return list<Person>
 	 * @throws ItemNotFoundException
@@ -488,19 +443,10 @@ class StoryService {
 	}
 
 	/**
-	 * The picture a story was posted as, taken away with the story.
-	 *
-	 * The promise of a story is that it stops existing after a day, and until
-	 * this ran that was true of the row and false of everything else: the
-	 * document row and both copies in appdata stayed, `/media/{uuid}` went on
-	 * serving them with a cache lifetime of for ever, and anyone who had ever
-	 * been shown the story — every viewer's client, every follower's instance
-	 * — could still load it. The disk was never reclaimed either.
-	 *
-	 * Only a document that belongs to this story: one posted as a story has no
-	 * parent, and one that arrived with a story names the story as its parent.
-	 * Anything else is a picture some post is also showing, and a story is not
-	 * a reason to take a post's picture away.
+	 * The photo a story was posted as, removed with the story: its document
+	 * row and both copies in appdata, which `/media/{uuid}` would otherwise
+	 * keep serving. Only a document that belongs to the story (none or the
+	 * story as parent); a photo a post also shows stays.
 	 */
 	private function forgetMedia(Story $story): void {
 		try {
@@ -518,8 +464,8 @@ class StoryService {
 
 			$this->mediaPurgeService->purge($document);
 		} catch (Throwable $e) {
-			// a story whose picture is already gone is a story that still has
-			// to go, and one unreadable row must not end a sweep
+			// a story whose photo is already gone still has to go, and one
+			// unreadable row must not end a sweep
 			$this->logger->warning('could not remove the picture of a story', [
 				'story' => $story->getId(), 'exception' => $e,
 			]);
@@ -544,10 +490,8 @@ class StoryService {
 			$story->setSeen(in_array($story->getId(), $seen, true));
 			$this->attachMedia($story);
 			$this->attachAuthor($story);
-			// Only the poster is told how many people watched. Set *and*
-			// cleared, rather than only set: leaving whatever the object
-			// happened to carry would make the guarantee depend on the story
-			// having been freshly read, which is not something a caller can see.
+			// Only the poster is told how many people watched: set and cleared, so
+			// the guarantee does not depend on how the object was read.
 			$story->setViewCount(
 				($story->getOwnerId() === $viewer->getId())
 					? $this->storiesRequest->countViews($story->getId())
@@ -567,8 +511,8 @@ class StoryService {
 			$document = $this->documentService->getDocumentById($story->getDocumentId());
 			$story->setMedia($document->convertToMediaAttachment($this->urlGenerator));
 		} catch (\Exception $e) {
-			// a story whose picture is gone is a story with no picture; the row
-			// is about to expire anyway and an empty frame beats a 500
+			// a story whose photo is gone is shown without one; the row is about
+			// to expire anyway and an empty frame beats a 500
 			$story->setMedia(null);
 		}
 	}
@@ -576,10 +520,8 @@ class StoryService {
 	private function attachAuthor(Story $story): void {
 		try {
 			$author = $this->cacheActorService->getFromId($story->getOwnerId());
-			// the client format, as every other account this API hands a
-			// client is: an actor in ActivityPub shape has no `acct`, no
-			// `display_name` and no `avatar`, which is everything a story
-			// carousel draws
+			// the client format, as every other account this API hands a client:
+			// the carousel draws `acct`, `display_name` and `avatar`
 			$author->setExportFormat(ACore::FORMAT_LOCAL);
 			$story->setAuthor($author);
 		} catch (\Exception $e) {

@@ -5,14 +5,9 @@
 
 /**
  * What the short composer does to a video in the browser: record one, cut it
- * to length, and take a still out of it for the cover.
- *
- * All of it happens here rather than on the server so that what is uploaded
- * is what the writer saw -- the server stores and transcodes a video as it
- * always has, and needs to know nothing about trimming. The pure parts (the
- * arithmetic of a trim, which recording format a browser can make) are kept
- * apart from the parts that need a real `<video>` and a canvas, so they can be
- * tested without either.
+ * to length, and take a still for the cover, so that what is uploaded is what
+ * the writer saw. The pure parts are kept apart from those that need a real
+ * `<video>` and a canvas, so they can be tested without either.
  */
 
 /** the shortest a trimmed short may be, in seconds */
@@ -87,8 +82,8 @@ export function filmstripTimes(duration, count) {
 }
 
 /**
- * The best format this browser can record in: MP4 where it can (Safari, and
- * Chrome since it learnt to), WebM otherwise. The server takes both.
+ * The best format this browser can record in: MP4 where it can, WebM
+ * otherwise. The server takes both.
  *
  * @param {(mime: string) => boolean} isSupported `MediaRecorder.isTypeSupported`
  * @return {string} a mime type, '' where the browser offers nothing we know
@@ -145,11 +140,9 @@ export function seekTo(video, time) {
 
 /**
  * How long a video is, including one that does not say.
- *
- * A WebM written by `MediaRecorder` has no duration in its header, and a
- * browser reports it as `Infinity` until something makes it read to the
- * end: asking for a time past the end does, and `durationchange` then
- * carries the real length.
+ * How long a video is, including one that does not say: a `MediaRecorder`
+ * WebM reports `Infinity` until a seek past the end makes the browser read
+ * it, and `durationchange` then carries the real length.
  *
  * @param {HTMLVideoElement} video an element whose metadata has loaded
  * @param {number} [wait] how long to give it, in milliseconds
@@ -211,9 +204,8 @@ export async function captureFrame(video, maxEdge = 1080) {
 
 /**
  * Small stills across a video, for the strip under the trim handles.
- *
- * A second element does the seeking so the preview the writer is watching
- * does not jump about while the strip is made.
+ * A second element does the seeking, so the preview being watched does not
+ * jump about.
  *
  * @param {string} url an object URL for the video
  * @param {number} count how many stills
@@ -253,13 +245,10 @@ export async function filmstrip(url, count) {
 
 /**
  * Cuts a video down to a stretch of it, in the browser.
- *
- * There is no way to cut an MP4 or a WebM without re-encoding it, and no
- * encoder in a browser other than `MediaRecorder`, so the stretch is played
- * once through a canvas and recorded as it plays: a 20-second short takes 20
- * seconds to prepare, which the composer shows as progress. The sound is
- * routed through Web Audio into the recording and not to the speakers, so
- * preparing a short is silent.
+ * A browser can only re-encode through `MediaRecorder`, so the stretch is
+ * played once through a canvas and recorded: a 20-second short takes 20
+ * seconds, shown as progress. The sound goes through Web Audio into the
+ * recording, not to the speakers.
  *
  * @param {File} file the video as chosen or recorded
  * @param {number} start where the short begins, in seconds

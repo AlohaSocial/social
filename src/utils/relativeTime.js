@@ -6,19 +6,13 @@
 import { userLocale } from './locale.js'
 
 /**
- * The two date formats this app shows, from the platform rather than from a
- * date library.
- *
- * `moment` was pulled into an entrypoint to provide `fromNow()` and one
- * `LLL` format — around 600 kB of module graph for five calls. `Intl` does
- * both, is localised by the browser, and costs nothing to ship.
+ * Date formats built on `Intl`, localised by the browser, so no date library
+ * has to ship.
  */
 
-/** the steps a relative time is rounded to, longest first */
 /**
- * The units `Intl.RelativeTimeFormat` is given, largest first, with how many
- * seconds each one is. Typed as tuples so the unit stays a unit: inferred, both
- * halves would be `string | number` and the arithmetic below would be untyped.
+ * The units `Intl.RelativeTimeFormat` is given, largest first, with their
+ * length in seconds. Typed as tuples so the unit stays a unit.
  *
  * @type {Array<[Intl.RelativeTimeFormatUnit, number]>}
  */
@@ -33,9 +27,8 @@ const STEPS = [
 ]
 
 /**
- * The formatters built so far, by locale and kind. Building one is the
- * expensive part of `Intl`, and a post's age is re-read on every tick of the
- * clock for every post on screen.
+ * The formatters built so far, by locale and kind: building one is the
+ * expensive part of `Intl`, and every post's age is re-read on each tick.
  *
  * @type {Map<string, unknown>}
  */
@@ -137,8 +130,7 @@ function relativeFormat() {
 }
 
 /**
- * The full date and time, as `moment`'s `LLL` showed it: a readable date with
- * the time, in the viewer's locale.
+ * The full date and time in the viewer's locale.
  *
  * @param {string|number|Date} date the date to write out
  * @return {string} a localised date and time, or '' for a date that cannot be read
@@ -171,12 +163,8 @@ export function timeOfDay(date) {
 }
 
 /**
- * The date alone, without a time of day.
- *
- * For a bound that is a whole day rather than a moment: an announcement whose
- * window was given as whole days ends at midnight, and writing that out as
- * "22 September 2026 at 00:00" tells a reader about an implementation detail
- * of the window rather than about the day it runs to.
+ * The date alone, for a bound that is a whole day rather than a moment (an
+ * announcement window given in days ends at midnight).
  *
  * @param {string|number|Date} date the date to write out
  * @param {string} [timeZone] the zone whose calendar day to name; the reader's own when omitted

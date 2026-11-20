@@ -17,14 +17,9 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether the post tables are growing with nothing to bound them.
- *
- * Retention is off by default, and stays so: deleting what other servers
- * sent is the administrator's decision. Without it the posts, their
- * recipient rows, their words and their cached media grow with everything
- * the instance has ever received. On a small instance that is nothing; past
- * a million posts the timelines, the search and the backups start to feel
- * it, and that is when an administrator should hear about the setting.
+ * Whether the post tables are growing with nothing to bound them. Retention
+ * stays off by default (deleting what others sent is the admin's decision);
+ * past a million posts the admin should hear about the setting.
  */
 class RetentionBoundsTheTables implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#the-post-tables-keep-growing';

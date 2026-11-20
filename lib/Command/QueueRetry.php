@@ -17,23 +17,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 
 /**
- * Retries or drops queued deliveries.
- *
- * `occ social:queue:status` could tell an administrator that N deliveries to a
- * host keep failing and nothing could be done about it: a delivery that fails
- * for a reason since fixed sat there until its fifteenth attempt deleted it,
- * and one that will never succeed (a peer that is gone, an activity a peer
- * refuses) kept a worker busy until then. This is the other half: put them
- * back in the queue, or take them out of it.
- *
- * `--instance` is the form that answers the report: `social:queue:status` names
- * the hosts this instance has given up on, and the reason it gave up is
- * usually one thing that has since been fixed — a certificate, a firewall, a
- * peer that was down for three days. Those deliveries are still in the table
- * for a week after they were abandoned, and this is what puts them back.
- *
- * The selecting and resetting is `QueueRetryService`, which the Retry button
- * on the admin page's Deliveries card uses as well.
+ * Retries or drops queued deliveries, such as those to hosts that
+ * `social:queue:status` reports as given up on once the cause is fixed;
+ * abandoned deliveries stay in the table for a week. The work is done by
+ * `QueueRetryService`, shared with the Retry button on the admin page's
+ * Deliveries card.
  */
 class QueueRetry extends SocialCommand {
 	public function __construct(

@@ -26,16 +26,13 @@ use Throwable;
 
 /**
  * The OAuth authorization server of this PDS, by AT Protocol's profile
- * (§6.3): pushed authorization requests, PKCE S256, DPoP-bound tokens with
- * server nonces, client metadata documents for client IDs, the `atproto`
- * scope and the transitional ones.
+ * (§6.3): PAR, PKCE S256, DPoP-bound tokens with server nonces, client
+ * metadata documents, the `atproto` scope and the transitional ones.
  *
- * It shares the issuer and the `/oauth/authorize`, `/oauth/token` and
- * `/oauth/revoke` addresses with the Mastodon OAuth server, because AT
- * Protocol requires the issuer to be the bare origin; a request is this
- * server's when it carries what only AT Protocol's profile sends (a pushed
- * `request_uri`, a `DPoP` proof, a URL as `client_id`). Its tokens and
- * sessions are its own and good for the Bluesky surface only.
+ * AT Protocol requires the bare origin as issuer, so it shares the
+ * `/oauth/*` addresses with the Mastodon OAuth server; a request is this
+ * server's when it carries a pushed `request_uri`, a `DPoP` proof or a URL
+ * as `client_id`. Its tokens are good for the Bluesky surface only.
  */
 class AuthorizationServer {
 	public const REQUEST_URI_PREFIX = 'urn:ietf:params:oauth:request_uri:req-';

@@ -145,10 +145,9 @@ import { errorOf, stoppedMoveError } from '../utils/serverError.js'
 const POLL_INTERVAL = 10000
 
 /**
- * A Bluesky account moved here by the other side: the twin Bridgy Fed made
- * for the person's Fediverse account, which Bridgy is asked to move, or any
- * account a migration tool moves, with what the tool needs. Draws nothing
- * when Bluesky is off here.
+ * A Bluesky account moved here by the other side: the twin Bridgy Fed made for
+ * the person's Fediverse account, or any account a migration tool moves.
+ * Draws nothing when Bluesky is off here.
  */
 export default {
 	name: 'BlueskyMoveInbound',
@@ -277,7 +276,7 @@ export default {
 				const before = this.move?.state
 				this.takeMove(data?.move)
 				if (before !== undefined && before !== 'done' && this.move?.state === 'done') {
-					// the account goes by its handle here now
+					// a finished move gives the account its handle here
 					const identity = await axios.get(generateUrl('apps/social/api/v1/social/bluesky/identity'))
 					this.identity = identity.data ?? this.identity
 				}

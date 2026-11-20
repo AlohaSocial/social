@@ -66,10 +66,8 @@ export default {
 
 	computed: {
 		/**
-		 * The visibility on the button. Falls back rather than returning
-		 * undefined: the template reads `.text` off this, so one unknown id —
-		 * a draft written by another version, say — took the whole composer
-		 * down with it.
+		 * The visibility on the button, with a fallback for an unknown id (a
+		 * draft written by another version), since the template reads `.text`.
 		 *
 		 * @return {import('./VisibilitiesInfos.js').Visibility}
 		 */
@@ -83,8 +81,8 @@ export default {
 		switchType(visibility) {
 			this.$emit('update:visibility', visibility.id)
 			try {
-				// throws outright in a private window and where site data is
-				// blocked, which is no reason for the choice not to take effect
+				// throws in a private window or where site data is blocked; the
+				// choice still takes effect
 				localStorage.setItem(userKey('social.lastPostType'), visibility.id)
 			} catch (error) {
 				logger.debug('Could not remember the visibility', { error })

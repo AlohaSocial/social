@@ -4,9 +4,8 @@
 -->
 <template>
 	<div class="media-upload">
-		<!-- the file picker opens from the press itself: a browser only lets
-		     a page open one in answer to something the reader just did, and a
-		     composer that has to load first is no longer that -->
+		<!-- opened from the click itself: browsers only open a file picker in
+		     direct response to a user action -->
 		<input
 			ref="input"
 			type="file"
@@ -35,9 +34,8 @@ import IconVideoPlusOutline from 'vue-material-design-icons/VideoPlusOutline.vue
 import eventBus from '../services/eventBus.js'
 
 /**
- * Shared media-first entry for Photos and Videos. The picker opens directly
- * from the click; selected files go to the existing modal composer and its
- * uploader, draft handling and permissions. No editor is mounted here.
+ * Shared media-first entry for Photos and Videos: picked files are handed to
+ * the modal composer. No editor is mounted here.
  */
 export default {
 	name: 'MediaUploadButton',

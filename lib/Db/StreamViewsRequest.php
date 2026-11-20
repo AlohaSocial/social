@@ -13,23 +13,17 @@ use DateTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * Who has opened a post.
- *
- * One row per (post, viewer), so the number an author sees is people rather
- * than visits — a reader coming back to a thread is the same person who was
- * already there.
+ * Who has opened a post: one row per (post, viewer), so authors see people,
+ * not visits.
  */
 class StreamViewsRequest extends CoreRequestBuilder {
 	/**
-	 * Remembers that somebody opened a post.
+	 * Remembers that somebody opened a post; a repeat is settled by the unique
+	 * index.
 	 *
-	 * A repeat is the ordinary case and is not an error: the unique index
-	 * settles it, and nothing here needs to know which of the two it was.
-	 */
-	/**
-	 * @return bool whether this is the first time this account has opened it —
-	 *              which is what decides whether a receipt goes out to the
-	 *              server that holds it, so a second play is not a second view
+	 * @return bool whether this is the first time this account has opened it,
+	 *              which decides whether a receipt goes to the server that
+	 *              holds it
 	 */
 	public function seen(string $streamId, string $actorId): bool {
 		$qb = $this->getQueryBuilder();
@@ -57,10 +51,6 @@ class StreamViewsRequest extends CoreRequestBuilder {
 
 	/**
 	 * The counts for a page of posts, in one query.
-	 *
-	 * A profile is twenty posts, and twenty queries to put a number under each
-	 * of them is the kind of thing that is invisible in development and is the
-	 * whole page in production.
 	 *
 	 * @param string[] $streamIds
 	 * @return array<string, int> id_prim => how many, missing where none
@@ -93,11 +83,8 @@ class StreamViewsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Forgets the views of one post, when the post itself goes.
-	 *
-	 * Called from the cascade in `StreamRequest::deleteRelatedTo()`: a row
-	 * naming a post that no longer exists is a row nothing will ever read
-	 * again.
+	 * Forgets the views of one post when the post goes (from
+	 * `StreamRequest::deleteRelatedTo()`).
 	 */
 	public function deleteByStream(string $streamId): void {
 		$qb = $this->getQueryBuilder();

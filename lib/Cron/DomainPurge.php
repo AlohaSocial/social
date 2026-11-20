@@ -16,33 +16,19 @@ use OCP\BackgroundJob\QueuedJob;
 use Psr\Log\LoggerInterface;
 
 /**
- * Removes what a newly blocked instance already sent us.
+ * Removes what a newly blocked instance already sent us. Queued with the
+ * domain by `FediverseService::addAddress()`, so not registered in
+ * `info.xml`.
  *
- * Queued with the domain as its argument by `FediverseService::addAddress()`,
- * so — unlike `Cache` and `Queue` — it is not registered in `info.xml`: a job
- * listed there is added once at install time with no argument, and this one is
- * meaningless without a domain.
- *
- * **Why it re-queues itself.** A cron run is a slot shared with every other
- * job on the server, and an instance that federated with us for years can have
- * more here than fits in one. So it does a bounded number of batches and, if
- * anything of the domain is left, puts itself back on the list for the next
- * run. Each pass finds its own work by asking what is still stored (see
- * `DomainPurgeService`), so a pass that dies takes nothing with it and the
- * next one resumes where it stopped.
- *
- * **Why it does not check the block.** An admin who blocks and then quickly
- * unblocks has already had a purge start; finishing it is the honest
- * behaviour, because what the first pass deleted is not coming back and a
- * half-purged instance is worse than a purged one. `occ social:domain:purge`
- * exists for the same reason in reverse: purging is a decision of its own,
- * separable from the block.
+ * It does a bounded number of batches per run and re-queues itself while
+ * anything is left; each pass finds its work by what is still stored
+ * (`DomainPurgeService`), so a dead pass loses nothing. It does not re-check
+ * the block: a half-purged instance is worse than a purged one.
  */
 class DomainPurge extends QueuedJob {
 	/**
-	 * Batches per run. `DomainPurgeService::BATCH` accounts each, so a few
-	 * hundred accounts a pass — enough that a small instance is finished in
-	 * one, bounded enough that a large one never owns a cron slot.
+	 * Batches per run, of `DomainPurgeService::BATCH` accounts each: a small
+	 * instance finishes in one run, a large one never hogs a cron slot.
 	 */
 	private const STEPS_PER_RUN = 10;
 

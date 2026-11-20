@@ -17,20 +17,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Writing stored videos at a ladder of smaller sizes.
+ * Writes stored videos at a ladder of smaller sizes, off unless an
+ * administrator turned it on.
  *
- * Its own job rather than a step of `Cron\Transcode`, even though the two are
- * neighbours: a transcode is one encode and a ladder is three, so a job that
- * did both would have an unpredictable cost per run and the transcoder — the
- * one that decides whether a video travels at all — would be the thing waiting
- * behind it.
- *
- * **One video per run**, and a longer interval than the transcoder's, because
- * each run is several times the work. A hundred videos is a few days at this
- * rate, which is the right speed for something that makes existing uploads
- * nicer to watch and is not urgent for any of them.
- *
- * Off unless an administrator turned it on.
+ * Separate from `Cron\Transcode`, so that the three encodes of a ladder never
+ * hold up the transcoder. One video per run, at a longer interval: the
+ * ladder only makes existing uploads nicer to watch.
  */
 class Ladder extends TimedJob {
 	public function __construct(

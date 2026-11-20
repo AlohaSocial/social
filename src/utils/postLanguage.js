@@ -8,14 +8,10 @@ import logger from '../services/logger.js'
 import { userKey } from './browserStore.js'
 
 /**
- * The language a post is written in, as the composer offers it.
- *
- * A post that says what language it is in reaches the readers who filter by
- * language and is skipped by the ones who filter it out; a post that says
- * nothing federated as `language: null` and was neither. The server fills an
- * absent language in from the poster's Nextcloud language, but the poster
- * has to be able to see the guess to correct it — a German account writing
- * one post in English is the whole reason the control exists.
+ * The language a post is written in, as the composer offers it, so that
+ * readers' language filters work on it. The server would fill an absent one
+ * in from the poster's Nextcloud language; the composer shows that guess so
+ * it can be corrected.
  */
 
 const NAME = 'social.lastLanguage'
@@ -38,9 +34,7 @@ export function isLanguageCode(code) {
 
 /**
  * The language the composer starts with: the reader's Nextcloud language,
- * without its region. `de_DE` and `en_GB` say how the interface is spelled,
- * not what the post is written in, and Mastodon's per-language filters are
- * keyed by the plain `de`.
+ * without its region, since Mastodon's language filters use the plain `de`.
  *
  * @return {string} a two-letter code, `en` when Nextcloud has none
  */
@@ -53,8 +47,8 @@ export function defaultLanguage() {
 /**
  * The language the last post went out with, when there was one.
  *
- * Reading localStorage throws outright in a private window and where site
- * data is blocked, which is no reason to have no composer.
+ * Reading localStorage throws in a private window and where site data is
+ * blocked.
  *
  * @return {string} the code, or '' when nothing is remembered
  */
@@ -85,9 +79,9 @@ export function rememberLanguage(code) {
 }
 
 /**
- * A language named rather than coded, in the reader's own language: `de` is
- * "German" to an English reader and "Deutsch" to a German one. A code no
- * browser knows is shown as it stands, which is better than dropping it.
+ * A language named in the reader's own language: `de` is "German" to an
+ * English reader and "Deutsch" to a German one. A code no browser knows is
+ * shown as it is.
  *
  * @param {string} code a language code
  * @return {string}

@@ -61,9 +61,8 @@ class BlueskyGraphService {
 	}
 
 	/**
-	 * A follow that came with a repository that moved here: its record is
-	 * there already and now stands for the follow saved here, and the
-	 * author's feed is watched. Nothing is written.
+	 * A follow that came with a repository moved here: its record exists
+	 * already and the author's feed is watched. Nothing is written.
 	 */
 	public function adopt(string $did, string $rkey, Person $target, Follow $follow): void {
 		$subject = BlueskyIds::didOf($target->getId());
@@ -76,7 +75,7 @@ class BlueskyGraphService {
 
 	/**
 	 * The record goes; the watch too when no local account follows the
-	 * author any more.
+	 * author.
 	 */
 	public function unfollow(Person $actor, Person $target, Follow $follow): void {
 		$did = BlueskyIds::didOf($target->getId());

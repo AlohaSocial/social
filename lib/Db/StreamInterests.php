@@ -18,15 +18,10 @@ use OCA\Social\Tools\SearchTerms;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * What For you asks of the stream table.
- *
- * Every read here is as the viewer and through the same visibility filter the
- * timelines use, including the reader's blocks and mutes: a post the reader
- * could not open is neither something they can learn from nor something their
- * feed may show. That matters twice over for learning, because the interests
- * it produces are shown back to the reader — a signal naming a followers-only
- * post of a stranger would otherwise put that post's hashtags on their
- * settings page.
+ * What For you asks of the stream table. Every read is as the viewer, through
+ * the timelines' visibility filter including blocks and mutes, since learned
+ * interests are shown back to the reader and must not leak posts they cannot
+ * see.
  */
 trait StreamInterests {
 	/** Maximum bounded newest-public scan used while the word index is backfilling. */
@@ -66,20 +61,13 @@ trait StreamInterests {
 	}
 
 	/**
-	 * The posts that could go into the feed: newer than `$sinceNid`, carrying
-	 * one of `$tags`, and neither the viewer's own nor from somebody silenced.
+	 * The candidate posts: newer than `$sinceNid`, carrying one of `$tags`,
+	 * not the viewer's own nor from somebody silenced. One row per post and
+	 * matching tag, newest first, at most `$cap`. Tags are compared as stored
+	 * (normalised by `FollowedTagsRequest::normalise()`) so the index applies.
 	 *
-	 * One row per post and matching tag, newest first, at most `$cap` of them.
-	 * The tags are compared as they stand, as the hashtag timeline compares
-	 * them: `social_stream_tag` holds them normalised
-	 * (`FollowedTagsRequest::normalise()`), and a comparison over `LOWER()` of
-	 * the column is one its index cannot answer.
-	 *
-	 * `$media` narrows them to one kind, on the indexed `media_kind` column the
-	 * Photos and Videos timelines read: `photos` is a post with a picture in
-	 * it, `videos` one that is a video, `media` either (Mastodon's
-	 * `only_media`), and '' every post. `shorts` is a short video, on
-	 * `short_kind`, the column `only_short` reads.
+	 * `$media` narrows on `media_kind` as the Photos and Videos timelines do
+	 * (`media` is Mastodon's `only_media`); `shorts` uses `short_kind`.
 	 *
 	 * @param string[] $tags normalised
 	 * @param string[] $excludeNids the posts the reader hid
@@ -162,14 +150,10 @@ trait StreamInterests {
 	}
 
 	/**
-	 * A bounded set of posts whose indexed words may describe a topic. The
-	 * returned rows are filtered in SQL for current viewer access, public
-	 * discoverability, hidden actors, duplicates, language and age before the
-	 * caller extracts topic features from their content.
-	 *
-	 * When the search word index is still backfilling, scan only the newest
-	 * eligible public window rather than pretending older posts have been
-	 * searched or querying the whole stream table.
+	 * A bounded set of posts whose indexed words may describe a topic,
+	 * filtered in SQL for access, discoverability, hidden actors, language and
+	 * age. While the word index is backfilling, only the newest public window
+	 * is scanned.
 	 *
 	 * @param list<string> $terms topic aliases to search
 	 * @param list<string> $excludeNids posts hidden by the reader or already selected

@@ -6,16 +6,11 @@
 import eventBus from './eventBus.js'
 
 /**
- * Keyboard shortcuts, in the vocabulary every other Fediverse client uses:
- * j/k to move through posts, l/b/r to act on the one in focus, n to compose,
- * ? for the list.
- *
- * Nothing fires while the viewer is typing — in a field, a contenteditable
- * composer, or with a modifier held — because a shortcut that eats a keystroke
- * mid-sentence is worse than no shortcut at all. Nor while a dialog is open:
- * the post a key would act on is behind it. And the reader can turn them off,
- * in Settings here or for all of Nextcloud in its Accessibility settings,
- * since a single key that likes or boosts is easy to press by mistake.
+ * Keyboard shortcuts, in the vocabulary other Fediverse clients use: j/k to
+ * move through posts, l/b/r to act on the one in focus, n to compose, ? for
+ * the list. Nothing fires while the viewer is typing (in a field, a
+ * contenteditable, or with a modifier held) or while a dialog is open, and the
+ * reader can turn them off here or in Nextcloud's Accessibility settings.
  */
 
 /** The event the command palette opens on. */
@@ -129,11 +124,8 @@ export function isPaletteKey(event) {
 }
 
 /**
- * Whether the focused element would act on this key itself.
- *
- * Enter on a focused button or link is not a shortcut, it is a click — the
- * only way to press one without a mouse. Taking it away leaves a keyboard
- * user unable to use the app at all, so an element that owns the key keeps it.
+ * Whether the focused element would act on this key itself: Enter on a button
+ * or link is a keyboard user's click, so the element keeps it.
  *
  * @param {KeyboardEvent} event the press
  * @return {boolean} true when the key belongs to the element, not to us

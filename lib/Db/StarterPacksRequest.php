@@ -28,11 +28,9 @@ class StarterPacksRequest extends CoreRequestBuilder {
 	private const CHUNK = 500;
 
 	/**
-	 * Writes a collection, replacing what is stored for the same id.
-	 *
-	 * A pack read again keeps the slug it was first stored with, which is
-	 * the address its page has been shared at. Two runs writing the same
-	 * new pack at once write one row.
+	 * Writes a collection, replacing what is stored for the same id. A pack read
+	 * again keeps its first slug, the address its page was shared at; concurrent
+	 * runs write one row.
 	 *
 	 * @param array{uri: string, slug: string, origin: string, curator: string, curator_acct: string, name: string, summary: string, topic: string, language: string, url: string, members: list<string>, fetched: int} $pack
 	 *

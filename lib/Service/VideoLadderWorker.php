@@ -18,20 +18,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Finding the next video to ladder, laddering it, and keeping the rows honest.
- *
- * The same split as `VideoTranscodingWorker`: `VideoLadderService` knows how to
- * run ffmpeg over a path and nothing about the store, this knows about the
- * store and nothing about ffmpeg's flags, and each half can be tested without
- * the other.
- *
- * The order of operations matters here for a different reason than it does in
- * the transcoder. Nothing is ever *replaced*: the source video stays exactly
- * where it was and keeps being what a plain `<video>` plays. Rungs are an
- * addition, so the failure mode of every step is "no ladder yet", never "a
- * video that 404s". A half-built ladder is torn down rather than published,
- * because a master playlist advertising a rung whose file is not there is a
- * player that stalls rather than one that picks another.
+ * Finds the next video to ladder, ladders it and keeps the rows honest;
+ * `VideoLadderService` runs ffmpeg and knows nothing about the store, as
+ * with `VideoTranscodingWorker`. The source video is never replaced, so a
+ * failure means no ladder yet; a half-built ladder is torn down, as a
+ * playlist naming a missing rung makes the player stall.
  */
 class VideoLadderWorker {
 	/** The four states `social_cache_doc.laddered` holds. */
@@ -57,12 +48,8 @@ class VideoLadderWorker {
 	}
 
 	/**
-	 * Ladders the next video that wants it.
-	 *
-	 * Paging, and marking as it passes, for the same reason the transcoder
-	 * does: an instance whose first twenty videos are all too short to be
-	 * worth a ladder would otherwise report that there was nothing to do with
-	 * an hour-long one sitting behind them.
+	 * Ladders the next video that wants it, paging and marking as it passes,
+	 * so videos too short to ladder cannot hide the ones behind them.
 	 *
 	 * @return bool whether a ladder was actually built
 	 */

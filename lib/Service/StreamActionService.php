@@ -14,11 +14,6 @@ use OCA\Social\Exceptions\StreamActionDoesNotExistException;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Nid;
 
-/**
- * Class StreamActionService
- *
- * @package OCA\Social\Service
- */
 class StreamActionService {
 	private StreamActionsRequest $streamActionsRequest;
 
@@ -76,10 +71,9 @@ class StreamActionService {
 
 	/**
 	 * A like or a bookmark carries the moment it was set, as an id the
-	 * favourites and bookmarks lists are ordered and paged by: minted when
-	 * the flag goes from clear to set, cleared with it, and left alone when
-	 * the flag is set to the value it already has -- liking a post twice
-	 * does not move it to the top of the list.
+	 * favourites and bookmarks lists are paged by: minted when the flag is set,
+	 * cleared with it, and kept when it is set again, so liking twice does not
+	 * move a post to the top.
 	 */
 	private function dateMark(StreamAction $action, string $key, bool $value): void {
 		$mark = match ($key) {
@@ -116,11 +110,8 @@ class StreamActionService {
 	}
 
 	/**
-	 * Two people liking the same post at the same moment is the ordinary case,
-	 * not a rare one, and this used to UPDATE and then INSERT when the update
-	 * reported no rows — so both requests inserted and one of them died on the
-	 * unique index with a 500. The Db layer now inserts first and falls back to
-	 * an update, which is what the other tables already do.
+	 * Concurrent likes of one post are ordinary: the Db layer inserts first and
+	 * falls back to an update, so neither request fails on the unique index.
 	 */
 	private function saveAction(StreamAction $action): void {
 		$this->streamActionsRequest->save($action);

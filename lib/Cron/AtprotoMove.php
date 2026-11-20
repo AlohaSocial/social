@@ -22,18 +22,13 @@ use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Carries a move of a Bluesky account on (§13), whatever is left of it:
- * away — the repository, the blobs, the preferences, the DID, the
- * activation — or here — the repository, the blobs, the preferences, then,
- * once the person entered the e-mailed code, the DID and the follows —
- * or, for one the other side moved here, the follows once it is active;
- * or, asked to `republish`, a page of the posts a finished move took off
+ * Carries a Bluesky account move on (§13) from wherever it stopped, or with
+ * `republish` republishes a page of the posts a finished move took off
  * Bluesky.
  *
- * One job carries a move at a time: core drops a queued job before it runs
- * it, so a move queued again while its job still runs (StaleMoves) would
- * otherwise be run twice at once. The job holds the move's lock, and a
- * second one finds it held and leaves the move to the first.
+ * Core drops a queued job before running it, so a move queued again by
+ * StaleMoves could run twice at once; the job holds the move's lock, and a
+ * second job that finds it held leaves the move alone.
  */
 class AtprotoMove extends QueuedJob {
 	public function __construct(

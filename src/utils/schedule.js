@@ -5,15 +5,13 @@
 
 /**
  * The rules a publication time is held to, shared by the composer's clock and
- * by Settings → Scheduled posts, so that the two cannot come to disagree about
- * what the server accepts.
+ * the Scheduled posts list so the two agree with the server.
  */
 
 /**
  * How far ahead a scheduled post has to be, in milliseconds: the server's
- * `ScheduledStatusService::MIN_LEAD_TIME`, which is Mastodon's five minutes.
- * Checked here as well so the refusal comes before the request, while the
- * time can still be moved.
+ * `ScheduledStatusService::MIN_LEAD_TIME`. Checked here too so the refusal
+ * comes while the time can still be moved.
  */
 export const MIN_SCHEDULE_LEAD = 5 * 60 * 1000
 

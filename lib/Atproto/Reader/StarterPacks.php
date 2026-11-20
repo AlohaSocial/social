@@ -21,12 +21,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Bluesky starter packs (`app.bsky.graph.starterpack`), opened here: who is
- * in one and which feeds come with it, read from the AppView as the person
- * where they are on Bluesky — so whom they follow already is marked — and
- * its members followed from here, some or all, a batch at a time, as any
- * Bluesky account is followed. The feeds are kept as a Bluesky app keeps
- * them (`BlueskyFeeds`).
+ * Bluesky starter packs (`app.bsky.graph.starterpack`): members and feeds read
+ * from the AppView as the person, so whom they follow already is marked, and
+ * members followed from here a batch at a time. The feeds are kept as
+ * `BlueskyFeeds` keeps them.
  */
 class StarterPacks {
 	public const COLLECTION = 'app.bsky.graph.starterpack';

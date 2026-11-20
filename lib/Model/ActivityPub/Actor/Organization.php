@@ -11,11 +11,6 @@ namespace OCA\Social\Model\ActivityPub\Actor;
 
 use JsonSerializable;
 
-/**
- * Class Organization
- *
- * @package OCA\Social\Model\ActivityPub
- */
 class Organization extends Person implements JsonSerializable {
 	public const TYPE = 'Organization';
 }

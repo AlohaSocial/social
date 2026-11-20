@@ -14,16 +14,13 @@ use OCA\Social\Model\Interest;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * A reader's interests, and the posts they asked to see less like.
- *
- * Keyed by the prim of the actor id, like the rest of the schema. Nothing here
- * decides anything: the scores are `InterestScorer`'s to work out and
- * `InterestService`'s to write back.
+ * A reader's interests, and the posts they asked to see less like. Storage
+ * only: `InterestScorer` computes the scores and `InterestService` writes them.
  */
 class InterestsRequest extends CoreRequestBuilder {
 	/**
-	 * Every row the reader has. A few hundred at most — the service prunes the
-	 * ones that have faded — so the whole set is read and ranked in PHP.
+	 * Every row the reader has; the service prunes faded ones, so the set is
+	 * small enough to rank in PHP.
 	 *
 	 * @return Interest[]
 	 */
@@ -51,13 +48,10 @@ class InterestsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Writes a row, whether or not it exists yet.
-	 *
-	 * An update first, since a signal almost always lands on a tag the reader
-	 * already has; an insert that skips a conflicting row when it does not,
-	 * and the update once more for the one case where somebody else's request
-	 * inserted it in between. Never an insert that catches a unique violation:
-	 * on PostgreSQL that aborts the whole transaction it runs in.
+	 * Writes a row, whether or not it exists yet: update, else insert skipping a
+	 * conflict, else update again if another request inserted in between. Never
+	 * an insert that catches a unique violation, which aborts the transaction
+	 * on PostgreSQL.
 	 */
 	public function save(string $actorId, Interest $interest): void {
 		if ($this->update($actorId, $interest) > 0) {
@@ -126,8 +120,7 @@ class InterestsRequest extends CoreRequestBuilder {
 		$this->dbConnection->insertIgnoreConflict(self::TABLE_INTEREST_HIDES, [
 			'actor_id_prim' => $qb->prim($actorId),
 			'stream_nid' => $nid,
-			// a string: the values go through untyped, and a DateTime object
-			// is not something every adapter knows how to bind
+			// A string, as not every adapter binds an untyped DateTime.
 			'creation' => (new DateTime('now'))->format('Y-m-d H:i:s'),
 		]);
 	}
@@ -178,8 +171,7 @@ class InterestsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Forgets hides older than the feed's window: a post that old cannot be in
-	 * the feed any more, so the row keeps nothing out.
+	 * Forgets hides older than the feed's window, which can keep nothing out.
 	 *
 	 * @return int how many went
 	 */

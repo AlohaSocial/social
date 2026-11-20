@@ -25,15 +25,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * One of a person's lists, as a Bluesky list (`app.bsky.graph.list`, a
- * curate list) with an `app.bsky.graph.listitem` for each member that has a
- * Bluesky identity. A Bluesky list is public, so a list is published when
- * its owner makes it public (`sync()`), and withdrawn when they make it
- * private again — unless a threadgate names it: a reply rule here that lets
- * the members of one of the person's lists reply publishes that list too
- * (`ensure()`), and it stays while a gate needs it. Kept in step as it is
- * renamed and as members come and go; the members on the fediverse alone
- * have no Bluesky identity to list, and are held to a reply rule here.
+ * One of a person's lists as a Bluesky curate list (`app.bsky.graph.list`)
+ * with a `listitem` per member that has a Bluesky identity. Bluesky lists are
+ * public, so a list is published when made public (`sync()`) and withdrawn
+ * when made private, unless a reply rule still needs it (`ensure()`).
  */
 class BlueskyLists {
 	/** how many public lists one pass looks at */
@@ -60,9 +55,8 @@ class BlueskyLists {
 	}
 
 	/**
-	 * Publishes the public lists that are not on Bluesky yet — made public
-	 * while Bluesky was off for the instance, or whose first write failed —
-	 * a page of lists a pass, going on where the last pass stopped.
+	 * Publishes public lists not yet on Bluesky (made public while Bluesky
+	 * was off, or whose first write failed), one page per pass.
 	 *
 	 * @return int how many were published
 	 */

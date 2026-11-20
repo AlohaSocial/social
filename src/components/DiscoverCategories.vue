@@ -34,16 +34,8 @@ import { translate as t } from '@nextcloud/l10n'
 import logger from '../services/logger.js'
 
 /**
- * The subjects this instance says it is about.
- *
- * Trending on a small instance is four hashtags and a wedding, and an Explore
- * page that shows only that looks abandoned. What the instance would *like* to
- * be known for is a decision its administrators make, and no counter can work
- * it out — so this is curated, sits above the counted lists, and says which of
- * the two it is.
- *
- * Renders nothing at all when nobody has curated anything, rather than an
- * empty shelf: a heading over nothing is worse than no heading.
+ * The subjects this instance says it is about, curated by its administrators
+ * and shown above the counted lists. Renders nothing when nothing is curated.
  */
 export default {
 	name: 'DiscoverCategories',

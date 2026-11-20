@@ -16,14 +16,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Records, per cached picture, the machine-generation provenance its metadata
- * stated when it was stored: `0` nothing, `1` IPTC's `trainedAlgorithmicMedia`,
- * `2` its `compositeWithTrainedAlgorithmicMedia`.
- *
- * On the row because it cannot stay in the file: the XMP it is read from is
- * stripped before the copy is written, and the stored bytes no longer say it.
- * Rows from before this column existed read as `0` — their metadata is gone
- * and nothing can be learnt about them now.
+ * Records, per cached image, the machine-generation provenance its metadata
+ * stated when stored: `0` nothing, `1` IPTC's `trainedAlgorithmicMedia`, `2`
+ * its `compositeWithTrainedAlgorithmicMedia`. Kept on the row because the
+ * XMP is stripped from the stored copy; older rows read as `0`.
  */
 class Version1000Date20261005000001 extends SimpleMigrationStep {
 	#[\Override]

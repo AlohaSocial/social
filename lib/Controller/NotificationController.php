@@ -38,18 +38,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The three notification routes that are about one notification rather than
- * about the list: reading one, dismissing one, and dismissing all of them.
+ * This controller's notification routes: one notification or group rather
+ * than the list, the unread count, and the notification policy and request
+ * inbox.
  *
- * Without them "dismiss" is a button every client draws and nothing answers —
- * masto.js reports the 404 as a failed request and leaves the row where it
- * was — and a client that opens a notification from a push payload has no way
- * to fetch it.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController` and
- * `ConversationController`: a Mastodon client authenticates with a bearer
- * token and has no Nextcloud session or CSRF token to present. Every route
- * here resolves a viewer first — no token, no session, 401 — and a
+ * `#[PublicPage]` with `#[NoCSRFRequired]`, as Mastodon clients use a bearer
+ * token. Every route resolves a viewer first (401 without one), and a
  * notification that is not the viewer's is not found.
  */
 class NotificationController extends ClientApiController {
@@ -89,11 +83,8 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * Dismisses one notification and answers `{}`, as Mastodon does.
-	 *
-	 * Dismissing one that is already gone is not an error: the client is
-	 * asking for a state that holds, and a 404 there would leave the row on
-	 * screen in every client that redraws from the answer.
+	 * Dismisses one notification and answers `{}`, as Mastodon does; one that
+	 * is already gone is not an error.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -105,8 +96,7 @@ class NotificationController extends ClientApiController {
 			try {
 				$this->notificationService->dismiss($this->viewer, $id);
 			} catch (ItemNotFoundException $e) {
-				// gone between the read and the dismiss; the state asked for
-				// is the state there is
+				// Already gone, which is the state asked for.
 			}
 
 			return new DataResponse([], Http::STATUS_OK);
@@ -133,15 +123,13 @@ class NotificationController extends ClientApiController {
 	// Mastodon 4.3: the same notifications, grouped
 
 	/**
-	 * How many groups of notifications the reader has not seen: those past the
-	 * notifications marker, as Mastodon counts them, and those released behind
-	 * it, as `/api/v1/notifications/unread_count` counts them too. Capped at
-	 * `limit`, and tagged as v1 is, so a client that polls is answered `304`
-	 * until something changed.
+	 * How many groups of notifications the reader has not seen: past the
+	 * notifications marker, plus those released behind it, as v1's
+	 * `unread_count` counts. Capped at `limit` and tagged, so a polling client
+	 * gets `304` until something changed.
 	 *
-	 * Declared before the `{group_key}` routes below, because within a
-	 * controller the order the methods are written in is the order the routes
-	 * are tried in and `unread_count` would otherwise be read as a group key.
+	 * Declared before the `{group_key}` routes, which would otherwise match
+	 * `unread_count`: routes are tried in declaration order.
 	 *
 	 * @param string[]|string $types
 	 * @param string[]|string $exclude_types
@@ -172,9 +160,7 @@ class NotificationController extends ClientApiController {
 					$marker = $this->markerService->lastReadId($userId, NotificationInboxService::TIMELINE);
 					$released = array_flip($this->markerService->unreadBehind($userId, NotificationInboxService::TIMELINE));
 
-					// read from the marker, or from the oldest released behind
-					// it, which are among the notifications the requests inbox
-					// looked back over
+					// From the marker, or from the oldest notification released behind it.
 					$since = $marker;
 					foreach (array_keys($released) as $nid) {
 						if (Nid::compare((string)$nid, $since) <= 0) {
@@ -192,9 +178,7 @@ class NotificationController extends ClientApiController {
 							|| isset($released[(string)$notification->getNid()])
 					);
 
-					// counted over groups, not rows: the number a client puts on
-					// the bell should say how many things happened, and one
-					// popular post is one thing
+					// Groups, not rows: one popular post is one thing.
 					return [
 						'count' => min(
 							$cap, count($this->notificationGroupService->group($unread, $grouped_types)['notification_groups'])
@@ -208,12 +192,9 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * `GET /api/v2/notifications`: the viewer's notifications, grouped.
-	 *
-	 * The shape is Mastodon's `GroupedNotificationsResults` — groups, plus the
-	 * accounts and statuses they refer to, each carried once. A page of forty
-	 * favourites of one post is one group and one status here, where v1 sends
-	 * forty rows and forty copies of the post.
+	 * `GET /api/v2/notifications`: the viewer's notifications, grouped, as
+	 * Mastodon's `GroupedNotificationsResults` (groups plus the accounts and
+	 * statuses they refer to, each carried once).
 	 *
 	 * @param string[]|string $types
 	 * @param string[]|string $exclude_types
@@ -249,24 +230,19 @@ class NotificationController extends ClientApiController {
 
 	/**
 	 * What this account does with notifications from people it has no
-	 * relationship with.
-	 *
-	 * Declared ahead of `group()`: `/api/v2/notifications/{group_key}` matches
-	 * `/api/v2/notifications/policy` too, and the routes of one controller are
-	 * matched in declaration order.
+	 * relationship with. Declared ahead of `group()`, whose
+	 * `/api/v2/notifications/{group_key}` matches this path too.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/notifications/policy')]
-	// Mastodon moved the policy to v2 in 4.3 and a 4.3 client looks there
-	// only; the v1 spelling stays for the clients written against 4.2, which
-	// is the release this server used to announce.
+	// v2 since Mastodon 4.3; the v1 spelling stays for 4.2 clients.
 	#[FrontpageRoute(verb: 'GET', url: '/api/v2/notifications/policy', postfix: 'v2')]
 	public function policy(): Response {
 		try {
 			$this->initViewer(['read:notifications']);
 
-			// the sidebar's badge reads this on every push and poll
+			// The sidebar's Activities badge reads this on every push and poll.
 			return Revalidation::byTag(
 				$this->request,
 				$this->notificationInboxService->pendingTag($this->viewer, $this->userId()),
@@ -299,10 +275,7 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * Everybody in one group, not only the sample the group carries.
-	 *
-	 * This is what "and 34 others" opens, so it is the whole set rather than
-	 * the eight accounts the group lists.
+	 * Everybody in one group ("and 34 others"), not only the sample it carries.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -331,11 +304,8 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * Dismisses every notification in one group.
-	 *
-	 * A group is what the reader sees, so dismissing it has to mean the rows
-	 * behind it: dismissing only the most recent would leave the group on
-	 * screen with one fewer in it.
+	 * Dismisses every notification in one group, since a group is what the
+	 * reader sees.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -350,8 +320,7 @@ class NotificationController extends ClientApiController {
 				try {
 					$this->notificationService->dismiss($this->viewer, $notification->getNid());
 				} catch (ItemNotFoundException $e) {
-					// gone between the read and the dismiss; the state asked
-					// for is the state there is
+					// Already gone, which is the state asked for.
 				}
 			}
 
@@ -364,13 +333,9 @@ class NotificationController extends ClientApiController {
 	// Mastodon 4.3: the policy, and the inbox it fills
 
 	/**
-	 * Changes the policy. What is not named is left as it is, so a client that
-	 * turns one of the five on does not reset the other four.
-	 *
-	 * `PATCH`, which is what Mastodon 4.3 uses. A decision this does not
-	 * recognise leaves its key alone rather than failing the request: a client
-	 * from a newer Mastodon sending a sixth key must not lose the five that
-	 * work here.
+	 * Changes the policy with Mastodon 4.3's `PATCH`. Keys not sent are left as
+	 * they are, and an unknown decision leaves its key alone rather than failing
+	 * the request.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -389,10 +354,9 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * When this account's Nextcloud notifications are raised: at once, or as
-	 * a digest at the times it chose, with the pass-throughs and quiet hours
-	 * around that. Not a Mastodon route — Mastodon has no equivalent, since
-	 * its notifications are the list itself — hence the `/social/` path.
+	 * When this account's Nextcloud notifications are raised: at once, or as a
+	 * digest at chosen times, with pass-throughs and quiet hours. Not a Mastodon
+	 * route, hence the `/social/` path.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -409,8 +373,8 @@ class NotificationController extends ClientApiController {
 
 	/**
 	 * Changes the delivery setting and answers the whole of it. Any subset of
-	 * its keys may be sent; a value that does not validate refuses the whole
-	 * change with a 422 that says which, and nothing is written.
+	 * keys may be sent; an invalid value refuses the whole change with a 422
+	 * naming it.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -428,12 +392,8 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * Whether the held notifications have been merged back into the list.
-	 *
-	 * Mastodon answers `false` while it is still moving rows about after a
-	 * policy change. Nothing is moved here — the policy is applied when the
-	 * list is read — so there is never anything in flight, and the answer is
-	 * always `true`.
+	 * Whether the held notifications have been merged back into the list:
+	 * always `true`, since the policy is applied when the list is read.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -466,11 +426,7 @@ class NotificationController extends ClientApiController {
 
 	/**
 	 * The senders whose notifications the policy is holding, one row each with
-	 * how many they have sent.
-	 *
-	 * One row per sender is the point: somebody held back has usually sent
-	 * more than one thing, and being asked about each in turn is what makes a
-	 * filtered inbox worse than an unfiltered one.
+	 * how many they have sent, so the reader decides once per sender.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -508,12 +464,9 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * "Show me this account's notifications after all."
-	 *
-	 * The decision is about the account, so it settles what they have already
-	 * sent and what they send later — which is why the request inbox is worth
-	 * having at all. What they already sent joins the list as unread and
-	 * raises nothing now; the sender is always allowed from then on.
+	 * "Show me this account's notifications after all": what they already sent
+	 * joins the list as unread without raising anything, and the sender is
+	 * always allowed from then on.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -523,12 +476,8 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * "Stop asking me about this account."
-	 *
-	 * What they have sent stays where it is and stays hidden; what changes is
-	 * that they are no longer offered as a decision to take. Mastodon deletes
-	 * the notifications; nothing is deleted here, so a policy the reader
-	 * loosens later still has something to show.
+	 * "Stop asking me about this account": their notifications stay hidden but
+	 * are not deleted (unlike Mastodon), so a later looser policy can show them.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -538,9 +487,8 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * The senders this account accepted from its requests, as accounts, the
-	 * most recently accepted first. Not a Mastodon route: Mastodon keeps no
-	 * list of the senders it was told to let through, hence `/social/`.
+	 * The senders this account accepted from its requests, most recent first.
+	 * Not a Mastodon route, hence `/social/`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -562,9 +510,8 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * Stops always allowing a sender: their next notification is judged by
-	 * the policy again. Answers `{}`; an account that was not allowed, or
-	 * that names nobody, is the state asked for already.
+	 * Stops always allowing a sender: their next notification is judged by the
+	 * policy again. Answers `{}` also for an account that was not allowed.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -587,9 +534,9 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
-	 * Puts away the one-time pointer to the policy that an account from
-	 * before new accounts started calm is shown (`notice` on the policy).
-	 * Saving the policy puts it away too. Answers the policy.
+	 * Dismisses the one-time pointer to the policy (`notice` on the policy),
+	 * shown to accounts older than the calm defaults. Saving the policy dismisses
+	 * it too. Answers the policy.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -628,8 +575,7 @@ class NotificationController extends ClientApiController {
 		bool $lookback = false,
 	): array {
 		if ($accountId !== '') {
-			// the notifications one account caused: Mastodon's `account_id`
-			// is the numeric id, and nobody by that name has caused any
+			// Mastodon's `account_id` is numeric; an unknown one has caused nothing.
 			try {
 				$accountId = $this->cacheActorService->resolve($accountId)->getId();
 			} catch (CacheActorDoesNotExistException) {
@@ -638,9 +584,8 @@ class NotificationController extends ClientApiController {
 		}
 
 		if ($this->bearer !== '') {
-			// a client other than the web app: the types Mastodon does not
-			// define are left out unless it named them, in the query so that
-			// the page stays full
+			// For clients other than the web app, types Mastodon does not define are left
+			// out unless named, in the query so the page stays full.
 			$excludeTypes = array_merge($excludeTypes, Stream::notificationTypesKeptFromClients($types));
 		}
 
@@ -673,10 +618,8 @@ class NotificationController extends ClientApiController {
 
 	/**
 	 * Accepts or dismisses the senders named by account id, and answers `{}`.
-	 *
-	 * An id that names no account is skipped rather than refused: these
-	 * arrive as a list from a client clearing a screenful, and one stale entry
-	 * must not lose the rest of the decisions.
+	 * An id that names no account is skipped, so one stale entry does not lose
+	 * the rest.
 	 *
 	 * @param array<mixed> $ids
 	 */

@@ -40,7 +40,7 @@ class StreamQueueRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */

@@ -23,14 +23,10 @@ use Throwable;
  * Brings stored post bodies and cached bios up to the current
  * `HtmlSanitizer::version()`, so their reads can skip the sanitizer.
  *
- * A row under another stamp still reads correctly -- it is sanitized on
- * every read -- so this is only ever catching up. Each table is walked once
- * per stamp, in pages by `nid`, from a cursor kept in the app config: the
- * stamp it walks for and the last `nid` done, or `done` once the walk passed
- * the end. Rows written meanwhile carry the current stamp already, so a walk
- * that reached the end is finished until the stamp changes. A row that
- * cannot be rewritten is logged and passed over: it keeps its old stamp and
- * is sanitized on read, so it never holds the walk back.
+ * Rows under another stamp are sanitized on every read, so this only catches
+ * up: each table is walked once per stamp, in `nid` pages, from a cursor in
+ * the app config (`done` once past the end). New rows already carry the
+ * current stamp. A row that cannot be rewritten is logged and skipped.
  */
 class SanitizerUpgrade {
 	public const BATCH = 500;

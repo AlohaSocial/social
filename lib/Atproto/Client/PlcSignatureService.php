@@ -29,20 +29,16 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The PLC signature a tool moving an account away from here asks for (§13.2),
- * as the reference PDS serves it: `requestPlcOperationSignature` e-mails the
- * person a code, by Nextcloud's mail to the address of their Nextcloud
- * account, and `signPlcOperation` takes that code and signs, with this
- * server's rotation key, the operation the tool proposes — the new PDS's
- * keys, handle and endpoint. The operation is answered, not sent: the tool
- * hands it to the new PDS, which submits it.
+ * The PLC signature a tool moving an account away asks for (§13.2), as the
+ * reference PDS serves it: `requestPlcOperationSignature` mails the person a
+ * code (Nextcloud mail, account address), and `signPlcOperation` signs the
+ * tool's proposed operation with this server's rotation key and returns it
+ * for the new PDS to submit.
  *
- * Both need the account's own session allowed to change its identity
- * (`identity:*`, an OAuth grant), as the reference PDS asks; an app
- * password is never enough. The code is kept hashed for fifteen minutes,
- * the reference PDS's lifetime for it, and is good once. The person's
- * recovery key keeps the first place among the rotation keys, as when
- * this server hands the account over itself (`IdentityService::handOver()`).
+ * Both need an OAuth session with `identity:*`; an app password is never
+ * enough. The code is stored hashed, valid once for fifteen minutes. The
+ * person's recovery key stays first among the rotation keys, as in
+ * `IdentityService::handOver()`.
  */
 class PlcSignatureService {
 	public const REQUEST = 'com.atproto.identity.requestPlcOperationSignature';

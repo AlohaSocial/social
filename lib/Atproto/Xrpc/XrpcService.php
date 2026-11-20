@@ -108,9 +108,9 @@ class XrpcService {
 	}
 
 	/**
-	 * A procedure (POST) nobody signed in made. A signed-in app's sessions
-	 * and writes are `ClientXrpc`'s; what reaches here asks to be signed in,
-	 * or is not something this PDS answers — a relay's `requestCrawl`, say.
+	 * A procedure (POST) made without signing in. Signed-in apps go through
+	 * `ClientXrpc`; what reaches here needs a sign-in or is not answered by this
+	 * PDS (a relay's `requestCrawl`, say).
 	 *
 	 * @throws XrpcException
 	 * @psalm-suppress NoValue every procedure that reaches here is refused
@@ -280,11 +280,9 @@ class XrpcService {
 	}
 
 	/**
-	 * What a DNS or HTTPS lookup on another server answered, for anybody who
-	 * asks: remembered for a few minutes, an answer that found nothing for
-	 * less, and a lookup that has to go out is counted against the asking
-	 * address. These queries need no sign-in, and each lookup can hold a
-	 * worker for seconds.
+	 * A DNS or HTTPS lookup on another server for an unauthenticated caller:
+	 * cached for a few minutes (a miss for less), and each outgoing lookup is
+	 * counted against the caller's address, as it can hold a worker for seconds.
 	 *
 	 * @template T
 	 * @param callable(): T $fetch
@@ -403,9 +401,8 @@ class XrpcService {
 	}
 
 	/**
-	 * A blob, served from this instance's origin as bytes a browser neither
-	 * runs nor sniffs: sandboxed, and a download unless it is a picture, a
-	 * video or a sound.
+	 * A blob, served from this instance's origin sandboxed and unsniffed, as a
+	 * download unless it is an image, video or sound.
 	 */
 	private function getBlob(string $did, string $cid): XrpcBytes {
 		$identity = $this->repoIdentity($did);

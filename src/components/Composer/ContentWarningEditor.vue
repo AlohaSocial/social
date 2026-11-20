@@ -14,7 +14,6 @@
 				:aria-label="t('social', 'Content warning')"
 				:placeholder="t('social', 'Content warning, e.g. what the post is about')"
 				@input="$emit('update:value', valueOf($event))">
-			<!-- The way out of a thing belongs on the thing. -->
 			<NcButton
 				variant="tertiary"
 				class="content-warning-row__remove"

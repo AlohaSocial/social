@@ -15,35 +15,20 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * One frame out of a video, to show before anybody presses play.
+ * One frame out of a local video, as a poster to show before play;
+ * federated PeerTube videos get theirs from PeerTube (see `PeerTubeService`).
  *
- * A video posted here had no still at all: the client was told the preview was
- * the video itself, so a timeline of them was a wall of black rectangles that
- * each had to be downloaded before they showed anything. A federated PeerTube
- * video already gets one -- PeerTube publishes a thumbnail and this instance
- * mirrors it (see `PeerTubeService`) -- and this is the local half of the same
- * idea.
- *
- * **This is not transcoding.** It decodes one frame and writes a small JPEG;
- * the video itself is stored exactly as it was uploaded, in whatever format it
- * was uploaded in. What that buys is the poster and the dimensions, not a
- * resolution ladder.
- *
- * ffmpeg is used when the server has it and the whole thing is skipped when it
- * does not, because an app that refuses uploads on a server without ffmpeg
- * would be worse than one that shows no poster. Everything downstream already
- * copes with a missing preview.
+ * Not transcoding: one frame is decoded into a small JPEG and the video is
+ * stored as uploaded. Uses ffmpeg when present and is skipped otherwise;
+ * everything downstream copes with a missing poster.
  */
 class VideoThumbnailService {
 	/** What a poster is written as, and served as. */
 	public const MEDIA_TYPE = 'image/jpeg';
 
 	/**
-	 * Where in the video to take the frame from.
-	 *
-	 * Not the first frame: video routinely opens on black, a fade or a slate,
-	 * and a timeline of black rectangles is what this exists to stop being.
-	 * One second in is what PeerTube and most players settle on.
+	 * Where in the video to take the frame from: one second in, as PeerTube
+	 * and most players do, since videos often open on black or a fade.
 	 */
 	private const SEEK_SECONDS = 1;
 
@@ -66,12 +51,8 @@ class VideoThumbnailService {
 	}
 
 	/**
-	 * A JPEG of one frame, the video's own dimensions, and how long it runs.
-	 *
-	 * The duration is asked of ffprobe rather than measured, and is what a
-	 * federated `Video` states and what a client shows on the scrub bar before
-	 * a frame has loaded. It is optional in both places, so a server with
-	 * ffmpeg but no ffprobe still gets a poster.
+	 * A JPEG of one frame, the video's own dimensions, and its duration
+	 * (from ffprobe, optional, so ffmpeg alone still yields a poster).
 	 *
 	 * @param string $path a readable path to the video
 	 *
@@ -89,10 +70,8 @@ class VideoThumbnailService {
 			return null;
 		}
 
-		// `-ss` before `-i` seeks by keyframe, which is both far faster than
-		// decoding up to the mark and enough for a still. A video shorter than
-		// the seek point lands past the end and produces nothing, so it is
-		// tried again from the start rather than left with no poster.
+		// `-ss` before `-i` seeks by keyframe, which is fast and enough for a
+		// still; a video shorter than the seek point is retried from the start
 		foreach ([self::SEEK_SECONDS, 0] as $seek) {
 			if ($this->extract($ffmpeg, $path, $target, $seek)) {
 				$content = @file_get_contents($target);

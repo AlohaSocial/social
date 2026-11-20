@@ -22,31 +22,22 @@ use OCP\IConfig;
 /**
  * The For you feed: posts carrying the reader's hashtags, ranked.
  *
- * Built in three steps. The candidates are every post of the last few days
- * that carries one of the reader's interests and that they may see — the same
- * visibility, blocks, mutes and silences as the hashtag timeline, less their
- * own posts, the posts they said "less like this" about, and anything not in
- * their languages. Each is ranked by how well it matches, halved for every day
- * of its age. Then the page is spread out: no author more than twice in any
- * twenty, no one hashtag more than two fifths of them or ten posts across a
- * snapshot, and no classified topic more than six posts while alternatives
- * remain. One post in ten comes from a hashtag that often travels with the
- * reader's own but is not on their list yet.
+ * The candidates are recent posts carrying one of the reader's interests that
+ * they may see (visibility, blocks, mutes and silences as on the hashtag
+ * timeline), minus their own posts, posts they marked "less like this" and
+ * posts outside their languages. Each is ranked by match, halved per day of
+ * age, then spread out: no author more than twice in twenty, no hashtag more
+ * than two fifths or ten posts per snapshot, no topic more than six while
+ * alternatives remain. One post in ten comes from a related hashtag.
  *
- * A ranked feed cannot be paged by id the way a timeline is, because the next
- * page is not "older than the last post". So the ranking is made once, kept
- * for an hour, and cut into pages; a client that pages with the last post's
- * id as `max_id`, as every Mastodon client does, gets the page after that
- * post in the ranking. Refreshing — a request with no cursor — ranks afresh.
+ * A ranked feed cannot be paged by id, so the ranking is kept for an hour and
+ * cut into pages; `max_id` gets the page after that post in the ranking, and
+ * a request with no cursor ranks afresh.
  *
- * The same ranking also comes narrowed to one kind of post, for the Photos
- * and Videos pages and the Shorts stack: `photos`, `videos`, `shorts` (the
- * short videos `only_short` keeps), or `media` for pictures and videos. Each is a ranking of its own, kept under its own key, so paging
- * one never lands in another. Pictures and videos carry fewer hashtags than
- * text and are rarer, so those rankings look twice as far back. Where a
- * ranking of any kind is still shorter than `POPULAR_FILL` the rest is what
- * is trending in that kind — marked `popular`, so the line over the post says
- * so rather than inventing a hashtag it matched.
+ * `photos`, `videos`, `shorts` and `media` (photos and videos) are rankings
+ * of their own under their own keys, looking twice as far back since media
+ * carries fewer hashtags. A ranking shorter than `POPULAR_FILL` is topped up
+ * with what is trending in that kind, marked `popular`.
  */
 class InterestFeedService {
 	/** How long a ranking is kept to be paged through; every read extends it. */
@@ -112,10 +103,8 @@ class InterestFeedService {
 			$snapshot = $this->cache()->get($key);
 		}
 		if (!is_array($snapshot)) {
-			// no ranking kept — the first page, one that has expired, or an
-			// instance with no memory cache at all. Ranked again, the cursor
-			// is usually still in it; where it is not, the page below is empty
-			// and refreshing starts over
+			// no ranking kept (first page, expired, or no memory cache): rank
+			// again; if the cursor is no longer in it the page is empty
 			$snapshot = $this->rank($viewer, $media);
 		}
 		$this->cache()->set($key, $snapshot, self::SNAPSHOT_TTL);
@@ -150,9 +139,8 @@ class InterestFeedService {
 	}
 
 	/**
-	 * Project the existing automatically learned hashtag profile into the
-	 * shared recommendation ranker. Scores use the same tag relevance and
-	 * recency decay as the established For You feed.
+	 * The automatically learned hashtag profile as signals for the shared
+	 * recommendation ranker, with the For you feed's relevance and recency decay.
 	 *
 	 * @param list<Stream> $posts
 	 * @return array<string, float> stream nid => bounded automatic interest
@@ -187,9 +175,8 @@ class InterestFeedService {
 	}
 
 	/**
-	 * Where a reader's ranking of one kind is kept. The kind is part of it, so
-	 * the three rankings are three snapshots rather than one that each of
-	 * them overwrites and pages into.
+	 * Where a reader's ranking of one kind is kept, so each kind has its own
+	 * snapshot.
 	 */
 	public static function snapshotKey(string $viewerId, string $media): string {
 		return 'feed/' . $media . '/' . md5($viewerId);
@@ -302,12 +289,10 @@ class InterestFeedService {
 
 	/**
 	 * Lays the ranking out so no author and no hashtag has a stretch of it to
-	 * themselves, and so one slot in ten looks slightly beyond the list.
-	 *
-	 * A post that would break a limit waits for the first slot where it no
-	 * longer does, rather than being dropped: this reorders the feed and never
-	 * shortens it. Where every post left breaks one, the hashtag limit gives
-	 * way before the author limit does.
+	 * themselves, and one slot in ten looks slightly beyond the list. A post
+	 * that would break a limit waits for a slot where it does not; nothing is
+	 * dropped. When every remaining post breaks one, the hashtag limit gives
+	 * way first.
 	 *
 	 * @param list<array{nid: string, author: string, tags: string[], reason: string, updated?: string, ...}> $ranked
 	 * @param list<array{nid: string, author: string, tags: string[], reason: string, updated?: string, ...}> $related
@@ -689,12 +674,10 @@ class InterestFeedService {
 	}
 
 	/**
-	 * What is trending in this kind, for a ranking too short to fill a
-	 * screen: a newcomer with no history yet, or interests that few posts
-	 * carry. `TrendService` is what Discover reads, so these are the same
-	 * posts, topped up on a young instance with its newest ones. None of the
-	 * reader's own, none they hid, none already ranked; the page reads each
-	 * again as the reader may see it.
+	 * What is trending in this kind, for a ranking too short to fill a screen.
+	 * The same posts Discover shows (`TrendService`), topped up on a young
+	 * instance with its newest; none of the reader's own, hidden or already
+	 * ranked.
 	 *
 	 * @param string[] $seen the posts to leave out
 	 *
@@ -720,8 +703,7 @@ class InterestFeedService {
 		}
 
 		// a narrowed ranking's trending is already topped up with the newest
-		// media; the plain one asks for the newest posts itself, because the
-		// trending pages are not padded
+		// media; the plain one asks for the newest posts itself
 		if ($media === '' && count($popular) < $wanted) {
 			foreach ($this->trendService->newestPublic($wanted - count($popular), array_map('strval', array_keys($seen))) as $status) {
 				$nid = (string)$status->getNid();

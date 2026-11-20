@@ -48,22 +48,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Moving a Bluesky account here driven by the other side (§13.3): Bridgy
- * Fed for an account it bridged, or any migration tool. This server is the
- * new PDS of the AT Protocol's account migration.
+ * Moving a Bluesky account here driven by the other side (§13.3): Bridgy Fed
+ * or any migration tool, with this server as the new PDS.
  *
- * The person invites the DID first, and gets a one-time code. With it and a
- * service-auth token the DID signs, the other side makes the account here
- * (`createAccount`) and gets a session that can do one thing: move the
- * account. It sends the repository (`importRepo`, checked against the
- * DID's key and kept under a commit signed with a key made for the account
- * here) and the blobs, asks what to point the DID at
- * (`getRecommendedDidCredentials`), points it here — itself, or through
- * `submitPlcOperation` — and activates the account. Activation checks that
- * the directory names this server and its key; the account then takes the
- * DID, the one this server had made for it is retired, and its follows
- * become follows here. Blobs may still arrive after that, as Bridgy sends
- * them.
+ * The person invites the DID and gets a one-time code; with it and a token
+ * the DID signs, the other side creates the account, imports the repository
+ * and blobs, points the DID here and activates the account. Activation
+ * checks that the directory names this server and its key. Blobs may still
+ * arrive afterwards, as Bridgy sends them late.
  */
 class InboundMoveService {
 	/** how long an invitation waits for the account to be made with it */
@@ -361,10 +353,8 @@ class InboundMoveService {
 	}
 
 	/**
-	 * The person's decision on a move the PLC operation was held back for,
-	 * as blobs are missing: go on without them — the next operation the
-	 * other side sends is taken — or have this server copy them from the
-	 * old PDS first.
+	 * The person's decision on a move whose PLC operation was held back for
+	 * missing blobs: go on without them, or copy them from the old PDS first.
 	 *
 	 * @throws MoveErrorException
 	 */
@@ -550,11 +540,9 @@ class InboundMoveService {
 	}
 
 	/**
-	 * `com.atproto.identity.getRecommendedDidCredentials`: the rotation
-	 * keys — the person's recovery key here and every key the DID lists now
-	 * that is not the old server's, then this server's (`RotationKeys`) —
-	 * the handle on the person's own domain when they had one, else the
-	 * account's handle here, the key made for it here and this PDS.
+	 * `com.atproto.identity.getRecommendedDidCredentials`: the rotation keys
+	 * (the person's recovery key, the DID's current keys except the old
+	 * server's, then this server's), the handle, the key made here and this PDS.
 	 *
 	 * @throws XrpcException
 	 */
@@ -580,10 +568,9 @@ class InboundMoveService {
 	}
 
 	/**
-	 * The old server's own rotation keys, as far as they can be told: a
-	 * DID Bridgy Fed holds lists only Bridgy's. Any other old server is
-	 * not asked — only the tool that drives the move has a session there —
-	 * so every key such a DID lists is kept.
+	 * The old server's own rotation keys, as far as they can be told: only
+	 * Bridgy Fed's are known, so for any other server every key the DID lists
+	 * is kept.
 	 *
 	 * @return list<string>
 	 */

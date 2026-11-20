@@ -12,11 +12,6 @@ namespace OCA\Social\Model\ActivityPub\Activity;
 use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
-/**
- * Class Add
- *
- * @package OCA\Social\Model\ActivityPub\Activity
- */
 class Add extends ACore implements JsonSerializable {
 	public const TYPE = 'Add';
 
@@ -38,9 +33,8 @@ class Add extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * `target` is the collection, and for a pin it is what a peer checks: an
-	 * `Add` or `Remove` that names no collection is dropped by Mastodon,
-	 * which acts on one only when its `target` is the actor's `featured`.
+	 * `target` is the collection: Mastodon acts on an `Add` or `Remove` only when
+	 * its `target` is the actor's `featured`.
 	 */
 	#[\Override]
 	public function exportAsActivityPub(): array {

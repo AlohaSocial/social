@@ -20,15 +20,9 @@ use OCA\Social\Service\Statistics\StatisticsSource;
 /**
  * Bluesky's part of the statistics page.
  *
- * A Bluesky account's id here is its profile address on `bsky.app`, which is
- * a website and not where the account lives: that is its PDS, which the DID
- * document names and `ActorMapper` keeps. Bluesky runs most accounts on PDS
- * hosts under `host.bsky.network`, dozens of them, which nobody would
- * recognise and which are one service; they are shown as `bsky.social`, the
- * name the accounts on them carry.
- *
- * A post that went out on Bluesky is a record in its author's repository,
- * read straight from there: it is never delivered to an instance, so it has
+ * An account lives on its PDS, not on `bsky.app`. Bluesky's own PDS hosts
+ * under `host.bsky.network` are one service and are shown as `bsky.social`.
+ * Posts published to Bluesky are never delivered to an instance, so they have
  * no instance path.
  */
 class BlueskyStatistics implements StatisticsSource {
@@ -83,13 +77,10 @@ class BlueskyStatistics implements StatisticsSource {
 	}
 
 	/**
-	 * The server an account on Bluesky lives on, from its PDS endpoint;
-	 * Bluesky's own hosts as one, and an unknown PDS as Bluesky's, which is
-	 * where an account whose DID document was never read is all but always.
-	 *
-	 * The account writes its own DID document, so an endpoint whose host is
-	 * not a hostname is taken as unknown too: `parse_url()` hands back
-	 * whatever stands between `//` and the path, `=HYPERLINK(…)` included.
+	 * The server an account on Bluesky lives on, from its PDS endpoint; Bluesky's
+	 * own hosts as one, and an unknown PDS as Bluesky's, where an account whose
+	 * DID document was never read almost always is. The account writes its own
+	 * DID document, so a host that is not a hostname counts as unknown.
 	 */
 	public static function hostOf(string $pds): string {
 		$host = strtolower((string)parse_url($pds, PHP_URL_HOST));

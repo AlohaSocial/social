@@ -42,12 +42,9 @@ import { availableFilters } from '../../utils/imageFilters.js'
 import { t } from '@nextcloud/l10n'
 
 /**
- * The filters, each drawn over the actual picture being posted.
- *
- * Every swatch is the same `<img>` with a different `filter:` on it, so showing
- * eight of them costs one decode and no canvas work at all — which is what makes
- * it reasonable to render the real photo in every swatch rather than a generic
- * gradient. The filter is baked in once, on send.
+ * The filters, each drawn over the photo being posted. Every swatch is the same
+ * `<img>` with a CSS `filter:`, so it costs one decode; the filter is baked in
+ * on send.
  */
 export default {
 	name: 'FilterPicker',
@@ -59,7 +56,7 @@ export default {
 			default: 'none',
 		},
 
-		/** A URL for the picture being filtered, for the swatches. */
+		/** A URL for the photo being filtered, for the swatches. */
 		preview: {
 			type: String,
 			default: '',
@@ -86,8 +83,7 @@ export default {
 	gap: var(--default-grid-baseline);
 	overflow-x: auto;
 	padding-block: var(--default-grid-baseline);
-	// a filter strip is a horizontal scroller by nature; keep it from stealing
-	// the vertical scroll of the composer around it
+	// keep the strip from stealing the composer's vertical scroll
 	overscroll-behavior-x: contain;
 
 	&__option {

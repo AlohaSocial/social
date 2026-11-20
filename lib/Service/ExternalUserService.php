@@ -435,10 +435,8 @@ class ExternalUserService {
 
 	/**
 	 * Creates an external account: the Nextcloud user and its Social account.
-	 *
-	 * Serialised on a lock so two approvals racing for the last free place
-	 * cannot both have it, and every check is repeated inside it: the person
-	 * may have registered while the instance still had room.
+	 * Serialised on a lock, with every check repeated inside it, so two
+	 * approvals racing for the last free place cannot both have it.
 	 *
 	 * @param string $origin `open`, `invite:<id>`, `approval` or `occ`, kept for the record
 	 * @throws ExternalUserException
@@ -522,12 +520,9 @@ class ExternalUserService {
 	}
 
 	/**
-	 * Turns an external user into an ordinary local one.
-	 *
-	 * The row moves to Nextcloud's database backend with the same user id and
-	 * the same password hash, so the person logs in as before, keeps their
-	 * two-factor setup and their Social account, and from now on is subject
-	 * to the instance's normal app and group rules.
+	 * Turns an external user into an ordinary local one: the row moves to
+	 * Nextcloud's database backend with the same user id and password hash, so
+	 * the login, two-factor setup and Social account stay as they are.
 	 *
 	 * @throws ExternalUserException
 	 */

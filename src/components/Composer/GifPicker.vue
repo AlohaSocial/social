@@ -37,12 +37,9 @@
 					:title="gif.title || gif.slug"
 					:aria-label="t('social', 'Attach {name}', { name: gif.title || gif.slug })"
 					@click="choose(gif)">
-					<!-- `loading="lazy"`: the whole library is in this grid and
-					     most of it is below the fold, and these are animations -->
-					<!-- `fetchpriority="low"`: a cold picture holds one of the
-					     browser's six connections to this host while the server
-					     fetches it, and what must not be stuck behind them is
-					     the reader's next search -->
+					<!-- lazy: most of the library is below the fold, and these are animations -->
+					<!-- low priority, so cold pictures the server is still fetching do
+					     not hold the connections the next search needs -->
 					<img
 						class="gif-picker__image"
 						:src="gif.url"
@@ -52,9 +49,8 @@
 						fetchpriority="low">
 				</button>
 			</li>
-			<!-- the rest arrives when the reader reaches the bottom of the
-			     grid rather than all at once: the library is 881 pictures and
-			     drawing them all is 881 the server would go and fetch -->
+			<!-- loaded a screenful at a time: each picture drawn may be one the
+			     server has to fetch -->
 			<li v-if="hasMore" class="gif-picker__more">
 				<NcButton variant="tertiary" :disabled="loading" @click="loadMore">
 					{{ loading ? t('social', 'Loading…') : t('social', 'Show more') }}
@@ -62,9 +58,8 @@
 			</li>
 		</ul>
 
-		<!-- what the licence of the shipped emoji asks for, wherever they are
-		     shown; the server says it, so regenerating the list cannot leave
-		     the credit behind -->
+		<!-- the credit the shipped emoji's licence asks for; it comes from the
+		     server so it stays with the list -->
 		<p v-if="attribution !== '' && gifs.length > 0" class="gif-picker__credit">
 			{{ attribution }}
 		</p>
@@ -84,34 +79,17 @@ import logger from '../../services/logger.js'
 const DEBOUNCE = 250
 
 /**
- * How many to ask for at a time.
- *
- * Every picture in the grid is a request, and for one of the shipped emoji
- * this instance has not shown before it is a request the server answers by
- * fetching it from Google. A screenful at a time keeps that to what somebody
- * is actually looking at.
- *
- * Twenty-four rather than sixty, which is what a grid this tall shows without
- * scrolling. The number that matters is not how many are drawn but how many
- * cold pictures are in flight at once: a browser opens six connections to a
- * host over HTTP/1.1, so sixty of them queue four deep and the search that
- * followed them waited half a minute for a connection. Measured on a cold
- * instance: sixty took 33s, twenty-four a few.
+ * How many to ask for at a time. Each cold picture is one the server fetches
+ * from Google, and the browser opens only six connections to a host, so a
+ * larger page queues up and delays the next search.
  */
 const PAGE = 24
 
 /**
- * The instance's shared picture library, as a grid in the composer.
- *
- * The pictures are ones an administrator put there (the GIF library card of
- * the admin page, or `occ social:gif add`), so this is the same set for
- * everybody on the instance — which is what makes it the same joke in the
- * same team rather than one person's collection, and is the whole reason it
- * is not simply the Files picker that sits beside it.
- *
- * Choosing one does not download and re-upload it: the server copies the
- * library file into an attachment, through the same path an upload takes. See
- * `/api/v1/media/from-gif`.
+ * The instance's shared picture library, as a grid in the composer: the same
+ * set for everybody, put there by an administrator (the admin page or
+ * `occ social:gif`). Choosing one copies the library file into an attachment
+ * on the server (`/api/v1/media/from-gif`).
  */
 export default {
 	name: 'GifPicker',
@@ -267,9 +245,8 @@ export default {
 
 .gif-picker__grid {
 	display: grid;
-	/* as many as fit, each at least this wide; no media query decides how many
-	   columns there are, because the composer is in a column whose width
-	   depends on the window and on the sidebar */
+	/* as many columns as fit: the composer's width depends on the window and
+	   the sidebar, so no media query decides */
 	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
 	gap: 4px;
 	/* a library of any size is scrolled inside the picker rather than pushing

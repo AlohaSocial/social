@@ -61,13 +61,10 @@ class OStatusController extends Controller {
 	}
 
 	/**
-	 * The page another server sends somebody to, to follow an account from
-	 * here: `uri` is the account, by its address or its actor URL.
-	 *
-	 * A link anybody can write, opened by a reader who is signed in, so it
-	 * looks the account up only among those this server holds. One it does
-	 * not hold is handed to the page as `resolve`, and the page asks
-	 * `resolve()` for it, with the request token only the page has.
+	 * The page another server sends somebody to, to follow an account from here:
+	 * `uri` is the account, by address or actor URL. Only accounts held here are
+	 * looked up; any other is passed to the page as `resolve`, which asks
+	 * `resolve()` with the page's request token.
 	 */
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
@@ -148,11 +145,9 @@ class OStatusController extends Controller {
 	}
 
 	/**
-	 * Resolves where a remote account's instance sends a follow request.
-	 *
-	 * Anyone may call this, and the webfinger lookup it makes goes to whatever
-	 * host the caller names — so the limit has to be real: the annotation this
-	 * replaces was a docblock, and docblock throttles are no longer read.
+	 * Resolves where a remote account's instance sends a follow request. Public
+	 * and making a WebFinger lookup to a host the caller names, so it is rate
+	 * limited.
 	 */
 	#[AnonRateLimit(limit: 10, period: 300)]
 	#[NoCSRFRequired]
@@ -176,8 +171,7 @@ class OStatusController extends Controller {
 			$template = $this->get('template', $link, '');
 			$url = str_replace('{uri}', $following->getAccount(), $template);
 
-			// the template is the remote server's to write, and the browser is
-			// sent to the result: only a web address is one to send it to
+			// The template is the remote server's: only redirect to a web address.
 			if (preg_match('/^https?:\/\//i', $url) !== 1) {
 				throw new RetrieveAccountFormatException();
 			}

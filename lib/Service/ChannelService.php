@@ -19,42 +19,17 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Channels: what a video belongs to, everywhere but here.
- *
- * PeerTube has no video without a channel. Its builder resolves one by looking
- * for a **`Group`** in the video's `attributedTo` and throws *"Cannot find
- * associated video channel"* when there is none; then it fetches that `Group`
- * and looks for a **`Person`** in *its* `attributedTo`. A Social account is a
- * `Person` and nothing else, so until this existed every video this app
- * published was refused by every PeerTube that received it — silently, and in
- * their logs rather than ours.
- *
- * A channel is **an actor like any other**: a key pair, an inbox, an outbox,
- * followers, followable from anywhere, moderatable, suspendable. That is the
- * same design `TeamService` uses and the reason neither of them needed the
- * actor machinery written a second time. What is new here is only the type it
- * is served as and who it belongs to.
- *
- * **Nobody has to know what a channel is.** One is made for an account the
- * first time it posts a video, named after the account, and used unless the
- * person picks another. Making the concept mandatory before somebody can post
- * a video would be importing PeerTube's data model into a Nextcloud app as a
- * chore.
- *
- * **A channel is not a second identity.** It carries no posts of its own
- * beyond the videos attributed to it, it is not something to write from, and
- * the post stays the author's: the video is attributed to both, which is
- * exactly what PeerTube does — the channel is what it is *filed under*, the
- * account is who made it.
+ * Channels: what a video belongs to on PeerTube, which refuses a video
+ * without a `Group` in its `attributedTo` that is in turn attributed to a
+ * `Person`. A channel is an actor like any other, as `TeamService`'s teams
+ * are; it is made for an account on its first video, named after it, and
+ * used unless the person picks another. The video stays the author's: it is
+ * attributed to both, filed under the channel.
  */
 class ChannelService {
 	/**
-	 * The `user_id` a channel actor is stored under.
-	 *
-	 * Reserved rather than clever: a Nextcloud user id may not contain a
-	 * slash, so nothing a real account is stored under can collide with this,
-	 * and a channel never resolves as somebody's own account on a path that
-	 * looks one up by user.
+	 * The `user_id` a channel actor is stored under: a Nextcloud user id may
+	 * not contain a slash, so it cannot collide with a real account.
 	 */
 	public const USER_PREFIX = 'channel/';
 
@@ -94,12 +69,8 @@ class ChannelService {
 	}
 
 	/**
-	 * The channel a video goes to when nobody chose, making one if this
-	 * account has none.
-	 *
-	 * Lazily, on the first video: an account that never posts one never grows
-	 * an actor nobody asked for, and an account that does never has to learn
-	 * the word.
+	 * The channel a video goes to when nobody chose, made on the account's
+	 * first video if it has none.
 	 */
 	public function defaultFor(Person $owner): Channel {
 		$channels = $this->channelsRequest->getByOwner($owner->getId());
@@ -227,12 +198,8 @@ class ChannelService {
 	}
 
 	/**
-	 * The `attributedTo` a video carries: the channel it is filed under, then
-	 * the account that made it.
-	 *
-	 * The order is PeerTube's own and the shape its `findOwner` reads — it
-	 * filters `attributedTo` by `type`, so entries that are bare id strings
-	 * would make it fetch each one to learn what it is.
+	 * The `attributedTo` a video carries: the channel, then the account, as
+	 * typed objects, the order and shape PeerTube's `findOwner` reads.
 	 *
 	 * @return array<int, array{type: string, id: string}>
 	 */
@@ -245,13 +212,9 @@ class ChannelService {
 
 	/**
 	 * The `attributedTo` a video by this account carries, or `[]` when the
-	 * account has no channel.
-	 *
-	 * Read only, and memoised for the request: this is called from a
-	 * serialisation, which happens once per instance a post is delivered to,
-	 * and a fan-out to forty servers must not be forty queries. Nothing is
-	 * created here — a channel is made when the post is written, because
-	 * making an actor inside a serialisation is a write on a read path.
+	 * account has no channel. Read only, as it runs while serialising, and
+	 * memoised for the request, as a post is serialised once per receiving
+	 * instance.
 	 *
 	 * @return array<int, array{type: string, id: string}>
 	 */
@@ -298,12 +261,9 @@ class ChannelService {
 	}
 
 	/**
-	 * One channel by its handle, or null.
-	 *
-	 * A handle is an actor's `preferredUsername` and is not stored on the
-	 * channel row, so this resolves the actor first — which is also what
-	 * decides that a handle belonging to an ordinary account is not a channel,
-	 * rather than a channel nobody can find.
+	 * One channel by its handle, or null. The handle is the actor's
+	 * `preferredUsername`, not stored on the channel row, so the actor is
+	 * resolved first.
 	 */
 	public function byHandle(string $handle): ?Channel {
 		$handle = trim($handle);
@@ -337,11 +297,8 @@ class ChannelService {
 	}
 
 	/**
-	 * What to call an account's first channel.
-	 *
-	 * `alice_channel`, which is PeerTube's own derivation, with a number after
-	 * it where that is taken — an account called `news` on an instance that
-	 * already has a `news_channel` still gets one.
+	 * What to call an account's first channel: `alice_channel`, as PeerTube
+	 * derives it, with a number after it where that is taken.
 	 */
 	private function deriveHandle(Person $owner): string {
 		$base = substr($owner->getPreferredUsername(), 0, self::MAX_HANDLE - strlen(self::DEFAULT_SUFFIX) - 3);

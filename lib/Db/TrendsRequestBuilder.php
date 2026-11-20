@@ -15,10 +15,8 @@ use OCA\Social\Tools\Traits\TArrayTools;
 /**
  * Class TrendsRequestBuilder
  *
- * Extends StreamRequestBuilder because what a status trend answers with is a
- * page of statuses, built out of the same stream helpers the timelines are —
- * `getStreamSelectSql()`, `linkToCacheActors()`, `getStreamsFromRequest()` —
- * rather than out of a copy of them.
+ * Extends StreamRequestBuilder because a status trend answers with a page of
+ * statuses, built from the same stream helpers as the timelines.
  *
  * @package OCA\Social\Db
  */
@@ -27,14 +25,9 @@ class TrendsRequestBuilder extends StreamRequestBuilder {
 
 	/**
 	 * The statuses that were interacted with inside a window, as a `nid`
-	 * column and a count.
-	 *
-	 * `social_action` is where a like and a boost are already stored, one row
-	 * each with the time it happened, and the index
-	 * `Version1000Date20260910000001` added on (object, type) is what this
-	 * join reads. Nothing new is counted and nothing is kept: a trend is an
-	 * aggregate over rows that exist for their own reasons, which is why it
-	 * cannot drift from the counts a status reports.
+	 * column and a count, aggregated from the like and boost rows in
+	 * `social_action` over its (object, type) index, so a trend cannot drift
+	 * from the counts a status reports.
 	 */
 	protected function getTrendingStatusNidsSelectSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();

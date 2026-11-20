@@ -13,16 +13,11 @@ use OCA\Social\Exceptions\SignatureException;
 use OCP\IRequest;
 
 /**
- * RFC 9421 HTTP Message Signatures, as they arrive on the wire.
- *
- * Reads `Signature-Input` and `Signature` (RFC 8941 structured fields),
- * rebuilds the signature base of RFC 9421 §2.5 from the request, and checks
- * the two RSA algorithms an ActivityPub actor's `publicKeyPem` can carry.
- *
- * What a signature *means* — whose key, how old it may be, which components
- * have to be covered — is SignatureService's call. This class knows the wire
- * format only, so it can be held against the RFC's own test vectors without a
- * request pipeline, a clock or a key store around it.
+ * RFC 9421 HTTP Message Signatures on the wire: parses `Signature-Input` and
+ * `Signature`, rebuilds the §2.5 signature base and checks the two RSA
+ * algorithms an actor's `publicKeyPem` can carry. What a signature means is
+ * SignatureService's call, so this can be tested against the RFC vectors
+ * alone.
  */
 class HttpMessageSignatureParser {
 	/** RSASSA-PKCS1-v1_5 over SHA-256: what Mastodon signs with for RSA keys. */
@@ -34,37 +29,24 @@ class HttpMessageSignatureParser {
 	public const SUPPORTED_ALGORITHMS = [self::ALG_RSA_V1_5_SHA256, self::ALG_RSA_PSS_SHA512];
 
 	/**
-	 * Derived components (§2.2) this verifier rebuilds from an inbound request.
-	 *
-	 * `@status` belongs to responses, and `@query-param` needs the query
-	 * decoded and re-encoded parameter by parameter — neither is anything an
-	 * ActivityPub sender covers, so both are refused by name rather than
-	 * approximated.
+	 * Derived components (§2.2) this verifier rebuilds. `@status` and
+	 * `@query-param` are refused by name: no ActivityPub sender covers them.
 	 */
 	public const DERIVED_COMPONENTS = [
 		'@method', '@target-uri', '@authority', '@scheme', '@request-target', '@path', '@query',
 	];
 
 	/**
-	 * Component parameters (§2.1) that change how a value is serialised.
-	 *
-	 * `sf` re-serialises the field as a structured field, `bs` wraps each
-	 * instance as a byte sequence, `key` picks a dictionary member, `req`
-	 * binds a response to its request and `tr` reads a trailer. None is used
-	 * by anything that federates, and each is a second serialiser to get
-	 * exactly right; a signature that relies on one is refused with the
-	 * parameter's name.
+	 * Component parameters (§2.1) that change how a value is serialised
+	 * (`sf`, `bs`, `key`, `req`, `tr`). Nothing that federates uses them, so a
+	 * signature relying on one is refused with the parameter's name.
 	 */
 	public const REFUSED_COMPONENT_PARAMETERS = ['sf', 'bs', 'key', 'req', 'tr'];
 
 	/**
-	 * The members of a `Signature-Input` header, keyed by label.
-	 *
-	 * Each member is an inner list of component identifiers with the signature
-	 * parameters attached to the list. `serialized` is the member exactly as
-	 * it was received, from the opening parenthesis through the last
-	 * parameter: that is the value of `@signature-params`, the one line of the
-	 * signature base that is not rebuilt but copied.
+	 * The members of a `Signature-Input` header, keyed by label: component
+	 * identifiers and signature parameters, plus `serialized`, the member
+	 * exactly as received, which is copied into `@signature-params`.
 	 *
 	 * @return array<string, array{components: list<array{name: string, params: array<string, mixed>}>, params: array<string, mixed>, serialized: string}>
 	 * @throws SignatureException
@@ -120,15 +102,11 @@ class HttpMessageSignatureParser {
 	}
 
 	/**
-	 * The signature base of RFC 9421 §2.5: every covered component on a line
-	 * of its own as `"name": value`, then `"@signature-params"` with the inner
-	 * list exactly as received.
-	 *
-	 * `$authority` is what this instance considers itself to be reachable as.
-	 * It stands in for `@authority`, for the authority of `@target-uri` and
-	 * for a covered `host` header — the same substitution the draft-cavage
-	 * path applies to `host`, which is what makes a captured request
-	 * unreplayable against another instance.
+	 * The signature base of RFC 9421 §2.5: each covered component as
+	 * `"name": value`, then `"@signature-params"` exactly as received.
+	 * `$authority`, this instance's own address, stands in for `@authority`,
+	 * the authority of `@target-uri` and `host`, so a captured request cannot
+	 * be replayed against another instance.
 	 *
 	 * @param list<array{name: string, params: array<string, mixed>}> $components
 	 * @throws SignatureException
@@ -255,10 +233,9 @@ class HttpMessageSignatureParser {
 	 * RSASSA-PSS verification (RFC 8017 §8.1.2 and §9.1.2) with SHA-512, MGF1
 	 * over SHA-512 and a 64-byte salt, as RFC 9421 §3.3.1 fixes them.
 	 *
-	 * Written out rather than delegated because `openssl_verify()` only grew
-	 * a padding argument in PHP 8.5, and this app runs on 8.1. The RSA
-	 * primitive itself is OpenSSL's: a raw public-key operation with no
-	 * padding, which leaves the encoded message to be checked here.
+	 * Written out because `openssl_verify()` takes a padding argument only from
+	 * PHP 8.5 on; OpenSSL does the raw, unpadded RSA operation and the encoded
+	 * message is checked here.
 	 *
 	 */
 	private function verifyRsaPssSha512(string $message, string $signature, \OpenSSLAsymmetricKey $key): bool {
@@ -308,13 +285,10 @@ class HttpMessageSignatureParser {
 			$db[0] = chr(ord($db[0]) & (0xff >> $unusedBits));
 		}
 
-		// The salt is read out of the padding rather than assumed: DB is
-		// PS || 0x01 || salt, so where the 0x01 sits says how long the salt is.
-		// RFC 9421 asks a *signer* for 64 bytes, but OpenSSL picks the longest
-		// salt that fits on some builds and 64 on others — and a verifier that
-		// only accepts its own guess rejects signatures that are perfectly
-		// valid. This is what RSA_PSS_SALTLEN_AUTO does, and the padding is
-		// still checked byte for byte.
+		// The salt length is read from the padding (DB is PS || 0x01 || salt)
+		// rather than assumed: OpenSSL signers pick 64 bytes on some builds and
+		// the longest that fits on others. This is RSA_PSS_SALTLEN_AUTO, and
+		// the padding is still checked byte for byte.
 		$paddingLength = strspn($db, "\0");
 		if ($paddingLength >= strlen($db) || $db[$paddingLength] !== "\x01") {
 			return false;

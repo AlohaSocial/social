@@ -13,22 +13,12 @@ use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
 
 /**
- * The backfills a fresh install would otherwise never run.
- *
- * Nextcloud installs an app by running its migrations schema-only, so a
- * migration's `postSchemaChange()` does not run there — and several of this
- * app's are what raise the flags the fast queries wait for, or queue the job
- * that raises one. An instance installed after them kept the fallbacks for
- * good: the home timeline's join path (`dest_nid_filled`), the `archived IS
- * NULL` and attachments fallbacks and the joined Photos and Videos pages
- * (`stream_archived_filled`, `stream_media_kind_filled`), the bounded content
- * scan (`search_index_ready`, raised by `Cron\SearchIndex`) and the id-based
- * silenced-instance filter (`stream_author_hosts_filled`, raised by
- * `Cron\StreamAuthorHosts`).
- *
- * On an install the tables are empty, so each backfill finds nothing to do:
- * the first three flags go up at once, and the two jobs raise theirs on
- * their first run.
+ * The backfills a fresh install would otherwise never run: Nextcloud installs
+ * an app by running its migrations schema-only, so `postSchemaChange()` does
+ * not raise the flags the fast queries wait for (`dest_nid_filled`,
+ * `stream_archived_filled`, `stream_media_kind_filled`) or queue the jobs that
+ * raise `search_index_ready` and `stream_author_hosts_filled`. The tables are
+ * empty, so the flags go up at once or on the jobs' first run.
  */
 class InstallBackfills implements IRepairStep {
 	public function __construct(

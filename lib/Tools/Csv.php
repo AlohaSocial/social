@@ -10,14 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Tools;
 
 /**
- * Cells of the CSV files people download and open in a spreadsheet.
- *
- * Excel, LibreOffice and Google Sheets read a cell that starts with `=`, `+`,
- * `-`, `@`, a tab or a carriage return as a formula, and much of what goes in
- * these files is named by other servers: a remote account's name, the host
- * its DID document gives. Such a cell is written with a leading `'`, which
- * makes a spreadsheet read it as text, and the importers here take the `'`
- * off again so that their own files read back unchanged.
+ * Cells of the CSV files people download and open in a spreadsheet. A cell
+ * starting with `=`, `+`, `-`, `@`, a tab or a carriage return is read as a
+ * formula, and much of the content comes from other servers, so such a cell
+ * gets a leading `'`, which the importers here strip again.
  */
 final class Csv {
 	private const FORMULA_START = "=+-@\t\r";

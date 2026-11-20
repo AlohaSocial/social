@@ -22,18 +22,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The curate lists in a person's own repository, as their lists here: what a
- * Bluesky app signed in here writes (`WriteService`) and what an account
- * that moved here brought (`MoveInService`). A list record becomes a public
- * list, a list item one of its members, and each record is then tied to
- * what it stands for by the local id `BlueskyLists` gives it, so the list is
- * one from then on — renamed, filled or emptied on either side, it follows
- * on the other.
- *
- * Only ever reads a record somebody else wrote: a record this server wrote
- * for a list here already stands for it and is not read again, so nothing
- * goes round in a circle. A moderation list is not a list here (§12.5),
- * and neither are its members.
+ * The curate lists in a person's own repository as public lists here, whether
+ * a Bluesky app wrote them (`WriteService`) or a move brought them
+ * (`MoveInService`). Each record is tied to its list by the local id
+ * `BlueskyLists` gives it, so the two stay in step. Records this server wrote
+ * are never read back, so nothing loops; moderation lists are skipped (§12.5).
  */
 class BlueskyListImport {
 	private const PAGE = 100;

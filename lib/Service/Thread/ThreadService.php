@@ -81,9 +81,8 @@ class ThreadService {
 	}
 
 	/**
-	 * Read Bluesky replies in the request that opened the conversation. The
-	 * feed has already made the user wait for this post; leaving its replies
-	 * for the next cron run can add another minute or more of stale context.
+	 * Read Bluesky replies in the request that opened the conversation, rather
+	 * than leaving them to the next cron run.
 	 *
 	 * @return ?bool true when read, false when unavailable or unsupported, null
 	 *               when another request is already reading it

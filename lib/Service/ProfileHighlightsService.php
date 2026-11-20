@@ -14,26 +14,13 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
  * The few numbers that say what an account is like, for the top of its
- * profile.
+ * profile: when it started, how the last weeks went, and what it keeps
+ * writing about.
  *
- * A profile used to be a name, a picture and three counts. The counts say how
- * much of something there is and nothing about what the account does with it:
- * "412 posts" reads the same for somebody who wrote them all last week and
- * somebody who has been here since 2019. What is added here is the shape of
- * that history — when it started, how the last few weeks went, and what the
- * account keeps writing about.
- *
- * **Local accounts only.** For a remote account this instance holds whatever
- * happened to arrive: the posts of people somebody here follows, from whenever
- * they started following. A chart drawn from that would show a quiet 2019 for
- * an account that was busy, because this instance was not listening yet, and
- * there is no way to tell that apart from an account that really was quiet. A
- * partial history presented as a history is a lie, so remote accounts get
- * nothing rather than something wrong.
- *
- * **Public posts only**, which is also what the profile timeline shows. Anything
- * else would be a different chart for every viewer, and counting posts the
- * viewer cannot see would tell them those posts exist.
+ * Local accounts only: this instance holds only part of a remote account's
+ * history, and a partial chart would look like a quiet account. Public posts
+ * only, as on the profile timeline, so every viewer sees the same chart and
+ * no hidden post is revealed by a count.
  */
 class ProfileHighlightsService {
 	/** How many weeks the little chart covers. */
@@ -43,12 +30,9 @@ class ProfileHighlightsService {
 	private const WEEK = 7 * 24 * 3600;
 
 	/**
-	 * How many posts the chart will read at most.
-	 *
-	 * Twelve weeks of an ordinary account is far below this. It is here so an
-	 * account that posts hundreds of times a day cannot turn a profile view
-	 * into an unbounded query; the chart is then drawn from the most recent
-	 * posts, which is the part of the window it is about anyway.
+	 * How many posts the chart reads at most, so a very prolific account
+	 * cannot make a profile view an unbounded query; the most recent posts
+	 * are kept.
 	 */
 	private const MAX_POSTS = 5000;
 
@@ -56,11 +40,8 @@ class ProfileHighlightsService {
 	private const TOP_HASHTAGS = 3;
 
 	/**
-	 * How far back the "posting since" and the hashtags look.
-	 *
-	 * A year rather than everything: what an account has been writing about
-	 * lately is the useful answer, and a tag somebody used a hundred times in
-	 * 2019 and never since is not what they are about now.
+	 * How far back the "posting since" and the hashtags look: a year, so the
+	 * tags reflect what the account writes about lately.
 	 */
 	private const HASHTAG_WINDOW = 365 * 24 * 3600;
 
@@ -101,12 +82,10 @@ class ProfileHighlightsService {
 		foreach ($this->streamRequest->publishedTimesByAuthor($actorId, $from, self::MAX_POSTS) as $time) {
 			$offset = $time - $from;
 
-			// Both ends of the window are checked here, in seconds, rather
-			// than on the bucket number below. Before: intdiv() truncates
-			// towards zero, so a post one second older than `$from` would
-			// give bucket 0 and be counted into the oldest week instead of
-			// being dropped. After: a post published in the moment between
-			// the query and this loop is newer than the last bucket.
+			// Both ends of the window are checked in seconds, not on the bucket
+			// number: intdiv() truncates towards zero, so a post just older than
+			// `$from` would land in bucket 0, and one published after the query
+			// would be past the last bucket.
 			if ($offset < 0 || $offset >= self::WEEKS * self::WEEK) {
 				continue;
 			}
@@ -126,11 +105,8 @@ class ProfileHighlightsService {
 	}
 
 	/**
-	 * When this account started posting here.
-	 *
-	 * The actor's own creation date, not its first post: an account that has
-	 * deleted everything it ever wrote has still been here since it was made,
-	 * and reading the oldest surviving post would say otherwise.
+	 * When this account started posting here: the actor's creation date, not
+	 * its oldest surviving post.
 	 *
 	 * @return int unix time, or 0 when the actor carries no creation date
 	 */
@@ -139,12 +115,9 @@ class ProfileHighlightsService {
 	}
 
 	/**
-	 * The answer for an account this instance cannot honestly chart.
-	 *
-	 * `available` is false rather than the arrays being empty, so the profile
-	 * can leave the section out entirely instead of drawing twelve zeroes —
-	 * which would say "this account posted nothing", which is the one thing
-	 * this does not know.
+	 * The answer for an account this instance cannot honestly chart:
+	 * `available` false, so the profile leaves the section out rather than
+	 * drawing zeroes.
 	 *
 	 * @return array{
 	 *     available: bool,

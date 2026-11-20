@@ -18,16 +18,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Tells the followers' servers once more about the local accounts named
- * apart from their login, so they read the icon again.
- *
- * The icon of a local account used to be Nextcloud's avatar route, which
- * names the login; it is now this app's route of the username, and a server
- * that copied the actor keeps the old address until it is told. Only the
- * accounts whose username is not the login gave anything away, so only they
- * are told. `PAGE` accounts a run, and a run queues the next one with where
- * it got to; queued once, by `Migration\RepublishAvatarAddresses`, so it is
- * not registered in `info.xml`.
+ * Sends the actors of local accounts whose username differs from their login
+ * to their followers' servers again, so those re-read the icon address,
+ * which names the username rather than the login. `PAGE` accounts a run,
+ * each run queueing the next; queued once by
+ * `Migration\RepublishAvatarAddresses`, so not registered in `info.xml`.
  */
 class RepublishAvatars extends QueuedJob {
 	public const PAGE = 50;

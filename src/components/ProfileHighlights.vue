@@ -13,10 +13,8 @@
 		</p>
 
 		<div v-if="hasPosts" class="profile-highlights__chart">
-			<!-- The chart is decoration over a sentence, not instead of one:
-			     a row of twelve bars is unreadable to anybody not looking at
-			     it, so the same news is written out underneath and the bars
-			     themselves are hidden from the accessibility tree. -->
+			<!-- decoration over a sentence: the same news is written out underneath,
+			     and the chart is hidden from the accessibility tree -->
 			<svg
 				class="profile-highlights__spark"
 				viewBox="0 0 120 32"
@@ -36,11 +34,6 @@
 				{{ summary }}
 			</p>
 		</div>
-
-		<!-- The hashtags used to be drawn again here, under the chart, without
-		     their counts. They are the same tags `FeaturedTags` draws above the
-		     bio with counts, so the page said the same thing twice and the
-		     second time said less. -->
 	</InfoCard>
 </template>
 
@@ -52,19 +45,12 @@ import logger from '../services/logger.js'
 import InfoCard from './InfoCard.vue'
 
 /**
- * What an account is like, over and above how much of it there is.
+ * What an account is like: when it started and how the last twelve weeks
+ * went.
  *
- * A profile was a name, a picture and three counts, and a count says how much
- * of something there is and nothing about what the account does with it: "412
- * posts" reads the same for somebody who wrote them all last week and somebody
- * who has been here since 2019. This says when they started, how the last
- * twelve weeks went, and what they keep writing about.
- *
- * The server answers `available: false` for a remote account, and this then
- * renders nothing at all. That is deliberate and not a failure: this instance
- * holds a remote account's posts only from whenever somebody here started
- * following them, so a chart of that would show a quiet year for an account
- * that was busy — see ProfileHighlightsService.
+ * The server answers `available: false` for a remote account and this renders
+ * nothing: this instance holds a remote account's posts only from when
+ * somebody here followed it (see ProfileHighlightsService).
  */
 export default {
 	name: 'ProfileHighlights',
@@ -88,9 +74,8 @@ export default {
 
 	computed: {
 		/**
-		 * @return {boolean} whether there is anything worth a section. An
-		 *         account that has posted nothing and tagged nothing gets the
-		 *         "here since" line alone if it has one, and otherwise nothing
+		 * @return {boolean} whether there is anything worth a section: the
+		 *         "here since" line, the chart, or both
 		 */
 		show() {
 			return this.available && (this.sinceLabel !== '' || this.hasPosts)
@@ -107,13 +92,8 @@ export default {
 		},
 
 		/**
-		 * The twelve weeks as points in the little chart's own 120x32 box.
-		 *
-		 * A line rather than the twelve bars it was: the bars were an honest
-		 * chart and a joyless one, and what somebody reads off a profile is a
-		 * shape -- busy then quiet, steady, just arrived -- which a line gives
-		 * and twelve separate rectangles do not. A week with nothing in it is
-		 * a point on the floor rather than a gap, so the line stays continuous.
+		 * The twelve weeks as points in the little chart's own 120x32 box. A week
+		 * with nothing in it is a point on the floor, so the line stays continuous.
 		 *
 		 * @return {{x: number, y: number}[]}
 		 */
@@ -127,9 +107,8 @@ export default {
 
 			return weeks.map((count, index) => ({
 				x: Math.round(index * step * 10) / 10,
-				// 3 and 29 rather than 0 and 32: a full week would otherwise be
-				// drawn half outside the box, and an empty one would sit on the
-				// very edge where the line has no room to be a line
+				// 3 and 29 rather than 0 and 32, so a full week is not drawn half outside the
+				// box and an empty one is not on the very edge
 				y: Math.round((29 - (count / top) * 26) * 10) / 10,
 			}))
 		},
@@ -219,8 +198,7 @@ export default {
 				this.since = Number(data?.since) || 0
 				this.weeks = Array.isArray(data?.weeks) ? data.weeks.map((count) => Number(count) || 0) : []
 			} catch (error) {
-				// a profile is readable without this; it is an extra, and a
-				// failed extra should not be an error message on somebody's page
+				// an extra on top of the profile is not worth an error message
 				logger.debug('Could not read the profile highlights', { error })
 				this.available = false
 			}
@@ -247,13 +225,9 @@ export default {
 	font-size: 13px;
 }
 
-/**
- * The twelve weeks as a line.
- *
- * Small, quiet and decorative: the sentence under it is what carries the
- * information, and this is the shape of it. The wash under the line is the
- * same colour at a tenth of the opacity, so the two read as one mark rather
- * than as a chart with a fill.
+/*
+ * The twelve weeks as a line, decorative: the sentence under it carries the
+ * information. The wash is the same colour at a tenth of the opacity.
  */
 .profile-highlights__spark {
 	inline-size: 120px;

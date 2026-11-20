@@ -35,10 +35,8 @@ export default {
 	data() {
 		return {
 			/**
-			 * Whether the picture for this emoji failed to load. The pictures
-			 * stop at whichever Unicode version the bundled Twemoji knows;
-			 * anything newer has no file, and is better drawn as the reader's
-			 * own glyph than as a broken image.
+			 * Whether the Twemoji image failed to load (an emoji newer than the
+			 * bundled set); the reader's own glyph is drawn instead.
 			 */
 			missing: false,
 		}

@@ -15,25 +15,15 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 
 /**
- * Whether a post says it was made with AI, and whether a reader wants such
- * posts hidden.
+ * Whether a post says it was made with AI, and whether a reader hides such
+ * posts.
  *
- * Three things label a post, and all three are things the post *carries*: a
- * hashtag from a known set, the author's own mark — which on the wire is the
- * same hashtag, since the composer adds `#AIgenerated` — and a picture whose
- * metadata states machine-generation provenance (IPTC's `DigitalSourceType`,
- * or the same term inside a C2PA manifest). Nothing here looks at the pixels
- * or the prose: a post that is generated and says nothing about it is not
- * recognised, and a post that is honest about it is. That is the whole of what
- * the switch can promise, and the documentation says so in as many words.
- *
- * The switch is the reader's, stored per user, and off until they turn it on.
- * When it is on the labelled posts are dropped in `FilterService::apply()`,
- * which is the one place every timeline, thread, profile and notification
- * page passes through on its way to a client; a post hidden there is hidden
- * in every list and the API alike. Independently of the switch, every status
- * and attachment states `ai_generated`, so a client can draw a quiet label
- * for readers who chose to keep seeing them.
+ * A post is labelled by what it carries: a hashtag from a known set (the
+ * composer adds `#AIgenerated`), or an image whose metadata states machine
+ * generation (IPTC `DigitalSourceType`, also inside C2PA). Content itself is
+ * not analysed. The reader's switch is off by default; labelled posts are
+ * dropped in `FilterService::apply()`, and every status and attachment
+ * states `ai_generated` regardless.
  */
 class AiContentService {
 	/** The per-user switch: `'1'` hides, anything else shows. */
@@ -42,12 +32,8 @@ class AiContentService {
 	private const AMBIGUOUS_TAGS = ['ai'];
 
 	/**
-	 * The hashtags that label a post, lower-case and without their `#`.
-	 *
-	 * Explicit labels first, then the tools people name. An administrator can
-	 * add to the list with the `ai_tags` app value; nothing here can take one
-	 * of these away, because a reader who turned the switch on is relying on
-	 * `#aigenerated` meaning what it says.
+	 * The hashtags that label a post, lower-case and without `#`. The
+	 * `ai_tags` app value can add to them but not remove any.
 	 */
 	public const DEFAULT_TAGS = [
 		'aigenerated',

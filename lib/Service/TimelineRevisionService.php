@@ -13,47 +13,26 @@ use OCA\Social\Db\ActorsRequest;
 use Throwable;
 
 /**
- * A number that moves whenever a reader changes what their own timeline shows.
+ * A number that moves whenever a reader changes what their own timeline
+ * shows, carried in the home timeline's `ETag` beside the newest visible
+ * post: unfollowing, blocking, muting, filtering or following a hashtag
+ * changes the page without moving the newest id, and must not be answered
+ * `304`.
  *
- * The home timeline's `ETag` is built from the newest post the reader can see,
- * which answers "has anything new arrived" and nothing else. Everything else
- * that decides what the page holds is a decision the reader made — following or
- * unfollowing an account, blocking or muting one, adding a keyword filter,
- * following a hashtag — and none of those move the newest id. Without this, a
- * reader who unfollows a noisy account is answered `304` on every poll and goes
- * on seeing it until somebody else happens to post: the page they are looking
- * at is the one they just asked to change.
- *
- * So the tag carries this alongside. It is one integer per Nextcloud account,
- * incremented where the rows that decide the page are written — in the request
- * classes that own them, so it moves whether the change came from the web app,
- * a Mastodon client or the inbox, and no caller has to remember to say so.
- *
- * Reading it is one user-config lookup, which Nextcloud has usually already
- * loaded for the session; a remote actor has no Nextcloud account behind it and
- * bumping for one costs a lookup and does nothing.
- *
- * The increment is read-modify-write and deliberately not locked: two changes
- * racing may end on the same number, which loses nothing that matters — the
- * number is still different from the one before either of them, which is the
- * only thing the tag is asked.
- *
- * What it does **not** cover is a post being deleted further down a page the
- * reader already holds: the newest id does not move, this number does not move
- * for a stranger's decision, and the page is revalidated when either next
- * changes. Making a deletion reach every follower's tag means writing to every
- * follower's row, which is the fan-out this whole design exists to avoid.
+ * One integer per Nextcloud account in user config, bumped by the request
+ * classes that write the rows deciding the page, so every path moves it.
+ * Not locked: racing bumps may land on the same number, which still differs
+ * from the one before. A deletion further down a page does not move it;
+ * reaching every follower's tag would be the fan-out this avoids.
  */
 class TimelineRevisionService {
 	public const KEY = 'timeline_revision';
 
 	/**
-	 * The same kind of number for the counts on the badges, moved whenever a
-	 * row they count is written: a notification for the account, a direct
-	 * message to or from it — and for conversations also when one is marked
-	 * read or dismissed. The newest id cannot say so alone: a nid orders by
-	 * its second first and by chance within one, so a second row in the same
-	 * second may sort below the first and move no newest id.
+	 * The same kind of number for the badge counts, moved by every row they
+	 * count (a notification, a direct message, a conversation read or
+	 * dismissed): rows within one second may sort below the newest id and move
+	 * nothing.
 	 */
 	public const NOTIFICATIONS = 'notifications_revision';
 	public const CONVERSATIONS = 'conversations_revision';
@@ -79,9 +58,8 @@ class TimelineRevisionService {
 	}
 
 	/**
-	 * The same number read from the database rather than from what this
-	 * process loaded before: for the streaming daemon, which outlives the
-	 * requests that bump it.
+	 * The same number read from the database rather than this process's cache,
+	 * for the streaming daemon, which outlives the requests that bump it.
 	 *
 	 * @param string $key `KEY`, or one of the badges' numbers
 	 */
@@ -105,9 +83,8 @@ class TimelineRevisionService {
 	}
 
 	/**
-	 * The same, for the places that hold an actor rather than an account: the
-	 * request classes write rows keyed by actor id, and a row written for a
-	 * remote actor belongs to nobody here.
+	 * The same, for callers holding an actor rather than an account; a remote
+	 * actor's rows belong to nobody here.
 	 */
 	public function bumpForActor(string $actorId, string $key = self::KEY): void {
 		if ($actorId === '') {

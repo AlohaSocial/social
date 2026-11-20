@@ -217,18 +217,13 @@ let stickerSerial = 0
 
 /**
  * Posts one 24-hour short (a story, in the API): a picture or a video with
- * stickers on it, or a few words on a coloured card, and how long it stays on
- * screen. Opened by ShortComposerDialog for a picture or a card.
+ * stickers, or a few words on a coloured card, and how long it stays on screen.
+ * Opened by ShortComposerDialog for a picture or a card.
  *
- * A text card and the stickers are drawn onto a picture in the browser
- * (utils/textCard.js) and uploaded as one, so they reach other servers as what
- * they look like. The words of a text story go with it as its description.
- *
- * The file goes up through the same upload every attachment takes
- * (`/api/v1/media`), so it is stripped of its metadata like any other
- * picture posted here, and the short is then made of that upload. It is for
- * followers and lasts 24 hours; the dialog says so, since neither is
- * how a post behaves.
+ * Cards and stickers are drawn onto the picture in the browser
+ * (utils/textCard.js), so other servers get what they look like; a text
+ * story's words go along as its description. The file goes up through
+ * `/api/v1/media` like any attachment, so its metadata is stripped.
  */
 export default {
 	name: 'StoryComposerDialog',
@@ -586,8 +581,7 @@ export default {
 					return
 				}
 
-				// the words of a text story are what the picture shows, and
-				// the only way somebody who cannot see it will know
+				// the words are the picture's description, for anybody who cannot see it
 				if (this.kind === 'text') {
 					await this.timelineStore.describeMedia({ id: media.id, description: this.storyText.trim() })
 				}

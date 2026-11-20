@@ -17,34 +17,22 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
 /**
- * Asks where each remote post lives how many likes, boosts and replies it has
- * now, on the cron's schedule and in its budget.
+ * Refreshes the like, boost and reply counts of remote posts by asking where
+ * each post lives, on the cron's schedule and budget. Counts are not
+ * federated, so a stored count is only as fresh as the last time it was asked.
  *
- * The counts a stored post carries were read off its document the once, when
- * it arrived, and every server that publishes them publishes them as they were
- * at that moment: a status with five likes said five for as long as the row
- * lasted, and one answered here had a reply count that never moved. Nothing
- * federates a count — a `Like` travels to the origin and the origin totals it
- * on its own side — so the only way to know a number now is to ask again.
- *
- * The posts somebody looks at are asked about as they are seen
- * (`Counts\CountService::seen()`); this is the pass over the rest: the remote
- * posts of the last week whose last answer has fallen due, a bounded batch of
- * them, each asked of its own network (`CountService::refreshPosts()`), and
- * the same for this instance's own posts of the last week that are on Bluesky
- * too, whose likes and reposts there reach this server only as notifications
- * that may be missed (`Atproto\Reader\BlueskyPublishedCountSource`). A post
- * is stamped whether or not the answer arrived, so a host that is gone is
- * asked once per interval rather than on every pass, and whatever was already
- * stored stands where the answer cannot be trusted.
+ * Posts being looked at are asked as they are seen
+ * (`Counts\CountService::seen()`); this pass covers the rest of the last
+ * week's remote posts that are due (`CountService::refreshPosts()`), and this
+ * instance's own posts on Bluesky, whose likes there may be missed
+ * (`Atproto\Reader\BlueskyPublishedCountSource`). A post is stamped whether
+ * or not it answered, so a dead host is asked once per interval.
  */
 class RemoteCountService {
 	/**
-	 * How long one post's counts stand before they are asked again, in seconds.
-	 *
-	 * An hour would be tighter but does not divide the pass well: at twelve
-	 * minutes a pass, two hours is ten passes for a post to fall due in, which
-	 * is where the batch below stops being the limit on how much gets asked.
+	 * How long one post's counts stand before they are asked again, in
+	 * seconds: two hours, ten twelve-minute passes, so the batch size is
+	 * what limits each pass.
 	 */
 	public const TTL = 7200;
 
@@ -110,9 +98,8 @@ class RemoteCountService {
 		}
 
 		if ($asked > 0 && $answered === 0) {
-			// nothing was read at all, which is never one host being down: a
-			// fetch that has stopped working, so it should say so rather than
-			// leave every count quietly where it was
+			// nothing was read at all, which is never one host being down: the
+			// fetch itself is broken, so it is reported
 			$this->logger->debug(
 				'[RemoteCountService] none of ' . $asked . ' posts answered with a count'
 			);

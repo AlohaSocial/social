@@ -34,19 +34,17 @@ class ProfileSectionListener implements IEventListener {
 			return;
 		}
 
-		// the page is a Nextcloud user's and knows them by their user id; the
-		// account's username need not be it, and the section asks the API
-		// by the username. '' where the user has no account here.
+		// The page knows the user id, the API the account username; '' without an
+		// account.
 		try {
 			$username = $this->actorsRequest->getFromUserId($event->getUserId())->getPreferredUsername();
 		} catch (Exception) {
 			$username = '';
 		}
 
-		// The profile page is public, and its address is the login. A visitor
-		// is not told which account a login owns where the account is named
-		// apart from it (see Person::nextcloudUser()), and without that the
-		// section has nothing of the account's to show, so it is left out.
+		// The public profile page's address is the login; where the account is named
+		// differently (Person::nextcloudUser()) a visitor is not told which account
+		// it is, so the section is left out.
 		if ($username !== '' && $username !== $event->getUserId() && $this->userSession->getUser() === null) {
 			return;
 		}

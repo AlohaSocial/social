@@ -16,14 +16,9 @@ use OCA\Social\Model\Client\Collection;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The albums an account curates out of its own posts.
- *
- * Every route that changes a collection reads it with the owner as a SQL
- * predicate rather than reading the row and comparing afterwards -- the same
- * shape `ListsRequest` uses, and for the same reason: a check that is part of
- * the query cannot be forgotten by a later caller.
- *
- * @package OCA\Social\Db
+ * The albums an account curates out of its own posts. Every change reads the
+ * collection with the owner as a SQL predicate, as `ListsRequest` does, so no
+ * caller can forget the check.
  */
 class CollectionsRequest extends CollectionsRequestBuilder {
 	/** How many collections one account may keep. */
@@ -139,10 +134,9 @@ class CollectionsRequest extends CollectionsRequestBuilder {
 	}
 
 	/**
-	 * Everything an account owns, for a suspension or a deletion.
-	 *
-	 * Named as every other side table names it, so the fan-out in
-	 * `ModerationService` and `PersonInterface` reads the same for all of them.
+	 * Everything an account owns, for a suspension or a deletion; named like the
+	 * other side tables' for the fan-out in `ModerationService` and
+	 * `PersonInterface`.
 	 */
 	public function deleteRelatedId(string $actorId): void {
 		foreach ($this->getByActor($actorId) as $collection) {
@@ -151,11 +145,9 @@ class CollectionsRequest extends CollectionsRequestBuilder {
 	}
 
 	/**
-	 * Adds a post, at the end unless a position is given.
-	 *
-	 * A post that is already in the collection is left where it is: the unique
-	 * index refuses the second row and that is the whole of the handling, which
-	 * is what makes the route safe to retry.
+	 * Adds a post, at the end unless a position is given. The unique index
+	 * refuses a post already in the collection, which makes the route safe to
+	 * retry.
 	 */
 	public function addItem(Collection $collection, string $streamId, int $position = -1): void {
 		if ($position < 0) {
@@ -182,12 +174,8 @@ class CollectionsRequest extends CollectionsRequestBuilder {
 	}
 
 	/**
-	 * Empties a collection.
-	 *
-	 * For the one caller that rebuilds rather than edits: a playlist that
-	 * arrived from somewhere else is somebody else's document, and the document
-	 * is the whole truth about it — a video taken out there has to go from here
-	 * too, which a merge cannot express.
+	 * Empties a collection, for a playlist from elsewhere that is rebuilt from
+	 * its document: what was taken out there has to go here too.
 	 */
 	public function clearItems(Collection $collection): void {
 		$qb = $this->getCollectionItemsDeleteSql();
@@ -207,12 +195,8 @@ class CollectionsRequest extends CollectionsRequestBuilder {
 	}
 
 	/**
-	 * The prims of the posts in a collection, in the owner's order.
-	 *
-	 * Ordered by `position` and then by `id`, so that items sharing a position
-	 * -- which nothing writes, but which a hand-edited row could produce --
-	 * still come back in a stable order rather than whatever the database
-	 * happens to return.
+	 * The prims of the posts in a collection, in the owner's order, with `id`
+	 * breaking ties between equal positions.
 	 *
 	 * @return string[]
 	 */
@@ -242,13 +226,10 @@ class CollectionsRequest extends CollectionsRequestBuilder {
 	}
 
 	/**
-	 * The posts of a collection, in the owner's order.
-	 *
-	 * Two queries, as every timeline here is: the first decides which posts are
-	 * on the page and in what order, the second reads them with their author
-	 * and the viewer's own actions on them. The order is the collection's, not
-	 * the stream's, so it is re-applied to the rows after they come back --
-	 * `WHERE id_prim IN (...)` does not preserve the order of the list.
+	 * The posts of a collection, in the owner's order. Two queries, as for every
+	 * timeline: the first picks the posts, the second reads them with author and
+	 * the viewer's actions, and the order is re-applied since `IN (...)` does not
+	 * keep it.
 	 *
 	 * @return Stream[]
 	 */
@@ -262,12 +243,9 @@ class CollectionsRequest extends CollectionsRequestBuilder {
 		$qb->andWhere(
 			$qb->expr()->in('s.id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY))
 		);
-		// A collection says which posts its owner grouped, not who may read
-		// them: a followers-only post put in a public album was served to
-		// anybody who opened it, and the two routes that read this are
-		// unauthenticated. The same predicate every other read of a post
-		// applies — with no viewer it answers with the public ones, which is
-		// what a visitor should see.
+		// A collection does not say who may read its posts, and the routes that
+		// read this are unauthenticated: apply the usual visibility predicate, which
+		// without a viewer keeps the public ones.
 		$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
 		$qb->leftJoinStreamAction('sa');

@@ -98,9 +98,8 @@ class BlueskyActorService {
 	}
 
 	/**
-	 * Resolved when first needed rather than injected: the pins need the
-	 * post store, which needs this service. Null without a container, as in
-	 * a unit test.
+	 * Resolved lazily because of a service cycle; null without a container, as
+	 * in a unit test.
 	 */
 	private function pins(): ?BlueskyPins {
 		$service = $this->container?->get(BlueskyPins::class);
@@ -217,10 +216,9 @@ class BlueskyActorService {
 	}
 
 	/**
-	 * The instance's verification of the account written again when the
-	 * AppView now gives another handle or display name
-	 * (`VerificationService::refresh()`); resolved lazily, as that needs
-	 * services that need this one.
+	 * Reissues the instance's verification of the account when the AppView now
+	 * gives another handle or display name (`VerificationService::refresh()`);
+	 * resolved lazily because of a service cycle.
 	 */
 	private function reissueVerification(Person $person): void {
 		try {

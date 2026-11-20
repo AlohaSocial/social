@@ -23,13 +23,9 @@ use OCP\AppFramework\Utility\ITimeFactory;
 /**
  * How Bluesky is doing on this server, in figures, for the administrator.
  *
- * Every figure is read from this server's own tables and app values, never
- * from the network, and each is a count over an index or over a table with
- * one row per local account. The answer is cached for a minute, so a page
- * left open and reloaded does not count again.
- *
- * Left out because no index answers it: the number of blocks across the
- * repositories, which only a count of the whole block table could give.
+ * Every figure is an indexed count over local tables and app values, never
+ * the network, cached for a minute. Blocks across repositories are left out:
+ * no index can count them.
  */
 class AtprotoFiguresService {
 	public const CACHE_NAMESPACE = Application::APP_ID . '/bluesky-figures';
@@ -112,10 +108,9 @@ class AtprotoFiguresService {
 	}
 
 	/**
-	 * How far behind now the Jetstream cursor the listener stored is, in
-	 * seconds; null without a Jetstream endpoint or before the first cursor.
-	 * The cursor is the time of the last event heard, in microseconds, so a
-	 * quiet hour among few followed accounts reads as an hour behind.
+	 * How far behind now the listener's Jetstream cursor is, in seconds; null
+	 * without a Jetstream endpoint or a cursor. The cursor is the last event
+	 * heard, so a quiet hour reads as an hour behind.
 	 */
 	private function jetstreamLag(int $now): ?int {
 		if ($this->config->jetstream() === '') {

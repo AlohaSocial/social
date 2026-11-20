@@ -15,17 +15,13 @@ import { t } from '@nextcloud/l10n'
 import { useAccountStore } from '../store/account.js'
 
 /**
- * What of an account can be read: its posts three ways, its collections, and
- * the photographs somebody else took of it.
+ * What of an account can be read: its posts three ways, the photos others
+ * tagged it in, and its collections. One list for both views that draw the
+ * switcher, so a profile's tabs are the same in each.
  *
- * One list for the two views that draw the switcher, so that a profile's tabs
- * cannot differ depending on which of them is on screen. The three kinds of
- * post stay on the profile route with the kind in the query, as they were;
- * collections are a page of their own under the account, because they are
- * not a filter of the posts but a thing the account made out of them. Tagged
- * is a page of its own for the opposite reason: the posts on it are not the
- * account's at all — they are everybody else's photographs that it is named
- * in, which is why it is the last of the five rather than beside Photos.
+ * Posts, Photos and Videos stay on the profile route with the kind in the
+ * query; Tagged and Collections are pages of their own, since they are not
+ * filters of the account's posts.
  *
  * @param {string} account the handle in the route
  * @param {object} [layout] public presentation preferences

@@ -54,9 +54,7 @@
 						<th>{{ t('social', 'Decision') }}</th>
 					</tr>
 				</thead>
-				<!-- a handle and an instance name are whatever a remote server
-				     sent, so every cell here is interpolated and none of this
-				     page uses `v-html` -->
+				<!-- every cell is remote-supplied, so it is interpolated, never `v-html` -->
 				<tbody v-for="account in accounts" :key="account.actor_id" class="accounts__group">
 					<tr>
 						<td>{{ account.handle || account.username }}</td>
@@ -145,11 +143,7 @@ import { showError, showSuccess } from '../../services/toast.js'
 export const PAGE = 40
 
 /**
- * Every account this instance knows, whether or not anybody complained.
- *
- * Before this section only a *reported* account could be acted on from the web:
- * an instance that had a problem with somebody nobody had filed a report about
- * needed a moderation client and a token.
+ * Every account this instance knows, whether or not anybody reported it.
  */
 export default {
 	name: 'AccountsSection',
@@ -235,17 +229,9 @@ export default {
 
 		/**
 		 * Runs the search the form describes, or continues the one on screen.
-		 *
-		 * `more` asks for the page after the rows already here, so it has to
-		 * ask the same question they answered: the cursor belongs to that
-		 * search, and the form may have been typed in since without anybody
-		 * pressing Search. Reading the controls again put one search's cursor
-		 * on another one's filters and appended the answer to rows it has
-		 * nothing to do with.
-		 *
-		 * The counter is for the other direction: two replacement searches can
-		 * settle in the order the server felt like, and only the newest one
-		 * may write.
+		 * `more` reuses the filters the rows on screen came from, as the cursor
+		 * belongs to that search; the counter lets only the newest replacement
+		 * search write.
 		 *
 		 * @param {boolean} [more] whether to continue the current page rather
 		 *   than start again
@@ -293,9 +279,6 @@ export default {
 
 		/**
 		 * Opens one account's history under its row, and closes it again.
-		 *
-		 * A number is what a moderator scans a page for; the history is what
-		 * they need once one of the numbers is not zero.
 		 *
 		 * @param {object} account the row
 		 * @return {Promise<void>}

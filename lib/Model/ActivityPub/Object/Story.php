@@ -13,33 +13,17 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * A story on the wire: one picture that stops existing after a day.
+ * A story on the wire: one picture that is gone after a day.
  *
- * Pixelfed's object, and Pixelfed's verbs around it — a story is published as
- * an `Add` addressed to the author's followers and withdrawn with a `Delete`,
- * which is what its inbox handles. It is not a `Note`: a story is not in
- * anybody's timeline, has no replies of its own here, and is gone tomorrow,
- * and a Mastodon-family server that does not know the type will ignore it,
- * which is the right outcome rather than a post nobody asked for.
+ * Pixelfed's object and verbs, field names included, since only Pixelfed
+ * reads stories: an `Add` to the author's followers, withdrawn with a
+ * `Delete`. Not a `Note`, so a server that does not know the type ignores it.
+ * `expiresAt` is required and in the future, and nothing is held past a day.
  *
- * `expiresAt` is the whole contract. A receiver that keeps the object past it
- * is keeping something the author published on the understanding that it goes
- * — so this app stores the date it is given, refuses one that is absent or
- * already past, and holds nothing longer than a day whatever the sender says.
- *
- * **The shape is Pixelfed's, down to the field names**, because Pixelfed is the
- * only network that has stories and a shape it does not read is a story nobody
- * sees. Two things in here exist only for that and are worth knowing about:
- *
- *  - `object` is a **bearcap** (`bear:?t=…&u=…`, FEP-d8c2): a URL and a token
- *    that fetches this story. Pixelfed's inbox does not read the story out of
- *    the activity at all — `StoryFetch` validates `object.object` and fetches
- *    what it names — so an `Add` without one is dropped without a word. The
- *    fields beside it are still filled in, for this app's own inbox and for
- *    anything else that would rather read than fetch.
- *  - `attachment` is **one object, not a list**, and its `type` is `Image` or
- *    `Video` rather than `Document`. That is what Pixelfed validates
- *    (`attachment.url`, `attachment.type in:Image,Video`), and a list fails it.
+ * Two shapes exist only for Pixelfed: `object` is a bearcap
+ * (`bear:?t=…&u=…`, FEP-d8c2) that its `StoryFetch` follows, so an `Add`
+ * without one is dropped there; and `attachment` is one object of type
+ * `Image` or `Video`, not a list, as Pixelfed validates.
  */
 class Story extends ACore implements JsonSerializable {
 	public const TYPE = 'Story';
@@ -105,11 +89,8 @@ class Story extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * The capability that fetches this story: `bear:?t=<token>&u=<url>`.
-	 *
-	 * Empty on a story that arrived rather than one being sent — this app
-	 * reads the fields beside it and never follows the capability, because
-	 * what it would fetch is what it was already handed.
+	 * The capability that fetches this story: `bear:?t=<token>&u=<url>`. Empty
+	 * on a story that arrived: this app reads the fields beside it instead.
 	 */
 	public function getBearcap(): string {
 		return $this->bearcap;
@@ -142,16 +123,13 @@ class Story extends ACore implements JsonSerializable {
 		$expires = strtotime($this->get('expiresAt', $data, ''));
 		$this->setExpiresAt(($expires === false) ? 0 : $expires);
 
-		// one picture: a story is one thing seen for a few seconds, and a
-		// sender that puts several in the array is sending something this app
-		// has no way to show
+		// one picture: a story is one thing shown for a few seconds
 		$attachments = $this->getArray('attachment', $data, []);
 		$first = $attachments[0] ?? ($attachments === [] ? null : $attachments);
 		if (is_array($first) && ($first['url'] ?? '') !== '') {
 			$document = new Document();
-			// a remote file is identified by where it lives: Pixelfed's
-			// attachment carries a url and no id of its own, and an id this
-			// app minted would name a document on this server that is not here
+			// a remote file is identified by its url: Pixelfed's attachment has no id,
+			// and one minted here would name a document that is not on this server
 			$document->setId($this->validate(ACore::AS_URL, 'id', $first, '')
 				?: $this->validate(ACore::AS_URL, 'url', $first, ''));
 			$document->setUrl($this->validate(ACore::AS_URL, 'url', $first, ''));
@@ -164,9 +142,8 @@ class Story extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * `Image` or `Video`, which is the only pair Pixelfed accepts, worked out
-	 * from the file rather than from the ActivityPub class — every attachment
-	 * here is a `Document` and that is not an answer to this question.
+	 * `Image` or `Video`, the only pair Pixelfed accepts, worked out from the
+	 * file, since every attachment here is a `Document`.
 	 */
 	private function attachmentType(Document $attachment): string {
 		return str_starts_with(strtolower($attachment->getMediaType()), 'video/')
@@ -189,9 +166,8 @@ class Story extends ACore implements JsonSerializable {
 					// the capability that fetches this story, for the one
 					// network that reads a story that way; see the class comment
 					'object' => $this->getBearcap(),
-					// neither is possible here, and both are answered rather
-					// than left out: a reader that assumes the default gets the
-					// wrong one
+					// neither is possible here, and both are stated, since a reader assuming
+					// the default would get it wrong
 					'can_reply' => false,
 					'can_react' => false,
 					// one object, not a list — see the class comment

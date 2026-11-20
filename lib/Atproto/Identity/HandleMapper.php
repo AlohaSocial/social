@@ -10,13 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Identity;
 
 /**
- * `alice.<instance host>` from a username.
- *
- * A Social username may hold what a DNS label may not — dots, underscores,
- * capitals — so it is mapped: lower-cased, every run of other characters
- * becomes one hyphen, hyphens are trimmed, and the label is cut to 63. The
- * result is stored with the identity, never recomputed, so a later change
- * of this rule renames nobody; a collision after mapping gets a number.
+ * `alice.<instance host>` from a username, mapped to a DNS label: lower-cased,
+ * every run of other characters one hyphen, hyphens trimmed, cut to 63. The
+ * result is stored, never recomputed, so changing this rule renames nobody;
+ * a collision after mapping gets a number.
  */
 final class HandleMapper {
 	private const MAX_LABEL = 63;

@@ -102,10 +102,8 @@ export default {
 	computed: {
 		...mapStores(useAccountStore),
 		/**
-		 * The handle under the name, written in full: a local account's
-		 * `acct` is the bare username, which told the reader nothing about
-		 * where the account is, and read as a different thing from the
-		 * `@user@host` the profile page shows for the same account.
+		 * The handle in full, `@user@host`, also for a local account whose `acct`
+		 * is the bare username.
 		 *
 		 * @return {string}
 		 */
@@ -132,11 +130,7 @@ export default {
 		},
 
 		/**
-		 * Where this entry stands with the reader.
-		 *
-		 * This component only mixes in currentUserMixin, so the `relationship`
-		 * the mount guard tested was always undefined and the guard could
-		 * never hold: twenty followers meant twenty requests, on every mount.
+		 * Where this entry stands with the reader, from the account store.
 		 *
 		 * @return {import('../types/Mastodon.js').Relationship|undefined}
 		 */

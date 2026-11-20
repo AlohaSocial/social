@@ -133,23 +133,16 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 			$post = null;
 		}
 
-		// A boost cannot widen the audience of the post it repeats: the local
-		// boost path refuses to create one at all (BoostService::create()), and
-		// storing a remote one would republish a followers-only or direct post
-		// into the timeline of everyone the booster reaches. An object we do
-		// not hold yet is caught on the way out instead, by the visibility
-		// condition on leftJoinObjectStatus().
+		// A boost cannot widen the audience of what it repeats (see
+		// BoostService::create()). An object not held yet is caught later by the
+		// visibility condition on leftJoinObjectStatus().
 		if ($post !== null && !$post->isPublic()) {
 			return;
 		}
 
-		// A PeerTube channel announces its own video to its followers the
-		// moment it publishes it, so a followed channel arrived twice: once as
-		// the video, once as "the channel boosted the video". Narrow on
-		// purpose — only a video, and only where the announcer is the account
-		// the video is already attributed to — because somebody boosting their
-		// own *post* to resurface it is a thing people do on Mastodon and this
-		// must not swallow that.
+		// A PeerTube channel announces its own new video, which would arrive twice.
+		// Only a video announced by the account it is attributed to: self-boosting a
+		// post to resurface it is normal on Mastodon.
 		if ($post !== null
 			&& ($post->getType() === 'Video' || $post->getSubType() === 'Video')
 			&& strcasecmp($post->getAttributedTo(), $item->getActorId()) === 0) {
@@ -160,10 +153,8 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 			return;
 		}
 
-		// one Announce row per booster: a second boost of the same post is a
-		// row of its own, attributed to whoever made it, so that an Undo can
-		// name it and the timelines can say who boosted. The same booster
-		// announcing again changes nothing.
+		// One Announce row per booster, so an Undo can name it and timelines can
+		// say who boosted; the same booster again changes nothing.
 		try {
 			$this->streamRequest->getAnnounceBy($item->getObjectId(), $actor->getId());
 		} catch (StreamNotFoundException $e) {
@@ -184,9 +175,8 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 		try {
 			$this->actionsRequest->getActionFromItem($item);
 		} catch (ActionDoesNotExistException $e) {
-			// a redelivery overlapping the first copy passes the lookups
-			// above and is refused by the database instead: the first copy
-			// counts and notifies
+			// A concurrent redelivery is refused by the database; the first copy counts
+			// and notifies.
 			if (!$this->actionsRequest->save($item)) {
 				return;
 			}
@@ -217,8 +207,7 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 				$actor = $this->cacheActorService->getFromId($item->getActorId());
 			}
 
-			// this booster's row and nobody else's; a row stored before boosts
-			// had one row each, attributed to another booster, is left as it is
+			// This booster's row only.
 			$knownItem = $this->streamRequest->getAnnounceBy($item->getObjectId(), $actor->getId());
 			$this->streamRequest->deleteById($knownItem->getId(), Announce::TYPE);
 		} catch (StreamNotFoundException|ItemUnknownException|SocialAppConfigException $e) {

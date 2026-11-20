@@ -15,24 +15,11 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether the peers that are strict about it will talk to this instance at all.
- *
- * Federation does not fail all at once. A Nextcloud on `http://` or on a
- * private address federates happily with a permissive peer and is refused,
- * silently and at the first gate, by a strict one — so an admin sees *some*
- * of the fediverse work and has no way to tell why the rest does not.
- *
- * The strictest in common use is Pixelfed, which is also the network a photo
- * server most wants to reach. Its `Helpers::isValidUri()` refuses any scheme
- * but `https`, and `lookupPublicIps()` resolves the host through DNS —
- * ignoring `/etc/hosts` — and refuses it if any address is private. Both are
- * consulted before a signature is even checked, from its inbox, its delivery
- * and its actor fetch, with nothing to configure. Mastodon is laxer about the
- * address but still refuses plain HTTP in practice.
- *
- * Reported rather than enforced: a development instance on a LAN is a
- * perfectly good thing to be, and this says what it costs rather than
- * pretending it is broken.
+ * Whether the peers that are strict about it will talk to this instance at
+ * all. Pixelfed refuses any scheme but `https` and any host that resolves
+ * through DNS to a private address, before checking a signature; Mastodon
+ * refuses plain HTTP in practice. Reported, not enforced: a LAN development
+ * instance is fine, and this says what it costs.
  */
 class ReachableByStrictPeers implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#the-setup-checks';

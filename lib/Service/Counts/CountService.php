@@ -26,28 +26,19 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The likes, boosts and replies of a post that lives elsewhere, kept current
- * wherever it lives.
+ * Keeps the likes, boosts and replies of posts that live elsewhere current.
  *
- * A post from another server arrives with the counts it had at that moment,
- * and nothing tells this server when they move. So the posts somebody looks
- * at are asked about again: a status, a conversation or a page of a timeline
- * hands its remote posts to `seen()`, which only queues — the page does no
- * network I/O — a background read (`Cron\RefreshCounts`) of the ones whose
- * counts are older than their interval: a quarter of an hour for a post less
- * than a day old, six hours after that. Each network the post may be on is
- * a `CountSource`; what it answers is stored in the post's row
- * (`CountWriter`), so every reader sees it, and `counts_at` says when it
- * was asked. The cron's pass over posts nobody looked at
- * (`RemoteCountService`) goes through `refreshPosts()` too.
+ * A remote post arrives with the counts it had then. Pages hand their remote
+ * posts to `seen()`, which only queues a background read
+ * (`Cron\RefreshCounts`) of the ones older than their interval: a quarter of
+ * an hour for a post under a day old, six hours after. Each network is a
+ * `CountSource`, and the answer is stored on the post's row (`CountWriter`),
+ * with `counts_at` saying when. The cron's pass over unseen posts
+ * (`RemoteCountService`) uses `refreshPosts()` too.
  *
- * A post on a reader's screen is read sooner and inline
- * (`refreshVisibleIfDue()`, `refreshVisibleMany()`), on a window that grows
- * with the post's age (`VISIBLE_WINDOWS`).
- *
- * A post of this instance's own is counted here, except where it is also on
- * a network that keeps counts this instance may not have heard of: a post
- * published to Bluesky is asked about the same way
+ * Posts on a reader's screen are read sooner and inline
+ * (`refreshVisibleIfDue()`, `refreshVisibleMany()`, `VISIBLE_WINDOWS`). Local
+ * posts are counted here, unless they are also on Bluesky
  * (`BlueskyPublishedCountSource`).
  */
 class CountService {
@@ -119,10 +110,9 @@ class CountService {
 			return false;
 		}
 
-		// The durable-cache throttle and IJobList check are both read-then-write:
-		// two feed requests arriving together could otherwise pass both checks
-		// and enqueue the same remote read twice. Keep this lock only around the
-		// short queue operation; network I/O remains in the background job.
+		// The throttle and the IJobList check are read-then-write, so concurrent
+		// feed requests could queue the same read twice; the lock covers only the
+		// short queue operation.
 		try {
 			$this->locks->acquireLock(self::QUEUE_LOCK, ILockingProvider::LOCK_EXCLUSIVE);
 		} catch (LockedException) {
@@ -214,14 +204,10 @@ class CountService {
 	}
 
 	/**
-	 * Refresh the counts of posts on a reader's screen: the ones whose
-	 * on-screen window (`visibleInterval()`) is out are asked of their
-	 * networks together, one call per network, within the interactive
-	 * timeout. A post another request is refreshing is left to it. Records
+	 * Refreshes the counts of posts on a reader's screen whose on-screen window
+	 * (`visibleInterval()`) is out, one call per network within the interactive
+	 * timeout; posts another request is refreshing are left to it. Records
 	 * nothing about the reader.
-	 *
-	 * Answers the ids whose counts were read, and whether any read is still
-	 * running or queued.
 	 *
 	 * @param iterable<Stream> $posts
 	 * @return array{refreshed: list<string>, pending: bool}
@@ -398,9 +384,8 @@ class CountService {
 	}
 
 	/**
-	 * The background read (`Cron\RefreshCounts`) of posts that were seen:
-	 * the ones still due — a page seen twice, or the cron, may have asked
-	 * already.
+	 * The background read (`Cron\RefreshCounts`) of posts that were seen, those
+	 * still due.
 	 *
 	 * @param string[] $postIds
 	 * @return array{asked: int, answered: int}

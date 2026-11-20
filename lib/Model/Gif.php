@@ -27,13 +27,9 @@ class Gif implements JsonSerializable {
 	}
 
 	/**
-	 * Whether a string may name a picture.
-	 *
-	 * The slug is a path segment of a public URL and the stem of a filename in
-	 * appdata, so it is held to what is safe in both: lowercase letters,
-	 * digits, `-` and `_`. That rules out `.` and `/` and therefore rules out
-	 * traversal, which is the reason the rule is this narrow rather than
-	 * "anything without a slash".
+	 * Whether a string may name a picture. The slug is a public URL segment and
+	 * a filename stem in appdata, so it is limited to lowercase letters, digits,
+	 * `-` and `_`, which rules out traversal.
 	 */
 	public static function isSlug(string $slug): bool {
 		return preg_match('/^[a-z0-9_-]{2,64}$/', $slug) === 1;

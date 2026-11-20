@@ -18,12 +18,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who may reply in a Bluesky thread (`app.bsky.feed.threadgate`): the gate
- * the thread's root carries, its rules checked for the account replying
- * from here. A reply the gate does not let through is hidden by every
- * AppView, so it is refused here, with the reason, rather than sent to
- * where nobody will see it. A thread nobody may reply to is marked when its
- * root is read (`PostMapper`), so the reply is not even offered.
+ * Who may reply in a Bluesky thread (`app.bsky.feed.threadgate`), checked for
+ * the account replying from here. A reply the gate refuses is hidden by every
+ * AppView, so it is refused here with the reason. A thread nobody may reply
+ * to is marked when its root is read (`PostMapper`).
  */
 class Threadgates {
 	private const GATE = 'app.bsky.feed.threadgate';

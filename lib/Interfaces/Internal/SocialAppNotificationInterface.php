@@ -54,18 +54,10 @@ class SocialAppNotificationInterface extends AbstractActivityPubInterface implem
 	}
 
 	/**
-	 * No notification is generated from an actor the recipient has blocked, who has
-	 * blocked the recipient, or whom the recipient muted with notifications hidden.
-	 * (The notification timeline filters on read as well; this keeps suppressed
-	 * entries out of the table entirely.)
-	 *
-	 * A mute that has run out is not a mute. Nothing deletes the row when its
-	 * expiry passes — that is what lets a timed mute end on an instance whose
-	 * background jobs never run — so every place that reads a mute has to ask
-	 * whether it still applies. This one did not, and it is the first of them:
-	 * the notification was never stored, so neither the read filter nor the
-	 * Nextcloud notification ever saw it, and a mute the user was told had
-	 * ended went on hiding what the account sent for ever.
+	 * No notification is stored from an actor the recipient has blocked, who
+	 * has blocked the recipient, or whom the recipient muted with notifications
+	 * hidden. Expired mutes do not count: nothing deletes their rows, so every
+	 * reader of a mute must check its expiry.
 	 */
 	private function isSuppressed(SocialAppNotification $notification): bool {
 		$to = $notification->getTo();

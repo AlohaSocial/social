@@ -16,29 +16,15 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Mastodon's StatusEdit entity: one version a status has been through.
+ * Mastodon's StatusEdit entity: one version a status has been through, with
+ * its text, content warning, sensitivity and attachments. Not a Status:
+ * clients diff it against the status they have.
  *
- * A revision is a snapshot of what an edit may change — the text, the content
- * warning, the sensitivity flag and the attachments with their descriptions
- * and focal points — and of when that version came into being. It is deliberately not a Status: it carries no id, no counts and
- * no interaction state, because a client renders it as a diff against the
- * status it already has rather than as a post of its own.
- *
- * `account` is the status author, the same on every revision of one status,
- * and is attached when the history is read rather than stored: an author's
- * display name and avatar are theirs now, not as they were at the time, and
- * copying them into every revision row would freeze a stale one into the
- * history.
- *
- * `media_attachments` are the attachments as they were in that version,
- * stored with the row because `media_attributes` rewrites a description or a
- * focal point in place and the post keeps only the latest. A revision written
- * before the row had a place for them reads as `[]`: what they were then was
- * never kept and cannot be recovered.
- *
- * `poll` and `emojis` are always `null`/`[]`: no edit here changes a poll, and
- * the emojis are derived from the text. The keys are emitted because a client
- * that declares them non-optional cannot decode the entity without them.
+ * `account` is attached on read, so it shows the author as they are now.
+ * `media_attachments` are stored per revision since descriptions and focal
+ * points are edited in place; older revisions without them read as `[]`.
+ * `poll` and `emojis` are always `null`/`[]` but emitted, as some clients
+ * require them.
  */
 class StatusRevision implements JsonSerializable {
 	use TArrayTools;
@@ -54,11 +40,9 @@ class StatusRevision implements JsonSerializable {
 	private array $mediaAttachments = [];
 
 	/**
-	 * The version a status is in right now.
-	 *
-	 * `published` is the edit stamp when there is one and the creation stamp
-	 * when there is not, which is what makes the first revision of a status
-	 * carry the time it was posted rather than the time it was first changed.
+	 * The version a status is in right now. `published` is the edit stamp, or
+	 * the creation stamp if never edited, so the first revision carries the
+	 * posting time.
 	 */
 	public static function fromStream(Stream $stream): self {
 		$updated = $stream->getUpdated();
@@ -191,9 +175,8 @@ class StatusRevision implements JsonSerializable {
 	}
 
 	/**
-	 * `account` is exported in the client format, not the ActivityPub one: a
-	 * StatusEdit is only ever read by a Mastodon client, and the federated
-	 * shape of an actor is not something any of them can decode.
+	 * `account` in the client format, as only Mastodon clients read a
+	 * StatusEdit.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {
@@ -218,11 +201,9 @@ class StatusRevision implements JsonSerializable {
 	}
 
 	/**
-	 * When this version was written, as the client API writes every time: UTC
-	 * with milliseconds and `Z`. What is stored is the ActivityPub `published`
-	 * or `updated` as it was written — `+00:00` for a post made here, any ISO
-	 * 8601 spelling for a peer's — and a client that parses Mastodon's form
-	 * fails on the others.
+	 * When this version was written, in the client API's form (UTC with
+	 * milliseconds and `Z`); the stored ActivityPub time may use any ISO 8601
+	 * spelling, which some clients fail to parse.
 	 */
 	private static function clientTime(string $stored): string {
 		$time = strtotime($stored);

@@ -12,11 +12,6 @@ namespace OCA\Social\Tools\Model;
 use JsonSerializable;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class CacheItem
- *
- * @package OCA\Social\Tools\Model
- */
 class CacheItem implements JsonSerializable {
 	use TArrayTools;
 
@@ -159,10 +154,8 @@ class CacheItem implements JsonSerializable {
 	}
 
 	/**
-	 * What is stored in `social_stream.cache`, and read back by `import()`.
-	 *
-	 * Only `content` is stored: the object is `content` decoded, and
-	 * `getObject()` decodes it when it is asked for.
+	 * What is stored in `social_stream.cache`, and read back by `import()`:
+	 * only `content`, which `getObject()` decodes on demand.
 	 *
 	 * @return array
 	 */

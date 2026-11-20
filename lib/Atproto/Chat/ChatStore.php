@@ -35,18 +35,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A Bluesky direct message as a direct message here: a `Note` from its
- * sender to the one local account, naming it, so it is in that account's
- * conversations and notifies it like any other. Each message answers the
- * one before it in the Bluesky conversation, received or sent from here,
- * which is how the conversation stays one conversation here.
+ * A Bluesky direct message as a direct message here: a `Note` from its sender
+ * to the local account, answering the previous message so the conversation
+ * stays one thread.
  *
- * A message the account itself wrote in a Bluesky app is stored as its own
- * direct message to the others in the conversation, saved as it is and
- * never delivered: it reached them already. One sent from here is
- * remembered by its Bluesky id, so it is not stored a second time when the
- * log shows it, and by its conversation, so reading it here is reading it
- * on Bluesky.
+ * A message the account wrote in a Bluesky app is stored as its own direct
+ * message, never delivered. One sent from here is remembered by its Bluesky
+ * id, so it is not stored twice, and by its conversation, so reading it here
+ * marks it read on Bluesky.
  */
 class ChatStore {
 	/** how long the newest message of a conversation is remembered */
@@ -244,14 +240,10 @@ class ChatStore {
 	}
 
 	/**
-	 * A reaction in a Bluesky chat log, or one attached to a backfilled message.
-	 * Reactions use the existing local EmojiReact table so direct conversations
-	 * expose the same summaries as other messages.
-	 *
-	 * An old message may not be present here (the initial import is deliberately
-	 * limited to unread messages). Such a reaction cannot be displayed and is
-	 * intentionally ignored; database failures still propagate so
-	 * the chat cursor can retry them.
+	 * A reaction in a Bluesky chat log, or on a backfilled message, stored in the
+	 * local EmojiReact table. A reaction to a message not stored here (the
+	 * import only takes unread messages) is ignored; database failures
+	 * propagate so the chat cursor retries.
 	 *
 	 * @param array $message a `messageView` or `deletedMessageView`
 	 * @param array $reaction a `reactionView`

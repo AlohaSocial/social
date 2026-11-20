@@ -20,13 +20,9 @@ use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
 
 /**
- * What answers an address under `/api/` that no route of the client API
- * does, for a browser client of another origin: the CORS preflight a bearer
- * token, a JSON body or an `Idempotency-Key` makes it send first, and the 404
- * of an endpoint this server does not have, readable by that client. Neither
- * looks at who asks; the calls themselves are authenticated as they always
- * are (`ClientApiCorsMiddleware`). Routed in `appinfo/routes.php`, after
- * every other route.
+ * Answers an `/api/` address no client-API route does, for a browser client of
+ * another origin: the CORS preflight, and a 404 that client can read. Neither
+ * looks at who asks. Routed last in `appinfo/routes.php`.
  */
 class ClientApiPreflightController extends Controller {
 	public function __construct(IRequest $request) {

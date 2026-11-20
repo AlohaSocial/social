@@ -17,11 +17,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * The shared pictures this instance offers in the composer.
- *
- * A small set curated for a whole instance, not something every reader adds
- * to. An administrator fills it from here or from the GIF library card of the
- * admin page, which calls the same `GifService`.
+ * The shared GIFs this instance offers in the composer, curated for the whole
+ * instance. The admin page's GIF library card uses the same `GifService`.
  */
 class Gif extends SocialCommand {
 	public function __construct(

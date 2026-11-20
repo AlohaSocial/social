@@ -6,13 +6,9 @@
 /**
  * The `max_id` the server put in its `Link: …; rel="next"` header.
  *
- * A list whose cursor is not the id of the last row it answered with has to
- * page from here rather than from what is on screen: a conversation's id is
- * its thread root and its cursor a message nid, a follow request is paged on
- * the request rather than the account, a list member's cursor is the
- * membership row and not the account, and a page of tagged photos can be
- * short because the reader may not see some of them. The absence of the
- * header is also the only reliable "this was the last page".
+ * Lists whose cursor is not the id of their last row (conversations, follow
+ * requests, list members, tagged photos) page from this, and a missing header
+ * is the only reliable sign of the last page.
  *
  * @param {Record<string, unknown>} headers the response headers, as axios hands them back
  * @return {string} the cursor, or '' when the server said this is the last page

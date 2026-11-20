@@ -25,17 +25,10 @@ use Throwable;
 /**
  * What a PeerTube `Video` says, in the terms the rest of this app speaks.
  *
- * A `Video` is modelled as a `Note` carrying its wire type in `subtype` (see
- * `AP::NOTE_LIKE_TYPES`) -- that is what makes it storable, queryable and
- * readable by a Mastodon client. What it was missing is everything that makes
- * it a *video*: the file to play, the thumbnail to show before it plays, how
- * long it runs, and which of the two actors in `attributedTo` published it.
- * None of those live where an ordinary `Note` keeps them, so they are read out
- * here.
- *
- * Nothing in this class fetches anything. It reads the object that already
- * arrived in the inbox and says what is in it; the caller decides what to do
- * with that.
+ * A `Video` is modelled as a `Note` with its wire type in `subtype` (see
+ * `AP::NOTE_LIKE_TYPES`); what makes it a video (the file, the thumbnail, the
+ * duration, the publishing actor) lives elsewhere in the object and is read
+ * out here. Nothing here fetches anything.
  */
 class PeerTubeService {
 	use TArrayTools;
@@ -51,14 +44,10 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The one link this app will play, in the order it prefers them.
-	 *
-	 * `video/mp4` is the only thing every browser can play from a bare
-	 * `<video src>`, so a PeerTube in "web videos" mode is played directly.
-	 * An instance transcoding to HLS only publishes `application/x-mpegURL`
-	 * instead, which Safari plays natively and nothing else does; it is taken
-	 * as a last resort rather than dropped, because the alternative for those
-	 * videos is no player at all.
+	 * The one link this app will play, in the order it prefers them. `video/mp4`
+	 * plays from a bare `<video src>` everywhere; HLS-only instances publish
+	 * `application/x-mpegURL`, which only Safari plays natively, taken as a last
+	 * resort.
 	 */
 	private const PLAYABLE = ['video/mp4', 'video/webm', 'video/ogg', 'application/x-mpegURL'];
 
@@ -72,20 +61,12 @@ class PeerTubeService {
 	private const MAX_TITLE = 120;
 
 	/**
-	 * The file to play, as a `Document` that is deliberately never mirrored.
+	 * The file to play, as a `Document` that is never mirrored. The row is what
+	 * the streaming route checks a request against, so it cannot proxy any URL.
 	 *
-	 * A `Document` rather than a bare url because that is what the rest of the
-	 * app -- the attachment list, the media route, the client entity -- is
-	 * built out of, and because the row it becomes is what the streaming route
-	 * checks a request against: a proxy that would fetch any url it is handed
-	 * is an open redirect with a server behind it.
-	 *
-	 * `localCopy` is the streamed sentinel rather than empty, which is what
-	 * keeps the caching cron's hands off it -- `getNotCachedDocuments()` only
-	 * looks at rows whose `local_copy` is empty, and a two-hour talk is not
-	 * something to copy onto somebody's Nextcloud. `resizedCopy` is left for
-	 * the thumbnail, which *is* small enough to mirror and is filled in by
-	 * `VideoAttachmentService`.
+	 * `localCopy` is the streamed sentinel, which keeps the caching cron
+	 * (`getNotCachedDocuments()`) off it; `resizedCopy` is left for the
+	 * thumbnail, which `VideoAttachmentService` mirrors.
 	 *
 	 * @param array $data the wire `Video`
 	 *
@@ -111,10 +92,8 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The still to show before anything is played: PeerTube's `icon`, which is
-	 * one `Image` on older instances and a list of them on newer ones. The
-	 * largest is taken -- they are all a few dozen kilobytes, and the grid
-	 * draws them at whatever size it likes.
+	 * The still to show before anything is played: PeerTube's `icon`, one
+	 * `Image` or a list of them, of which the largest is taken.
 	 *
 	 * @param array $data the wire `Video`
 	 *
@@ -163,18 +142,10 @@ class PeerTubeService {
 	}
 
 	/**
-	 * Whether replies to this video have to be approved before anybody sees
-	 * them — FEP-5624, which PeerTube ≥ 6.2 implements as `commentsPolicy`.
-	 *
-	 * `1` is enabled, `2` disabled and `3` "requires approval"; `canReply`
-	 * names who may reply without being approved, so a video that publishes one
-	 * which does not include the public collection is moderating its comments
-	 * too. Read in both spellings because the two arrived a version apart and
-	 * instances run both.
-	 *
-	 * Without this a reply written here looked posted, sat in a queue on the
-	 * other side, and either appeared a day later or never — with nothing
-	 * anywhere to say which.
+	 * Whether replies to this video need approval: FEP-5624, PeerTube's
+	 * `commentsPolicy` (`1` enabled, `2` disabled, `3` requires approval), or a
+	 * `canReply` without the public collection. Both spellings are read, since
+	 * instances run both. Lets a reply written here say it awaits approval.
 	 *
 	 * @param array $data the wire `Video`
 	 */
@@ -205,11 +176,8 @@ class PeerTubeService {
 	}
 
 	/**
-	 * How long it runs, in whole seconds.
-	 *
-	 * ActivityStreams says `duration` is an xsd:duration, and PeerTube always
-	 * writes the simple `PT113S` form of one. Only the time half is read: a
-	 * video measured in months is not a video.
+	 * How long it runs, in whole seconds, from the `PT113S` xsd:duration form
+	 * PeerTube writes; only the time half is read.
 	 *
 	 * @return int 0 when it says nothing usable
 	 */
@@ -229,18 +197,10 @@ class PeerTubeService {
 	}
 
 	/**
-	 * Everything else a `Video` says that a `Note` has nowhere to put.
-	 *
-	 * A video is not a post with a rectangle in it. It has a category, a
-	 * licence, a language, chapters, captions, a "support the author" line and
-	 * two counters — every one of which PeerTube publishes and none of which
-	 * this app read, so a federated video arrived as a paragraph and a player
-	 * with all of that thrown away.
-	 *
-	 * Kept together in one block on the post's details rather than spread over
-	 * a dozen columns: it is local, derived data about somebody else's
-	 * document, which is what the details column is for, and a watch page wants
-	 * all of it or none.
+	 * Everything else a `Video` says that a `Note` has nowhere to put: category,
+	 * licence, language, chapters, captions, support line and counters. Kept as
+	 * one block in the post's details, since a watch page wants all of it or
+	 * none.
 	 *
 	 * @param array $data the wire `Video`
 	 *
@@ -248,10 +208,7 @@ class PeerTubeService {
 	 */
 	public function videoMeta(array $data): array {
 		$meta = array_filter([
-			// what the video is *called*. A `Note` has no title and this app
-			// puts it in the first line of the content, which is right for a
-			// timeline card and not enough for a page about the video: a watch
-			// page wants a heading, and it cannot take one out of a paragraph.
+			// the title, for a watch page's heading; a `Note` has none
 			'title' => mb_substr($this->title($data), 0, self::MAX_TITLE),
 			// PeerTube sends these as `{id, label}`; the label is what a reader
 			// wants and the id means nothing off its own instance
@@ -274,9 +231,8 @@ class PeerTubeService {
 			}
 		}
 
-		// `downloadEnabled` is the author saying whether the file may be saved.
-		// Absent means yes, which is PeerTube's own default, so only a stated
-		// refusal is recorded — an absent field must not read as one.
+		// `downloadEnabled` absent means yes, PeerTube's default, so only a stated
+		// refusal is recorded
 		if (array_key_exists('downloadEnabled', $data)) {
 			$meta['download'] = (bool)$data['downloadEnabled'];
 		}
@@ -315,10 +271,8 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The chapters of a video, from FEP-6f7d's `hasParts`.
-	 *
-	 * A chapter is a name and a moment, which is all a seek list needs. The
-	 * offsets are seconds; anything that is not a number is not a chapter.
+	 * The chapters of a video, from FEP-6f7d's `hasParts`: a name and an offset
+	 * in seconds.
 	 *
 	 * @return array<int, array{title: string, start: int}>
 	 */
@@ -349,11 +303,8 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The subtitle tracks a video publishes.
-	 *
-	 * PeerTube hangs them off `url` as `text/vtt` links carrying the language,
-	 * which is the only place they are actually addressable — `subtitleLanguage`
-	 * on its own names languages with nothing to fetch for them.
+	 * The subtitle tracks a video publishes: the `text/vtt` links in `url`, the
+	 * only place they can be fetched from.
 	 *
 	 * @return array<int, array{language: string, url: string}>
 	 */
@@ -393,16 +344,9 @@ class PeerTubeService {
 	}
 
 	/**
-	 * Who published it.
-	 *
-	 * PeerTube sends `attributedTo` as a list of two actors -- the channel, a
-	 * `Group`, and the account behind it, a `Person` -- where every other
-	 * server sends one id as a string. `Stream::import()` asks for a string and
-	 * so read neither, leaving every federated video attributed to nobody.
-	 *
-	 * The channel wins, because the channel is what the `Create` is signed by,
-	 * what a reader follows, and what the video is listed under on PeerTube
-	 * itself.
+	 * Who published it. PeerTube's `attributedTo` lists the channel (a `Group`)
+	 * and the account behind it (a `Person`); the channel wins, as it signs the
+	 * `Create`, is what readers follow, and lists the video on PeerTube.
 	 *
 	 * @return string '' when the list holds no actor with an id
 	 */
@@ -433,25 +377,13 @@ class PeerTubeService {
 
 	/**
 	 * The video as a post: its title, linked to the page it plays on, and the
-	 * description under it.
+	 * description under it. The title is not copied into the note's `name`,
+	 * which means a poll vote's option here (`PollService::handleIncomingVote`).
 	 *
-	 * The title is what a video is *called*, and a `Video` keeps it in `name`
-	 * where a `Note` has no title at all -- so a timeline that only read
-	 * `content` showed the description of a video whose name it never
-	 * mentioned. It is not copied into the note's `name` instead, because that
-	 * field means one thing here, the option a poll vote chose (see
-	 * `PollService::handleIncomingVote`), and giving it a second meaning is how
-	 * a post would end up counted as a vote.
-	 *
-	 * The description is read as html and sanitised, as every other object's
-	 * `content` is -- *unless* the object says it is not, which PeerTube does:
-	 * it declares `text/markdown` in the object's own `mediaType` and sends the
-	 * description raw. That is then escaped and its blank lines become
-	 * paragraphs, which is as much of markdown as a timeline needs. Believing
-	 * the declaration in both directions is the point: escaping html would show
-	 * somebody's tags to them, and rendering markdown as html would hand a
-	 * remote server a way to put markup in a post that never went through a
-	 * sanitiser of its own.
+	 * The description is sanitised HTML, unless the object declares
+	 * `text/markdown`, as PeerTube does: then it is escaped first and given a
+	 * little markdown, so a remote server can never get markup past the
+	 * sanitiser.
 	 */
 	public function content(array $data): string {
 		$content = '';
@@ -482,23 +414,12 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The little of markdown a video description actually uses, as html.
+	 * The little markdown a video description uses, as HTML, rather than raw
+	 * asterisks and brackets.
 	 *
-	 * Left alone, a PeerTube description reads as `**Take back the control of
-	 * your videos! [#JoinPeertube](https://joinpeertube.org)**` -- asterisks,
-	 * brackets and a URL in parentheses, in the middle of a timeline. Mastodon
-	 * shows exactly that, and it is not a good reason to.
-	 *
-	 * The order is the safety: the text is **escaped first**, so every tag
-	 * below is one this method wrote and there is no path by which a remote
-	 * server's markup survives. A link is only made of an `http(s)` target --
-	 * `[click here](javascript:…)` stays the text it was -- and the href is the
-	 * escaped form, so a `"` in a url cannot end the attribute.
-	 *
-	 * Bold before italic, because `**` would otherwise be read as two `*`.
-	 * Block constructs (headings, lists, code fences) are deliberately not
-	 * handled: they are rare in a video description and each one is a way to
-	 * get this wrong.
+	 * The text is escaped first, so every tag is one this method wrote. Links
+	 * are made only of `http(s)` targets, with the escaped href. Bold before
+	 * italic, since `**` would read as two `*`. Block constructs are not handled.
 	 */
 	private function markdown(string $text): string {
 		$text = $this->escape($text);
@@ -544,9 +465,8 @@ class PeerTubeService {
 
 	/**
 	 * The playable link with the most pixels this app is willing to proxy, and
-	 * `application/x-mpegURL` only when there is no file at all -- a playlist
-	 * that Chrome and Firefox cannot open must never be preferred over an mp4
-	 * that they can.
+	 * `application/x-mpegURL` only when there is no file at all, since Chrome and
+	 * Firefox cannot open it.
 	 *
 	 * @param array<int, array{href: string, mediaType: string, width: int, height: int, language: string}> $links
 	 */
@@ -586,20 +506,10 @@ class PeerTubeService {
 	}
 
 	/**
-	 * `url` normalised to a flat list of links.
-	 *
-	 * It is a string on every other kind of object, one `Link` on some, and on
-	 * a PeerTube `Video` a list that mixes the watch page, one file per
-	 * resolution, the HLS playlist, a torrent and a magnet URI. Only http(s)
-	 * survives -- `magnet:` is not something to hand a `<video>`.
-	 *
-	 * The nesting is not decoration. A PeerTube transcoding to HLS -- which is
-	 * the default, and what a public instance actually federates -- publishes
-	 * *one* top-level link, the `.m3u8` playlist, and hangs the playable file
-	 * for each resolution off that link's `tag` instead. Reading only the top
-	 * level therefore found nothing but a playlist, which is to say nothing
-	 * Chrome or Firefox can open, on the majority of real videos. So `tag` is
-	 * walked as well, and the files inside it are links like any other.
+	 * `url` normalised to a flat list of http(s) links (no `magnet:`). On a
+	 * PeerTube `Video` it mixes the watch page, files, the HLS playlist and
+	 * torrents, and an HLS instance hangs each resolution's file off the
+	 * playlist link's `tag`, which is walked too.
 	 *
 	 * @param int $depth guards against a `tag` that refers back to its own link
 	 *
@@ -715,16 +625,10 @@ class PeerTubeService {
 	// ---- the other direction: what this instance publishes ----
 
 	/**
-	 * The one video attachment of a post, when the post is a video.
-	 *
-	 * Exactly one, and nothing else alongside it. A `Video` object *is* the
-	 * video -- it has one title, one duration, one file -- so a post carrying a
-	 * video and three photographs is a post, not a video, and stays a `Note`.
-	 *
-	 * Static and pure, like everything below it: this half is called from
-	 * `Note::jsonSerialize()`, which is a model with no container to reach
-	 * into, and it lives in this file rather than beside the caller so that
-	 * what this app writes and what it reads cannot drift apart.
+	 * The one video attachment of a post, when the post is a video: exactly one
+	 * and nothing else, or it stays a `Note`. Static and pure, as everything
+	 * below, since `Note::jsonSerialize()` calls it, and kept here so writing
+	 * and reading cannot drift apart.
 	 *
 	 * @param MediaAttachment[] $attachments
 	 */
@@ -739,26 +643,10 @@ class PeerTubeService {
 	}
 
 	/**
-	 * A local post, reshaped as the `Video` object PeerTube publishes.
-	 *
-	 * Everything already in `$note` stays -- id, actor, audience, published,
-	 * sensitive, tags, replies -- and what a `Video` adds on top is what makes
-	 * it findable as a video rather than as a post that happens to have one:
-	 *
-	 * - `name`, the title. A `Note` has no such field, so it is derived; see
-	 *   `titleFor()`.
-	 * - `duration`, in the xsd form PeerTube writes (`PT113S`).
-	 * - `icon`, the poster frame, which this instance generates on upload.
-	 * - `url` as a **list**: the web page, and a `Link` for the file itself.
-	 *   That list is the one thing PeerTube actually looks at, and a `Video`
-	 *   without it is a video nothing can play.
-	 *
-	 * `attachment` is deliberately **kept** as well. A `Video` carries its file
-	 * in `url` and has no need of it, but every Mastodon-family server reads
-	 * `attachment` and nothing else, and this post rendered there with an
-	 * inline player before this method existed. Publishing the two together
-	 * costs a few hundred bytes and is the difference between gaining PeerTube
-	 * and trading Mastodon for it.
+	 * A local post, reshaped as the `Video` object PeerTube publishes. On top of
+	 * the note it adds `name` (see `titleFor()`), `duration` (`PT113S`), `icon`
+	 * (the poster frame) and `url` as a list with the page and the file, which is
+	 * what PeerTube plays. `attachment` stays, for Mastodon-family servers.
 	 *
 	 * @param array $note the note as it would otherwise have been published
 	 * @param array<array{height: int, size: int, bandwidth: int, href: string}> $rungs
@@ -777,22 +665,16 @@ class PeerTubeService {
 		$duration = (int)round((float)($meta?->getDuration() ?? 0));
 		$icon = self::iconFor($video);
 
-		// PeerTube's validator makes `duration`, `icon` and a non-empty
-		// `attributedTo` mandatory, and its builder refuses a video whose
-		// `attributedTo` holds no `Group` at all. A post that cannot satisfy
-		// all three — no poster because the server has no ffmpeg, no duration
-		// for the same reason, no channel because the account has none — is
-		// therefore published as the `Note` it would have been, which Mastodon
-		// and Pixelfed both read. Sending a `Video` that is going to be thrown
-		// away is strictly worse than sending the shape that works.
+		// PeerTube requires `duration`, `icon` and an `attributedTo` with a
+		// `Group`; a post lacking any of them (no ffmpeg, no channel) goes out as
+		// the `Note`, which Mastodon and Pixelfed read.
 		if ($duration <= 0 || $icon === null || $attributedTo === []) {
 			return null;
 		}
 
 		$note['type'] = self::TYPE;
-		// what the author called it, where they called it anything. A title
-		// taken out of the first line of the post is a guess, and a guess is
-		// only worth making when nobody has answered the question.
+		// what the author called it, where they did; a first-line title is only a
+		// fallback
 		$note['name'] = ($stated['title'] ?? '') !== ''
 			? mb_substr((string)$stated['title'], 0, self::MAX_TITLE)
 			: self::titleFor($note, $video);
@@ -803,9 +685,8 @@ class PeerTubeService {
 			}
 		}
 		$note['attributedTo'] = $attributedTo;
-		// `isUUIDValid` is checked before anything else is read, and a `Video`
-		// without one is refused outright. Derived from the post's own id so
-		// that the same post is the same video however often it is delivered.
+		// PeerTube refuses a `Video` without a valid `uuid`; derived from the
+		// post's id, so a redelivery is the same video
 		$note['uuid'] = self::uuidFor((string)($note['id'] ?? ''));
 		$note['views'] = max(0, $views);
 		// mandatory, and this app writes one only on a post that has been
@@ -813,8 +694,7 @@ class PeerTubeService {
 		if (($note['updated'] ?? '') === '') {
 			$note['updated'] = (string)($note['published'] ?? gmdate('c'));
 		}
-		// the defaults PeerTube would have filled in, said out loud: a reader
-		// that states them is a reader whose intent cannot be guessed wrong
+		// PeerTube's defaults, stated explicitly
 		$note['state'] = 1;
 		$note['waitTranscoding'] = false;
 		$note['downloadEnabled'] = true;
@@ -825,9 +705,8 @@ class PeerTubeService {
 		$note['icon'] = [$icon];
 		$note['duration'] = 'PT' . $duration . 'S';
 
-		// what the content actually is, said out loud. PeerTube declares
-		// `text/markdown` for its own; this app's posts are html, and a peer
-		// that assumed otherwise would show somebody their own tags.
+		// this app's posts are HTML, said explicitly, since PeerTube's own are
+		// markdown
 		if (($note['content'] ?? '') !== '') {
 			$note['mediaType'] = 'text/html';
 		}
@@ -838,9 +717,8 @@ class PeerTubeService {
 		// has replies on every post and no way to turn them off
 		$note['commentsEnabled'] = true;
 
-		// PeerTube fetches both counts for every video it takes in, and writes
-		// whatever it got: without them it wrote an undefined count and the
-		// unhandled failure took the whole server down
+		// PeerTube fetches both counts for every video, and a missing one crashes
+		// it
 		$id = (string)($note['id'] ?? '');
 		$note['likes'] = $id . Stream::LIKES_PATH;
 		$note['dislikes'] = $id . Stream::DISLIKES_PATH;
@@ -849,15 +727,9 @@ class PeerTubeService {
 	}
 
 	/**
-	 * What to call it.
-	 *
-	 * A `Note` has no title and this app does not ask for one, so it is taken
-	 * from the first line of the post -- which is where somebody writing about
-	 * a video puts its name -- with the alt text as the fallback for a post
-	 * that is nothing but the video.
-	 *
-	 * `name` on a Note means the option a poll vote chose, so nothing here
-	 * reads it: a title that came from that field would be a vote.
+	 * What to call it: the post's first line, where somebody writing about a
+	 * video puts its name, else the alt text. `name` on a Note is a poll vote's
+	 * option, so it is never read.
 	 */
 	private static function titleFor(array $note, MediaAttachment $video): string {
 		$content = trim(strip_tags(str_replace(['</p>', '<br>', '<br/>', '<br />'], "\n", (string)($note['content'] ?? ''))));
@@ -876,24 +748,11 @@ class PeerTubeService {
 	}
 
 	/**
-	 * A UUID for a post that has none.
+	 * A UUID derived from the post's id, since PeerTube refuses a `Video` without
+	 * one and a redelivered video must be the same video. A name hash, but marked
+	 * version 4, the only version PeerTube's `isUUIDValid()` accepts.
 	 *
-	 * PeerTube checks `uuid` before it reads anything else and refuses a
-	 * `Video` whose one is not a UUID. This app addresses a post by its URL and
-	 * has no such field, so one is derived from the id — the same id in, the
-	 * same UUID out, every time, which is what makes a redelivered video the
-	 * same video rather than a second one.
-	 *
-	 * Shaped as a version-4 UUID although it is a hash of a name, because
-	 * PeerTube's `isUUIDValid()` accepts version 4 and nothing else. It used
-	 * to say version 5, which is what it is, and PeerTube refused every
-	 * `Video` this app sent on that one field. The two nibbles that carry the
-	 * version and the variant are set by hand; the rest is the hash, so it
-	 * stays as stable as it was.
-	 *
-	 * Public because `PeerTubeApiService` needs the **same** answer: a video
-	 * seen through the PeerTube client API and the same video seen over
-	 * ActivityPub must carry one uuid and not two that nothing can tell apart.
+	 * Public because `PeerTubeApiService` must give the same video the same uuid.
 	 */
 	public static function uuidFor(string $id): string {
 		$hash = sha1('social:video:' . $id);
@@ -914,8 +773,7 @@ class PeerTubeService {
 	private static function iconFor(MediaAttachment $video): ?array {
 		$preview = $video->getPreviewUrl();
 		if ($preview === '' || $preview === (string)$video->getUrl()) {
-			// no poster: this instance had no ffmpeg when the video was
-			// uploaded, and `preview_url` is the video itself
+			// no poster (no ffmpeg at upload), so `preview_url` is the video itself
 			return null;
 		}
 
@@ -931,14 +789,9 @@ class PeerTubeService {
 	}
 
 	/**
-	 * `url` as PeerTube writes it: the page a person watches on, then the file
-	 * a player opens.
-	 *
-	 * The file link is always there: whatever was uploaded, at one size, which
-	 * is what a reader with no HLS falls back to. Where the video has been
-	 * laddered there is a streaming playlist beside it, in the shape PeerTube
-	 * publishes its own — the master's address, and a `Link` tag per rung so a
-	 * peer knows what it is being offered without fetching the playlist first.
+	 * `url` as PeerTube writes it: the watch page, then the file as uploaded, and,
+	 * for a laddered video, a streaming playlist with a `Link` tag per rung, as
+	 * PeerTube publishes its own.
 	 *
 	 * @param array<array{height: int, size: int, bandwidth: int, href: string}> $rungs
 	 */
@@ -956,8 +809,7 @@ class PeerTubeService {
 
 		$link = [
 			'type' => 'Link',
-			// the full type, not the `video` half a client entity carries: a
-			// peer that does not sniff the file has nothing else to go on
+			// the full type: a peer that does not sniff has nothing else to go on
 			'mediaType' => ($video->getMediaType() !== '') ? $video->getMediaType() : 'video/mp4',
 			'href' => $file,
 		];
@@ -968,10 +820,8 @@ class PeerTubeService {
 			$link['height'] = $original->getHeight();
 		}
 
-		// `isRemoteVideoUrlValid()` wants `height` and `size` as integers and
-		// drops a file link that has neither, so a `Video` whose only link went
-		// out without them arrived with nothing to play. `fps` is optional and
-		// sent where it is known.
+		// `isRemoteVideoUrlValid()` drops a file link without integer `height` and
+		// `size`; `fps` is optional
 		$link['size'] = $video->getSizeBytes();
 		$fps = (int)round((float)($video->getMeta()?->getFps() ?? 0));
 		if ($fps > 0) {
@@ -989,14 +839,9 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The ladder as PeerTube's streaming-playlist link.
-	 *
-	 * PeerTube reads `mediaType: application/x-mpegURL` as "this is HLS" and
-	 * takes the resolutions from the `Link` tags underneath rather than by
-	 * fetching the playlist, so a link with no tags is one it accepts and then
-	 * has no files for. No `Infohash` tag: those are BitTorrent info hashes for
-	 * PeerTube's WebTorrent transport, which this app does not have and must
-	 * not invent.
+	 * The ladder as PeerTube's streaming-playlist link: PeerTube takes the
+	 * resolutions from the `Link` tags rather than the playlist. No `Infohash`
+	 * tags, which belong to its WebTorrent transport.
 	 *
 	 * @param array<array{height: int, size: int, bandwidth: int, href: string}> $rungs
 	 */
@@ -1014,8 +859,7 @@ class PeerTubeService {
 
 			$tags[] = [
 				'type' => 'Link',
-				// a rung is one fragmented MP4 whose segments are byte ranges
-				// into it, which is a `video/mp4` to anything that fetches it
+				// a rung is one fragmented MP4 whose segments are byte ranges into it
 				'mediaType' => 'video/mp4',
 				'href' => $rung['href'],
 				'height' => (int)$rung['height'],
@@ -1037,16 +881,11 @@ class PeerTubeService {
 
 	/**
 	 * The video as this app's one media attachment for it: a player pointed at
-	 * the streaming route, a still that *is* mirrored here, and how long it
-	 * runs.
+	 * the streaming route, a mirrored still, and the duration.
 	 *
-	 * Two cache rows, not one. The video's says where the bytes are and is
-	 * never filled; the thumbnail's is an ordinary image row, fetched and
-	 * resized like any other, which is what lets `/media/{uuid}` answer it
-	 * with `image/jpeg` instead of the video's own media type. Hanging the
-	 * still off the video row's `resized_copy` instead would have put one uuid
-	 * on two rows, and `getByCopy()` would answer with whichever the database
-	 * felt like.
+	 * Two cache rows: the video's, never filled, and the thumbnail's, an ordinary
+	 * image row, so `/media/{uuid}` answers it as an image and no uuid is on two
+	 * rows.
 	 *
 	 * @param array $data the wire `Video`
 	 * @param ACore $parent the post it belongs to
@@ -1098,12 +937,9 @@ class PeerTubeService {
 	}
 
 	/**
-	 * The still, cached here, as a url on this instance -- '' when the video
-	 * published none or it could not be fetched.
-	 *
-	 * A thumbnail that will not download is not worth losing the video over,
-	 * so a failure here is swallowed; the row it leaves behind has an empty
-	 * `local_copy`, which is exactly what the caching cron comes back for.
+	 * The still, cached here, as a url on this instance; '' when the video
+	 * published none or it could not be fetched. A failure is swallowed, and the
+	 * empty `local_copy` it leaves is what the caching cron retries.
 	 */
 	private function preview(array $data, ACore $parent): string {
 		$thumbnail = $this->thumbnail($data);

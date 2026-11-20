@@ -161,10 +161,8 @@ class Report implements JsonSerializable {
 	}
 
 	/**
-	 * Whether the Flag was delivered to the instance the reported account is
-	 * on. Only ever true for a local report about a remote account: there is
-	 * nowhere to forward a report about one of our own, and a report that
-	 * arrived as a Flag is not ours to pass on.
+	 * Whether the Flag was delivered to the reported account's instance; only
+	 * ever true for a local report about a remote account.
 	 */
 	public function setForwarded(bool $forwarded): self {
 		$this->forwarded = $forwarded;
@@ -207,13 +205,10 @@ class Report implements JsonSerializable {
 	}
 
 	/**
-	 * This report as the administration page's moderation table reads it.
-	 *
-	 * Not the Mastodon entity above: the table shows who was reported and
-	 * what already stands against them, which the API's Report does not
-	 * carry. It appends the pages `ModerationController::reports()` answers
-	 * to the rows `AdminSettings` rendered the page with and cannot tell them
-	 * apart, so both go through here and neither can drift from the other.
+	 * This report as the administration page's moderation table reads it,
+	 * with who was reported and their standing decision. Both the initial
+	 * `AdminSettings` rows and `ModerationController::reports()` pages go
+	 * through here, so they cannot drift apart.
 	 *
 	 * @param array<string, string> $decisions the standing decision per account, keyed by actor id
 	 *

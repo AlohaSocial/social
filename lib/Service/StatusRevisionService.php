@@ -17,13 +17,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What a status used to say.
- *
- * Two jobs, and the order between them is the whole feature: an edit records
- * the version it replaces before it records the new one, so the first row of
- * any status is the text that was posted. Reading the history back is then a
- * plain ordered select — there is no reconstruction step, because nothing here
- * stores diffs.
+ * What a status used to say. An edit records the version it replaces before
+ * the new one, so the first row of any status is the text that was posted and
+ * the history is a plain ordered select, with no diffs.
  */
 class StatusRevisionService {
 	public function __construct(
@@ -34,18 +30,12 @@ class StatusRevisionService {
 	}
 
 	/**
-	 * Records an edit, called with the status as it was and as it now is.
+	 * Records an edit, called with the status as it was and as it now is. The
+	 * replaced version is written only when nothing has been written for this
+	 * status yet: then it is the original; later it is already the last row.
 	 *
-	 * The version being replaced is written only when nothing has been written
-	 * for this status yet: on the first edit that version *is* the original,
-	 * and on every later edit it is already the last row there is. Writing it
-	 * unconditionally would double every intermediate version.
-	 *
-	 * A failure here is logged and swallowed. The edit itself has already been
-	 * stored and federated by the time this runs, and refusing the whole
-	 * request afterwards would tell the author their edit did not happen when
-	 * it did — a missing revision is the smaller loss, and the only one that
-	 * can still be true.
+	 * A failure is logged and swallowed: the edit is already stored and
+	 * federated, and a missing revision is the smaller loss.
 	 */
 	public function recordEdit(Stream $before, Stream $after): void {
 		try {
@@ -64,14 +54,8 @@ class StatusRevisionService {
 
 	/**
 	 * Every version of a status, oldest first, as Mastodon StatusEdit
-	 * entities.
-	 *
-	 * A status with no rows is answered with the one version it is in. That is
-	 * the honest answer in two cases and there is no third: a status that was
-	 * never edited has exactly one version, and a status edited before this
-	 * table existed has one version left in the database and no way to know
-	 * what the others said. Mastodon's route never returns an empty list — a
-	 * client reads `history[0]` to draw "original" — so neither does this one.
+	 * entities. A status with no rows answers with its one current version,
+	 * as Mastodon never returns an empty list and clients read `history[0]`.
 	 *
 	 * @return StatusRevision[]
 	 */
@@ -90,11 +74,8 @@ class StatusRevisionService {
 	}
 
 	/**
-	 * The status author, as they are now.
-	 *
-	 * Null rather than a failure when the actor is not cached: a history is
-	 * about the text, and refusing to show what a post used to say because its
-	 * author's profile has not been fetched would be the wrong trade.
+	 * The status author, as they are now; null rather than a failure when the
+	 * actor is not cached.
 	 */
 	private function author(Stream $stream): ?Person {
 		try {

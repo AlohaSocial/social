@@ -14,11 +14,6 @@ use OCA\Social\Tools\Nid;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\IRequest;
 
-/**
- * Class ProbeOptions
- *
- * @package OCA\Social\Model\Client\Options
- */
 class ProbeOptions extends CoreOptions implements JsonSerializable {
 	use TArrayTools;
 
@@ -35,11 +30,9 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	public const FOLLOWING = 'following';
 
 	/**
-	 * What `media_type` may narrow `only_media` to.
-	 *
-	 * The first half of the attachment's MIME type, which is what
-	 * `Document::convertToMediaAttachment()` stores as its `type`, plus
-	 * `visual` for the combined photo/video timeline.
+	 * What `media_type` may narrow `only_media` to: the attachment `type`
+	 * `Document::convertToMediaAttachment()` stores, plus `visual` for the
+	 * combined photo/video timeline.
 	 */
 	public const MEDIA_TYPES = ['image', 'video', 'audio', 'visual'];
 
@@ -59,8 +52,7 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 
 	/**
 	 * Upper bound on how many items a read this server makes for itself may
-	 * ask for (`setLookback()`): a list derived from the notifications held,
-	 * which a client's page could never reach back far enough for.
+	 * ask for (`setLookback()`), such as a list derived from the notifications held.
 	 */
 	public const MAX_LOOKBACK = 400;
 
@@ -135,14 +127,9 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	}
 
 	/**
-	 * Where a timeline's posts may come from, as the client narrowed it:
-	 * `true` for this instance's own posts (`local=true`), `false` for every
-	 * other instance's (`remote=true`), `null` for all of them.
-	 *
-	 * Asking for both is asking for no narrowing at all — a post cannot be
-	 * from here and from elsewhere — so `local` wins and the timeline stays
-	 * whole, rather than answering with the empty intersection nobody asked
-	 * for.
+	 * Where a timeline's posts may come from: `true` for this instance's own
+	 * (`local=true`), `false` for other instances' (`remote=true`), `null`
+	 * for all. Asking for both means no narrowing, so `local` wins.
 	 */
 	public function originLimit(): ?bool {
 		if ($this->isLocal()) {
@@ -171,13 +158,8 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	}
 
 	/**
-	 * Whether the caller wants only the posts that are a video.
-	 *
-	 * This app's own, where Mastodon has only `only_media`: a video timeline
-	 * asking that question would answer with every holiday photo on the
-	 * instance. It is a narrowing of `only_media` and not a replacement for
-	 * it -- a client that sends both gets the same answer as one that sends
-	 * this alone.
+	 * Whether the caller wants only the posts that are a video. This app's
+	 * own narrowing of `only_media`; sending both answers the same.
 	 */
 	public function isOnlyVideo(): bool {
 		return $this->onlyVideo;
@@ -190,12 +172,8 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	}
 
 	/**
-	 * Whether the caller wants only the posts that are a short video.
-	 *
-	 * This app's own, and narrower than `only_video`: a post whose single
-	 * video is short and upright, by the rule in `Stream::shortKindOf()`.
-	 * It wins over `only_video`, `only_media` and `media_type` when they are
-	 * sent with it, since every short is all of those.
+	 * Whether the caller wants only short videos, by `Stream::shortKindOf()`.
+	 * This app's own; it wins over `only_video`, `only_media` and `media_type`.
 	 */
 	public function isOnlyShort(): bool {
 		return $this->onlyShort;
@@ -208,12 +186,9 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	}
 
 	/**
-	 * Whether the caller wants only the posts that are news.
-	 *
-	 * This app's own, like `only_video`, and a narrowing of nothing: news is not
-	 * a kind of media. A post is news when it is an `Article` or a `Page`, or
-	 * when its text links somewhere else — see `Stream::newsKindOf()`, which is
-	 * where that is decided, once, on the write.
+	 * Whether the caller wants only the posts that are news: an `Article` or
+	 * `Page`, or a post linking elsewhere, as `Stream::newsKindOf()` decides
+	 * on the write. This app's own.
 	 */
 	public function isOnlyNews(): bool {
 		return $this->onlyNews;
@@ -383,26 +358,10 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	}
 
 	/**
-	 * @param string $accountId
-	 *
-	 * @return ProbeOptions
-	 */
-	/**
-	 * Narrows `only_media` to one kind of attachment.
-	 *
-	 * A Social extension rather than a Mastodon parameter: Mastodon has
-	 * `only_media` and nothing finer, and a profile that offers Photos and
-	 * Videos as separate tabs needs the difference asked of the database
-	 * rather than sorted out afterwards — a page filtered in the client is a
-	 * page that can come back empty while there are still videos to find.
-	 *
-	 * `media_type=video` is the same question `only_video` asks and gets the
-	 * same answer, PeerTube's `Video` objects included: the two are one
-	 * predicate in `StreamRequest::filterMedia()`, so a profile's Videos tab
-	 * and the Videos timeline cannot come to disagree about what a video is.
-	 *
-	 * The visual extension combines photos and videos. Any other value is read
-	 * as "no preference": the value arrives from a query string.
+	 * Narrows `only_media` to one kind of attachment, a Social extension so a
+	 * profile's Photos and Videos tabs are filtered in the database. `video`
+	 * is the same predicate as `only_video` in `StreamRequest::filterMedia()`.
+	 * `visual` is photos and videos; any other value means no preference.
 	 *
 	 * @param string $mediaType `image`, `video`, `audio`, `visual` (images/videos), or '' for all of them
 	 */
@@ -432,8 +391,7 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	/**
 	 * Whether an account's timeline lists its boosts beside its posts, as
 	 * Mastodon's `accounts/{id}/statuses` does. Off unless the caller asks:
-	 * every other reader of the account probe — the outbox, an export, the
-	 * statistics — is about what the account wrote.
+	 * other readers of the account probe (outbox, export) want what it wrote.
 	 */
 	public function isWithBoosts(): bool {
 		return $this->withBoosts;

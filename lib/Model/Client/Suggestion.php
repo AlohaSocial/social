@@ -15,20 +15,13 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
  * Mastodon's Suggestion entity: an account to follow, and where the
- * suggestion came from.
+ * suggestion came from. Both `sources` and the deprecated `source` are sent,
+ * since clients read one or the other.
  *
- * `sources` is the current field and `source` its deprecated predecessor. Both
- * are sent, because clients in the wild read one or the other and a client
- * that reads the old one would otherwise render every suggestion unlabelled.
- *
- * Three of Mastodon's source values are used here, and each is a description
- * of a real query rather than a category this app aspires to:
- * `friends_of_friends` for an account followed by accounts the viewer follows,
- * `most_interactions` for one that is simply posting here, and `featured` for
- * an account named in the `fediverse` field of a Nextcloud profile on this
- * instance -- the closest of Mastodon's words to "the people you already share
- * a server with, saying where they are". Nobody promotes it by hand; the
- * profile does.
+ * Sources: `friends_of_friends` for an account followed by accounts the
+ * viewer follows, `most_interactions` for one posting here, and `featured`
+ * for an account named in the `fediverse` field of a Nextcloud profile on
+ * this instance.
  */
 class Suggestion implements JsonSerializable {
 	/** Followed by somebody the viewer follows. */

@@ -58,19 +58,11 @@ const DISMISSED_KEY = 'social.weeklyRecap.dismissed'
 const WEEK_MS = 7 * 24 * 3600 * 1000
 
 /**
- * How the reader's week went, if they asked to be told.
+ * How the reader's week went, if they switched it on in the settings.
  *
- * Off until it is switched on in the settings. A card that turns up in
- * somebody's feed to comment on how much they have posted is something to ask
- * for, not something to be given, and this one is deliberately dull about it:
- * a count, the week before for comparison, and nothing that frames a quiet
- * week as a failure.
- *
- * There is no streak. A run of consecutive weeks is a thing that can be lost,
- * and a feed that tells somebody they have broken one is asking them for posts
- * rather than offering them anything. A quiet week gets a way into the local
- * timeline instead — what other people have been writing is the useful answer
- * to "you have not posted", and it asks nothing.
+ * Deliberately plain: a count and the week before, no streaks, and nothing
+ * that frames a quiet week as a failure. A quiet week links to the local
+ * timeline instead.
  */
 export default {
 	name: 'WeeklyRecap',
@@ -113,8 +105,7 @@ export default {
 		},
 
 		/**
-		 * The week before, for scale. Only when there was one — "0 last week"
-		 * next to "0 this week" is a sentence about nothing.
+		 * The week before, for scale, only when something was posted in it.
 		 *
 		 * @return {string}
 		 */
@@ -169,9 +160,8 @@ export default {
 		},
 
 		/**
-		 * Draws the week as a picture and opens the composer with it
-		 * attached and described, so posting it is the reader's choice and
-		 * the words are still theirs to change.
+		 * Draws the week as a picture and opens the composer with it attached
+		 * and described, for the reader to edit and post.
 		 */
 		async share() {
 			this.sharing = true

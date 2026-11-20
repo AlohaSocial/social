@@ -29,18 +29,10 @@ const PETALS = [0, 1, 2, 3, 4]
 const bloomed = new Set()
 
 /**
- * The flower from the app's logo, opening once.
- *
- * For the small moments that deserve a nod and nothing more: being caught up
- * with a feed, a first post, a new account. It opens when it is drawn and then
- * stays still; with `onceKey` it opens only the first time that moment comes
- * round on the page, and is simply there after that. A reader who asked for
- * less motion gets the open flower straight away.
- *
- * Decoration only, hidden from assistive technology: whatever it sits beside
- * says what happened.
- *
- * Usage: `<BloomingFlower :size="20" onceKey="caught-up" />`
+ * The flower from the app's logo, opening once for a small moment such as
+ * being caught up or a first post. With `onceKey` it blooms only the first
+ * time per page; a reader who asked for less motion gets it open. Decorative:
+ * hidden from assistive technology.
  */
 export default {
 	name: 'BloomingFlower',

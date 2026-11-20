@@ -54,9 +54,8 @@ const DEFAULT_COUNTS = {
 }
 
 /**
- * The shape of what is loading, instead of a spinner on an empty page, so
- * the content settles into the places it was drawn rather than appearing from
- * nothing.
+ * The shape of what is loading, so content settles into the places it was
+ * drawn rather than appearing from nothing.
  *
  * - `rows`: the flat rows of a timeline, with the same padding, hairlines
  *   and face as TimelineEntry, so a post lands where its row was.
@@ -66,8 +65,7 @@ const DEFAULT_COUNTS = {
  * - `page`: a heading and a few blocks, for a page whose shape is its own.
  *
  * `standalone` is the placeholder for a whole page (App.vue, while a page's
- * code loads): it takes the column a page of that kind takes, and starts
- * with a heading where the page's title will be.
+ * code loads), in that page's column and with a heading.
  */
 export default {
 	name: 'TimelineSkeleton',

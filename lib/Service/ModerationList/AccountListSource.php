@@ -13,8 +13,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
  * Where a published list of accounts to mute or block comes from
- * (`ModerationListService`): today Bluesky's moderation lists, the one
- * network that has them.
+ * (`ModerationListService`), such as Bluesky's moderation lists.
  */
 interface AccountListSource {
 	/**

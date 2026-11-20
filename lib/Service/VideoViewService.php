@@ -19,25 +19,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * How many times a video posted here was watched: the number under it on a
- * video site, public, for everybody to see.
+ * How many times a video posted here was watched: the public number under
+ * it. Not `ViewCountService`, which counts page opens for the author. A view
+ * counts once somebody played `MIN_SECONDS`, at most once per viewer, video
+ * and day; the viewer is the account or the browser's session.
  *
- * Not `ViewCountService`, which counts the accounts that opened a post's page
- * and tells only the author. This one counts **watching**: the player reports
- * a view once somebody has played a few seconds of the video (`MIN_SECONDS`,
- * the client's side of the rule), and the count moves at most once per viewer,
- * video and day. A viewer is the account, or for somebody who is not signed in
- * the Nextcloud session their browser holds.
- *
- * What is kept to make that work is as little as it can be: a keyed hash of
- * (day, video, viewer), for the day it was counted on and no longer. The key
- * is the instance's secret, so a row cannot be worked back to a person without
- * it, and the day and the video are in the hash, so two rows of the same
- * person cannot be matched to each other. The rows of the days before are
- * dropped by `Cron\Cache`, leaving the number and nothing about who made it.
- *
- * Only videos posted here are counted: a video from another server is counted
- * by that server, and its number arrives with it (`video.views`).
+ * Only a keyed hash of (day, video, viewer) is kept, for that day, so a row
+ * cannot be tied to a person or to another row; `Cron\Cache` drops older ones.
+ * Videos from elsewhere are counted there and arrive with `video.views`.
  */
 class VideoViewService {
 	/** How many seconds of a video the player waits for before it reports a view. */
@@ -56,10 +45,7 @@ class VideoViewService {
 
 	/**
 	 * Counts one view, unless this viewer was already counted for this video
-	 * today.
-	 *
-	 * Nothing here may fail a request: a view that could not be counted is a
-	 * number one lower, not an error for somebody who is watching.
+	 * today. Never fails the request.
 	 *
 	 * @return bool whether the count moved
 	 */
@@ -145,10 +131,8 @@ class VideoViewService {
 	}
 
 	/**
-	 * Who is watching, as the hash takes it: the account where there is one,
-	 * else the session. '' when there is neither, and then nothing is counted:
-	 * without something to tell a second view from a first, every press of
-	 * play would be a view.
+	 * Who is watching, as the hash takes it: the account, else the session;
+	 * '' when there is neither, and then nothing is counted.
 	 */
 	private function viewerKey(?Person $viewer): string {
 		if ($viewer !== null && $viewer->getId() !== '') {

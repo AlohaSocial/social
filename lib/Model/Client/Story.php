@@ -16,16 +16,11 @@ use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * One picture that stops existing after a day.
+ * A short (Pixelfed's story): one photo that stops existing after a day, with
+ * a caption, a hold time and who has seen it.
  *
- * The expiry is the feature, not a detail of it: it is the reason people put
- * things here that they would not put on a timeline. Everything else -- the
- * caption, the hold time, who has seen it -- hangs off that.
- *
- * A story is not a post. It has no `social_stream` row, no ActivityPub identity
- * and no recipients, and it is not federated. Pixelfed's are local too, and
- * giving them an identity would mean answering for what a peer did with its
- * copy after the day was up.
+ * Not a post: no `social_stream` row, no ActivityPub identity, no recipients,
+ * not federated, like Pixelfed's, so no peer keeps a copy past the day.
  */
 class Story implements IQueryRow, JsonSerializable {
 	use TArrayTools;
@@ -103,7 +98,7 @@ class Story implements IQueryRow, JsonSerializable {
 		return $this->duration;
 	}
 
-	/** Clamped: a story that holds for an hour is not a story. */
+	/** Clamped to a short hold time. */
 	public function setDuration(int $duration): self {
 		$this->duration = max(self::MIN_DURATION, min(self::MAX_DURATION, $duration));
 
@@ -209,9 +204,7 @@ class Story implements IQueryRow, JsonSerializable {
 		$this->setExpiresAt(DbTime::toTimestamp($expires));
 
 		$this->setSourceId($this->get('source_id', $data));
-		// rows written before stories travelled have no `local` column value
-		// of their own; they are this instance's, which is what they could
-		// only have been
+		// rows from before the `local` column are this instance's own
 		$this->setLocal($this->getBool('local', $data, true));
 	}
 

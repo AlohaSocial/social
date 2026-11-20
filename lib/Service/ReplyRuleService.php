@@ -23,11 +23,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who may reply to one of this instance's own posts (`Stream::normalizeReplyRule()`):
- * the author's choice, held to wherever a reply comes from — a reply from
- * here is refused with the reason, one from another server or from Bluesky
- * is not kept — and said to peers as `interactionPolicy.canReply` and to
- * Bluesky as the post's threadgate. The author always may.
+ * Who may reply to one of this instance's own posts
+ * (`Stream::normalizeReplyRule()`): enforced wherever a reply comes from (a
+ * local reply is refused with the reason, a remote or Bluesky one is not
+ * kept), and published as `interactionPolicy.canReply` and as the Bluesky
+ * threadgate. The author always may.
  */
 class ReplyRuleService {
 	public function __construct(
@@ -66,9 +66,8 @@ class ReplyRuleService {
 	}
 
 	/**
-	 * A rule as the author may set it: the lists it names their own, the
-	 * others left out — and nobody, rather than everybody, when nothing of
-	 * it is left.
+	 * A rule as the author may set it: only their own lists, and nobody rather
+	 * than everybody when nothing of it is left.
 	 */
 	public function sanitize(string $authorId, string $rule): string {
 		$rule = Stream::normalizeReplyRule($rule);

@@ -4,12 +4,9 @@
  */
 
 /**
- * Descriptions that travel with a file handed to the composer.
- *
- * A picture the app made itself, such as the weekly recap, knows what is in
- * it before anybody has looked: the composer fills the description field
- * with it, where the author can still change it. Keyed on the file itself and
- * held weakly, so a file nobody attaches takes its description with it.
+ * Descriptions that travel with a file handed to the composer, such as the
+ * weekly recap picture's, to prefill its description field. Held weakly on the
+ * file, so a file nobody attaches takes its description with it.
  */
 
 /** @type {WeakMap<Blob, string>} */

@@ -96,9 +96,8 @@ class PostStore {
 		if (PostMapper::isHidden($post)) {
 			$known = $id !== '' ? $this->knownPost($id) : null;
 			if ($known !== null && !$known->isLocal()) {
-				// Keep the cached post and its local interactions. A moderation label
-				// can later be lifted; refresh the label metadata so the API hides the
-				// post while it is active and can restore it without losing likes.
+				// Keep the cached post and its local interactions; refresh the label so the
+				// API hides the post while a label is active and can restore it later.
 				$create = $this->mapper->create($post, includeHidden: true);
 				if ($create !== null) {
 					$this->refreshKnownPostRecord($post, $create, $known);
@@ -116,16 +115,10 @@ class PostStore {
 		$known = $this->knownPost($id);
 		if ($known !== null) {
 			$this->refreshKnownPostRecord($post, $create, $known);
-			// Feed views already carry the latest AppView counters. Keep those
-			// current as the timeline is read, instead of waiting for a separate
-			// count refresh request or for somebody to open the thread.
+			// Feed views carry current AppView counters; store them as the timeline is read.
 			$this->refreshKnownPostCountsFromView($post, $known);
-			// AppView can index the post before its PDS has exposed the full
-			// embed view. The first import then has the text and counters but no
-			// usable attachment URL. A later profile/thread/feed response carries
-			// the same record again; let that fill the missing media once the PDS
-			// endpoint is known, without rewriting the post or fetching on every
-			// subsequent read.
+			// The AppView can index a post before its PDS exposes the full embed, so a
+			// later view may fill in missing media without rewriting the post.
 			$this->refreshMissingAttachments($post, $id);
 
 			return false;
@@ -146,8 +139,7 @@ class PostStore {
 		}
 		$parent = (string)($create['object']['inReplyTo'] ?? '');
 		if ($fetchParent && BlueskyIds::isPostId($parent) && !$this->isKnown($parent)) {
-			// one hop up, so a reply is not stored without what it answers;
-			// the parent's own parent is not fetched
+			// One hop up, so a reply is stored with its parent; no further.
 			$this->storeByUri((string)($post['record']['reply']['parent']['uri'] ?? ''));
 		}
 
@@ -155,9 +147,8 @@ class PostStore {
 	}
 
 	/**
-	 * AppView returns the current record even for a post already in the local
-	 * stream. A changed CID is an edit, so import it through the ordinary Update
-	 * path; otherwise the cache kept the old words and media forever.
+	 * A changed CID of an already stored post is an edit, imported through the
+	 * ordinary Update path.
 	 *
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 * @param array<string, mixed> $create the ActivityPub-shaped version of the post
@@ -184,8 +175,7 @@ class PostStore {
 			if ($pds !== '') {
 				$create = $this->mapper->create($post, $pds) ?? $create;
 			} else {
-				// Do not lose media that is already cached just because the PDS is
-				// temporarily unavailable while the AppView has the edited text.
+				// Keep cached media while the PDS is unavailable.
 				$create['object']['attachment'] = array_map(
 					static fn ($attachment): array => $attachment->jsonSerialize(),
 					$known->getAttachments()
@@ -291,8 +281,7 @@ class PostStore {
 			$attachments = (string)json_encode($object->getAttachments(), JSON_UNESCAPED_SLASHES);
 			$this->streams->setRecoveredRemoteAttachments($id, $attachments, $stored->getSubType());
 		} catch (Throwable $e) {
-			// Media enrichment must not turn a readable post into a failed feed or
-			// thread refresh; a later AppView response can try it again.
+			// Media enrichment must not fail a feed or thread read; a later view retries.
 			$this->logger->debug('Bluesky post media not enriched', ['id' => $id, 'exception' => $e]);
 		}
 	}
@@ -320,9 +309,8 @@ class PostStore {
 	}
 
 	/**
-	 * A thread response is a fresh AppView view even when its post was already
-	 * imported from a feed. Refresh the remote counters in place instead of
-	 * treating the known row as if the view had nothing new to say.
+	 * Refreshes the remote counters of an already stored post from a fresh
+	 * AppView view.
 	 *
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 * @return bool whether the current view contained counts that were stored
@@ -334,8 +322,8 @@ class PostStore {
 		}
 		$known ??= $this->knownPost($id);
 		if ($known === null || $known->getId() !== $id || $known->isLocal()) {
-			// Own posts use BlueskyPublishedCountSource: it subtracts only the
-			// local interactions which were actually published to Bluesky.
+			// Own posts use BlueskyPublishedCountSource, which subtracts only the local
+			// interactions that were published to Bluesky.
 			return false;
 		}
 
@@ -470,16 +458,14 @@ class PostStore {
 				return null;
 			}
 
-			// getPosts omits unavailable records on some AppViews; the official
-			// response schema does not promise a notFound item. Confirm absence
-			// against the author's PDS before deleting a stored post. An
-			// unreachable PDS leaves the page retryable instead of guessing.
+			// Some AppViews omit unavailable records rather than marking them notFound,
+			// so absence is confirmed with the author's PDS; an unreachable PDS leaves
+			// the page to be retried.
 			$parsed = BlueskyIds::parsePostId($id);
 			$exists = $parsed === null ? null : $this->postExistsAtPds($parsed);
 			if ($exists === null) {
 				$this->logger->notice('Bluesky post absence could not be confirmed at its PDS', ['post' => $id]);
-				// Keep this one for the next sweep cycle, but do not let an
-				// unavailable PDS stall every later page of the deletion cursor.
+				// Retry next cycle without stalling the deletion cursor.
 				continue;
 			}
 			if (!$exists && $this->delete($id)) {

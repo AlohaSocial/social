@@ -16,20 +16,13 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * The relays this instance subscribes to.
  *
- * Three reads, all small: the panel's list, "is this actor one of ours" on
- * every activity a relay could have sent, and the accepted inboxes a public
- * post is delivered to.
- *
  * @package OCA\Social\Db
  */
 class RelayRequest extends CoreRequestBuilder {
 	/**
-	 * Records a subscription, replacing whatever stood before.
-	 *
-	 * Subscribing twice is the same row — that is what the unique index is
-	 * for, and why the violation is handled rather than avoided by reading
-	 * first: between the read and the write is where the second administrator's
-	 * click lands.
+	 * Records a subscription, replacing whatever stood before. The unique
+	 * index settles concurrent subscribes, so the violation is handled rather
+	 * than avoided by reading first.
 	 */
 	public function save(Relay $relay): void {
 		$qb = $this->getQueryBuilder();
@@ -94,11 +87,9 @@ class RelayRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Where a local public post has to go besides its followers' inboxes.
-	 *
-	 * Read straight off the table rather than through `RelayService`, because
-	 * the caller is `ActivityService` and the service depends on half the app
-	 * — routing one query through it would tie delivery to the fetch stack.
+	 * Where a local public post goes besides its followers' inboxes. Read
+	 * straight from the table, not through `RelayService`, so delivery does
+	 * not depend on the fetch stack.
 	 *
 	 * @return string[] the inboxes of the relays that accepted, deduplicated
 	 */

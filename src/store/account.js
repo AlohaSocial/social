@@ -17,20 +17,14 @@ import { isBlueskyAccount } from '../utils/accountLocality.js'
 import { isBlockedBy } from '../utils/blockedBy.js'
 
 /**
- * How many followers or followed accounts one page holds.
- *
- * Asked for rather than assumed: the end of the list is read off the size of
- * the answer, which held only because the controller happened to default to
- * the same number.
+ * How many followers or followed accounts one page holds, asked for
+ * explicitly because the end of the list is read off the size of the answer.
  */
 const FOLLOW_PAGE_SIZE = 20
 
 /**
- * What this store holds, for the helpers and getters that are handed it.
- *
- * Written down because they are plain functions taking the state as an
- * argument: without it every one read `state.accounts` off an untyped
- * `object`, which TypeScript 7 no longer lets through.
+ * What this store holds, for the helpers and getters that take the state as
+ * an argument.
  *
  * @typedef {object} AccountState
  * @property {string} currentAccountHandle the handle the reader is signed in as
@@ -54,9 +48,6 @@ const FOLLOW_PAGE_SIZE = 20
 
 /**
  * The actor URL an account handle resolves to, or undefined.
- *
- * This used to read a module-level `state` object rather than the store's own,
- * which worked only because there happened to be exactly one store.
  *
  * @param {AccountState} state the store state
  * @param {string} account a handle, or an actor URL
@@ -102,11 +93,8 @@ function visibilityFromWire(privacy) {
  */
 function indexAccount(state, { actorId, data }) {
 	state.accounts = { ...state.accounts, [actorId]: { ...state.accounts[actorId], ...data } }
-	// The follower and following lists used to be reset to [] here, so any
-	// refresh of the account — saving the profile fields, uploading a banner,
-	// a search result arriving — emptied an open followers list under the
-	// reader. They are seeded by addFollowers/addFollowing, which is the only
-	// thing that knows whether they have been loaded at all.
+	// the lists are only seeded here, never reset: addFollowers/addFollowing
+	// own them, so refreshing an account does not empty an open list
 	if (state.accountsFollowers[actorId] === undefined) {
 		state.accountsFollowers = { ...state.accountsFollowers, [actorId]: [] }
 	}
@@ -203,9 +191,8 @@ export const useAccountStore = defineStore('account', {
 		accountsFollowersAllLoaded: {},
 		accountsFollowingsAllLoaded: {},
 		/**
-		 * Which of these lists failed to load, keyed the same way. A list that
-		 * could not be fetched is not a list with nobody in it, and the page
-		 * said "No followers yet" for both.
+		 * Which of these lists failed to load, keyed the same way, as a list
+		 * that could not be fetched is not an empty one.
 		 */
 		accountsFollowersFailed: {},
 		accountsFollowingsFailed: {},
@@ -229,9 +216,7 @@ export const useAccountStore = defineStore('account', {
 			}
 		},
 		/**
-		 * The account a handle names, or undefined while it is still unknown —
-		 * which is also the only thing the old `accountLoaded` getter answered,
-		 * so there is one query here rather than two.
+		 * The account a handle names, or undefined while it is still unknown.
 		 *
 		 * @param {AccountState} state the store state
 		 * @return {(account: string) => import('../types/Mastodon.js').Account|undefined} handle -> account
@@ -346,14 +331,10 @@ export const useAccountStore = defineStore('account', {
 			this.accountsFollowingsAllLoaded = { ...this.accountsFollowingsAllLoaded, [actorId]: loaded }
 		},
 		/**
-		 * Replaces page one. `allLoaded` is reset here, and this is the only
-		 * place it is: the fetch above only ever sets it *true*, when a page
-		 * comes back short. An account whose list was short on an earlier
-		 * visit and has grown since would otherwise keep that `true` through
-		 * the refresh, and the view stops paging the moment it reads it — so
-		 * only the first page would be reachable until the page was reloaded.
-		 * `addFollowersAppend` deliberately does not reset it: a later page is
-		 * not a new list.
+		 * Replaces page one. `allLoaded` is reset only here, as the fetch only
+		 * ever sets it true; a list that has grown since an earlier short page
+		 * would otherwise stop paging after page one. `addFollowersAppend`
+		 * leaves it, as a later page is not a new list.
 		 *
 		 * @param {object} page one page of the list
 		 * @param {string} page.account whose list it is
@@ -434,13 +415,8 @@ export const useAccountStore = defineStore('account', {
 			}
 		},
 		/**
-		 * Asks for one account's relationship, together with everybody else who
-		 * asked in the same moment.
-		 *
-		 * Twenty followers on a page used to be twenty round-trips, because each
-		 * UserEntry dispatched its own single-id request on mount — and the guard
-		 * that was supposed to prevent that could never hold. The endpoint takes
-		 * an array, so the ids are collected and sent once.
+		 * Asks for one account's relationship together with everybody else who
+		 * asked in the same moment, in one request (the endpoint takes an array).
 		 *
 		 * @param {string} id the account id to ask about
 		 * @return {Promise<object[]>} the relationships in the batch this joined
@@ -520,15 +496,10 @@ export const useAccountStore = defineStore('account', {
 			}
 		},
 		/**
-		 * Writes what a settings form changed, and keeps what the server
-		 * answered with: it is the CredentialAccount as it now stands, so the
-		 * form, the composer's default audience and the profile all see the
-		 * change at once.
-		 *
-		 * Only what is passed is sent — `update_credentials` writes only the
-		 * fields it was given — so a caller changing one thing leaves the rest
-		 * alone. Failure is said out loud here and answered with undefined,
-		 * the way the other account actions do it.
+		 * Writes what a settings form changed and keeps the CredentialAccount
+		 * the server answers, so the form, the composer's default audience and
+		 * the profile all see the change at once. Only the fields passed are
+		 * sent; a failure is reported here and answered with undefined.
 		 *
 		 * @param {object} changes the fields as `update_credentials` names them
 		 * @return {Promise<object|undefined>} the updated CredentialAccount, or undefined
@@ -558,15 +529,10 @@ export const useAccountStore = defineStore('account', {
 			}
 		},
 		/**
-		 * Re-reads what the server now says about an account, after a follow
-		 * or an unfollow changed it.
-		 *
-		 * `PUT /current/follow` answers `success([])` and says nothing about
-		 * the state it left behind, and a follow of a locked or remote account
-		 * is `requested` until the Accept arrives — never `following` — so
-		 * nothing here can be worked out from the call having succeeded. The
-		 * counts move too: the target's `followers_count` and the reader's own
-		 * `following_count`.
+		 * Re-reads what the server says about an account after a follow or an
+		 * unfollow: `PUT /current/follow` answers nothing about the resulting
+		 * state, a follow of a locked or remote account stays `requested` until
+		 * the Accept arrives, and both accounts' counts move.
 		 *
 		 * @param {string} account the handle that was followed or unfollowed
 		 * @return {Promise<void>}
@@ -581,18 +547,10 @@ export const useAccountStore = defineStore('account', {
 			])
 		},
 		/**
-		 * Draws the relationship as it will be, before the server says so.
-		 *
-		 * Following somebody is two round trips — the follow, then the
-		 * relationship and the credentials it refreshes — and the button sat
-		 * saying "Follow" for both of them. On a fediverse round trip that is
-		 * a second or more of a button that looks broken, and the usual
-		 * outcome is somebody pressing it again.
-		 *
-		 * Only the flag the button reads is moved. Nothing else is guessed at:
-		 * the follower counts, whether the follow is pending approval on a
-		 * locked account, and everything else come back from the server a
-		 * moment later and are the truth.
+		 * Draws the relationship as it will be, before the server says so, so
+		 * the button does not look broken for two round trips. Only the flag
+		 * the button reads is moved; counts and pending state come from the
+		 * server a moment later.
 		 *
 		 * @param {string} account the handle that was acted on
 		 * @param {boolean} following what to show until the server answers
@@ -603,9 +561,8 @@ export const useAccountStore = defineStore('account', {
 			const id = this.accounts[actorId]?.id ?? this.accounts[account]?.id ?? account
 			const known = this.accountsRelationships[id]
 			if (known === undefined) {
-				// nothing to move: a stranger has no relationship row yet, and
-				// inventing one would draw a button state the server never
-				// confirmed
+				// a stranger has no relationship row yet, and inventing one would
+				// show a state the server never confirmed
 				return null
 			}
 
@@ -630,10 +587,8 @@ export const useAccountStore = defineStore('account', {
 				const url = generateUrl('/apps/social/api/v1/current/follow?account=' + encodeURIComponent(accountToFollow))
 				const response = await axios.put(url)
 				if (response.data.status === -1) {
-					// thrown rather than returned: a rejected thenable returned
-					// from inside the try resolves only after this frame has
-					// popped, so the catch below never saw it — a refusal was a
-					// silent unhandled rejection, with no toast and no error state
+					// thrown, not returned: a rejection returned from inside the try
+					// would escape the catch below as an unhandled rejection
 					throw new Error('The server refused the follow')
 				}
 				await this.refreshFollowState(accountToFollow)
@@ -724,14 +679,10 @@ export const useAccountStore = defineStore('account', {
 			}
 		},
 		/**
-		 * The two switches that ride along with a follow: the bell, and
-		 * whether this account's boosts belong in your timelines.
-		 *
-		 * Sent as a follow, which is what Mastodon's API offers — there is no
-		 * route for either on its own, and re-following somebody you already
-		 * follow changes nothing else. Only the switch named is sent: the
-		 * server leaves the other alone, so setting one cannot silently reset
-		 * the other.
+		 * The two switches that ride along with a follow: the bell, and whether
+		 * this account's boosts belong in your timelines. Sent as a follow,
+		 * Mastodon's only route for either; only the switch named is sent, so
+		 * the server leaves the other alone.
 		 *
 		 * @param {object} options which switch, and which way
 		 * @param {string} options.id the account's numeric id

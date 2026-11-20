@@ -18,16 +18,13 @@ class Relationship implements JsonSerializable {
 	private int $id;
 	private bool $following = false;
 	/**
-	 * Boosts from an account the viewer follows do reach the home timeline, and
-	 * nothing here can turn them off per account. `false` described a setting
-	 * this app does not have, and a client that reads it offers "show boosts"
-	 * as the action for a timeline that already shows them.
+	 * Boosts from a followed account reach the home timeline unless the viewer
+	 * turned them off for that account.
 	 */
 	private bool $showingReblogs = true;
 	/**
-	 * Whether the viewer is notified of this account's new posts — Mastodon's
-	 * per-account bell. There is no such subscription here, so the honest
-	 * answer is that nobody is being notified.
+	 * Whether the viewer is notified of this account's new posts, Mastodon's
+	 * per-account bell.
 	 */
 	private bool $notifying = false;
 	private bool $followedBy = false;
@@ -179,9 +176,9 @@ class Relationship implements JsonSerializable {
 	}
 
 	/**
-	 * The private note the viewer keeps about this account, written through
-	 * `POST /api/v1/accounts/{id}/note` and read by nobody else — not by the
-	 * account it is about, and never by another instance.
+	 * The private note the viewer keeps about this account
+	 * (`POST /api/v1/accounts/{id}/note`), read by nobody else and never
+	 * federated.
 	 */
 	public function setNote(string $note): self {
 		$this->note = $note;
@@ -194,12 +191,9 @@ class Relationship implements JsonSerializable {
 	}
 
 	/**
-	 * When the mute the viewer holds over this account lifts itself.
-	 *
-	 * Mastodon keeps this on the account entities of `GET /api/v1/mutes` and
-	 * not on the relationship, which means a client that has just muted
-	 * somebody for an hour has no way of being told so. It is reported here as
-	 * well, where every client already looks after a mute.
+	 * When the viewer's mute of this account lifts itself. Mastodon reports it
+	 * only on `GET /api/v1/mutes`; here it is on the relationship too, where
+	 * clients look after muting.
 	 */
 	public function setMuteExpiresAt(int $muteExpiresAt): self {
 		$this->muteExpiresAt = $muteExpiresAt;
@@ -226,12 +220,8 @@ class Relationship implements JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's Relationship entity.
-	 *
-	 * `id` is a string, like every other id on the wire: a strongly typed
-	 * client that declares `id: String` (Ivory, Mona and anything else built on
-	 * Swift's Codable) fails to decode an integer, so the follow/block/mute
-	 * button state broke after every action that returns one of these.
+	 * Mastodon's Relationship entity. `id` is a string, as every id on the wire:
+	 * Codable-based clients (Ivory, Mona) cannot decode an integer.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

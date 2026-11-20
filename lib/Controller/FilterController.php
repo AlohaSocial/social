@@ -36,30 +36,16 @@ use stdClass;
 use Throwable;
 
 /**
- * Keyword filters, as Mastodon's v2 filter API.
+ * Keyword filters, as Mastodon's v2 filter API; what a filter does is
+ * `FilterService`'s.
  *
- * A filter is what an account mutes a word or a phrase with: a title, the
- * contexts it applies in, an expiry, an action — `warn`, which leaves the
- * status in place for the client to blur, or `hide`, which takes it out of the
- * timeline — and the keywords that match a status. This is the editing half;
- * what a filter *does* is `FilterService`'s, and is applied wherever statuses
- * are handed to a client.
+ * The deprecated v1 routes are served over the same filters, a v1 filter
+ * being a v2 keyword. The web client (`src/components/FiltersSettings.vue`)
+ * uses v2 only, since a filter of three words is three ids in v1.
  *
- * The v1 routes (`/api/v1/filters`) are deprecated in Mastodon but are served
- * here, over the same filters: a v1 filter is a v2 *keyword*, carrying its
- * parent's contexts, expiry and action. This docblock said they were not
- * served long after `indexV1()` and the rest below were written. The web
- * client (`src/components/FiltersSettings.vue`) uses v2 only — a filter of
- * three words is three ids in v1 and one in v2, and an editor that mixed the
- * two would delete the wrong row.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController` and
- * `TagController`, and for the same reason: a Mastodon client authenticates
- * with a bearer token and has no Nextcloud session or CSRF token to present,
- * so `#[NoAdminRequired]` would refuse every real caller before the handler
- * ran. Every route here requires a viewer itself — no token, no session, 401 —
- * and every read and write is scoped to that viewer in SQL, so one account can
- * neither see nor edit another's filters.
+ * `#[PublicPage]` with `#[NoCSRFRequired]` for bearer-token clients; every
+ * route requires a viewer itself and scopes all reads and writes to that
+ * viewer in SQL.
  */
 class FilterController extends ClientApiController {
 
@@ -79,11 +65,8 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Whether the viewer hides posts made with AI: `{"hide": bool}`.
-	 *
-	 * Under the filter scopes because it is a filter — one the app keeps for
-	 * the reader rather than one they wrote keyword by keyword — and applied in
-	 * the same place, `FilterService::apply()`, in every context at once.
+	 * Whether the viewer hides posts made with AI: `{"hide": bool}`. Applied
+	 * with the other filters in `FilterService::apply()`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -123,10 +106,9 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Whether the reader is shown how many likes, dislikes, boosts and
-	 * followers things have. Beside the AI switch because it is the same kind
-	 * of thing: a choice about what reading here is like, applied to every
-	 * answer at once (`HideCountsMiddleware`). Hidden unless turned off.
+	 * Whether the reader is shown counts of likes, dislikes, boosts and
+	 * followers, applied to every answer by `HideCountsMiddleware`. Hidden
+	 * unless turned off.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -188,11 +170,7 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Every filter of the viewer, newest first.
-	 *
-	 * Not paged, and Mastodon does not page it either: an account has a
-	 * handful of filters, and a client needs all of them to decide what to
-	 * blur.
+	 * Every filter of the viewer, newest first. Not paged, as on Mastodon.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -213,16 +191,9 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Mastodon's **v1** filters, over the v2 ones.
-	 *
-	 * v1 has no notion of a filter with several keywords: each filter *is* a
-	 * phrase. So a v1 filter here is a v2 keyword, carrying its parent's
-	 * contexts and expiry — which is the mapping Mastodon itself serves for
-	 * clients that have not moved, and why the ids in the two APIs are
-	 * different things.
-	 *
-	 * Absent, these routes 404'd, and a client that has not moved to v2 reads a
-	 * 404 as "this server has no filters at all" rather than "none configured".
+	 * Mastodon's v1 filters, over the v2 ones: v1 has one phrase per filter,
+	 * so a v1 filter is a v2 keyword with its parent's contexts and expiry, as
+	 * Mastodon maps them. Clients still on v1 read a 404 as "no filters at all".
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -260,12 +231,8 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Creates a v1 filter: a v2 filter whose title is the phrase, holding that
-	 * one keyword.
-	 *
-	 * `irreversible` is Mastodon's older name for what v2 calls
-	 * `filter_action: hide` — the filtered status is dropped rather than
-	 * blurred — so it maps onto the action rather than being stored twice.
+	 * Creates a v1 filter: a v2 filter titled with the phrase, holding that
+	 * one keyword. `irreversible` maps to `filter_action: hide`.
 	 *
 	 * @param array<mixed>|string $context
 	 */
@@ -304,9 +271,7 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Changes a v1 filter. What is not named is left alone, as everywhere else
-	 * here — a client that sends only `phrase` must not thereby clear the
-	 * contexts or the expiry.
+	 * Changes a v1 filter; what is not sent is left alone.
 	 *
 	 * @param array<mixed>|string|null $context
 	 */
@@ -356,10 +321,8 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Removes a v1 filter: the keyword, and the filter with it when that was
-	 * its last one — a v2 filter with no keywords matches nothing, and leaving
-	 * one behind would show up in the v2 list as an empty filter the user never
-	 * made.
+	 * Removes a v1 filter: the keyword, and its filter when that was the last
+	 * keyword, as an empty v2 filter would match nothing.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -433,11 +396,9 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Creates a filter, with the keywords it was given.
-	 *
-	 * `title` and at least one known `context` are required, as they are on
-	 * Mastodon; `filter_action` defaults to `warn`, and an absent `expires_in`
-	 * means a filter that never expires.
+	 * Creates a filter with its keywords. `title` and one known `context` are
+	 * required; `filter_action` defaults to `warn`, and no `expires_in` means
+	 * it never expires.
 	 *
 	 * @param array<mixed>|string $context
 	 * @param array<mixed>|string $keywords_attributes
@@ -483,13 +444,9 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Changes a filter. What is not named is left as it is — a client that
-	 * sends only `title` must not thereby clear the contexts, the expiry or
-	 * the keywords.
-	 *
-	 * `keywords_attributes` edits keywords in place, as Mastodon's does: an
-	 * entry with an `id` changes that keyword, one with `_destroy` removes it,
-	 * one without an id adds it, and a keyword nobody named is untouched.
+	 * Changes a filter; what is not sent is left alone. `keywords_attributes`
+	 * edits keywords in place as Mastodon's does: with `id` it changes one,
+	 * with `_destroy` removes it, without an id adds one.
 	 *
 	 * @param array<mixed>|string|null $context
 	 * @param array<mixed>|string|null $keywords_attributes
@@ -518,21 +475,15 @@ class FilterController extends ClientApiController {
 				$filter->setAction($this->action($filter_action));
 			}
 
-			// read from the request rather than taken as an argument, because
-			// only the raw parameter distinguishes "not sent", which leaves the
-			// expiry alone, from an explicit null, which is Mastodon's way of
-			// saying the filter should stop expiring
+			// read from the request because only the raw parameter tells "not
+			// sent" (leave the expiry) from null (stop expiring)
 			$expiresIn = $this->request->getParam('expires_in', false);
 			if ($expiresIn !== false) {
 				$filter->setExpiresAt($this->expiry($expiresIn));
 			}
 
-			// One change, however many rows it is. `applyKeywordAttributes()`
-			// refuses a keyword that belongs to another filter, and can refuse
-			// the fourth after writing the first three: without this the
-			// request answered 404 with the title already changed, and a
-			// client retrying what it was told had failed retried against
-			// state that had partly moved.
+			// One transaction: `applyKeywordAttributes()` can refuse a keyword
+			// after writing others, and a refused request must change nothing.
 			$this->filtersRequest->transactional(function () use ($filter, $keywords_attributes): void {
 				$this->filtersRequest->update($filter);
 
@@ -684,16 +635,9 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Adds one post to a filter: a client's "filter this post".
-	 *
-	 * The post is named by the id the client API hands out. It is not looked
-	 * up: a filter is the reader's own list and may name a post this server
-	 * has since deleted or has never held — the entry simply never matches
-	 * anything. A lookup here would refuse to filter a post the reader can see
-	 * on their own screen in a thread whose rows arrived from somewhere else.
-	 *
-	 * Adding the same post twice makes a second entry, as it does on Mastodon:
-	 * each has its own id, and deleting one leaves the other.
+	 * Adds one post to a filter: a client's "filter this post". The post id
+	 * is not looked up, as it may name a post this server never held; adding
+	 * it twice makes two entries, as on Mastodon.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -907,9 +851,8 @@ class FilterController extends ClientApiController {
 
 		$seconds = (int)$raw;
 
-		// a filter that expires now, or expired before it was made, is one
-		// that never expires — which is what Mastodon stores for a blank
-		// expires_in, and the only reading that is not a filter dead on arrival
+		// an expiry in the past means never expiring, as Mastodon stores a
+		// blank expires_in
 		return ($seconds <= 0) ? 0 : time() + $seconds;
 	}
 
@@ -919,9 +862,8 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * A flag that has to be there and has to be one: `flag()` reads what it
-	 * does not recognise as `false`, which is the right default for an
-	 * optional one and the wrong answer for a switch being set.
+	 * A required flag: `flag()` reads anything unrecognised as `false`, which
+	 * is wrong for a switch being set.
 	 *
 	 * @throws InvalidResourceException
 	 */
@@ -936,12 +878,9 @@ class FilterController extends ClientApiController {
 	}
 
 	/**
-	 * Every route here that is not a read changes which posts this account is
-	 * shown, and its timelines' ETag is built from ids that none of it moves —
-	 * see TimelineRevisionService. It is recorded here rather than beside each
-	 * of the eleven writes: one place that cannot be forgotten, at the cost of
-	 * also moving the number when a write is attempted and refused, which
-	 * spends one revalidation and is the harmless direction to be wrong in.
+	 * Every write here changes which posts the account is shown, which the
+	 * timelines' ETag cannot see (TimelineRevisionService), so the revision is
+	 * bumped for every non-GET request in this one place, refused ones included.
 	 */
 	#[\Override]
 	protected function prepareViewer(Person $viewer): Person {

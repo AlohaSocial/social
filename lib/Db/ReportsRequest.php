@@ -84,11 +84,8 @@ class ReportsRequest extends ReportsRequestBuilder {
 	}
 
 	/**
-	 * One page of the open or of the resolved reports, newest first.
-	 *
-	 * The panel used to read the first two hundred of both mixed together, so
-	 * an instance with a busy month of resolved complaints pushed the open
-	 * ones off the bottom — and past two hundred, off the page entirely.
+	 * One page of the open or of the resolved reports, newest first, so a
+	 * busy month of resolved reports cannot push the open ones off the page.
 	 *
 	 * @return Report[]
 	 */
@@ -128,10 +125,8 @@ class ReportsRequest extends ReportsRequestBuilder {
 	}
 
 	/**
-	 * Recorded after the fact: the report is stored first and delivered
-	 * second, so a forward that fails still leaves a report a moderator can
-	 * read — and one that succeeds is not lost if this update is the thing
-	 * that fails.
+	 * Recorded after the fact: the report is stored before it is forwarded, so
+	 * a failed forward still leaves a report a moderator can read.
 	 */
 	public function setForwarded(int $id, bool $forwarded): void {
 		$qb = $this->getReportsUpdateSql();
@@ -142,11 +137,8 @@ class ReportsRequest extends ReportsRequestBuilder {
 	}
 
 	/**
-	 * Files a report under a different category.
-	 *
-	 * A moderator reading a report often finds it under the wrong one — "spam"
-	 * for something that is harassment — and the category a reporter chose was
-	 * the category for ever until this.
+	 * Files a report under a different category, for a moderator who finds it
+	 * under the wrong one.
 	 */
 	public function setCategory(int $id, string $category): void {
 		$qb = $this->getQueryBuilder();

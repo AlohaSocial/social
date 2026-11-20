@@ -14,10 +14,9 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 
 /**
- * Asks what the counts of some posts somebody just saw are now, where they
- * live (`CountService::refresh()`). Queued by `RemoteFetchQueue::refreshCounts()`
- * when a page shows them, so — like `FillInteractions` — it is not registered
- * in `info.xml`.
+ * Asks the origin servers for the current counts of posts somebody just saw
+ * (`CountService::refresh()`). Queued by `RemoteFetchQueue::refreshCounts()`,
+ * so not in `info.xml`.
  */
 class RefreshCounts extends QueuedJob {
 	public function __construct(

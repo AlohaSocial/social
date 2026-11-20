@@ -5,13 +5,9 @@
 
 /*
  * The registration form's proof of work (`SignupChallengeService`): find a
- * nonce for which SHA-256(challenge ‖ nonce) starts with a number of zero
- * bits.
- *
- * SHA-256 is computed here rather than with SubtleCrypto: SubtleCrypto
- * exists only in a secure context, so a server reached over plain HTTP could
- * not be registered with, and its one-promise-per-hash interface is several
- * times slower for millions of short inputs.
+ * nonce for which SHA-256(challenge ‖ nonce) starts with a number of zero bits.
+ * SHA-256 is computed here because SubtleCrypto exists only in a secure
+ * context and is several times slower for millions of short inputs.
  */
 
 /** The round constants, in hexadecimal. */

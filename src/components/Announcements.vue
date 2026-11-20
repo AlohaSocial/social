@@ -16,9 +16,7 @@
 			:key="announcement.id"
 			class="announcement"
 			:class="{ 'announcement--read': announcement.read }">
-			<!-- the admin's own words, rendered through the same pipeline as a
-			     post: parsed, reduced to an allowlist of tags and rebuilt as
-			     elements, never handed to v-html -->
+			<!-- the admin's words go through the post pipeline, never v-html -->
 			<MessageContent class="announcement__text" :item="announcement" />
 
 			<p class="announcement__meta">
@@ -41,8 +39,7 @@
 						:aria-pressed="reaction.me ? 'true' : 'false'"
 						:aria-label="reactionLabel(reaction)"
 						@click="toggle(announcement, reaction)">
-						<!-- a reaction with a picture names a custom emoji this
-						     instance publishes; one without is a character -->
+						<!-- a picture is a custom emoji of this instance; otherwise a character -->
 						<img
 							v-if="reaction.url"
 							class="reaction__image"
@@ -109,37 +106,13 @@ import { useServerData } from '../composables/useServerData.js'
 import { fromNow, fullDate, fullDateTime } from '../utils/relativeTime.js'
 
 /**
- * What the administrators of this server are telling everybody.
+ * The administrators' announcements, above the composer on the timeline.
  *
- * An announcement was reachable only over the client API until this existed:
- * an admin could post "we are moving servers on Friday" and nobody reading the
- * web client would ever be told. It goes at the top of the timeline because
- * that is the page people are on, above the composer, where it is read before
- * anything is written.
- *
- * **An unread announcement interrupts; a read one does not.** The card is
- * drawn only when something in the list was unread at the moment the page
- * loaded, so a reader who has dealt with the notices never scrolls past this
- * again. What was already read is not shown, but while the card is up a
- * disclosure at its foot brings it back — somebody who dismissed one too
- * quickly is one press away from it for the rest of the visit.
- *
- * Dismissing does not take the announcement off the screen. `read` is what
- * changes: the notice stays where it was with its dismissal button gone and a
- * "Read" mark in its place, because a card that vanishes under the cursor
- * takes the sentence the reader was halfway through with it. It is gone on the
- * next visit, and gone on every other device the account uses — the dismissal
- * is stored per account by the server, not in this browser.
- *
- * Nothing of this is on the public page. An announcement is what the instance
- * tells its *accounts*, and the route behind it needs a viewer: a reader who is
- * not logged in would get a 401 for a card they are not meant to see.
- *
- * Nothing is done here about a window that has not opened or has closed:
- * `GET /api/v1/announcements` compares the bounds in its own query, so an
- * announcement outside its window is never in the answer. One with an end is
- * shown with it ("Until 21 September"), which is the half of a window a reader
- * can act on.
+ * The card shows only when something was unread at page load; already-read
+ * ones come back through a disclosure at its foot. Dismissing marks one read
+ * on the server, for every device, but leaves it on screen with a "Read" mark
+ * so it does not vanish under the cursor. Not on the public page: the route
+ * needs a viewer. The server only returns announcements inside their window.
  */
 export default {
 	name: 'Announcements',
@@ -163,10 +136,8 @@ export default {
 			/** every announcement that applies now, oldest effective first */
 			announcements: [],
 			/**
-			 * The ids that were unread when the list came in.
-			 *
-			 * Held apart from `read` so that dismissing one keeps it on the
-			 * screen: the flag flips, this does not.
+			 * The ids that were unread when the list came in, kept apart from
+			 * `read` so a dismissed one stays on screen.
 			 *
 			 * @type {string[]}
 			 */
@@ -182,8 +153,7 @@ export default {
 
 	computed: {
 		/**
-		 * The announcements this card is for: the ones that were unread when
-		 * the page loaded, and the rest only once they are asked for.
+		 * The ones unread at page load, plus the rest once revealed.
 		 *
 		 * @return {object[]} in the order the server sent them
 		 */
@@ -212,13 +182,8 @@ export default {
 		fullDateTime,
 
 		/**
-		 * When the announcement stops applying, for one that says.
-		 *
-		 * A whole-day window ends at midnight after its last day, so it is
-		 * written as a date: the time of day is the shape of the bound rather
-		 * than anything the reader needs. The server sets that midnight in
-		 * UTC, so the date is UTC's: west of Greenwich it is still the day
-		 * before.
+		 * When the announcement stops applying, as a date. A whole-day window
+		 * ends at UTC midnight after its last day, so the date is UTC's.
 		 *
 		 * @param {object} announcement one entity
 		 * @return {string} the line to show, or '' when it has no end
@@ -248,13 +213,8 @@ export default {
 		},
 
 		/**
-		 * Reads what applies now.
-		 *
-		 * A failure is logged rather than announced: the timeline is the page
-		 * and this is something extra above it, so a server that cannot answer
-		 * costs the reader a notice they never knew was there, not an error
-		 * message on every visit. Everything the reader presses below says so
-		 * when it fails.
+		 * Reads what applies now. A failure is only logged: this is an extra
+		 * above the timeline, not worth an error on every visit.
 		 *
 		 * @return {Promise<void>} once the list is in
 		 */
@@ -263,8 +223,8 @@ export default {
 			if (this.serverData.public) {
 				return
 			}
-			// the page said nothing applied when it was opened; that spares the
-			// first read only, because one may be published while it is open
+			// the page's hint only spares the first read: one may be published
+			// while the page is open
 			if (!mayHave('has_announcements')) {
 				setHint('has_announcements', true)
 				return
@@ -288,10 +248,7 @@ export default {
 		},
 
 		/**
-		 * Marks one read for this account, everywhere.
-		 *
-		 * It stays on the screen — see the note on the component — so nothing
-		 * is said about it having worked beyond the card changing.
+		 * Marks one read for this account, everywhere; it stays on screen.
 		 *
 		 * @param {object} announcement the one that was dismissed
 		 * @return {Promise<void>}
@@ -313,11 +270,8 @@ export default {
 		},
 
 		/**
-		 * Asks for the page's one emoji picker, and hands it what to do with
-		 * the answer.
-		 *
-		 * The picker is most of a megabyte and is mounted once by `App`; see
-		 * ReactionPicker for why no card owns one.
+		 * Asks for the page's one emoji picker, mounted by `App` (see
+		 * ReactionPicker), and hands it what to do with the answer.
 		 *
 		 * @param {object} announcement the one being reacted to
 		 */
@@ -340,14 +294,9 @@ export default {
 		},
 
 		/**
-		 * Puts an emoji on an announcement or takes it back.
-		 *
-		 * The routes answer `{}` rather than the announcement, so the bar is
-		 * redrawn from what was sent — after the write, not before it. An
-		 * emoji the server refuses (it takes one emoji or a shortcode it
-		 * publishes, and at most eight per account) therefore never appears in
-		 * the bar at all, which is better than one that appears and is taken
-		 * away again.
+		 * Puts an emoji on an announcement or takes it back. The routes answer
+		 * `{}`, so the bar is redrawn from what was sent, after the write: an
+		 * emoji the server refuses never appears.
 		 *
 		 * @param {object} announcement the one being reacted to
 		 * @param {string} name the emoji, or the shortcode of a custom one
@@ -359,8 +308,7 @@ export default {
 				return
 			}
 
-			// the emoji is in the path, as it is on Mastodon, so it has to
-			// survive the trip there
+			// the emoji is in the path, as on Mastodon
 			const url = generateUrl(`/apps/social/api/v1/announcements/${announcement.id}/reactions/${encodeURIComponent(name)}`)
 
 			this.busy = announcement.id + '|' + name
@@ -377,9 +325,8 @@ export default {
 		},
 
 		/**
-		 * The bar with this account's own reaction added or removed, ordered
-		 * as the server orders one: most-reacted first, alphabetical within a
-		 * tie, so a redraw does not reshuffle it.
+		 * The bar with this account's own reaction added or removed, in the
+		 * server's order (most-reacted first, then alphabetical).
 		 *
 		 * @param {object[]} reactions the bar as it stands
 		 * @param {string} name the emoji that moved
@@ -413,8 +360,7 @@ export default {
 	padding: 10px 12px;
 	border: 1px solid var(--color-border);
 	border-radius: 8px;
-	/* the notice is not one of the posts under it: the primary tint says so
-	   before a word of it is read */
+	/* tinted: the notice is not one of the posts under it */
 	background: var(--color-primary-element-light);
 }
 
@@ -440,16 +386,13 @@ export default {
 	border-block-start: 1px solid var(--color-border);
 }
 
-/* one that has been dealt with stays where it was, out of the way of the ones
-   that have not */
 .announcement--read {
 	opacity: .7;
 }
 
 .announcement__text {
 	margin-top: 4px;
-	/* an announcement is written by an administrator and may be long; it wraps
-	   rather than pushing the column wider */
+	/* an administrator's text may be long: wrap rather than widen the column */
 	overflow-wrap: anywhere;
 
 	:deep(p) {
@@ -514,8 +457,7 @@ export default {
 	}
 }
 
-/* the ones this account chose, so pressing again to undo is obvious rather
-   than a discovery */
+/* the ones this account chose, so pressing again to undo is obvious */
 .reaction--mine {
 	border-color: var(--color-primary-element);
 	background: var(--color-background-hover);

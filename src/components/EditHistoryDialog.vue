@@ -62,19 +62,9 @@ import { fullDateTime } from '../utils/relativeTime.js'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
 
 /**
- * Every version of an edited post, oldest first.
- *
- * The API has served this since editing landed and the client showed only
- * "Edited {date}" — which tells a reader that the words they are looking at are
- * not the words somebody replied to, and nothing about what changed. Mastodon
- * shows the versions; a reader who has been quoted or answered wants to see
- * them.
- *
- * The content is rendered as HTML because that is what it is: each version is
- * the post as it stood, and rendering it as text would show markup to the
- * reader. It goes through the client sanitiser first, the way every other
- * remote-HTML sink in this app does — a revision of a remote post is that
- * server's markup.
+ * Every version of an edited post, oldest first. Each version's HTML goes
+ * through the client sanitiser, as a remote post's revision is that server's
+ * markup.
  */
 export default {
 	name: 'EditHistoryDialog',

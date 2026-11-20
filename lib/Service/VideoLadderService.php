@@ -15,37 +15,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The same video written at two or three sizes, as HLS.
+ * The same video written at two or three sizes, as HLS, so a player can move
+ * between them as the connection changes, as PeerTube publishes.
  *
- * `VideoTranscodeService` makes a video *playable* — one H.264 MP4 that every
- * server and browser will take. This makes it *watchable on a phone on a
- * train*: a ladder of heights plus a playlist that lets the player move
- * between them as the connection changes. It is also what PeerTube publishes,
- * so a video laddered here is a video a PeerTube reader gets the same way they
- * get a native one.
- *
- * **One file per rung.** HLS normally means a directory of a few hundred
- * segments; `-hls_flags single_file` writes each rung as a single fragmented
- * MP4 and addresses the segments inside it as byte ranges. The store keeps
- * doing the one thing it does well — a file per row — and a 40-minute video is
- * three files rather than a thousand. It is also, not by coincidence, exactly
- * the shape PeerTube's own fMP4 output has.
- *
- * **Keyframes are forced onto the segment boundary** at every rung, with the
- * same period. Without that, ffmpeg cuts a segment at the next keyframe it
- * happens to find, the rungs end up with different boundaries, and a player
- * switching between them either stalls or skips. With it, every rung's
- * segment *n* covers the same seconds of the video, which is the whole
- * premise of adaptive streaming.
- *
- * **It never upscales.** A rung taller than the source is dropped rather than
- * encoded: a 480p video written out at 1080p is a bigger file of exactly the
- * same picture, and a ladder whose top rung is the worst deal on it is worse
- * than no ladder.
- *
- * Off unless an administrator turns it on, like the transcoder and for the
- * same reasons — this is ffmpeg time on somebody's server, several times over
- * per video.
+ * Each rung is one fragmented MP4 (`-hls_flags single_file`) addressed by
+ * byte ranges, a file per row as the store keeps. Keyframes are forced onto
+ * the segment boundary at every rung, so a player can switch between rungs.
+ * A rung taller than the source is never encoded. Off unless an
+ * administrator turns it on, as it is ffmpeg time several times per video.
  */
 class VideoLadderService {
 	/** The rungs an instance gets when its administrator has not said otherwise. */
@@ -56,12 +33,8 @@ class VideoLadderService {
 	public const MAX_HEIGHT = 2160;
 
 	/**
-	 * How long a segment is.
-	 *
-	 * Four seconds is the usual compromise: short enough that a player
-	 * reacting to a slow connection reacts within a few seconds, long enough
-	 * that the per-segment overhead and the number of byte-range requests stay
-	 * small.
+	 * How long a segment is: four seconds, short enough for a player to react
+	 * to a slow connection, long enough to keep the request count small.
 	 */
 	public const SEGMENT_SECONDS = 4;
 
@@ -72,10 +45,8 @@ class VideoLadderService {
 	public const RENDITION_TYPE = 'video/mp4';
 
 	/**
-	 * How long one rung gets.
-	 *
-	 * Per rung rather than per video, so a three-rung ladder on a long video
-	 * is not killed halfway up by a budget sized for one encode.
+	 * How long one rung gets, per rung so a long video's ladder is not killed
+	 * by a budget sized for one encode.
 	 */
 	private const TIMEOUT_SECONDS = 1800;
 
@@ -112,11 +83,9 @@ class VideoLadderService {
 	}
 
 	/**
-	 * The ladder an administrator configured, cleaned up.
-	 *
-	 * Anything that is not a number in range is dropped rather than
-	 * complained about, and the result is sorted and deduplicated: this is
-	 * read on a cron run, where there is nobody to tell.
+	 * The ladder an administrator configured, cleaned up: anything not a number
+	 * in range is dropped silently (this runs on cron), and the result sorted
+	 * and deduplicated.
 	 *
 	 * @return int[] heights, smallest first
 	 */
@@ -141,12 +110,8 @@ class VideoLadderService {
 	}
 
 	/**
-	 * Which rungs are worth writing for a source this tall.
-	 *
-	 * Every configured rung below the source, plus the source's own height
-	 * when no rung reaches it — so a 1440p video on a 360/720/1080 ladder gets
-	 * a 1440p rung too and a player is never offered a ladder whose best rung
-	 * is worse than the file sitting beside it.
+	 * Which rungs are worth writing for a source this tall: every configured
+	 * rung below it, plus its own height when no rung reaches it.
 	 *
 	 * @return int[] heights, smallest first
 	 */
@@ -281,12 +246,9 @@ class VideoLadderService {
 	}
 
 	/**
-	 * The playlist with the media filename swapped for the placeholder.
-	 *
-	 * It refuses rather than guesses when the playlist names more than one
-	 * file: `single_file` is supposed to produce exactly one, and a playlist
-	 * that names several is an ffmpeg that did something else — storing it
-	 * would mean a rung that 404s halfway through for every reader.
+	 * The playlist with the media filename swapped for the placeholder,
+	 * refused when it names more than one file, which `single_file` should
+	 * never produce.
 	 */
 	public function placeholdered(string $playlist, string $media): ?string {
 		$named = [];
@@ -328,11 +290,8 @@ class VideoLadderService {
 	}
 
 	/**
-	 * What the master playlist advertises for a rung, in bits per second.
-	 *
-	 * Measured from the file rather than taken from the encoder's target: CRF
-	 * encoding has no target, and a player choosing a rung is choosing on how
-	 * much it will actually have to fetch.
+	 * What the master playlist advertises for a rung, in bits per second,
+	 * measured from the file, as CRF encoding has no target.
 	 */
 	public function bandwidth(int $size, float $duration): int {
 		if ($duration <= 0.0) {

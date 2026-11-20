@@ -22,18 +22,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * An author's own posts that are waiting for a moderator.
+ * An author's own posts that are waiting for a moderator: what is waiting,
+ * and taking one back, so a held post can be found again.
  *
- * The one thing this feature must not do is lose somebody's writing without
- * telling them. The composer says a post was held at the moment it happens,
- * but a person who closed the tab has to be able to find it again — so these
- * two routes exist: what of mine is waiting, and take that one back.
- *
- * Session routes, like the migration ones and for the same reason: unpublished
- * text of the caller's own is not something a third-party token should be able
- * to read, and there is no account parameter here, so there is nothing to
- * point at anybody else. What may be read is scoped in SQL on the way out
- * (`PostHoldsRequest`), not checked afterwards.
+ * Session routes, since unpublished text should not be readable by a
+ * third-party token; results are scoped in SQL (`PostHoldsRequest`).
  */
 class ReviewController extends Controller {
 	use OwnAccount;
@@ -79,10 +72,7 @@ class ReviewController extends Controller {
 	}
 
 	/**
-	 * Takes one back.
-	 *
-	 * An author changing their mind about a post nobody has seen is not a
-	 * moderation decision and leaves no trace: the row goes, and that is all.
+	 * Takes one back; not a moderation decision, so it leaves no trace.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/review/{id}')]
@@ -99,8 +89,7 @@ class ReviewController extends Controller {
 		} catch (AccountNotSetUpException $e) {
 			return self::notSetUp($e);
 		} catch (Throwable $e) {
-			// somebody else's, or gone: the same answer, so that a caller
-			// cannot learn from this route what anybody else has waiting
+			// Somebody else's or gone: the same answer, so nothing leaks.
 			return new DataResponse(['error' => 'no such held post'], Http::STATUS_NOT_FOUND);
 		}
 	}

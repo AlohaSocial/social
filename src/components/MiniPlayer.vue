@@ -43,14 +43,11 @@ import VideoPlayer from './VideoPlayer.vue'
 import { closeMiniPlayer, miniPlayer } from '../services/miniPlayer.js'
 
 /**
- * The small player in the corner: a video the reader left its page while it
- * played, going on where it was.
- *
- * Drawn by `App.vue` for as long as `services/miniPlayer.js` holds a video,
- * keyed by the post, so it outlives every navigation inside the app. It plays
- * on from where the watch page was and nothing else: it never starts a video
- * of its own. "Back to the video" opens the video's page, which takes the
- * video back from here; closing stops it.
+ * The small player in the corner: a video the reader left the page of while
+ * it played, going on where it was. `App.vue` draws it while
+ * `services/miniPlayer.js` holds a video, so it outlives navigation; it never
+ * starts a video of its own. "Back to the video" opens the video's page, which
+ * takes the video back; closing stops it.
  */
 export default {
 	name: 'MiniPlayer',

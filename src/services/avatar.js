@@ -7,17 +7,9 @@ import { generateUrl } from '@nextcloud/router'
 import { getCurrentUser } from '@nextcloud/auth'
 
 /**
- * Where to find the reader's own face.
- *
- * The avatar route answers with `Cache-Control: immutable, max-age=86400`, so a
- * browser that has the picture will not ask again for a day -- not even to
- * revalidate. Uploading a new one in Personal settings therefore changed
- * nothing here until the day was up. The version Nextcloud bumps on every
- * change goes in the address to make it a different picture to the browser.
- *
- * `NcAvatar` does the same thing when it is given a `user`; these callers give
- * it a `url` instead, which it trusts as it stands, so the version has to be
- * here.
+ * Where to find the reader's own face. The avatar route is cached as immutable
+ * for a day, so the version Nextcloud bumps on every change goes in the
+ * address; `NcAvatar` does this for a `user` but trusts a `url` as it stands.
  *
  * @param {number} size how many pixels across, as the route wants it
  * @return {string} the address, or an empty string when nobody is logged in

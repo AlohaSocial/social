@@ -14,15 +14,11 @@ use OCA\Social\Service\DurableCache;
 
 /**
  * Where the Jetstream listener got to and its last report, kept in the
- * durable cache's table rather than app config: the listener writes them
- * every few seconds, and an app-config write invalidates the config cache
- * of every request on the host.
- *
- * The table, whatever memcache there is, since `occ social:atproto:listen`
- * writes them and a web request (the admin page) reads them. Every row of
- * it expires; a year is far longer than any listener is down, and each
- * write starts the year again. A value an older version kept in app config
- * is moved over on its first read.
+ * durable cache table: they are written every few seconds, and an app-config
+ * write would invalidate every request's config cache. The table rather than
+ * memcache, since `occ social:atproto:listen` writes and the admin page
+ * reads. Rows expire after a year, renewed by each write. A value still in
+ * app config is moved over on its first read.
  */
 class JetstreamState {
 	private const NAMESPACE = 'social.atproto.jetstream';

@@ -118,13 +118,9 @@ import { errorOf } from '../utils/serverError.js'
 export const CONFIRM_ABOVE = 10
 
 /**
- * One starter pack, open: who curated it and where it lives, its members
- * with a Follow each, and following everybody not followed yet.
- *
- * Every pack is drawn by this, wherever it was read from; the page that
- * opened it only says how to follow, through `followMembers` and
- * `followMember`. What was followed here is kept until the pack changes,
- * so the page keys this by the pack.
+ * One starter pack, open: who curated it, its members with a Follow each, and
+ * following everybody not followed yet. The opening page supplies the follow
+ * functions and keys this by the pack, since what was followed here is kept.
  */
 export default {
 	name: 'StarterPackDetail',

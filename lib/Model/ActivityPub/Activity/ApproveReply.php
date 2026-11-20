@@ -14,16 +14,8 @@ use OCA\Social\Model\ActivityPub\ACore;
 
 /**
  * FEP-5624's `ApproveReply`: the author of a post saying that a reply to it
- * may be shown.
- *
- * PeerTube ≥ 6.2 moderates comments. A video whose `commentsPolicy` is
- * "requires approval" takes a reply in and shows it to nobody until a human
- * has looked; when one does, the video's server sends this back to the server
- * the reply came from, naming the reply.
- *
- * Without it a reply written here looked posted, sat in a queue on the other
- * side, and either appeared a day later or never — with nothing anywhere to
- * say which.
+ * may be shown, as PeerTube ≥ 6.2 sends when a video's `commentsPolicy`
+ * requires approval and a moderator approved the reply.
  */
 class ApproveReply extends ACore implements JsonSerializable {
 	public const TYPE = 'ApproveReply';

@@ -15,14 +15,10 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Moderation;
 
 /**
- * Counting the reactions on a post, which is a read and nothing else.
- *
- * Apart from `ReactionService`, which writes them, because writing one asks
- * `ModerationService` whether the account may act — and `ModerationService`
- * takes `StreamService`, which is what hangs the bars on a timeline. Putting
- * both halves in one class closed that circle and the container refused to
- * build anything: "Tried to query StreamService, but it is already in the
- * chain". Reading needs nothing but the table.
+ * Counting the reactions on a post, a read only. Apart from
+ * `ReactionService`, which writes them and needs `ModerationService`, which
+ * needs `StreamService`, which needs this: one class would be a dependency
+ * cycle.
  */
 class ReactionSummaryService {
 	public function __construct(
@@ -34,12 +30,8 @@ class ReactionSummaryService {
 	}
 
 	/**
-	 * The reaction bar of a post: each emoji, how many used it, and whether
-	 * the viewer is one of them.
-	 *
-	 * Ordered by how many, then by the emoji itself, so the bar does not
-	 * reshuffle between two readers or between two page loads when counts are
-	 * equal.
+	 * The reaction bar of a post: each emoji, how many used it, and whether the
+	 * viewer did; ordered by count, then emoji, so it is stable.
 	 *
 	 * @param string $viewerId the reader's actor id, or '' for anonymous
 	 * @return list<array{name: string, count: int, me: bool, url?: string}>
@@ -49,11 +41,8 @@ class ReactionSummaryService {
 	}
 
 	/**
-	 * Hangs the reaction bars on a page of posts.
-	 *
-	 * Called where the link previews are attached, and for the same reason:
-	 * one query for the page rather than one per card. Neither is part of the
-	 * stored post or of the wire object.
+	 * Hangs the reaction bars on a page of posts, in one query, as link
+	 * previews are attached.
 	 *
 	 * @param Stream[] $posts
 	 * @param string $viewerId the reader's actor id, or '' for anonymous

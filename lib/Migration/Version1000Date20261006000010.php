@@ -17,13 +17,9 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * Records, per revision of a status, the attachments as they were in that
- * version: a JSON list of MediaAttachment entities, ids, urls, descriptions
- * and focal points included.
- *
- * On the revision because the attachment rows cannot answer it: an edit's
- * `media_attributes` rewrites a description or a focal point in place. Rows
- * from before this column existed read as null — what their attachments said
- * then was never kept.
+ * version (a JSON list of MediaAttachment entities), as an edit's
+ * `media_attributes` rewrites the attachment rows in place. Older revisions
+ * read as null.
  */
 class Version1000Date20261006000010 extends SimpleMigrationStep {
 	#[\Override]

@@ -15,12 +15,9 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 
 /**
- * Offers registration on the login page, while there is anything to offer.
- *
- * Nothing is shown when external users are switched off, when the instance
- * is full, or when registration is by invitation only: the invitation link
- * is the way in then, and a button leading to "invitation only" would be a
- * button that leads nowhere.
+ * Offers registration on the login page, unless external users are off, the
+ * instance is full, or registration is by invitation only (the invitation
+ * link is the way in then).
  */
 class SignupLoginProvider implements IAlternativeLoginProvider {
 	public function __construct(

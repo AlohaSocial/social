@@ -3,12 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!--
-	  The zero case lives here, not in the caller: a counter that is only
-	  rendered above zero cannot animate its own first "1" if the parent
-	  decides whether the component exists at all. Mounted the whole time,
-	  it can roll the first one in like any other change.
-	-->
+	<!-- mounted at zero too, so that the first "1" can roll in like any other change -->
 	<span
 		v-if="count > 0"
 		class="post-action-count rolling-count"

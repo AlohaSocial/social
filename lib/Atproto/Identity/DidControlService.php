@@ -20,15 +20,13 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 
 /**
- * Who controls a person's DID, read from the PLC directory: the rotation
- * keys its latest operation lists, each named by what it is to the person
- * — this server's key, their recovery phrase, or a key this server does
- * not know — and, for 72 hours after an operation, until when a key that
- * ranks above the one that signed it can still undo it.
+ * Who controls a person's DID, read from the PLC directory: the rotation keys
+ * of its latest operation, each named by role (this server's key, their
+ * recovery phrase, or unknown), and for 72 hours after an operation, until
+ * when a higher-ranked key can still undo it.
  *
- * The directory's answer is kept a minute, under the operation this
- * server confirmed last, so an operation this server sends is seen at
- * once and a page that reloads does not ask the directory each time.
+ * The directory's answer is cached a minute, keyed by the operation this
+ * server confirmed last, so its own operations show at once.
  */
 class DidControlService {
 	/** the PLC rule: a higher rotation key can nullify an operation for this long */

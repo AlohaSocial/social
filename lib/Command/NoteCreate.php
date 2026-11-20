@@ -93,9 +93,7 @@ class NoteCreate extends SocialCommand {
 		$replyTo = $input->getOption('replyTo');
 		$type = $input->getOption('type');
 
-		// an omitted --type is what the option's own help promises, public; an
-		// unrecognised one used to become a direct post addressed to nobody,
-		// silently, which is not something a command line should do quietly
+		// an omitted --type is public, as the option's help says
 		$type = ($type === null || $type === '') ? 'public' : (string)$type;
 		if (!Stream::isKnownClientVisibility($type)) {
 			$output->writeln(
@@ -119,8 +117,7 @@ class NoteCreate extends SocialCommand {
 		$token = '';
 		$activity = $this->postService->createPost($post, $token);
 
-		// through the output interface rather than echo, so the result can be
-		// redirected, captured or formatted like every other occ command's
+		// through the output interface so the result can be redirected or captured
 		$output->writeln(
 			'object: ' . json_encode($activity, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
 		);

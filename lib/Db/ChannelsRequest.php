@@ -16,10 +16,6 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * The channels an account publishes videos under.
  *
- * Two reads, both small: "the channels of this account", which is the picker
- * and the profile, and "who owns this channel", which every serving of a
- * channel actor asks so it can say whose it is.
- *
  * @package OCA\Social\Db
  */
 class ChannelsRequest extends CoreRequestBuilder {
@@ -71,13 +67,8 @@ class ChannelsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Every channel on this instance, oldest first.
-	 *
-	 * Capped rather than paged: the PeerTube client route that reads this
-	 * lists what an instance publishes under, and an instance with more
-	 * channels than one page is one where a directory rather than a list is
-	 * the right answer — a page nobody asked for would be worse than a short
-	 * one that says so.
+	 * Every channel on this instance, oldest first. Capped, not paged: an
+	 * instance with more channels than that wants a directory, not a list.
 	 *
 	 * @return Channel[]
 	 */

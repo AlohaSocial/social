@@ -12,23 +12,14 @@ namespace OCA\Social\Model\Client;
 use JsonSerializable;
 
 /**
- * Somebody another server's directory said exists.
+ * Somebody another server's directory said exists. Not a Mastodon `Account`,
+ * whose `id` a client hands back to this instance's API: the id in a remote
+ * directory's answer is a row in somebody else's database. So this is keyed by
+ * the handle, and `url` is only for the link out.
  *
- * Deliberately **not** a Mastodon `Account`. An `Account` carries an `id` that
- * the client hands straight back to this instance's own API, and the id in a
- * remote directory's answer is a row number in somebody else's database — the
- * same string means a different person here. Giving these entities the same
- * shape would make that mistake invisible; giving them their own makes it
- * unspellable.
- *
- * The one durable reference to a person on another server is their handle, so
- * that is what this carries and what every action the client can take from a
- * result is keyed by. `url` is offered for the link out and for nothing else.
- *
- * Everything here was written by a stranger's server. It is length-capped, and
- * `note` is delivered as text with its markup removed rather than as HTML: a
- * bio arrives as HTML on Mastodon and as plain text on Misskey, and the one
- * thing the two must not be is "sometimes markup, rendered".
+ * Everything here was written by a stranger's server: it is length-capped, and
+ * `note` is plain text with its markup removed, as a bio arrives as HTML from
+ * Mastodon and as plain text from Misskey.
  */
 class DirectoryAccount implements JsonSerializable {
 	public const MAX_NAME = 120;
@@ -101,9 +92,8 @@ class DirectoryAccount implements JsonSerializable {
 	}
 
 	/**
-	 * The bio, as text. Tags are stripped rather than escaped, and the entities
-	 * behind them decoded, because half of these arrive as HTML and half as
-	 * plain text and a row has to draw both the same way.
+	 * The bio, as text: tags stripped and entities decoded, so HTML and plain
+	 * text bios draw the same way.
 	 */
 	public function setNote(string $note): self {
 		$text = html_entity_decode(
@@ -183,9 +173,8 @@ class DirectoryAccount implements JsonSerializable {
 	}
 
 	/**
-	 * Whether this instance already holds the actor — so the row can offer the
-	 * profile here rather than sending the reader to somebody else's website
-	 * for a person their own server knows.
+	 * Whether this instance already holds the actor, so the row can offer the
+	 * profile here.
 	 */
 	public function setKnown(bool $known): self {
 		$this->known = $known;

@@ -15,12 +15,9 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The accounts a team posts from, and who actually wrote each post.
- *
- * No membership is stored: the Nextcloud group *is* the membership, and it is
- * asked at the moment somebody tries to post. A copy of a group is a copy that
- * drifts, and the drift is somebody who left the organisation still able to
- * speak for it.
+ * The accounts a team posts from, and who wrote each post. Membership is not
+ * stored: the Nextcloud group is asked at posting time, so somebody who left
+ * cannot still speak for the team.
  *
  * @package OCA\Social\Db
  */

@@ -17,11 +17,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Purging a domain by hand.
- *
- * Blocking one queues the purge already; this is for the cases that are not a
- * fresh block — a domain blocked before this existed, a job that failed half
- * way, or an admin who wants the data gone without waiting for cron.
+ * Purging a domain by hand, for a domain blocked without a queued purge, a
+ * failed job, or an admin who will not wait for cron.
  */
 class DomainPurge extends SocialCommand {
 	public function __construct(
@@ -64,8 +61,7 @@ class DomainPurge extends SocialCommand {
 				return 0;
 			}
 
-			// unblocking does not undo this, so it is said before the rows
-			// are gone rather than after
+			// Unblocking does not undo this, so confirm first.
 			$confirmed = $this->confirmDestructive(
 				$input, $output,
 				'Delete every account and post of ' . $domain . ' held here? Unblocking the domain does not restore what was deleted.'
@@ -89,8 +85,7 @@ class DomainPurge extends SocialCommand {
 
 		$output->writeln(sprintf('%d accounts of %s purged', $purged, $domain));
 		if ($this->domainPurgeService->hasRemains($domain)) {
-			// only reachable with --batches: without it the purge runs until
-			// there is nothing left to find
+			// Only with --batches; otherwise it runs until nothing is left.
 			$output->writeln('<comment>more is left; run the command again to continue</comment>');
 		}
 

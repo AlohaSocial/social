@@ -27,11 +27,6 @@ use OCP\Search\IProvider;
 use OCP\Search\ISearchQuery;
 use OCP\Search\SearchResult;
 
-/**
- * Class UnifiedSearchProvider
- *
- * @package OCA\Social\Search
- */
 class UnifiedSearchProvider implements IProvider {
 	public const PROVIDER_ID = 'social';
 	public const ORDER = 12;
@@ -53,7 +48,7 @@ class UnifiedSearchProvider implements IProvider {
 	}
 
 	/**
-	 * return unique id of the provider
+	 * The unique id of the provider.
 	 */
 	#[\Override]
 	public function getId(): string {
@@ -94,11 +89,8 @@ class UnifiedSearchProvider implements IProvider {
 		$limit = max(1, $query->getLimit());
 		$offset = max(0, (int)($query->getCursor() ?? 0));
 
-		// Each source is asked for one entry beyond where this page ends: that
-		// makes the merged list a faithful prefix as far as the page reaches, and
-		// the leftover is what says whether there is a next page at all. Advertising
-		// a cursor without it — which is what used to happen — made "load more"
-		// answer with the same first page for ever.
+		// Each source is asked for one entry beyond this page, so the merged list
+		// is a faithful prefix and the leftover says whether there is a next page.
 		$reach = $offset + $limit + 1;
 		$result = array_merge(
 			// cache-only, and nothing queued: Nextcloud asks every provider
@@ -119,11 +111,8 @@ class UnifiedSearchProvider implements IProvider {
 	}
 
 	/**
-	 * Tells everything this search will ask whose search it is.
-	 *
-	 * Each of these holds the viewer itself, so the viewer has to be handed to
-	 * each of them: a service that was not told sees the search as a stranger's
-	 * and answers only what is public.
+	 * Hands the viewer to every service this search asks, or each would answer
+	 * only what is public.
 	 *
 	 * @param IUser $user who is searching
 	 * @param bool $exception whether a user with no Social account throws

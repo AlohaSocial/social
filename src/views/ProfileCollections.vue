@@ -9,8 +9,6 @@
 			value="collections"
 			:label="t('social', 'Which of their posts to show')" />
 
-		<!-- an album is made here, where the albums are, rather than in a
-		     settings page nobody would look for it in -->
 		<form v-if="isOwn" class="collections__create" @submit.prevent="create">
 			<NcTextField
 				v-model="newTitle"
@@ -99,13 +97,8 @@ import { useAccountStore } from '../store/account.js'
 import { latestLoad } from '../utils/latestLoad.js'
 
 /**
- * An account's collections — Pixelfed's albums — as the fourth tab of a
- * profile.
- *
- * The API has had these for a while; this is the first page that shows them.
- * The list is asked of the server for the account on screen, so a visitor
- * sees the public ones and a follower the followers-only ones too, exactly as
- * the API decides it. The owner makes a new one here, where the others are.
+ * An account's collections (Pixelfed's albums) as a tab of its profile. The
+ * server decides which ones the reader may see; the owner also creates them here.
  */
 export default {
 	name: 'ProfileCollections',
@@ -151,10 +144,8 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether these are the reader's own albums. The
-		 * handle in the route is what the server was asked about, so it is
-		 * what the reader's own handle is compared with — no lookup, and
-		 * nothing to wait for
+		 * @return {boolean} whether these are the reader's own albums, by the
+		 * handle in the route
 		 */
 		isOwn() {
 			const current = this.accountStore.currentAccount?.acct
@@ -188,10 +179,8 @@ export default {
 
 		/** @return {Promise<void>} */
 		async load() {
-			// the handle from the route, which the server resolves as happily
-			// as a numeric id or an actor URL: the page has no reason to wait
-			// for the account store to be filled, and on the first paint it is
-			// not
+			// the server resolves a handle as well as an id, so this need not
+			// wait for the account store
 			const account = this.account
 			const isNewest = this.loads.begin()
 			if (!account) {
@@ -247,7 +236,7 @@ export default {
 
 		/**
 		 * @param {object} collection one album
-		 * @return {string} the first picture of its first post, or ''
+		 * @return {string} the first photo of its first post, or ''
 		 */
 		coverOf(collection) {
 			for (const post of collection.posts ?? []) {

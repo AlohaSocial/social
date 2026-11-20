@@ -23,12 +23,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A person's own switch for their presence on Bluesky (D22, §4.6). Off, the
- * identity is deactivated as Bluesky deactivates an account: its profile
- * and posts are no longer shown there, nothing new is published, and every
- * Bluesky app signed in to it is signed out; the DID, the handle and the
- * repository stay theirs. On again, the repository is served as it was
- * left. What was written here while it was off stays off Bluesky.
+ * A person's switch for their presence on Bluesky (D22, §4.6). Off, the
+ * identity is deactivated as Bluesky deactivates an account and signed-in
+ * apps are signed out; the DID, handle and repository stay theirs. What was
+ * written while it was off is never published.
  */
 class PresenceService {
 	/** when the person last switched their presence back on, in seconds */

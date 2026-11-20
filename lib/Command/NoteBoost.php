@@ -18,11 +18,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
-/**
- * Class NoteBoost
- *
- * @package OCA\Social\Command
- */
 class NoteBoost extends SocialCommand {
 	public function __construct(
 		private AccountService $accountService,

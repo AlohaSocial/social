@@ -19,15 +19,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What a Bluesky app asks of the AppView through this PDS (D17): its
- * timelines, threads, profiles, notifications, search — and of Bluesky's
- * chat service, its direct messages (`chat.bsky.*`, D15). Passed on as the
- * signed-in account, with a token its own key signs for the one method,
- * and answered as the service answered (§16.2). The app's own token never
- * leaves here. Only the AppView and the chat service this instance is
- * configured with can be the target: `atproto-proxy` cannot point the
- * account's signature anywhere else. A report an app files is no proxied call: it becomes a
- * report here (`WriteService`), passed on in this server's name.
+ * Passes a Bluesky app's AppView and chat (`chat.bsky.*`) calls on as the
+ * signed-in account, with a token the account's key signs for the one method.
+ * The app's own token never leaves here, and only the configured AppView and
+ * chat service can be the target, whatever `atproto-proxy` says. Reports are
+ * not proxied: they become reports here (`WriteService`).
  */
 class AppViewProxy {
 	private const TIMEOUT = 20;

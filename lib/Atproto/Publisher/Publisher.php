@@ -39,13 +39,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Puts what a local account does onto Bluesky: every public post as it is
- * made, deleted or edited, and the profile.
+ * Puts a local account's public posts (created, edited, deleted) and profile
+ * onto Bluesky.
  *
- * Idempotent on purpose. A post is published when it has no record yet,
- * whoever asks — the listener right after the post, the queued job, or the
- * reconcile pass that finds recent missed publications and walks the local
- * record inventory — so a missed event costs minutes, not the post.
+ * Idempotent on purpose: a post is published whenever it has no record yet,
+ * whether the listener, the queued job or the reconcile pass asks, so a
+ * missed event costs minutes, not the post.
  */
 class Publisher {
 	/** how far back missed first publications are sought */
@@ -82,12 +81,9 @@ class Publisher {
 	}
 
 	/**
-	 * Publishes a post, unless it is not one that goes to Bluesky, is there
-	 * already, or its author is not on Bluesky now or was not when they
-	 * wrote it. While the author's Bluesky account moves away it waits:
-	 * the move publishes what waits right before the DID moves
-	 * (publishBacklog()), and once a move is called off or stops before
-	 * that, the reconcile pass does.
+	 * Publishes a post unless it is not for Bluesky, is there already, or its
+	 * author was not on Bluesky when writing it. While the author's account
+	 * moves away it waits for publishBacklog() or the reconcile pass.
 	 *
 	 * @return CommitResult|null the commit, or null when nothing was written
 	 * @throws AtprotoException
@@ -99,8 +95,7 @@ class Publisher {
 		$existing = $this->recordOf($post->getId());
 		if ($existing !== null) {
 			// A previous attempt may have committed the root and only part of a
-			// long thread. Reconcile the record set on retry instead of treating
-			// the root's existence as proof that the whole post was published.
+			// long thread, so reconcile the whole record set.
 			if (!$this->imported->isImported($post->getAttributedTo(), $post->getId())) {
 				$this->updateRecord($post, $existing);
 			}
@@ -229,9 +224,8 @@ class Publisher {
 	public function editPost(Stream $post): string {
 		$record = $this->recordOf($post->getId());
 		if ($record === null) {
-			// The initial publication may have failed before it created a
-			// record. An edit is another opportunity to publish the current
-			// version; publishPost is idempotent and re-check the repository
+			// The first publication may have failed before creating a record;
+			// publishPost is idempotent, and the repository is checked again
 			// below in case a queued publication won the race.
 			if ($this->publishPost($post) !== null) {
 				return 'updated';
@@ -351,9 +345,8 @@ class Publisher {
 				|| $this->threadVerifier->isComplete($post, $records);
 
 			return [
-				// A root record alone is not a successful publication when the
-				// source text is longer than the Bluesky record limit. Reconcile
-				// will repair it; until then do not show a false delivered state.
+				// A root record alone is not a complete publication of a text
+				// longer than one record; reconcile repairs it.
 				'state' => $complete ? 'published' : 'waiting',
 				'uri' => $record->uri(),
 				'url' => 'https://bsky.app/profile/' . $identity->handle . '/post/' . $record->rkey,
@@ -364,12 +357,9 @@ class Publisher {
 	}
 
 	/**
-	 * Brings Bluesky up to date with recent public posts and every local post
-	 * already represented in a Bluesky repository: what a missed event or a
-	 * failed write left behind — a post without a record, an edit whose
-	 * contents differ from the record, or a record whose post is gone. Each
-	 * pass looks at two pages of new posts and two pages of records at most
-	 * (walkPages()), so older missed edits are repaired over time too.
+	 * Repairs what missed events or failed writes left behind: posts without
+	 * a record, edits the record lacks, records whose post is gone. Each pass
+	 * looks at two pages of new posts and two pages of records (walkPages()).
 	 *
 	 * @return int how many records were written or removed
 	 */
@@ -402,10 +392,9 @@ class Publisher {
 				$this->logger->warning('Post not published to Bluesky', ['post' => $post->getId(), 'exception' => $e]);
 			}
 		}
-		// Walk the whole local record inventory. The recent-post window is
-		// enough to find a missed first publication, but would leave an edit
-		// or deletion missed while Bluesky was disabled stale forever when it
-		// belonged to an older post.
+		// Walk the whole record inventory too: the recent-post window would
+		// never repair an edit or deletion of an older post missed while
+		// Bluesky was off.
 		$records = $this->walkPages('records', $limit, fn (int $before): array => $this->repositories->getRecordsSince(RecordMapper::POST, 0, $limit, $before));
 		$seenLocalIds = [];
 		foreach ($records as $record) {
@@ -438,10 +427,8 @@ class Publisher {
 	}
 
 	/**
-	 * The newest page and the next page below the saved cursor, newest first.
-	 * When there is no older page, the cursor is cleared and the next run starts
-	 * from the beginning. New posts are therefore checked every run while the
-	 * full inventory is covered over successive runs.
+	 * The newest page and the next page below the saved cursor, newest first;
+	 * the cursor wraps to the start after the oldest page.
 	 */
 	private function walkPages(string $walk, int $limit, Closure $page): array {
 		$newest = $page(0);
@@ -576,10 +563,8 @@ class Publisher {
 	}
 
 	/**
-	 * A sufficiently long Social post can need more records than one ATProto
-	 * repository commit allows. Write bounded commits in order, with the root
-	 * first so a partial publication remains discoverable and reconcile can
-	 * finish it after a transient failure.
+	 * Writes a long post in bounded commits, root first, so a partial
+	 * publication stays discoverable and reconcile can finish it.
 	 *
 	 * @param RepoWrite[] $writes
 	 */
@@ -587,9 +572,8 @@ class Publisher {
 		$result = null;
 		foreach (array_chunk($writes, RepositoryService::MAX_WRITES) as $chunk) {
 			$committed = $this->repositories->write($identity->did, $this->identities->signingKey($identity), $chunk);
-			// A duplicate first-publication can lose the root createOnce() race.
-			// Do not continue with its separately generated replies or report the
-			// earlier chunks as a complete thread. Reconciliation can finish it.
+			// A duplicate first publication can lose the root createOnce() race;
+			// stop here and leave the rest to reconcile.
 			if ($committed === null) {
 				return null;
 			}
@@ -615,9 +599,8 @@ class Publisher {
 	}
 
 	/**
-	 * The root record and its continuation replies, all linked to one Social
-	 * post. The first record keeps its rkey; subsequent parts keep theirs when
-	 * edited so replies to them also retain their URIs.
+	 * The root record and its continuation replies for one post. Each part
+	 * keeps its rkey on edit so replies to it keep their URIs.
 	 *
 	 * @param array{record: array<string, mixed>, truncated: bool, continuations?: array<int, array{text: string, facets: array}>} $mapped
 	 * @return RepoWrite[]

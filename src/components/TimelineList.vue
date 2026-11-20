@@ -4,9 +4,7 @@
 -->
 <template>
 	<div class="social__timeline" @focusout="onFocusOut">
-		<!-- the timeline changes under the reader without a word otherwise: new
-		     posts appear, a page loads, the end is reached, and none of it is
-		     announced. Polite, so it waits for a gap rather than interrupting -->
+		<!-- announces new posts, loaded pages and the end of the list to screen readers -->
 		<div class="hidden-visually" role="status" aria-live="polite">
 			{{ announcement }}
 		</div>
@@ -52,10 +50,8 @@
 			</NcButton>
 		</div>
 
-		<!-- The grid is a different way of drawing the same timeline, not a
-		     different timeline: paging, the new-post pill, the error state and
-		     the empty state all stay here, because otherwise the grid would
-		     have to reimplement every one of them. -->
+		<!-- The grid draws the same timeline, so paging, the pill and the error
+		     and empty states stay here for all displays. -->
 		<ProfileMediaGrid
 			v-if="display === 'grid'"
 			:posts="timeline"
@@ -82,10 +78,7 @@
 					:class="{ 'timeline-divider--new': headings[index] === 'new' }">
 					{{ dayHeadingLabel(headings[index]) }}
 				</li>
-				<!-- Where the reader had got to last time. Everything below it
-				     they have seen, and is drawn a shade quieter, which is what
-				     makes a timeline finite: a scroll with no bottom and no
-				     marks in it is the same screen for ever. -->
+				<!-- Where the reader got to last time; everything below it is drawn quieter. -->
 				<li v-if="caughtUpAt > 0 && index === caughtUpAt" class="timeline-caughtup">
 					<span class="timeline-caughtup__line" />
 					<AlohaScene scene="hammock" class="timeline-caughtup__scene" />
@@ -108,21 +101,10 @@
 					:unread="isUnread(entry)" />
 			</template>
 		</transition-group>
-		<!--
-			Not while a switch is settling. Going from My Feed to Local empties
-			the list and fills it again about 150 ms later, and a skeleton in
-			that gap is the content blinking out and back — the flicker people
-			report when they use the switcher above. A list that had posts a
-			moment ago keeps them, dimmed and inert, until the new ones arrive;
-			only a genuinely cold list draws bones.
-		-->
+		<!-- Not while a switch is settling: the previous posts stay dimmed until
+		     the new ones arrive, so only a cold list draws a skeleton. -->
 		<TimelineSkeleton v-if="display === 'list' && loading && timeline.length === 0 && !holding" />
-		<!--
-		  A failure used to set allLoaded, so the reader was shown "No posts
-		  found / Posts from people you follow will show up here" for what was
-		  a server error, and the observer never fired again: paging was dead
-		  until a full reload. An error is now its own state, with a retry.
-		-->
+		<!-- An error is its own state with a retry, so paging resumes without a reload. -->
 		<div v-if="error !== null" class="timeline-error timeline-state-card" role="alert">
 			<AlertCircleOutline class="timeline-state-card__icon" :size="24" aria-hidden="true" />
 			<div class="timeline-state-card__content">
@@ -141,10 +123,7 @@
 		<div ref="sentinel" class="list-sentinel">
 			<WaveLoading v-if="loading && timeline.length > 0" class="list-loading" />
 			<div v-else-if="!loading && !allLoaded" class="list-end" />
-			<!-- in both views: the grid used to carry an empty state of its own
-			     that said "No photos yet" whatever the tab was, so an account
-			     with no videos was told it had no photos. This one knows which
-			     tab asked -->
+			<!-- in every display, so the empty state names the tab that asked -->
 			<EmptyContent v-if="showEmptyContent" :item="emptyContentData" />
 		</div>
 	</div>
@@ -168,17 +147,10 @@ import WaveLoading from './WaveLoading.vue'
 import AlohaScene from './illustrations/AlohaScene.vue'
 import PullToRefresh from './PullToRefresh.vue'
 
-/**
- * How long a list counts as swapping after a held-over list is replaced, in
- * milliseconds: a little longer than an entry takes to rise in.
- */
+/** How long a list counts as swapping after a held-over list is replaced, in ms: a little longer than the rise-in transition. */
 const SWAP_SETTLE = 320
 
-/**
- * The lists a switch holds the previous one over for even on a first visit:
- * the three scopes of the switcher, which are the same kind of list and
- * practically never empty, so the posts being left are a fair stand-in.
- */
+/** The switcher's scopes, which hold the previous list over even on a first visit. */
 const HELD_SCOPES = ['home', 'timeline', 'federated']
 const UNTAGGED_RECOMMENDATION_CONTEXTS = ['interests', 'photos', 'videos', 'shorts', 'reels']
 import EmptyContent from './EmptyContent.vue'
@@ -198,37 +170,19 @@ import { isPostControl } from '../utils/postControls.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 
-/**
- * How many times fetchNewStatuses() may follow itself in one tick. It recursed
- * with no cap and terminated only because the server honours min_id; a server
- * that ignores it looped for as long as the tab was open.
- */
+/** How many times fetchNewStatuses() may follow itself in one tick, so a server that ignores min_id cannot loop it. */
 const MAX_CATCHUP_PAGES = 10
 
-/**
- * The longest the poll waits between two attempts while the server keeps
- * refusing, in milliseconds. Each failure doubles the wait from the usual
- * interval up to this; the first answer puts it back.
- */
+/** The longest poll backoff in ms; each failure doubles the wait up to this and an answer resets it. */
 const MAX_POLL_WAIT = 5 * 60 * 1000
 
-/**
- * How far down the reader has to be for arriving posts to be announced with
- * the pill rather than simply prepended. Above this the top of the list is on
- * screen and a post appearing there is its own announcement.
- */
+/** How far down, in px, the reader has to be for arriving posts to be held behind the pill rather than prepended. */
 const ANNOUNCE_BELOW = 240
 
-/**
- * How far apart two posts by one author may be, in milliseconds, and still be
- * drawn as one run in a feed.
- */
+/** How far apart two posts by one author may be, in ms, and still be drawn as one run. */
 const RUN_WITHIN = 30 * 60 * 1000
 
-/**
- * The lists whose posts are never drawn as runs: each entry there stands
- * alone, and on a profile every post is by the one author.
- */
+/** The lists whose posts are never drawn as runs. */
 const NO_RUNS = ['notifications', 'direct', 'single-post', 'account']
 
 /**
@@ -269,26 +223,13 @@ function keepsPlace(identity) {
 }
 
 /**
- * How long the notifications have to be on screen before they count as read.
- *
- * The rule, in one sentence: the page is read once it has been in front of the
- * reader for two seconds, and what it is read *up to* is the newest card that
- * was on it at that moment.
- *
- * It used to be read the instant it rendered — a watcher with `immediate: true`
- * — so a badge was cleared by the page merely existing. That marker is shared
- * with every other client, so opening the tab in a background window cleared
- * the reader's phone too, for notifications no human had seen. Two seconds is
- * not a claim that they were read; it is the shortest interval that cannot
- * happen by accident, and the tab has to be in front for it to pass at all.
+ * How long the notifications have to be on screen, with the tab in front,
+ * before they count as read up to the newest card shown. The marker is shared
+ * with every client, so merely rendering the page must not clear it.
  */
 const SEEN_AFTER = 2000
 
-/**
- * How often the counts of posts on screen are asked for again. Posts that
- * come into view are asked about once scrolling settles; this tick only
- * catches a screen left where it is.
- */
+/** How often the counts of posts on screen are refreshed while the screen stays put. */
 const COUNT_REFRESH_MS = 2 * 60 * 1000
 /** how long scrolling has to rest before posts that came into view are asked about */
 const COUNT_SETTLE_MS = 1500
@@ -348,12 +289,7 @@ export default {
 			default: false,
 		},
 
-		/**
-		 * How to draw the posts: as a list of entries, as the grid of
-		 * squares a profile shows on Pixelfed, or as the Videos page's
-		 * cards. Only the drawing differs -- the timeline, its paging and
-		 * its states are the same.
-		 */
+		/** How to draw the posts: entries, a Pixelfed-style grid, or the Videos page's cards. */
 		display: {
 			type: String,
 			default: 'list',
@@ -366,23 +302,14 @@ export default {
 			default: '',
 		},
 
-		/**
-		 * The title of the list being read, when this is a list's timeline and
-		 * the server has said what it is called. Only the empty state uses it:
-		 * "Nothing in Colleagues yet" names the list the reader is looking at,
-		 * where "No posts found" could be about anything.
-		 */
+		/** The title of the list being read, for the empty state. */
 		listTitle: {
 			type: String,
 			default: '',
 		},
 	},
 
-	/**
-	 * `settled` fires whenever a fetch finishes, successfully or not — what a
-	 * view needs to know before it can say anything about what the list does
-	 * not* hold. It is not "loaded": a failure settles the list too.
-	 */
+	/** `settled` fires whenever a fetch finishes, successfully or not. */
 	emits: ['settled'],
 
 	setup() {
@@ -395,9 +322,8 @@ export default {
 	data() {
 		return {
 			/**
-			 * The reading tracker this list feeds, or null while there is
-			 * none. Held raw: it carries an IntersectionObserver and its own
-			 * timers, and proxying those deeply buys nothing.
+			 * The reading tracker this list feeds, or null. Held raw: it carries
+			 * an IntersectionObserver and timers.
 			 *
 			 * @type {ReturnType<typeof import('../services/interestTracker.js').createInterestTracker>|null}
 			 */
@@ -412,19 +338,16 @@ export default {
 			 */
 			heldOver: [],
 			/**
-			 * Whether the held-over list is being replaced by the one that was
-			 * asked for. For that moment the old entries go without their
-			 * leave transition and the new ones rise together: a switch is
-			 * one list becoming another, not a page arriving from nothing.
+			 * Whether the held-over list is being replaced: the old entries skip
+			 * their leave transition and the new ones rise together.
 			 */
 			swapping: false,
 			/** @type {ReturnType<typeof setTimeout>|null} */
 			swapTimer: null,
 			/**
-			 * The newest post each list has shown this session, by identity:
-			 * what is remembered as the reader's place when they leave it.
-			 * Taken as the lists fill, because by the time a switch is
-			 * noticed the store already holds the next list.
+			 * The newest post each list has shown this session, by identity,
+			 * remembered as the reader's place. Taken as the lists fill, since
+			 * by the time a switch is noticed the store holds the next list.
 			 *
 			 * @type {Object<string, string>}
 			 */
@@ -476,12 +399,7 @@ export default {
 			loading: false,
 			profileSyncChecking: false,
 			allLoaded: false,
-			/**
-			 * Which list the requests in flight belong to. Switching timeline
-			 * used to leave `loading` set, so nothing was ever asked for the
-			 * list now on screen, and the previous list's answer was committed
-			 * under the new heading when it arrived.
-			 */
+			/** Which list the requests in flight belong to, so a late answer for a previous list is dropped. */
 			generation: 0,
 			/** what went wrong, when something did; null while all is well */
 			error: null,
@@ -489,10 +407,8 @@ export default {
 			pollFailureReported: false,
 			observer: null,
 			/**
-			 * The server's read marker as it stood when this page opened, and
-			 * what the "New" line is drawn against. Frozen on purpose: reading
-			 * the page moves the marker, and a line that moved with it would
-			 * rub out the very boundary it is there to show.
+			 * The server's read marker when this page opened, which the "New"
+			 * line is drawn against. Frozen, as reading the page moves the marker.
 			 */
 			seenUpTo: '0',
 			/** the newest post id this reader had seen on this timeline last time */
@@ -505,11 +421,7 @@ export default {
 			markedUpTo: '0',
 			/** whether the marker has been asked for on this visit */
 			markerAsked: false,
-			/**
-			 * Whether the server has answered where the marker is. Not the
-			 * same question as `seenUpTo > 0`: an account that has never read
-			 * anything has a marker of 0, and everything it has is new.
-			 */
+			/** Whether the server has answered where the marker is; an account that never read anything has a marker of 0. */
 			markerKnown: false,
 			emptyContent: {
 				default: {
@@ -648,13 +560,8 @@ export default {
 		...mapStores(useAccountStore, useNotificationsStore, useTimelineStore),
 
 		/**
-		 * Whether this list is in the order things were posted.
-		 *
-		 * For you is ranked instead, so nothing that reasons about "newer
-		 * than" applies to it: there is no top to catch up on, no line where
-		 * the reader left off, and the cursor is where the page ended rather
-		 * than the oldest post on it. The same holds for the For you scope of
-		 * Photos and Videos.
+		 * Whether this list is in posting order. For you (also as a scope of
+		 * Photos and Videos) is ranked, so nothing about "newer than" applies.
 		 *
 		 * @return {boolean}
 		 */
@@ -663,9 +570,8 @@ export default {
 		},
 
 		/**
-		 * What For you hears this list's reading as, or null when it
-		 * hears nothing: the feature is off, the reader opted out or paused,
-		 * nobody is signed in, or this is not a timeline that teaches it.
+		 * The For you context this list's reading feeds, or null when it
+		 * feeds none.
 		 *
 		 * @return {string|null}
 		 */
@@ -681,11 +587,7 @@ export default {
 			return isTracking(this.serverData.interests) || tracksV4 ? context : null
 		},
 
-		/**
-		 * What has just changed, in one sentence. Only the thing worth saying:
-		 * a reader does not need to hear about every page that loads while
-		 * they scroll, but they do need to know when nothing more is coming.
-		 */
+		/** What the live region announces: new posts, loading, or the end of the list. */
 		announcement() {
 			if (this.arrived > 0) {
 				return n('social', '%n new post available', '%n new posts available', this.arrived)
@@ -746,17 +648,12 @@ export default {
 		},
 
 		/**
-		 * What to say when the list is empty. This used to write to
-		 * `this.emptyContent[...]` from inside the computed, which mutated
-		 * component data during evaluation and left the mutation behind for
-		 * every later route.
+		 * What to say when the list is empty.
 		 *
 		 * @return {object} a drawing, a title and a description
 		 */
 		emptyContentData() {
-			// a filtered tab of a profile is empty for a different reason than
-			// an account that has never posted: they may have posted plenty,
-			// just none of this
+			// a filtered profile tab says what the filter found none of
 			const media = String(this.$route.query?.media ?? '')
 			const emptyTab = {
 				image: {
@@ -775,12 +672,7 @@ export default {
 				return emptyTab
 			}
 
-			// what the page says it is, before what the URL happens to spell.
-			// Bookmarks, Photos and a list all reach TimelineList as a `type`
-			// and none of them as a route of that name, so a lookup that began
-			// at the route fell through all three to "Posts from people you
-			// follow will show up here" — which a list is not, and Bookmarks
-			// least of all.
+			// the `type` prop first: Bookmarks, Photos and lists have no route of that name
 			const byProp = this.emptyContent[this.type]
 			if (byProp !== undefined) {
 				if (this.type === 'list' && this.listTitle !== '') {
@@ -826,8 +718,7 @@ export default {
 				? this.timelineStore.getParentsTimeline
 				: this.timelineStore.getTimeline
 
-			// a copy: .reverse() sorts in place, and this array comes from a
-			// cached Vuex getter that every other reader shares
+			// a copy: .reverse() works in place on a shared cached getter
 			return this.reverseOrder ? [...timeline].reverse() : timeline
 		},
 
@@ -840,16 +731,9 @@ export default {
 		},
 
 		/**
-		 * The replies under a post, as the conversation they are: each reply
-		 * followed by the replies to it, oldest first, with how deep it sits.
-		 *
-		 * They used to be one flat list, newest first — a reply to a reply
-		 * landed above the post it answered, and nothing said which reply it
-		 * answered (alohasocial/social#825, #1630). The tree is built from
-		 * `in_reply_to_id` over what this page holds; a reply whose parent is
-		 * not here (deleted, or a branch this instance holds only part of)
-		 * keeps its place in time at the top level, and its own replies hang
-		 * off it.
+		 * The replies under a post as a tree: each reply followed by its
+		 * replies, oldest first, with its depth. A reply whose parent is not
+		 * on the page stays at the top level.
 		 *
 		 * @return {{order: object[], depth: Record<string, number>}}
 		 */
@@ -898,8 +782,7 @@ export default {
 		},
 
 		/**
-		 * Which entries have a reply under them, so the thread line can carry
-		 * on down past them rather than stopping at every elbow.
+		 * Which entries have a reply under them, so the thread line continues past them.
 		 *
 		 * @return {Record<string, boolean>}
 		 */
@@ -920,13 +803,8 @@ export default {
 		},
 
 		/**
-		 * Where what the reader has already seen begins.
-		 *
-		 * The mark is the newest post that was on screen the last time they
-		 * were here, remembered per timeline. 0 when there is nothing new --
-		 * a line over the whole page separates nothing -- and 0 when there is
-		 * nothing old either, because a line under everything is a line at the
-		 * bottom of the screen that nobody ever reaches.
+		 * Index where what the reader saw last time (per timeline) begins;
+		 * 0 when everything is new or nothing is.
 		 *
 		 * @return {number}
 		 */
@@ -958,14 +836,8 @@ export default {
 		},
 
 		/**
-		 * Where the "N new posts" pill sits.
-		 *
-		 * It is sticky, and so is the box the reader writes in, which is taller
-		 * and paints above it in the same stacking context. The pill only shows
-		 * once the reader has scrolled a screen or so — which is exactly when
-		 * the composer is stuck to the top — so it was painted behind it every
-		 * single time. The composer's height is measured rather than assumed,
-		 * because it grows: a content warning, a row of attachments, a poll.
+		 * Puts the sticky pill below the sticky composer, which paints above it.
+		 * The composer's height is measured because it grows.
 		 *
 		 * @return {object} the inline offset, or nothing when there is no composer
 		 */
@@ -974,17 +846,13 @@ export default {
 		},
 
 		/**
-		 * What is actually drawn. The same list everywhere but the
-		 * notifications page, where runs of the same reaction are folded into
-		 * one card — twelve people liking one post is one thing that happened,
-		 * not twelve, and quoting the post twelve times buried everything
-		 * else. Paging still works off `timeline`, which is untouched.
+		 * What is drawn: the timeline, with runs of the same reaction folded
+		 * into one card on the notifications page. Paging works off `timeline`.
 		 *
 		 * @return {object[]}
 		 */
 		entries() {
-			// what was on screen when the switch started, until the new list
-			// has something of its own: see `holding`
+			// see `holding`
 			const timeline = (this.timeline.length === 0 && this.holding)
 				? this.heldOver
 				: this.revealed(this.timeline)
@@ -1018,38 +886,23 @@ export default {
 			return ids
 		},
 
-		/**
-		 * Whether what is on screen is the list being left.
-		 *
-		 * Only while the next one is loading: once the request has settled on
-		 * an empty list, that emptiness is the answer and the reader is owed
-		 * it rather than somebody else's posts.
-		 */
+		/** Whether the list being left is on screen, which lasts only while the next one is loading. */
 		holding() {
 			return this.loading && this.timeline.length === 0 && this.heldOver.length > 0 && this.holdable
 		},
 
 		/**
-		 * Whether the list being loaded is one worth holding the last one
-		 * over for: a scope of the switcher, or any list that has shown a
-		 * post before this session. A ranked feed opened for the first time
-		 * may well be empty, and posts that appear only to vanish are worse
-		 * than a moment of skeleton.
+		 * Whether to hold the last list over while this one loads: only for a
+		 * switcher scope or a list that has shown posts this session, since a
+		 * first-time ranked feed may well be empty.
 		 */
 		holdable() {
 			return HELD_SCOPES.includes(this.timelineStore.type) || this.timelineStore.wasFilled(this.timelineStore.getTimelineIdentity)
 		},
 
 		/**
-		 * Where the already-seen part of the notifications page begins: the
-		 * number of cards newer than the marker the server held when this page
-		 * was opened. 0 when there is nothing new, or when this is not the
-		 * notifications page.
-		 *
-		 * Taken against `seenUpTo`, which is frozen at that moment rather than
-		 * following the store: the line has to stay where the reader found it
-		 * for as long as they are on the page, or reading the page would erase
-		 * the mark that says what they had not read.
+		 * Where the already-seen part of the notifications page begins, against
+		 * the frozen `seenUpTo`; 0 when nothing is new or elsewhere.
 		 *
 		 * @return {number}
 		 */
@@ -1060,8 +913,7 @@ export default {
 
 			const older = this.entries.findIndex((entry) => !isNewerId(newestIdOf(entry), this.seenUpTo))
 
-			// every card is newer than the marker: the whole page is new, and
-			// a heading over all of it separates nothing
+			// every card is newer: a heading over all of it separates nothing
 			return older <= 0 ? 0 : older
 		},
 
@@ -1077,10 +929,7 @@ export default {
 
 	watch: {
 		/**
-		 * The router-view is no longer keyed on the full path, so switching
-		 * timeline reuses this component: the paging state has to be put back
-		 * by hand, or Home keeps Global's "you have reached the end" — and
-		 * nothing would ask the server for the list that is now current.
+		 * Switching timeline reuses this component, so the paging state is reset by hand.
 		 *
 		 * @param {string} now the list the store holds
 		 * @param {string} before the list being left
@@ -1088,22 +937,16 @@ export default {
 		timelineIdentity(now, before) {
 			this.profileSyncChecking = false
 			if (!this.showParents) {
-				// a list put back, or fetched ahead, replaces the one on
-				// screen in the same render: drawn as a swap, like a held-over
-				// list being replaced
+				// a restored or prefetched list replaces the one on screen at once: drawn as a swap
 				if (this.timelineStore.restored && this.timeline.length > 0) {
 					this.startSwap()
 				}
-				// the place of the list being left, under its own key: the
-				// store already holds the next list here, and writing that
-				// one's newest post as seen rubbed out the line it was about
-				// to be drawn against
+				// under the left list's key: the store already holds the next list
 				this.rememberPlace(before, this.newestShown[before])
 				this.readPlace()
 				this.resetAndLoad()
 			}
-			// a different list is a different page view: what was read on
-			// the last one is said, and the new one starts counting afresh
+			// a different list is a different page view for the tracker
 			this.startTracking()
 		},
 
@@ -1129,35 +972,28 @@ export default {
 			this.startTracking()
 		},
 
-		// the pill is only on screen for as long as there is something to say,
-		// so the composer is only watched for that long either
+		// the composer is watched only while the pill shows
 		arrived(count) {
 			if (count > 0) {
 				this.watchComposer()
 			} else {
 				this.unwatchComposer()
-				// what was held back is on the list now, and is what the
-				// reader's place is taken from
+				// the withheld posts are on the list now
 				this.noteNewestShown(this.timeline)
 			}
 		},
 
-		// something new to look at restarts the dwell: what arrived while the
-		// reader was here is read on the same terms as what was already there
+		// new entries restart the read dwell
 		timeline(entries, previous) {
 			if (entries.length > 0) {
 				this.timelineStore.markFilled(this.timelineStore.getTimelineIdentity)
 				this.noteNewestShown(this.revealed(entries))
 			}
-			// the held-over list is on screen when the new one lands: that
-			// render swaps them, so it is drawn as a swap
+			// the new list replaces the held-over one: drawn as a swap
 			if (entries.length > 0 && previous.length === 0 && this.heldOver.length > 0 && this.holdable) {
 				this.startSwap()
 			}
-			// the last list that had anything is what a switch shows while the
-			// next one is on its way. Taken here rather than when the switch is
-			// noticed, because by then the store has already emptied it; ids
-			// only, so holding one costs nothing.
+			// kept here for the next switch, since by the time it is noticed the store has emptied it
 			if (entries.length > 0) {
 				this.heldOver = [...entries]
 			}
@@ -1165,8 +1001,7 @@ export default {
 			this.armSeenTimer()
 		},
 
-		// the entries are in the DOM once the render has been flushed, which
-		// is when the tracker can find them
+		// post flush, so the entries are in the DOM
 		entries: {
 			handler() {
 				this.syncTracked()
@@ -1178,9 +1013,7 @@ export default {
 	},
 
 	mounted() {
-		// a list that was already full when this mounted has had no change for
-		// the watcher below to see, and the first switch away from it is
-		// exactly the one worth not flickering
+		// a list already full on mount never reaches the `timeline` watcher
 		if (this.timeline.length > 0) {
 			this.heldOver = [...this.timeline]
 			this.noteNewestShown(this.timeline)
@@ -1189,11 +1022,8 @@ export default {
 		// the ancestors above a post are read as much as the replies below it
 		this.startTracking()
 
-		// The ancestors list in the single-post view renders the same
-		// /context response its sibling fetches: it used to page, poll and
-		// observe on its own, so opening a thread made two identical
-		// requests and left two 30-second intervals running. It also listened
-		// for j/k, so one press moved the focus in both lists at once.
+		// The ancestors list renders the /context response its sibling
+		// fetches, so it neither pages, polls nor handles j/k itself.
 		if (this.showParents) {
 			return
 		}
@@ -1203,16 +1033,12 @@ export default {
 		eventBus.on('shortcut:next', this.focusNext)
 		eventBus.on('shortcut:previous', this.focusPrevious)
 
-		// coming back to the tab is what starts the dwell on a page that was
-		// opened in the background, so this is registered whatever the
-		// timeline is: the router-view is reused, and the notifications page
-		// is often arrived at rather than landed on
+		// returning to the tab starts the dwell on a page opened in the
+		// background; registered for every timeline as this component is reused
 		document.addEventListener('visibilitychange', this.armSeenTimer)
 		this.ensureMarker()
 
-		// the page header above this list can mark everything read; the line
-		// this list froze when it opened has to move with it, or the heading
-		// and the pills stay up over activities the badge no longer counts
+		// the page header can mark everything read, which must move the frozen line too
 		eventBus.on(NOTIFICATIONS_READ, this.onMarkedAllRead)
 
 		this.loadFirstPage()
@@ -1222,13 +1048,11 @@ export default {
 		this.countObserver = new IntersectionObserver(this.onCountIntersection)
 		this.observeCountTargets()
 		this.countRefreshIntervalId = window.setInterval(() => this.refreshVisiblePostCounts(), COUNT_REFRESH_MS)
-		// with notify_push the server tells us about new entries; polling
-		// remains as a slow safety net. Without it, poll every 30 seconds.
+		// with notify_push, polling is only a slow safety net
 		const hasPush = onTimelinePush(this.onPushed)
 		this.pollEvery = (hasPush ? 300 : 30) * 1000
 		this.intervalId = window.setInterval(() => this.pollIfVisible(), this.pollEvery)
-		// a tab nobody is looking at does not need to ask; it catches up when
-		// it comes back
+		// a hidden tab does not poll; it catches up when it comes back
 		document.addEventListener('visibilitychange', this.pollOnReturn)
 		this.setupIntersectionObserver()
 	},
@@ -1260,17 +1084,9 @@ export default {
 
 	methods: {
 		/**
-		 * Where this reader had got to on this timeline, from last time.
-		 *
-		 * Per timeline and per browser, in local storage, for most lists: a
-		 * convenience about where somebody was looking. The home timeline asks
-		 * the server as well — the `home` marker of `GET /api/v1/markers`,
-		 * which every Mastodon client reads and writes — so a feed read on the
-		 * phone is up to date here, and the other way round. Whichever of the
-		 * two is further along wins; the server answers when it answers, and
-		 * the line is drawn from the browser's copy until then. A browser that
-		 * refuses storage and a server with no marker yet simply draw no line,
-		 * which is the state every timeline was in before.
+		 * Reads where the reader got to on this timeline last time, from local
+		 * storage. Home also asks the server's `home` marker (shared with other
+		 * Mastodon clients), and whichever is further along wins.
 		 */
 		readPlace() {
 			this.lastSeen = ''
@@ -1299,9 +1115,7 @@ export default {
 					this.lastSeen = marker.id
 					this.lastSeenAt = marker.at
 				}
-				// only now does looking at the page count as reading it: the
-				// line is drawn first, and the marker it is drawn against is
-				// the one that was there before this visit moved it
+				// only now does the dwell start, so the line is drawn against the marker from before this visit
 				this.armSeenTimer()
 			})
 		},
@@ -1352,34 +1166,20 @@ export default {
 		},
 
 		/**
-		 * Asks for the first page, unless this list is already loaded.
-		 *
-		 * A timeline that came back with the reader — Back out of a post, most
-		 * of all — is held by the store with every page they had read. Asking
-		 * again here would have appended the page *after* those, which is both
-		 * a request nobody needed and a list that changes height underneath the
-		 * scroll offset being restored.
+		 * Asks for the first page, unless the store restored this list (on Back),
+		 * where another page would shift the scroll offset being restored.
 		 */
 		async loadFirstPage() {
 			if (!this.timelineStore.restored || this.timeline.length === 0) {
 				await this.infiniteHandler()
 			}
 
-			// the router holds a restored scroll offset until this says the
-			// list is on the page: before it is, the document is one screen
-			// tall and the browser clamps the offset to the bottom of it
+			// the router waits for this to restore the scroll offset, which the browser would clamp on a short page
 			await this.$nextTick()
 			eventBus.emit('timeline:rendered')
 		},
 
-		/**
-		 * Keeps `composerHeight` in step with the box the reader writes in.
-		 *
-		 * The composer is a sibling of this list rather than a child, so it is
-		 * found by walking back from here: a page without one — a profile's
-		 * grid, a thread — simply finds nothing and the pill keeps its own
-		 * offset.
-		 */
+		/** Keeps `composerHeight` in step with the composer, a preceding sibling of this list if there is one. */
 		watchComposer() {
 			this.unwatchComposer()
 
@@ -1404,12 +1204,7 @@ export default {
 			this.composerObserver.observe(sibling)
 		},
 
-		/**
-		 * Marks the next render as a swap, for as long as the entering
-		 * entries take to rise: long enough for the leave to be skipped and
-		 * the stagger to be read as off, short enough that a post removed
-		 * afterwards fades as usual.
-		 */
+		/** Marks the next render as a swap, for as long as the entering entries take to rise. */
 		startSwap() {
 			this.swapping = true
 			if (this.swapTimer !== null) {
@@ -1431,10 +1226,8 @@ export default {
 		},
 
 		/**
-		 * Starts measuring what is read in this list for the For you feed, or
-		 * stops, when it should not be: the one tracker the list had is
-		 * always finished first, so its reading is sent under the context it
-		 * was read in.
+		 * Starts measuring what is read for the For you feed, finishing the
+		 * previous tracker first so its reading goes under its own context.
 		 */
 		startTracking() {
 			this.stopTracking()
@@ -1472,9 +1265,8 @@ export default {
 					}
 				}).catch((error) => logger.debug('Could not read For You learning settings', { error }))
 			}
-			// delegated, so a page of new posts needs nothing added. Capture,
-			// because `play` does not bubble and a picture's own click handler
-			// may stop the event before it would get here
+			// delegated, in the capture phase: `play` does not bubble and a
+			// picture's click handler may stop the event
 			this.$el.addEventListener('click', this.onTrackedClick, true)
 			this.$el.addEventListener('play', this.onTrackedPlay, true)
 			this.$el.addEventListener('timeupdate', this.onTrackedVideoProgress, true)
@@ -1505,10 +1297,8 @@ export default {
 
 		/** Hands the tracker the entries on the page, each with its post. */
 		syncTracked() {
-			// what is held over from the list being left is not this list
-			// a grid is a wall of tiles, all of them on screen together, so
-			// time in view says nothing about any one: there, only opening a
-			// tile counts (`onTrackedClick`)
+			// not the held-over list, and not a grid, where all tiles are in view
+			// at once and only opening one counts (`onTrackedClick`)
 			if (!this.tracker || !this.$el || this.holding || this.display !== 'list') {
 				return
 			}
@@ -1602,11 +1392,8 @@ export default {
 		},
 
 		/**
-		 * A picture opened, or a link followed, from a post.
-		 *
-		 * Only a link out of the post counts: a hashtag or a mention goes
-		 * somewhere inside this app, and says nothing about the post's
-		 * subject that its hashtags do not already.
+		 * Records a picture opened, a post opened or a link out followed;
+		 * hashtags and mentions do not count.
 		 *
 		 * @param {MouseEvent} event the click
 		 */
@@ -1724,10 +1511,8 @@ export default {
 		},
 
 		/**
-		 * Stops the sentinel asking. After a failed page the error block and
-		 * the wave trade places above the sentinel, and every reflow was an
-		 * intersection: a list whose request kept failing asked for it again
-		 * as fast as the server could refuse.
+		 * Stops the sentinel asking after a failed page, where every reflow of
+		 * the error block would otherwise retry at once.
 		 */
 		unwatchSentinel() {
 			if (this.observer && this.$refs.sentinel) {
@@ -1736,13 +1521,8 @@ export default {
 		},
 
 		/**
-		 * Reads where the reader had got to, once per visit to the
-		 * notifications page.
-		 *
-		 * Asked before anything is marked, so the line lands where they left
-		 * off rather than where they have just got to. Switching the filter is
-		 * the same visit and asks nothing; leaving the page forgets, so the
-		 * next visit draws its line against a marker this one has moved.
+		 * Reads the read marker once per visit to the notifications page,
+		 * before anything is marked; switching the filter is the same visit.
 		 */
 		ensureMarker() {
 			if (this.serverData.public || this.type !== 'notifications' || this.showParents) {
@@ -1766,18 +1546,11 @@ export default {
 		},
 
 		/**
-		 * Starts the dwell after which what is on screen counts as read.
-		 *
-		 * Nothing happens on a tab nobody is looking at, or on a page with
-		 * nothing on it yet; coming back to the tab arms it, which is why this
-		 * is also the `visibilitychange` handler.
+		 * Starts the dwell after which what is on screen counts as read; not
+		 * on a hidden tab or an empty page. Also the `visibilitychange` handler.
 		 */
 		armSeenTimer() {
-			// the two lists that carry a badge: Activities, and Direct
-			// messages -- which is one page with the messages on it rather
-			// than exchanges to open one at a time, so having looked at it is
-			// having read them -- and the home timeline, whose marker every
-			// other client draws its own line from
+			// Activities and Direct messages carry a badge; home has the marker other clients share
 			if (this.serverData.public || !['notifications', 'direct', 'home'].includes(this.type) || this.showParents) {
 				return
 			}
@@ -1790,50 +1563,36 @@ export default {
 		},
 
 		/**
-		 * Whether this card arrived since the reader last looked.
-		 *
-		 * Taken against the marker rather than against `dividerAt`, which is
-		 * where it used to come from. That index is 0 both when none of the
-		 * page is new and when all of it is -- a heading over everything
-		 * separates nothing -- so reading the highlight off it left exactly
-		 * the case the badge is loudest about, a page whose every card is new,
-		 * with nothing marked on it at all.
+		 * Whether this card arrived since the reader last looked. Taken against
+		 * the marker, since `dividerAt` is also 0 when every card is new.
 		 *
 		 * @param {object} entry a card, grouped or not
 		 * @return {boolean}
 		 */
 		isUnread(entry) {
-			// nothing is marked until the server has said where the marker is,
-			// or a page would light up entirely for the moment before the
-			// answer arrives and then settle, which reads as a fault
+			// nothing is marked until the server has said where the marker is
 			if (this.type !== 'notifications' || this.showParents || !this.markerKnown) {
 				return false
 			}
 
-			// a marker of 0 is an account that has never read anything -- not
-			// one that has read everything. It is what the badge is counting
-			// against, so it is what the cards are marked against
+			// a marker of 0 means nothing was ever read, so every card is new
 			return isNewerId(newestIdOf(entry), this.seenUpTo)
 		},
 
 		/**
-		 * The reader said they were done with the lot, from the page header.
+		 * Handles "mark all read" from the page header.
 		 *
 		 * @param {number|string} marker the id it was marked up to
 		 */
 		onMarkedAllRead(marker) {
 			this.seenUpTo = newerId(marker, this.seenUpTo)
-			// the dwell must not report it again: it is already reported
+			// so the dwell does not report it again
 			this.markedUpTo = newerId(marker, this.markedUpTo)
 		},
 
 		/**
-		 * Reports everything now on screen as read.
-		 *
-		 * The marker is "up to", so the newest id covers the whole page —
-		 * grouped cards included, which is why the id comes from
-		 * `newestIdOf()` rather than from the card's own `id`: a card that
-		 * stands for nine favourites must not leave eight of them unread.
+		 * Reports everything now on screen as read, up to the newest id;
+		 * `newestIdOf()` covers every notification in a grouped card.
 		 */
 		markSeen() {
 			this.seenTimer = -1
@@ -1866,9 +1625,7 @@ export default {
 		/** Starts this timeline over: a different type is a different list. */
 		resetAndLoad() {
 			this.generation += 1
-			// whatever is still in flight belongs to the list that was here a
-			// moment ago; it is disowned above, and this is what lets the new
-			// list ask at all
+			// requests in flight belong to the previous list, disowned above
 			this.loading = false
 			this.allLoaded = false
 			this.error = null
@@ -1877,8 +1634,7 @@ export default {
 			this.pollFailureReported = false
 			this.pollWait = 0
 			this.pollSkip = 0
-			// the dwell belonged to the list that was here; the new one earns
-			// its own. What has already been reported read stays reported.
+			// the dwell belonged to the previous list
 			clearTimeout(this.seenTimer)
 			this.seenTimer = -1
 			this.ensureMarker()
@@ -1931,17 +1687,9 @@ export default {
 			const params = {}
 
 			if (this.timeline.length !== 0) {
-				// The timeline getter sorts by created_at while min_id/max_id
-				// filter on the id, and a federated post can have a high id
-				// with an old date — so page on the ids themselves, or the
-				// cursor never advances and the same page loops forever.
-				//
-				// As strings, end to end: a cursor rounded through a Number
-				// either re-fetches the post it points at, so the end of the
-				// list is never reached, or skips the rows between the two.
-				//
-				// A ranked list pages from where the last page ended: its
-				// oldest post may be anywhere in it.
+				// Page on the ids, as strings: the getter sorts by created_at,
+				// and a federated post can have a high id with an old date. A
+				// ranked list pages from where the last page ended.
 				const ids = this.timeline.map((entry) => entry.id)
 				const cursor = !this.chronological
 					? ids[ids.length - 1]
@@ -1957,10 +1705,7 @@ export default {
 					return
 				}
 				this.error = null
-				// a /context response is the whole thread at once rather than a
-				// page of one, and its `.length` is undefined — so `=== 0` was
-				// never true and the sentinel kept asking for a next page that
-				// does not exist
+				// a /context response is the whole thread, not an array page
 				this.allLoaded = Array.isArray(response)
 					? response.length === 0 && !this.timelinePageFilling
 					: !this.timelinePageFilling
@@ -1969,8 +1714,7 @@ export default {
 					return
 				}
 				logger.error('Failed to load more timeline entries', { error })
-				// not allLoaded: that told the observer to stop watching and
-				// showed the reader an empty timeline for a server error
+				// not allLoaded, which would show the empty state for a server error
 				this.error = this.timeline.length === 0
 					? t('social', 'The posts could not be loaded.')
 					: t('social', 'No more posts could be loaded.')
@@ -1984,19 +1728,14 @@ export default {
 			}
 		},
 
-		/**
-		 * The polling tick. Asking while the tab is hidden is traffic nobody
-		 * is waiting for — on an instance with many open tabs it is most of
-		 * the traffic there is.
-		 */
+		/** The polling tick; a hidden tab does not ask. */
 		pollIfVisible() {
 			if (document.visibilityState === 'hidden') {
 				this.hiddenSince = this.hiddenSince || Date.now()
 				return
 			}
 
-			// backing off: a server that is down was asked every 30 seconds
-			// for as long as the tab was open
+			// backing off after failures
 			if (this.pollSkip > 0) {
 				this.pollSkip -= 1
 				return
@@ -2006,9 +1745,8 @@ export default {
 		},
 
 		/**
-		 * What the server's push event runs: the activities for a
-		 * notification, every other list for a post. Asked here rather than
-		 * when subscribing, as switching timeline keeps this component.
+		 * Handles a push event: Activities for a notification, every other list
+		 * for a post. Checked here since switching timeline keeps this component.
 		 *
 		 * @param {string[]} kinds what arrived (`timelinePush.js`)
 		 * @return {Promise<void>|undefined} settled once the new posts are in
@@ -2050,15 +1788,12 @@ export default {
 		 * @param {number} step 1 for the next post, -1 for the previous one
 		 */
 		moveFocus(step) {
-			// `entries`, not `timeline`: on the notifications page the two are
-			// different lengths, and the highlight is drawn against the cards
-			// that are actually on screen
+			// `entries`, not `timeline`: notifications are grouped into fewer cards
 			if (this.entries.length === 0) {
 				return
 			}
 
-			// after the focus was let go, the next press starts from what is
-			// on screen rather than from wherever the reader used to be
+			// with no focus, start from what is on screen
 			const from = this.focused >= 0 ? this.focused + step : Math.max(this.firstOnScreen(), 0)
 			const next = Math.min(Math.max(from, 0), this.entries.length - 1)
 			this.setFocus(next)
@@ -2072,9 +1807,7 @@ export default {
 
 				this.watchFocused(entry)
 
-				// real focus, not just a highlight: without it the reader most
-				// likely to be using j/k is told nothing at all, and scrolling
-				// alone leaves the keyboard somewhere else entirely
+				// real focus, not just a highlight, for keyboard and screen reader users
 				entry.focus({ preventScroll: true })
 				entry.scrollIntoView({
 					block: 'center',
@@ -2111,8 +1844,7 @@ export default {
 				behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
 			})
 
-			// scrolling moves the page, not the keyboard: send focus to the
-			// first of the posts the reader just asked to see
+			// scrolling does not move focus: focus the first new post
 			this.$nextTick(() => {
 				this.setFocus(0)
 				const entry = this.$el.querySelector('.timeline-entry')
@@ -2208,31 +1940,21 @@ export default {
 		 * @param {number} depth how many pages have already been followed
 		 */
 		async fetchNewStatuses(depth = 0) {
-			// a ranked feed has no top for new posts to arrive at; pulling the
-			// list again is how it is refreshed
+			// a ranked feed has no top for new posts to arrive at
 			if (this.showParents || !this.chronological) {
 				return
 			}
-			// While a page is on its way there is nothing to catch up on: with
-			// an empty list this asked for a cursor-less first page beside the
-			// real one, and counted it as arrivals. An empty list that failed
-			// belongs to the retry button.
+			// not while a page is loading, and an empty list that failed belongs to the retry button
 			if (this.loading || (this.timeline.length === 0 && this.error !== null)) {
 				return
 			}
 
-			// a reader who has scrolled back to the top is shown what was
-			// held back for them on the way
+			// back at the top: show what was withheld
 			if (depth === 0 && this.withheld.length > 0 && scrollOffset() <= ANNOUNCE_BELOW) {
 				this.withheld = []
 			}
 
-			// Newest by id, not this.timeline[0] (sorted by created_at): a
-			// federated post with a high id but an old date would otherwise
-			// keep min_id stuck and this method would refetch forever. As a
-			// string: rounded down through a Number it names a post already on
-			// screen, which comes back on every tick and drives the catch-up
-			// below to its page cap.
+			// newest by id, as a string, not this.timeline[0], which is sorted by created_at
 			const newest = newestId(this.timeline.map((entry) => entry.id))
 
 			try {
@@ -2244,9 +1966,7 @@ export default {
 				this.pollSkip = 0
 
 				if (response.length > 0) {
-					// held back while the top of the list is out of sight, so
-					// nothing moves above what is being read; up there the
-					// posts simply appear
+					// held back while the top of the list is out of sight, so nothing moves above the reader
 					if (scrollOffset() > ANNOUNCE_BELOW) {
 						this.withhold(response)
 					}
@@ -2258,12 +1978,10 @@ export default {
 				}
 			} catch (error) {
 				logger.error('Failed to load newer timeline entries', { error })
-				// twice the wait each time, up to the ceiling: 60 s, 120 s,
-				// 240 s, then five minutes between attempts
+				// double the wait each time, up to MAX_POLL_WAIT
 				this.pollWait = Math.min(Math.max(this.pollWait, this.pollEvery) * 2, Math.max(MAX_POLL_WAIT, this.pollEvery))
 				this.pollSkip = Math.max(0, Math.round(this.pollWait / this.pollEvery) - 1)
-				// once, not once per tick: a server that is down produced an
-				// endless stream of identical toasts every 30 seconds
+				// one toast, not one per tick
 				if (!this.pollFailureReported) {
 					this.pollFailureReported = true
 					showError(t('social', 'Could not load the newest posts'))

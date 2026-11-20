@@ -19,9 +19,8 @@
 		:style="entryStyle"
 		:data-status-id="entryContent?.id"
 		tabindex="-1">
-		<!-- who did it, with what they did as a disc on the face's corner;
-		     a card for several people shows the disc alone here and their
-		     faces beside the words -->
+		<!-- the actor's face with the type as a disc on its corner; a grouped
+		     card shows the disc alone and the faces beside the words -->
 		<span v-if="isNotification" class="notification__lead" :class="{ 'notification__lead--group': groupedAccounts.length > 1 }">
 			<ActorAvatar v-if="groupedAccounts.length <= 1" :actor="notification.account" :size="avatarSize" />
 			<span class="notification__type" :class="'notification__type--' + typeTone">
@@ -48,9 +47,7 @@
 		</span>
 		<div v-if="isNotification" class="notification__header">
 			<span class="notification__summary">
-				<!-- the first few of the several this card stands for,
-				     overlapping so a row of nine cannot push the words off
-				     the card -->
+				<!-- the first few faces of a grouped card, overlapping -->
 				<span v-if="groupedAccounts.length > 1" class="notification__faces">
 					<ActorAvatar
 						v-for="account in groupedAccounts"
@@ -64,10 +61,7 @@
 				<span class="notification__text">{{ actionSummary }}</span>
 			</span>
 			<span class="notification__details">
-				<!-- what the badge was counting, said on the card itself: the
-				     tint behind an unread notification is a pale frame around
-				     an opaque post, which is easy to miss and impossible to
-				     see at all for a reader who cannot tell the two apart -->
+				<!-- said in words, as the unread tint alone is easy to miss -->
 				<span v-if="unread" class="notification__new">
 					{{ t('social', 'New') }}
 				</span>
@@ -90,9 +84,8 @@
 					:title="notificationFormattedDate">
 					{{ notificationRelativeTimestamp }}
 				</span>
-				<!-- a mention or a reply is where an unwanted thread reaches
-				     the reader; its post has no menu on this page, so the one
-				     thing to do about the thread is offered here -->
+				<!-- the post has no menu on this page, so muting a mentioning
+				     thread is offered here -->
 				<NcActions v-if="canMuteConversation" class="notification__menu" :forceMenu="true">
 					<NcActionButton :closeAfterClick="true" @click="toggleConversationMute">
 						<template #icon>
@@ -118,9 +111,8 @@
 				{{ t('social', 'boosted') }}
 			</div>
 		</template>
-		<!-- why For you put the post here, and the way to the tag that
-		     did it. Above the post rather than inside it: it is the feed's
-		     remark about the post, not part of what the author wrote -->
+		<!-- why For you shows the post, linking to the tag; above the post
+		     because it is not part of what the author wrote -->
 		<router-link
 			v-if="interest !== null && interest.tag !== null"
 			class="interest-reason"
@@ -143,8 +135,7 @@
 			<span class="interest-reason__text">{{ interest.text }}</span>
 		</span>
 		<UserEntry v-if="isNotification && notificationIsAboutAnAccount" :displayFollowButton="false" :item="item.account" />
-		<!-- a private message is not laid out in full beside the public
-		     mentions: its first words, and the way to the conversation -->
+		<!-- a private message shows only its first words and a link to the conversation -->
 		<div v-else-if="isDirectMessage" class="notification__direct">
 			<p class="notification__direct-preview">
 				{{ directPreview }}
@@ -155,8 +146,8 @@
 		</div>
 		<template v-else>
 			<div v-if="entryContent" class="wrapper">
-				<!-- the face is drawn once for a run of posts by one author;
-				     the rest keep its room, with the line that joins them -->
+				<!-- a run of posts by one author shows the face once; the rest
+				     keep its room for the line that joins them -->
 				<span
 					v-if="!isNotification && !hideAvatar && grouped"
 					class="entry__thread"
@@ -233,7 +224,7 @@ import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 
 /** the face's size inside the card, on a phone */
 const PHONE_AVATAR = 36
-/** The face beside a post in a list, sized so it lines up with the name. */
+/** the face beside a post in a list, sized to line up with the name */
 const LIST_AVATAR = 40
 /** each face of a card that stands for several people */
 const GROUP_FACE = 28
@@ -254,12 +245,8 @@ const TYPE_TONES = {
 const MAX_INDENT = 4
 
 /**
- * How many entries are staggered on the way in.
- *
- * Only what a reader can plausibly see at first paint: past that the delay
- * would be time spent looking at nothing, and a page appended by the infinite
- * scroll is already on screen by the time it arrives, so it fades with no
- * delay at all rather than counting up from wherever it landed.
+ * How many entries are staggered on the way in: about the first screenful.
+ * Later entries, and pages appended by infinite scroll, fade in without delay.
  */
 const STAGGER_DEPTH = 8
 
@@ -332,10 +319,8 @@ export default {
 		},
 
 		/**
-		 * Whether to appear in place, without rising in: set for the entries
-		 * of a list that replaces one already on screen, where twenty cards
-		 * fading in at once is the page blinking. Read once at mount, so an
-		 * entry is never given an animation half way through being drawn.
+		 * Whether to appear in place without rising in, for a list that
+		 * replaces one already on screen. Read once at mount.
 		 */
 		immediate: {
 			type: Boolean,
@@ -343,31 +328,26 @@ export default {
 		},
 
 		/**
-		 * How deep this entry sits in a conversation: 0 for a reply to the post
-		 * being read, 1 for a reply to that, and so on. Indented accordingly,
-		 * up to MAX_INDENT levels — deeper than that the column would run out.
-		 */
-		/**
-		 * Whether something below this entry hangs off it.
-		 *
-		 * A reply at the end of a branch stops the line at its own elbow; one
-		 * with replies under it carries the line on down, so a reader can see
-		 * where a branch continues without counting indents.
+		 * Whether replies below this entry hang off it, so its thread line
+		 * carries on down instead of stopping at its elbow.
 		 */
 		continues: {
 			type: Boolean,
 			default: false,
 		},
 
+		/**
+		 * How deep this entry sits in a conversation, 0 for none; indented
+		 * up to MAX_INDENT levels.
+		 */
 		depth: {
 			type: Number,
 			default: 0,
 		},
 
 		/**
-		 * Whether this post follows another by the same author, close enough
-		 * in time to read as one run: drawn without the face and the name,
-		 * which the post above already shows.
+		 * Whether this post continues a run by the same author, drawn
+		 * without the face and the name the post above already shows.
 		 */
 		grouped: {
 			type: Boolean,
@@ -379,21 +359,13 @@ export default {
 			default: 'li',
 		},
 
-		/**
-		 * Whether this arrived after the reader last read their notifications.
-		 * Drawn as a tint and a bar down the leading edge, so the new ones can
-		 * be picked out of a page that is mostly not new.
-		 */
+		/** whether this arrived after the reader last read their notifications */
 		unread: {
 			type: Boolean,
 			default: false,
 		},
 
-		/**
-		 * Where this entry sits in the list, so the first screenful can come
-		 * in one after another instead of all at once. Only the first few are
-		 * staggered — see STAGGER_DEPTH.
-		 */
+		/** the entry's position in the list, for the stagger (see STAGGER_DEPTH) */
 		index: {
 			type: Number,
 			default: 0,
@@ -402,19 +374,15 @@ export default {
 
 	data() {
 		return {
-			/** whether this entry rises in, taking its place in the stagger */
+			/** whether this entry rises in, staggered */
 			staggered: !this.immediate,
-			/**
-			 * On a phone the avatar column beside the card would take a
-			 * quarter of the width, so the face moves inside the card and
-			 * shrinks; see the `@media` block below.
-			 */
+			/** on a phone the face moves inside the card and shrinks */
 			isPhone: isPhone(),
 			MAX_INDENT,
 			GROUP_FACE,
-			/** re-read from the shared clock, so the wording stays true */
+			/** updated from the shared clock, for the relative timestamp */
 			now: Date.now(),
-			/** unsubscribe from the phone-width watch and the shared clock */
+			/** unsubscribers for the phone-width watch and the shared clock */
 			stopPhoneWatch: null,
 			stopTicking: null,
 		}
@@ -427,11 +395,9 @@ export default {
 		},
 
 		/**
-		 * The thread indent and the stagger delay, which are both one custom
-		 * property on the same element.
+		 * The thread indent and the stagger delay, as custom properties.
 		 *
-		 * @return {object|undefined} the style, or undefined when there is
-		 *                            neither an indent nor a delay to set
+		 * @return {object|undefined} the style, or undefined when there is neither
 		 */
 		entryStyle() {
 			const style = {}
@@ -450,8 +416,8 @@ export default {
 		...mapStores(useAccountStore, useSettingsStore, useTimelineStore),
 
 		/**
-		 * Whether the card offers to mute its thread: a mention (a reply
-		 * is one) about a post, for a signed-in reader.
+		 * Whether the card offers to mute its thread: a mention (replies
+		 * included) about a post, for a signed-in reader.
 		 *
 		 * @return {boolean}
 		 */
@@ -467,11 +433,10 @@ export default {
 		 */
 		entryContent() {
 			if (this.isNotification) {
-				// the store's copy where there is one: the notification's own
-				// is a snapshot, and a like on the card lands in the store
+				// the store's copy, so actions on the card are reflected
 				return this.timelineStore.getStatus(this.notification.status?.id) ?? this.notification.status
 			} else if (this.isBoost) {
-				// We use the object stored in the store so that actions on it are reflected.
+				// the store's copy, so actions on it are reflected
 				return this.timelineStore.getStatus(this.status.reblog.id)
 			} else {
 				return this.status
@@ -479,8 +444,7 @@ export default {
 		},
 
 		/**
-		 * Why For you shows this post, from the `interest` the feed puts
-		 * on each of its posts; every other timeline sends null.
+		 * Why For you shows this post; null on every other timeline.
 		 *
 		 * @return {{tag: string|null, reason?: string, text: string, label: string}|null}
 		 */
@@ -529,8 +493,7 @@ export default {
 		},
 
 		/**
-		 * The first words of a private message: the content warning where
-		 * there is one, else the text, cut where a line of the card ends.
+		 * The first words of a private message: its content warning, else its text.
 		 *
 		 * @return {string}
 		 */
@@ -547,10 +510,8 @@ export default {
 		},
 
 		/**
-		 * The faces a grouped card shows: everyone in it, capped, so that nine
-		 * people liking one post is a row of five and a count rather than nine
-		 * avatars. Empty for a card that stands for one thing, which draws the
-		 * single avatar instead.
+		 * The faces a grouped card shows, capped at GROUP_FACES; empty for a
+		 * card about one account, which draws the single avatar instead.
 		 *
 		 * @return {import('../types/Mastodon.js').Account[]}
 		 */
@@ -570,8 +531,7 @@ export default {
 		},
 
 		/**
-		 * The colour family of the type disc: likes red, boosts green,
-		 * warnings amber, and everything else the theme's colour.
+		 * The colour family of the type disc.
 		 *
 		 * @return {string}
 		 */
@@ -585,9 +545,8 @@ export default {
 		},
 
 		/**
-		 * Whether the post the card is about is the reader's own. Its author
-		 * line would only repeat the reader's name, so it is left out and the
-		 * post is shown as a quiet excerpt.
+		 * Whether the post the card is about is the reader's own, shown as
+		 * an excerpt without the author line.
 		 *
 		 * @return {boolean}
 		 */
@@ -654,37 +613,22 @@ export default {
 	margin-bottom: 14px;
 	padding: 0;
 	border-radius: 8px;
-	/* a long column is laid out a screen at a time: a card off screen keeps
-	   a placeholder of about its height until it scrolls near, and its real
-	   size once it has been drawn */
+	/* a card off screen is skipped by layout, holding a placeholder height */
 	content-visibility: auto;
 	contain-intrinsic-size: auto 320px;
 
-	/*
-	 * Cards used to appear all at once, in one hard step from the skeleton to
-	 * a full page. They now rise in, and the first screenful one after another
-	 * so the eye is led down the column instead of having to find the top of a
-	 * page that arrived whole. --stagger-delay is set by the component for the
-	 * first few only; everything below the fold, and every page appended
-	 * afterwards, has no delay and simply fades.
-	 */
+	/* cards rise in; --stagger-delay is set for the first screenful only */
 	animation: timeline-rise .28s ease-out both;
 	animation-delay: var(--stagger-delay, 0ms);
 
-	/* one list swapped for another: the posts are simply there */
+	/* one list swapped for another: no animation */
 	&.timeline-entry--settled {
 		animation: none;
 	}
 
 	/**
-	 * A reply steps in under the one it answers, joined to it by a line.
-	 *
-	 * The line was a plain border down the whole side, which is a margin
-	 * marking rather than a connection: it began above the reply, ended below
-	 * it, and pointed at nothing. Drawn as an elbow instead -- up from the
-	 * reply's own left edge and curving in towards it -- it reads as coming
-	 * *from* the post above, which is what a thread is. The depth is the
-	 * custom property the list sets.
+	 * A reply is indented by --thread-depth and joined to the post above by
+	 * an elbow line.
 	 */
 	&--reply {
 		margin-inline-start: calc(var(--thread-depth, 1) * 24px);
@@ -696,8 +640,7 @@ export default {
 			position: absolute;
 			inset-block-start: -10px;
 			inset-inline-start: 0;
-			// up past the gap into the post above, and down to the middle of
-			// this one, where the elbow turns in
+			// from the gap above down to the middle of this entry, where the elbow turns in
 			block-size: 34px;
 			inline-size: 12px;
 			border-inline-start: 2px solid var(--color-border);
@@ -722,32 +665,24 @@ export default {
 		margin-bottom: 0;
 	}
 
-	// The post inside opens its actions into a panel that reaches over the gap
-	// to the next entry, so the entry it belongs to has to be above the entries
-	// below it. Its own z-index cannot do that: every entry carries the
-	// scroll-driven `timeline-entry-rise` transform, which makes each one a
-	// stacking context, and a z-index inside a stacking context cannot lift it
-	// past a sibling. Without this the *next* entry's "X boosted" line is drawn
-	// straight through the action icons.
+	// The actions panel reaches over the gap into the next entry. Each entry's
+	// rise animation makes it a stacking context, so the entry itself has to
+	// be raised above its siblings.
 	&:hover,
 	&:focus-within {
 		position: relative;
 		z-index: 3;
 	}
 
-	// the same while the overflow menu holds a panel open with the pointer
-	// somewhere else entirely. Its own rule: a browser without `:has()` drops
-	// the selector, and it must not take the hover case with it.
+	// also while the overflow menu holds the panel open; a separate rule so a
+	// browser without `:has()` keeps the hover case
 	&:has(.post-actions-reveal--held) {
 		position: relative;
 		z-index: 3;
 	}
 
-	// The panel lands on the gap, and a boosted entry keeps its "X boosted"
-	// byline there — which starts further left than the card, so the panel
-	// covers all of it but the first few letters and leaves them sticking out
-	// like a fault. The line steps out of the way instead: it is about to be
-	// covered either way, and half a word is worse than none.
+	// the panel would cover the next entry's boost byline all but its first
+	// letters, so the byline is hidden instead
 	&:hover + .timeline-entry .boost {
 		opacity: 0;
 	}
@@ -756,13 +691,8 @@ export default {
 		opacity: 0;
 	}
 
-	/* Arrived since the reader last looked: a bar down the row's start edge,
-	   not a dot. The page is read by running down it, and an edge is visible
-	   in peripheral vision where a dot beside the timestamp is not. Out of
-	   the flow, so a new row is not shifted against its read neighbours, and
-	   straight rather than following the row's rounded corners. A
-	   notification is never a reply, so `::before` (a reply's elbow line) is
-	   free here. */
+	/* unread: a bar down the row's start edge, out of the flow. A
+	   notification is never a reply, so `::before` is free here. */
 	&--unread.notification::before {
 		content: '';
 		position: absolute;
@@ -774,22 +704,19 @@ export default {
 		pointer-events: none;
 	}
 
-	// the hairline between rows is the only rule: Nextcloud's notifications
-	// app styles the same class name globally with a bottom border of its own
+	// Nextcloud's notifications app styles this class globally with a bottom border
 	&.notification {
 		border: none;
 	}
 }
 
 /*
- * A notification is two columns: the face, with what happened as a disc on
- * its corner, and beside it the summary line over what it is about. The face
- * spans both rows, so the words start level with its top and the excerpt
- * hangs under the words rather than under the face.
+ * A notification is two columns: the face, spanning both rows, and the
+ * summary line over the excerpt.
  */
 .timeline-entry.notification {
 	--notification-face: 40px;
-	// the colour behind the row, so a ring reads as a gap between two faces
+	// the row's background, so a ring reads as a gap between two faces
 	--notification-ring: var(--color-main-background);
 	display: grid;
 	grid-template-columns: var(--notification-face) minmax(0, 1fr);
@@ -824,7 +751,7 @@ export default {
 		block-size: var(--notification-face);
 	}
 
-	// a card for several people: the disc stands alone, level with the faces
+	// a grouped card: the disc stands alone, level with the faces
 	&__lead--group {
 		block-size: auto;
 	}
@@ -843,9 +770,8 @@ export default {
 		--notification-tone: var(--color-primary-element);
 		--notification-tone-text: var(--color-primary-element-text);
 
-		// the element colours, not --color-error and friends: those are pale
-		// backgrounds from Nextcloud 32 on. The icon takes the page colour,
-		// which is the contrasting one in both themes
+		// the element colours, as --color-error and friends are pale
+		// backgrounds from Nextcloud 32 on
 		&--like {
 			--notification-tone: var(--color-element-error, var(--color-error));
 			--notification-tone-text: var(--color-main-background);
@@ -866,7 +792,7 @@ export default {
 		}
 	}
 
-	// on a face: its bottom end corner, reaching a little past the edge
+	// on the face's bottom end corner
 	&__lead:not(.notification__lead--group) &__type {
 		position: absolute;
 		inset-block-end: -3px;
@@ -887,7 +813,7 @@ export default {
 		margin-bottom: 2px;
 	}
 
-	// the account a follow is about is a line in the row, not a card of its own
+	// the account a follow is about is a line in the row, not a card
 	:deep(.user-entry) {
 		width: auto;
 		margin-bottom: 0;
@@ -913,10 +839,7 @@ export default {
 		overflow-wrap: anywhere;
 	}
 
-	/* the faces of a card that stands for several people, on a line of
-	   their own above the words: each tucks a little under the one before
-	   it, and a ring in the row's colour keeps one set of initials from
-	   running into the next */
+	/* a grouped card's faces, on their own line, overlapping with a ring between */
 	&__faces {
 		display: flex;
 		flex-basis: 100%;
@@ -932,8 +855,7 @@ export default {
 		}
 	}
 
-	// the reader's own post: what was liked or boosted, as a quiet excerpt
-	// under the line that says so, with no author line repeating their name
+	// the reader's own post: a quiet excerpt without the author line
 	:deep(.notification__own) {
 		.post-header {
 			display: none;
@@ -956,14 +878,11 @@ export default {
 		min-height: 20px;
 		font-size: 12px;
 
-		// the menu's button is taller than the line it sits on, and is
-		// centred on it rather than pushing the excerpt down
+		// the menu button is taller than the line; centred without pushing the excerpt down
 		.notification__menu {
 			margin-block: calc((20px - var(--default-clickable-area, 34px)) / 2);
 		}
 
-		/* the word rather than a dot: a dot has to be learnt, and there is
-		   room for three letters beside a relative timestamp */
 		.notification__new {
 			padding: 1px 6px;
 			border-radius: 8px;
@@ -1027,7 +946,6 @@ export default {
 	}
 }
 
-// the same quiet line a boost gets, as a link: it goes somewhere
 .interest-reason {
 	display: inline-flex;
 	align-items: center;
@@ -1045,7 +963,7 @@ export default {
 		color: var(--color-main-text);
 	}
 
-	// words, not a link: nothing to answer a pointer with
+	// not a link
 	&--popular:hover,
 	&--topic:hover {
 		color: var(--color-text-maxcontrast);
@@ -1066,8 +984,7 @@ export default {
 	gap: 6px;
 	margin-bottom: 6px;
 	padding-inline-start: 4px;
-	// it fades rather than vanishes when the entry above opens its actions
-	// over it; see the rule in `.timeline-entry`
+	// fades when the entry above opens its actions over it; see `.timeline-entry`
 	transition: opacity .16s ease;
 
 	a {
@@ -1087,8 +1004,7 @@ export default {
 	}
 }
 
-// in a list the arrows stand over the avatar column and the booster's face
-// starts where the post's name does
+// in a list the boost icon is centred over the avatar column
 .timeline-entry:not(.notification, .timeline-entry--direct) .boost {
 	gap: 10px;
 	padding-inline-start: 0;
@@ -1104,7 +1020,6 @@ export default {
 	}
 }
 
-// the byline still steps out of the panel's way; it just stops fading to do it
 @media (prefers-reduced-motion: reduce) {
 	.boost {
 		transition: none;
@@ -1112,21 +1027,17 @@ export default {
 }
 
 /*
- * A phone. The avatar column beside the card took 64 of a phone's 390 pixels
- * and gave every post a quarter less room than the screen has, so the face
- * moves inside the card, smaller (`PHONE_AVATAR`), over the corner the header
- * leaves for it. Same number as `PHONE_WIDTH` in services/phone.js.
+ * On a phone the face moves inside the card, smaller (`PHONE_AVATAR`), so
+ * posts get the full width. Same breakpoint as `PHONE_WIDTH` in services/phone.js.
  */
 @include layout.below(layout.$phone) {
-	// Nested replies otherwise lose too much of the narrow card to indentation.
-	// Keep the elbow visible while reserving room for post content and actions.
+	// a smaller indent, so nested replies keep room for content and actions
 	.timeline-entry--reply {
 		margin-inline-start: calc(var(--thread-depth, 1) * 12px);
 		padding-inline-start: 10px;
 	}
 
-	// a notification has no face in that corner (its faces are in the
-	// summary), and a direct message draws neither face nor header
+	// not for a notification (its faces are in the summary) or a direct message
 	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper {
 		position: relative;
 		gap: 0;
@@ -1160,11 +1071,7 @@ export default {
 	}
 }
 
-/*
- * The stagger is decoration: the page is the same page without it, so it goes
- * away entirely rather than being made faster. `both` on the animation above
- * means a card would otherwise sit at the from-state for its whole delay.
- */
+/* no rise and no stagger, which would otherwise hold a card invisible for its delay */
 @media (prefers-reduced-motion: reduce) {
 	.timeline-entry {
 		animation: none;
@@ -1172,15 +1079,9 @@ export default {
 }
 
 /*
- * In a list, a post is a row rather than a card: no frame and no shadow,
- * whitespace and a hairline between one post and the next, and the avatar
- * beside the name inside the row. Ten boxed cards on a screen read as a
- * form. Activities is the same list: a notification is a row whose summary
- * line stands where a post's face would, with what it is about quoted
- * beneath it, and its "new" mark is the bar on its edge. A direct message
- * keeps its bubble, which DirectMessages.vue draws, and the post component
- * keeps its own look wherever it is drawn outside a list (a quote, the
- * dashboard, a profile card).
+ * In a list, a post or notification is a row rather than a card, with a
+ * hairline between rows. A direct message keeps its bubble (DirectMessages.vue),
+ * and a post outside a list keeps its card look.
  */
 .timeline-entry:not(.timeline-entry--direct) {
 	position: relative;
@@ -1190,9 +1091,8 @@ export default {
 	border-radius: var(--border-radius-large, 8px);
 	transition: background-color .15s ease;
 
-	// the hairline sits in the middle of the gap, clear of the hover tint.
-	// A post followed by a reply has none, and that is also the only case
-	// where a reply's own ::after (its thread line) is drawn
+	// the hairline in the middle of the gap; none before a reply, whose
+	// thread line joins the two
 	&:not(:last-child):not(:has(+ .timeline-entry--reply))::after {
 		content: '';
 		position: absolute;
@@ -1207,13 +1107,12 @@ export default {
 		margin-bottom: 0;
 	}
 
-	// a reply hangs off the post above by its elbow line; a gap between
-	// them would cut the line
+	// a gap would cut a reply's elbow line
 	&:has(+ .timeline-entry--reply) {
 		margin-bottom: 0;
 	}
 
-	// the whole row opens the thread, so the whole row answers the pointer
+	// the whole row opens the thread
 	&:hover {
 		background-color: var(--color-background-hover);
 	}
@@ -1223,21 +1122,15 @@ export default {
 		gap: 10px;
 	}
 
-	// the face's top on the name's: face and words start at one height, and
-	// the face does not reach up into the gap above the row. The name's line
-	// is taller than its letters, hence the few pixels down
+	// aligns the face's top with the name's letters
 	.wrapper .entry__avatar {
 		margin-top: 2px;
 	}
 }
 
-// a phone draws a post's face over the row's corner instead; with no card
-// padding any more, the corner is the row's own. A notification has no face
-// there, so none of this is room for one
+// on a phone a post's face sits in the row's own corner
 .timeline-entry:not(.notification, .timeline-entry--direct) {
 	@include layout.below(layout.$phone) {
-		// the face starts the row here, without the step down it takes
-		// beside the name on a wide screen
 		padding-block-start: 16px;
 
 		.wrapper {
@@ -1276,32 +1169,25 @@ export default {
 		margin-bottom: 2px;
 	}
 
-	// nothing under the last line, so the hairline sits as far from the
-	// words above it as from the face below it
 	.wrapper :deep(.post-content .post-message) {
 		margin-bottom: 0;
 	}
 
-	// the last icon ends where the timestamp ends: the pill's frame and the
-	// button's own padding would otherwise hold it 9px short
+	// the last icon ends where the timestamp ends, despite the button's padding
 	.wrapper :deep(.post-footer .post-actions-reveal) {
 		margin-inline-end: -9px;
 	}
 
-	// likewise at the bottom: a lone heart ends where the words would, and
-	// the button's room under the icon does not push the hairline down
+	// likewise, the button's padding does not push the hairline down
 	.wrapper :deep(.post-footer:not(:has(.reaction-bar))) {
 		margin-bottom: -6px;
 	}
 }
 
 /*
- * With a pointer, the controls take no room of their own: an invisible row
- * under every post was a band of empty space down the page. The pill floats
- * over the top end of the row, across the timestamp, when the post is
- * pointed at or focused. A post that shows something in that row at rest —
- * reactions, or a count where the reader has the numbers on — keeps the
- * row, since a pill over the timestamp would draw its numbers across it.
+ * With a pointer, the controls take no room of their own: they float over the
+ * top end of the row on hover or focus. A post with reactions or counts in
+ * that row keeps it.
  */
 @media (hover: hover) {
 	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper :deep(.post-footer:not(:has(.reaction-bar, .post-action-count))) {
@@ -1316,9 +1202,8 @@ export default {
 		}
 	}
 
-	// a like or boost already given shows as a small mark by the timestamp,
-	// so it never needs a row of its own under the words; its button keeps
-	// to the pill, which only shows when the post is pointed at
+	// a like or boost already given shows as a mark by the timestamp, and
+	// its button only on hover
 	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper :deep(.post-content:not(:has(.reaction-bar, .post-action-count))) {
 		.post-given {
 			display: inline-flex;
@@ -1331,23 +1216,15 @@ export default {
 }
 
 /*
- * The row, pointed at. At rest it is only the post, and its counts where the
- * reader has the numbers on. Pointed at or focused, it rises a little off the
- * page like a card lifted from a table: up 3px, onto a soft shadow, on the
- * page's own ground so the shadow has an edge to fall from. Its controls come
- * to full strength beside their counts, and the ones without a count slide
- * in at the end of the row: where the reader has the numbers off, that is
- * all of them, over the timestamp, which steps aside. No pill, no tint, no
- * frame. In over about 250 ms; out in 100 ms. The lift is `translate`, not
- * `transform`, which the row's scroll-driven rise already uses. Touch
- * screens keep their always-visible row.
+ * Pointed at or focused, the row lifts 3px onto a soft shadow, and its
+ * controls come to full strength, those without a count sliding in from the
+ * end. The lift is `translate`, as `transform` is taken by the rise animation.
  */
 @media (hover: hover) {
 	.timeline-entry:not(.timeline-entry--direct) {
 		// a softer corner than a card's, for an edge that comes and goes
 		border-radius: 12px;
-		// the shadow is there at rest at nothing, so that it grows rather
-		// than appears
+		// a transparent shadow at rest, so it grows rather than appears
 		box-shadow: 0 1px 2px transparent, 0 2px 6px -6px transparent;
 		transition: box-shadow .1s linear, translate .1s linear, background-color .1s linear;
 
@@ -1359,8 +1236,7 @@ export default {
 			transition: box-shadow .25s ease, translate .25s cubic-bezier(.2, .8, .2, 1), background-color .2s ease;
 		}
 
-		// its own rule: a browser without `:has()` drops the selector, and it
-		// must not take the hover case with it
+		// a separate rule so a browser without `:has()` keeps the hover case
 		&:has(.post-actions-reveal--held) {
 			background-color: var(--color-main-background);
 			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow) 70%, transparent);
@@ -1403,8 +1279,7 @@ export default {
 		}
 	}
 
-	// the numbers off: the controls float over the top end of the row (the
-	// rule above), and with no pill under them the timestamp steps aside
+	// with no counts, the floating controls replace the timestamp
 	.timeline-entry:not(.notification, .timeline-entry--direct):not(:has(.reaction-bar, .post-action-count)) {
 		.wrapper :deep(.post-timestamp),
 		.wrapper :deep(.post-given) {
@@ -1448,11 +1323,9 @@ export default {
 }
 
 /*
- * A run of posts by one author reads as one voice: the face and the name at
- * the head of the run, then the posts that follow sit closer, with no hairline
- * between them, and a thin line runs down the face's column joining them. The
- * line starts under the face (the row's 14px of padding, the face's 2px step
- * and its 40px) and is centred on it.
+ * A run of posts by one author sits closer, without hairlines, joined by a
+ * line down the face's column that starts under the face (14px padding + 2px
+ * step + 40px face) and is centred on it.
  */
 .entry__thread {
 	flex: 0 0 auto;
@@ -1496,8 +1369,7 @@ export default {
 		inset-block-end: 0;
 	}
 
-	// a phone has no face column to run the line down: the run is only
-	// drawn closer together, and its header starts at the edge
+	// a phone has no face column, so there is no line
 	@include layout.below(layout.$phone) {
 		&:has(+ .timeline-entry--grouped)::before,
 		&.timeline-entry--grouped::before {

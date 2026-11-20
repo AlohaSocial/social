@@ -4,8 +4,6 @@
 -->
 <template>
 	<div ref="socialWrapper" class="social__wrapper">
-		<!-- a post opened from a timeline is a place the reader went into, and
-		     the way out of it was the browser's own button or the sidebar -->
 		<NcButton
 			class="thread__back"
 			variant="tertiary"
@@ -23,9 +21,7 @@
 				class="thread__ancestors"
 				:showParents="true"
 				:reverseOrder="true" />
-			<!-- a video gets a page about the video: the same route, because
-			     every link to one already leads here, with a heading, the
-			     channel to subscribe to and its chapters instead of a card -->
+			<!-- a video gets a page about the video, with its channel and chapters -->
 			<VideoHeader v-if="isVideo" :status="singlePost" />
 			<TimelineEntry
 				v-else-if="singlePost"
@@ -34,13 +30,12 @@
 				:item="singlePost"
 				type="single-post"
 				element="div" />
-			<!-- what a post's own page can say that a card in a list should
-			     not: the fine print, who reacted, and the box for answering -->
+			<!-- what a post's own page shows below it: the fine print, who
+			     reacted, and the box for answering -->
 			<div v-if="singlePost" class="main-post__under">
 				<PostDetails :status="singlePost" />
 				<PostReactedBy :status="singlePost" />
-				<!-- one box per post: opened from a thread, another post gets
-				     its own recipients, audience and saved draft -->
+				<!-- one box per post, so each gets its own recipients, audience and draft -->
 				<Composer
 					v-if="canReply"
 					v-show="!timelineStore.composerDisplayStatus"
@@ -80,8 +75,7 @@
 				v-if="timeline"
 				class="descendants thread__descendants"
 				@settled="repliesSettled = true" />
-			<!-- a thread this instance holds only part of should say so rather
-			     than present what it has as the whole of it -->
+			<!-- this instance may hold only part of a thread -->
 			<p v-if="hiddenReplies > 0" class="thread__hidden">
 				{{ hiddenRepliesText }}
 			</p>
@@ -112,8 +106,7 @@ import TimelineList from '../components/TimelineList.vue'
 import TimelineSkeleton from '../components/TimelineSkeleton.vue'
 import { isTracking } from '../services/interests.js'
 import { signalNow } from '../services/interestTracker.js'
-// its own chunk: it brings a player and a follow button, and almost every post
-// opened is not a video
+// its own chunk: most posts opened are not videos
 const VideoHeader = defineAsyncComponent(() => import(/* webpackChunkName: "watch" */'../components/VideoHeader.vue'))
 import { loadState } from '@nextcloud/initial-state'
 import logger from '../services/logger.js'
@@ -153,23 +146,16 @@ export default {
 
 	data() {
 		return {
-			/**
-			 * Whether the replies have been asked for and answered. Until they
-			 * have, every reply is a reply this page has not drawn, and saying
-			 * so while they are on their way would be counting the loading.
-			 */
+			/** whether the replies have been loaded, so loading is not counted as hidden replies */
 			repliesSettled: false,
 			/**
-			 * Where asking the server for a post nothing had loaded stands:
-			 * 'loading' while it is asked, 'failed' when it did not answer,
-			 * and '' otherwise — the post is there, or the server said it is
-			 * not.
+			 * Loading state of a post that was not in the store: 'failed' when
+			 * the server did not answer, '' when it is there or gone.
 			 *
 			 * @type {''|'loading'|'failed'}
 			 */
 			postState: '',
-			/** the composer-reply handler, kept so only this one is removed */
-			/** refresh the one post shown outside either timeline list */
+			/** refreshes the one post shown outside either timeline list */
 			countRefreshIntervalId: null,
 			countRefreshInProgress: false,
 		}
@@ -182,11 +168,8 @@ export default {
 		},
 
 		/**
-		 * Whether this post is a video, and so gets a page about the video.
-		 *
-		 * The `video` block is what a federated `Video` said about itself; a
-		 * post written here whose only attachment is a video is one too, and
-		 * gets the heading and the channel without the counters it has none of.
+		 * Whether this post is a video: a federated `Video`, or a local post
+		 * whose only attachment is a video.
 		 *
 		 * @return {boolean}
 		 */
@@ -205,9 +188,7 @@ export default {
 		},
 
 		/**
-		 * Whose post this is. The route says so; this used to be read off
-		 * window.location by splitting the href and slicing a '@' off the
-		 * second-to-last segment, which broke on any URL shape but one.
+		 * Whose post this is, from the route.
 		 *
 		 * @return {string}
 		 */
@@ -224,12 +205,8 @@ export default {
 		},
 
 		/**
-		 * Whether there is a conversation here, or only the one post.
-		 *
-		 * The spine is a line drawn behind the avatars to say that what it runs
-		 * through belongs together. With nothing above the post and nothing
-		 * below it there is nothing to say, and the line is a mark beside a
-		 * single card with no other end.
+		 * Whether there is a conversation here rather than a single post, which
+		 * is when the spine is drawn.
 		 *
 		 * @return {boolean}
 		 */
@@ -238,9 +215,7 @@ export default {
 		},
 
 		/**
-		 * Whether there is somebody here to write a reply. A post read without
-		 * logging in is read from a page with no account behind it, and a box
-		 * that cannot send is worse than no box.
+		 * Whether there is an account to reply with: a logged-out reader gets no box.
 		 *
 		 * @return {boolean}
 		 */
@@ -249,15 +224,9 @@ export default {
 		},
 
 		/**
-		 * How many replies this instance knows of but is not showing.
-		 *
-		 * `replies_count` is what the post's own instance said plus what has
-		 * arrived here, so the two differ honestly: a reply from an account the
-		 * reader blocked or muted is filtered out of the thread but still
-		 * counted, and a remote thread is only ever as complete as what has
-		 * reached this server. Counted against the *direct* replies, since that
-		 * is what the number on the post counts — a reply to a reply is in the
-		 * thread below without being in it.
+		 * How many direct replies this instance knows of but is not showing:
+		 * ones from blocked or muted accounts, and ones that never reached
+		 * this server.
 		 *
 		 * @return {number}
 		 */
@@ -325,9 +294,8 @@ export default {
 	},
 
 	mounted() {
-		// The main post sits between the ancestor and reply lists, so neither
-		// list's visible-card refresher sees it. Keep its counts fresh while its
-		// detail page is open; only the opening read counts as a view.
+		// The main post is outside both lists' visible-card refreshers, so keep
+		// its counts fresh here; only the opening read counts as a view.
 		this.countRefreshIntervalId = window.setInterval(this.refreshOpenedPostCounts, OPENED_COUNT_REFRESH_MS)
 		document.addEventListener('visibilitychange', this.refreshOpenedPostCounts)
 	},
@@ -369,14 +337,9 @@ export default {
 		},
 
 		/**
-		 * Back to wherever the reader came from, and to the home timeline when
-		 * that is nowhere.
-		 *
-		 * `history.state.back` is what the router writes when it navigates
-		 * inside the app, so it is also how to tell a post opened from a
-		 * timeline from one opened from a link somebody sent: going back from
-		 * the second would leave the app entirely, which is not what a button
-		 * inside it should do.
+		 * Back to where the reader came from in the app, or to the home timeline
+		 * when the post was opened from outside (`history.state.back` is unset),
+		 * so the button never leaves the app.
 		 */
 		goBack() {
 			if (window.history.state?.back) {
@@ -389,21 +352,15 @@ export default {
 		},
 
 		/**
-		 * Opens the conversation the route names. Called again when the route
-		 * changes to another post, because the router-view is no longer keyed
-		 * on the full path and this component is reused.
+		 * Opens the conversation the route names. Also called when the route
+		 * changes to another post, since this component is reused.
 		 */
 		async load() {
 			// read before the reset: changeTimelineType prunes the status index
 			const singlePost = this.timelineStore.getPostFromTimeline(String(this.$route.params.id)) ?? this.postFromInitialState()
 
-			// A post has two addresses here. The app links it by the numeric id
-			// its client API knows, `/@alice/42`; the wider fediverse links it
-			// by its ActivityPub id, whose last segment is a twenty-digit
-			// number. Both land on this view, and everything below — the
-			// `/context` request, and which status the page then shows — speaks
-			// the first. So when the server has handed the post over, its own
-			// id is the one to go on rather than the one in the address.
+			// The address may hold the client API id or the last segment of the
+			// ActivityPub id; `/context` and everything below need the former.
 			const id = String(singlePost?.id ?? this.$route.params.id ?? '')
 
 			this.timelineStore.changeTimelineType({
@@ -417,10 +374,8 @@ export default {
 			})
 			this.timelineStore.addToStatuses(singlePost)
 
-			// nothing had loaded this post: a link somebody sent, a reload, or a
-			// tile on Discover, whose posts belong to that view and never went
-			// through the store. `/context` answers with what is around a post
-			// and never with the post, so the page used to say it did not exist.
+			// nothing had loaded this post (a shared link, a reload, a Discover
+			// tile), and `/context` never returns the post itself
 			if (singlePost === undefined || singlePost === null) {
 				const routeId = String(this.$route.params.id)
 				/** @type {''|'failed'} */
@@ -442,8 +397,8 @@ export default {
 				}
 			} else {
 				this.postState = ''
-				// A timeline copy can already be minutes old. Keep it on screen,
-				// while replacing it with the origin's current counts and details.
+				// a timeline copy can be minutes old: keep it on screen while
+				// fetching the current counts
 				this.timelineStore.fetchStatus(id, true).catch((error) => {
 					logger.debug('Could not refresh an opened status', { error, id })
 				})
@@ -451,8 +406,7 @@ export default {
 
 			this.reportOpened()
 
-			// the account is loaded for the post's author card; nothing here
-			// reads the answer, which is why it is not kept
+			// loaded for the author card; the answer is not read here
 			const fetchMethod = this.serverData.public ? 'fetchPublicAccountInfo' : 'fetchAccountInfo'
 			await this.accountStore[fetchMethod](this.account)
 		},
@@ -469,18 +423,9 @@ export default {
 		},
 
 		/**
-		 * The post the server rendered into the page, for a permalink opened
-		 * cold. `loadState` throws when the key is absent — which is what a
-		 * deleted post looks like — and the throw used to happen inside
-		 * beforeMount, so the view never rendered at all.
-		 *
-		 * It is only this post if the address says so. The page is rendered
-		 * once and the reader goes on reading: opening a second post from the
-		 * first would otherwise have been answered with the first one again,
-		 * whenever the store had not loaded the second. The address names it
-		 * either by the client id or by the last segment of its ActivityPub id,
-		 * and both are checked, which is also what makes a fediverse permalink
-		 * resolve at all.
+		 * The post the server rendered into the page, when the address names it
+		 * by its client id or the last segment of its ActivityPub id. Null when
+		 * absent, as for a deleted post (`loadState` would throw).
 		 *
 		 * @return {object|null}
 		 */
@@ -518,22 +463,16 @@ export default {
 }
 
 /*
- * The indent belongs to the thread, not to the list: `.social__timeline` is
- * another component's root, and a scoped rule here lands on it beside the
- * list's own layout with the same specificity, so which one wins depends on
- * the order the bundle happens to put them in.
+ * Scoped under `.thread` because `.social__timeline` is another component's
+ * root, where an equally specific rule would win by bundle order.
  */
 .thread .social__timeline {
 	margin-inline-start: 16px;
 }
 
 /**
- * A reply chain used to read as three unrelated stacks of cards. The spine is
- * a single line behind the avatars: everything on it belongs to the same
- * conversation.
- *
- * Only when there is one. A post with no parent and no replies is a single
- * card, and the line beside it ran from nothing to nothing.
+ * The spine: a line behind the avatars joining the posts of a conversation,
+ * drawn only when there is more than one post.
  */
 .thread {
 	position: relative;
@@ -557,24 +496,17 @@ export default {
 	}
 }
 
-/* The post being read is the card, and this is spacing around it. It used to
-   be a second card: white ground, 20px of padding, rounded corners, a shadow,
-   and an accent border on top of all that — so a post on its own page was
-   drawn inside two boxes, one nested in the other about ten pixels out. What
-   marks the post the page is about is that it is the one at the top with the
-   thread hanging off it, which needs no frame of its own. */
+/* No card of its own: the post card is the frame. */
 .main-post {
 	position: relative;
 	z-index: 1;
 	margin: 16px 0;
-	/* the lists above and below sit 16px out and pad 8 inside that, so this
-	   takes the 24 that puts its avatar on the same line as theirs — which is
-	   the line the spine runs down */
+	/* 24px puts its avatar on the same line as the lists' (16px out, 8px
+	   padding), which is the line the spine runs down */
 	margin-inline-start: 24px;
 }
 
-/* the fine print, the faces and the reply box belong to the post above them,
-   so they sit on its line rather than on the thread's */
+/* the fine print, the faces and the reply box align with the post above them */
 .main-post__under {
 	margin-inline-start: 24px;
 	/* level with the card, which starts where the avatar column ends */

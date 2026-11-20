@@ -17,26 +17,14 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_stream_tag.hashtag` in the one form a hashtag is compared in.
+ * `social_stream_tag.hashtag` in the one form a hashtag is compared in
+ * (`FollowedTagsRequest::normalise()`), so the hashtag timeline and the
+ * followed-tags join can use the index rather than `LOWER()`.
  *
- * A post's tags used to be stored as their author wrote them, so the hashtag
- * timeline and the followed-tags join compared `LOWER(st.hashtag)` — and no
- * index can answer a comparison over a function of the column: the tag was a
- * filter applied to every tag row of every candidate post, walking the stream
- * newest-first until twenty matched. The rows are now written normalised
- * (`FollowedTagsRequest::normalise()`, the form `social_hashtag` and
- * `social_followed_tag` already hold) and compared as they stand; this step
- * brings the rows written before that into the same form.
- *
- * Keyset-paged on the primary key, so the walk is one pass however many rows
- * need it. Only the rows whose tag is not lowercase are read on MySQL and
- * PostgreSQL, whose `LOWER()` folds all of Unicode; SQLite's folds ASCII only,
- * so there every row is read and the comparison is made here.
- *
- * Two rows of one post can become the same tag — `#Nextcloud` and `#nextcloud`
- * on one post — and the unique index on (stream_id, hashtag) would refuse the
- * second. The one that would collide is deleted instead: the post keeps its
- * tag, once.
+ * Keyset-paged on the primary key. MySQL and PostgreSQL read only the rows
+ * that are not lowercase; SQLite's `LOWER()` folds ASCII only, so every row is
+ * read and compared here. A row that would collide with another tag of the
+ * same post under the unique (stream_id, hashtag) index is deleted instead.
  */
 class Version1000Date20260925000001 extends SimpleMigrationStep {
 	/**
@@ -99,12 +87,10 @@ class Version1000Date20260925000001 extends SimpleMigrationStep {
 	}
 
 	/**
-	 * What to do with the rows of one page whose tag is not normalised.
-	 *
-	 * A row becomes its normalised tag unless another row of the same post
-	 * already holds that tag — one that is normalised, or one earlier in this
-	 * page that is about to be — and is deleted then. A tag that normalises to
-	 * nothing is deleted too: no post could be found by it.
+	 * What to do with the rows of one page whose tag is not normalised: each
+	 * becomes its normalised tag unless another row of the same post already
+	 * holds it (or will, earlier in this page), and is deleted then. A tag
+	 * that normalises to nothing is deleted too.
 	 *
 	 * @param list<array{id: int|string, stream_id: string, hashtag: string}> $changing in id order
 	 * @param list<array{stream_id: string, hashtag: string}> $siblings every tag row of those posts

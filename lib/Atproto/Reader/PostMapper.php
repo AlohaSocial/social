@@ -15,20 +15,16 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\Details;
 
 /**
- * A Bluesky post, as the AppView shows it in a feed, as the `Create` of a
- * `Note` a Fediverse server would have sent — so the one import path
- * stores it with every side effect a post has here. A repost in a feed is
- * the `Announce` the boosting account would have sent.
+ * Maps a Bluesky post from an AppView feed to the `Create` of a `Note` (a
+ * repost to an `Announce`), so the one import path stores it with every side
+ * effect a post has here.
  *
- * What the mapping decides: the post's text and facets become HTML; the
- * pictures of an image embed become attachments pointing at the CDN, and
- * a video is a federated `Video` streamed from Bluesky's video CDN; a
- * reply names its parent, a quote the quoted post; the moderation labels
- * of §12.1 become `sensitive` and a content warning; a post is public
- * and addressed to the author's followers collection, which is what the
- * home timeline joins on — unless its author asked apps not to show them
- * to logged-out people (`!no-unauthenticated`), when it is addressed to
- * the followers alone. Counts and the `at://` URI ride in `details`.
+ * Text and facets become HTML, images point at the CDN, a video is a `Video`
+ * streamed from Bluesky's video CDN, §12.1 labels become `sensitive` and a
+ * content warning. Posts are public and cc the author's followers collection
+ * (which the home timeline joins on), or followers-only when the author
+ * opted out of logged-out viewers (`!no-unauthenticated`). Counts and the
+ * `at://` URI ride in `details`.
  */
 class PostMapper {
 	public const DETAIL = Details::ATPROTO;
@@ -60,12 +56,10 @@ class PostMapper {
 	/** labels that hide the post altogether */
 	private const HIDE = ['!hide', '!takedown'];
 	/**
-	 * The self-label asking apps not to show the account, or the post, to
-	 * people who are not logged in. Followers-only is the audience here that
-	 * keeps the post out of anonymous pages, the public timelines, search and
-	 * federation addressed to the public, while the people who chose to
-	 * follow the account still see it; unlisted would still serve it to
-	 * anybody with the link.
+	 * The self-label asking apps not to show the account or post to logged-out
+	 * people. Followers-only keeps such a post out of anonymous pages, public
+	 * timelines, search and public federation; unlisted would still serve it
+	 * to anybody with the link.
 	 */
 	public const NO_UNAUTHENTICATED = '!no-unauthenticated';
 
@@ -228,9 +222,8 @@ class PostMapper {
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
 			] + ($selfLabels === [] ? [] : [Details::ATPROTO_SELF_LABELS => $selfLabels]) + ($recordEmbed === null ? [] : [
 				// recordWithMedia can embed a feed, list or starter pack beside a
-				// link card. The social stream stores the card separately, so keep
-				// the original StrongRef alongside it for the publisher to rebuild
-				// the same combined embed instead of silently dropping the record.
+				// link card; the card is stored separately, so keep the original
+				// StrongRef for the publisher to rebuild the combined embed.
 				Details::ATPROTO_RECORD_EMBED => $recordEmbed,
 			]) + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
 				// the quoted author detached this quote, so it is withdrawn
@@ -284,9 +277,8 @@ class PostMapper {
 		}
 		$type = (string)($embed['$type'] ?? '');
 		if (in_array($type, [self::RECORD_WITH_MEDIA, self::RECORD_RECORD_WITH_MEDIA], true)) {
-			// The wrapper itself is a known lexicon, but its media union can be
-			// supplied by another lexicon. Follow it just as embed() does so a
-			// file blob can be recovered when the PDS endpoint becomes available.
+			// The wrapper is a known lexicon but its media union can come from
+			// another, so follow it as embed() does to recover a file blob.
 			return self::hasGenericBlobs($embed['media'] ?? null);
 		}
 		if (in_array($type, [
@@ -387,9 +379,8 @@ class PostMapper {
 	}
 
 	/**
-	 * Blobs in third-party ATProto embed lexicons. The standard embed unions
-	 * above keep their dedicated CDN/player handling; unknown records are
-	 * exposed only as validated PDS getBlob links, later streamed by this server.
+	 * Blobs in third-party embed lexicons, exposed only as validated PDS
+	 * getBlob links that this server streams.
 	 *
 	 * @return list<array<string, mixed>>
 	 */
@@ -412,10 +403,8 @@ class PostMapper {
 					$attachments[] = ['type' => 'Image', 'mediaType' => $mime === 'image/jpg' ? 'image/jpeg' : $mime, 'url' => $imageUrl, 'name' => self::blobName($blobName, $mime)];
 					continue;
 				}
-				// The public CDN only has transformations for a short list of
-				// image formats. Keep other valid image blobs as downloadable
-				// files through their verified PDS instead of silently dropping
-				// the attachment.
+				// The public CDN only transforms a few image formats; keep other
+				// valid image blobs as downloads through their verified PDS.
 			}
 			if (!self::isSafePds($pds)) {
 				continue;
@@ -578,10 +567,9 @@ class PostMapper {
 	}
 
 	/**
-	 * Images in the original post record carry a blob reference instead of the
-	 * CDN URLs the AppView adds to its embed view. Build the public image URL
-	 * only for validated image blobs; never turn an arbitrary CID or MIME type
-	 * from a record into a fetch target.
+	 * Images from the original record, which carries blob references rather
+	 * than the AppView's CDN URLs. Only validated image blobs become URLs, so
+	 * a record's arbitrary CID or MIME type is never turned into a fetch target.
 	 *
 	 * @return list<array<string, mixed>>
 	 */
@@ -600,9 +588,8 @@ class PostMapper {
 				if (!str_starts_with($mimeType, 'image/') || !Cid::isValid($cid) || !self::isSafePds($pds)) {
 					continue;
 				}
-				// Bluesky's image CDN only transforms a small set of formats.
-				// For other valid image blobs, keep the post's alt text and ratio
-				// and stream the original from the author's verified PDS.
+				// Bluesky's image CDN only transforms a few formats; stream other
+				// valid image blobs from the author's verified PDS.
 				$url = rtrim($pds, '/') . '/xrpc/com.atproto.sync.getBlob?' . http_build_query(['did' => $authorDid, 'cid' => $cid], '', '&', PHP_QUERY_RFC3986);
 			}
 			$mimeType = $mimeType === 'image/jpg' ? 'image/jpeg' : $mimeType;
@@ -805,12 +792,9 @@ class PostMapper {
 	}
 
 	/**
-	 * Mentions and hashtags as the tags a Fediverse post carries them in:
-	 * the hashtags in the text, and the ones the record lists beside it
-	 * (`tags`), which Bluesky's hashtag search finds the post by too. A
-	 * mention is named by its handle — the `@handle` the text shows at the
-	 * facet, since the record carries only the DID — and the DID is in the
-	 * target alone.
+	 * Mentions and hashtags as Fediverse tags: hashtags from the text and the
+	 * record's `tags`, mentions named by the `@handle` shown at the facet, as
+	 * the record carries only the DID.
 	 *
 	 * @return list<array{type: string, href: string, name: string}>
 	 */
@@ -910,10 +894,9 @@ class PostMapper {
 	}
 
 	/**
-	 * Social writes the warning alongside `!warn` in the post text, because
-	 * ATProto labels carry no warning text of their own. Restore that warning
-	 * as the ActivityPub summary and keep the prefix out of the visible body.
-	 * Facets use UTF-8 byte offsets, so shift the remaining ones with the text.
+	 * Restores the warning Social writes after `!warn` in the text (labels
+	 * carry no text) as the summary and strips it from the body, shifting the
+	 * UTF-8 byte offsets of the remaining facets.
 	 *
 	 * @return array{string, mixed, string}
 	 */
@@ -973,10 +956,8 @@ class PostMapper {
 	}
 
 	/**
-	 * A feed, list or starter-pack StrongRef the post embeds, kept for a
-	 * lossless publish roundtrip. Ordinary post quotes use the quote relation.
-	 * AppView wraps the reference in one or two `record` view objects; the raw
-	 * record has the StrongRef directly on the first nested record.
+	 * The feed, list or starter-pack StrongRef the post embeds, kept for a
+	 * lossless round trip; post quotes use the quote relation instead.
 	 *
 	 * @return array{uri: string, cid: string}|null
 	 */

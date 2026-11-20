@@ -368,36 +368,10 @@ function isTyping(event, player) {
 }
 
 /**
- * The player of a video's own page, and of the small player that goes on
- * playing it when the reader leaves that page.
- *
- * It plays the video attachment of the post the way the rest of the app does
- * (`services/videoSource.js`): the file, the proxied HLS playlist of a remote
- * video through hls.js, or a local video's ladder. Around that it does what a
- * video site's player does:
- *
- * - **It starts where the reader stopped** (`progressOf()`, which the server
- *   fills in on a video read on its own) unless that was near the end, and
- *   tells the server where they are as they watch (`/watched`): every ten
- *   seconds of playing, on pause, at the end, and as the page goes away.
- *   Nothing for somebody not signed in, and nothing for a live broadcast.
- * - **It counts a view** after `VIEW_AFTER` seconds of playing (`/view`); the
- *   server decides whether it counts.
- * - **Speed, quality and subtitles** in menus of its own, inside the player so
- *   that they work in full screen: the speed is kept for the browser; the
- *   quality is offered where the source has several (an HLS playlist or a
- *   ladder), with Auto first; the subtitles are the tracks the video
- *   published, played through this server, and any the playlist carries.
- * - **YouTube's keys** (`PLAYER_SHORTCUTS`): on the watch page wherever the
- *   focus is outside a text field or a dialog, in the small player while it
- *   has the focus; never while the reader turned shortcuts off here or for all
- *   of Nextcloud.
- * - **Picture in picture** where the browser has it, and full screen.
- *
- * In `mini` it is the small player's: fewer controls, and it says where it is
- * to `services/miniPlayer.js`. Leaving the watch page while the video plays
- * hands it to that small player, and coming back to the same video takes it
- * back from there.
+ * The player of a video's watch page, and (with `mini`) of the small player
+ * that keeps playing it after the reader leaves that page. It resumes where
+ * the reader stopped, reports progress (`/watched`) and views (`/view`), and
+ * keeps its menus inside the player so they work in full screen.
  */
 export default {
 	name: 'VideoPlayer',
@@ -756,7 +730,6 @@ export default {
 			}
 		},
 
-		/** Plays, or pauses. */
 		togglePlay() {
 			const element = this.media()
 			if (!element) {

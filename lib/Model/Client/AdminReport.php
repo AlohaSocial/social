@@ -13,25 +13,14 @@ use JsonSerializable;
 use OCA\Social\Model\Report;
 
 /**
- * Mastodon's `Admin::Report`: the moderator's view of a report, which differs
- * from the reporter's `Report` entity in carrying who filed it, who is dealing
- * with it and who acted on it.
+ * Mastodon's `Admin::Report`: the moderator's view of a report, with who
+ * filed it, who is dealing with it and who acted on it, each an
+ * `Admin::Account`; the last two are null until somebody takes it.
  *
- * The three account fields are `Admin::Account` entities, as Mastodon's are.
- * `assigned_account` and `action_taken_by_account` are null until somebody
- * takes the report, which is what `Version1000Date20260911000013` gave the
- * report table somewhere to record.
- *
- * `rules` is always `[]`: a report here carries a category, never a rule id —
- * `POST /api/v1/reports` ignores `rule_ids`, and the instance's rules are
- * lines of text in an app value with no ids to refer to. `forwarded` is read
- * from the report: a local report about a remote account is forwarded when the
- * reporter asked for it and the reported account's instance accepted the
- * `Flag`, and is `false` in every other case.
- *
- * `updated_at` is the moment of the last decision on the report, and the
- * moment it was filed while there has been none — the report table records no
- * other change, and a report that is never acted on is never edited.
+ * `rules` is always `[]`, since reports here carry a category and rules have
+ * no ids. `forwarded` is true when the reporter asked for it and the remote
+ * instance accepted the `Flag`. `updated_at` is the last decision, or the
+ * filing time while there is none.
  */
 class AdminReport implements JsonSerializable {
 	private ?AdminAccount $account = null;

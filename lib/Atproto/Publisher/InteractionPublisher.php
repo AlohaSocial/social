@@ -22,12 +22,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Likes and boosts of posts that exist on Bluesky (§8.6): a local like of
- * a Bluesky post, or of a local post that has a record, writes
- * `app.bsky.feed.like` in the local account's repository; a boost writes
- * `app.bsky.feed.repost`; undoing either removes the record. A like of a
- * post that is on the Fediverse alone writes nothing. One action, two
- * networks — the viewer flags the status carries are the same either way.
+ * Likes and boosts of posts that exist on Bluesky (§8.6): a like writes
+ * `app.bsky.feed.like`, a boost `app.bsky.feed.repost`, and undoing either
+ * removes the record. Posts that are only on the Fediverse get nothing.
  */
 class InteractionPublisher {
 	/** the most records one deleted post takes with it in one run */
@@ -74,10 +71,8 @@ class InteractionPublisher {
 
 	/**
 	 * Removes the like and repost records local accounts made of a post that
-	 * is gone (§8.5): the likes and boosts here outlive the post, and so
-	 * would their records on Bluesky. Every removal is tried; the first
-	 * failure that may pass is thrown afterwards, so the job tries again,
-	 * and a record removed already is not there to remove a second time.
+	 * is gone (§8.5). Every removal is tried; the first transient failure is
+	 * rethrown afterwards so the job retries.
 	 *
 	 * @return int how many records were removed
 	 * @throws Throwable the first failure that may pass

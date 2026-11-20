@@ -5,17 +5,10 @@
 <template>
 	<!-- Show button only if user is authenticated and she is not the same as the account viewed -->
 	<div v-if="!serverData.public && relationship !== undefined" class="follow-button-wrapper">
-		<!-- the ring that expands out of the button once, the same one the
-		     like in a post throws; only ever present for a follow that the
-		     server took -->
+		<!-- the ring thrown out once when the server took a follow, as a like does -->
 		<span v-if="celebrating" class="follow-button__burst" aria-hidden="true" />
-		<!--
-		  One real button, not two swapped by a :hover rule. The pair used to be
-		  a "Following" label with no handler plus an "Unfollow" button that
-		  `display: none` kept out of the tab order until a pointer hovered the
-		  container — so a keyboard user and every touch device had no way to
-		  unfollow anyone at all. The label changes on hover and focus instead.
-		-->
+		<!-- one button: the label turns to "Unfollow" on hover and on focus, so
+		     keyboard and touch users can unfollow too -->
 		<NcButton
 			v-if="relationship.following"
 			:disabled="loading"
@@ -70,13 +63,8 @@
 			class="follow-button"
 			:class="{ 'follow-button--pending': pending, 'follow-button--refused': refused }"
 			@click="follow">
-			<!--
-			  While the request is in flight the button already says what it is
-			  about to become — but dimmed and breathing, so it reads as being
-			  applied rather than done. A refusal takes that back: the label
-			  returns to "Follow" and the button shakes, the way a post says a
-			  like it had already shown was rolled back.
-			-->
+			<!-- while the request is in flight the label already shows the new
+			     state, dimmed; a refusal turns it back to "Follow" with a shake -->
 			<span :key="pending ? 'pending' : 'follow'" class="follow-button__label">
 				{{ pending ? words.following : words.follow }}
 			</span>
@@ -161,13 +149,8 @@ export default {
 		...mapStores(useAccountStore),
 
 		/**
-		 * What this button is called, which depends on what is behind it.
-		 *
-		 * A channel — a PeerTube one, or one of ours — is a `Group`, and you
-		 * subscribe to a channel rather than follow it. The act and the API are
-		 * identical; only the word people use for it is not, and a button that
-		 * says "Follow" under a channel reads as a mistake to anybody who has
-		 * used a video site.
+		 * The button's words: a channel (a `Group`) is subscribed to rather than
+		 * followed, though the API is the same.
 		 *
 		 * @return {{follow: string, following: string, unfollow: string}}
 		 */
@@ -238,9 +221,8 @@ export default {
 				// the label goes ahead of the server, and comes back if it has to
 				this.pending = true
 				await this.accountStore.followAccount({ accountToFollow: this.profileAccount })
-				// the store commits the follow only when the server took it —
-				// on a refusal it reports the error itself and commits nothing,
-				// which is the only signal this component gets
+				// the store commits the follow only when the server took it; on a
+				// refusal it reports the error itself and commits nothing
 				if (this.relationship?.following || this.relationship?.requested) {
 					this.celebrate()
 					feel('follow')
@@ -248,8 +230,7 @@ export default {
 					this.refuse()
 				}
 			} catch (error) {
-				// the store says what went wrong; without this the rejection
-				// had nowhere to go but the console, as an unhandled one
+				// the store has already reported it; this keeps the rejection handled
 				logger.error('Failed to follow an account', { error })
 				this.refuse()
 			} finally {
@@ -354,15 +335,13 @@ export default {
 	}
 
 	.follow-button {
-		/* the ring behind it is absolutely positioned; the button has to be
-		   painted on top of it rather than under it */
+		/* painted above the ring behind it */
 		position: relative;
 		z-index: 1;
 		width: 150px !important;
 		border-radius: 8px !important;
 		font-weight: 600 !important;
-		/* the colours cross from primary to success to error as the state
-		   changes under the pointer, instead of switching in one frame */
+		/* the colours cross-fade as the state changes under the pointer */
 		transition: background-color var(--social-motion-fast) var(--social-ease), border-color var(--social-motion-fast) var(--social-ease), color var(--social-motion-fast) var(--social-ease), box-shadow var(--social-motion-fast) var(--social-ease);
 	}
 

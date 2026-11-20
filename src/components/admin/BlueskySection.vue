@@ -332,11 +332,9 @@ function relaysOf(text) {
  * The Bluesky side of this server: whether it is one, what it needs to be
  * one, and how it is doing.
  *
- * Only the switch saves by itself. It is the one field whose answer can be
- * "no" — the server refuses to switch on while a requirement fails, and
- * answers with the checks that say which — so it is pressed and answered on
- * its own rather than folded into a Save that could half succeed. The other
- * fields go together, and only the ones that changed are sent.
+ * The switch saves on its own, since the server may refuse it and answer
+ * with the failing checks; the other fields are saved together, and only
+ * the ones that changed are sent.
  */
 export default {
 	name: 'BlueskySection',
