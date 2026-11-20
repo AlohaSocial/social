@@ -17,15 +17,10 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
 
 /**
- * Giving a Nextcloud group an account to post from.
- *
- * A command rather than a route, and deliberately: creating an actor on this
- * instance makes an address other servers will follow, cache and keep. That is
- * an administrator's decision, not one to hand to anybody who happens to be in
- * a group.
- *
- * Who may *post* as it afterwards needs no administrator at all — it is
- * whoever is in the group, asked live every time.
+ * Gives a Nextcloud group an account to post from. A command, not a route:
+ * creating an actor makes an address other servers will keep, which is an
+ * administrator's decision. Who may post as it is the group's members,
+ * checked live.
  */
 class TeamAccount extends SocialCommand {
 	public function __construct(

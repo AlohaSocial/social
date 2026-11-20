@@ -15,23 +15,15 @@ use RuntimeException;
 /**
  * The WebSocket side of the firehose, in plain PHP sockets.
  *
- * A relay connects, the handshake is answered, and from then on the server
- * only ever writes binary frames and reads the one thing a subscriber may
- * send: pings and a close. There is no library between the socket and the
- * frames because what a firehose needs of RFC 6455 is a page of it, and a
- * page this app owns is one it can bound: a slow consumer whose output
- * buffer fills past OUTPUT_LIMIT is dropped, as the reference relay drops
- * a slow PDS, a request longer than REQUEST_LIMIT never upgrades, a
- * connection that has not finished its handshake after HANDSHAKE_TIMEOUT
- * seconds is closed, and past MAX_SUBSCRIBERS in all or MAX_PER_ADDRESS
- * from one address a connection is answered 503 and closed.
+ * Only the part of RFC 6455 a firehose needs is implemented, so every limit
+ * is ours to bound: a subscriber whose output buffer passes OUTPUT_LIMIT is
+ * dropped, requests over REQUEST_LIMIT never upgrade, handshakes are closed
+ * after HANDSHAKE_TIMEOUT, and connections past MAX_SUBSCRIBERS or
+ * MAX_PER_ADDRESS get a 503.
  *
- * Connections are plain TCP; the web server in front terminates TLS and
- * proxies the upgrade (contrib/webserver). The address a connection is
- * counted under is its peer's, or, when the peer is a proxy (the loopback
- * or one the trusted-proxy check names), the last address in its
- * `X-Forwarded-For` that is not a proxy. An IPv6 address is counted with
- * the rest of its /64, which one host can hold all of.
+ * TLS is terminated by the web server in front (contrib/webserver). Behind a
+ * trusted proxy a connection counts under the last non-proxy address in
+ * `X-Forwarded-For`; IPv6 addresses count by their /64.
  */
 class WebSocketServer {
 	public const PATH = '/xrpc/com.atproto.sync.subscribeRepos';

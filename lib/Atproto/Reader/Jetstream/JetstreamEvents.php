@@ -24,17 +24,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What a Jetstream event about a watched Bluesky account does here. A post
- * or a repost is a sign the account's feed has something new: it is read
- * as the poller reads it (`FeedPoller::pollWatch()`), a moment later, when
- * the AppView has it — and again a little later if it did not yet, until
- * the poller is left to it. A deleted post is deleted here at once; a
- * changed profile or handle is read again. A block of a local account is
- * recorded at once (`BlockedByService`); a deleted block names nobody, so
- * the local accounts the blocker is recorded as blocking are asked about
- * again a moment later, when the AppView knows. An account Bluesky stopped
- * serving, or serves again, is hidden or restored here at once, and purged
- * only when it was deleted (`AccountStatus`).
+ * What a Jetstream event about a watched Bluesky account does here. A post or
+ * repost triggers a feed read (`FeedPoller::pollWatch()`) a moment later,
+ * retried briefly while the AppView lags. Deletions, profile and handle
+ * changes, blocks (`BlockedByService`) and account status (`AccountStatus`)
+ * take effect at once; a deleted block names nobody, so the blocker's
+ * recorded blocks are re-checked shortly after.
  */
 class JetstreamEvents {
 	public const POST = 'app.bsky.feed.post';
