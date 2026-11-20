@@ -1018,8 +1018,6 @@ export default {
 
 :deep(.feed-notice.interests-notice),
 :deep(.feed-notice .interests-notice),
-:deep(.feed-notice.interests-banner),
-:deep(.feed-notice .interests-banner),
 :deep(.feed-notice.policy-notice),
 :deep(.feed-notice .policy-notice) {
 	position: relative;
@@ -1030,7 +1028,6 @@ export default {
 }
 
 :deep(.feed-notice .interests-notice),
-:deep(.feed-notice .interests-banner),
 :deep(.feed-notice .policy-notice) {
 	margin: 0;
 	padding: 0 32px;
@@ -1038,7 +1035,6 @@ export default {
 	background: transparent;
 }
 
-:deep(.feed-notice.interests-banner),
 :deep(.feed-notice.policy-notice) {
 	padding-inline: 44px;
 }
@@ -1097,8 +1093,6 @@ export default {
 
 	:deep(.feed-notice.interests-notice),
 	:deep(.feed-notice .interests-notice),
-	:deep(.feed-notice.interests-banner),
-	:deep(.feed-notice .interests-banner),
 	:deep(.feed-notice.policy-notice),
 	:deep(.feed-notice .policy-notice) {
 		padding-inline: 24px;

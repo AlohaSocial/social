@@ -141,6 +141,8 @@ class NavigationController extends Controller {
 	// the client router sends it on to `/shorts`
 	#[FrontpageRoute(verb: 'GET', url: '/reels', postfix: 'reels')]
 	#[FrontpageRoute(verb: 'GET', url: '/search', postfix: 'search')]
+	// the server's rules, contact and legal links, which a visitor needs before signing up
+	#[FrontpageRoute(verb: 'GET', url: '/about', postfix: 'about')]
 	#[FrontpageRoute(verb: 'GET', url: '/search/{term}', postfix: 'searchterm')]
 	#[FrontpageRoute(verb: 'GET', url: '/collections/{id}', postfix: 'collection', requirements: ['id' => '\\d+'])]
 	#[FrontpageRoute(verb: 'GET', url: '/places/{id}', postfix: 'place', requirements: ['id' => '\\d+'])]
@@ -161,7 +163,10 @@ class NavigationController extends Controller {
 				'isAdmin' => false,
 			]);
 
-			return new PublicTemplateResponse(Application::APP_ID, 'main');
+			$page = new PublicTemplateResponse(Application::APP_ID, 'main');
+			$page->setHeaderTitle(Application::APP_NAME_DISPLAY);
+
+			return $page;
 		}
 
 		$this->logger->debug('[NavigationController] navigate() called', [
@@ -332,7 +337,7 @@ class NavigationController extends Controller {
 	/**
 	 * The pages that are the reader's own: their settings, their statistics,
 	 * moving their account, the people asking to follow them and the ones they
-	 * blocked, and the About page of the server they are on. The same app
+	 * blocked. The same app
 	 * page as navigate(), for a signed-in reader only — not a public page, so
 	 * Nextcloud sends anybody else to its login, with this address to come
 	 * back to.
@@ -348,7 +353,6 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/switch', postfix: 'switch')]
 	#[FrontpageRoute(verb: 'GET', url: '/follow_requests', postfix: 'followrequests')]
 	#[FrontpageRoute(verb: 'GET', url: '/blocked', postfix: 'blocked')]
-	#[FrontpageRoute(verb: 'GET', url: '/about', postfix: 'about')]
 	public function personal(): TemplateResponse {
 		return $this->navigate();
 	}

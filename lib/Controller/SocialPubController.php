@@ -278,6 +278,7 @@ class SocialPubController extends Controller {
 		// anonymous timeline route so a cold link and an in-app navigation have
 		// the same public access rules.
 		$page = new PublicTemplateResponse(Application::APP_ID, 'main');
+		$page->setHeaderTitle(Application::APP_NAME_DISPLAY);
 		$this->addOembedDiscovery($page, $post);
 
 		return $page;

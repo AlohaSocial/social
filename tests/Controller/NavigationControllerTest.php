@@ -355,6 +355,8 @@ class NavigationControllerTest extends TestCase {
 
 		$this->assertInstanceOf(PublicTemplateResponse::class, $response);
 		$this->assertSame('main', $response->getTemplateName());
+		// the same name in the header as on a public profile
+		$this->assertSame('Aloha Social', $response->getHeaderTitle());
 		$this->assertTrue($this->serverData()['public']);
 		$this->assertFalse($this->serverData()['needsAccount']);
 		$this->assertFalse($this->serverData()['isAdmin']);
@@ -689,7 +691,7 @@ class NavigationControllerTest extends TestCase {
 		yield 'moving in' => ['/switch', 'personal'];
 		yield 'statistics' => ['/statistics', 'personal'];
 		yield 'settings' => ['/settings', 'personal'];
-		yield 'about' => ['/about', 'personal'];
+		yield 'about' => ['/about', 'navigate'];
 		yield 'shorts' => ['/shorts', 'navigate'];
 		yield 'the earlier address of shorts' => ['/reels', 'navigate'];
 		yield 'search' => ['/search', 'navigate'];
@@ -714,7 +716,7 @@ class NavigationControllerTest extends TestCase {
 		$personal = new \ReflectionMethod(NavigationController::class, 'personal');
 		$this->assertSame([], $personal->getAttributes(PublicPage::class), 'personal() is a public page');
 		$this->assertSame(
-			['/about', '/blocked', '/follow_requests', '/migration', '/settings', '/statistics', '/switch'],
+			['/blocked', '/follow_requests', '/migration', '/settings', '/statistics', '/switch'],
 			self::sorted(array_keys($this->routesOf('personal')))
 		);
 

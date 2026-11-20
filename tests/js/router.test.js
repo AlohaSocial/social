@@ -420,7 +420,6 @@ describe('the reader\'s own pages', () => {
 	const ownPages = [
 		'/settings',
 		'/statistics',
-		'/about',
 		'/migration',
 		'/switch',
 		'/follow_requests',
@@ -438,6 +437,7 @@ describe('the reader\'s own pages', () => {
 		'/timeline/tags/nextcloud',
 		'/@alice',
 		'/@alice/12345',
+		'/about',
 		'/discover',
 		'/search/nextcloud',
 		'/shorts',
@@ -571,6 +571,14 @@ describe('router base detection', () => {
 		window.history.replaceState({}, '', '/nextcloud/index.php/apps/social/@alice')
 
 		expect(await freshBase()).toBe('/nextcloud/index.php/apps/social')
+	})
+
+	it('drops index.php where the instance has no pretty urls but the app was opened without it', async () => {
+		// a link from an instance with pretty urls; the app showed its own 404
+		globalThis._oc_webroot = '/nextcloud'
+		window.history.replaceState({}, '', '/nextcloud/apps/social/timeline/timeline')
+
+		expect(await freshBase()).toBe('/nextcloud/apps/social')
 	})
 
 	it('takes the pretty shape when a path only looks like the other one', async () => {
