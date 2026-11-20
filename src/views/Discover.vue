@@ -132,6 +132,22 @@
 				why somebody was in one list rather than another, which is the
 				only thing that makes a list of strangers worth reading.
 			-->
+			<!-- where the administrators let people invite others to register -->
+			<p v-if="invitesOffered" class="discover__invite">
+				<NcButton variant="secondary" @click="inviting = true">
+					<template #icon>
+						<IconEmailPlus :size="20" />
+					</template>
+					{{ t('social', 'Invite people') }}
+				</NcButton>
+			</p>
+			<SettingsDialog
+				v-if="inviting"
+				:title="t('social', 'Invite people')"
+				:description="t('social', 'A link somebody without an account can use to register on this server. Each link works once and for a week.')"
+				@close="inviting = false">
+				<InviteSettings />
+			</SettingsDialog>
 			<section class="discover__section">
 				<h2 class="discover__section-title">
 					{{ t('social', 'Your island and its neighbours') }}
@@ -239,6 +255,9 @@ import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isHandleOf } from '../utils/accountLocality.js'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import IconEmailPlus from 'vue-material-design-icons/EmailPlusOutline.vue'
+import { defineAsyncComponent } from 'vue'
+import SettingsDialog from '../components/SettingsDialog.vue'
 import axios from '@nextcloud/axios'
 import logger from '../services/logger.js'
 import { generateUrl } from '@nextcloud/router'
@@ -266,6 +285,9 @@ export default {
 
 	components: {
 		PageHeader,
+		IconEmailPlus,
+		InviteSettings: defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InviteSettings.vue')),
+		SettingsDialog,
 		AccountMultipleOutline,
 		BlueskySuggestions,
 		BlueskyTrends,
@@ -318,6 +340,7 @@ export default {
 			failedPack: '',
 			/** which tabs have been asked for, so a second visit does not re-ask */
 			loaded: [],
+			inviting: false,
 		}
 	},
 
@@ -328,6 +351,10 @@ export default {
 		},
 
 		/** @return {boolean} whether the reader is signed out, and so cannot follow */
+		invitesOffered() {
+			return useSettingsStore().getServerData?.externalInvites === true
+		},
+
 		visitor() {
 			return useSettingsStore().getServerData?.public === true
 		},
@@ -649,6 +676,10 @@ export default {
 	/* three lists of people, each with a heading that says which question it
 	   answers: stacked without them, a reader cannot tell why somebody is in
 	   one list rather than another */
+	&__invite {
+		margin: 0 0 16px;
+	}
+
 	&__section {
 		padding-block-end: calc(var(--default-grid-baseline) * 4);
 		border-block-end: 1px solid var(--color-border);

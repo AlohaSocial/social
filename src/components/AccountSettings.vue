@@ -24,14 +24,7 @@
 
 			<!-- the settings that shape how others reach the account; each is
 			     one sentence about what it does, since the Mastodon names
-			     (locked, discoverable, indexable) mean nothing to anybody -->
-			<NcCheckboxRadioSwitch
-				v-model="draft.locked"
-				type="switch"
-				class="account-settings__switch"
-				:description="t('social', 'Somebody who wants to follow you asks first, and waits under Follow requests until you answer.')">
-				{{ t('social', 'Approve who follows you') }}
-			</NcCheckboxRadioSwitch>
+			     (discoverable, indexable) mean nothing to anybody -->
 
 			<NcCheckboxRadioSwitch
 				v-model="draft.discoverable"
@@ -129,7 +122,6 @@ export default {
 		return {
 			visibilities: visibilitiesInfo,
 			draft: {
-				locked: false,
 				discoverable: false,
 				indexable: false,
 				hideCollections: false,
@@ -180,7 +172,7 @@ export default {
 			}
 			const changes = {}
 			const stored = this.credentials
-			for (const flag of ['locked', 'discoverable', 'indexable', 'bot']) {
+			for (const flag of ['discoverable', 'indexable', 'bot']) {
 				if (this.draft[flag] !== Boolean(stored[flag])) {
 					changes[flag] = this.draft[flag]
 				}
@@ -240,7 +232,6 @@ export default {
 		reset(credentials) {
 			const privacy = this.accountStore.defaultPostVisibility || 'public'
 			this.draft = {
-				locked: Boolean(credentials.locked),
 				discoverable: Boolean(credentials.discoverable),
 				indexable: Boolean(credentials.indexable),
 				hideCollections: Boolean(credentials.source?.hide_collections),

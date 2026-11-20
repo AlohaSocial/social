@@ -5,6 +5,7 @@
 <template>
 	<div class="social__blocked">
 		<PageHeader
+			v-if="!embedded"
 			:title="t('social', 'Blocking')"
 			:description="t('social', 'Everything you have decided not to read, in one place: the accounts you have blocked or muted, the servers you have hidden, the words you would rather not see — and the senders your notification settings are holding back, waiting on you.')"
 			clearNavigation />
@@ -271,7 +272,7 @@
 					<IconInboxOutline :size="20" />
 				</span>
 				<h3 class="block-card__title">
-					{{ t('social', 'Filtered notifications') }}
+					{{ t('social', 'Filtered activities') }}
 				</h3>
 			</header>
 			<p class="block-card__lede">
@@ -344,6 +345,11 @@ export default {
 		TagOutline,
 		VolumeHigh,
 		VolumeOff,
+	},
+
+	props: {
+		/** a section of Settings, under its heading, rather than a page */
+		embedded: { type: Boolean, default: false },
 	},
 
 	setup() {

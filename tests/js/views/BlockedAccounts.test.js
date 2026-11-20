@@ -116,7 +116,7 @@ describe('BlockedAccounts', () => {
 
 		expect(wrapper.find('#filters .filters-settings-stub').exists()).toBe(true)
 		expect(wrapper.findAll('h3').map((heading) => heading.text()))
-			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Posts made with AI', 'Filtered notifications'])
+			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Posts made with AI', 'Filtered activities'])
 	})
 
 	describe('Bluesky labelers', () => {

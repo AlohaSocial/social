@@ -14,18 +14,20 @@
 					<span v-if="tag.statuses_count > 0" class="featured-tags__count">{{ tag.statuses_count }}</span>
 				</router-link>
 			</li>
-			<!-- Only on the reader's own profile, and the only thing anywhere
-			     in the app that says these can be changed at all: the editor
-			     is a section of Settings, which nobody reaches by looking at
-			     the chips it produces. -->
+			<!-- only on the reader's own profile, where the hashtags are edited -->
 			<li v-if="editable">
-				<router-link
-					class="featured-tags__edit"
-					:to="{ name: 'settings', hash: '#featured-tags' }">
+				<button type="button" class="featured-tags__edit" @click="editing = true">
 					{{ tags.length ? t('social', 'Edit featured hashtags') : t('social', 'Feature a hashtag') }}
-				</router-link>
+				</button>
 			</li>
 		</ul>
+		<SettingsDialog
+			v-if="editing"
+			:title="t('social', 'Featured hashtags')"
+			:description="t('social', 'Hashtags shown under your bio. Anyone can click one to read what you posted with it.')"
+			@close="doneEditing">
+			<FeaturedTagsSettings />
+		</SettingsDialog>
 	</nav>
 </template>
 
@@ -33,7 +35,9 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
+import { defineAsyncComponent } from 'vue'
 import logger from '../services/logger.js'
+import SettingsDialog from './SettingsDialog.vue'
 import { tagStyle } from '../utils/tagColour.js'
 
 /**
@@ -52,13 +56,17 @@ import { tagStyle } from '../utils/tagColour.js'
  * `#design` on a profile is recognisably the `#design` on the tag page it
  * leads to.
  *
- * On the reader's own profile it also carries the way in to the editor, which
- * is a section of Settings — including when there is nothing to draw, because
- * "you feature none" is exactly when somebody needs to be told they could.
- * Nothing about anybody else's profile changes.
+ * On the reader's own profile it also opens the editor, including when there
+ * is nothing to draw: "you feature none" is when somebody needs to be told
+ * they could.
  */
 export default {
 	name: 'FeaturedTags',
+
+	components: {
+		FeaturedTagsSettings: defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'./FeaturedTagsSettings.vue')),
+		SettingsDialog,
+	},
 
 	props: {
 		/** whose profile this is, as the API addresses accounts */
@@ -77,6 +85,7 @@ export default {
 	data() {
 		return {
 			tags: [],
+			editing: false,
 		}
 	},
 
@@ -90,6 +99,11 @@ export default {
 	methods: {
 		t,
 		tagStyle,
+
+		doneEditing() {
+			this.editing = false
+			this.load()
+		},
 
 		/** Reads the account's featured tags, and shows nothing if it cannot. */
 		async load() {
@@ -143,6 +157,10 @@ export default {
 /* deliberately not a chip: it is not one of the tags, and reading as one would
    make the reader's own profile look like it features something it does not */
 .featured-tags__edit {
+	margin: 0;
+	border: none;
+	background: none;
+	cursor: pointer;
 	display: inline-flex;
 	align-items: center;
 	padding: 1px 4px;
