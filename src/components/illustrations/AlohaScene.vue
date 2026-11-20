@@ -4,10 +4,9 @@
 -->
 <template>
 	<!--
-		The full-size drawings above an empty page: eight scenes from the
-		shore, each in the same round window so they read as one set. Markup
-		rather than files, so the colours are mixed with the page's own
-		background and text and follow the theme without a filter.
+		The full-size drawings above an empty page, each in the same round
+		window. Inline markup, so the colours mix with the page's own and follow
+		the theme.
 	-->
 	<svg
 		class="aloha-scene"

@@ -174,8 +174,7 @@ export default {
 		this.stopPhone = onPhoneChange((phone) => {
 			this.phone = phone
 		})
-		// scroll does not bubble; caught on the way down, it is heard from the
-		// column however often the app content is drawn again
+		// scroll does not bubble, so it is caught in the capture phase
 		document.addEventListener('scroll', this.onScroll, { capture: true, passive: true })
 	},
 
@@ -234,9 +233,8 @@ export default {
 		},
 
 		/**
-		 * Down hides the bar, up brings it back. Only the app's column counts:
-		 * a strip of chips or the Shorts stack scrolling sideways or inside
-		 * itself says nothing about where the reader is going.
+		 * Down hides the bar, up brings it back. Only the app's column counts,
+		 * not chips or the Shorts stack scrolling inside themselves.
 		 *
 		 * @param {Event} event a scroll anywhere in the page
 		 */

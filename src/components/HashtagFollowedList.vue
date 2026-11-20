@@ -60,9 +60,8 @@ import { useServerData } from '../composables/useServerData.js'
 import { nextCursor } from '../utils/linkHeader.js'
 
 /**
- * What the server caps a page of this list at anyway. A reader who follows
- * more pages on with Show more, on the cursor the `Link` header names — the
- * follow's own row, since a tag unfollowed and followed again moves.
+ * The server's page size for this list. Show more follows the cursor in the
+ * `Link` header, which is the follow's own row.
  */
 const PAGE_SIZE = 50
 

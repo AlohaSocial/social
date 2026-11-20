@@ -4,30 +4,16 @@
  */
 
 /**
- * A colour for an account, the same one everywhere.
- *
- * Nextcloud gives every account a generated avatar in a colour of its own, and
- * that colour is the only thing about an account a reader recognises before
- * they have read anything. It was doing that work in one place -- the avatar --
- * while the ring around a story, the tint behind a direct message and the edge
- * of a hover card were all the same grey for everybody.
- *
- * What is returned is a hue rather than a colour, and it reaches the page as a
- * custom property. Colours are then built in CSS, where the theme can be asked
- * about: the same hue is a deep ink on a white page and a soft wash on a dark
- * one, and a colour computed here could only be one of the two.
+ * A colour for an account, the same one everywhere. It is returned as a hue and
+ * set as a custom property, so the CSS can make a colour that suits the theme.
  */
 
 /** Hues that read as an error, kept for errors. */
 const RESERVED = [[350, 370], [0, 12]]
 
 /**
- * A stable hue for a handle.
- *
- * FNV-1a over the handle: small, well spread for short strings, and -- unlike
- * anything involving `Math.random` or a counter -- the same answer in every
- * browser, on every page, for ever, which is the whole point. The reds are
- * stepped over so that an account's own colour never reads as a warning.
+ * A stable hue for a handle: FNV-1a, so every browser and page agrees. The
+ * reds are stepped over so an account's colour never reads as a warning.
  *
  * @param {string} acct the handle, with or without a leading @
  * @return {number} a hue in degrees
@@ -41,9 +27,7 @@ export function accountHue(acct) {
 	let hash = 0x811c9dc5
 	for (let i = 0; i < handle.length; i++) {
 		hash ^= handle.charCodeAt(i)
-		// the shifts are FNV's 32-bit prime, written as additions because
-		// `Math.imul` on a number this app does not otherwise need is a
-		// dependency on a detail of how the engine rounds
+		// multiplies by FNV's 32-bit prime, as shifts and additions
 		hash = (hash + (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)) >>> 0
 	}
 

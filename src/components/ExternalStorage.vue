@@ -27,11 +27,8 @@ import { useServerData } from '../composables/useServerData.js'
 import { humanSize } from '../utils/humanSize.js'
 
 /**
- * How much of their media quota a self-registered external user has used.
- *
- * The figures are the page's own (`serverData.externalMedia`), as they stood
- * when it was opened: the quota is counted on upload, and a page that
- * refetched it on every visit would be asking a question nobody is waiting on.
+ * How much of their media quota a self-registered external user has used, as
+ * of page load (`serverData.externalMedia`).
  */
 export default {
 	name: 'ExternalStorage',

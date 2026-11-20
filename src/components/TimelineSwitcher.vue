@@ -11,8 +11,7 @@
 		@keydown="onKeydown"
 		@scroll.passive="updateOverflow">
 		<div ref="track" class="switcher__track">
-			<!-- the pill that slides: one element that moves, rather than several
-			     that light up, so the eye follows the change instead of finding it -->
+			<!-- the pill that slides between the options -->
 			<span
 				class="switcher__glider"
 				:style="gliderStyle"
@@ -38,8 +37,8 @@
 					class="switcher__icon"
 					:size="18" />
 				<span class="switcher__label">{{ option.label }}</span>
-				<!-- what a phone shows where there is no room for the label, for
-				     choices an icon cannot tell apart; the label stays the name -->
+				<!-- shown on a phone instead of the icon, for choices an icon
+				     cannot tell apart; the label stays the name -->
 				<span v-if="option.short" class="switcher__short" aria-hidden="true">{{ option.short }}</span>
 			</button>
 		</div>
@@ -48,45 +47,23 @@
 
 <script>
 /**
- * A row of places to be, with a pill that travels between them.
+ * A row of choices with a pill that travels between them: the feed scopes,
+ * a profile's Posts, Photos and Videos, Discover's lists.
  *
- * It was written for the three timelines a reader moves between all day, which
- * were a sidebar entry each — and a sidebar entry is where you go for a place
- * you *visit*. Those three are the same place seen from three distances, and
- * switching between them is something you do while reading rather than
- * something you navigate to; Mastodon and every client of it put them side by
- * side above the posts for that reason. A profile's Posts, Photos and Videos
- * are the same shape of choice, so they are the same control.
- *
- * Hand-built rather than `NcCheckboxRadioSwitch`, for the one thing that
- * component cannot do: a single indicator that *travels* between the options.
- * Several buttons that light up tell you where you landed; one pill that
- * slides tells you where you came from, which is what makes a switch feel like
- * a switch. The cost is the accessibility, which is therefore done here in
- * full — a real `radiogroup`, arrow keys, a roving tabindex — rather than left
- * to a set of links dressed up as tabs.
- *
- * It decides nothing itself. An option that carries a route pushes it, so the
- * page it sits on stays the one answer to what is being shown; an option with
- * no route is a choice the page holds itself, and the pick is handed back as
- * `update:value` for that page to act on — Discover's four lists are one
- * screen and not four, so they are state there rather than four routes. The
- * words in the routes are the route's own — `timeline` for the local feed,
- * `federated` for the global one, `image` and `video` for the kinds of
- * attachment the API knows — rather than the labels beside them, because two
- * vocabularies would be one more place for the two to disagree.
+ * Hand-built rather than `NcCheckboxRadioSwitch` for the travelling pill,
+ * so the accessibility is done here: a real `radiogroup`, arrow keys and a
+ * roving tabindex. An option with a route pushes it; one without emits
+ * `update:value` for the page to act on.
  */
 export default {
 	name: 'TimelineSwitcher',
 
 	props: {
 		/**
-		 * What to choose between: `{ value, label, icon, to, short }` each,
-		 * where `to` is the route the option pushes when it is chosen. Leave
-		 * `to` off and the option emits `update:value` instead, for a page
-		 * whose choice is its own state. `short` is optional: a few words a
-		 * phone shows instead of the icon, for choices whose icons cannot tell
-		 * them apart -- four time windows are four calendars.
+		 * What to choose between: `{ value, label, icon, to, short }` each.
+		 * `to` is the route the option pushes; without it the option emits
+		 * `update:value`. `short` is optional words a phone shows instead of
+		 * the icon, for choices whose icons look alike.
 		 */
 		options: {
 			type: /** @type {import('vue').PropType<Array<{ value: string, label: string, icon: object, to?: object, short?: string }>>} */ (Array),
@@ -105,10 +82,7 @@ export default {
 			required: true,
 		},
 
-		/**
-		 * Icons only, the labels back on hover or focus: for a switcher that
-		 * stays on screen while the page scrolls under it.
-		 */
+		/** Icons only, the labels back on hover or focus, while the page scrolls under it. */
 		compact: {
 			type: Boolean,
 			default: false,
@@ -116,8 +90,7 @@ export default {
 
 		/**
 		 * Whether this is the first row of a page with no visible title, to
-		 * sit beside Nextcloud's navigation toggle rather than below it. A
-		 * feed's scope switcher does so without being asked.
+		 * sit beside Nextcloud's navigation toggle rather than below it.
 		 */
 		besideToggle: {
 			type: Boolean,
@@ -127,7 +100,7 @@ export default {
 
 	/**
 	 * `intent`: the reader is pointing at, focusing or touching an option, by
-	 * its `value` -- the moment to fetch what it shows, before the click.
+	 * its `value`, so what it shows can be fetched before the click.
 	 */
 	emits: ['update:value', 'intent'],
 
@@ -155,19 +128,10 @@ export default {
 		},
 
 		/**
-		 * Where the pill is, and how wide.
-		 *
-		 * Measured off the option it sits under, because the options are no
-		 * longer all the same width: an option is as wide as its own words,
-		 * which is what lets "All" and "Polls" leave room for "Favourites"
-		 * instead of every option being as wide as the longest one. A share of
-		 * the track is only right while they are equal.
-		 *
-		 * `measured` is null until there is something to measure — the first
-		 * paint, and jsdom, where nothing has a width. The fallback is the old
-		 * behaviour: an equal share of the track, positioned by index, with the
-		 * width left to the stylesheet (which takes the track's padding off
-		 * first, or the pill would stick out past the option it is under).
+		 * Where the pill is, and how wide, measured off the option it sits
+		 * under since options are as wide as their own words. Until there is
+		 * something to measure (first paint, jsdom) it takes an equal share of
+		 * the track by index.
 		 *
 		 * @return {object} the inline style
 		 */
@@ -208,14 +172,11 @@ export default {
 		this.updateOverflow()
 		this.$nextTick(() => this.bringIntoView(this.activeIndex))
 
-		// the options change width without the control changing size — a
-		// translation arriving, a font loading, the labels giving way to their
-		// icons at a breakpoint — so the observer watches an option rather
-		// than only the scroll container
+		// an option can change width without the control changing size (a
+		// translation, a font, a breakpoint), so the options are observed too
 		if (typeof ResizeObserver === 'function') {
 			this.observer = new ResizeObserver(() => {
-				// off the observer's own callback: measuring inside it would
-				// re-enter it on the next frame
+				// measuring inside the observer's callback would re-enter it
 				window.requestAnimationFrame(() => {
 					this.measure()
 					this.updateOverflow()
@@ -239,11 +200,7 @@ export default {
 	methods: {
 		/**
 		 * Reads where the active option is, so the pill can sit on it.
-		 *
-		 * `offsetLeft` is relative to the track, which is the pill's containing
-		 * block, so the two agree without either knowing where the control is
-		 * on the page. A width of 0 means there is nothing laid out yet — the
-		 * first paint, or jsdom — and the share-of-the-track fallback stands.
+		 * A width of 0 means nothing is laid out yet and the fallback stands.
 		 */
 		measure() {
 			const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
@@ -258,19 +215,15 @@ export default {
 			}
 
 			// `offsetLeft` is physical and the pill is anchored to the inline
-			// start, so in a right-to-left interface the two run in opposite
-			// directions: the distance is measured from the other edge and the
-			// travel is negative.
+			// start, so in right-to-left the distance is measured from the other
+			// edge and the travel is negative
 			const rightToLeft = window.getComputedStyle(track).direction === 'rtl'
 			const inlineStart = (element) => (rightToLeft
 				? track.offsetWidth - (element.offsetLeft + element.offsetWidth)
 				: element.offsetLeft)
 
-			// measured against the first option rather than against the track,
-			// which takes the track's padding out of both sides of the
-			// subtraction: the pill already sits after that padding, so
-			// travelling it again would push the pill off its option by
-			// exactly that much
+			// measured from the first option, so the track's padding, which the
+			// pill already sits after, is not counted twice
 			const distance = inlineStart(option) - inlineStart(first)
 
 			this.measured = {
@@ -280,12 +233,9 @@ export default {
 		},
 
 		/**
-		 * Marks the side of the control that has options beyond it.
-		 *
-		 * The track is physically wider than the scroll container when there
-		 * are more options than fit; comparing the two boxes says which edges
-		 * are cut off without relying on `scrollLeft`, whose sign differs
-		 * between browsers in a right-to-left interface.
+		 * Marks the side of the control that has options beyond it, by
+		 * comparing boxes rather than `scrollLeft`, whose sign differs between
+		 * browsers in right-to-left.
 		 */
 		updateOverflow() {
 			const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
@@ -343,8 +293,7 @@ export default {
 		},
 
 		/**
-		 * Arrow keys move through the group, as they do in every radio group —
-		 * a roving tabindex puts one stop on the control, not one per option.
+		 * Arrow keys move through the group, with a roving tabindex.
 		 *
 		 * @param {KeyboardEvent} event the key
 		 */
@@ -376,16 +325,11 @@ export default {
 @use '../styles/layout.scss' as layout;
 
 /*
- * The control scrolls rather than squeezes. Seven translated labels do not fit
- * a reading column, and letting the options share the width makes each of them
- * narrower than the words in it; the words then run into the next option.
- * Natural widths and a scroll container keep every option readable, and a fade
- * on the edge says there is more than what is on screen.
+ * The control scrolls rather than squeezes, so every option stays as wide as
+ * its words; a fade on the edge says there is more.
  */
 .switcher {
-	// the width to ask about is the column the control is drawn in, not the
-	// window: a wide window still has a reading column, and the labels give
-	// way at the same point in both
+	// the labels give way by the width of the column, not the window
 	container-type: inline-size;
 	container-name: timeline-switcher;
 	width: 100%;
@@ -393,8 +337,7 @@ export default {
 	margin: 0 auto 14px;
 	overflow-x: auto;
 	overflow-y: hidden;
-	// a scrollbar inside the pill would change its height; the fades say the
-	// same thing without taking room
+	// a scrollbar would change the pill's height; the fades say the same
 	scrollbar-width: none;
 	scroll-behavior: smooth;
 	overscroll-behavior-x: contain;
@@ -419,16 +362,10 @@ export default {
 }
 
 /*
- * Where the sidebar is folded away its toggle floats over the top-left corner
- * of the page, and a page without a visible title would spend a whole row on
- * it. The switcher that opens such a page shares the toggle's row instead:
- * narrowed by the toggle's width on both sides, so the pill stays centred and
- * clear of it, and lifted so the two are centred on one line (the toggle sits
- * 8px down, the page's own padding is 16px, and 36px against 44px leaves 4px).
- *
- * A feed opens with its scope switcher unless a notice comes first, and then
- * the notice is the first child and keeps the room Timeline.vue makes for the
- * toggle; the selector below is specific enough to outrank that rule.
+ * Where the sidebar is folded away, a page without a visible title puts the
+ * switcher on the row of the floating toggle: narrowed by the toggle's width
+ * on both sides to stay centred, and lifted onto the toggle's line. The
+ * selector outranks the room Timeline.vue makes for a notice shown first.
  */
 @include layout.below(layout.$folded) {
 	.social__wrapper > .switcher:first-child,
@@ -439,8 +376,8 @@ export default {
 	}
 }
 
-/* the track is as wide as all of its options, and is what the pill measures
-   against; the control above is only the window onto it */
+/* the track is as wide as all of its options and is what the pill measures
+   against; the control above is the window onto it */
 .switcher__track {
 	position: relative;
 	display: flex;
@@ -449,8 +386,7 @@ export default {
 	margin-inline: auto;
 	padding: 3px;
 	border-radius: var(--border-radius-pill, 100px);
-	// the track is a well rather than a surface: darker than the page, with no
-	// shadow of its own, so the only thing casting one is the pill in it
+	// a well rather than a surface, so only the pill casts a shadow
 	background: var(--color-background-dark);
 }
 
@@ -465,40 +401,28 @@ export default {
 	width: calc((100% - 6px) / var(--switcher-count, 3));
 	border-radius: var(--border-radius-pill, 100px);
 	background: var(--color-primary-element);
-	// the app's one shadow, as every other raised thing in the timeline uses:
-	// a hand-rolled rgba here and the page stops looking like one surface
+	// the app's shared shadow, as the other raised things in the timeline use
 	box-shadow: var(--social-elevation-resting);
-	// overshoots and settles, which is what makes it read as a thing that
-	// moved rather than a colour that changed
+	// overshoots and settles, so it reads as something that moved
 	transition: transform var(--social-motion-slow) var(--social-ease-spring);
 }
 
-/* Written from inside the track, and every state of it said out loud.
-   Nextcloud styles bare `button` elements, and its rule for the hovered and
-   focused ones is `button:not(.button-vue, [class^="vs__"]):hover` — more
-   specific than one class, so a plain `.switcher__option:hover` loses and the
-   server paints its own colour straight over the pill. `.switcher &` outranks
-   it, and what is not restated here is inherited from the server. */
+/* `.switcher &` outranks Nextcloud's
+   `button:not(.button-vue, [class^="vs__"]):hover`, which would otherwise
+   paint over the pill; what is not restated here comes from the server. */
 .switcher .switcher__option {
 	position: relative;
 	z-index: 1;
-	/* As wide as its own words, and never narrower. Sharing the width made
-	   every option as wide as the longest of them; shrinking into the column
-	   then made each of them narrower than the words in it, so the words ran
-	   into the next option. What does not fit scrolls instead. */
+	/* as wide as its own words, never narrower; what does not fit scrolls */
 	flex: 0 0 auto;
 	display: flex;
 	gap: 8px;
 	align-items: center;
 	justify-content: center;
-	/* 30, with the track's 3px of padding either side, is a 36px control. It
-	   was 36 — a 48px control, taller than a Nextcloud button and the loudest
-	   thing above a timeline it only labels */
+	/* 30px plus the track's 3px of padding either side is a 36px control */
 	min-height: 30px;
-	/* What separates one option from the next is this padding doubled, and
-	   nothing else: there is no rule between them and the pill sits under only
-	   one. Three roomy options and seven tight ones are the same control, so
-	   the figure is the one that reads well at the crowded end. */
+	/* the only separation between options is this padding doubled, sized
+	   for the crowded case */
 	padding: 0 18px;
 	border: none;
 	border-radius: var(--border-radius-pill, 100px);
@@ -528,8 +452,7 @@ export default {
 	}
 }
 
-/* the two you did not choose warm up under the pointer: a ghost of the pill,
-   so hovering shows you where it would land */
+/* the options not chosen show a ghost of the pill under the pointer */
 .switcher .switcher__option:not(.switcher__option--active) {
 	&:hover,
 	&:focus-visible {
@@ -545,8 +468,7 @@ export default {
 
 .switcher__icon {
 	display: flex;
-	// an icon is a fixed glyph: squeezing it to fit is how it ends up drawn
-	// over the words beside it
+	// a fixed glyph: squeezed, it ends up drawn over the words beside it
 	flex: 0 0 auto;
 	transition: transform var(--social-motion-base) var(--social-ease-spring);
 }
@@ -578,21 +500,16 @@ export default {
 }
 
 /*
- * Five of these do not fit a phone.
- *
- * The control is barely wider than the thumb there, so the labels give way to
- * the icons they sit beside. The query is the control's own width rather than
- * the window's: a narrow column in a wide window keeps its labels and scrolls
- * under the fades instead. The labels stay in the accessibility tree, because
- * the label is the option's name and a radiogroup of five unnamed buttons is
- * not a control anybody can use.
+ * On a phone-wide control the labels give way to the icons. The query is the
+ * control's own width, not the window's. The labels stay in the accessibility
+ * tree as the options' names.
  */
 @container timeline-switcher (max-width: #{layout.$phone}) {
 	.switcher .switcher__option {
 		padding: 0 14px;
 	}
 
-	// the icon says the same thing, and there is no longer room for both
+	// the icon says the same thing, and there is no room for both
 	.switcher__label {
 		@include layout.visually-hidden;
 	}
@@ -606,8 +523,7 @@ export default {
 		display: inline;
 	}
 
-	// a word is wider than the icon it stands in for, so five of them fit
-	// only with less room around each
+	// a word is wider than its icon, so these get less padding
 	.switcher .switcher__option--short {
 		padding: 0 10px;
 	}

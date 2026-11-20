@@ -44,10 +44,8 @@ import { errorOf } from '../utils/serverError.js'
 import { starterPackUrl } from '../utils/starterPack.js'
 
 /**
- * A Bluesky starter pack, opened here: who is in it and which feeds come
- * with it, and following them — everybody not followed yet, or one by one.
- * Its address is the one bsky.app gives it, under this app, so a link to
- * one is opened by putting it here.
+ * A Bluesky starter pack, opened here under its bsky.app address: its members
+ * and feeds, followed all at once or one by one.
  */
 export default {
 	name: 'StarterPack',

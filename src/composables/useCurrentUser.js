@@ -9,11 +9,9 @@ import { computed } from 'vue'
 import { useServerData } from './useServerData.js'
 
 /**
- * Who is reading: the Nextcloud user, and the account they have here.
- *
- * The two are named apart. The account's username is chosen on the setup
- * screen and need not be the user id, so the user id is for what Nextcloud
- * itself answers to (avatars, its profile page) and never for the account.
+ * Who is reading: the Nextcloud user, and their account here. The account's
+ * username need not be the user id, which is only for what Nextcloud itself
+ * answers to (avatars, its profile page).
  *
  * @return {{currentUser: import('vue').ComputedRef<object>, username: import('vue').ComputedRef<string>, cloudId: import('vue').ComputedRef<string>, socialId: import('vue').ComputedRef<string>, isOwnHandle: (handle: unknown) => boolean}}
  */

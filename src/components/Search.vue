@@ -9,9 +9,7 @@
 		:aria-busy="loading ? 'true' : 'false'">
 		<PageHeader :title="t('social', 'Search results for “{term}”', { term: query })" clearNavigation />
 
-		<!-- Other servers are asked only when the reader asks: typing a
-		     handle searches this server, and an address it does not hold
-		     yet is offered here, one press away. -->
+		<!-- other servers are asked only on Enter or "Look up", never while typing -->
 		<p v-if="lookingUp" class="social__search-lookup" role="status">
 			<NcLoadingIcon :size="20" />
 			<span>{{ t('social', 'Looking up {address} …', { address: lookupLabel }) }}</span>
@@ -29,9 +27,7 @@
 			{{ t('social', 'Nobody was found at {address}.', { address: lookupLabel }) }}
 		</p>
 
-		<!-- only while there is nothing to show yet: a refined term replacing
-		     results with the spinner and back was a flicker, and the results
-		     that survive the new term should stay where they are -->
+		<!-- only while there is nothing to show yet, so refining a term does not flicker -->
 		<div v-if="loading && isEmpty && !lookingUp" class="social__search-loading">
 			<NcLoadingIcon :size="32" />
 			<span>{{ t('social', 'Searching …') }}</span>
@@ -60,15 +56,9 @@
 			</transition>
 
 			<!--
-			  Results arrive the way timeline entries do. Keyed on what the
-			  server calls each result, never on the index, so refining a term
-			  leaves the results both terms found exactly where they are and
-			  only moves what actually changed.
-
-			  `:css` keeps the last term's results quiet: while the request
-			  for what is in the search box is still in flight, what is on
-			  screen is swapped in without motion rather than being announced
-			  as the answer.
+			  Keyed on the server's id, never the index, so refining a term
+			  only moves what changed. `:css` brings in the previous term's
+			  results without motion while the current term is in flight.
 			-->
 			<section v-if="accounts.length > 0" class="social__search-section">
 				<h2>{{ t('social', 'People') }}</h2>
@@ -162,10 +152,7 @@ export default {
 			default: '',
 		},
 
-		/**
-		 * The reader submitted the search (Enter in the search box): other
-		 * servers may be asked, see `search()`.
-		 */
+		/** The reader submitted the search (Enter): other servers may be asked. */
 		lookup: {
 			type: Boolean,
 			default: false,
@@ -176,11 +163,8 @@ export default {
 		return {
 			accounts: [],
 			/**
-			 * Ids, not the statuses themselves. Held locally they were invisible
-			 * to every mutation in store/timeline.js — each one is guarded by
-			 * `state.statuses[id] !== undefined` — so liking, boosting,
-			 * bookmarking or pinning a result sent its request and then changed
-			 * nothing on screen, and deleting one left it in the list.
+			 * Ids, read back through the timeline store, so that liking,
+			 * boosting or deleting a result shows on screen.
 			 */
 			statusIds: [],
 			hashtags: [],
@@ -188,21 +172,19 @@ export default {
 			error: null,
 			debounceTimer: null,
 			/**
-			 * Which request the results on screen belong to. Responses are not
-			 * ordered — a webfinger lookup for "ali" can outlive the cached
-			 * answer for "alice" — so anything that is not the newest request
-			 * is dropped rather than rendered.
+			 * Which request the results on screen belong to: responses can
+			 * arrive out of order, and only the newest is rendered.
 			 */
 			requestSequence: 0,
 			/**
-			 * The term the results on screen actually answer, which is not
-			 * always the term in the search box: see `resultsAreCurrent`.
+			 * The term the results on screen answer, not always the one in the
+			 * search box.
 			 *
 			 * @type {?string}
 			 */
 			renderedTerm: null,
 			/**
-			 * The term the request in flight asks about: see `refreshing`.
+			 * The term the request in flight asks about.
 			 *
 			 * @type {?string}
 			 */
@@ -210,8 +192,8 @@ export default {
 			/** whether the request in flight asks other servers */
 			lookingUp: false,
 			/**
-			 * The term other servers were last asked about, so the offer to
-			 * look it up is not made again for the answer it already got.
+			 * The term other servers were last asked about, so the lookup is
+			 * not offered again for it.
 			 *
 			 * @type {?string}
 			 */
@@ -243,9 +225,7 @@ export default {
 		},
 
 		/**
-		 * The found posts, read back out of the store so that acting on one
-		 * shows. A status the store no longer holds — a deleted one — drops
-		 * out of the list on its own.
+		 * The found posts, read from the store; a deleted one drops out.
 		 *
 		 * @return {object[]}
 		 */
@@ -255,15 +235,9 @@ export default {
 				.filter(Boolean)
 		},
 
-		/** @return {boolean} whether the reply composer is open */
-
 		/**
-		 * Whether what is on screen answers what is in the search box.
-		 *
-		 * The results always answer *some* term the reader typed, but the
-		 * request for the one they have finished typing may still be in
-		 * flight: those older results are put on screen without any motion,
-		 * so nothing announces them as the answer.
+		 * Whether what is on screen answers what is in the search box; older
+		 * results are shown without motion.
 		 *
 		 * @return {boolean}
 		 */
@@ -272,10 +246,9 @@ export default {
 		},
 
 		/**
-		 * Whether the results on screen answer a term the reader has since
-		 * refined, and are dimmed to say so. Asking the same term again — the
-		 * refill while posts beyond this server are read, or a lookup of the
-		 * address on screen — leaves them as they are: they still answer it.
+		 * Whether the results answer a term the reader has since refined, and
+		 * are dimmed. Asking the same term again (a refill or a lookup) does
+		 * not dim them.
 		 *
 		 * @return {boolean}
 		 */
@@ -294,8 +267,8 @@ export default {
 		},
 
 		/**
-		 * Whether to offer asking the address's own server: an address the
-		 * answer on screen does not hold, and that was not asked about yet.
+		 * Whether to offer asking the address's own server: the results do not
+		 * hold it and it was not asked about yet.
 		 *
 		 * @return {boolean}
 		 */
@@ -328,9 +301,8 @@ export default {
 	},
 
 	watch: {
-		// typing re-enters the route on every keystroke; one request per word
-		// is enough, and re-sorting the whole store per letter was the old
-		// cost. A submitted search is asked at once.
+		// typing re-enters the route on every keystroke, so it is debounced;
+		// a submitted search is asked at once
 		searchRequest() {
 			if (this.lookup) {
 				this.lookUp()
@@ -376,21 +348,15 @@ export default {
 		},
 
 		/**
-		 * Asks the server, rather than filtering the handful of posts that
-		 * happen to be loaded. `/api/v2/search` answers with accounts, posts
-		 * and hashtags in one response.
-		 *
-		 * `resolve` lets it ask other servers about an address it has not
-		 * met. That is sent only when the reader asks — Enter, or "Look up" —
-		 * and not while they type: every keystroke of a handle would be a
-		 * lookup of another host that does not exist.
+		 * Asks `/api/v2/search` for accounts, posts and hashtags. `resolve`
+		 * lets it ask other servers about an unknown address; it is sent only
+		 * when the reader asks, as each keystroke would look up a host.
 		 *
 		 * @param {boolean} resolve whether other servers may be asked
 		 */
 		async search(resolve = false) {
 			const term = this.query.trim()
-			// whatever is still in flight answers a term that is no longer
-			// the one being asked about
+			// drop whatever is still in flight for an older term
 			const sequence = ++this.requestSequence
 
 			if (term === '') {
@@ -414,8 +380,8 @@ export default {
 				if (sequence !== this.requestSequence) {
 					return
 				}
-				// the posts beyond this server that match are being read: the
-				// same search once more, a little later, while it is still the one asked
+				// the server is still reading matching posts from beyond this
+				// server: search again shortly, if the term is unchanged
 				if (headers?.['x-social-filling'] === '1') {
 					setTimeout(() => sequence === this.requestSequence && this.search(), SEARCH_REFILL_MS)
 				}
@@ -436,8 +402,7 @@ export default {
 					this.timelineStore.addToStatuses(status)
 				}
 				this.statusIds = found.map((status) => status.id)
-				// what is on screen from here on answers this term, whether or
-				// not it is still the one being typed
+				// what is on screen answers this term from here on
 				this.renderedTerm = term
 				if (resolve) {
 					this.lookedUp = term
@@ -508,11 +473,8 @@ export default {
 	}
 
 	/**
-	 * Results arrive the way timeline entries do: the same short fade and
-	 * rise as the shared `list` transition in App.vue, in the direction
-	 * `timeline-entry-rise` uses. Only the arrival is animated — a result
-	 * that a refined term no longer matches goes without ceremony, so a
-	 * replaced set never overlaps itself on the way out.
+	 * Results fade and rise in like timeline entries (`list` in App.vue).
+	 * Only the arrival is animated, so a replaced set never overlaps itself.
 	 */
 	.result-enter-active,
 	.result-move {
@@ -524,8 +486,7 @@ export default {
 		transform: translateY(6px);
 	}
 
-	/* a refined term is still running: the results on screen are the previous
-	   answer, and say so rather than pretending to be the new one */
+	/* a refined term is still running: the results on screen are the previous answer */
 	.social__search--refreshing .social__search-section {
 		opacity: .55;
 	}

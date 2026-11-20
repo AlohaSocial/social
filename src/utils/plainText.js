@@ -4,18 +4,9 @@
  */
 
 /**
- * A post's HTML as the words that were typed.
- *
- * A post is written as plain text and published as HTML, and two places need
- * to go back the other way: the inline editor, and the re-draft that puts a
- * deleted post back in the composer. They have to agree — the same post edited
- * and re-drafted must come back as the same text — which is why this is one
- * function and not two.
- *
- * Block elements end in a newline and `<br>` is a newline, because that is
- * what `LinkifyService` made of the newlines on the way out. Everything else
- * contributes its text and nothing else: a mention arrives as a link around a
- * handle, and the handle is what was typed.
+ * A post's HTML as the words that were typed. Block elements and `<br>` become
+ * newlines, as `LinkifyService` made them; everything else contributes only
+ * its text, so a mention gives back its handle.
  *
  * @param {string} html the post's content
  * @return {string} the words, without the markup
@@ -33,11 +24,8 @@ export function htmlToPlainText(html) {
 
 /**
  * What the composer's editable box says, as the text the post is sent with.
- *
- * An emoji drawn as a picture counts as its alt text. Entities are the
- * browser's to decode: the walk below reads text nodes, which hold the
- * characters and not the markup, so an `&amp;` the reader typed stays the
- * five characters they typed.
+ * An emoji drawn as an image counts as its alt text; text nodes hold decoded
+ * characters, so a typed `&amp;` stays as typed.
  *
  * @param {HTMLElement|null|undefined} element the editable element
  * @return {string} the text, trimmed
@@ -71,8 +59,7 @@ function nodeToPlainText(node) {
 			continue
 		}
 
-		// a ChildNode is not an Element until the node type says so, which the
-		// guard above has just established
+		// the guard above established that it is an Element
 		const element = /** @type {Element} */ (child)
 		if (element.tagName === 'BR') {
 			text += '\n'
