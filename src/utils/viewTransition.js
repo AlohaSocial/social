@@ -4,11 +4,8 @@
  */
 
 /**
- * View transitions, where the browser has them.
- *
- * Everything here is an enhancement: if `startViewTransition` is missing, or
- * the viewer asked for less motion, the change is applied exactly as it was
- * before — immediately, with no animation and no waiting.
+ * View transitions, where the browser has them. Without `startViewTransition`,
+ * or when the viewer asked for less motion, a change is applied immediately.
  */
 
 /** @return {boolean} whether an animated transition is welcome here */
@@ -33,9 +30,9 @@ export function uniqueTransitionName() {
 }
 
 /**
- * Names an element for a morph: the name to pair it with its counterpart,
- * and the class every morph is styled through (see App.vue), because a
- * stylesheet cannot list names that are made up as the page runs.
+ * Names an element for a morph: the name pairs it with its counterpart, and
+ * the class styles every morph (see App.vue), since a stylesheet cannot list
+ * names made up at run time.
  *
  * @param {HTMLElement|null} element the element, or nothing
  * @param {string} name the name, or '' to release it
@@ -50,15 +47,11 @@ export function nameMorph(element, name) {
 }
 
 /**
- * Carries one element into another across a change of the page, so a picture
- * grows into the viewer showing it instead of the viewer appearing from
- * nowhere.
+ * Carries one element into another across a change of the page, such as a
+ * photo growing into the viewer.
  *
- * The name is only ever on one element at a time: `from` holds it while the
- * old picture is taken, and gives it up to whatever `to` finds once the change
- * has been applied. A browser that finds two elements with one name abandons
- * the transition, so the order matters. Both are released when the animation
- * is over, or straight away where nothing is animated.
+ * The name is on one element at a time (`from`, then what `to` finds), since
+ * a browser abandons a transition that finds two elements with one name.
  *
  * @param {HTMLElement|null} from the element the change starts from
  * @param {() => unknown} change mutates the DOM; may be async

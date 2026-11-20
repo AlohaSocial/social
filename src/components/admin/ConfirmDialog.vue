@@ -21,11 +21,8 @@ import { translate as t } from '@nextcloud/l10n'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 
 /**
- * The question asked before something that cannot be taken back.
- *
- * Suspending an account, taking a post down and removing an announcement each
- * delete something for everybody, and each used to ask with `window.confirm`,
- * which is a browser dialog in the middle of a Nextcloud page.
+ * The question asked before something that cannot be taken back, such as
+ * suspending an account, taking a post down or removing an announcement.
  */
 export default {
 	name: 'ConfirmDialog',

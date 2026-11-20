@@ -3,8 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- until the server has answered there is no state to show, and a button
-	     that guesses would offer to unfollow what may not be followed -->
+	<!-- hidden until the state is known, so it never offers the wrong action -->
 	<NcButton
 		v-if="canFollow"
 		class="hashtag-follow"
@@ -48,12 +47,8 @@ export default {
 		},
 
 		/**
-		 * The hashtags the reader follows, when whoever drew this button
-		 * already knows — a list of them is one request for the page instead of
-		 * one lookup per button, and twenty buttons asking separately is twenty
-		 * requests before any of them can be drawn.
-		 *
-		 * `null` means nobody has said, and the button asks for itself.
+		 * The hashtags the reader follows, when the parent already has them,
+		 * to save one lookup per button. `null` makes the button ask itself.
 		 */
 		known: {
 			type: /** @type {import('vue').PropType<string[]|null>} */ (Array),
@@ -119,16 +114,13 @@ export default {
 			},
 		},
 
-		// not immediate: the tag watcher above already draws the first state,
-		// and two immediate watchers meant two lookups per button
+		// not immediate: the tag watcher above already draws the first state
 		known: 'apply',
 	},
 
 	methods: {
 		/**
-		 * Takes the state from the list it was given, and asks the server when
-		 * it was given none. Both watchers come through here, so a button that
-		 * moves to another hashtag is answered the same way it was first drawn.
+		 * Takes the state from `known`, or asks the server when there is none.
 		 */
 		apply() {
 			if (this.known === null) {

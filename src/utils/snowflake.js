@@ -4,16 +4,11 @@
  */
 
 /**
- * Row ids — a status id, a notification id, a `nid`, a `min_id`/`max_id`
- * cursor — are snowflakes: `published_time * 1e9 + random`, twenty digits,
- * well above `Number.MAX_SAFE_INTEGER`. `Number('1789553297940456473')` is
- * 1789553297940456400, and around that magnitude doubles are 256 apart, so a
- * cursor that has been through a Number is off by up to a couple of hundred
- * rows in either direction while the server compares the id exactly. They are
- * therefore carried as strings and compared as BigInts, never parsed.
+ * Row ids (status and notification ids, `min_id`/`max_id` cursors) are
+ * snowflakes well above `Number.MAX_SAFE_INTEGER`, so they are carried as
+ * strings and compared as BigInts, never parsed into a Number.
  */
 
-/** A row id is a run of digits and nothing else. */
 const ID_PATTERN = /^\d+$/
 
 /**

@@ -22,10 +22,8 @@
 			<table class="social-admin__table">
 				<thead>
 					<tr>
-						<!-- not "Announcement": `n()` uses that word as the
-						     singular of a plural elsewhere, and gettext folds
-						     the two into one plural entry, which `t()` cannot
-						     look up. The column holds the text anyway. -->
+						<!-- not "Announcement": that is the singular of an `n()`
+						     elsewhere, and gettext would fold the two together -->
 						<th>{{ t('social', 'Text') }}</th>
 						<th>{{ t('social', 'Shown from') }}</th>
 						<th>{{ t('social', 'Until') }}</th>
@@ -33,9 +31,7 @@
 						<th />
 					</tr>
 				</thead>
-				<!-- the text is the admin's own and the API sends it back
-				     unchanged; it is interpolated all the same, so that what an
-				     earlier admin typed cannot run in the next one's browser -->
+				<!-- the API returns the text unchanged; interpolate it so no admin's text runs in another's browser -->
 				<tbody>
 					<tr v-for="announcement in announcements" :key="announcement.id">
 						<td>{{ announcement.text }}</td>
@@ -110,11 +106,9 @@ import { errorOf } from '../../utils/serverError.js'
 import { showError } from '../../services/toast.js'
 
 /**
- * What the instance is telling everybody.
- *
- * The section carries nothing from the server-rendered page: the list is read
- * from the same routes it writes through, so what is shown is what is stored
- * even when the server decided a window differently from the one typed.
+ * What the instance is telling everybody. The list is read from the routes it
+ * writes through, so it shows what is stored even where the server adjusted a
+ * window.
  */
 export default {
 	name: 'AnnouncementsSection',
@@ -162,14 +156,13 @@ export default {
 				return '—'
 			}
 
-			// the API dates in UTC; an all-day window is a date and showing its
-			// time would say 22:00 to half of Europe
+			// the API dates in UTC, so an all-day window shows only its date
 			return allDay ? value.slice(0, 10) : value.slice(0, 16).replace('T', ' ')
 		},
 
 		/**
-		 * One bound of the window, as the endpoint has always been given it:
-		 * the wall-clock time that was picked, not the instant behind it.
+		 * One bound of the window, as the wall-clock time that was picked, not
+		 * the instant behind it.
 		 *
 		 * @param {Date|null} date what the picker holds
 		 * @return {string} `YYYY-MM-DDTHH:mm`, or '' for no bound
@@ -204,9 +197,8 @@ export default {
 		},
 
 		/**
-		 * Posts what the form holds, and redraws from what came back rather
-		 * than from what was typed: the server decides the window an all-day
-		 * announcement ends up with.
+		 * Posts what the form holds and redraws from the answer, since the
+		 * server decides the window of an all-day announcement.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -238,8 +230,7 @@ export default {
 		},
 
 		/**
-		 * It is gone for everybody, including the accounts that have read it,
-		 * so it asks.
+		 * Asks first: removal is for everybody, including those who read it.
 		 *
 		 * @param {object} announcement the row
 		 */

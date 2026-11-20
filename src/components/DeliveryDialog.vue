@@ -32,9 +32,8 @@
 					<span class="delivery-list__host">{{ entry.host }}</span>
 					<span class="delivery-list__state">{{ stateLabel(entry) }}</span>
 				</li>
-				<!-- not a server among servers: Bluesky is a network the post
-				     is written into rather than sent to, so it is the one row
-				     that can be opened -->
+				<!-- Bluesky is a network the post is written into, not a
+				     server it is sent to, so its row can be opened -->
 				<li
 					v-if="bluesky"
 					class="delivery-list__row delivery-list__row--bluesky"
@@ -67,12 +66,8 @@ import { generateUrl } from '@nextcloud/router'
 const DEFAULT_RETENTION = 7 * 86400
 
 /**
- * Where a post got to, server by server.
- *
- * The author is the only person this is answered for, and the only person it
- * would mean anything to: everybody else sees a post either arrive or not.
- * Asked fresh every time it opens, because a delivery that was failing a
- * minute ago may have gone through since.
+ * Where a post got to, server by server, for its author. Loaded each time it
+ * opens, because a failing delivery may have gone through since.
  */
 export default {
 	name: 'DeliveryDialog',
@@ -135,8 +130,7 @@ export default {
 		},
 
 		/**
-		 * @return {string} the counts as one sentence — the author reads this
-		 * line and, most of the time, needs nothing under it
+		 * @return {string} the counts as one sentence
 		 */
 		summary() {
 			const d = this.delivery
@@ -239,9 +233,8 @@ export default {
 }
 
 /*
- * One row per server, the state carried by a dot as well as the word so the
- * list reads at a glance: green got there, amber is still trying, red was
- * given up on.
+ * One row per server, its state shown by a dot as well as the word: green got
+ * there, amber is still trying, red was given up on.
  */
 .delivery-list {
 	margin: 0 12px 12px;

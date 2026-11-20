@@ -3,8 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- the heading and the id other pages link to (#notification-policy)
-	     are the settings section's -->
+	<!-- the heading and the #notification-policy anchor belong to the settings section -->
 	<div class="policy-settings" :aria-busy="saving !== '' ? 'true' : undefined">
 		<p class="policy-settings__hint">
 			{{ t('social', 'Held people can still write to you. Their posts, likes and follows wait in Activities until you look; they do not ring, push or mail.') }}
@@ -22,9 +21,8 @@
 					{{ question.label }}
 				</legend>
 				<div class="policy-settings__choices">
-					<!-- a click on the choice already shown still counts when
-					     an app set `drop`, which is shown as holding: a checked
-					     radio sends no change event of its own -->
+					<!-- `drop` is shown as holding, and a checked radio sends no
+					     change event, so a click on it is caught separately -->
 					<NcCheckboxRadioSwitch
 						v-for="choice in choices"
 						:key="choice.value"
@@ -95,17 +93,12 @@ const VALUES = ['accept', 'filter', 'drop']
 const POLICY_URL = 'apps/social/api/v2/notifications/policy'
 
 /**
- * Who may reach the reader's notifications: the second part of Settings →
- * Notifications.
+ * Who may reach the reader's notifications, in Settings → Notifications.
  *
- * Each key is answered **Allow** (`accept`) or **Hold for review**
- * (`filter`). `drop` is left to the API: a key an app set to it is shown as
- * holding, with a note, and any choice made here replaces it, so a save
- * from this page never writes `drop`. Every choice is saved as it is made,
- * one key at a time, so a key this page does not know is never touched.
- *
- * Under the rows, the senders accepted from requests — always allowed until
- * the reader stops allowing them, which hands them back to the policy.
+ * Each key is Allow (`accept`) or Hold for review (`filter`). A key an app set
+ * to `drop` is shown as holding, and this page never writes `drop`. Each
+ * choice is saved on its own, so keys this page does not know are untouched.
+ * Below the rows are the senders accepted from requests.
  */
 export default {
 	name: 'NotificationPolicySettings',

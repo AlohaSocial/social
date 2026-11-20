@@ -4,31 +4,21 @@
  */
 
 /**
- * The shared behaviour of a page that is a long list of sections with a rail
- * beside it: which section the reader is looking at, and going to one.
- *
- * Both the settings page and the administration page are that shape, and the
- * rule below is worth having in one place because both obvious versions of it
- * are wrong -- see `currentSection`.
+ * A long page of sections with a rail beside it (settings, administration):
+ * which section the reader is looking at, and going to one.
  */
 
 /**
- * How far down the window a section's top has to have passed to count as the
- * one being read. Just past the `scroll-margin` a section carries, so that a
- * section jumped to is the one marked.
+ * How far down the window a section's top has to be to count as the one being
+ * read. Just past a section's `scroll-margin`, so a section jumped to is marked.
  */
 export const RAIL_BAND = 96
 
 /**
- * The section the reader is looking at.
- *
- * The last one whose heading has passed the top of the window. Taking the
- * topmost section that is merely *visible* instead marks the wrong one as soon
- * as a tall section straddles the top: it starts above the window, so it is
- * the highest thing on screen while the reader is already past it. Measuring
- * against a band further down -- a third of the window, say -- has the
- * opposite fault: a short section leaves the one below it inside the band as
- * well, and a rail link then marks the section after the one it scrolled to.
+ * The section the reader is looking at: the last one whose heading has passed
+ * the top of the window. The topmost visible section would be wrong while a
+ * tall section straddles the top, and a band lower down would mark the section
+ * after a short one a rail link scrolled to.
  *
  * @param {string[]} ids the section ids, in the order they are drawn
  * @param {string} current what is marked now, kept when nothing has passed yet
@@ -48,11 +38,9 @@ export function currentSection(ids, current = '') {
 }
 
 /**
- * Calls back whenever a section comes into or goes out of view.
- *
- * The observer is only the trigger; which section is current is worked out
- * from all of them by `currentSection`, because the entries a callback is
- * handed are only the ones that changed.
+ * Calls back whenever a section comes into or goes out of view. The observer
+ * is only the trigger: its entries are only the sections that changed, so
+ * `currentSection` works out the current one from all of them.
  *
  * @param {string[]} ids the section ids to watch
  * @param {() => void} onChange called with no arguments

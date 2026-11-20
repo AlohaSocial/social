@@ -56,16 +56,9 @@ function explainSnapshot(reason, snapshot) {
 /**
  * What the chip over a post in For you says: why the post is there.
  *
- * One matching hashtag is said as a reason ("Because you follow #film"); two
- * or more are listed instead, because a sentence naming three tags is longer
- * than the post it sits over. The accessible name always gives the reason, so
- * a screen reader hears why rather than a list of tags.
- *
- * A `popular` post matched none of the reader's hashtags: it filled a ranking
- * that was too short, from what is trending in the same kind.
- * Its chip says exactly that and links nowhere, since no tag put it there.
- * An `exploration` item was selected from outside the leading predictions;
- * its topic match is shown without implying an established author affinity.
+ * One matching hashtag is said as a sentence; two or more are only listed, to
+ * keep the chip short, while the accessible name always gives the reason. A
+ * `popular` post matched no hashtag of the reader's, so its chip links nowhere.
  *
  * @param {{tags?: string[], reason?: string, topics?: {id?: string, labels?: Record<string, string>}[], explanation?: {also?: string[], protocol?: string, rerank_note?: string}}|null|undefined} interest the post's `interest` field
  * @return {{tag: string|null, reason?: string, text: string, label: string}|null} the tag the chip links to

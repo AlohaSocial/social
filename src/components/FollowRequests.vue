@@ -107,12 +107,8 @@ export default {
 		n,
 
 		/**
-		 * The pending requests, a page at a time.
-		 *
-		 * The next page is continued from the cursor in the server's `Link`
-		 * header, not from the last row here: the cursor is the follow
-		 * request's, not the account's, and the rows answered since the page
-		 * arrived have left the list without moving it.
+		 * The pending requests, a page at a time. Paging follows the `Link`
+		 * header's cursor, which is the follow request's id, not the account's.
 		 *
 		 * @param {boolean} more whether this is the reader asking for the page
 		 *                       after the one they have
@@ -239,14 +235,8 @@ export default {
 }
 
 /**
- * An answered request collapses out of the list rather than blinking away,
- * so the reader sees which row they just answered and the rows below close
- * the gap instead of jumping into it.
- *
- * Same motion as the shared `list` transition in App.vue — .2s ease for the
- * fade and the shift — with the height taken out over .3s ease-out, the way
- * the welcome banner in Timeline.vue collapses. The max-height is headroom
- * for one row, not a measurement: it only has to be larger than a row.
+ * An answered request collapses out of the list so the rows below close the
+ * gap smoothly. The max-height only has to be larger than one row.
  */
 .collapse-enter-active,
 .collapse-leave-active {
