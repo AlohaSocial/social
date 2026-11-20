@@ -15,17 +15,10 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
- * Per-account blocks of a whole instance.
- *
- * One account's list, enforced for that account only: the admin's
- * instance-wide access list is `FediverseService`, which decides what the
- * *server* federates with and is a different thing with a different audience.
- * Nothing here is federated and the blocked instance is never told.
- *
- * A block is held as a domain and applied to the *host of an actor id*, which
- * is the one form of an account's instance that every row the timeline reads
- * already carries — see `DomainBlocksRequestBuilder::filterDomainBlocked()`,
- * which is where a blocked instance stops reaching the timelines.
+ * Per-account blocks of a whole instance, enforced for that account only and
+ * never federated; the instance-wide access list is `FediverseService`. A
+ * block is a domain compared with the host of actor ids (see
+ * `DomainBlocksRequestBuilder::filterDomainBlocked()`).
  */
 class DomainBlockService {
 	/**
@@ -36,19 +29,14 @@ class DomainBlockService {
 	public const MAX_LIMIT = 200;
 
 	/**
-	 * How much of one account's block list is kept in memory. An account with
-	 * more blocked instances than this is asked in SQL instead — the list is
-	 * there to save queries, not to decide anything it does not hold.
+	 * How much of one account's block list is kept in memory; longer lists are
+	 * checked in SQL instead.
 	 */
 	private const CACHE_LIMIT = 1000;
 
 	/**
-	 * The blocked domains of one account, for the duration of one request.
-	 *
-	 * A relationship is built one account at a time, so without this a client
-	 * asking about a page of forty accounts would read the same short list
-	 * forty times. Every write below drops the entry, so nothing in one request
-	 * can read a list its own call changed.
+	 * The blocked domains of one account, cached for one request so a page of
+	 * relationships reads the list once. Every write drops the entry.
 	 *
 	 * @var array<string, string[]> actor id => domains
 	 */
@@ -61,20 +49,14 @@ class DomainBlockService {
 	}
 
 	/**
-	 * The domain as it is stored and compared: lowercase, no scheme, no port,
-	 * no path, no leading `@`, no trailing dot.
-	 *
-	 * A client sends what a user typed — `Example.COM`, `@user@example.com`,
-	 * `https://example.com/@user` are all the same instance — and one stored
-	 * form is what makes blocking twice a no-op and makes the timeline
-	 * comparison an equality rather than a guess.
+	 * The domain as stored and compared: lowercase, without scheme, port,
+	 * path, leading `@` or trailing dot, so `@user@Example.COM` and
+	 * `https://example.com/@user` are the same block.
 	 *
 	 * @throws InvalidResourceException there is no domain in what was sent, or
-	 *                                  what is left is not one: the LIKE
-	 *                                  pattern of the timeline join is built
-	 *                                  out of this value, so a `%` or a `_`
-	 *                                  reaching the table would be a block that
-	 *                                  silently matched other instances
+	 *                                  what is left is not one: the timeline
+	 *                                  join builds a LIKE pattern from it, so
+	 *                                  a `%` or `_` would match other instances
 	 */
 	public static function normalise(string $domain): string {
 		$domain = trim($domain);
@@ -133,10 +115,8 @@ class DomainBlockService {
 
 	/**
 	 * @throws InvalidResourceException the domain is not one, or it is this
-	 *                                  instance's own — blocking that would
-	 *                                  hide the account's own posts from it,
-	 *                                  and Mastodon refuses it for the same
-	 *                                  reason
+	 *                                  instance's own, which Mastodon refuses
+	 *                                  too
 	 */
 	public function block(Person $viewer, string $domain): string {
 		$domain = self::normalise($domain);

@@ -26,82 +26,35 @@ use Throwable;
 use ZipArchive;
 
 /**
- * Bringing an account's own posts over from the server it wrote them on.
+ * Imports an account's own posts from the server it wrote them on, as new
+ * local posts of the importing account, dated when written, with their media.
  *
- * What moving to another Fediverse server has never carried is the posts. A
- * `Move` takes the followers; an export takes a file. This reads that file and
- * writes the posts here — as **new local posts of the importing account**,
- * dated when they were written, with their pictures.
+ * Nothing is federated (re-publishing years of posts would flood every
+ * follower), the same discipline as `SocialMigrator::importRelations()`. Ids
+ * are minted here; the original is remembered in `social_import_post`, which
+ * makes re-runs no-ops and lets replies find their parent. Only what the
+ * account wrote: boosts and direct messages are skipped.
  *
- * Three rules decide everything else, and each of them is load-bearing:
+ * Formats read:
  *
- * **Nothing is federated.** Not one delivery is queued. Re-publishing somebody's
- * five years of posts would put five years of posts into the timeline of every
- * person who follows them, on every server, in one afternoon. The rows are
- * written and the queue is never touched — the same write-the-row,
- * federate-nothing discipline `SocialMigrator::importRelations()` uses for the
- * follow graph.
- *
- * **The ids are ours.** A post's id belongs to the server it was written on: an
- * id from somewhere else served from here would be a second server claiming
- * another's URI, and nothing would resolve it. So each post is minted locally
- * and the original id is remembered in `social_import_post` — which is what
- * makes a second run of the same archive a no-op, and what lets a reply find
- * the post it answers.
- *
- * **Only what the account wrote.** Boosts are somebody else's post and are
- * skipped. Direct messages are skipped too: their recipients are accounts on
- * the old server, and a direct message with nobody in it is a post nobody —
- * the author included — can find.
- *
- * Four shapes are read, because four are what the networks hand out:
- *
- *  - this app's own archive (`social/outbox.json` in the zip, with the files
- *    under `media_attachments/`),
- *  - Mastodon's and GoToSocial's (`outbox.json` at the root of the zip, same
- *    layout — theirs is the layout ours copied),
- *  - an `outbox.json` on its own, and
- *  - Pixelfed's `pixelfed-statuses.json`, which is its API's shape and carries
- *    **URLs rather than files**: those pictures are fetched from the old
- *    server, which therefore has to still be running.
- *
- * And a fifth that *is* a Fediverse export but is not a timeline: **PeerTube's**
- * (`/api/v1/users/me/exports`), read from `peertube/videos.json`. Its own JSON
- * rather than the `activity-pub/outbox.json` sitting beside it, because the
- * ActivityPub half names each video's file by its address on the old server
- * while the PeerTube half names the copy that is **inside the archive** — so
- * one import needs the old server to still be running and the other does not.
- * It also states the privacy as a number rather than leaving it to be read out
- * of an audience, and carries the title, the tags, the category and the
- * licence, which is most of what a video is.
- *
- * And a sixth that is not a Fediverse export at all: **Instagram's** "Download
- * your information" archive, which is the way most people arrive at Pixelfed.
- * It is read from `content/posts_*.json` and the reels beside them, with the
- * pictures out of the archive's own `media/` folder — nothing is fetched,
- * because there is no server left that would answer us for them.
- *
- * Instagram's archive is missing three things every other export has, and each
- * is answered rather than guessed at:
- *
- *  - **No ids.** One is derived from the file a post carries and the moment it
- *    was posted, so a second run of the same archive is still a no-op.
- *  - **No visibility.** An Instagram post was visible to whoever could see the
- *    account, which is not a sentence this app can translate. The importing
- *    account's **own default** is used — what their next post would get — and
- *    the person is told that is what happened.
- *  - **No hashtags as data.** They are words in the caption, so they are read
- *    out of it, which is what makes them findable here.
- *
- * Only the JSON export can be read. Instagram also offers HTML, which is a
- * rendering of the same data with the data taken out.
+ *  - this app's archive (`social/outbox.json`, files under `media_attachments/`),
+ *  - Mastodon's and GoToSocial's (`outbox.json` at the zip root),
+ *  - a bare `outbox.json`,
+ *  - Pixelfed's `pixelfed-statuses.json`, whose media are URLs fetched from
+ *    the old server,
+ *  - PeerTube's export, from `peertube/videos.json`, which names the video
+ *    files inside the archive and carries title, tags, category and licence,
+ *  - Instagram's JSON "Download your information" archive (`posts_*.json`
+ *    and reels, media from its `media/` folder). It has no ids (derived from
+ *    the file and time), no visibility (the account's default is used and the
+ *    person told) and no hashtag data (read from the caption).
  */
 class PostImportService {
 	/** How many posts one run writes at most. */
 	public const MAX_POSTS = 2000;
 	/**
-	 * How many failures are kept by name in a tally. A number says something
-	 * went wrong; the name of the post and the reason say what to do about it.
+	 * How many failures are kept by name in a tally, so the person knows what
+	 * failed and why.
 	 */
 	public const REPORT_FAILURES = 20;
 
@@ -114,20 +67,15 @@ class PostImportService {
 	private const OUTBOX_PATHS = ['social/outbox.json', 'outbox.json'];
 
 	/**
-	 * Where PeerTube keeps the videos, and the key it wraps them in.
-	 *
-	 * Not `activity-pub/outbox.json`, which is in the same archive: see the
-	 * class comment for why the richer half is the one worth reading.
+	 * Where PeerTube keeps the videos, and the key it wraps them in; not
+	 * `activity-pub/outbox.json`, which names the files on the old server.
 	 */
 	private const PEERTUBE_PATH = 'peertube/videos.json';
 
 	/**
 	 * PeerTube's `VideoPrivacy`, as far as it maps onto an audience here.
-	 *
-	 * 3 (private), 4 (internal) and 5 (password-protected) are deliberately
-	 * absent: each is a video its author decided not to publish, and an
-	 * importer that quietly made one public would be undoing that decision.
-	 * Unlisted becomes unlisted, which is the same promise on both sides.
+	 * Private, internal and password-protected (3, 4, 5) are absent: their
+	 * authors chose not to publish them.
 	 */
 	private const PEERTUBE_PRIVACY = [
 		1 => Stream::TYPE_PUBLIC,
@@ -135,26 +83,16 @@ class PostImportService {
 	];
 
 	/**
-	 * Where Instagram keeps them.
-	 *
-	 * Two layouts, because Instagram moved the folder and did not move the
-	 * archives people already had: the files sit under
-	 * `your_instagram_activity/content/` in an archive taken since 2023 and
-	 * under `content/` in one taken before that. The export splits at a size
-	 * rather than at a date, so `posts_1.json`, `posts_2.json` and the rest are
-	 * all read.
+	 * Where Instagram keeps them: `your_instagram_activity/content/` in
+	 * archives since 2023, `content/` before. The export splits by size, so
+	 * all of `posts_1.json`, `posts_2.json` … are read.
 	 */
 	private const INSTAGRAM_DIRS = ['your_instagram_activity/content/', 'content/'];
 
 	/**
 	 * The files in those folders that hold posts, and the key each wraps them
-	 * in — `posts_*.json` is a bare array, the others an object with one key.
-	 *
-	 * Deliberately not here: `stories.json`, which is a day of somebody's life
-	 * that was meant to end; `archived_posts.json`, which is what they took
-	 * down on purpose; and `recently_deleted_content.json`, which they deleted.
-	 * An importer that quietly republished any of the three would be worse than
-	 * one that imported nothing.
+	 * in (`posts_*.json` is a bare array). Stories, archived posts and recently
+	 * deleted content are left out on purpose: their authors took them down.
 	 */
 	private const INSTAGRAM_FILES = [
 		'reels.json' => 'ig_reels_media',
@@ -200,37 +138,16 @@ class PostImportService {
 	}
 
 	/**
-	 * Brings **one** video over, by its address.
+	 * Imports one video by its address, for somebody leaving an instance (or
+	 * without access to their account there) who wants a single video here.
+	 * The same rules as an archive import: nothing federated, the id ours with
+	 * the original remembered, a new local post of the importing account.
 	 *
-	 * PeerTube has this and people use it: you have a video on an instance you
-	 * are leaving, or on one you only ever used to publish, and you want it
-	 * here. An export is the right tool for a channel and a heavy one for a
-	 * single video — and somebody who has lost their account on the old server
-	 * cannot take an export at all, while the video is still there to be
-	 * fetched.
-	 *
-	 * The same three rules as an archive import: **nothing is federated**, the
-	 * **id is ours** with the original remembered in `social_import_post` so a
-	 * second attempt is a no-op, and it is written as a **new local post of the
-	 * importing account**.
-	 *
-	 * What it will not do:
-	 *
-	 * - **A video hosted here.** Bringing a neighbour's post over as your own
-	 *   is not an import, and this is the one case the server can actually
-	 *   tell.
-	 * - **A document that is not a video.** This is not a way to copy a post.
-	 * - **A video whose address it was not given.** The document has to name
-	 *   the address it was fetched from, the same evidence
-	 *   `SearchService::resolveStatus()` requires, so a redirect cannot
-	 *   substitute one video for another.
-	 *
-	 * What it cannot check is whether the video is **yours**. Neither can
-	 * PeerTube's own importer, and neither can the archive import above — an
-	 * archive is a file somebody uploaded. What stands in for it is the same
-	 * thing that stands in for it there: it is one deliberate act, it is rate
-	 * limited, and what it produces is an ordinary post of the account that
-	 * asked for it, which moderation and reporting reach like any other.
+	 * Refused: a video hosted here, a document that is not a video, and one
+	 * that does not name the address it was fetched from (the evidence
+	 * `SearchService::resolveStatus()` requires). Ownership cannot be checked,
+	 * as with archives; it is one deliberate, rate-limited act producing an
+	 * ordinary, reportable post.
 	 *
 	 * @return array<string, mixed> the same tally an archive import answers with
 	 * @throws MoveErrorException with a sentence saying what was wrong, and its code
@@ -283,12 +200,8 @@ class PostImportService {
 	}
 
 	/**
-	 * One fetched `Video` document, in the shape every other reader produces.
-	 *
-	 * The file is the playable link out of `url`, which is an **absolute**
-	 * address — so it is fetched from the server that holds it, the same way
-	 * an export that named only addresses is. There is no archive here to take
-	 * it out of.
+	 * One fetched `Video` document, in the shape every other reader produces;
+	 * the file is the playable absolute link in `url`, fetched from its server.
 	 *
 	 * @param array<string, mixed> $data
 	 * @return array<string, mixed>|null
@@ -324,11 +237,8 @@ class PostImportService {
 			'source' => $id,
 			'text' => $text,
 			'published' => ($published === false || $published <= 0) ? time() : $published,
-			// whatever its audience was there, it is this account's own post
-			// here and is published as the thing everybody can see. An
-			// unlisted video brought over as public would be a decision the
-			// person did not make, so the *object's* own audience is read
-			// first and only the two that mean something here are kept.
+			// the object's own audience is read first, and only public and
+			// unlisted are kept, so an unlisted video does not become public
 			'visibility' => $this->visibility($data) === Stream::TYPE_UNLISTED
 				? Stream::TYPE_UNLISTED : Stream::TYPE_PUBLIC,
 			'sensitive' => (bool)($data['sensitive'] ?? false),
@@ -354,12 +264,8 @@ class PostImportService {
 	}
 
 	/**
-	 * The best file link a `Video` offers.
-	 *
-	 * An HLS playlist is deliberately passed over: what this wants is a file
-	 * to store, and a playlist is a list of a few hundred segments on somebody
-	 * else's server — importing it would store a text file and call it a
-	 * video.
+	 * The best file link a `Video` offers. HLS playlists are skipped: they
+	 * list remote segments, not a file to store.
 	 *
 	 * @param array<string, mixed> $data
 	 */
@@ -449,11 +355,9 @@ class PostImportService {
 	}
 
 	/**
-	 * Writes the posts of an ActivityPub collection already in hand: the pages
-	 * of an account's outbox, fetched from the server it is still on, rather
-	 * than an archive it exported. The same parsing and the same writes as
-	 * `import()`, so what is brought over and what is left out is one rule.
-	 * Uncapped, because what calls this is a background run.
+	 * Writes the posts of an ActivityPub collection already fetched (an
+	 * account's outbox on a server it is still on), with the same parsing and
+	 * writes as `import()`. Uncapped, as it runs in the background.
 	 *
 	 * @param array<int, mixed> $items the activities or objects, as the collection lists them
 	 * @param callable(int, int): void|null $progress
@@ -588,17 +492,12 @@ class PostImportService {
 		$contents = null;
 
 		if ($zip !== null) {
-			// PeerTube first, because its archive also holds an
-			// `activity-pub/outbox.json` that the loop below would find — and
-			// that half names each video's file on the old server, where this
-			// one names the copy inside the archive
+			// PeerTube first: its archive also holds an `activity-pub/outbox.json`
+			// the loop below would find, which names the files on the old server
 			$peertube = $this->peerTubeItems($zip);
 			if ($peertube !== []) {
-				// PeerTube's export is offered with and without the video
-				// files. Without them the JSON is a catalogue: every entry
-				// names a file that is not in the archive, so the run would
-				// report "nothing imported" about an archive that is perfectly
-				// valid and simply not the one to ask for.
+				// an export without the video files is only a catalogue, which
+				// would import nothing, so it is reported as the wrong export
 				if ($this->peerTubeHasNoFiles($zip)) {
 					throw new MoveErrorException(
 						'this PeerTube export was taken without its video files, so there is'
@@ -650,11 +549,9 @@ class PostImportService {
 	}
 
 	/**
-	 * One list of posts out of an archive, or null when it is not there.
-	 * Its declared size is checked before it is read: `getFromName()`
-	 * allocates that much and inflates no further, and a list too large to
-	 * decode within the memory limit would end the run with a fatal error,
-	 * not a refusal.
+	 * One list of posts out of an archive, or null when it is not there. Its
+	 * declared size is checked before reading, as a list too large to decode
+	 * would end the run with a fatal error rather than a refusal.
 	 *
 	 * @throws MoveErrorException file-too-large
 	 */
@@ -692,11 +589,9 @@ class PostImportService {
 	}
 
 	/**
-	 * The videos a PeerTube export names, or `[]` when this is not one.
-	 *
-	 * Looked for by suffix rather than by exact name, like every other file in
-	 * an archive here: a zip saved by a browser and re-packed by a person is
-	 * nested under a folder of its own, and nothing above it would match.
+	 * The videos a PeerTube export names, or `[]` when this is not one. Found
+	 * by suffix, like every archive file, since re-packed zips nest under a
+	 * folder.
 	 *
 	 * @return array<int, mixed>
 	 */
@@ -731,12 +626,8 @@ class PostImportService {
 	}
 
 	/**
-	 * Everything an Instagram archive holds that is a post.
-	 *
-	 * Read whole rather than by a known list of names: the export splits
-	 * `posts_1.json`, `posts_2.json` … at a size nobody can predict, and an
-	 * archive of ten years has a dozen of them. The entries of the reels and
-	 * IGTV files are the same shape and go in the same list.
+	 * Everything an Instagram archive holds that is a post: every
+	 * `posts_N.json`, plus the reels and IGTV files, which share the shape.
 	 *
 	 * @return array<int, mixed>
 	 */
@@ -779,9 +670,8 @@ class PostImportService {
 	 */
 	private function instagramWrapper(string $name): string|null|false {
 		foreach (self::INSTAGRAM_DIRS as $dir) {
-			// at the root, or under the folder a browser unpacked the archive
-			// into — which is named for the account and the day and is
-			// therefore not something that can be listed here
+			// at the root, or under the folder a browser unpacked it into, which
+			// is named for the account and date
 			$at = str_starts_with($name, $dir) ? 0 : strpos($name, '/' . $dir);
 			if ($at === false) {
 				continue;
@@ -801,13 +691,9 @@ class PostImportService {
 	}
 
 	/**
-	 * Why an archive with no outbox and no Instagram posts in it is not an
-	 * export this can read.
-	 *
-	 * Instagram's HTML download has the same folders and the same file names
-	 * with `.html` on the end, and it is the option people pick because it is
-	 * the one they can open. Being told "ask for JSON" is the difference
-	 * between a two-minute fix and giving up.
+	 * Why an archive with no outbox and no Instagram posts is not readable.
+	 * Instagram's HTML download has the same layout with `.html` files, so the
+	 * person is told to ask for JSON instead.
 	 */
 	private function whyNotAnExport(ZipArchive $zip): MoveErrorException {
 		for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -854,9 +740,8 @@ class PostImportService {
 
 		$visibility = $this->visibility($item);
 		if ($visibility === '' || $visibility === Stream::TYPE_DIRECT) {
-			// a direct message's recipients are accounts on the old server: a
-			// copy here would be addressed to nobody, and a post addressed to
-			// nobody is one even its author cannot find
+			// a direct message's recipients are on the old server, so a copy
+			// here would be addressed to nobody
 			return null;
 		}
 
@@ -883,26 +768,13 @@ class PostImportService {
 	}
 
 	/**
-	 * One video out of a PeerTube export.
+	 * One video out of a PeerTube export, with an extra `video` key for title,
+	 * duration, category and licence.
 	 *
-	 * The shape is the same one every other reader produces, plus a `video`
-	 * key: a video has a title, a running time, a category and a licence, and
-	 * an import that dropped all of that would turn a video page into a post
-	 * with a rectangle in it.
-	 *
-	 * Three things are refused rather than translated:
-	 *
-	 * - **A private, internal or password-protected video.** Each is one its
-	 *   author decided not to publish; an importer that made it public would
-	 *   be undoing that decision, and there is no audience here that means
-	 *   "the people who had the password".
-	 * - **A live.** There is no recording to bring over unless one was saved,
-	 *   in which case the saved replay is a video of its own and is exported
-	 *   as one.
-	 * - **A video with no file in the archive.** The export is asked for
-	 *   `withVideoFiles`, and one taken without them is a catalogue: importing
-	 *   it would write a page per video with nothing to play, which is worse
-	 *   than importing nothing.
+	 * Refused: private, internal or password-protected videos (their authors
+	 * chose not to publish), lives (a saved replay is exported as its own
+	 * video), and videos without a file in the archive (an export taken
+	 * without `withVideoFiles`).
 	 *
 	 * @param array<string, mixed> $item one entry of `peertube/videos.json`
 	 * @return array<string, mixed>|null
@@ -961,11 +833,9 @@ class PostImportService {
 
 	/**
 	 * Where the video's own file is inside the archive.
-	 *
-	 * `archiveFiles.videoFile` is written relative to `peertube/`, so it
-	 * arrives as `../files/videos/video-files/<uuid>.mp4`; the `..` is
-	 * resolved here rather than left for the suffix match, which would
-	 * otherwise be looking for a path that begins with a segment no entry has.
+	 * `archiveFiles.videoFile` is relative to `peertube/`
+	 * (`../files/videos/video-files/<uuid>.mp4`), so the `..` is resolved
+	 * before the suffix match.
 	 *
 	 * @param array<string, mixed> $item
 	 */
@@ -992,12 +862,9 @@ class PostImportService {
 	}
 
 	/**
-	 * What this app keeps about a video, out of what PeerTube exported.
-	 *
-	 * The same shape `PeerTubeService::videoMeta()` builds from the wire, so
-	 * an imported video and a federated one are the same kind of thing to
-	 * everything downstream — including the publisher, which reads it back to
-	 * make the `Video` this instance sends out.
+	 * What this app keeps about a video, in the shape
+	 * `PeerTubeService::videoMeta()` builds from the wire, so imported and
+	 * federated videos are alike downstream, publishing included.
 	 *
 	 * @param array<string, mixed> $item
 	 * @return array<string, mixed>
@@ -1017,10 +884,7 @@ class PostImportService {
 			$meta['duration'] = $duration;
 		}
 
-		// the counters are **not** carried over. They are numbers about the
-		// old instance's readers, and a post here that arrived with four
-		// thousand views would be claiming four thousand people had watched it
-		// on this server.
+		// counters are not carried over: they count the old instance's viewers
 		if (($item['downloadEnabled'] ?? true) === false) {
 			$meta['download'] = false;
 		}
@@ -1058,12 +922,8 @@ class PostImportService {
 	}
 
 	/**
-	 * What language a post was written in, as the export says.
-	 *
-	 * ActivityPub carries it as the key of `contentMap` and Mastodon's API as
-	 * a `language`; a post that says neither is left to the account's own
-	 * default, which is what `Stream::normalizeLanguage()` returning nothing
-	 * means downstream.
+	 * The language a post was written in: the `contentMap` key, or Mastodon's
+	 * `language`; otherwise the account's default applies.
 	 *
 	 * @param array<string, mixed> $item
 	 */
@@ -1079,12 +939,8 @@ class PostImportService {
 	}
 
 	/**
-	 * What audience an exported post went out to.
-	 *
-	 * An ActivityPub post says so by who it is addressed to; an API export
-	 * says so in a word. Anything this app cannot place is treated as direct —
-	 * the most restrictive reading — and therefore left alone, rather than
-	 * guessed into the public timeline.
+	 * The audience an exported post went out to, from its addressing or the
+	 * API's word. Anything unplaceable is direct, and therefore skipped.
 	 *
 	 * @param array<string, mixed> $item
 	 */
@@ -1134,13 +990,8 @@ class PostImportService {
 
 	/**
 	 * One entry of an Instagram archive, as the same post every other reader
-	 * here produces.
-	 *
-	 * The caption is in one of two places and the archive does not say which:
-	 * a post of several pictures carries it at the top, a post of one carries
-	 * it on the picture. Both are read, the top one first, because a carousel
-	 * whose first picture happens to have a title would otherwise be published
-	 * under the wrong words.
+	 * produces. The caption is at the top for a carousel and on the media for
+	 * a single item; the top one is read first.
 	 *
 	 * @param array<string, mixed> $item
 	 * @param string $visibility the importing account's own default
@@ -1208,16 +1059,9 @@ class PostImportService {
 	}
 
 	/**
-	 * An id for a post that has none.
-	 *
-	 * It has to be the same on a second run of the same archive — that is what
-	 * stops a re-import writing everything twice — and different for two posts
-	 * that happen to share a caption. The file a post carries is what
-	 * distinguishes it; a caption-only post has only its words and the second
-	 * it was posted, which together are enough.
-	 *
-	 * Not a URL, and deliberately not one: nothing resolves it, and an id that
-	 * looked like an address would invite something to try.
+	 * An id for a post that has none, stable across re-runs of the same
+	 * archive: derived from the post's files, or for a text-only post from
+	 * its words and time. Deliberately not a URL, as nothing resolves it.
 	 *
 	 * @param array<int, array{url: string, name: string}> $attachments
 	 */
@@ -1229,17 +1073,10 @@ class PostImportService {
 	}
 
 	/**
-	 * Instagram's text, in the encoding it was written in.
-	 *
-	 * Every caption in the archive is mojibake: the exporter writes UTF-8 and
-	 * escapes each **byte** as if it were a character, so `né` arrives as
-	 * `nÃ©` and an emoji as four accented letters. Reading each character back
-	 * as the byte it stood for undoes it exactly.
-	 *
-	 * Only when the result is valid UTF-8 and the input was the kind of string
-	 * that can be one: a caption somebody genuinely wrote with a `Ã` in it is
-	 * left alone, because converting it would be the same bug pointed the
-	 * other way.
+	 * Instagram's text, in the encoding it was written in. The exporter
+	 * escapes each UTF-8 byte as a character (`né` becomes `nÃ©`), so each
+	 * character is read back as its byte; only when the result is valid UTF-8,
+	 * so a genuine `Ã` is left alone.
 	 */
 	private function instagramText(string $text): string {
 		$text = trim($text);
@@ -1259,12 +1096,8 @@ class PostImportService {
 	}
 
 	/**
-	 * The hashtags a caption spells.
-	 *
-	 * On Instagram a hashtag is a word in the text and nothing else, so unless
-	 * they are read out of it an imported post is not findable by any of the
-	 * tags its author chose. The same set the linkifier would find, so the
-	 * stored tags and the rendered links agree.
+	 * The hashtags a caption spells, found as the linkifier finds them, since
+	 * on Instagram they are only words in the text.
 	 *
 	 * @return string[]
 	 */
@@ -1283,11 +1116,8 @@ class PostImportService {
 	}
 
 	/**
-	 * A post's words, from the markup the other server wrote them in.
-	 *
-	 * The markup is not kept: this app renders its own from the text, and a
-	 * post is stored as what was typed. Paragraphs and line breaks are the
-	 * only formatting a post here has, so they are the only ones carried.
+	 * A post's words from the other server's markup. Only paragraphs and line
+	 * breaks are kept, as posts here are stored as typed text.
 	 */
 	private function text(string $html): string {
 		if ($html === '') {
@@ -1371,12 +1201,8 @@ class PostImportService {
 	}
 
 	/**
-	 * Writes one post, and nothing else.
-	 *
-	 * `StreamRequest::save()` rather than the delivery path: it writes the
-	 * post, its recipients and its tags in one transaction and queues no
-	 * request. That is the whole difference between importing a post and
-	 * publishing one.
+	 * Writes one post via `StreamRequest::save()`, which stores the post, its
+	 * recipients and tags in one transaction and queues no delivery.
 	 *
 	 * @param array<string, mixed> $post
 	 * @param array<string, string> $known original id => local id_prim, for a reply's parent
@@ -1398,11 +1224,8 @@ class PostImportService {
 		$note->setVisibility($post['visibility']);
 		$note->setLanguage(Stream::normalizeLanguage($post['language']));
 
-		// when it was written, not when it was imported: an archive that
-		// arrived as today's posts would be a timeline of somebody's whole
-		// history, in one minute, in the wrong order. Never later than now:
-		// the date is the post's place in every timeline, and one dated in
-		// the future would sit above every real post until then
+		// dated when written, not when imported, but never in the future, as
+		// the date is the post's place in every timeline
 		$note->setPublished(gmdate('Y-m-d\TH:i:s\Z', min($post['published'], time())));
 		$note->convertPublished();
 
@@ -1419,11 +1242,8 @@ class PostImportService {
 		$this->streamService->addHashtags($note, $post['hashtags']);
 		$note->setContent($this->linkifyService->toHtml($post['text'], $note->getTags()));
 
-		// what the author said the video is: its title, how long it runs, its
-		// category and its licence. Kept because it is most of what a video
-		// *is*, and because this app reads it back out when it publishes one —
-		// an imported video therefore leaves here as the same `Video` it
-		// arrived as, rather than as a post with a rectangle in it.
+		// the video's title, duration, category and licence, read back when
+		// it is published, so it leaves as the same `Video` it arrived as
 		if (($post['video'] ?? []) !== []) {
 			$note->setVideoMeta($post['video']);
 		}
@@ -1441,12 +1261,9 @@ class PostImportService {
 	}
 
 	/**
-	 * The entry of the archive whose path ends with this one, or null.
-	 *
-	 * The index is walked rather than guessed at because the prefix is
-	 * whatever folder the archive was packed under, and it is built once per
-	 * import: an archive of ten years of pictures is a few thousand entries
-	 * and this would otherwise be a scan per attachment.
+	 * The archive entry whose path ends with this one, or null. The index of
+	 * entries is built once per import, since the prefix is whatever folder
+	 * the archive was packed under.
 	 */
 	private function endingWith(ZipArchive $zip, string $path): ?string {
 		if ($this->archiveIndex === null) {
@@ -1481,13 +1298,9 @@ class PostImportService {
 	}
 
 	/**
-	 * The files of one post: out of the archive where it has them, off the old
-	 * server where the export only wrote their addresses.
-	 *
-	 * Every file goes through the ordinary upload path, so an imported picture
-	 * is stripped of its metadata, converted where a browser could not draw
-	 * it, and held to the same size and type this instance accepts from its
-	 * own people.
+	 * The files of one post, from the archive or fetched from the old server.
+	 * Each goes through the ordinary upload path: metadata stripped, converted
+	 * where needed, and held to this instance's size and type limits.
 	 *
 	 * @param array<string, mixed> $post
 	 * @param array<string, mixed> $tally
@@ -1537,13 +1350,9 @@ class PostImportService {
 	}
 
 	/**
-	 * One file, as a temporary path, or null where it cannot be had.
-	 *
-	 * A relative address is a file inside the archive — which is how both this
-	 * app's export and Mastodon's name theirs. An absolute one is on the
-	 * server the account is leaving, and is only fetched if the person asked
-	 * for that: it means telling the old server that the import is happening,
-	 * and it only works while that server is still up.
+	 * One file, as a temporary path, or null where it cannot be had. A
+	 * relative address is inside the archive; an absolute one is on the old
+	 * server and fetched only if the person asked for that.
 	 */
 	/**
 	 * Keeps a failure by the post it concerns, up to REPORT_FAILURES of them.
@@ -1602,10 +1411,7 @@ class PostImportService {
 
 	/**
 	 * A file out of the archive, written where the upload path can read it.
-	 *
-	 * The entry is read by name and its size is checked first: a zip says how
-	 * large a member is before it is expanded, and an archive that claims a
-	 * small file and expands to a large one is the oldest trick there is.
+	 * Its declared size is checked before it is expanded, against zip bombs.
 	 */
 	private function fromArchive(ZipArchive $zip, string $path): ?string {
 		$candidates = [$path, 'social/' . $path, ltrim($path, '/')];

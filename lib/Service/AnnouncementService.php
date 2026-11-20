@@ -16,35 +16,17 @@ use OCA\Social\Model\Client\Announcement;
 
 /**
  * Mastodon's announcements: the notice an admin posts to the whole instance,
- * and the dismissal that makes it read for one account.
+ * and the per-account dismissal that marks it read.
  *
- * Two surfaces meet here and they are not the same read. A client is answered
- * with the announcements that apply *now* — the window is a predicate of the
- * query, so nothing has to run for one to start or stop — each carrying
- * whether that account has dismissed it. The administration page is answered
- * with every announcement there is, including one that has not started and one
- * that has run out, because those are exactly the ones an admin needs to see
- * to act on.
- *
- * Dismissal is per account and stored as such: `read` is filled in from the
- * account being answered and from nothing else, so one account's read state is
- * never another's. Dismissing does not hide the announcement — Mastodon keeps
- * serving it and flips `read`, which is what lets a client show the notice
- * with its unread mark gone rather than have it vanish mid-read.
- *
- * There is no edit route. An announcement is a thing people have already read;
- * changing one under them would leave some accounts having dismissed a notice
- * that now says something else, and Mastodon's own answer to that — bumping
- * `updated_at` and leaving the dismissals — is worse than posting a new one.
- * `updated_at` is therefore always `published_at`, which is what the column
- * holds.
+ * Clients get the announcements live now (the window is a query predicate),
+ * each with that account's `read`; dismissed ones are still served, as on
+ * Mastodon. The administration page gets all of them, scheduled and expired
+ * included. There is no edit, so `updated_at` is always `published_at`.
  */
 class AnnouncementService {
 	/**
-	 * How many distinct emoji one account may put on one announcement.
-	 *
-	 * Mastodon's own ceiling. Without one, a notice is a free row generator
-	 * for whoever wants to make the reaction list unreadable for everybody.
+	 * How many distinct emoji one account may put on one announcement:
+	 * Mastodon's ceiling.
 	 */
 	public const MAX_REACTIONS_PER_ACCOUNT = 8;
 
@@ -70,15 +52,9 @@ class AnnouncementService {
 	}
 
 	/**
-	 * The announcements that apply, oldest window first, each carrying whether
-	 * this account has dismissed it.
-	 *
-	 * Ordered the way Mastodon orders them — by when the announcement takes
-	 * effect, which is its start when it has one and its publication when it
-	 * does not. That is a COALESCE of two columns and it is done here rather
-	 * than in SQL: the set is the handful of announcements that are live at
-	 * this moment, and a sort of a handful of rows is not worth an expression
-	 * four databases have to agree on.
+	 * The announcements that apply, each with whether this account dismissed
+	 * them, ordered as Mastodon does by start (or publication when unset);
+	 * sorted in PHP, as the live set is a handful of rows.
 	 *
 	 * @return Announcement[]
 	 */
@@ -120,12 +96,8 @@ class AnnouncementService {
 	}
 
 	/**
-	 * Marks it read for that account.
-	 *
-	 * The announcement is read first so that an id that names nothing is a 404
-	 * rather than a dismissal row pointing at nothing — and an announcement
-	 * outside its window can still be dismissed, because a client that was
-	 * showing it when it ran out must be able to put it away.
+	 * Marks it read for that account. An unknown id is a 404; one outside its
+	 * window can still be dismissed by a client that was showing it.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -135,16 +107,8 @@ class AnnouncementService {
 	}
 
 	/**
-	 * Puts an emoji on an announcement, for one account.
-	 *
-	 * The only thing an account can say back about an instance-wide notice.
-	 * Without it the only thing anybody could do with one was put it away, and
-	 * an admin who posted one had no way of telling whether it had landed.
-	 *
-	 * The announcement is read first, so an id that names nothing is a 404
-	 * rather than a row pointing at nothing — and one outside its window can
-	 * still be reacted to, because a client that was showing it when it ran
-	 * out must be able to finish what the reader started.
+	 * Puts an emoji on an announcement, for one account. An unknown id is a
+	 * 404; one outside its window can still be reacted to.
 	 *
 	 * @throws ItemNotFoundException the announcement
 	 * @throws InvalidResourceException the emoji, or too many of them
@@ -168,11 +132,8 @@ class AnnouncementService {
 	}
 
 	/**
-	 * Takes one back.
-	 *
-	 * Taking back one that was never there succeeds: Mastodon answers the same
-	 * way, and a client that has lost track of what it sent should not be told
-	 * the announcement does not exist.
+	 * Takes one back. Taking back one that was never there succeeds, as on
+	 * Mastodon.
 	 *
 	 * @throws ItemNotFoundException the announcement
 	 */
@@ -183,11 +144,8 @@ class AnnouncementService {
 
 	/**
 	 * What may be reacted with: one Unicode emoji, or the shortcode of one
-	 * this instance publishes.
-	 *
-	 * The same two things Mastodon accepts. Anything else would be a label an
-	 * account wrote on an instance-wide notice, shown to everybody who reads
-	 * it — which is not a reaction, it is a second announcement.
+	 * this instance publishes, as on Mastodon. Free text would be a second
+	 * announcement, not a reaction.
 	 *
 	 * @throws InvalidResourceException
 	 */
@@ -211,19 +169,10 @@ class AnnouncementService {
 	}
 
 	/**
-	 * Whether a string is a single emoji.
-	 *
-	 * Written out as code-point ranges rather than asked of `intl`, which this
-	 * app does not otherwise need and does not declare.
-	 *
-	 * One emoji is often several code points — a flag is two regional
-	 * indicators, a family is several people joined by ZWJ, a keycap is a
-	 * digit and an enclosing mark, a waving hand may carry a skin tone — so
-	 * this does two things. Every code point has to be one an emoji is built
-	 * from, which keeps out letters and words; and the pictographic ones have
-	 * to add up to exactly one emoji, which keeps out `😀😀` and two flags.
-	 * A label somebody wrote on an instance-wide notice, shown to everybody
-	 * who reads it, is not a reaction — it is a second announcement.
+	 * Whether a string is a single emoji, by code-point ranges rather than the
+	 * undeclared `intl`. Every code point must be an emoji building block, and
+	 * the pictographic ones must make exactly one emoji (flags, ZWJ sequences,
+	 * keycaps and skin tones included).
 	 */
 	public static function isEmoji(string $name): bool {
 		// long enough for a ZWJ family with skin tones, and no longer
@@ -250,10 +199,9 @@ class AnnouncementService {
 			if (preg_match('/^[\x{1F1E6}-\x{1F1FF}]$/u', $point) === 1) {
 				$regional++;
 			} elseif (preg_match('/^[' . self::EMOJI_PART . ']$/u', $point) === 1) {
-				// a skin tone and a variation selector modify the emoji before
-				// them rather than being one; tested first because the tone
-				// modifiers also fall inside the pictographic block, and a
-				// waving hand with a skin tone is one wave
+				// skin tones and variation selectors modify the emoji before
+				// them; tested first because the tones also fall inside the
+				// pictographic block
 				$joined = false;
 
 				continue;
@@ -268,12 +216,9 @@ class AnnouncementService {
 	}
 
 	/**
-	 * The reaction counts, with the picture behind any that names a custom
-	 * emoji this instance publishes.
-	 *
-	 * A client reads a reaction with no `url` as a character to render and one
-	 * with a `url` as a picture to fetch, so a shortcode without it renders as
-	 * the literal text `blobcat`.
+	 * The reaction counts, with the image URL of any custom emoji this
+	 * instance publishes; without a `url`, clients render the shortcode as
+	 * text.
 	 *
 	 * @param array<string, array{count: int, me: bool}> $reactions
 	 *
@@ -291,12 +236,8 @@ class AnnouncementService {
 	}
 
 	/**
-	 * Every announcement, newest first, as the administration page shows one:
-	 * the text as it was typed, its window, and whether it is being served at
-	 * this moment.
-	 *
-	 * Not the client entity — an admin is looking at what they wrote, not at
-	 * the HTML a client renders, and `read` would be the admin's own.
+	 * Every announcement, newest first, for the administration page: the text
+	 * as typed, its window, and whether it is live now.
 	 *
 	 * @return array<int, array<string, string|bool|null>>
 	 */
@@ -353,10 +294,8 @@ class AnnouncementService {
 		}
 
 		if ($allDay && $starts > 0) {
-			// whole days rather than the minute the admin happened to pick:
-			// the window opens at the start of its first day and closes at the
-			// start of the day after its last, which is the moment the read
-			// stops matching
+			// whole days: the window opens at the start of its first day and
+			// closes at the start of the day after its last
 			$starts = (int)strtotime('midnight', $starts);
 			$ends = (int)strtotime('midnight +1 day', $ends);
 		}
@@ -394,10 +333,8 @@ class AnnouncementService {
 
 	/**
 	 * @throws InvalidResourceException the field is not a date this server can
-	 *                                  read — refused rather than stored as
-	 *                                  "no bound", which would publish to
-	 *                                  everybody an announcement the admin
-	 *                                  scheduled
+	 *                                  read; refused rather than treated as no
+	 *                                  bound, which would publish it at once
 	 */
 	private function timestamp(string $date, string $field): int {
 		$date = trim($date);
