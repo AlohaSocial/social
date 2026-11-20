@@ -16,27 +16,15 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Publishes the posts whose time has come.
- *
- * A job of its own rather than a step of `Cron\Cache`, because it is the only
- * thing in this app whose lateness a user notices: everything that job does is
- * a cache that is merely stale until the next pass, while this one is somebody
- * waiting for a post to appear at the time they picked.
+ * Publishes the posts whose time has come. A job of its own because it is the
+ * only one whose lateness a user notices.
  */
 class ScheduledPosts extends TimedJob {
 	/**
-	 * The other two jobs run every twelve minutes, which would make every
-	 * scheduled post up to twelve minutes late. Five matches
-	 * `ScheduledStatusService::MIN_LEAD_TIME` — the shortest notice a post may
-	 * be accepted on — so the worst case is that a post goes out one period
-	 * after the minute it was asked for rather than in some interval longer
-	 * than the notice the API demanded for it.
-	 *
-	 * Nothing calls `setTimeSensitivity()` here: time-sensitive is what a job
-	 * already is, and this one has to stay that way. An instance that defers
-	 * non-urgent jobs to off-peak hours would otherwise publish an evening post
-	 * the next morning, which is precisely the failure the feature exists to
-	 * prevent.
+	 * Five minutes, matching `ScheduledStatusService::MIN_LEAD_TIME`, so a post
+	 * is never later than the notice the API demanded for it. Deliberately not
+	 * marked time-insensitive, which would let off-peak scheduling delay posts
+	 * for hours.
 	 */
 	public function __construct(
 		ITimeFactory $time,
@@ -55,10 +43,9 @@ class ScheduledPosts extends TimedJob {
 				$this->logger->info('[Cron\\ScheduledPosts] published ' . $published . ' scheduled posts');
 			}
 		} catch (Throwable $e) {
-			// publishDue() already survives one post failing; reaching here
-			// means the database or the container did, and the next run is the
-			// retry. Logged rather than thrown, because an exception out of a
-			// job is what makes Nextcloud stop scheduling it.
+			// publishDue() survives one post failing, so this is the database
+			// or container failing; logged, not thrown, as a throwing job stops
+			// being scheduled. The next run retries.
 			$this->logger->warning(
 				'[Cron\\ScheduledPosts] the run failed: ' . $e->getMessage(),
 				['exception' => $e]

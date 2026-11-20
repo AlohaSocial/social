@@ -13,9 +13,8 @@ use OCA\Social\Model\Client\Collection;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Extends StreamRequestBuilder rather than CoreRequestBuilder because the items
- * of a collection are posts: reading one means reaching `social_stream` through
- * the same helpers every other timeline uses, rather than a second copy of them.
+ * Extends StreamRequestBuilder because a collection's items are posts, read
+ * through the same `social_stream` helpers as every timeline.
  *
  * @package OCA\Social\Db
  */

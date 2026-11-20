@@ -14,12 +14,9 @@ use OCA\Social\Model\Strike;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The history of what moderators have decided about accounts.
- *
- * Append-only: a row is written when a decision is taken and is never updated
- * and never deleted by a lift, which is the whole difference between this and
- * `social_moderation`. Deleting the account's rows happens in one place only —
- * the purge of an instance, where the account itself is going.
+ * The history of what moderators have decided about accounts. Append-only,
+ * unlike `social_moderation`: rows are only deleted when an instance is
+ * purged along with its accounts.
  */
 class StrikesRequest extends CoreRequestBuilder {
 	/** How many of an account's strikes a history shows. */
@@ -63,16 +60,9 @@ class StrikesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * How many strikes each of these accounts has.
-	 *
-	 * One query for a whole page of the account browser: asking per row turned
-	 * a forty-account page into forty-one queries, and the column is only a
-	 * number.
-	 *
-	 * Only what stands against the account is counted. The table also records
-	 * the lifting of a decision, which is history rather than a mark against
-	 * anybody — counted, it would make an account that was let off look worse
-	 * than one that never was.
+	 * How many strikes each of these accounts has, in one query for a page of
+	 * the account browser. Lifted decisions are history, not strikes, and are
+	 * not counted.
 	 *
 	 * @param string[] $actorIds
 	 *

@@ -23,16 +23,10 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
- * Who has authorized which app, and with what.
- *
- * `social_client` used to hold this in its own row — one code, one account,
- * one token — so an app registration belonged to exactly one person at a time
- * and the second person to sign in with a client signed the first one out.
- * Everything about *who authorized* lives here instead; the app registration
- * stays where it was.
- *
- * Every read joins the app row, so what comes back is still one `SocialClient`
- * carrying both halves: the app it is, and the account it is acting for.
+ * Who has authorized which app, and with what, one row per account and app,
+ * so several people can sign in with the same client. Every read joins the
+ * app row and returns one `SocialClient` carrying both the app and the
+ * account it acts for.
  */
 class ClientAuthRequest extends ClientRequestBuilder {
 	/** How often replace() deletes and inserts before it gives up on a busy row. */
@@ -51,18 +45,11 @@ class ClientAuthRequest extends ClientRequestBuilder {
 
 	/**
 	 * Records an authorization, replacing whatever that account had granted
-	 * this app before.
+	 * this app before, token included, so an old token cannot act under new
+	 * scopes.
 	 *
-	 * Replacing rather than adding: a second authorization by the same person
-	 * against the same app is them saying "start again", and Mastodon reads it
-	 * the same way. The token is emptied with the row — leaving the old one
-	 * live would let a token granted under the old scopes act under the new
-	 * ones.
-	 *
-	 * The PKCE challenge is stored as the client sent it: it is a digest
-	 * already, and `exchangeCode()` compares the digest of the presented
-	 * verifier against it. The `redirect_uri` the code was issued for is
-	 * stored beside it, so the exchange can require the same one.
+	 * The PKCE challenge is stored as sent (it is a digest already) for
+	 * `exchangeCode()`, with the `redirect_uri` the exchange must repeat.
 	 */
 	public function authorize(
 		int $clientId,
@@ -95,14 +82,10 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Records an app token: a row of the app's that names no account.
-	 *
-	 * Stored like an authorization, with an empty `user_id`, so that
-	 * `getByToken()` reads it back as a `SocialClient` whose `auth_user_id`
-	 * is empty -- which is what tells the routes it acts for nobody. One per
-	 * app, replaced by the next (the (client, user) index is unique), and
-	 * the app row is marked as used, as `authorize()` marks it, so a client
-	 * that only ever took an app token is not swept as never authorized.
+	 * Records an app token: an authorization with an empty `user_id`, which
+	 * `getByToken()` returns as a `SocialClient` acting for nobody. One per
+	 * app; the app row is marked as used, as `authorize()` does, so it is not
+	 * swept as never authorized.
 	 *
 	 * @param string[] $scopes
 	 */
@@ -125,12 +108,8 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Exchanges a code for a token, on the authorization the code names.
-	 *
-	 * The code is spent here: it is emptied in the same statement that writes
-	 * the token, so the same code cannot be exchanged twice even if two
-	 * requests arrive together — the second updates no row and is told the
-	 * code is unknown.
+	 * Exchanges a code for a token. The code is emptied in the same statement
+	 * that writes the token, so of two concurrent exchanges only one succeeds.
 	 *
 	 * @throws ClientNotFoundException the code names no live authorization
 	 */
@@ -162,13 +141,9 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Puts a new access and refresh token in place of the ones an
-	 * authorization holds, if the refresh token presented is still its
-	 * current one, and remembers the presented one as spent.
-	 *
-	 * The comparison is in the statement that writes, so of two requests
-	 * presenting the same refresh token at once only one rotates; the other
-	 * updates no row and is told so.
+	 * Replaces the access and refresh tokens if the presented refresh token is
+	 * still current, and remembers it as spent. The comparison is in the
+	 * UPDATE, so of two concurrent rotations only one succeeds.
 	 *
 	 * @param string[] $scopes
 	 * @return bool whether the authorization was rotated
@@ -337,13 +312,9 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Drops authorizations nobody has used since a moment
-	 * (`ClientService::idleSeconds()` before now), with their refresh tokens.
-	 *
-	 * The app registration is untouched, which is the other half of what the
-	 * old sweep got wrong: it deleted the whole `social_client` row, so an
-	 * idle token took the app's registration with it and the client had to
-	 * register again.
+	 * Drops authorizations unused for `ClientService::idleSeconds()`, with
+	 * their refresh tokens. The app registration stays, so the client need
+	 * not register again.
 	 */
 	public function deprecate(int $before): void {
 		$qb = $this->getQueryBuilder();
@@ -380,12 +351,9 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	 * Puts one account's authorization of an app (or the app's own token, for
 	 * an empty `$userId`) in place of whatever was there.
 	 *
-	 * Two requests can do this at once — a consent form sent twice, two
-	 * workers of a bot asking for an app token together — and both delete
-	 * before either inserts, so the second insert meets the unique
-	 * (client, user) index. It is skipped rather than refused, and the
-	 * request deletes and tries again: the last one to write wins, and
-	 * neither fails.
+	 * Two concurrent requests can both delete before either inserts; the
+	 * second insert then meets the unique (client, user) index, is skipped,
+	 * and the request deletes and retries, so the last writer wins.
 	 *
 	 * @param array<string, string> $values the row's columns but its key and dates
 	 */

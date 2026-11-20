@@ -15,18 +15,14 @@ use OCA\Social\Tools\Traits\TArrayTools;
 /**
  * Class DiscoveryRequestBuilder
  *
- * Extends CacheActorsRequestBuilder because everything discovery answers with
- * is an Account entity, and `social_cache_actor` is where this app builds one
- * from — including for its own local accounts, which are mirrored into it. The
- * `discoverable` flag is not there, though: it lives on `social_actor`, which
- * only local accounts have a row in, so every query here that honours the flag
- * joins the two.
+ * Extends CacheActorsRequestBuilder because discovery answers with Account
+ * entities, built from `social_cache_actor` (local accounts included). The
+ * `discoverable` flag is on `social_actor`, so queries honouring it join the
+ * two.
  *
- * Both readers work in two steps, the way the timelines do: one query decides
- * *which* accounts belong in the answer and projects a single column, and a
- * second fetches the rows. The deciding query aggregates, and grouping by the
- * twenty columns an Account needs would be unportable — Oracle cannot group by
- * a CLOB at all.
+ * Queries run in two steps, like the timelines: an aggregating one picks the
+ * accounts by a single column, a second fetches the rows, since grouping by
+ * all Account columns is unportable (Oracle cannot group by a CLOB).
  *
  * @package OCA\Social\Db
  */
@@ -39,13 +35,8 @@ class DiscoveryRequestBuilder extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * The local accounts that have opted in to being listed, as a single
-	 * `id_prim` column.
-	 *
-	 * The join is what reads the `discoverable` flag — stored and federated
-	 * since `Version1000Date20260911000002` and, until this, read by nothing:
-	 * an account that never opted in was as listable as one that did, because
-	 * there was no directory to leave it out of.
+	 * The local accounts that opted in to being listed, as a single `id_prim`
+	 * column; the join reads the `discoverable` flag.
 	 */
 	protected function getDiscoverablePrimsSelectSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
@@ -60,12 +51,9 @@ class DiscoveryRequestBuilder extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * The follows of one account, as a single `object_id_prim` column.
-	 *
-	 * Accepted follows only: a follow request the other side has not answered
-	 * says nothing about who that account trusts, and a pending request to a
-	 * locked account would otherwise leak its followers into a suggestion
-	 * list.
+	 * The accepted follows of one account, as a single `object_id_prim`
+	 * column. Pending requests are left out, as they would leak a locked
+	 * account's followers into suggestions.
 	 */
 	protected function getFollowedPrimsSelectSql(string $alias): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();

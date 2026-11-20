@@ -30,11 +30,8 @@ class MuteExpiryRequestBuilder extends CoreRequestBuilder {
 	public const ALIAS = 'hd_x';
 
 	/**
-	 * The columns an expiry is looked up by: the author of the row, and the
-	 * author of the row it boosts.
-	 *
-	 * A boost's own author is the booster, and either of the two can be muted
-	 * — with the mute of one of them run out while the other still holds.
+	 * The columns an expiry is looked up by: the row's author, and the author
+	 * of the row it boosts, as either may be muted with a different expiry.
 	 *
 	 * @return string[]
 	 */
@@ -48,16 +45,10 @@ class MuteExpiryRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The mutes of the viewer that have run out, joined against the authors of
-	 * the rows being read.
-	 *
-	 * Joined *before* the relation anti-join of `filterHiddenActors()` and not
-	 * after, because an expiry is a condition of that join and a join may only
-	 * name an alias that already exists. Nothing is filtered here: this only
-	 * puts the expiry within reach of `unexpired()` below.
-	 *
-	 * Costs an index probe per query for an account that has no timed mute, and
-	 * nothing else.
+	 * Joins the viewer's expired mutes against the authors of the rows being
+	 * read, for `unexpired()`. It must come before the anti-join of
+	 * `filterHiddenActors()`, whose join condition names this alias. Nothing is
+	 * filtered here.
 	 *
 	 * @param string $announceAlias the alias the boosted row is joined under; a
 	 *                              boost's own author is the booster, and both
@@ -100,14 +91,10 @@ class MuteExpiryRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * True of a mute row that still applies: the one whose expiry has passed is
-	 * the row `joinExpiredMutes()` found, and it is that row and no other — the
-	 * comparison is on the muted account, because a boost brings two authors
-	 * into the same query and only one of them may have run out.
-	 *
-	 * The expiry is a predicate of the read and not a row that something
-	 * deletes: a mute stops applying the second it expires, on an instance with
-	 * no working cron as much as on one with.
+	 * True of a mute row that still applies, compared on the muted account,
+	 * as a boost brings two authors into one query. Expiry is a predicate of
+	 * the read, not a cleanup job, so a mute stops applying the moment it
+	 * expires even without cron.
 	 */
 	public static function unexpired(
 		IExpressionBuilder $expr, string $relationAlias = 'hd_r', string $expiryAlias = self::ALIAS,

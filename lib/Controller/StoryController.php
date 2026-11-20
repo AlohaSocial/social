@@ -27,13 +27,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Stories: one picture that stops existing after a day.
- *
- * Pixelfed's routes, because these are Pixelfed's feature. Every one of them
- * requires a viewer -- there is no public story and so nothing here to answer a
- * signed-out caller with. Whether an account even *has* a story up is only told
- * to its followers, which is why "not allowed to see these" and "there are none"
- * are the same 404.
+ * Stories (shorts in the UI), on Pixelfed's routes. Every route requires a
+ * viewer. Only followers learn that an account has a story up, so "not
+ * allowed" and "none" are the same 404.
  */
 class StoryController extends ClientApiController {
 	public function __construct(
@@ -119,10 +115,7 @@ class StoryController extends ClientApiController {
 	}
 
 	/**
-	 * Marks one seen.
-	 *
-	 * Called as a client scrolls, so it is written to be called twice: a repeat
-	 * is a no-op rather than a second view.
+	 * Marks one seen; a repeat is a no-op.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

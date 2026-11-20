@@ -86,11 +86,9 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	public function activity(Acore $activity, ACore $item): void {
 		/** @var Person $item */
 		$activity->checkOrigin($item->getId());
-		// An actor speaks for itself and for nothing else. The origin check
-		// above stops at the host, which on a shared server is every account
-		// on it: without this, any of them could delete a neighbour's account
-		// from here, or hand `updateActor()` a profile carrying its own public
-		// key under the neighbour's id and sign as them from then on.
+		// An actor speaks only for itself. The origin check stops at the host,
+		// so without this any account on a shared server could delete a
+		// neighbour's account or replace its public key.
 		$activity->checkActor($item->getId(), $activity->getActorId());
 
 		switch ($activity->getType()) {
@@ -117,12 +115,9 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * Everything the account leaves behind, from the one list a suspension
-	 * works from too — see `ActorCascadeService`, which exists because these
-	 * were two lists and had drifted apart.
-	 *
-	 * A moderation decision is deliberately not in it: it is what keeps a
-	 * suspended account suspended if it comes back.
+	 * Everything the account leaves behind, from the list a suspension also
+	 * uses (`ActorCascadeService`). The moderation decision is kept, so a
+	 * suspended account stays suspended if it comes back.
 	 */
 	#[\Override]
 	public function delete(ACore $item): void {
@@ -142,12 +137,9 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 		$this->streamRequest->deleteByAuthor($actor->getId());
 
 		if (!$this->detachRecipient($actor, self::DETACH_INLINE)) {
-			// More posts address this account than one request may rewrite.
-			// The rest is finished by a job, because the alternative is doing
-			// it here: this runs inside the HTTP request a peer is waiting on
-			// for its `Delete`, and a peer that times out re-sends it — so the
-			// work would start again from the beginning, for ever, on exactly
-			// the accounts that have too much of it.
+			// The rest is left to a job: this runs inside the request a peer
+			// waits on for its `Delete`, and a timed-out peer re-sends it, which
+			// would restart the work for ever.
 			$this->jobList->add(ActorCleanup::class, ['actor' => $actor->getId()]);
 
 			return;
@@ -157,12 +149,9 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * Rewrites the posts that address an account, in pages, and says whether it
-	 * reached the end.
-	 *
-	 * Public so `Cron\ActorCleanup` can carry on where a request stopped: the
-	 * two must do the same work, and two copies of this walk would be two
-	 * chances to leave a post addressed to an account that no longer exists.
+	 * Rewrites the posts that address an account, in pages, and says whether
+	 * it reached the end. Public so `Cron\ActorCleanup` can finish what a
+	 * request started.
 	 *
 	 * @return bool true when nothing is left to detach
 	 */
@@ -193,10 +182,9 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * Drops the rows that said a post was addressed to this account, once
-	 * every post that carried it has been rewritten. Public for the same
-	 * reason `detachRecipient()` is: the job has to be able to finish what a
-	 * request started.
+	 * Drops the rows that addressed a post to this account, once every such
+	 * post has been rewritten. Public for `Cron\ActorCleanup`, as
+	 * `detachRecipient()` is.
 	 */
 	public function forgetRecipient(string $actorId): void {
 		$this->streamDestRequest->deleteRelatedToActor($actorId);
@@ -247,10 +235,8 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * The post and everything that hangs off it. StreamRequest::deleteById()
-	 * takes either a uri or the prim a dest row holds, which is what this is
-	 * given, and now removes the related rows itself — the name of this method
-	 * was a promise its one-line body never kept.
+	 * The post and everything that hangs off it; StreamRequest::deleteById()
+	 * takes the prim a dest row holds and removes the related rows itself.
 	 */
 	private function removeStreamAndRelated(string $idPrim): void {
 		$this->streamRequest->deleteById($idPrim);
@@ -259,9 +245,8 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	private function updateActor(Person $actor, ACore $activity) {
 		$actor->setCreation($activity->getOriginCreationTime());
 
-		// through ActorService, which stores the picture the profile names
-		// before the profile points at it: written straight to the cache, a
-		// new avatar pointed at a document nobody had stored
+		// through ActorService, which stores the avatar the profile names
+		// before the profile points at it
 		try {
 			$current = $this->cacheActorsRequest->getFromId($actor->getId());
 			if ($current->getCreation() < $activity->getOriginCreationTime()) {

@@ -26,15 +26,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The move an account's owner grants another server the right to send.
+ * The account move for a token: what `POST /api/v1/migration/move` does for a
+ * session, for the token the person's new instance obtained by consent.
  *
- * `POST /api/v1/migration/move` is the button: a session, a password, the
- * own handle typed back. This is the same move for a token — the one the
- * person's new instance obtained by sending them here to consent — and it
- * takes exactly `write:migration`, never the broad `write` every phone app
- * holds: a token that can post must not be a token that can move the
- * account away. The token has to have been sent to an Aloha Social move-in
- * callback, and the target has to be on that callback's host.
+ * It takes exactly `write:migration`, never the broad `write` every phone app
+ * holds, so a token that can post cannot move the account away. The token
+ * must have been sent to an Aloha Social move-in callback, and the target
+ * must be on that callback's host.
  */
 class MigrationApiController extends ClientApiController {
 	public function __construct(

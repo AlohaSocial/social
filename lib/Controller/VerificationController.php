@@ -25,13 +25,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The accounts this instance verified (`VerificationService`), for the
- * administration page and an account's profile menu.
- *
- * Verifying and taking a verification back are the moderators' — an
- * administrator or whoever the Social settings are delegated to, as for
- * every moderation route. Choosing the account the instance verifies in
- * the name of is the administrator's alone: it is the instance speaking.
+ * The accounts this instance verified (`VerificationService`). Verifying is
+ * for moderators; choosing the account the instance verifies in the name of
+ * is the administrator's alone.
  */
 class VerificationController extends Controller {
 	public function __construct(
