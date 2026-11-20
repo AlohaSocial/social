@@ -21,15 +21,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What happens here when Bluesky stops serving an account, as Jetstream's
- * `account` event or the AppView's refusal says it (§9.5). A deactivated,
- * suspended or taken-down account can come back (takedowns are often
- * reversed), so its mirror is hidden and kept: the actor is marked and its
- * posts lose their recipient rows, which takes them out of every timeline
- * and viewer-limited read until the account is active again and the rows
- * are written back; the follows of it stay. Only a deleted account is gone,
- * so the actor and everything it put here go through the cascade a remote
- * `Delete` of the actor goes through.
+ * What happens here when Bluesky stops serving an account (§9.5). A
+ * deactivated, suspended or taken-down account can come back, so its actor is
+ * marked and its posts lose their recipient rows, hiding them until it is
+ * active again. Only a deleted account goes through the cascade of a remote
+ * `Delete` of the actor.
  */
 class AccountStatus {
 	public const DEACTIVATED = 'deactivated';

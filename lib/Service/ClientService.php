@@ -48,11 +48,8 @@ class ClientService {
 	public const TIME_CODE_TTL = 600; // 10m
 
 	/**
-	 * The PKCE transformations this server accepts (RFC 7636 §4.2).
-	 *
-	 * `plain` is deliberately absent: it offers no protection against an
-	 * intercepted authorization request, and the discovery document names
-	 * exactly what is implemented here.
+	 * The PKCE transformations this server accepts (RFC 7636 §4.2); `plain`
+	 * offers no protection against an intercepted authorization request.
 	 */
 	public const CODE_CHALLENGE_METHODS = ['S256'];
 
@@ -138,9 +135,8 @@ class ClientService {
 
 	/**
 	 * An application's website as it may be offered as a link: an `http` or
-	 * `https` address with a host, or '' for anything else. Registration
-	 * refuses anything else now; rows registered before it did are read
-	 * through this too.
+	 * `https` address with a host, or '' for anything else, including rows
+	 * registered before registration checked it.
 	 */
 	public static function websiteLink(string $website): string {
 		$website = trim($website);
@@ -244,21 +240,10 @@ class ClientService {
 	}
 
 	/**
-	 * A client registration for a PeerTube app, made on the spot.
-	 *
-	 * PeerTube's `/oauth-clients/local` hands out **one** pair per instance,
-	 * the same one to everybody, for ever. This app mints a pair per client
-	 * and **hashes the secret** — deliberately, and as a fix to a real
-	 * problem — so there is no stored plaintext to hand back a second time,
-	 * and a route that promised the same pair every call would have to undo
-	 * that.
-	 *
-	 * So it registers a fresh one each time and answers with its credentials.
-	 * That satisfies what the route is actually for: a client fetches a pair
-	 * immediately before logging in and uses it at once. Nothing in PeerTube's
-	 * flow requires the pair to be the *same* one, only a working one — and a
-	 * registration per call is exactly what a Mastodon client does through
-	 * `/api/v1/apps`, which is what the rest of this API is built on.
+	 * A client registration for a PeerTube app, made on the spot. PeerTube's
+	 * `/oauth-clients/local` hands out one pair per instance; this app hashes
+	 * client secrets, so it registers a fresh pair each call, which the
+	 * client uses at once, as a Mastodon client does through `/api/v1/apps`.
 	 *
 	 * @throws ClientException
 	 */
@@ -278,12 +263,8 @@ class ClientService {
 
 	/**
 	 * Records that this account has authorized this app, and returns the code
-	 * to hand back.
-	 *
-	 * One row per (app, account): an app registration used to hold a single
-	 * authorization in its own row, so the second person to sign in with a
-	 * client signed the first one out. Re-authorizing replaces that account's
-	 * row and nobody else's.
+	 * to hand back. One row per (app, account), so signing in with an app does
+	 * not sign anybody else out of it.
 	 */
 	public function authClient(SocialClient $client): void {
 		$client->setAuthCode($this->token(60));
@@ -301,19 +282,10 @@ class ClientService {
 	}
 
 	/**
-	 * Exchanges an authorization code for a token.
-	 *
-	 * The code decides whose authorization this is, so what comes back is that
-	 * account's — not whatever the app row last held.
-	 *
-	 * An authorization made with PKCE (RFC 7636) is only exchangeable against
-	 * the verifier its challenge was derived from, so a code intercepted on
-	 * the redirect — a custom scheme another app can claim, a proxy reading
-	 * the query string — is of no use on its own.
-	 *
-	 * RFC 6749 §4.1.3: the `redirect_uri` presented here has to be the one
-	 * the code was issued for. A client holding a code that was sent to
-	 * another of the app's registered URIs is not the client it was sent to.
+	 * Exchanges an authorization code for a token of the account the code
+	 * belongs to. With PKCE (RFC 7636) only the matching verifier is accepted,
+	 * and the `redirect_uri` has to be the one the code was issued for
+	 * (RFC 6749 §4.1.3), so an intercepted code is of no use on its own.
 	 *
 	 * @throws ClientNotFoundException the code names no live authorization
 	 * @throws InvalidGrantException the redirect_uri is not the one the code
@@ -343,17 +315,11 @@ class ClientService {
 
 	/**
 	 * The `refresh_token` grant (RFC 6749 §6): a new access token and a new
-	 * refresh token in place of the ones the authorization holds.
-	 *
-	 * Rotated on every use, so a refresh token works once. One presented a
-	 * second time is a copy — whoever holds the other one has already used
-	 * it — and since nothing tells the two holders apart, the whole
-	 * authorization goes, and its client signs in again (OAuth 2.0 Security
-	 * BCP, RFC 9700 §4.14.2). A refresh may narrow the scopes, never widen them.
-	 *
-	 * The Web Push subscription bound to the old access token is moved to the
-	 * new one. A streaming connection opened with the old one is closed at
-	 * the daemon's next token check, and the client reconnects with the new.
+	 * refresh token in place of the ones the authorization holds. Rotated on
+	 * every use; a token presented twice was copied, so the whole
+	 * authorization goes (RFC 9700 §4.14.2). A refresh may narrow the scopes,
+	 * never widen them. The Web Push subscription moves to the new token; a
+	 * streaming connection on the old one is closed at the daemon's next check.
 	 *
 	 * @throws InvalidGrantException the token is unknown, spent, expired, the
 	 *                               account's is disabled, or it belongs to
@@ -463,12 +429,9 @@ class ClientService {
 	}
 
 	/**
-	 * Takes one of an account's own authorizations back.
-	 *
-	 * Scoped to that account by looking it up among theirs rather than by
-	 * deleting the id it was handed: the id is a number a caller can count
-	 * upwards, and revoking somebody else's token — signing a stranger's
-	 * phone out — has to be impossible rather than unlikely.
+	 * Takes one of an account's own authorizations back, looked up among
+	 * theirs: the id is a countable number, and revoking somebody else's must
+	 * be impossible.
 	 *
 	 * @return bool whether there was one to take back
 	 */
@@ -519,13 +482,8 @@ class ClientService {
 
 	/**
 	 * The `client_credentials` grant (RFC 6749 §4.4): a token for the app
-	 * itself, bound to no account.
-	 *
-	 * Mastodon's own apps take one before anybody has signed in, for the
-	 * instance and its rules; bots and `Mastodon.py` tools probe
-	 * `/api/v1/instance` with one. It is granted `read` and nothing more,
-	 * whatever the app registered: there is no account for `write` or
-	 * `follow` to act on, and a route that needs one answers 401.
+	 * itself, bound to no account, as Mastodon's apps and bots take before
+	 * sign-in. Granted `read` only, whatever the app registered.
 	 */
 	public function issueAppToken(SocialClient $client): SocialClient {
 		$token = $this->token(80);
@@ -584,10 +542,9 @@ class ClientService {
 			throw new ClientNotFoundException();
 		}
 
-		// The sliding idle limit above is about a token nobody uses; this is
-		// about one somebody does. Without it a token copied off a device lived
-		// as long as whoever held the copy kept using it. An authorization
-		// with a refresh token is kept, so its client can refresh it.
+		// The idle limit above is about an unused token; this bounds a used
+		// one, so a copied token does not live for ever. An authorization with
+		// a refresh token is kept, so its client can refresh it.
 		if ($this->expiredByAge($client, $now)) {
 			if ($client->getRefreshToken() === '') {
 				$this->clientAuthRequest->revoke($client->getAuthId());
@@ -626,11 +583,8 @@ class ClientService {
 	 * The housekeeping `Cron\Cache` runs: authorizations idle past
 	 * `token_idle_days` with their Web Push subscriptions, the spent refresh
 	 * tokens of authorizations that are gone, and app registrations nobody
-	 * ever authorized.
-	 *
-	 * The first used to happen only when an expired token was presented, so a
-	 * token whose holder never came back stayed in the table for good; the
-	 * last is what keeps the public `POST /api/v1/apps` from filling it.
+	 * ever authorized, which keeps the public `POST /api/v1/apps` from
+	 * filling the table.
 	 *
 	 * @return int how many unused registrations were removed
 	 */
@@ -649,12 +603,9 @@ class ClientService {
 
 	/**
 	 * When the current access token stops working however much it is used,
-	 * or 0 for never.
-	 *
-	 * Counted from when it was issued (the grant, for a row from before that
-	 * was recorded): `refreshed_token_hours` for a token issued by a refresh,
-	 * `token_max_days` for any other. A setting at 0, or a row with no date,
-	 * is never.
+	 * or 0 for never: `refreshed_token_hours` after a refresh issued it,
+	 * `token_max_days` after any other issue (the grant, for a row without an
+	 * issue date). A setting at 0, or a row with no date, is never.
 	 */
 	public function expiresAt(SocialClient $client): int {
 		$issued = ($client->getTokenCreation() > 0) ? $client->getTokenCreation() : $client->getAuthCreation();
@@ -794,12 +745,9 @@ class ClientService {
 			}
 		}
 
-		// Neither `code` nor `auth_scopes` is among what this checks. An app row
-		// no longer carries either, because it no longer carries one
-		// authorization: the code is what *finds* the authorization, and both
-		// it and the scopes granted with it live on the row it names — the
-		// code checked by exchangeCode(), the scopes enforced per request by
-		// each controller's checkTokenScope().
+		// `code` and `auth_scopes` are not checked here: they live on the
+		// authorization the code finds, checked by exchangeCode() and enforced
+		// per request by each controller's checkTokenScope().
 	}
 
 	private function now(): int {

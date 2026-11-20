@@ -105,11 +105,9 @@ class SocialReportsWidget implements IAPIWidgetV2, IIconWidget, IButtonWidget, I
 	}
 
 	/**
-	 * The rows are read for the user the API names, so the check is made here
-	 * too: `isEnabled()` decides what the dashboard *offers*, and a widget
-	 * that only answered that question would hand its rows to any client that
-	 * asked for them by id. The reports name accounts somebody has complained
-	 * about, which is not public.
+	 * The rows are read for the user the API names, so access is checked here
+	 * too: `isEnabled()` only decides what the dashboard offers, and reports
+	 * are not public.
 	 */
 	#[\Override]
 	public function getItemsV2(string $userId, ?string $since = null, int $limit = 7): WidgetItems {

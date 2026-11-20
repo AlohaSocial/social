@@ -16,26 +16,12 @@ use OCP\AppFramework\Http\Response;
 use OCP\Files\SimpleFS\ISimpleFile;
 
 /**
- * A stored file, served a byte range at a time.
+ * A stored file, served a byte range at a time, so a browser can seek a video
+ * and read its duration without downloading all of it.
  *
- * `FileDisplayResponse` sends the whole thing and says nothing about ranges,
- * which is fine for a picture and wrong for anything with a timeline in it: a
- * browser cannot seek a video it can only receive from the beginning, so the
- * scrub bar does nothing, and asking for the duration alone costs the whole
- * file. On a page of twenty videos that is twenty full downloads before
- * anybody has pressed play.
- *
- * So this answers `Accept-Ranges: bytes`, and when the reader asks for part of
- * a file it sends that part with a `206` and a `Content-Range`. The rules are
- * RFC 9110's: a range past the end is unsatisfiable and answered `416` with the
- * length, a suffix range (`bytes=-500`) is the last N bytes, an open range
- * (`bytes=500-`) runs to the end, and anything malformed is ignored rather than
- * refused — the whole file is a valid answer to a range request nobody could
- * parse.
- *
- * Multipart ranges (`bytes=0-99,200-299`) are deliberately not implemented.
- * No media element asks for one, and the answer to a range request this does
- * not handle is the whole file, which is always correct.
+ * Follows RFC 9110: a range past the end is `416` with the length, a suffix
+ * range is the last N bytes, an open range runs to the end, and anything
+ * malformed or multipart is answered with the whole file.
  *
  * @template-extends Response<Http::STATUS_*, array<string, mixed>>
  */
@@ -65,13 +51,9 @@ class RangedFileResponse extends Response implements ICallbackResponse {
 		// the offer has to be made before a browser will make use of it
 		$this->addHeader('Accept-Ranges', 'bytes');
 
-		// The bytes behind one of these are immutable — every route that
-		// answers with this one is addressed by a uuid or a (uuid, height)
-		// pair that names bytes which never change — so the tag can be
-		// anything that identifies them. A timeline is forty to sixty of these
-		// per screen, each of which is a full Nextcloud boot and, measured on
-		// devel, nineteen queries before the first byte; a conditional request
-		// that comes back empty is the difference between that and nothing.
+		// The bytes behind one of these never change (every route is addressed
+		// by a uuid or a (uuid, height) pair), so the tag can be anything that
+		// identifies them; a timeline screen asks for dozens of these.
 		$this->etag = '"' . $this->file->getETag() . '"';
 		$this->addHeader('ETag', $this->etag);
 
@@ -110,16 +92,11 @@ class RangedFileResponse extends Response implements ICallbackResponse {
 	}
 
 	/**
-	 * The headers every stored file is served with.
-	 *
-	 * A file somebody else wrote, served from this instance's own origin. A
-	 * browser must not be allowed to sniff past the type this states, and
-	 * anything that is not a picture, a video or a sound is handed over as a
-	 * download rather than rendered: a peer that declares `text/html` over
-	 * bytes beginning `GIF89a` is otherwise a page on this origin, framed and
-	 * same-origin, whatever the content security policy says about the
-	 * scripts in it. A download is also sandboxed, for the browser that opens
-	 * a text file in a tab all the same.
+	 * The headers every stored file is served with. The file was written by
+	 * somebody else and is served from this origin, so the browser may not
+	 * sniff past its type, and anything but an image, a video or a sound is a
+	 * sandboxed download rather than rendered: `text/html` over GIF bytes
+	 * would otherwise be a page on this origin.
 	 */
 	public static function guardStoredFile(Response $response, string $contentType): void {
 		$response->addHeader('X-Content-Type-Options', 'nosniff');
@@ -130,14 +107,9 @@ class RangedFileResponse extends Response implements ICallbackResponse {
 	}
 
 	/**
-	 * Whether a media element may be pointed at this and nothing worse can
-	 * happen: a picture, a video or a sound.
-	 *
-	 * An SVG is none of the three. It is a document with scripts and remote
-	 * references in it that happens to be spelled `image/`, and drawing one
-	 * inline is script on this origin whatever `nosniff` says. The ingest
-	 * allow-list already refuses it; this is the second place, for a row
-	 * written before it did.
+	 * Whether a media element may be pointed at this safely: an image, a video
+	 * or a sound. Not an SVG, which is a document with scripts; the ingest
+	 * allow-list refuses those too, and this covers rows stored before it did.
 	 */
 	private static function isRenderable(string $contentType): bool {
 		$type = strtolower(trim(explode(';', $contentType, 2)[0]));

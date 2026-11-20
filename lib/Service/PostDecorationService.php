@@ -15,17 +15,11 @@ use OCA\Social\Model\ActivityPub\Stream;
 
 /**
  * What a client is shown on a post that is not part of the stored post: its
- * link preview, its place, its reaction bar, the people named in its
- * pictures and, on a video posted here, how many times it was watched.
- *
- * Every route that serves posts to a client calls `decorate()`, whether it
- * serves a timeline page, a thread or one status, so a post looks the same
- * wherever it is opened. One query per kind for the whole list, never one per
- * post. None of it is part of the wire object, so nothing that serves posts to
- * another server calls this.
- *
- * Depends on nothing that depends on `StreamService` or `MediaTagService`,
- * which both call it.
+ * link preview, its place, its reaction bar, the people named in its photos
+ * and, on a video posted here, how many times it was watched. Every route
+ * serving posts to a client calls `decorate()`, with one query per kind for
+ * the whole list; nothing federated does. Depends on nothing that depends on
+ * `StreamService` or `MediaTagService`, which both call it.
  */
 class PostDecorationService {
 	public function __construct(
@@ -57,16 +51,10 @@ class PostDecorationService {
 	}
 
 	/**
-	 * The people named in each post's pictures.
-	 *
-	 * On the wire the names are `Mention` tags, which is where a peer looks
-	 * for them; this is the list a client draws under the picture.
-	 *
-	 * The people are read from the actor cache only, in one query: a page is
-	 * being built, and fetching an uncached person from their server here
-	 * held the whole timeline for that server's timeout. Somebody not cached
-	 * is left out of this page and fetched in the background
-	 * (`RemoteFetchQueue`), so the next page that shows the picture names them.
+	 * The people named in each post's photos, for the client (on the wire they
+	 * are `Mention` tags). Read from the actor cache only, in one query;
+	 * somebody not cached is left out and fetched in the background
+	 * (`RemoteFetchQueue`) for the next page.
 	 *
 	 * @param Stream[] $posts
 	 */

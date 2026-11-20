@@ -34,26 +34,20 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * One post's trip to Bluesky, queued by the listener the moment the post
- * is made, deleted or edited, so the Fediverse delivery never waits for it.
+ * One post's trip to Bluesky, queued by the listener when the post is made,
+ * deleted or edited, so the Fediverse delivery never waits for it.
  *
- * `argument`: `action` (publish, delete, edit, bookmark, unbookmark, message for a direct
- * message, profile with an actor's id, or verifications, with any `id`,
- *
- * for every verification moved to another verifying account) and the
- * `id`; for a like or repost (`like`, `unlike`, `repost`, `unrepost`) the
- * id is the Like's or Announce's, with the `post` and the `actor` when one
- * is made; a bookmark has the post id and actor; for `chat` the id is the person's, with what `ChatState` does to
- * their Bluesky conversations (`chat`, `convos`, `member`). A failure that
- * may pass — a service down, a lock that timed out — queues the job again
- * with the attempts so far in `tries`, later each time (`Backoff::bluesky()`),
- * until the last attempt gives up; one no attempt would change — what it is
- * of is gone, a request Bluesky refuses as such — is logged and left, for a
- * post to the reconcile pass. A like or repost undone meanwhile writes
- * nothing. Before a like, a repost or a new post's mentions reach accounts
- * on Bluesky, whether they have blocked the local account is asked and
- * recorded (`BlockedByService`); what is written does not change with the
- * answer.
+ * `argument` is `action` and `id`: `publish`, `delete`, `edit`; `bookmark` and
+ * `unbookmark` with the post id and `actor`; `like`, `unlike`, `repost` and
+ * `unrepost` with the Like's or Announce's id and, when made, `post` and
+ * `actor`; `message` for a direct message; `profile` with an actor's id;
+ * `verifications`, with any `id`, when verifications move to another verifying
+ * account; `chat` with the person's id and what `ChatState` does (`chat`,
+ * `convos`, `member`). A failure that may pass is queued again with `tries`,
+ * later each time (`Backoff::bluesky()`); one no attempt would change is
+ * logged and left to the reconcile pass. Whether Bluesky accounts a like,
+ * repost or mention reaches have blocked the local account is recorded first
+ * (`BlockedByService`).
  */
 class AtprotoPublish extends QueuedJob {
 	public function __construct(

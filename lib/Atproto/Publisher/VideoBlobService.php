@@ -22,12 +22,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Videos as blobs.
- *
- * A video a record refers to is a stored document as it is, never
- * re-encoded here: what Bluesky plays is the stream its video service made
- * of it. It is hashed and served as a stream, a chunk at a time, because a
- * video of a hundred megabytes is not something to hold in memory.
+ * Videos as blobs: the stored document as it is, never re-encoded, since
+ * Bluesky plays what its own video service makes of it. Hashed and served as
+ * a stream, a chunk at a time, so a large video is never held in memory.
  */
 class VideoBlobService {
 	/** `app.bsky.embed.video`: the blob's `maxSize` */

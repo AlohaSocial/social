@@ -13,16 +13,10 @@ use DateTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The instances one account has blocked for itself.
- *
- * Every read and every write here takes the blocker's actor id and compares it
- * in SQL. That is the whole of the access control on domain blocks: nothing in
- * this class can return, add or remove a row that belongs to somebody else, so
- * no caller has to remember to check — and one account's block list can never
- * reach another account's timeline.
- *
- * This is not `FediverseService`, which is the admin's instance-wide access
- * list and applies to everybody on the server at once.
+ * The instances one account has blocked for itself. Every read and write is
+ * scoped by the blocker's actor id in SQL, which is the whole of the access
+ * control on domain blocks. Not `FediverseService`, the administrator's
+ * instance-wide list.
  */
 class DomainBlocksRequest extends DomainBlocksRequestBuilder {
 	/** Blocking an instance twice is blocking it once. */

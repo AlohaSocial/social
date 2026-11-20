@@ -30,26 +30,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What one account decides about another, beside following, blocking and
- * muting it: the instances it will not hear from, the note it keeps about an
- * account, and the accounts it features on its profile.
+ * What one account decides about another beside following, blocking and
+ * muting: the instances it blocks, its private notes on accounts, and the
+ * accounts it features. Every row belongs to one account, is read only for it
+ * and is never federated, so every route of this controller scopes reads and
+ * writes by the viewer.
  *
- * They share a controller because they share an access model, and it is the
- * strictest one in this API: every row involved belongs to exactly one account,
- * is only ever read for that account, and is never federated. Nobody — not the
- * account a note is about, not the instance that was blocked — may see any of
- * it, so every route here resolves the viewer first and scopes every read and
- * every write by them.
- *
- * Not `RelationshipService`, which is blocks and mutes and does federate what
- * Mastodon federates. Nothing here leaves the server.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController`,
- * `TagController` and `ListController`, and for the same reason: a Mastodon
- * client authenticates with a bearer token and has no Nextcloud session or CSRF
- * token to present, so `#[NoAdminRequired]` would refuse every real caller
- * before the handler ran. Every route then requires a viewer itself — no token,
- * no session, 401 — so nothing is public in fact.
+ * `#[PublicPage]` with `#[NoCSRFRequired]` because a Mastodon client has a
+ * bearer token, not a session; every route requires a viewer itself.
  */
 class RelationController extends ClientApiController {
 	/** What Mastodon defaults and caps a page of featured accounts at. */
@@ -71,12 +59,8 @@ class RelationController extends ClientApiController {
 	}
 
 	/**
-	 * The instances the viewer has blocked, as a flat list of domains — which
-	 * is what Mastodon answers here, not entities.
-	 *
-	 * No `Link` header, like `/api/v1/blocks` and `/api/v1/mutes`: the route
-	 * takes no cursor, and a header advertising the page just sent is one a
-	 * client scrolls for ever.
+	 * The instances the viewer has blocked, as a flat list of domains, as in
+	 * Mastodon. No `Link` header: the route takes no cursor.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -205,17 +189,12 @@ class RelationController extends ClientApiController {
 	}
 
 	/**
-	 * The relationship a client is handed back after a write here.
-	 *
-	 * Decorated on the way out rather than left to `FollowService::
-	 * generateRelationship()`: the caller of one of these routes has just
-	 * changed one of these fields and must be told what it is now, whether or
-	 * not the relationship builder has been taught to read them. Decorating a
-	 * relationship twice reaches the same answer.
+	 * The relationship a client is handed back after a write here, decorated
+	 * with the fields just written whatever `FollowService::generateRelationship()`
+	 * reads; decorating it twice gives the same answer.
 	 *
 	 * @param bool|null $endorsed what this request made of it, when it is this
-	 *                            request that decided — no query can answer it
-	 *                            better than the write that just happened
+	 *                            request that decided
 	 */
 	private function relationship(Person $target, ?bool $endorsed = null): Relationship {
 		$this->followService->setViewer($this->viewer);

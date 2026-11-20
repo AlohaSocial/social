@@ -20,33 +20,15 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Naming the people in a picture.
+ * Naming the people in a photo, Pixelfed's `MediaTag`.
  *
- * A staple of every photo network there has been, and this app had nothing:
- * somebody arriving from Instagram or Pixelfed expects to tag the people in a
- * photograph, expects to be told when they are in one, and expects a "photos
- * of you" page of their own. Pixelfed calls the row a `MediaTag`.
+ *  - Only the post's author may tag, so nobody can push a post onto somebody
+ *    else's profile or audience.
+ *  - Anybody named may take their own name off, and the author may too.
+ *  - A tag is written onto the post as a `Mention`, so the person's own
+ *    server tells them, and the post is re-sent as an `Update`.
  *
- * Three decisions worth defending:
- *
- *  - **Only the post's author may tag.** Anybody being able to write their own
- *    name onto anybody's photograph is a way to put a post in front of an
- *    audience that did not ask for it, and to make somebody's profile show
- *    pictures they have never seen.
- *  - **Anybody named may take their own name off**, and the author may too.
- *    Being in somebody else's photograph is not something to need their
- *    permission to leave; this is Pixelfed's "untag me" and it is the whole
- *    remedy the feature needs.
- *  - **A tag addresses the person.** It is written onto the post as a
- *    `Mention`, which is what makes their own server tell them — a tag that
- *    only this instance knew about would notify local accounts and silently do
- *    nothing for everybody else. The post is then re-sent as an `Update`, so
- *    the servers that already have it learn the name too.
- *
- * A tag does not widen who may *see* the post. A followers-only photograph
- * stays followers-only when somebody is named in it, and the name is simply
- * not shown to a reader who cannot see the post — because there is no such
- * reader, the post itself being out of reach.
+ * A tag does not widen who may see the post.
  */
 class MediaTagService {
 	public function __construct(
@@ -62,26 +44,22 @@ class MediaTagService {
 	}
 
 	/**
-	 * Names people in one of the author's own posts.
-	 *
-	 * The list is what the post should end up naming, not what to add: a
-	 * client sends the whole list, and anybody dropped from it is untagged.
-	 * That is what makes calling this twice with the same list a no-op rather
-	 * than a growing pile.
+	 * Names people in one of the author's own posts. The list is the whole set
+	 * the post should name, so anybody dropped is untagged and repeating a
+	 * call changes nothing.
 	 *
 	 * @param string[] $accounts handles or ids, as a client has them
 	 *
 	 * @return Person[] the people the post now names
 	 *
 	 * @throws ItemNotFoundException the post is unknown or not the author's
-	 * @throws InvalidResourceException there is no picture, or too many names
+	 * @throws InvalidResourceException there is no photo, or too many names
 	 */
 	public function tag(Person $author, int|string $nid, array $accounts): array {
 		$post = $this->ownPost($author, $nid);
 
 		if ($post->getAttachments() === []) {
-			// the feature is "who is in this picture"; on a post with none the
-			// answer would be a list of people attached to nothing
+			// tags name who is in a photo, so a post without one has nothing to tag
 			throw new InvalidResourceException('there is no picture on this post');
 		}
 
@@ -101,10 +79,8 @@ class MediaTagService {
 			try {
 				$person = $this->cacheActorService->resolve($account);
 			} catch (Throwable $e) {
-				// an account this server cannot find is left out rather than
-				// failing the whole list: a client sends names as they were
-				// typed, and one of them being gone is not a reason to lose
-				// the rest
+				// an account this server cannot find is left out rather than failing
+				// the whole list
 				$this->logger->debug('could not name an account in a post', [
 					'account' => $account, 'reason' => $e->getMessage(),
 				]);
@@ -171,17 +147,11 @@ class MediaTagService {
 	}
 
 	/**
-	 * The posts somebody is named in, as the reader may see them.
-	 *
-	 * The visibility rule is not re-implemented here: the ids come out of the
-	 * tag table and the posts are read the way any other post is read for this
-	 * reader, so one they may not see is simply not among them.
-	 *
-	 * That is also why the cursor is returned beside the posts rather than
-	 * left to the client to take from the last of them: a page can come back
-	 * short, or empty, because the reader may not see what the tag table
-	 * held, and the rows after it are still there. `next` is the last tag row
-	 * read, and null once a page read fewer rows than it asked for.
+	 * The posts somebody is named in, as the reader may see them: read like
+	 * any other post for this reader, so hidden ones drop out. A page can
+	 * therefore come back short or empty with more rows behind it, so `next`
+	 * is the last tag row read, and null once a page read fewer rows than it
+	 * asked for.
 	 *
 	 * @return array{posts: Stream[], next: ?string}
 	 */
@@ -238,12 +208,9 @@ class MediaTagService {
 	}
 
 	/**
-	 * Writes the names onto the post as mentions and sends it again.
-	 *
-	 * This is what makes a tag reach the person's own server. A failure is not
-	 * a failure of the tagging — the names are stored here either way, and a
-	 * post that could not be re-sent is a notification that did not arrive
-	 * rather than a tag that was not made.
+	 * Writes the names onto the post as mentions and sends it again, which is
+	 * what reaches the person's own server. A failure here loses the
+	 * notification, not the tag, which is stored either way.
 	 *
 	 * @param Person[] $people
 	 */

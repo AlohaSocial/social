@@ -13,12 +13,8 @@ use JsonSerializable;
 
 /**
  * One directory this instance will ask about people: a host, and which API it
- * speaks.
- *
- * The kind is not guessed from the host. Sniffing it would mean a request
- * before the request — `/nodeinfo` and then the search — for an answer that
- * changes about once in a server's lifetime, and a wrong guess is a source
- * that silently answers nothing.
+ * speaks. The kind is configured, not sniffed, as that would cost a request
+ * for an answer that hardly ever changes.
  */
 class DirectorySource implements JsonSerializable {
 	/** This instance's own directory. Never asked over the network. */
@@ -38,15 +34,10 @@ class DirectorySource implements JsonSerializable {
 	public const KIND_LEMMY = 'lemmy';
 
 	/**
-	 * A directory somebody keeps by hand, published as a WordPress site and
-	 * asked through its REST API — `fedi.directory` is the one this ships
-	 * with.
-	 *
-	 * It is the only kind here that searches by *subject*. Every other source
-	 * can answer "is there an `alice` on that server"; this one answers "who
-	 * writes about mycology", because a person wrote that down. The entries
-	 * name accounts all over the fediverse rather than that host's own, so
-	 * the handle comes out of the entry rather than off the host.
+	 * A hand-kept directory published as a WordPress site and asked through its
+	 * REST API, such as the shipped `fedi.directory`. The only kind that
+	 * searches by subject; its entries name accounts anywhere, so the handle
+	 * comes out of the entry.
 	 */
 	public const KIND_WORDPRESS = 'wordpress';
 	public const KIND_BLUESKY = 'bluesky';

@@ -20,17 +20,10 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  */
 class StreamActionsRequest extends StreamActionsRequestBuilder {
 	/**
-	 * Stores the actions of one actor on one post.
-	 *
-	 * Insert first, and fall back to an update when the row is already there:
-	 * the other way round (update, insert when nothing was updated) races with
-	 * itself. Two concurrent likes of the same post both update nothing and
-	 * both insert, and the loser gets an uncaught constraint violation — and on
-	 * MySQL, where rowCount() counts *changed* rows, setting a flag to the
-	 * value it already holds takes that same path even on its own. The insert
-	 * a unique index refuses leaves an enclosing transaction usable
-	 * (`insertUnlessDuplicate()`), so a like inside a repository batch can
-	 * meet a row that is already there.
+	 * Stores the actions of one actor on one post: insert first, update when
+	 * the row is there. Update-then-insert races with itself, and on MySQL
+	 * rowCount() counts only changed rows. The refused insert leaves an
+	 * enclosing transaction usable (`insertUnlessDuplicate()`).
 	 */
 	public function save(StreamAction $action): void {
 		if ($this->insertUnlessDuplicate($this->insertSql($action))) {
@@ -138,9 +131,8 @@ class StreamActionsRequest extends StreamActionsRequestBuilder {
 	 */
 	public function getAction(string $actorId, string $streamId): StreamAction {
 		$qb = $this->getStreamActionSelectSql();
-		// the (stream_id_prim, actor_id_prim) unique index, rather than LOWER()
-		// over the two TEXT columns beside it — this runs on every like, boost,
-		// bookmark and poll vote
+		// the (stream_id_prim, actor_id_prim) unique index, not LOWER() over the
+		// TEXT columns: this runs on every like, boost, bookmark and poll vote
 		$this->limitToPrim($qb, 'actor_id_prim', $actorId);
 		$this->limitToPrim($qb, 'stream_id_prim', $streamId);
 

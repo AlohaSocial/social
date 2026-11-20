@@ -28,19 +28,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Accounts this instance verified: a company running the server vouching
- * for its own people, or a community for the accounts it knows.
- *
- * Moderators verify any account, local or not; the check is shown here on
- * the account wherever it appears (`exportOf()`, the account entity's
- * `verification`), naming the verifying account the administrator chose,
- * or the instance when none is chosen. With a verifying account and
- * Bluesky switched on, a verification of an account that has a DID is
- * also published, as a record in that account's repository
- * (`BlueskyVerifications`), and written again whenever the account's
- * handle or display name changes, since a record that names an old one no
- * longer counts. An account without a DID — most of the Fediverse — is
- * verified here only.
+ * Accounts this instance verified: a company vouching for its own people, or
+ * a community for the accounts it knows. Moderators verify any account; the
+ * check is shown wherever the account appears (`exportOf()`, the account
+ * entity's `verification`), naming the chosen verifying account or the
+ * instance. With a verifying account and Bluesky on, the verification of an
+ * account with a DID is also published as a record (`BlueskyVerifications`),
+ * rewritten when the account's handle or display name changes.
  *
  * @psalm-import-type VerificationRow from VerificationsRequest
  */

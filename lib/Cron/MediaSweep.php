@@ -17,41 +17,23 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The housekeeping stored media needs and nothing else does.
+ * Daily housekeeping of stored media, in three bounded passes that resume by
+ * running again (the first for SECONDS, the second one page, the third for
+ * PURGE_SECONDS):
  *
- * Three passes, all bounded, all resumable by simply being run again — the
- * first page after page for SECONDS, the second one page, the third for
- * PURGE_SECONDS:
- *
- * - the documents whose parent — the post, the cached actor or the story they
- *   hang off — no longer exists. Nothing can ever refer to those files again,
- *   and until the callers were taught to take the files with the rows, every
- *   deleted post and every expired story left its picture in appdata for good.
- * - the rows stored before their type was recorded. A client hides an
- *   attachment whose type it does not know, so those pictures are invisible
- *   until something says what they are, and nothing else ever will: the
- *   caching run only looks at rows with no local copy.
- * - the cached copies of other servers' media, past the age and over the
- *   total size the administrator set (`media_cache_days`, default 30, and
- *   `media_cache_mb`, default 5120; 0 turns either off). Nothing else bounds
- *   them: the two passes above only reach media whose post or account is
- *   gone, and a post somebody here follows is kept for good. A purged copy
- *   is fetched again when somebody next looks at it. See
- *   `MediaPurgeService::purgeCache()`.
- *
- * Daily. Neither answer changes within the hour, the first is a delete per row
- * and the second is a read per row, and a cron slot is worth more to the
- * queue and the caches than to either of these.
+ * - documents whose parent (post, cached actor or short) no longer exists;
+ * - rows stored without their type, which a client would hide;
+ * - cached copies of other servers' media past `media_cache_days` (default 30)
+ *   or over `media_cache_mb` (default 5120); 0 turns either off. A purged copy
+ *   is fetched again when next looked at (`MediaPurgeService::purgeCache()`).
  */
 class MediaSweep extends TimedJob {
 	private const INTERVAL = 86400;
 
 	/**
-	 * How old a row has to be before its missing parent is taken as final.
-	 *
-	 * Generous on purpose: an attachment is written during the import of the
-	 * post it belongs to, which is to say before the post's own row exists,
-	 * and a month of margin costs nothing but disk that was already spent.
+	 * How old a row has to be before its missing parent is taken as final: an
+	 * attachment is written during the import of its post, before the post's
+	 * own row exists.
 	 */
 	public const DAYS = 30;
 

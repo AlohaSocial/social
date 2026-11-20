@@ -20,19 +20,14 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_stream.root_prim`: the prim of the root of the thread a direct
- * message belongs to, stored with it (`ConversationsRequest::storeRoot()`).
+ * message belongs to (`ConversationsRequest::storeRoot()`), so a conversation
+ * is found without walking `in_reply_to` a level per query. Indexed, for
+ * `getThread()` and for moving replies that arrived before their parent
+ * under its root.
  *
- * A conversation is its thread, and the thread was found by walking
- * `in_reply_to` up a query a level. A chat is a chain of replies each to
- * the one before, so every read of the direct messages and every poll of
- * their badge walked it, and a chat longer than the walk was grouped under
- * wherever the walk stopped, which moved as the chat grew. Indexed, for the
- * thread's own posts (`getThread()`) and for moving replies that arrived
- * before their parent under its root.
- *
- * Null on the rows stored before it and on every post that is not a direct
- * message; the reads walk for a null row as before. The direct messages
- * already stored are given theirs by `Cron\ThreadRoots`, queued here.
+ * Null on posts that are not direct messages and on messages
+ * `Cron\ThreadRoots`, queued here, has not reached; the reads walk for a null
+ * row.
  */
 class Version1000Date20261016100400 extends SimpleMigrationStep {
 	public function __construct(

@@ -25,15 +25,10 @@ use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
 /**
- * Unfurls a link to a post or a profile of this app wherever Nextcloud renders
- * references: a Talk message, a Text document, a Deck card.
- *
- * Only what anyone could read is rendered — a public or unlisted post, a
- * profile — because a reference is resolved once and then served from a cache
- * shared by everyone who sees the link. A followers-only or direct post, or a
- * post this server does not hold, resolves to nothing and the link stays a
- * link. Nothing is fetched from another server on the way: a remote account
- * that is not cached here is not looked up either.
+ * Unfurls a link to a post or profile of this app wherever Nextcloud renders
+ * references (Talk, Text, Deck). Only what anyone could read is rendered, as
+ * the result is cached for everyone who sees the link; other posts stay
+ * plain links. Nothing is fetched from another server.
  */
 class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvider {
 	/** how much of a post the card shows */
@@ -232,8 +227,8 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	}
 
 	/**
-	 * The first picture attached, else the author's portrait. Behind a content
-	 * warning the picture is the portrait: the attachment is what is warned about.
+	 * The first photo attached, else the author's portrait. Behind a content
+	 * warning it is the portrait: the attachment is what is warned about.
 	 */
 	private function pictureOf(Stream $post, Person $author): ?string {
 		if (!$post->isSensitive()) {

@@ -20,19 +20,11 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_stream.author_host`: the host of a post's author, as an indexed
- * column.
- *
- * A domain block and a silenced instance were matched by `LIKE` patterns on
- * `attributed_to`, an unindexed text column — two per domain, on every
- * candidate row of every timeline read, so an imported blocklist made every
- * timeline slower for whoever imported it. With the host as a column they are
- * one `NOT IN`.
- *
- * NULL until a row is reached. Every post stored from now on writes its own;
- * the ones already there are filled in by `Cron\StreamAuthorHosts`, queued
- * here rather than run here because the table is the largest this app has.
- * Until it has finished, the filters match a row with no host by its id, as
- * before.
+ * column, so domain blocks and silenced instances are one `NOT IN` instead of
+ * `LIKE` patterns on `attributed_to`. NULL until a row is reached: new posts
+ * write their own, and `Cron\StreamAuthorHosts`, queued here as the table is
+ * the largest this app has, fills the rest. Until then the filters match a
+ * row with no host by its id.
  */
 class Version1000Date20261008000503 extends SimpleMigrationStep {
 	public function __construct(

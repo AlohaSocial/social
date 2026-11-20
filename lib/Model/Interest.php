@@ -10,13 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Model;
 
 /**
- * One hashtag a reader is interested in, as `social_interest` stores it.
- *
- * The score is what reading earned it, as of `scoredAt`: it decays from there
- * and is worked out again whenever it is read, so a row nobody has touched for
- * a month says what it said a month ago and `InterestScorer` says what it is
- * worth today. A position is a pin — the rank the reader dragged it to — and
- * null is a tag that floats on its score.
+ * One hashtag a reader is interested in, as `social_interest` stores it. The
+ * score is what reading earned it as of `scoredAt`; it decays from there, as
+ * `InterestScorer` works out when read. A position is the rank the reader
+ * pinned it to; null floats on its score.
  */
 class Interest {
 	public function __construct(

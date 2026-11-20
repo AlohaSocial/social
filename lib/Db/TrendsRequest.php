@@ -15,21 +15,10 @@ use OCA\Social\Model\StreamCard;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * What this instance has been reacting to lately: trending statuses and
- * trending links.
- *
- * Read the same way the hashtag trends are read — an aggregate over rows the
- * app already keeps for their own reasons — but live rather than from a cron's
- * stored counters. A hashtag needs stored buckets because counting uses means
- * walking `social_stream_tag`, a table with a row per tag per post; a status
- * trend is a count of `social_action` rows against an indexed column, and a
- * link trend a count of `social_stream_card` rows, both of which are one
- * grouped query over a window.
- *
- * Public statuses only, in both. These are unauthenticated routes: a trend
- * computed over followers-only posts would report on them to the whole
- * internet even if it never showed one, because a count is a statement about
- * what exists.
+ * Trending statuses and links, counted live from `social_action` and
+ * `social_stream_card` in one grouped query over a window, unlike the
+ * hashtag trends' stored buckets. Public statuses only: these routes are
+ * unauthenticated, and even a count says what exists.
  */
 class TrendsRequest extends TrendsRequestBuilder {
 	/**
@@ -67,7 +56,7 @@ class TrendsRequest extends TrendsRequestBuilder {
 		// a boost and a notification are not statuses that can trend
 		$qb->andWhere($expr->eq('s.type', $qb->createNamedParameter(Note::TYPE)));
 
-		// what a picture-first discover screen shows: a text post is a fine
+		// what a photo-first discover screen shows: a text post is a fine
 		// trending status and a poor thing to put in a grid of squares
 		if ($onlyMedia && $mediaType !== 'visual') {
 			$qb->limitToMedia();
@@ -105,17 +94,9 @@ class TrendsRequest extends TrendsRequestBuilder {
 	}
 
 	/**
-	 * Recent public posts carrying media, newest first.
-	 *
-	 * What a discovery grid shows when nothing is trending. Trending needs an
-	 * interaction inside the window, and a young instance has none — so the
-	 * Pictures and Videos tabs were empty on exactly the instances whose
-	 * readers most need something to look at, and empty in a way that reads as
-	 * broken rather than as new.
-	 *
-	 * The same audience rule as trending: public statuses only, because a
-	 * discovery surface must not show somebody something they would not have
-	 * been shown anywhere else.
+	 * Recent public posts carrying media, newest first: what a discovery grid
+	 * shows when nothing is trending, as on a young instance. Public statuses
+	 * only, as for trending.
 	 *
 	 * @param string[] $excluding nids already on the page, so a top-up does not repeat one
 	 *
@@ -202,11 +183,8 @@ class TrendsRequest extends TrendsRequestBuilder {
 	}
 
 	/**
-	 * The statuses of a page that has already been decided, in its order.
-	 *
-	 * The same shape as the list timeline's own reader and deliberately not a
-	 * call into it: that method belongs to the lists, and this class does not
-	 * own it.
+	 * The statuses of a page that has already been decided, in its order; the
+	 * same shape as the list timeline's reader, which belongs to the lists.
 	 *
 	 * @param string[] $nids
 	 *
@@ -243,11 +221,8 @@ class TrendsRequest extends TrendsRequestBuilder {
 
 	/**
 	 * The links most often attached to a public status inside a window, most
-	 * shared first.
-	 *
-	 * Counted by url and not by card row: the same article posted by five
-	 * accounts is five rows in `social_stream_card` and one trending link,
-	 * which is the whole point of the route.
+	 * shared first, counted by url: the same article posted by five accounts
+	 * is one trending link.
 	 *
 	 * @return array<array{url: string, shares: int}>
 	 */

@@ -15,16 +15,10 @@ use OCA\Social\Atproto\Crypto\PrivateKey;
 use RuntimeException;
 
 /**
- * A recovery key as twelve words.
- *
- * The words are BIP-39's: 128 bits of entropy and a four-bit checksum (the
- * first four bits of SHA-256 of the entropy), in eleven-bit groups
- * indexing the English word list. The key is not BIP-39's seed: it is
- * SHA-256 of the ASCII prefix `social.atproto.recovery.v1` followed by the
- * sixteen entropy bytes, taken as a secp256k1 secret. So the words are the
- * key and the key is never stored: what the person wrote down is the only
- * copy. docs/Atproto-Compatibility.md §4.4 spells this out for other
- * implementations; `resources/atproto/recovery-key.py` is one.
+ * A recovery key as twelve BIP-39 words (128 bits of entropy and a checksum).
+ * The key is not BIP-39's seed but SHA-256 of `social.atproto.recovery.v1` and
+ * the entropy, taken as a secp256k1 secret, so the words are its only copy.
+ * docs/Atproto-Compatibility.md §4.4 specifies it for other implementations.
  */
 final class Mnemonic {
 	private const WORDLIST = __DIR__ . '/../../../resources/atproto/bip39-english.txt';

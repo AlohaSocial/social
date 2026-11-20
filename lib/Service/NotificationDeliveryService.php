@@ -25,24 +25,17 @@ use OCP\Notification\IManager as INotificationManager;
 use Psr\Log\LoggerInterface;
 
 /**
- * Where a user's notification delivery setting lives, and the bookkeeping the
- * digest job needs around it.
+ * Where a user's notification delivery setting lives, and the digest job's
+ * bookkeeping: three user values, the setting as JSON
+ * (`notification_delivery`), what the last digest covered up to
+ * (`notification_digest_at`), and a flag that is `1` while the setting needs
+ * the digest job (`notification_delivery_scheduled`), as Nextcloud can find
+ * users by a value but not by a key.
  *
- * Three user values, all under this app: the setting itself as one JSON
- * document (`notification_delivery`), the moment the last digest covered up
- * to (`notification_digest_at`), and a flag that is `1` exactly while the
- * setting needs the digest job (`notification_delivery_scheduled`). The flag
- * exists because Nextcloud can find the users holding a given *value* but not
- * the users holding *any* value for a key: the job asks for the flag and
- * never reads the setting of the many users who left it at instant.
- *
- * The digest itself is built here too (`digestFor()`): one Nextcloud
- * notification with the counts of what the user has not read since the last
- * one, per kind. It counts rather than lists, because what was held is still
- * in the in-app list, and the bell's job is to say that there is something
- * there. What was never raised — held by the notification policy, or from a
- * muted thread — is not counted; the senders waiting in the requests inbox are
- * mentioned in a line of their own, and never make a digest by themselves.
+ * The digest (`digestFor()`) is one Nextcloud notification counting, per
+ * kind, what the user has not read since the last one. What the notification
+ * policy held or a muted thread produced is not counted; senders waiting in
+ * the requests inbox get a line of their own but never make a digest alone.
  */
 class NotificationDeliveryService {
 	public const CONFIG_KEY = 'notification_delivery';
@@ -82,14 +75,10 @@ class NotificationDeliveryService {
 	}
 
 	/**
-	 * Writes what was named and leaves the rest as it is.
-	 *
-	 * Switching *to* a digest starts the clock now: the first digest reports
-	 * what arrives from here on, not everything the account has ever been
-	 * told, which would make the first thing the setting does a dump of the
-	 * backlog. Switching *away* from a digest raises what it was holding as
-	 * one last digest, so nothing held is left unannounced; switching away
-	 * from every schedule then forgets the clock.
+	 * Writes what was named and leaves the rest as it is. Switching to a
+	 * digest starts the clock now, so the first digest is not the whole
+	 * backlog; switching away raises what it held as one last digest, and
+	 * switching away from every schedule forgets the clock.
 	 *
 	 * @param array<string, mixed> $changes
 	 *
@@ -174,20 +163,13 @@ class NotificationDeliveryService {
 	}
 
 	/**
-	 * Raises one digest covering what the user has not read between the last
-	 * digest and `$until`, and moves the clock to `$until`.
+	 * Raises one digest covering what the user has not read (past the read
+	 * marker) between the last digest and `$until`, and moves the clock to
+	 * `$until`, so a late cron still reports the window asked for. Older
+	 * digests are taken off the bell first, so one sits there at a time.
 	 *
-	 * `$until` rather than "now" is the caller's business: a cron that runs
-	 * late still reports the window the user asked for, and the next window
-	 * starts where this one ended. Unread means past the notifications read
-	 * marker — a row the user has already seen in the app is not news. Older
-	 * digests are taken off the bell first, so one digest sits there at a
-	 * time: a reader who ignores three in a row has three sets of counts in
-	 * the latest one anyway.
-	 *
-	 * Null when there was nothing to say — senders waiting in the requests
-	 * inbox alone are not something to say; the clock still moves, since the
-	 * window was looked at.
+	 * Null when there was nothing to say (waiting senders alone are not); the
+	 * clock moves anyway.
 	 *
 	 * @return array{counts: array<string, int>, total: int, link: string, waiting?: int}|null the digest's parameters
 	 */

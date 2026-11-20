@@ -10,13 +10,11 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Move;
 
 /**
- * The rotation keys of the operations this server signs. A DID that moves
- * here (§13.1) gets the person's own first — their recovery key here, then
- * every key the DID lists now that is not the old server's — and this
- * server's last. Every later operation carries the keys its head lists, in
- * their order, changing only this server's own key and the recovery key
- * (§4.5). A key ranked higher can undo, for 72 hours, an operation a lower
- * one signed.
+ * The rotation keys of the operations this server signs. A DID moving here
+ * (§13.1) lists the person's own keys first and this server's last; later
+ * operations keep the head's order and change only this server's key and the
+ * recovery key (§4.5). A higher-ranked key can undo, for 72 hours, an
+ * operation a lower one signed.
  */
 final class RotationKeys {
 	/** the most rotation keys a did:plc may list */

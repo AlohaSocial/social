@@ -16,18 +16,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_host_breaker`: which peers delivery is leaving alone, and until when.
- *
- * The circuit breaker lived in the distributed cache, which is a `NullCache`
- * on an instance without a memcache — so there it held nothing, every pass
- * rediscovered every dead peer one thirty-second timeout at a time, and the
- * cron's whole budget went on servers that were known to be gone. A row per
- * failing host is what every delivery path can read whatever the server has
- * configured.
- *
- * A file of its own for the reason `Version1000Date20260924000001` gives: the
- * squash is recorded as run on every instance that has upgraded, so a table
- * added to it would exist only on fresh installs.
+ * `social_host_breaker`: which peers delivery is leaving alone, and until
+ * when, in the database because the distributed cache holds nothing without a
+ * memcache. A file of its own for the reason `Version1000Date20260924000001`
+ * gives: a table added to the squash would exist only on fresh installs.
  */
 class Version1000Date20260925000003 extends SimpleMigrationStep {
 	/**

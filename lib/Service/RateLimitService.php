@@ -29,12 +29,9 @@ use ReflectionMethod;
 use Throwable;
 
 /**
- * Who is spending what, and how much they are allowed.
- *
- * Counting requests is done in two places — the headers a client paces itself
- * by, and the refusal when it does not — and the two have to agree about the
- * identity, the window and the key, or a client is told it has budget left and
- * then refused for spending it.
+ * Who is spending what, and how much they are allowed: one place for the
+ * identity, window and key, so the headers a client paces itself by agree
+ * with the refusal.
  */
 class RateLimitService {
 	/** The cache the counters live in; distinct from anything else this app caches. */
@@ -44,13 +41,10 @@ class RateLimitService {
 	public const BUCKET_API = 'api';
 
 	/**
-	 * Controllers whose traffic is not a client pacing itself.
-	 *
-	 * Federation arrives in bursts from a handful of addresses, and one busy
-	 * peer would exhaust an address budget for every other peer behind the
-	 * same relay; the inbox has a limiter of its own in `inbox_throttle`,
-	 * counted per origin host, which is the unit that makes sense there. The
-	 * queue controller is this server calling itself.
+	 * Controllers whose traffic is not a client pacing itself: federation comes
+	 * in bursts from a few addresses and has its own per-origin limiter
+	 * (`inbox_throttle`), and the queue controller is this server calling
+	 * itself.
 	 */
 	private const EXEMPT_CONTROLLERS = [
 		ActivityPubController::class,
@@ -59,10 +53,8 @@ class RateLimitService {
 	];
 
 	/**
-	 * Routes that serve bytes rather than answers.
-	 *
-	 * One public page is forty requests for pictures, and counting those
-	 * against a page budget would refuse the page rather than slow the caller.
+	 * Routes that serve bytes rather than answers: one public page is forty
+	 * requests for images, which must not count against a page budget.
 	 */
 	private const EXEMPT_ROUTES = [
 		NavigationController::class => ['documentGetPublic', 'resizedGetPublic'],
@@ -81,16 +73,11 @@ class RateLimitService {
 	}
 
 	/**
-	 * The budget a route with no attribute of its own gets.
-	 *
-	 * Mastodon's shape: a per-account allowance for a signed-in client, a
-	 * smaller per-address one for everybody else. Generous rather than tight —
-	 * a client that polls four timelines and a notification count is doing
-	 * nothing wrong, and this exists to stop a scraper reading the whole
-	 * instance at machine speed, not to pace an app.
-	 *
-	 * `0` on either key switches the default off, which is what an instance
-	 * behind its own limiter wants.
+	 * The budget a route with no attribute of its own gets, shaped like
+	 * Mastodon's: a per-account allowance for a signed-in client and a smaller
+	 * per-address one for everybody else, generous enough for a polling client,
+	 * tight enough to stop a scraper. `0` on either key switches the default
+	 * off, for an instance behind its own limiter.
 	 *
 	 * @return array{0: int, 1: int}|null limit and period, or null for no limit
 	 */
@@ -107,12 +94,8 @@ class RateLimitService {
 
 	/**
 	 * Records one request against a budget and says how many are now in the
-	 * window.
-	 *
-	 * Keyed by the window's own start rather than by a sliding expiry, so the
-	 * counter and the `Reset` header agree about where the window ends — a
-	 * client told "0 remaining, resets in 4 seconds" and refused for another
-	 * minute would have been told something untrue.
+	 * window, keyed by the window's start so the counter and the `Reset`
+	 * header agree about where the window ends.
 	 *
 	 * @param string $bucket what the budget is for: a route, or the whole API
 	 */
@@ -130,12 +113,9 @@ class RateLimitService {
 	}
 
 	/**
-	 * Whether the app's default budget is the one that governs this route.
-	 *
-	 * False where the route declares a limit of its own — Nextcloud already
-	 * counts those, and a second limiter over the top would refuse at a number
-	 * neither of them publishes — and false for the traffic that is not a
-	 * client pacing itself.
+	 * Whether the app's default budget governs this route: not where the route
+	 * declares its own limit, which Nextcloud counts, and not for traffic that
+	 * is not a client pacing itself.
 	 */
 	public function appliesDefaultTo(Controller $controller, string $methodName): bool {
 		foreach (self::EXEMPT_CONTROLLERS as $class) {
@@ -190,19 +170,10 @@ class RateLimitService {
 	}
 
 	/**
-	 * Somewhere to keep the count, or null when there is nowhere.
-	 *
-	 * Distributed first, because a budget is per account and not per web
-	 * server: two requests that land on different servers are two requests
-	 * against one budget. A local cache is the honest second best — the count
-	 * is then per server, so a client behind a load balancer sees a budget
-	 * that looks larger than it is, which errs towards pacing rather than
-	 * being refused.
-	 *
-	 * Null when Nextcloud has no memcache at all, which is the default on a
-	 * small install. Nothing is counted then and nothing is refused: a limiter
-	 * that cannot count must not guess, and refusing on a guess would take the
-	 * app away from the instances least able to debug it.
+	 * Somewhere to keep the count: the distributed cache, as a budget spans web
+	 * servers, else the local one (per server, so a budget looks larger behind
+	 * a load balancer). Null without any memcache, and then nothing is counted
+	 * or refused, as a limiter that cannot count must not guess.
 	 */
 	private function counter(): ?ICache {
 		if ($this->cacheFactory->isAvailable()) {

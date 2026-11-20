@@ -48,10 +48,9 @@ class ImportService {
 			throw new ActivityPubFormatException();
 		}
 
-		// the models are strictly typed, and a document that puts a string
-		// where an object belongs trips that deep inside one of them. It is the
-		// sender's bytes that are wrong, which is a 400 — not a 500 that makes
-		// the peer send the same bytes again for two days
+		// the models are strictly typed, so a document with a string where an
+		// object belongs is the sender's error, a 400, not a 500 that makes the
+		// peer retry for two days
 		try {
 			$activity = AP::instance()->getItemFromData($data);
 		} catch (\TypeError $e) {
@@ -87,13 +86,10 @@ class ImportService {
 		Stream::releaseAttachments($activity);
 		$activity->setRequestToken($this->uuid());
 
-		// A relay speaks a dialect of its own: its `Announce` is a pointer at
-		// somebody else's post rather than a boost of it, and its `Accept`
-		// answers a Follow no local actor sent. Both would be mishandled by
-		// the ordinary interfaces — the Announce as a boost by an actor nobody
-		// follows, the Accept as a follow that does not exist. Scoped to
-		// actors this instance holds a subscription row for, so a server that
-		// merely calls itself a relay is still handled as what it is.
+		// A relay's `Announce` points at somebody else's post rather than
+		// boosting it, and its `Accept` answers a Follow no local actor sent,
+		// so both get their own handling, only for actors this instance holds
+		// a relay subscription for.
 		if ($this->relayService->handleIncoming($activity)) {
 			return;
 		}

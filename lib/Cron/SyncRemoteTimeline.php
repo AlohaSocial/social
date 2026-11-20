@@ -18,13 +18,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Reads one remote account's outbox and stores what is new in it.
- *
- * Queued with the actor id by `RemoteFetchQueue::syncTimeline()` when the
- * first page of the account's profile is opened, so — like `DomainPurge` —
- * it is not registered in `info.xml`. The profile answered with what was
- * stored; the next look at it has the synced posts. The accounts somebody
- * here follows are synced by `Cron\Cache` regardless.
+ * Reads one remote account's outbox and stores what is new in it. Queued by
+ * `RemoteFetchQueue::syncTimeline()` when the account's profile is opened, so
+ * not registered in `info.xml`; followed accounts are synced by `Cron\Cache`.
  */
 class SyncRemoteTimeline extends QueuedJob {
 	public function __construct(
