@@ -384,10 +384,10 @@ describe('FirstRun', () => {
 		expect(links).toHaveLength(2)
 		for (const link of links) {
 			expect(link.props('to')).toEqual({ name: 'settings', hash: '#bring' })
-			expect(link.text()).toBe('Open Migration')
+			expect(link.text()).toBe('Open in Settings')
 		}
 		expect(wrapper.text()).not.toContain('Settings → Migration')
 		expect(wrapper.text()).not.toContain('under Migration')
-		expect(wrapper.find('.first-run__result').text()).toContain('the Migration page names it')
+		expect(wrapper.find('.first-run__result').text()).toContain('Moving your account in Settings names it')
 	})
 })
