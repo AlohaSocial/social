@@ -235,12 +235,12 @@ export default {
 			}
 
 			if (post.media_attachments.length > 1) {
-				return t('social', 'Post with {count} pictures', { count: post.media_attachments.length })
+				return t('social', 'Post with {count} photos', { count: post.media_attachments.length })
 			}
 
 			return (attachment.type === 'video' || attachment.type === 'gifv')
 				? t('social', 'Post with a video')
-				: t('social', 'Post with a picture')
+				: t('social', 'Post with a photo')
 		},
 
 		onImageError(key) {

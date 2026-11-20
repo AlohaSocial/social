@@ -144,7 +144,7 @@ button { margin-top: 12px; padding: 8px 14px; font: inherit; cursor: pointer; }
 </section>
 
 <section>
-<h2>' . $e($l->t('5. Your posts and pictures')) . '</h2>
+<h2>' . $e($l->t('5. Your posts and photos')) . '</h2>
 <p>' . $e($l->t('From the archive "Download your Bluesky account": repo.car and the files in blobs/, unpacked.')) . '</p>
 <label for="repo">repo.car</label>
 <input id="repo" type="file" accept=".car">

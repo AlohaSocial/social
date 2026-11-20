@@ -215,11 +215,11 @@ describe('BlueskyMoveAway', () => {
 		axios.post.mockResolvedValue({ data: { move: moveOf('running', 'identity') } })
 		const wrapper = await mountCard()
 
-		expect(wrapper.text()).toContain('3 pictures or videos did not arrive on https://pds.example. Your account still points here.')
+		expect(wrapper.text()).toContain('3 photos or videos did not arrive on https://pds.example. Your account still points here.')
 		await buttonNamed(wrapper, 'Switch without them').trigger('click')
 		await flushPromises()
 		expect(axios.post).not.toHaveBeenCalled()
-		expect(confirmDialog(wrapper).props('message')).toBe('3 pictures or videos did not arrive on https://pds.example. Your account is pointed at https://pds.example without them: the posts that show them lose them there, and they are not copied later.')
+		expect(confirmDialog(wrapper).props('message')).toBe('3 photos or videos did not arrive on https://pds.example. Your account is pointed at https://pds.example without them: the posts that show them lose them there, and they are not copied later.')
 		expect(confirmDialog(wrapper).findComponent({ name: 'BlueskyMissingRecords' }).props('records')).toEqual(lost)
 
 		confirmDialog(wrapper).vm.$emit('confirm')
@@ -347,8 +347,8 @@ describe('BlueskyMoveAway', () => {
 
 	it.each([
 		['repo', {}, 'Copying your posts'],
-		['blobs', { blobs: 12 }, 'Copying your pictures and videos (12 so far)'],
-		['blobs', {}, 'Copying your pictures and videos'],
+		['blobs', { blobs: 12 }, 'Copying your photos and videos (12 so far)'],
+		['blobs', {}, 'Copying your photos and videos'],
 		['prefs', {}, 'Copying your settings'],
 		['identity', {}, 'Pointing your account at the new server'],
 		['activate', {}, 'Switching your account on there'],
@@ -386,7 +386,7 @@ describe('BlueskyMoveAway', () => {
 		await vi.advanceTimersByTimeAsync(1)
 		await flushPromises()
 		expect(movePolls()).toBe(2)
-		expect(wrapper.text()).toContain('Copying your pictures and videos (3 so far)')
+		expect(wrapper.text()).toContain('Copying your photos and videos (3 so far)')
 
 		await vi.advanceTimersByTimeAsync(5000)
 		await flushPromises()

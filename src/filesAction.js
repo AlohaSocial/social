@@ -91,7 +91,7 @@ export function shareToSocial(nodes, navigate = (url) => window.location.assign(
 export const shareAction = {
 	id: 'social-share',
 	displayName: () => t('social', 'Share to Aloha Social'),
-	title: ({ nodes }) => n('social', 'Post this picture on Aloha Social', 'Post these %n pictures on Aloha Social', nodes.length),
+	title: ({ nodes }) => n('social', 'Post this photo on Aloha Social', 'Post these %n photos on Aloha Social', nodes.length),
 	iconSvgInline: () => ICON,
 	// every one of them has to be something a post can carry, and no more of
 	// them than a post can carry: the composer would have to refuse the rest,

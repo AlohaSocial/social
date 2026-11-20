@@ -71,7 +71,7 @@ export default {
 		return {
 			notifications: [],
 			showMoreUrl: generateUrl('/apps/social/timeline/notifications'),
-			showMoreText: t('social', 'Aloha Social notifications'),
+			showMoreText: t('social', 'Aloha Social activities'),
 			/** the timeout of the next ask, while polling */
 			timer: null,
 			/** whether the widget asks on a timer, for want of notify_push */
@@ -102,9 +102,9 @@ export default {
 		/** @return {string} */
 		emptyContentMessage() {
 			if (this.state === 'error') {
-				return t('social', 'Error getting Aloha Social notifications')
+				return t('social', 'Could not load Aloha Social activities')
 			} else if (this.state === 'ok') {
-				return t('social', 'No Aloha Social notifications!')
+				return t('social', 'No Aloha Social activities')
 			}
 			return ''
 		},
@@ -179,7 +179,7 @@ export default {
 				this.state = 'error'
 				if (error.response?.status && error.response.status >= 400) {
 					if (first) {
-						showError(t('social', 'Failed to get Aloha Social notifications'))
+						showError(t('social', 'Could not load Aloha Social activities'))
 					}
 				} else {
 					logger.error('Failed to get the Social notifications', { error })

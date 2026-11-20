@@ -29,7 +29,7 @@
 				</div>
 			</header>
 			<p class="place__hint">
-				{{ t('social', 'Public posts that were taken here, as their posters said. A place is never worked out from a picture — it is only ever what somebody chose to say.') }}
+				{{ t('social', 'Public posts that were taken here, as their posters said. A place is never worked out from a photo — it is only ever what somebody chose to say.') }}
 			</p>
 
 			<ProfileMediaGrid :posts="posts" :loading="loadingMore" />

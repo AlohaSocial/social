@@ -208,7 +208,7 @@ export default {
 				case 'repo':
 					return t('social', 'Waiting for your posts')
 				case 'blobs':
-					return t('social', '{records} posts arrived, {blobs} pictures and videos so far', { records: progress.records ?? 0, blobs: progress.blobs ?? 0 })
+					return t('social', '{records} posts arrived, {blobs} photos and videos so far', { records: progress.records ?? 0, blobs: progress.blobs ?? 0 })
 				case 'follows':
 					return t('social', 'Following the accounts you follow')
 				case 'posts':

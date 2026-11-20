@@ -13,7 +13,7 @@
 		</NcCheckboxRadioSwitch>
 		<p class="files-comments-settings__lede">
 			{{ enabled
-				? t('social', 'On: public and unlisted replies to a picture you posted from Files appear as comments on that file, and a comment you write there is posted as your reply. Comments from other people with access to the file stay on this server.')
+				? t('social', 'On: public and unlisted replies to a photo you posted from Files appear as comments on that file, and a comment you write there is posted as your reply. Comments from other people with access to the file stay on this server.')
 				: t('social', 'Off: posts you make from Files are not linked to the files, and comments there stay on this server.') }}
 		</p>
 	</div>

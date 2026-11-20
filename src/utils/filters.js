@@ -47,7 +47,7 @@ export function contextOptions() {
 			// Stream::exportAsNotification() serialises the nested status
 			// without `filtered`, so a folded notification is not something
 			// this client could draw even though the server applies the filter
-			hint: t('social', 'Mentions, boosts, favourites and the rest of your notifications. Here only taking the post out has any effect: a notification is never folded.'),
+			hint: t('social', 'Mentions, boosts, favorites and the rest of your activities. Here only taking the post out has any effect: an activity is never folded.'),
 		},
 		{
 			id: 'public',

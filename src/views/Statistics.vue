@@ -734,12 +734,12 @@
 			<section v-if="stats.media && stats.media.images > 0" class="stats__card">
 				<h3>
 					<IconImage :size="20" />
-					{{ t('social', 'Your pictures') }}
+					{{ t('social', 'Your photos') }}
 				</h3>
 				<ul class="stats__figures">
 					<li>
 						<strong>{{ number(stats.media.images) }}</strong>
-						<span>{{ n('social', 'picture posted', 'pictures posted', stats.media.images) }}</span>
+						<span>{{ n('social', 'photo posted', 'photos posted', stats.media.images) }}</span>
 					</li>
 					<li>
 						<strong>{{ decimal(stats.media.described_share) }}%</strong>
@@ -748,7 +748,7 @@
 					</li>
 				</ul>
 				<p v-if="stats.media.described_share < 100" class="stats__note">
-					{{ t('social', 'A picture without a description is a picture nobody using a screen reader can read. This is the one number on the page you can move on your own.') }}
+					{{ t('social', 'A photo without a description is a photo nobody using a screen reader can read. This is the one number on the page you can move on your own.') }}
 				</p>
 			</section>
 
@@ -1504,7 +1504,7 @@ export default {
 		content() {
 			const rows = this.stats?.content ?? []
 			const labels = {
-				with_media: t('social', 'With a picture or a video'),
+				with_media: t('social', 'With a photo or a video'),
 				text_only: t('social', 'Text only'),
 				with_hashtag: t('social', 'With a hashtag'),
 				no_hashtag: t('social', 'Without one'),
@@ -1617,7 +1617,7 @@ export default {
 				{ key: 'originals', label: t('social', 'Posts of your own'), count: posts.originals ?? 0 },
 				{ key: 'replies', label: t('social', 'Replies'), count: posts.replies ?? 0 },
 				{ key: 'boosts', label: t('social', 'Boosts of other people'), count: posts.boosts ?? 0 },
-				{ key: 'media', label: t('social', 'With a picture or a video'), count: posts.with_media ?? 0 },
+				{ key: 'media', label: t('social', 'With a photo or a video'), count: posts.with_media ?? 0 },
 				{ key: 'public', label: t('social', 'Public'), count: visibility.public ?? 0 },
 				{ key: 'unlisted', label: t('social', 'Unlisted'), count: visibility.unlisted ?? 0 },
 				{ key: 'followers', label: t('social', 'Followers only'), count: visibility.followers ?? 0 },

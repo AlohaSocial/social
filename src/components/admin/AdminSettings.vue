@@ -500,8 +500,8 @@ export default {
 					group: 'moderation',
 					icon: 'IconMedia',
 					component: 'MediaBlocksSection',
-					title: t('social', 'Refused pictures'),
-					lede: t('social', 'Files this server will not store, wherever they come from, so a removed picture cannot simply be posted again.'),
+					title: t('social', 'Refused photos'),
+					lede: t('social', 'Files this server will not store, wherever they come from, so a removed photo cannot simply be posted again.'),
 					keywords: t('social', 'image file checksum hash block'),
 				},
 				...(state.external

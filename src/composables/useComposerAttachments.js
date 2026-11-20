@@ -539,7 +539,7 @@ export function useComposerAttachments({ expand, root }) {
 			return
 		}
 		if (!loaded) {
-			showError(t('social', 'Could not load the picture to apply the filter, so it stays as it is'))
+			showError(t('social', 'Could not load the photo to apply the filter, so it stays as it is'))
 		}
 		attachments.value = {
 			...attachments.value,

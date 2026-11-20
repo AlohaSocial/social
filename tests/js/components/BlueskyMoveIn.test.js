@@ -229,7 +229,7 @@ describe('BlueskyMoveIn', () => {
 		axios.post.mockResolvedValue({ data: { move: moveOf('running', 'code') } })
 		const wrapper = await mountCard()
 
-		expect(wrapper.text()).toContain('12 pictures or videos of your posts could not be copied here.')
+		expect(wrapper.text()).toContain('12 photos or videos of your posts could not be copied here.')
 		await buttonNamed(wrapper, 'Go on without them').trigger('click')
 		await flushPromises()
 		expect(axios.post).not.toHaveBeenCalled()

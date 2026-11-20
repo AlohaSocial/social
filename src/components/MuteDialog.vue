@@ -14,7 +14,7 @@
 		</p>
 
 		<NcCheckboxRadioSwitch v-model="notifications" type="switch" class="mute-dialog__notifications">
-			{{ t('social', 'Hide their notifications too') }}
+			{{ t('social', 'Hide their activities too') }}
 		</NcCheckboxRadioSwitch>
 
 		<fieldset class="mute-dialog__duration">

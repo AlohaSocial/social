@@ -157,7 +157,7 @@ describe('the administration page', () => {
 
 		expect(seen).toEqual({
 			Overview: ['Needs attention', 'Activity here'],
-			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Verified accounts', 'Refused pictures'],
+			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Verified accounts', 'Refused photos'],
 			'Discover and features': ['Topics on Discover', 'What may trend', 'Custom emoji', 'GIF library', 'Announcements', 'Features'],
 			Federation: ['Allowed and blocked servers', 'Block lists', 'Relays', 'Deliveries'],
 			Server: ['About this server', 'Server settings', 'Retention', 'Storage', 'Background jobs'],

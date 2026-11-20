@@ -28,7 +28,7 @@
 				{{ t('social', 'Words to look for') }}
 			</legend>
 			<p class="filter-form__hint">
-				{{ t('social', 'A post is filtered if any one of these appears in it: in the text, in the content warning, in the description of a picture or in the options of a poll. A boost is read as the post it boosts. Upper and lower case never matter.') }}
+				{{ t('social', 'A post is filtered if any one of these appears in it: in the text, in the content warning, in the description of a photo or in the options of a poll. A boost is read as the post it boosts. Upper and lower case never matter.') }}
 			</p>
 
 			<div v-for="(entry, index) in keywords" :key="entry.key" class="filter-form__keyword">

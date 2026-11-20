@@ -72,7 +72,7 @@
 						@load="onPosterMetadata($event, index)">
 				</button>
 				<p v-else-if="entry.day && !entry.isVideo" class="short__gone">
-					{{ t('social', 'The picture of this short is gone.') }}
+					{{ t('social', 'The photo of this short is gone.') }}
 				</p>
 				<!-- a still where the player is not: the one <video> below
 				     is over whichever slide is being watched -->

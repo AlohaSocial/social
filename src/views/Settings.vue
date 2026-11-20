@@ -365,7 +365,7 @@ export default {
 					icon: 'IconSensitive',
 					component: 'SensitiveMediaSettings',
 					title: t('social', 'Sensitive media'),
-					lede: t('social', 'How pictures and videos their author marked sensitive are shown to you.'),
+					lede: t('social', 'How photos and videos their author marked sensitive are shown to you.'),
 				},
 				{
 					id: 'counts',
@@ -459,7 +459,7 @@ export default {
 							icon: 'IconFilesComments',
 							component: 'FilesCommentsSettings',
 							title: t('social', 'Replies in Files'),
-							lede: t('social', 'A picture you post from Files keeps a link to its file. Replies to the post can be read in the file\'s Comments tab, next to the picture they are about.'),
+							lede: t('social', 'A photo you post from Files keeps a link to its file. Replies to the post can be read in the file\'s Comments tab, next to the photo they are about.'),
 						}]),
 				{
 					id: 'apps',
@@ -499,7 +499,7 @@ export default {
 							icon: 'IconStorage',
 							component: 'ExternalStorage',
 							title: t('social', 'Your storage'),
-							lede: t('social', 'The pictures and videos you uploaded here, against what this server lets each account keep. Media from other servers does not count.'),
+							lede: t('social', 'The photos and videos you uploaded here, against what this server lets each account keep. Media from other servers does not count.'),
 						}]
 					: []),
 				{
@@ -556,7 +556,7 @@ export default {
 				{
 					id: 'notifications',
 					icon: 'IconNotifications',
-					title: t('social', 'Notifications'),
+					title: t('social', 'Activities'),
 					description: t('social', 'When the app may interrupt you, and who may reach you.'),
 				},
 				{

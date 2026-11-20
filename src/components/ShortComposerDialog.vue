@@ -34,7 +34,7 @@
 				</div>
 				<p class="short__lede">
 					{{ forDay
-						? t('social', 'For the people who follow you, gone after a day. Record a video, upload one, or post a picture or a few words.')
+						? t('social', 'For the people who follow you, gone after a day. Record a video, upload one, or post a photo or a few words.')
 						: t('social', 'A video, watched full height, one after another. Upload one, drop one here, or record one now.') }}
 				</p>
 				<input
@@ -77,7 +77,7 @@
 						class="short__source short__source--other"
 						@click="openEditor(null)">
 						<IconImageText :size="36" />
-						<span class="short__source-name">{{ t('social', 'Picture or words') }}</span>
+						<span class="short__source-name">{{ t('social', 'Photo or words') }}</span>
 						<span class="short__source-hint">{{ t('social', 'with stickers, or on a card') }}</span>
 					</button>
 				</div>
