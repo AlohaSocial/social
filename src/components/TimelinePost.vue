@@ -220,11 +220,9 @@
 						@manageReplies="managingReplies = true"
 						@hideReply="hideReply"
 						@tagPeople="taggingPeople = true"
-						@delete="askToDelete(false)"
-						@redraft="askToDelete(true)"
+						@delete="showDeleteDialog = true"
 						@translate="toggleTranslation"
 						@delivery="showDeliveryDialog = true"
-						@bookmark="toggleBookmark"
 						@react="askForReaction"
 						@muteConversation="toggleConversationMute"
 						@collect="showCollectionDialog = true"
@@ -235,6 +233,30 @@
 						@block="showBlockDialog = true"
 						@report="showReportDialog = true" />
 					<div class="post-actions__groups">
+						<div class="post-action-group">
+							<NcButton
+								:title="item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark')"
+								:aria-label="item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark')"
+								:aria-pressed="item.bookmarked ? 'true' : 'false'"
+								variant="tertiary"
+								@click="toggleBookmark">
+								<template #icon>
+									<Bookmark v-if="item.bookmarked" :size="20" fillColor="var(--color-primary)" />
+									<BookmarkOutline v-else :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<div v-if="postLink !== ''" class="post-action-group">
+							<NcButton
+								:title="t('social', 'Share')"
+								:aria-label="t('social', 'Share')"
+								variant="tertiary"
+								@click="share">
+								<template #icon>
+									<ShareVariantOutline :size="20" />
+								</template>
+							</NcButton>
+						</div>
 						<!-- the same three controls on every post, so nothing moves
 						     from one post to the next: one that cannot be used
 						     here is there, disabled, and says why -->
@@ -365,12 +387,10 @@
 		     do on the first click of a menu item sitting under "Edit" -->
 		<NcDialog
 			v-model:open="showDeleteDialog"
-			:name="deleteToRedraft ? t('social', 'Delete and write it again?') : t('social', 'Delete this post?')"
+			:name="t('social', 'Delete this post?')"
 			:buttons="deleteButtons">
 			<p class="delete-hint">
-				{{ deleteToRedraft
-					? t('social', 'The post is removed everywhere it reached, and its words, photos and content warning are put back in the composer. What you post next is a new post: the boosts, likes and replies this one collected stay with it and are gone.')
-					: t('social', 'The post is removed from this server and a deletion is sent to every server that received it. This cannot be undone.') }}
+				{{ t('social', 'The post is removed from this server and a deletion is sent to every server that received it. This cannot be undone.') }}
 			</p>
 		</NcDialog>
 	</article>
@@ -393,7 +413,10 @@ import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess, showUndo } from '../services/toast.js'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import Reply from 'vue-material-design-icons/Reply.vue'
+import Bookmark from 'vue-material-design-icons/Bookmark.vue'
+import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Heart from 'vue-material-design-icons/Heart.vue'
+import ShareVariantOutline from 'vue-material-design-icons/ShareVariantOutline.vue'
 import HeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import eventBus from '../services/eventBus.js'
 import { accountStyle } from '../services/accountColour.js'
@@ -442,7 +465,10 @@ const HOLD_MS = 450
 export default {
 	name: 'TimelinePost',
 	components: {
+		Bookmark,
+		BookmarkOutline,
 		DeliveryDialog,
+		ShareVariantOutline,
 		IconAccountBoxMultiple,
 		TimelineEventCard,
 		TimelinePostHeader,
@@ -549,7 +575,6 @@ export default {
 			managingQuotes: false,
 			managingReplies: false,
 			/** whether the delete on screen is the first half of a re-draft */
-			deleteToRedraft: false,
 			/** the Translation entity once it has arrived, null before */
 			translation: null,
 			/** whether the provider is working on it right now */
@@ -844,6 +869,11 @@ export default {
 			return code === '' || code === 'und' ? '' : languageName(code)
 		},
 
+		/** @return {string} the post's own address, '' when it has none */
+		postLink() {
+			return String(this.item.url || this.item.uri || '')
+		},
+
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		deleteButtons() {
 			return [
@@ -854,7 +884,7 @@ export default {
 					},
 				},
 				{
-					label: this.deleteToRedraft ? t('social', 'Delete & re-draft') : t('social', 'Delete'),
+					label: t('social', 'Delete'),
 					variant: 'error',
 					callback: () => this.remove(),
 				},
@@ -1308,40 +1338,10 @@ export default {
 			eventBus.emit('composer-edit', { edit: this.item, opener: this.menuOpener })
 		},
 
-		/**
-		 * Opens the confirmation. Deleting federates and cannot be undone, so
-		 * neither half of this happens on the first click of a menu item.
-		 *
-		 * @param {boolean} redraft whether the words come back in the composer
-		 */
-		askToDelete(redraft) {
-			this.deleteToRedraft = redraft
-			this.showDeleteDialog = true
-		},
-
-		/**
-		 * Deletes the post, and — for a re-draft — hands its words, pictures
-		 * and warning to the composer.
-		 *
-		 * The composer is filled *after* the delete rather than before: a
-		 * delete the server refuses leaves the post where it is, and a
-		 * composer already holding its words would invite somebody to post it
-		 * twice.
-		 */
+		/** Deletes the post here and everywhere it was delivered. */
 		async remove() {
 			this.showDeleteDialog = false
-			const redraft = this.deleteToRedraft
-			this.deleteToRedraft = false
-
-			// the post as it stands, kept before the store forgets it
-			const draft = redraft ? this.item : null
-
-			const deleted = await this.timelineStore.postDelete(this.item)
-
-			if (deleted === true && draft !== null) {
-				this.timelineStore.setComposerDisplayStatus(true)
-				eventBus.emit('composer-redraft', draft)
-			}
+			await this.timelineStore.postDelete(this.item)
 		},
 
 		/**
@@ -1389,6 +1389,23 @@ export default {
 		updatePoll(poll) {
 			this.localPoll = poll
 			this.timelineStore.updateStatusPoll({ statusId: this.item.id, poll })
+		},
+
+		/** Hands the post's address to the system share sheet on touch devices, or copies it. */
+		async share() {
+			const url = this.postLink
+			try {
+				if (typeof navigator.share === 'function' && window.matchMedia?.('(pointer: coarse)').matches) {
+					await navigator.share({ url })
+					return
+				}
+				await navigator.clipboard.writeText(url)
+				showSuccess(t('social', 'Link copied'))
+			} catch (error) {
+				if (error?.name !== 'AbortError') {
+					showError(t('social', 'Could not copy — select the address and copy it yourself'))
+				}
+			}
 		},
 
 		toggleBookmark() {

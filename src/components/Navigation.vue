@@ -326,7 +326,6 @@
 				:initialQuote="composerQuote"
 				:initialDraft="composerDraft"
 				:initialDraftContext="composerDraftContext"
-				:initialRedraft="composerRedraft"
 				:initialFiles="composerFiles"
 				:initialPaths="composerPaths"
 				emojiPickerContainer=".modal-wrapper"
@@ -548,7 +547,6 @@ export default {
 			composerQuote: null,
 			composerDraft: null,
 			composerDraftContext: '',
-			composerRedraft: null,
 			composerEdit: null,
 			composerFiles: [],
 			composerSaving: false,
@@ -973,7 +971,6 @@ export default {
 			'composer-open': (intent) => this.openComposer(intent),
 			'composer-reply': (reply) => this.openComposer({ reply }),
 			'composer-quote': (quote) => this.openComposer({ quote }),
-			'composer-redraft': (redraft) => this.openComposer({ redraft }),
 			'composer-edit': (intent) => this.openComposer(intent),
 			'shortcut:compose': () => this.openComposer(),
 		}
@@ -1081,7 +1078,6 @@ export default {
 			this.composerQuote = intent.quote || null
 			this.composerDraft = intent.draft || null
 			this.composerDraftContext = typeof intent.context === 'string' ? intent.context : ''
-			this.composerRedraft = intent.redraft || null
 			this.composerEdit = intent.edit || null
 			this.composerFiles = intent.files || []
 			this.composerPaths = intent.paths || []

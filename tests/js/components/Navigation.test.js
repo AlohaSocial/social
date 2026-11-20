@@ -25,7 +25,7 @@ vi.mock('../../../src/components/Composer/Composer.vue', () => ({
 	__isKeepAlive: false,
 	default: {
 		name: 'Composer',
-		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'],
+		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialDraft', 'initialDraftContext', 'listenForIntents'],
 		emits: ['posted'],
 		template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />',
 	},
@@ -63,7 +63,7 @@ const stubs = {
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
 	NcModal: { props: { name: String, labelId: String, closeOnClickOutside: Boolean, show: Boolean }, emits: ['close', 'update:show'], template: '<div class="modal-stub" :data-name="name" :data-label-id="labelId" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { name: 'Composer', data: () => ({ loading: false, isEditDirty: false, hasPendingUploads: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	Composer: { name: 'Composer', data: () => ({ loading: false, isEditDirty: false, hasPendingUploads: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -1507,7 +1507,6 @@ describe('Navigation', () => {
 		it.each([
 			['composer-reply', 'inReplyTo'],
 			['composer-quote', 'initialQuote'],
-			['composer-redraft', 'initialRedraft'],
 		])('keeps the initial context for lazy loading: %s', async (event, prop) => {
 			const wrapper = mountNavigation()
 			const post = { id: '123', content: '<p>Context</p>' }
