@@ -2859,7 +2859,7 @@ Each store is installed per Pinia instance rather than per module registration, 
 | `/collections/:id` | `collection` | CollectionPage |
 | `/places/:id` | `place` | PlacePage |
 | `/discover` | `discover` | Discover |
-| `/follow_requests` | `follow-requests` | FollowRequests |
+| `/follow_requests` | — | redirects to Activities, where `FollowRequests` lists the people waiting at the top of the All and Follows filters and draws nothing when nobody is |
 | `/blocked` | `blocked-accounts` | BlockedAccounts |
 | `/filtered` | — (redirects to `blocked-accounts`) | — |
 | `/migration` | `migration` | Migration |

@@ -133,6 +133,8 @@
 			:label="t('social', 'Which activities to show')"
 			@update:value="chooseNotificationFilter" />
 
+		<FollowRequests v-if="type === 'notifications' && ['all', 'follows'].includes(notificationFilter)" />
+
 		<!-- what the reader wrote on this day in years gone by, and how their
 		     week went if they asked to be told; only over their own home feed,
 		     which is the one page that is about them -->
@@ -221,6 +223,7 @@ import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 import { scrollOffset, scroller } from '../utils/scroller.js'
 
 // only drawn when somebody asks to review who is waiting
+const FollowRequests = defineAsyncComponent(() => import(/* webpackChunkName: "follow-requests" */'../components/FollowRequests.vue'))
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
 
 // the conversations page and a new account's welcome: neither is on the
@@ -244,6 +247,7 @@ export default {
 		HashtagFollowButton,
 		HashtagFollowedList,
 		FeedHelp,
+		FollowRequests,
 		InterestsNotice,
 		OnThisDay,
 		ShortsBar,

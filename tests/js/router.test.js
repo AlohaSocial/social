@@ -422,7 +422,6 @@ describe('the reader\'s own pages', () => {
 		'/statistics',
 		'/migration',
 		'/switch',
-		'/follow_requests',
 		'/blocked',
 		'/timeline/notifications',
 		'/timeline/direct',
@@ -517,6 +516,15 @@ describe('the reader\'s own pages', () => {
 			expect(assign).not.toHaveBeenCalled()
 			expect(instance.currentRoute.value.name).toBe('settings')
 		})
+	})
+})
+
+describe('follow requests', () => {
+	it('sends the old Follow requests address to Activities, where they are now', async () => {
+		await router.push('/follow_requests')
+
+		expect(router.currentRoute.value.name).toBe('timeline')
+		expect(router.currentRoute.value.params.type).toBe('notifications')
 	})
 })
 

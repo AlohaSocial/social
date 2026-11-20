@@ -397,7 +397,6 @@ import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.v
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
 import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
-import IconAccountClock from 'vue-material-design-icons/AccountClock.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconBookmark from 'vue-material-design-icons/Bookmark.vue'
@@ -854,12 +853,6 @@ export default {
 								to: { name: 'profile', params: { account: this.currentAccount.acct } },
 							}]
 						: []),
-					{
-						key: 'social-follow-requests',
-						icon: IconAccountClock,
-						title: t('social', 'Follow requests'),
-						to: { name: 'follow-requests' },
-					},
 					{
 						key: 'social-liked',
 						icon: IconHeart,
