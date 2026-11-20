@@ -35,7 +35,6 @@ export function setPageTitle(page) {
 const ROUTE_TITLES = {
 	settings: () => t('social', 'Settings'),
 	discover: () => t('social', 'Discover'),
-	statistics: () => t('social', 'Statistics'),
 	about: () => t('social', 'About this server'),
 	'blocked-accounts': () => t('social', 'Blocking'),
 	migration: () => t('social', 'Migration'),

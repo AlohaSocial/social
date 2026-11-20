@@ -7,8 +7,12 @@ import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple
 import IconFolderMultipleImage from 'vue-material-design-icons/FolderMultipleImage.vue'
 import IconImageMultiple from 'vue-material-design-icons/ImageMultiple.vue'
 import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultiple.vue'
+import IconBookmarkMultipleOutline from 'vue-material-design-icons/BookmarkMultipleOutline.vue'
+import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
+import IconFileDocumentEditOutline from 'vue-material-design-icons/FileDocumentEditOutline.vue'
 import IconTextBoxMultiple from 'vue-material-design-icons/TextBoxMultiple.vue'
 import { t } from '@nextcloud/l10n'
+import { useAccountStore } from '../store/account.js'
 
 /**
  * What of an account can be read: its posts three ways, its collections, and
@@ -54,4 +58,40 @@ export function profileKinds(account, layout = {}, selected = '') {
 			to: { name: 'profile.collections', params: { account } },
 		},
 	].filter((tab) => tab.value === '' || tab.value === selected || tabs.includes(names[tab.value]))
+		.concat(isOwnProfile(account) ? ownTabs(account) : [])
+}
+
+/**
+ * Whether the profile on screen is the signed-in reader's own.
+ *
+ * @param {string} account the handle the address names
+ * @return {boolean}
+ */
+export function isOwnProfile(account) {
+	const current = useAccountStore().currentAccount
+	if (!current?.acct || account === '') {
+		return false
+	}
+	if (account === current.acct) {
+		return true
+	}
+	try {
+		return account === current.acct + '@' + new URL(current.url).hostname
+	} catch {
+		return false
+	}
+}
+
+/**
+ * The tabs only the owner sees: what they saved, what they have not posted yet, and how their posts did.
+ *
+ * @param {string} account the handle the address names
+ * @return {object[]}
+ */
+function ownTabs(account) {
+	return [
+		{ value: 'saved', label: t('social', 'Saved'), icon: IconBookmarkMultipleOutline, to: { name: 'profile.saved', params: { account } } },
+		{ value: 'drafts', label: t('social', 'Drafts'), icon: IconFileDocumentEditOutline, to: { name: 'profile.drafts', params: { account } } },
+		{ value: 'statistics', label: t('social', 'Statistics'), icon: IconChartBox, to: { name: 'profile.statistics', params: { account } } },
+	]
 }
