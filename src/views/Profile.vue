@@ -7,7 +7,7 @@
 		<ProfileInfo v-if="accountLoaded && accountInfo" :uid="uid" />
 
 		<div class="profile-sections">
-			<router-view v-if="accountLoaded && accountInfo && profileRouteReady" name="details" :profileLayout="accountInfo.profile_layout" />
+			<router-view v-if="accountLoaded && accountInfo" name="details" />
 		</div>
 		<!-- a follow link from another server, for an account this one does
 		     not hold: looked up when the reader asks, not when a link opens -->
@@ -85,11 +85,6 @@ export default {
 	},
 
 	computed: {
-		profileRouteReady() {
-			return this.$route.name !== 'profile' || this.$route.query?.media !== undefined
-				|| !['photos', 'videos'].includes(this.accountInfo?.profile_layout?.default_tab)
-		},
-
 		...mapStores(useAccountStore, useTimelineStore),
 		/** @return {import('../types/Mastodon').Status[]} */
 		timeline() {
@@ -124,9 +119,6 @@ export default {
 	},
 
 	watch: {
-		accountInfo: { immediate: true, handler: 'applyDefaultProfileTab' },
-		'$route.fullPath': 'applyDefaultProfileTab',
-
 		'$route.params.account': 'fetchProfileData',
 
 		// the handle until the account arrives, then the name it goes by
@@ -144,17 +136,6 @@ export default {
 	},
 
 	methods: {
-
-		applyDefaultProfileTab() {
-			if (this.$route.name !== 'profile' || this.$route.query?.media !== undefined) {
-				return
-			}
-			const tab = this.accountInfo?.profile_layout?.default_tab
-			const media = tab === 'photos' ? 'image' : tab === 'videos' ? 'video' : ''
-			if (media) {
-				this.$router.replace({ ...this.$route, query: { ...this.$route.query, media } })
-			}
-		},
 
 		async fetchProfileData() {
 			this.uid = this.$route.params.account || this.serverData.account || this.resolvedAccount

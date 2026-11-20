@@ -34,6 +34,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Channel;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Moderation;
+use OCA\Social\Model\ProfileLayout;
 use OCA\Social\Service\AccessBlockService;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
@@ -1202,13 +1203,13 @@ class AccountServiceTest extends TestCase {
 		$this->service->createActor('alice', '');
 	}
 
-	public function testProfileLayoutIsLoadedFromTheUserPreferenceOnAuthoritativeReads(): void {
+	/** A layout stored by an earlier version is ignored: every profile opens on Posts with all tabs. */
+	public function testALocalProfileHasTheDefaultLayout(): void {
 		$this->userManager->method('get')->with('alice')->willReturn($this->user('alice'));
 		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($this->alice());
-		$layout = ['default_tab' => 'photos', 'tabs' => ['posts', 'photos']];
-		$this->configService->method('getValueForUser')->with('alice', 'profile_layout')->willReturn(json_encode($layout));
+		$this->configService->method('getValueForUser')->willReturn(json_encode(['default_tab' => 'photos', 'tabs' => ['posts', 'photos']]));
 
-		self::assertSame($layout, $this->service->getActorFromUserId('alice')->getProfileLayout());
+		self::assertSame(ProfileLayout::DEFAULT, $this->service->getActorFromUserId('alice')->getProfileLayout());
 	}
 
 	// --- setActorFlags -------------------------------------------------

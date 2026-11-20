@@ -36,8 +36,6 @@ export default {
 		TimelineSwitcher,
 	},
 
-	props: { profileLayout: { type: Object, default: undefined } },
-
 	computed: {
 		...mapStores(useTimelineStore),
 
@@ -46,7 +44,7 @@ export default {
 		},
 
 		kinds() {
-			return profileKinds(this.account, this.profileLayout, 'saved')
+			return profileKinds(this.account)
 		},
 
 		/** @return {string} `favourites` or `bookmarks`, as the address says */
