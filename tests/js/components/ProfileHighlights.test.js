@@ -108,36 +108,13 @@ describe('ProfileHighlights', () => {
 		expect(points[0]).toBe(29)
 	})
 
-	/**
-	 * The shape says how much; this says what kind. An account that has
-	 * stopped posting says so, rather than trailing off and leaving the reader
-	 * to notice.
-	 */
-	it('says what kind of week it has been', async () => {
-		const quiet = await mountHighlights(available({ weeks: [4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0] }))
-		expect(quiet.find('.profile-highlights__summary').text()).toContain('Quiet lately')
-
-		const busy = await mountHighlights(available({ weeks: [0, 0, 0, 0, 1, 0, 0, 1, 6, 7, 8, 9] }))
-		expect(busy.find('.profile-highlights__summary').text()).toContain('Busier than usual')
-
-		const steady = await mountHighlights(available({ weeks: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3] }))
-		expect(steady.find('.profile-highlights__summary').text()).toContain('Posting steadily')
-	})
-
-	/**
-	 * "Usual" needs a past: an account made twenty minutes ago has none, and
-	 * neither has one whose earlier weeks are empty. The chart still counts.
-	 */
-	it('says nothing about the rhythm until there is a usual to compare with', async () => {
-		const young = await mountHighlights(available({ since: Math.floor(Date.now() / 1000) - 20 * 60, weeks: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5] }))
-		expect(young.find('.profile-highlights__summary').text()).toContain('5 posts in the last twelve weeks')
-		expect(young.find('.profile-highlights__summary').text()).not.toContain('than usual')
-
-		const sevenWeeks = await mountHighlights(available({ since: Math.floor(Date.now() / 1000) - 7 * 7 * 86400, weeks: [0, 0, 0, 0, 0, 1, 0, 1, 6, 7, 8, 9] }))
-		expect(sevenWeeks.find('.profile-highlights__summary').text()).not.toContain('Busier')
-
-		const noPast = await mountHighlights(available({ weeks: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4] }))
-		expect(noPast.find('.profile-highlights__summary').text()).not.toContain('Busier')
+	/** The chart and the count are the whole of it: the card passes no judgement on anybody's pace. */
+	it('says how much, never whether that is quiet or busy', async () => {
+		for (const weeks of [[4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0, 0, 1, 6, 7, 8, 9]]) {
+			const text = (await mountHighlights(available({ weeks }))).find('.profile-highlights__summary').text()
+			expect(text).toMatch(/posts? in the last twelve weeks/)
+			expect(text).not.toMatch(/Quiet|Busier|Slowing|steadily/)
+		}
 	})
 
 	/**

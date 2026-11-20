@@ -74,7 +74,7 @@ class AboutService {
 	 * A Mastodon app is given a domain and asks `/api/v1/instance` at its
 	 * root, so the domain is offered only once the setup check has found the
 	 * client API answering there; the stored result is read, never probed,
-	 * because anybody signed in may ask. A Bluesky app is given the PDS, which
+	 * because anybody may ask. A Bluesky app is given the PDS, which
 	 * exists while Bluesky is switched on.
 	 *
 	 * @return array{mastodon: string, bluesky: string}
