@@ -236,8 +236,6 @@ class NavigationControllerTest extends TestCase {
 			// whether the like, boost and follower numbers are hidden, which
 			// the page needs before it draws a post
 			'hideCounts' => true,
-			// whether standalone replies are omitted from the feeds
-			'hideRepliesInFeeds' => false,
 			// whether the one-key shortcuts are on, before the first key
 			'keyboardShortcuts' => true,
 			// which sections this instance offers, so the sidebar is drawn

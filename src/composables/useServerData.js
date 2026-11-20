@@ -45,7 +45,6 @@ import { useSettingsStore } from '../store/settings.js'
  * @property {string} [resolve] - The account a follow link names that this server does not hold yet, for the reader to have looked up (Only on '/ostatus/follow')
  * @property {boolean} needsAccount - Whether the reader has no account in this app yet
  * @property {boolean} [hideCounts] - Whether the reader hides how many likes, dislikes, boosts and followers things have
- * @property {boolean} [hideRepliesInFeeds] - Whether standalone replies are omitted from the reader's feeds
  * @property {boolean} [keyboardShortcuts] - Whether the reader has the one-key shortcuts on (not on a public page)
  * @property {''|'show_all'|'default'|'hide_all'} [nsfwChoice] - What the reader chose for sensitive media; '' follows the instance (not on a public page)
  * @property {'show_all'|'default'|'hide_all'} [nsfwPolicy] - What happens to sensitive media for this reader (not on a public page)
