@@ -9,11 +9,11 @@
 	<section class="interests-notice" :aria-label="t('social', 'About For you')">
 		<TagHeart class="interests-notice__icon" :size="20" />
 		<p class="interests-notice__text">
-			{{ t('social', 'For You learns from the hashtags of posts you open and of posts you like, boost, reply to or save. Watching a substantial part of a video can count too, and scrolling quickly past a post counts a little against its hashtags; simply leaving a post on screen does not increase your interests. This activity profile stays on this server and is not shared with other users.') }}
+			{{ t('social', 'For you learns which hashtags you like from the posts you open, like, boost, reply to, save or scroll past, and from the videos you watch. This stays on this server and nobody else sees it.') }}
 		</p>
 		<div class="interests-notice__actions">
 			<NcButton variant="tertiary" :to="{ name: 'settings', hash: '#interests' }">
-				{{ t('social', 'Manage') }}
+				{{ t('social', 'Settings') }}
 			</NcButton>
 			<NcButton variant="tertiary" :disabled="saving" @click="turnOff">
 				{{ t('social', 'Turn off') }}
