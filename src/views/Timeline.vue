@@ -125,16 +125,13 @@
 
 		<FollowRequests v-if="type === 'notifications' && ['all', 'follows'].includes(notificationFilter)" />
 
-		<!-- the shorts bar, the weekly recap and the memories belong to the reader's
+		<!-- the shorts bar and the memories belong to the reader's
 		     own feed only; kept alive across scopes so coming back to My Feed draws
 		     them at once instead of refetching and pushing the posts down -->
 		<KeepAlive>
 			<ShortsBar v-if="isHome" />
 		</KeepAlive>
 
-		<KeepAlive>
-			<WeeklyRecap v-if="isHome" />
-		</KeepAlive>
 		<KeepAlive>
 			<OnThisDay v-if="isHome" />
 		</KeepAlive>
@@ -186,7 +183,6 @@ import FeedHelp from './../components/FeedHelp.vue'
 import InterestsNotice from './../components/InterestsNotice.vue'
 import OnThisDay from './../components/OnThisDay.vue'
 import ShortsBar from './../components/ShortsBar.vue'
-import WeeklyRecap from './../components/WeeklyRecap.vue'
 import { tagStyle } from '../utils/tagColour.js'
 import HashtagFollowedList from './../components/HashtagFollowedList.vue'
 import axios from '@nextcloud/axios'
@@ -234,7 +230,6 @@ export default {
 		InterestsNotice,
 		OnThisDay,
 		ShortsBar,
-		WeeklyRecap,
 		TimelineList,
 		MediaUploadButton,
 		DraftsButton,
@@ -382,7 +377,7 @@ export default {
 		},
 
 		/**
-		 * Whether this is the reader's own feed, where the memories, the recap and
+		 * Whether this is the reader’s own feed, where the memories and
 		 * the Shorts bar belong. `type` reports the home route, which has no `type`
 		 * parameter, as `'home'`.
 		 *

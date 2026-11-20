@@ -3,20 +3,14 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section v-if="show" class="weekly-recap">
+	<section v-if="loaded" class="weekly-recap">
 		<ChartLine :size="20" class="weekly-recap__icon" />
 		<p class="weekly-recap__text">
 			{{ headline }}
 			<span v-if="aside" class="weekly-recap__aside">{{ aside }}</span>
 		</p>
 		<NcButton
-			v-if="quiet"
-			variant="tertiary"
-			:to="{ name: 'timeline', params: { type: 'timeline' } }">
-			{{ t('social', 'See what other people on your instance shared') }}
-		</NcButton>
-		<NcButton
-			v-else
+			v-if="!quiet"
 			variant="tertiary"
 			:disabled="sharing"
 			@click="share">
@@ -24,15 +18,6 @@
 				<ImageOutline :size="20" />
 			</template>
 			{{ t('social', 'Share as image') }}
-		</NcButton>
-		<NcButton
-			variant="tertiary"
-			:title="t('social', 'Hide this week')"
-			:aria-label="t('social', 'Hide this week')"
-			@click="dismiss">
-			<template #icon>
-				<Close :size="20" />
-			</template>
 		</NcButton>
 	</section>
 </template>
@@ -42,54 +27,38 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import ChartLine from 'vue-material-design-icons/ChartLine.vue'
-import Close from 'vue-material-design-icons/Close.vue'
 import ImageOutline from 'vue-material-design-icons/ImageOutline.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import eventBus from '../services/eventBus.js'
 import { describeFile } from '../services/fileDescriptions.js'
 import logger from '../services/logger.js'
 import { renderRecapImage } from '../utils/recapImage.js'
-import { mayHave } from '../services/startupHints.js'
-
-/** where a dismissal is remembered, as the week it was dismissed in */
-const DISMISSED_KEY = 'social.weeklyRecap.dismissed'
-
-/** a week, in milliseconds, counted the way the server counts it */
-const WEEK_MS = 7 * 24 * 3600 * 1000
 
 /**
- * How the reader's week went, if they switched it on in the settings.
+ * How the reader's week went, at the top of their Statistics.
  *
  * Deliberately plain: a count and the week before, no streaks, and nothing
- * that frames a quiet week as a failure. A quiet week links to the local
- * timeline instead.
+ * that frames a quiet week as a failure.
  */
 export default {
 	name: 'WeeklyRecap',
 
 	components: {
 		ChartLine,
-		Close,
 		ImageOutline,
 		NcButton,
 	},
 
 	data() {
 		return {
-			enabled: false,
+			loaded: false,
 			thisWeek: 0,
 			lastWeek: 0,
-			dismissed: false,
 			sharing: false,
 		}
 	},
 
 	computed: {
-		/** @return {boolean} whether there is a card at all */
-		show() {
-			return this.enabled && !this.dismissed
-		},
-
 		/** @return {boolean} whether nothing was posted this week */
 		quiet() {
 			return this.thisWeek === 0
@@ -133,32 +102,6 @@ export default {
 		t,
 		n,
 
-		/** @return {string} which week it is, as the key a dismissal is stored under */
-		thisWeekKey() {
-			return String(Math.floor(Date.now() / WEEK_MS))
-		},
-
-		/** @return {boolean} whether this week's card was already put away */
-		dismissedThisWeek() {
-			try {
-				return window.localStorage.getItem(DISMISSED_KEY) === this.thisWeekKey()
-			} catch {
-				// private windows and blocked site data throw on access
-				return false
-			}
-		},
-
-		/** Puts it away until next week. */
-		dismiss() {
-			this.dismissed = true
-
-			try {
-				window.localStorage.setItem(DISMISSED_KEY, this.thisWeekKey())
-			} catch {
-				// nothing here depends on it having worked
-			}
-		},
-
 		/**
 		 * Draws the week as a picture and opens the composer with it attached
 		 * and described, for the reader to edit and post.
@@ -185,24 +128,14 @@ export default {
 
 		/** Reads the recap, and shows nothing if it cannot. */
 		async load() {
-			if (this.dismissedThisWeek()) {
-				this.dismissed = true
-				return
-			}
-			if (!mayHave('recap_enabled')) {
-				this.enabled = false
-				return
-			}
-
 			try {
 				const { data } = await axios.get(generateUrl('/apps/social/api/v1/memories/recap'))
 
-				this.enabled = data?.enabled === true
 				this.thisWeek = Number(data?.this_week) || 0
 				this.lastWeek = Number(data?.last_week) || 0
+				this.loaded = true
 			} catch (error) {
 				logger.debug('Could not read the weekly recap', { error })
-				this.enabled = false
 			}
 		},
 	},

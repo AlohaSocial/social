@@ -293,7 +293,7 @@ class NavigationControllerTest extends TestCase {
 		$actor = (new Person())->setPreferredUsername('alice');
 		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn($actor);
 		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
-		$hints = ['has_announcements' => false, 'has_stories' => false, 'recap_enabled' => false, 'has_memories' => true, 'has_teams' => false];
+		$hints = ['has_announcements' => false, 'has_stories' => false, 'has_memories' => true, 'has_teams' => false];
 		$startup = $this->createMock(\OCA\Social\Service\StartupHintsService::class);
 		$startup->expects($this->once())->method('forViewer')->with($actor, 'alice')->willReturn($hints);
 
