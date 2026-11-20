@@ -168,7 +168,7 @@ describe('BlueskyMoveInbound', () => {
 	it('follows the move as the posts arrive, and says when it is done', async () => {
 		server({ moves: [moveOf('waiting', 'blobs', { progress: { records: 12, blobs: 3 } }), moveOf('done', 'done')] })
 		const wrapper = await mountCard()
-		expect(wrapper.text()).toContain('12 posts arrived, 3 pictures and videos so far')
+		expect(wrapper.text()).toContain('12 posts arrived, 3 photos and videos so far')
 
 		await vi.advanceTimersByTimeAsync(10000)
 		await flushPromises()
@@ -189,7 +189,7 @@ describe('BlueskyMoveInbound', () => {
 		axios.post.mockResolvedValue({ data: { move: moveOf('running', 'blobs') } })
 		const wrapper = await mountCard()
 
-		expect(wrapper.text()).toContain('1 picture or video of your posts could not be copied here.')
+		expect(wrapper.text()).toContain('1 photo or video of your posts could not be copied here.')
 		await buttonNamed(wrapper, 'Try copying them again').trigger('click')
 		await flushPromises()
 

@@ -6,7 +6,7 @@
 	<div class="social__migration">
 		<PageHeader
 			:title="t('social', 'Migration')"
-			:description="t('social', 'Your account is yours. Take a copy of it whenever you like, move it to another server, or bring one here from somewhere else — including the posts you wrote there, with their pictures.')"
+			:description="t('social', 'Your account is yours. Take a copy of it whenever you like, move it to another server, or bring one here from somewhere else — including the posts you wrote there, with their photos.')"
 			clearNavigation />
 
 		<MigrationSettings />

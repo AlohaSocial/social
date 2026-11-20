@@ -369,8 +369,8 @@ describe('the types the server sends', () => {
 	it('say what a story answer, a photo tag and a moderator did', () => {
 		const said = (type) => notificationSummary({ type, account: { acct: 'bob.test' } })
 
-		expect(said('story:react')).toBe('bob.test reacted to your story')
-		expect(said('story:comment')).toBe('bob.test replied to your story')
+		expect(said('story:react')).toBe('bob.test reacted to your short')
+		expect(said('story:comment')).toBe('bob.test replied to your short')
 		expect(said('tagged')).toBe('bob.test tagged you in a photo')
 		expect(said('moderation_warning')).toBe('A moderator of this server has acted on your account')
 		expect(said('severed_relationships')).toBe('Some of your follows were removed because a server was blocked')

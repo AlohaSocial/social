@@ -37,7 +37,7 @@
 				:title="t('social', 'Available recommendations')"
 				class="timeline-recommendation-coverage feed-notice"
 				@dismiss="putAway(COVERAGE_NOTICE)">
-				{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
+				{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated posts and may show more as new posts arrive.') }}
 			</InfoCard>
 			<InfoCard
 				v-else-if="oneTimeNotice === 'scope'"
@@ -89,7 +89,7 @@
 		<div v-if="type === 'notifications' && notificationsStore.policyNotice" class="policy-notice feed-notice" role="note">
 			<IconBellCogOutline :size="20" class="policy-notice__icon" />
 			<p class="policy-notice__text">
-				{{ t('social', 'You can now choose who reaches your notifications — new accounts and people you don\'t follow can wait for your review.') }}
+				{{ t('social', 'You can now choose who reaches your activities — new accounts and people you don\'t follow can wait for your review.') }}
 				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }">
 					{{ t('social', 'Choose in Settings') }}
 				</RouterLink>
@@ -390,7 +390,7 @@ export default {
 				case 'interests':
 					return t('social', 'For you')
 				case 'favourites':
-					return t('social', 'Liked posts')
+					return t('social', 'Favorites')
 				case 'bookmarks':
 					return t('social', 'Bookmarks')
 				case 'single-post':
@@ -646,7 +646,7 @@ export default {
 			return [
 				{ value: 'all', label: t('social', 'All'), icon: IconBell },
 				{ value: 'mentions', label: t('social', 'Mentions'), icon: IconAt },
-				{ value: 'favourites', label: t('social', 'Favourites'), icon: IconHeart },
+				{ value: 'favourites', label: t('social', 'Favorites'), icon: IconHeart },
 				{ value: 'boosts', label: t('social', 'Boosts'), icon: IconRepeat },
 				{ value: 'follows', label: t('social', 'Follows'), icon: IconAccountPlusOutline },
 				{ value: 'polls', label: t('social', 'Polls'), icon: IconPoll },

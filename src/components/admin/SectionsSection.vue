@@ -9,7 +9,7 @@
 				{{ t('social', '24-hour shorts') }}
 			</NcCheckboxRadioSwitch>
 			<p class="sections__hint">
-				{{ t('social', 'A video, a picture or a text card for followers, gone after 24 hours. Off means the Shorts bar goes from the home timeline, New short offers only keeping it on the profile, and nothing new is taken.') }}
+				{{ t('social', 'A video, a photo or a text card for followers, gone after 24 hours. Off means the Shorts bar goes from the home timeline, New short offers only keeping it on the profile, and nothing new is taken.') }}
 			</p>
 
 			<NcCheckboxRadioSwitch v-model="form.photos" type="switch">

@@ -237,7 +237,7 @@ export default {
 				case 'repo':
 					return t('social', 'Copying your posts')
 				case 'blobs':
-					return t('social', 'Copying your pictures and videos')
+					return t('social', 'Copying your photos and videos')
 				case 'prefs':
 					return t('social', 'Copying your settings')
 				case 'follows':

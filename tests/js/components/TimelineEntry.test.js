@@ -245,8 +245,8 @@ describe('TimelineEntry', () => {
 		})
 
 		it.each([
-			['story:react', 'emoticon-happy-outline-icon', 'Bob reacted to your story', null],
-			['story:comment', 'comment-text-outline-icon', 'Bob replied to your story', null],
+			['story:react', 'emoticon-happy-outline-icon', 'Bob reacted to your short', null],
+			['story:comment', 'comment-text-outline-icon', 'Bob replied to your short', null],
 			['tagged', 'account-tag-outline-icon', 'Bob tagged you in a photo', post],
 			['moderation_warning', 'shield-alert-outline-icon', 'A moderator of this server has acted on your account', null],
 			['severed_relationships', 'account-multiple-remove-outline-icon', 'Some of your follows were removed because a server was blocked', null],

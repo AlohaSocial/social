@@ -224,7 +224,7 @@ describe('Discover', () => {
 			expect(Discover.computed.emptyMediaDescription.call({ active: 'videos' }))
 				.toContain('Videos')
 			expect(Discover.computed.emptyMediaDescription.call({ active: 'posts' }))
-				.toContain('Pictures')
+				.toContain('Photos')
 		})
 
 		it('keeps where a suggestion came from, so a colleague can be said to be one', async () => {

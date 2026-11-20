@@ -138,7 +138,7 @@ account for Aloha Social only cannot invite people.
 - **Discover** (in the sidebar) has five tabs: **People** (suggestions, with
   the people who share your Nextcloud and have said where they are on the
   fediverse listed first under *On your Nextcloud*), **Starter packs**,
-  **Pictures** and **Videos** being looked at, and **Hashtags** that are
+  **Photos** and **Videos** being looked at, and **Hashtags** that are
   trending, ranked over a window you pick.
 - **Your island and its neighbours** opens the People tab: a map of the
   fediverse as islands. Your own server is in the middle, with your picture on
@@ -529,11 +529,11 @@ in the sidebar.
   - **Post** shows how far it has got: cutting (as long as the trimmed short
     lasts, since the browser plays it through once), uploading, posting.
     Closing the dialog with a video in it asks before throwing it away.
-- **Activities** — your notifications: mentions, favourites, boosts, new
+- **Activities** — what happened to you: mentions, favorites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted,
-  reactions and replies to your stories, photos you were tagged in, and what a
+  reactions and replies to your shorts, photos you were tagged in, and what a
   moderator decided about your account. The **Mentions** filter also keeps
-  story replies and photo tags, and **Favourites** keeps story reactions.
+  short replies and photo tags, and **Favorites** keeps short reactions.
   It is in the sidebar, between Shorts and Direct messages. The badge
   beside it counts what arrived since you last looked, plus the people
   [waiting for your review](#who-may-reach-you-and-requests); the same
@@ -603,7 +603,7 @@ in the sidebar.
   no more — make the window taller and more appears. What you follow is never
   pushed out by what happens to be trending: the trending tags take only the
   room the rest leave, and a tag you already follow is not offered twice.
-- **Liked posts** and **Bookmarks** — what you favourited, and what you saved
+- **Favorites** and **Bookmarks** — what you liked, and what you saved
   with **Bookmark** in a post's menu. Bookmarks are private and never leave
   this server.
 - **Statistics** — what you have posted here and what came back: likes,
@@ -612,7 +612,7 @@ in the sidebar.
   people who answer you are on, and where else your posts went out.
 
 Open a post (its timestamp, `o` or `Enter`) for its own page: the thread, a
-reply box, who boosted and favourited it, and the details a card leaves out —
+reply box, who boosted and favorited it, and the details a card leaves out —
 exact time, audience, language, whether it was edited, and a link to the
 original on its home server. **Like**, **Boost** and **Reply** sit under every
 post; a post's `…` menu adds **Bookmark**, **Open on original instance** and
@@ -896,10 +896,10 @@ until you accept somebody.
 told; **Settings → Notifications → When to tell you** is about *when* the Nextcloud
 bell — and with it the mobile app and the notification mail — rings for what
 happens in Aloha Social. Left at **instant**, it rings the moment somebody
-mentions, favourites, boosts or follows you, as it always did. Set to
+mentions, favorites, boosts or follows you, as it always did. Set to
 **digest**, it stays quiet and rings once at each time of day you choose, up
 to four, with a count of what came in since the last one: "14 new
-notifications in Aloha Social — 3 mentions, 6 favourites, 4 boosts, 1 new
+notifications in Aloha Social — 3 mentions, 6 favorites, 4 boosts, 1 new
 follower". Two kinds of news can still reach you at once, each on its own
 switch: a direct message, and a mention from somebody you follow. **Quiet
 hours** work in either mode — between the two times you set, nothing but those

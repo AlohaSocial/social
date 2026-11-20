@@ -113,7 +113,7 @@ class PermissionDescriber {
 			case 'blob':
 				$types = array_map(fn (string $a): string => match ($a) {
 					'*/*' => $this->l10n->t('any files'),
-					'image/*' => $this->l10n->t('pictures'),
+					'image/*' => $this->l10n->t('photos'),
 					'video/*' => $this->l10n->t('videos'),
 					default => $a,
 				}, $rule['accept'] ?? []);

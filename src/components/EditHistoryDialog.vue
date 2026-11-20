@@ -42,7 +42,7 @@
 
 				<ul v-if="(version.media_attachments || []).length" class="history__media">
 					<li v-for="media in version.media_attachments" :key="media.id">
-						{{ media.description || t('social', 'A picture with no description') }}
+						{{ media.description || t('social', 'A photo with no description') }}
 					</li>
 				</ul>
 			</li>

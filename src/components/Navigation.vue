@@ -302,7 +302,7 @@
 					<template #icon>
 						<IconImageMultiple :size="20" />
 					</template>
-					{{ t('social', 'New story') }}
+					{{ t('social', 'New short') }}
 				</NcButton>
 			</div>
 			<!-- the box emptied and the modal stayed open, which reads as if
@@ -865,7 +865,7 @@ export default {
 					{
 						key: 'social-liked',
 						icon: IconHeart,
-						title: t('social', 'Liked posts'),
+						title: t('social', 'Favorites'),
 						to: { name: 'timeline', params: { type: 'favourites' } },
 					},
 					{

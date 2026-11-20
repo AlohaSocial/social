@@ -336,7 +336,7 @@ describe('OAuth2Authorize', () => {
 			setState('permissions', [
 				{ scope: 'atproto', label: 'Know which account you are', detail: '', writes: false, items: [] },
 				{ scope: 'include:app.example.authPosting', label: 'Posting', detail: 'Write posts', writes: true, items: ['Create, change and delete posts'] },
-				{ scope: 'blob:image/*', label: 'Upload pictures', detail: '', writes: true, items: [] },
+				{ scope: 'blob:image/*', label: 'Upload photos', detail: '', writes: true, items: [] },
 			])
 			const view = mount(OAuth2Authorize)
 			const items = view.findAll('.scopes > .scopes__item')

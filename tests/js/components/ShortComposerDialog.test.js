@@ -367,7 +367,7 @@ describe('ShortComposerDialog', () => {
 			const { wrapper } = mountDialog({ lifetime: 'day' })
 			await flushPromises()
 
-			await button(wrapper, 'Picture or wordswith stickers, or on a card').trigger('click')
+			await button(wrapper, 'Photo or wordswith stickers, or on a card').trigger('click')
 			await flushPromises()
 
 			expect(wrapper.find('.modal-stub').exists()).toBe(false)
@@ -391,7 +391,7 @@ describe('ShortComposerDialog', () => {
 
 		it('says what the editor posted, as a 24-hour short, and closes with it', async () => {
 			const { wrapper } = mountDialog({ lifetime: 'day' })
-			await button(wrapper, 'Picture or wordswith stickers, or on a card').trigger('click')
+			await button(wrapper, 'Photo or wordswith stickers, or on a card').trigger('click')
 			await flushPromises()
 
 			const editor = wrapper.findComponent({ name: 'StoryComposerDialog' })

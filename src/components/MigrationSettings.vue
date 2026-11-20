@@ -143,7 +143,7 @@
 						v-model="movePosts"
 						class="migration__move-in-switch"
 						:disabled="!moveAccount.posts.readable || moveStarting">
-						{{ t('social', 'Bring its public posts over, with their pictures') }}
+						{{ t('social', 'Bring its public posts over, with their photos') }}
 					</NcCheckboxRadioSwitch>
 					<NcButton
 						variant="primary"
@@ -267,7 +267,7 @@
 					{{ t('social', 'Bring your posts with you') }}
 				</h4>
 				<p>
-					{{ t('social', 'Upload the export from your old server and the posts in it are written here as yours, dated when you wrote them, with their pictures. Nothing is sent to your followers.') }}
+					{{ t('social', 'Upload the export from your old server and the posts in it are written here as yours, dated when you wrote them, with their photos. Nothing is sent to your followers.') }}
 				</p>
 				<details class="migration__how">
 					<summary>{{ t('social', 'How this works') }}</summary>
@@ -275,17 +275,17 @@
 						{{ t('social', 'Nothing is sent to anybody: your followers do not get years of posts in one afternoon, because nothing here is published again. Boosts and direct messages are left out, and a reply keeps the post it answers where the file holds both. Importing the same file twice changes nothing the second time.') }}
 					</p>
 					<p>
-						{{ t('social', 'Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their pictures and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are.') }}
+						{{ t('social', 'Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their photos and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are.') }}
 					</p>
 					<p>
 						{{ t('social', 'An archive too large for a browser to upload can be imported by an administrator with occ social:account:import-posts.') }}
 					</p>
 				</details>
 				<NcCheckboxRadioSwitch v-model="fetchMedia" type="switch" class="migration__media-switch">
-					{{ t('social', 'Fetch the pictures from the old server') }}
+					{{ t('social', 'Fetch the photos from the old server') }}
 				</NcCheckboxRadioSwitch>
 				<p class="migration__note">
-					{{ t('social', 'An archive usually holds the files themselves and they are used as they are. A file that only lists where its pictures are — Pixelfed writes one — needs them fetched, which tells that server the import is happening and only works while it is still running.') }}
+					{{ t('social', 'An archive usually holds the files themselves and they are used as they are. A file that only lists where its photos are — Pixelfed writes one — needs them fetched, which tells that server the import is happening and only works while it is still running.') }}
 				</p>
 				<input
 					ref="posts"
@@ -458,7 +458,7 @@
 					{{ t('social', 'Export your data') }}
 				</h4>
 				<p>
-					{{ t('social', 'A zip file holding your profile, the people you follow, your followers, the accounts you block and mute, your bookmarks and likes, and every post you have written — with the pictures and videos on those posts, and your profile banner, as files inside the archive rather than as links back to this server.') }}
+					{{ t('social', 'A zip file holding your profile, the people you follow, your followers, the accounts you block and mute, your bookmarks and likes, and every post you have written — with the photos and videos on those posts, and your profile banner, as files inside the archive rather than as links back to this server.') }}
 				</p>
 				<details class="migration__how">
 					<summary>{{ t('social', 'How this works') }}</summary>
@@ -514,7 +514,7 @@
 				<details class="migration__how">
 					<summary>{{ t('social', 'How this works') }}</summary>
 					<p>
-						{{ t('social', 'Posts in the archive are listed rather than published again, so importing cannot flood the timelines of people who follow you. Their pictures are put back on the posts this server still has, and your banner is restored.') }}
+						{{ t('social', 'Posts in the archive are listed rather than published again, so importing cannot flood the timelines of people who follow you. Their photos are put back on the posts this server still has, and your banner is restored.') }}
 					</p>
 				</details>
 				<!-- each file input here is opened by the button after it, which is

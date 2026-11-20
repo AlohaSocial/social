@@ -1062,7 +1062,7 @@ describe('Navigation', () => {
 			'Discover',
 			// the profile entry appears only when an ActivityPub account exists
 			'Follow requests',
-			'Liked posts',
+			'Favorites',
 			'Bookmarks',
 			'Statistics',
 			'Blocking',
@@ -1082,7 +1082,7 @@ describe('Navigation', () => {
 
 		expect(moreNames(wrapper)).toEqual([
 			'Follow requests',
-			'Liked posts',
+			'Favorites',
 			'Bookmarks',
 			'Statistics',
 			'Blocking',
@@ -1259,7 +1259,7 @@ describe('Navigation', () => {
 		['My Feed', { name: 'timeline' }],
 		['Activities', { name: 'timeline', params: { type: 'notifications' } }],
 		['Direct messages', { name: 'timeline', params: { type: 'direct' } }],
-		['Liked posts', { name: 'timeline', params: { type: 'favourites' } }],
+		['Favorites', { name: 'timeline', params: { type: 'favourites' } }],
 		['Statistics', { name: 'statistics' }],
 		['Follow requests', { name: 'follow-requests' }],
 		['Bookmarks', { name: 'timeline', params: { type: 'bookmarks' } }],
@@ -1376,7 +1376,7 @@ describe('Navigation', () => {
 		['/timeline/federated', 'My Feed'],
 		['/timeline/photos', 'Photos'],
 		['/timeline/videos', 'Videos'],
-		['/timeline/favourites', 'Liked posts'],
+		['/timeline/favourites', 'Favorites'],
 		['/timeline/bookmarks', 'Bookmarks'],
 		['/follow_requests', 'Follow requests'],
 	])('marks only one entry active on %s', (path, active) => {
@@ -1854,7 +1854,7 @@ describe('Navigation entries are links', () => {
 		['Activities', '/index.php/apps/social/timeline/notifications'],
 		['Direct messages', '/index.php/apps/social/timeline/direct'],
 		['Follow requests', '/index.php/apps/social/follow_requests'],
-		['Liked posts', '/index.php/apps/social/timeline/favourites'],
+		['Favorites', '/index.php/apps/social/timeline/favourites'],
 		['Bookmarks', '/index.php/apps/social/timeline/bookmarks'],
 		['Blocking', '/index.php/apps/social/blocked'],
 		['Migration', '/index.php/apps/social/migration'],
@@ -1869,11 +1869,11 @@ describe('Navigation entries are links', () => {
 		// timeline the reader had actually chosen.
 		const entry = (wrapper, name) => wrapper.findAll('li').find((li) => li.text().startsWith(name))
 		const lit = (wrapper, names) => names.filter((name) => entry(wrapper, name)?.find('.app-navigation-entry').classes().includes('active'))
-		const names = ['My Feed', 'Photos', 'Videos', 'Activities', 'Direct messages', 'Liked posts', 'Bookmarks']
+		const names = ['My Feed', 'Photos', 'Videos', 'Activities', 'Direct messages', 'Favorites', 'Bookmarks']
 
 		expect(lit(await mountReal('/timeline/direct'), names)).toEqual(['Direct messages'])
 		expect(lit(await mountReal('/timeline'), names)).toEqual(['My Feed'])
-		expect(lit(await mountReal('/timeline/favourites'), names)).toEqual(['Liked posts'])
+		expect(lit(await mountReal('/timeline/favourites'), names)).toEqual(['Favorites'])
 	})
 
 	it('does not let the browser follow the anchor as well', async () => {

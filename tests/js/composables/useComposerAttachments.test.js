@@ -521,7 +521,7 @@ describe('useComposerAttachments', () => {
 
 			await attachments.applyFilter({ key: 'nextcloud:1:/cat.jpg', filter: 'warm' })
 
-			expect(showError).toHaveBeenCalledWith('Could not load the picture to apply the filter, so it stays as it is')
+			expect(showError).toHaveBeenCalledWith('Could not load the photo to apply the filter, so it stays as it is')
 			expect(attachments.attachments.value['nextcloud:1:/cat.jpg'].filter).toBeUndefined()
 			expect(attachments.checkingMedia.value).toBe(false)
 		})

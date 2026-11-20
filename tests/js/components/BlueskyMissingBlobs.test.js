@@ -26,7 +26,7 @@ const NcDialog = {
 }
 
 /**
- * @param {number} count how many pictures or videos did not arrive
+ * @param {number} count how many photos or videos did not arrive
  * @return {object} the mounted card
  */
 function mountCard(count = 4, records = undefined) {
@@ -64,7 +64,7 @@ describe('BlueskyMissingBlobs', () => {
 
 		expect(axios.post).not.toHaveBeenCalled()
 		expect(wrapper.findComponent(NcDialog).props('name')).toBe('Go on without them?')
-		expect(wrapper.find('.dialog-stub').text()).toBe('4 pictures or videos of your posts could not be copied here. Your account is pointed at this server without them: the posts that show them lose them, and they are not copied later.')
+		expect(wrapper.find('.dialog-stub').text()).toBe('4 photos or videos of your posts could not be copied here. Your account is pointed at this server without them: the posts that show them lose them, and they are not copied later.')
 	})
 
 	it('names the posts that lose them, with a link where they can be read', async () => {
@@ -97,7 +97,7 @@ describe('BlueskyMissingBlobs', () => {
 
 		await buttonNamed(wrapper, 'Go on without them').trigger('click')
 
-		expect(wrapper.find('.dialog-stub').text()).toBe('1 picture or video of your posts could not be copied here. Your account is pointed at this server without it: the posts that show it lose it, and it is not copied later.')
+		expect(wrapper.find('.dialog-stub').text()).toBe('1 photo or video of your posts could not be copied here. Your account is pointed at this server without it: the posts that show it lose it, and it is not copied later.')
 	})
 
 	it('goes on without them once confirmed', async () => {

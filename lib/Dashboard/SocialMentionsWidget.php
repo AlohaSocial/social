@@ -49,7 +49,7 @@ class SocialMentionsWidget extends TimelineWidget {
 
 	#[\Override]
 	protected function getButtonText(): string {
-		return $this->l10n->t('Open notifications');
+		return $this->l10n->t('Open Activities');
 	}
 
 	#[\Override]

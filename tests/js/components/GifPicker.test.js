@@ -125,7 +125,7 @@ describe('GifPicker', () => {
 			const wrapper = await mountPicker([])
 
 			expect(wrapper.find('.gif-picker__note').text())
-				.toBe('There are no pictures on this instance.')
+				.toBe('There are no GIFs on this instance.')
 		})
 
 		it('says a search found nothing', async () => {
@@ -219,7 +219,7 @@ describe('GifPicker', () => {
 	it('can be closed', async () => {
 		const wrapper = await mountPicker()
 
-		await wrapper.find('[aria-label="Close the picture library"]').trigger('click')
+		await wrapper.find('[aria-label="Close the GIF library"]').trigger('click')
 
 		expect(wrapper.emitted('close')).toHaveLength(1)
 	})

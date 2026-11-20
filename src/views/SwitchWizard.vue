@@ -291,7 +291,7 @@ export default {
 					tint: '#222',
 					readsPosts: true,
 					readsPeople: false,
-					how: t('social', 'Settings → Your account → Download an archive of your data, and wait for the mail. Your posts and their pictures are in it. The accounts you followed are in it only as numbers, so there is nobody in that file to look up — and nothing on X federates, so no follower can come with you.'),
+					how: t('social', 'Settings → Your account → Download an archive of your data, and wait for the mail. Your posts and their photos are in it. The accounts you followed are in it only as numbers, so there is nobody in that file to look up — and nothing on X federates, so no follower can come with you.'),
 				},
 				{
 					id: 'instagram',

@@ -233,7 +233,7 @@
 				</h3>
 			</header>
 			<p class="block-card__lede">
-				{{ t('social', 'Hides posts that are tagged as made with AI, that their author marked, or whose pictures say so in their metadata. It cannot recognise what nobody labelled.') }}
+				{{ t('social', 'Hides posts that are tagged as made with AI, that their author marked, or whose photos say so in their metadata. It cannot recognise what nobody labelled.') }}
 			</p>
 			<NcCheckboxRadioSwitch
 				type="switch"

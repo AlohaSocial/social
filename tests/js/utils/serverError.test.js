@@ -58,8 +58,8 @@ describe('errorSentence', () => {
 	it('keeps the advice: the limit, and the field by the page\'s own name for it', () => {
 		expect(errorSentence('featured-tags-full', { limit: 10 })).toBe('You can feature at most 10 hashtags. Remove one first.')
 		expect(errorSentence('banner-too-large', { limit: '10 MB' })).toBe('That picture is larger than this server takes (at most 10 MB). Pick a smaller one.')
-		expect(errorSentence('setting-out-of-range', { field: 'max_size', min: 1, max: 10240 }, { max_size: 'Largest picture or file (MB)' }))
-			.toBe('"Largest picture or file (MB)" has to be between 1 and 10240.')
+		expect(errorSentence('setting-out-of-range', { field: 'max_size', min: 1, max: 10240 }, { max_size: 'Largest photo or file (MB)' }))
+			.toBe('"Largest photo or file (MB)" has to be between 1 and 10240.')
 		expect(errorSentence('setting-out-of-range', { field: 'halfLife', min: 7, max: 180 })).toBe('"halfLife" has to be between 7 and 180.')
 	})
 
@@ -132,7 +132,7 @@ describe('errorOf', () => {
 describe('stoppedMoveError', () => {
 	it('explains the code the move stopped with, and keeps what it said for the details', () => {
 		expect(stoppedMoveError({ error: '3 pictures or videos did not arrive on the other server', progress: { code: 'blobs-missing' } })).toEqual({
-			text: 'Some pictures or videos did not arrive. Copy them again, or go on without them.',
+			text: 'Some photos or videos did not arrive. Copy them again, or go on without them.',
 			details: '3 pictures or videos did not arrive on the other server',
 		})
 	})

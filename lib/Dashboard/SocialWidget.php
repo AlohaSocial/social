@@ -28,7 +28,7 @@ class SocialWidget implements IWidget {
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Aloha Social notifications');
+		return $this->l10n->t('Aloha Social activities');
 	}
 
 	#[\Override]

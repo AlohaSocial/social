@@ -540,8 +540,8 @@ export default {
 
 				notifications: {
 					scene: 'hammock',
-					title: t('social', 'No notifications found'),
-					description: t('social', 'You have not received any notifications yet'),
+					title: t('social', 'No activities yet'),
+					description: t('social', 'Nothing has happened here yet'),
 				},
 
 				federated: {
@@ -556,7 +556,7 @@ export default {
 
 				favourites: {
 					scene: 'plumeria',
-					title: t('social', 'No liked posts found'),
+					title: t('social', 'No favorites found'),
 					description: t('social', 'Posts you like are kept here, for you alone to see'),
 				},
 
@@ -579,7 +579,7 @@ export default {
 				photos: {
 					scene: 'tide',
 					title: t('social', 'No photos found'),
-					description: t('social', 'Posts with pictures will show up here'),
+					description: t('social', 'Posts with photos will show up here'),
 				},
 
 				link: {
@@ -762,7 +762,7 @@ export default {
 				image: {
 					scene: 'tide',
 					title: t('social', 'No photos yet'),
-					description: t('social', 'Posts with pictures appear here.'),
+					description: t('social', 'Posts with photos appear here.'),
 				},
 
 				video: {

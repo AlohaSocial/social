@@ -10,7 +10,7 @@
 		class="story-composer"
 		@update:open="$emit('update:open', $event)">
 		<p class="story-composer__hint">
-			{{ t('social', 'A picture, a video or a few words, for the people who follow you, gone after a day.') }}
+			{{ t('social', 'A photo, a video or a few words, for the people who follow you, gone after a day.') }}
 		</p>
 
 		<div class="story-composer__kinds" role="radiogroup" :aria-label="t('social', 'What kind of short')">
@@ -21,7 +21,7 @@
 				:aria-checked="kind === 'media'"
 				@click="kind = 'media'">
 				<IconImagePlus :size="20" />
-				{{ t('social', 'Picture or video') }}
+				{{ t('social', 'Photo or video') }}
 			</button>
 			<button
 				type="button"
@@ -84,7 +84,7 @@
 				class="story-composer__pick"
 				@click="pickFile">
 				<IconImagePlus :size="32" />
-				<span>{{ t('social', 'Choose a picture or a video') }}</span>
+				<span>{{ t('social', 'Choose a photo or a video') }}</span>
 			</button>
 
 			<div v-else class="story-composer__preview">
@@ -136,7 +136,7 @@
 					<form class="story-composer__add-text" @submit.prevent="addTextSticker">
 						<NcTextField
 							v-model="stickerText"
-							:label="t('social', 'Words on the picture')"
+							:label="t('social', 'Words on the photo')"
 							maxlength="60" />
 						<NcButton type="submit" variant="tertiary" :disabled="stickerText.trim() === ''">
 							{{ t('social', 'Add') }}

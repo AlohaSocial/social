@@ -369,7 +369,7 @@
 			:buttons="deleteButtons">
 			<p class="delete-hint">
 				{{ deleteToRedraft
-					? t('social', 'The post is removed everywhere it reached, and its words, pictures and content warning are put back in the composer. What you post next is a new post: the boosts, likes and replies this one collected stay with it and are gone.')
+					? t('social', 'The post is removed everywhere it reached, and its words, photos and content warning are put back in the composer. What you post next is a new post: the boosts, likes and replies this one collected stay with it and are gone.')
 					: t('social', 'The post is removed from this server and a deletion is sent to every server that received it. This cannot be undone.') }}
 			</p>
 		</NcDialog>
