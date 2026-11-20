@@ -24,7 +24,7 @@ use OCA\Social\Model\Moderation;
  * The administration screens of Pixelfed's app, answered from this
  * instance's moderation: accounts, reports, instances, domain blocks and the
  * review queue (Pixelfed's autospam screen). What has no equivalent here,
- * such as per-account `cw` flags on posts, is answered as absent or a 422.
+ * such as `no_autolink` or per-post flags, is answered as absent or a 422.
  *
  * Everything goes through `AdminApiService`, which decides who may moderate
  * and records every decision.
