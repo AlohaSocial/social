@@ -25,14 +25,12 @@ const ProfileSaved = () => import(/* webpackChunkName: "profile" */'./views/Prof
 const ProfileDrafts = () => import(/* webpackChunkName: "profile" */'./views/ProfileDrafts.vue')
 const ProfileStatistics = () => import(/* webpackChunkName: "profile" */'./views/ProfileStatistics.vue')
 const StarterPack = () => import(/* webpackChunkName: "profile" */'./views/StarterPack.vue')
-const BlockedAccounts = () => import(/* webpackChunkName: "settings" */'./views/BlockedAccounts.vue')
 const Discover = () => import('./views/Discover.vue')
 // Not in the `profile` chunk. Settings and Statistics are pages somebody goes
 // to on purpose, once in a while; a profile is what every avatar in every
 // timeline links to. Sharing a chunk meant opening a profile downloaded the
 // statistics engine -- Statistics.vue is the third-largest component in the
 // app -- and the settings page with it, before drawing a single post.
-const Migration = () => import(/* webpackChunkName: "migration" */'./views/Migration.vue')
 const SwitchWizard = () => import(/* webpackChunkName: "switch" */'./views/SwitchWizard.vue')
 const Settings = () => import(/* webpackChunkName: "settings" */'./views/Settings.vue')
 const About = () => import(/* webpackChunkName: "about" */'./views/About.vue')
@@ -412,32 +410,19 @@ const router = createRouter({
 			path: '/follow_requests',
 			redirect: { name: 'timeline', params: { type: 'notifications' } },
 		},
+		// Blocking and moving the account are sections of Settings; the old
+		// addresses, and the parts of them a link names, open them there
 		{
 			path: '/blocked',
-			components: {
-				default: BlockedAccounts,
-			},
-			name: 'blocked-accounts',
-			meta: { signedIn: true },
+			redirect: (to) => ({ name: 'settings', hash: to.hash || '#blocked' }),
 		},
 		{
-			// The held senders are a card on the Blocking page now. The path
-			// stays so that a bookmark, or a link somebody was sent, lands
-			// where the thing they wanted actually is rather than on a 404.
 			path: '/filtered',
-			redirect: { name: 'blocked-accounts' },
+			redirect: { name: 'settings', hash: '#filtered-notifications' },
 		},
 		{
-			// A page of its own again. Exporting an archive, importing one and
-			// bringing a following list over from another network are each a
-			// job somebody sits down to do, not a setting changed in passing,
-			// and they were the twelfth section of a page of switches.
 			path: '/migration',
-			components: {
-				default: Migration,
-			},
-			name: 'migration',
-			meta: { signedIn: true },
+			redirect: (to) => ({ name: 'settings', hash: to.hash || '#migration' }),
 		},
 		{
 			path: '/settings',

@@ -299,9 +299,9 @@
 					{{ t('social', 'Download your Bluesky account') }}
 				</NcButton>
 				<p class="bluesky-settings__hint">
-					{{ t('social', 'Your posts, photos and the history of your Bluesky identifier, in the files Bluesky tools read, with a guide to moving the account even if this server is gone. The archive from the Migration page holds the same files.') }}
-					<router-link :to="{ name: 'migration', hash: '#copy' }">
-						{{ t('social', 'Open Migration') }}
+					{{ t('social', 'Your posts, photos and the history of your Bluesky identifier, in the files Bluesky tools read, with a guide to moving the account even if this server is gone. The archive from Moving your account in Settings holds the same files.') }}
+					<router-link :to="{ name: 'settings', hash: '#copy' }">
+						{{ t('social', 'Open in Settings') }}
 					</router-link>
 				</p>
 			</div>

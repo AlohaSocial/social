@@ -162,7 +162,7 @@
 				<!-- the lists are made and filled in Settings; this is where a
 				     reader looks for the way there -->
 				<template #actions>
-					<NcActionButton closeAfterClick @click="navigate({ name: 'settings', hash: '#lists' })">
+					<NcActionButton closeAfterClick @click="managingLists = true">
 						<template #icon>
 							<IconCog :size="20" />
 						</template>
@@ -215,32 +215,9 @@
 							<NcCounterBubble :count="item.counter" type="highlighted" />
 						</template>
 					</NcAppNavigationItem>
-					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length }"
-						:name="t('social', 'Blocking')"
-						:href="hrefFor({ name: 'blocked-accounts' })"
-						:active="isActive({ to: { name: 'blocked-accounts' } })"
-						@click="navigate({ name: 'blocked-accounts' }, $event)">
-						<template #icon>
-							<IconCancel :size="20" />
-						</template>
-					</NcAppNavigationItem>
-					<!-- Moving an account in or out of this server: a job
-					     somebody sits down to do with a file manager open, so a
-					     page of its own rather than a section of Settings. -->
-					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 1 }"
-						:name="t('social', 'Migration')"
-						:href="hrefFor({ name: 'migration' })"
-						:active="isActive({ to: { name: 'migration' } })"
-						@click="navigate({ name: 'migration' }, $event)">
-						<template #icon>
-							<IconSwapHorizontal :size="20" />
-						</template>
-					</NcAppNavigationItem>
 					<!-- the server's rules, contact and legal links -->
 					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 2 }"
+						:style="{ '--entry-index': menu.more.length }"
 						:name="t('social', 'About this server')"
 						:href="hrefFor({ name: 'about' })"
 						:active="isActive({ to: { name: 'about' } })"
@@ -253,7 +230,7 @@
 					     place to read something, and this is the one place to
 					     change something -->
 					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 3 }"
+						:style="{ '--entry-index': menu.more.length + 1 }"
 						:name="t('social', 'Settings')"
 						:href="hrefFor({ name: 'settings' })"
 						:active="isActive({ to: { name: 'settings' } })"
@@ -266,6 +243,14 @@
 			</div>
 		</template>
 	</NcAppNavigation>
+
+	<SettingsDialog
+		v-if="managingLists"
+		:title="t('social', 'Lists')"
+		:description="t('social', 'A list is a few of the people you follow, read as a timeline of its own.')"
+		@close="managingLists = false">
+		<ListsSettings />
+	</SettingsDialog>
 
 	<!-- `closeOnClickOutside` is a boolean prop with no default, so the dialog
 	     ignored a click on the dimmed page around it and only the X closed it.
@@ -387,6 +372,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 
 import { defineAsyncComponent } from 'vue'
+import SettingsDialog from './SettingsDialog.vue'
 
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconBinoculars from 'vue-material-design-icons/Binoculars.vue'
@@ -409,9 +395,7 @@ import { capacityFrom, chooseEntries, entriesThatFit } from '../utils/explore.js
 import { offTimelinePush, onTimelinePush, PUSH_DIRECT, PUSH_NOTIFICATION } from '../services/timelinePush.js'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import IconCancel from 'vue-material-design-icons/Cancel.vue'
 import IconInformationOutline from 'vue-material-design-icons/InformationOutline.vue'
-import IconSwapHorizontal from 'vue-material-design-icons/SwapHorizontal.vue'
 import IconCog from 'vue-material-design-icons/Cog.vue'
 import IconAlertCircle from 'vue-material-design-icons/AlertCircle.vue'
 
@@ -437,6 +421,7 @@ import { ownAvatarUrl } from '../services/avatar.js'
 // its own chunk keeps all of that out of the entry bundle
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./Composer/Composer.vue'))
 const PostEditForm = defineAsyncComponent(() => import(/* webpackChunkName: "composer-edit" */'./PostEditForm.vue'))
+const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'./ListsSettings.vue'))
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
 
 /** how often to re-read the badges when the server cannot push */
@@ -464,6 +449,8 @@ const EXPLORE_OPEN_KEY = 'social.navigation.exploreOpen'
 export default {
 	name: 'Navigation',
 	components: {
+		ListsSettings,
+		SettingsDialog,
 		NcActionButton,
 		NcAppNavigation,
 		NcAppNavigationSearch,
@@ -492,9 +479,7 @@ export default {
 		IconBluesky,
 		IconBinoculars,
 		IconCompass,
-		IconCancel,
 		IconInformationOutline,
-		IconSwapHorizontal,
 		IconCog,
 		IconAlertCircle,
 	},
@@ -537,6 +522,7 @@ export default {
 			ringing: false,
 			ringTimer: null,
 			showComposer: false,
+			managingLists: false,
 			composerReply: null,
 			composerQuote: null,
 			composerDraft: null,
@@ -690,12 +676,11 @@ export default {
 		 *
 		 * The stylesheet staggers them from the bottom row upward, so it needs
 		 * the count as well as each row's index: the delay is
-		 * `total - 1 - index`. Blocking, Migration and Settings are written out
-		 * in the template rather than coming from `menu.more`, so they are
-		 * added here; a test holds this equal to the number of entries drawn.
+		 * `total - 1 - index`. About and Settings are written out in the
+		 * template rather than coming from `menu.more`, so they are added here.
 		 */
 		moreCount() {
-			return this.menu.more.length + 4
+			return this.menu.more.length + 2
 		},
 
 		/**
@@ -924,6 +909,9 @@ export default {
 			'composer-quote': (quote) => this.openComposer({ quote }),
 			'composer-edit': (intent) => this.openComposer(intent),
 			'shortcut:compose': () => this.openComposer(),
+			'lists:manage': () => {
+				this.managingLists = true
+			},
 		}
 		for (const [event, handler] of Object.entries(this.composerHandlers)) {
 			eventBus.on(event, handler)

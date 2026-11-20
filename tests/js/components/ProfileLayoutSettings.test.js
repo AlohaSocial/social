@@ -35,11 +35,11 @@ describe('public profile layout', () => {
 		await flushPromises()
 		expect(wrapper.get('select').element.value).toBe('posts')
 	})
-	it('only confirms and updates the shared account after the server saves', async () => {
+	it('saves a change as soon as it is made, and confirms once the server has it', async () => {
 		const layout = { default_tab: 'photos', tabs: ['posts', 'photos'] }
 		axios.put.mockResolvedValue({ data: { status: 1, result: { layout } } })
 		const { store, wrapper } = setup(layout)
-		await wrapper.get('form').trigger('submit')
+		await wrapper.get('select').trigger('change')
 		await flushPromises()
 		expect(axios.put).toHaveBeenCalledWith(expect.stringContaining('/account/profile-layout'), { layout })
 		expect(store.currentAccount.profile_layout).toEqual(layout)
@@ -48,10 +48,11 @@ describe('public profile layout', () => {
 	it('keeps an unsuccessful change retryable without a success announcement', async () => {
 		axios.put.mockRejectedValue(new Error('offline'))
 		const { wrapper } = setup()
-		await wrapper.get('form').trigger('submit')
+		await wrapper.get('select').trigger('change')
 		await flushPromises()
 		expect(wrapper.get('[role="alert"]').text()).toBeTruthy()
 		expect(wrapper.find('[role="status"]').exists()).toBe(false)
-		expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+		expect(wrapper.get('select').attributes('disabled')).toBeUndefined()
+		expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
 	})
 })

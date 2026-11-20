@@ -137,9 +137,9 @@
 					{{ t('social', 'Already somewhere else?') }}
 				</h2>
 				<p class="first-run__lead">
-					{{ t('social', 'If you have an account on Mastodon or another server, type its address. Everyone it follows is followed from here and its public posts are brought along, in the background. Moving your followers over as well is the last step, done on your old server; the Migration page tells you how.') }}
-					<router-link class="first-run__link" :to="{ name: 'migration', hash: '#bring' }">
-						{{ t('social', 'Open Migration') }}
+					{{ t('social', 'If you have an account on Mastodon or another server, type its address. Everyone it follows is followed from here and its public posts are brought along, in the background. Moving your followers over as well is the last step, done on your old server; Moving your account in Settings tells you how.') }}
+					<router-link class="first-run__link" :to="{ name: 'settings', hash: '#bring' }">
+						{{ t('social', 'Open in Settings') }}
 					</router-link>
 				</p>
 				<div class="first-run__move">
@@ -187,9 +187,9 @@
 					</p>
 				</div>
 				<p class="first-run__hint">
-					{{ t('social', 'On Mastodon: Preferences → Import and export → Data export → Follows (CSV). Moving your followers over as well is on the Migration page — that one is a one-way move, so it is not a button here.') }}
-					<router-link class="first-run__link" :to="{ name: 'migration', hash: '#bring' }">
-						{{ t('social', 'Open Migration') }}
+					{{ t('social', 'On Mastodon: Preferences → Import and export → Data export → Follows (CSV). Moving your followers over as well is under Moving your account in Settings — that one is a one-way move, so it is not a button here.') }}
+					<router-link class="first-run__link" :to="{ name: 'settings', hash: '#bring' }">
+						{{ t('social', 'Open in Settings') }}
 					</router-link>
 				</p>
 			</div>
@@ -502,7 +502,7 @@ export default {
 				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/follows'), form)
 				const job = await this.awaitImport(data?.import?.id)
 				if (job === null) {
-					this.followsResult = t('social', 'Your follows are being imported in the background; the Migration page shows where it gets to.')
+					this.followsResult = t('social', 'Your follows are being imported in the background; Moving your account in Settings shows where it gets to.')
 				} else if (job.status === 'failed') {
 					showError(job.report?.error || t('social', 'Could not import those follows'))
 				} else {
@@ -545,13 +545,13 @@ export default {
 				})
 				const job = await this.awaitImport(data?.import?.id)
 				if (job === null) {
-					this.moveResult = t('social', 'Your move is running in the background; the Migration page shows where it gets to, and names the last step on your old server.')
+					this.moveResult = t('social', 'Your move is running in the background; Moving your account in Settings shows where it gets to, and names the last step on your old server.')
 				} else if (job.status === 'failed') {
 					showError(job.report?.error || t('social', 'Could not move that account here'))
 				} else {
 					this.moveResult = t(
 						'social',
-						'{followed} accounts followed and {imported} posts brought over. The last step is on your old server; the Migration page names it.',
+						'{followed} accounts followed and {imported} posts brought over. The last step is on your old server; Moving your account in Settings names it.',
 						{ followed: job.report?.followed ?? 0, imported: job.report?.imported ?? 0 },
 					)
 				}

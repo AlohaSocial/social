@@ -371,14 +371,14 @@ describe('BlueskySettings', () => {
 		})
 
 		// the same archive is on the Migration page, a page of its own
-		it('links to the Migration page for the full archive', async () => {
+		it('links to moving the account in Settings for the full archive', async () => {
 			serverHas()
 			const wrapper = mountSettings()
 			await flushPromises()
 
-			const link = wrapper.findAllComponents(RouterLinkStub).find((candidate) => candidate.text() === 'Open Migration')
-			expect(link.props('to')).toEqual({ name: 'migration', hash: '#copy' })
-			expect(wrapper.text()).toContain('The archive from the Migration page holds the same files.')
+			const link = wrapper.findAllComponents(RouterLinkStub).find((candidate) => candidate.text() === 'Open in Settings')
+			expect(link.props('to')).toEqual({ name: 'settings', hash: '#copy' })
+			expect(wrapper.text()).toContain('The archive from Moving your account in Settings holds the same files.')
 			expect(wrapper.text()).not.toContain('Settings → Migration')
 		})
 
