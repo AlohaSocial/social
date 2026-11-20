@@ -42,12 +42,9 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 
 /**
- * Fills the tables with a plausible amount of content and times the queries
- * that serve a timeline, because a query's cost cannot be judged on the dozen
- * rows a development instance has.
- *
- * Everything it writes carries the same host, so `--clean` can take it all
- * back out again and nothing else is touched.
+ * Seeds the tables with a realistic volume of content and times the queries
+ * that serve timelines. Everything seeded shares one host, so `--clean` can
+ * remove exactly that.
  */
 class Benchmark extends SocialCommand {
 	/** every actor, note and follow this command writes lives under this host */
@@ -66,14 +63,9 @@ class Benchmark extends SocialCommand {
 	];
 
 	/*
-	 * The mix of what is seeded, each as "one post in N".
-	 *
-	 * A Photos or Videos timeline narrows the page to the posts carrying that
-	 * kind of media, and that narrowing is only measured when media is the
-	 * minority it is in life: an instance seeded with text alone answers the
-	 * Photos timeline with nothing, at once, and an instance where every post
-	 * has a picture answers it as if it were the home timeline. Roughly one
-	 * post in seven carrying media is what a Mastodon timeline looks like.
+	 * The mix of what is seeded, each as "one post in N". Media must be a
+	 * minority, as in real timelines (about one post in seven), or the
+	 * Photos and Videos timelines are not measured realistically.
 	 */
 
 	/** One post in this many carries a picture. */
@@ -121,11 +113,8 @@ class Benchmark extends SocialCommand {
 	private const CLEAN_PAGE = 1000;
 
 	/**
-	 * How many rows one `INSERT` carries.
-	 *
-	 * Five hundred tuples of a dozen columns is a statement of a few thousand
-	 * placeholders — comfortably inside every driver's limit, and large enough
-	 * that the per-statement cost stops mattering.
+	 * How many rows one `INSERT` carries: well inside every driver's
+	 * placeholder limit, large enough that per-statement cost stops mattering.
 	 */
 	private const CHUNK = 500;
 
@@ -374,14 +363,10 @@ class Benchmark extends SocialCommand {
 	/**
 	 * The limit each timing is held to, and whether it went over.
 	 *
-	 * A probe's ceiling is its own `--threshold` (for that page size, else for
-	 * the probe), else `--fail-over`. Its baseline allowance is
-	 * `$factor` times its entry in the baseline. The limit is the larger of
-	 * the two: the ceiling keeps a probe whose baseline is two milliseconds
-	 * from failing on the noise of a shared runner, and the baseline lets a
-	 * probe that has always been slower than the ceiling run without failing
-	 * every night — while still failing the night it gets three times slower.
-	 * A probe with neither has no limit.
+	 * The limit is the larger of the probe's ceiling (`--threshold`, else
+	 * `--fail-over`) and `$factor` times its baseline: the ceiling absorbs
+	 * noise on fast probes, the baseline lets slow probes pass until they
+	 * regress. A probe with neither has no limit.
 	 *
 	 * @param array<string, array{probe: string, limit: int, ms: float, rows: int}> $results
 	 * @param array<string, float> $thresholds
@@ -409,11 +394,9 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * This command ships to every install (appinfo/info.xml registers it), and
-	 * seeding writes thousands of rows into whichever database occ is pointed
-	 * at. There is nothing in the name to warn somebody that `social:debug:benchmark`
-	 * is not read-only, so it asks — and refuses to guess when nobody is
-	 * there to answer.
+	 * The command ships with every install and seeding writes thousands of
+	 * rows into whatever database occ points at, so it asks for confirmation
+	 * and refuses when nobody can answer.
 	 */
 	private function confirmSeeding(InputInterface $input, OutputInterface $output, int $actors, int $notes): bool {
 		$output->writeln(
@@ -477,24 +460,12 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * Writes the rows, in bulk.
+	 * Writes the rows with multi-row `INSERT`s, bypassing the model layer,
+	 * which at a few statements per row is far too slow to seed millions.
 	 *
-	 * **Not through the model layer.** An earlier version of this built a
-	 * `Note`, called `StreamRequest::save()` and then `generateStreamDest()`
-	 * for each post: three statements and a transaction per row, which is
-	 * about 400 rows a second and makes ten million posts a seven-hour wait —
-	 * so nobody ever seeded enough to find out what the queries cost, which is
-	 * the entire purpose of the command. Multi-row `INSERT`s of
-	 * `self::CHUNK` tuples do the same work at tens of thousands of rows a
-	 * second.
-	 *
-	 * The cost of going around the model is that this has to write the columns
-	 * the model would have written, and a column added later is one this
-	 * forgets. That is the right trade for a development-only command and the
-	 * wrong one for anything else: what is seeded has to be *shaped* like real
-	 * data — the prim hashes, the recipient rows, the follower collections —
-	 * because a query plan is only worth measuring against rows the planner
-	 * sees the way it sees real ones.
+	 * The cost is that this must write the columns the model would, and must
+	 * stay shaped like real data (prim hashes, recipient rows, follower
+	 * collections) for the measured query plans to mean anything.
 	 */
 	private function seed(int $actors, int $notes, int $follows, Person $viewer, OutputInterface $output): void {
 		$followers = max(0, $this->followersWanted);
@@ -514,14 +485,8 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * Brings the planner's statistics up to date with what was just written.
-	 *
-	 * A table that grew by a hundred thousand rows in a minute is one whose
-	 * statistics still describe it as it was, until autovacuum or InnoDB's
-	 * sampling gets round to it — and a plan made from those is not the plan
-	 * a live instance gets. Timings taken straight after a seed then depend
-	 * on how soon that happened, which is noise in a number that is compared
-	 * night to night.
+	 * Brings the planner's statistics up to date with what was just written,
+	 * so timings do not depend on when autovacuum or InnoDB sampling ran.
 	 */
 	private function analyze(): void {
 		$database = $this->databaseName();
@@ -588,15 +553,8 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * Who follows whom.
-	 *
-	 * Two directions, because they cost different things. The viewer following
-	 * seeded accounts is what the **home timeline** reads: its page query
-	 * resolves the viewer's follows and then the posts addressed to each of
-	 * their follower collections. Seeded accounts following the viewer is what
-	 * **delivery** reads: one queue row per distinct inbox when the viewer
-	 * posts. An instance seeded with only the first measures reads and says
-	 * nothing about writes.
+	 * Who follows whom, in both directions: the viewer's follows are what the
+	 * home timeline reads, the viewer's followers what delivery reads.
 	 *
 	 * @param string[] $ids
 	 */
@@ -668,16 +626,10 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * The posts, and every row that puts them somewhere: the recipient rows of
-	 * the timelines, the tag rows of the hashtag timeline, the words of the
-	 * search index, and a notification for each post that mentions the viewer.
-	 *
-	 * All of them are written here rather than derived from the posts,
-	 * because each `generate…()` is a statement per row and the whole point of
-	 * this path is not to do that. What is written is what those methods
-	 * would have written for a public post: recipient rows for the public
-	 * collection, the author and the author's follower collection, each
-	 * carrying the post's nid as the home timeline's page query reads it.
+	 * The posts and every row that places them: timeline recipients, hashtag
+	 * tags, search words, and a notification for each post mentioning the
+	 * viewer. They are written directly, shaped as the `generate…()` methods
+	 * would write them for a public post, because those cost a statement per row.
 	 *
 	 * @param string[] $ids
 	 */
@@ -760,11 +712,8 @@ class Benchmark extends SocialCommand {
 		// twenty is a page of twenty *recent* posts as it would be in life
 		$published = $now - $i * 5;
 		$followers = $author . '/followers';
-		// the same snowflake `StreamRequest::save()` mints: the second it was
-		// published in, times the limit, plus a random offset. It is the column
-		// every timeline pages and orders on, so a seeded row whose nid did not
-		// sort with the real ones would measure a different query than the one
-		// being served.
+		// the same snowflake `StreamRequest::save()` mints; every timeline pages
+		// and orders on it, so seeded rows must sort with real ones
 		$nid = Nid::fromPublishedTime($published, random_int(1, StreamRequest::NID_LIMIT - 1), StreamRequest::NID_LIMIT);
 
 		$media = self::mediaOf($i);
@@ -929,14 +878,9 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * One `INSERT` carrying many rows.
-	 *
-	 * Written as SQL rather than through `IQueryBuilder`, which has no
-	 * multi-row form: the placeholders are positional and every value is bound,
-	 * so it is the same escaping the builder would do and it runs unchanged on
-	 * MySQL, PostgreSQL and SQLite. The column list comes from the first row,
-	 * and every row is required to have the same keys — which they do, because
-	 * each is built by one loop above.
+	 * One `INSERT` carrying many rows, as SQL because `IQueryBuilder` has no
+	 * multi-row form. Every value is bound positionally; all rows must have
+	 * the keys of the first.
 	 *
 	 * @param array<int, array<string, mixed>> $rows
 	 */
@@ -967,10 +911,8 @@ class Benchmark extends SocialCommand {
 			}
 		}
 
-		// A seed that dies halfway and cannot be run again is a tool nobody
-		// uses twice: the second attempt collides with the actors the first
-		// one wrote. Every database spells "insert what is new and say nothing
-		// about the rest" differently, and all three of them have it.
+		// Insert-or-ignore, so a seed that died halfway can be run again
+		// without colliding with the actors it already wrote.
 		$verb = 'INSERT IGNORE';
 		$suffix = '';
 		if ($platform === 'pgsql') {
@@ -1011,10 +953,7 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * Says how far it has got, on one line.
-	 *
-	 * Seeding ten million rows is minutes, and a command that prints nothing
-	 * for minutes is one somebody kills.
+	 * Reports progress on one line; seeding takes minutes.
 	 */
 	private function progress(
 		OutputInterface $output, string $what, int $done, int $total, bool $last = false,
@@ -1096,10 +1035,8 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * The median of `$runs` reads of one page, after one that is not counted:
-	 * the first read warms the caches, and what is reported is what a served
-	 * request costs. The median rather than the mean, so that one run that
-	 * met a checkpoint or a neighbour's job does not decide the number.
+	 * The median of `$runs` reads of one page, after one uncounted warm-up
+	 * read. The median, so one run that met a checkpoint does not decide it.
 	 *
 	 * @param callable(int): int $read
 	 * @return array{0: float, 1: int} milliseconds, and the rows the page had
@@ -1183,23 +1120,12 @@ class Benchmark extends SocialCommand {
 	}
 
 	/**
-	 * Takes back out everything `seed()` wrote.
+	 * Removes everything `seed()` wrote.
 	 *
-	 * The seeded rows carry the host in their ids — but only in the columns
-	 * that hold an id. The rows that *point* at them do not: a recipient row
-	 * keys its post by `stream_id`, which is the md5 of the post's id, so
-	 * `LIKE '%benchmark.invalid%'` could never match one. That is how a
-	 * previous version of this left 60,000 recipient rows behind while
-	 * reporting that it had removed everything: twelve times as many rows as
-	 * the instance's own, with no post to belong to, on the table every
-	 * timeline reads.
-	 *
-	 * So the posts are found first and their dependants deleted by the key
-	 * they are actually keyed on, in pages — this can be a hundred thousand
-	 * rows and an `IN` list has a size limit on every database.
-	 *
-	 * A full scan is the right trade for the rest: this runs by hand on a
-	 * development instance, never on a request.
+	 * Dependent rows do not carry the host: a recipient row keys its post by
+	 * `stream_id`, the md5 of the post id, so a `LIKE` on the host misses it.
+	 * The posts are found first and their dependants deleted by that key, in
+	 * pages to stay under `IN` list limits.
 	 */
 	private function clean(): int {
 		$like = '%' . $this->connection->escapeLikeParameter(self::HOST) . '%';

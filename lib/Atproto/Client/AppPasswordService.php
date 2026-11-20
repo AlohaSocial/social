@@ -16,9 +16,8 @@ use OCP\Security\ISecureRandom;
 
 /**
  * App passwords for Bluesky apps (§6.3), as Bluesky makes them: four groups
- * of four, shown once, stored as a hash. They are this app's, not
- * Nextcloud's — a Nextcloud app password opens all of Nextcloud, files and
- * all, and a Bluesky app needs the Bluesky surface and nothing else.
+ * of four, shown once, stored as a hash. They are separate from Nextcloud's
+ * app passwords, which would open all of Nextcloud to a Bluesky app.
  * Removing one ends every session it opened.
  */
 class AppPasswordService {

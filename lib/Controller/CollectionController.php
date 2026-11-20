@@ -29,23 +29,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Collections: the albums an account curates out of its own posts.
+ * Collections: the albums an account curates out of its own posts, on
+ * Pixelfed's routes, as Mastodon has no equivalent.
  *
- * Pixelfed's routes, because these are Pixelfed's feature -- Mastodon has no
- * equivalent and defines nothing to be compatible with. A client that knows
- * Pixelfed finds them where it expects them.
- *
- * Reading a collection and writing one have different access models, which is
- * why the routes split the way they do. A public collection is readable by
- * anybody, including a signed-out visitor, because it is a page the owner chose
- * to publish. Everything that changes one resolves it through
- * `CollectionService::own()`, which carries the owner in the SQL statement, so a
- * collection belonging to somebody else is a 404 rather than a row that was read
- * and then rejected.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, as everywhere else in this API: a
- * client authenticates with a bearer token and has no Nextcloud session or CSRF
- * token to present. The write routes then require a viewer themselves.
+ * A public collection is readable by anybody, signed-out visitors included.
+ * Writes resolve the collection through `CollectionService::own()`, which
+ * puts the owner in the SQL, so another's collection is a 404. Routes are
+ * `#[PublicPage]` with `#[NoCSRFRequired]` for bearer-token clients; the
+ * write routes require a viewer themselves.
  */
 class CollectionController extends ClientApiController {
 	/** What one page of a collection's posts holds. */
@@ -106,10 +97,8 @@ class CollectionController extends ClientApiController {
 	}
 
 	/**
-	 * One collection, as the caller may see it.
-	 *
-	 * Answered to a signed-out visitor when the collection is public, which is
-	 * the point of publishing one.
+	 * One collection, as the caller may see it; public ones also to
+	 * signed-out visitors.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -224,9 +213,6 @@ class CollectionController extends ClientApiController {
 
 	/**
 	 * The collections of an account, as the caller may see them.
-	 *
-	 * What a profile draws, and the reason the feature is visible at all to
-	 * somebody who is not its owner.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

@@ -15,12 +15,10 @@ use OCA\Social\Service\Counts\CountSource;
 use OCA\Social\Service\Counts\CountWriter;
 
 /**
- * The counts of a post read from Bluesky, as the AppView has them now:
- * `getPosts`, 25 posts a call, each answering with its `likeCount`,
- * `repostCount`, `replyCount` and `quoteCount`. The post is stored once and
- * no later feed read touches it again, so this is the only way its numbers
- * move. A post the AppView no longer has is deleted as `DeletionSweep`
- * deletes it (`PostStore::postViews()`).
+ * Refreshes the counts of posts read from Bluesky via `getPosts` (25 a call).
+ * A stored post is not touched by later feed reads, so this is the only way
+ * its numbers move. Posts the AppView no longer has are deleted
+ * (`PostStore::postViews()`).
  */
 class BlueskyCountSource implements CountSource {
 	/** the most uris one `getPosts` takes */
@@ -47,8 +45,8 @@ class BlueskyCountSource implements CountSource {
 			foreach ($ids as $id) {
 				$view = $views['posts'][$id] ?? null;
 				if ($view === null) {
-					// a post the AppView no longer has is deleted by now; the
-					// posts of a call it did not answer are asked again later
+					// posts the AppView no longer has are deleted by now; posts of
+					// an unanswered call are asked again later
 					if ($views === null && $timeout === null) {
 						$this->writer->stamp($id);
 					}

@@ -181,12 +181,7 @@ class ApiController extends MastodonApiController {
 	}
 
 	/**
-	 * Mastodon's v1 search, which is the v2 one without `statuses` being
-	 * optional. `/api/v1/search` used to be the app's own web-UI search — a
-	 * Nextcloud envelope, `content` where a client looks for `statuses`, `search=`
-	 * where a client sends `q=`, and no bearer token accepted — so a client got
-	 * a 200 it could make no sense of, which is worse than a 404. The web UI's
-	 * own search goes through `/api/v2/search` like any client's.
+	 * Mastodon's v1 search, which is like the v2 one with `statuses` not optional.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -204,17 +199,10 @@ class ApiController extends MastodonApiController {
 	 * Mastodon's search endpoint: accounts, statuses (the viewer-bounded
 	 * full-text search) and hashtags, optionally narrowed with `type`.
 	 *
-	 * `account_id` narrows `statuses` to that account's posts and leaves
-	 * `accounts` and `hashtags` alone, as Mastodon does. An account this
-	 * instance does not know finds no posts rather than an error, and is not
-	 * looked up elsewhere. `offset`, `max_id` and `min_id` page `statuses`.
-	 *
-	 * `resolve` is the reader asking for other servers to be asked: an
-	 * account named by its address or handle is looked up there, and a post
-	 * named by its address is fetched, only on the first page of an
-	 * unnarrowed search that found nothing here. Without it, as in Mastodon,
-	 * the accounts are the ones this instance holds; one it does not is
-	 * queued, and found by a later search.
+	 * `account_id` narrows only `statuses`; an unknown account finds no posts.
+	 * With `resolve`, an account address or post URL is looked up remotely on
+	 * the first page of an unnarrowed search that found nothing here; without
+	 * it, an unknown account is queued and found by a later search.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -258,15 +246,12 @@ class ApiController extends MastodonApiController {
 					$filling = $this->remoteFetchQueue->fillPosts(PostDiscoveryService::SEARCH, $q, $this->viewer);
 				}
 
-				// `resolve` is the reader saying "I have a link, go and get
-				// it". Without it a post found in a browser cannot be replied
-				// to or boosted here, because nothing has ever had a reason to
-				// ask its server for it. Only on the reader's say-so: this
-				// fetches an address they chose.
+				// `resolve` means "I have a link, go and get it": without the
+				// fetch, a post found in a browser could not be replied to or
+				// boosted here. Only on request, as it fetches a URL the reader chose.
 				if ($resolve && $statuses === [] && $account_id === '' && $firstPage) {
-					// as the reader: the content search above is viewer-scoped,
-					// so a post they may not see finds nothing there and falls
-					// through to here — which used to hand it over in full
+					// fetched as the reader, so a post they may not see is not
+					// handed over here either
 					$resolved = $this->searchService->resolveStatus($q, true);
 					if ($resolved !== null) {
 						$resolved->setExportFormat(ACore::FORMAT_LOCAL);
@@ -331,10 +316,9 @@ class ApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The hashtags used most on this instance lately, as Mastodon's Tag
-	 * entities. The counts come from the trend the cron already keeps for
-	 * every hashtag; this instance counts uses rather than distinct accounts,
-	 * so `accounts` is always 0.
+	 * The hashtags used most on this instance lately, as Mastodon Tag
+	 * entities, from the trend the cron keeps. Uses are counted, not
+	 * distinct accounts, so `accounts` is always 0.
 	 *
 	 */
 	#[PublicPage]

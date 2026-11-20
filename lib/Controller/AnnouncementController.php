@@ -31,22 +31,11 @@ use Throwable;
  * Mastodon's announcements: the instance-wide notice an admin posts and every
  * account is shown once.
  *
- * Two surfaces, one subsystem, and they are not authenticated the same way.
- *
- * The two client routes are `#[PublicPage]` with `#[NoCSRFRequired]`, like
- * `ApiController` and `ListController`, and for the same reason: a Mastodon
- * client authenticates with a bearer token and has no Nextcloud session or
- * CSRF token to present, so `#[NoAdminRequired]` would refuse every real
- * caller before the handler ran. Both then require a viewer themselves — no
- * token, no session, 401 — so nothing is public in fact.
- *
- * The three `admin*` routes carry no attribute at all, which in Nextcloud
- * means an admin session and a CSRF token, as every route of
- * `ModerationController` does. They are the administration page's, never part
- * of the client API, and they are here rather than in that controller because
- * they read and write the same table as the routes above them: an admin
- * surface that drifted from the client entity is how an announcement gets
- * posted that nobody is served.
+ * The client routes are `#[PublicPage]` with `#[NoCSRFRequired]` because a
+ * Mastodon client has only a bearer token; they require a viewer themselves.
+ * The `admin*` routes carry no attribute, so they need an admin session and
+ * CSRF token; they live in this controller so the admin side and the client
+ * entity share one table and cannot drift apart.
  */
 class AnnouncementController extends ClientApiController {
 
@@ -62,13 +51,9 @@ class AnnouncementController extends ClientApiController {
 	}
 
 	/**
-	 * The announcements that apply now, each carrying whether the viewer has
-	 * read it.
-	 *
-	 * Unpaged, as Mastodon's is, and a dismissed announcement is still in it:
-	 * `read` is what changed, not what is served. Mastodon asks for no
-	 * particular scope here — any user token may read what the instance is
-	 * telling everybody — and neither does this.
+	 * The announcements that apply now, each with whether the viewer read it.
+	 * Unpaged and including dismissed ones, as on Mastodon; no particular
+	 * scope is required.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -104,15 +89,9 @@ class AnnouncementController extends ClientApiController {
 	}
 
 	/**
-	 * Puts an emoji on an announcement, for the viewer, and answers `{}` as
-	 * Mastodon does.
-	 *
-	 * The only thing an account can say back about an instance-wide notice.
-	 * Until this route existed, the only thing anybody could do with one was
-	 * put it away, and `Announcement.reactions` was always `[]`.
-	 *
-	 * The emoji is in the path, as it is on Mastodon, so it arrives
-	 * percent-encoded and the router has already decoded it.
+	 * Puts an emoji on an announcement for the viewer, and answers `{}` as
+	 * Mastodon does. The emoji is in the path, so the router has already
+	 * percent-decoded it.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

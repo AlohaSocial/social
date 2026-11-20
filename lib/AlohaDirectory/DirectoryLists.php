@@ -19,15 +19,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The signed lists of the Aloha Directory: `keys.json`, `servers.json` (the
- * servers apps suggest to newcomers) and `search.json` (the curated search
- * providers this server asks when somebody searches for people).
+ * The signed lists of the Aloha Directory: `keys.json`, `servers.json` and
+ * `search.json`, fetched daily.
  *
- * They are fetched once a day and kept only after they verified: the key set
- * against the pinned root keys, the lists against the key set, and every
- * serial higher than the one kept before. A list that does not verify changes
- * nothing; the last good copy stays in use. A list older than 90 days is no
- * longer used at all, as the concept prescribes for apps.
+ * A list is kept only once it verifies (key set against the pinned root keys,
+ * lists against the key set, serials increasing); otherwise the last good copy
+ * stays in use. A list older than 90 days is not used at all.
  */
 class DirectoryLists {
 	public const LISTS = ['servers', 'search'];

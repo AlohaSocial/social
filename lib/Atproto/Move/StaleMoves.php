@@ -20,23 +20,16 @@ use OCP\Lock\ILockingProvider;
 use Psr\Log\LoggerInterface;
 
 /**
- * Moves whose job died — the worker was killed, the server restarted —
- * while they ran. Core drops a queued job before it runs it, so nothing
- * else would ever end such a move, and it would hold the account for good:
- * "Try again" waits for a failed move, a new one for none under way.
+ * Moves whose job died while running (worker killed, server restarted).
+ * Core drops a queued job before running it, so without this such a move
+ * would hold the account for good.
  *
- * A move counts as stopped when it is `running`, has not been written to
- * for AFTER — a running move writes as it copies, blob by blob and page by
- * page of follows and posts — no job for it waits in the queue, and no
- * job holds its lock (Cron\AtprotoMove::lockOf()). It is queued
- * again RESUMES times (`progress.resumed`, forgotten when the person goes
- * on with it), then fails with `move-interrupted`, so the person can try
- * again or call it off. A move away that stopped while the DID was handed
- * over is first asked of the directory: once the DID points at the other
- * server, the move goes on from the activation, and can no longer be
- * called off. A move here that stopped at the follows or the posts, which
- * come once the account is active here and are best effort, is done; one
- * driven by a tool waits for the person's decision again before then.
+ * A move is stopped when it is `running`, unwritten for AFTER, and has no
+ * queued job and no lock (Cron\AtprotoMove::lockOf()). It is queued again up
+ * to RESUMES times, then fails with `move-interrupted`. A move away that
+ * stopped during the DID handover goes on from activation once the
+ * directory names the other server; a move here that stopped at the
+ * best-effort follows or posts is done.
  */
 class StaleMoves {
 	/** how long a running move goes without being written to before it counts as stopped */
@@ -110,10 +103,9 @@ class StaleMoves {
 	}
 
 	/**
-	 * A move stopped once too often: here, done at the follows or the
-	 * posts, which come once the account is active here and are best
-	 * effort; else failed, for the person to try again or call off; driven
-	 * by a tool, waiting for the person's decision on the blobs again.
+	 * A move stopped too often: done if it was a move here at the best-effort
+	 * follows or posts, waiting for the person's blob decision if a tool drove
+	 * it, otherwise failed.
 	 */
 	private function end(Move $move): void {
 		if ($move->direction !== Move::AWAY && in_array($move->step, [Move::STEP_FOLLOWS, Move::STEP_POSTS], true)) {

@@ -13,23 +13,12 @@ namespace OCA\Social\Atproto\Model;
  * A move of a Bluesky account between this server and another PDS (§13):
  * where to or from, the step it has reached, and how it ended.
  *
- * Moving away goes through the steps in order: the account is made on the
- * other PDS when the move starts, then its repository, its blobs and its
- * preferences are copied there, the other PDS is asked whether everything
- * arrived, the DID is pointed there, the account is activated there and
- * switched off here.
- *
- * Moving here: the repository, the blobs and the preferences are copied
- * from the old PDS, the old PDS e-mails the person a code, and with it
- * signs the operation that points the DID here; the account then takes the
- * DID, and is switched off there; its follows become follows here, and its
- * posts posts here.
- *
- * Moving here inbound, the other side drives — Bridgy Fed for a bridged
- * account, or a migration tool: the person invites the DID with a one-time
- * code, the other side makes the account here with it, sends the
- * repository and the blobs, points the DID here and activates the account;
- * then its follows become follows here, and its posts posts here.
+ * Moving away: account created there, repository, blobs and preferences
+ * copied, checked, DID pointed there, account activated there and switched
+ * off here. Moving here: the same copied from the old PDS, the DID operation
+ * signed with the code the old PDS e-mails, then follows and posts taken
+ * over. An inbound move is driven by the other side (Bridgy Fed or a
+ * migration tool) with a one-time invite code.
  */
 final class Move {
 	public const AWAY = 'away';
