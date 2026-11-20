@@ -18,12 +18,9 @@ use OCP\IUserSession;
 use OCP\Util;
 
 /**
- * Hides the parts of every page an external user cannot use.
- *
- * The header of a Nextcloud page carries the app menu, unified search and the
- * contacts menu. Their endpoints are refused to external users by
- * `ExternalScopeMiddleware`; this takes them off the page so there is
- * nothing to click that would only fail. Hiding is not the boundary.
+ * Hides the app menu, unified search and contacts menu from external users,
+ * whose endpoints `ExternalScopeMiddleware` already refuses; hiding is not
+ * the boundary.
  *
  * @template-implements IEventListener<BeforeTemplateRenderedEvent>
  */

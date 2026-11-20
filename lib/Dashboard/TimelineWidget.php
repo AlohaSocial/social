@@ -122,11 +122,9 @@ abstract class TimelineWidget implements IAPIWidgetV2, IIconWidget, IButtonWidge
 			$options->setProbe($this->getProbe())
 				->setLimit(max(1, min($limit, self::MAX_ITEMS)));
 
-			// the client hands back the sinceId of the newest row it holds.
-			// setSince() keeps the newest-first order, where setMinId() would
-			// invert it and hand the dashboard the oldest rows instead. It is a
-			// nid, so it stays the string it came as: an `(int)` cast clamps a
-			// wide one to PHP_INT_MAX.
+			// The client sends the sinceId of its newest row. setSince() keeps
+			// newest-first order (setMinId() would invert it); kept as a string since
+			// `(int)` clamps a wide nid.
 			if ($since !== null && ctype_digit($since)) {
 				$options->setSince($since);
 			}
@@ -142,11 +140,8 @@ abstract class TimelineWidget implements IAPIWidgetV2, IIconWidget, IButtonWidge
 				}
 			}
 
-			// The half-empty message is what the dashboard puts *above* the
-			// rows when a widget supplies one, so sending it unconditionally
-			// printed "No recent posts" directly on top of the posts this
-			// widget had just listed. It belongs to the empty case only: with
-			// rows to show there is nothing half empty about the widget.
+			// The half-empty message is drawn above the rows, so it is only for the
+			// empty case.
 			return new WidgetItems(
 				$items,
 				$this->getEmptyMessage(),

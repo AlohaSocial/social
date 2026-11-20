@@ -19,15 +19,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What becomes of the Bluesky identity when the Fediverse account moves out
- * of this server: a moved account posts nothing more here, so an identity
- * left active would be a silent account on Bluesky for good.
+ * What becomes of the Bluesky identity when the Fediverse account moves out,
+ * since a moved account posts nothing more here.
  *
- * `deactivate`, the default: the account is announced inactive on Bluesky
- * and nothing more is published for it; the DID and the handle stay the
- * person's, and Settings can switch it on again. `move`: the Bluesky account
- * moves on its own (§13.2), which has to be done or under way. `keep`: it
- * stays as it is.
+ * `deactivate` (default): announced inactive, nothing more published; the
+ * DID and handle stay the person's and Settings can switch it back on.
+ * `move`: the Bluesky account moves on its own (§13.2), done or under way.
+ * `keep`: left as it is.
  */
 class BlueskyAfterMoveOut {
 	public const MOVE = 'move';

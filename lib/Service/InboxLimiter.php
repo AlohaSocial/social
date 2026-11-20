@@ -16,46 +16,28 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IRequest;
 
 /**
- * A cheap per-origin ceiling on incoming inbox deliveries, applied before the
- * (expensive) signature verification: signatures and replay windows prove
- * authenticity, but nothing else caps how fast a valid-but-hostile peer can
- * fill the stream queue — and the verification itself fetches the signing key,
- * so a flood is expensive long before anything about it is known to be true.
+ * A cheap per-origin ceiling on incoming inbox deliveries, applied before
+ * the expensive signature verification (which fetches the signing key).
  *
- * The bucket checked before anything is known is the connecting address, which
- * is the one thing about an unauthenticated request the sender cannot choose.
- * The host named in the Signature header's keyId cannot be a bucket of its own
- * there: nothing has checked that the sender has anything to do with it, so
- * counting a request against the host it *names* lets any four cheap addresses
- * fill a large instance's bucket every minute and cut this server off from it —
- * the deliveries that are genuinely from it are then answered 429 and the local
- * timelines simply go quiet. That is a better attack than the one the bucket
- * was there to stop.
+ * Before verification the bucket is the connecting address, which the sender
+ * cannot choose; the keyId's host is unproven, and counting against it would
+ * let anyone silence a large instance. assertOriginAllowed() applies the
+ * per-origin ceiling with the origin the signature proved.
  *
- * A per-origin ceiling is still worth having, so it moved behind the signature:
- * assertOriginAllowed() is called with the origin the HTTP signature actually
- * proved, and only a peer that can sign for a host can spend that host's
- * budget.
- *
- * Fixed one-minute windows in `DurableCache`, so the ceiling holds on an
- * instance with no memcache too: in the distributed cache alone it read zero
- * on every delivery there and never refused one. A refused delivery counts
- * as well — a sender that keeps knocking stays over the ceiling. A limit of 0
- * disables the check.
+ * Fixed one-minute windows in `DurableCache`, so it works without a
+ * memcache. Refused deliveries count too. A limit of 0 disables the check.
  */
 class InboxLimiter {
 	public const WINDOW = 60;
 
 	/**
-	 * The per-origin bucket is deliberately looser than the per-address one: a
-	 * large instance legitimately delivers from several addresses, and this
-	 * ceiling exists only to bound one origin's total.
+	 * The per-origin bucket is looser than the per-address one: a large instance
+	 * legitimately delivers from several addresses.
 	 */
 	public const HOST_LIMIT_FACTOR = 4;
 
 	/**
-	 * The largest delivery this instance will read. See `readBody()` for why
-	 * there has to be one at all.
+	 * The largest delivery this instance will read; see `readBody()`.
 	 */
 	public const MAX_BODY = 1048576;
 
@@ -71,8 +53,7 @@ class InboxLimiter {
 
 	/**
 	 * The ceiling that applies before anything about the request is known: the
-	 * source address (an IPv6 one by its /64, see `ClientAddress`), and
-	 * nothing else the sender wrote.
+	 * source address (an IPv6 one by its /64, see `ClientAddress`).
 	 *
 	 * @throws TooManyRequestsException
 	 */
@@ -87,11 +68,7 @@ class InboxLimiter {
 
 	/**
 	 * The ceiling on one origin's total, across however many addresses it
-	 * delivers from.
-	 *
-	 * $origin must be the host the HTTP signature verified against — the keyId
-	 * as it arrived proves nothing, and spending a bucket on an unproven name
-	 * is a way to silence the instance that owns it.
+	 * delivers from. $origin must be the host the HTTP signature verified.
 	 *
 	 * @throws TooManyRequestsException
 	 */
@@ -118,25 +95,11 @@ class InboxLimiter {
 	/**
 	 * The delivery's body, or nothing if it is too big to be one.
 	 *
-	 * Both inboxes are public, unauthenticated routes, and what they did first
-	 * was read the whole request into a string and hash it: the `Digest` is
-	 * checked over the body **before** the signature is verified, because a
-	 * signature over a body nobody has hashed proves nothing about the body.
-	 * The only ceiling on that was PHP's `post_max_size`, which a Nextcloud
-	 * sets to hundreds of megabytes so that file uploads work — so anyone at
-	 * all could hand every worker in the pool half a gigabyte to allocate and
-	 * SHA-256, as often as the per-address bucket allows. The rate limit bounds
-	 * requests, not bytes, and one request was already enough to hold a worker
-	 * for seconds.
-	 *
-	 * An activity is a few kilobytes. The largest legitimate one — a long
-	 * article naming many recipients and carrying many attachments — is well
-	 * inside a megabyte, which is what Mastodon accepts as well. A sender that
-	 * genuinely has more to say has `Collection` pages to say it in.
-	 *
-	 * `Content-Length` is checked first because it costs nothing, and then the
-	 * read itself is bounded anyway: the header is the sender's claim, and a
-	 * chunked request carries none at all.
+	 * The inboxes are public and hash the body for the `Digest` before
+	 * verifying the signature, and `post_max_size` is large for file uploads,
+	 * so the read is capped at MAX_BODY (as Mastodon does); activities are a
+	 * few kilobytes. `Content-Length` is checked first, then the read itself is
+	 * bounded, since the header may lie or be absent (chunked).
 	 *
 	 * @throws PayloadTooLargeException
 	 */

@@ -33,21 +33,11 @@ class Document extends ACore implements JsonSerializable {
 	public const TYPE = 'Document';
 
 	/**
-	 * What stands in `localCopy` for a file this instance deliberately never
-	 * mirrors and streams from its origin instead.
-	 *
-	 * A federated video is the case it exists for: a talk is gigabytes, an
-	 * attachment is copied into the instance's own storage on the way in, and
-	 * doing that for every video that crosses a timeline is not a trade
-	 * anybody would make. The row still exists -- it is what `/media/stream`
-	 * checks a request against, so the proxy can only be pointed at a url that
-	 * actually arrived in an activity -- but it holds no bytes.
-	 *
-	 * It is a sentinel in the same column as `avatar` and `header` rather than
-	 * a flag of its own because that column is already what decides whether
-	 * the caching cron picks a row up: `getNotCachedDocuments()` looks only at
-	 * rows whose `local_copy` is empty, so filling it in is what keeps cron
-	 * off a file that must not be fetched.
+	 * What stands in `localCopy` for a file this instance never mirrors and
+	 * streams from its origin instead, such as a federated video. The row still
+	 * exists so `/media/stream` can only proxy urls that arrived in an activity.
+	 * A sentinel in `local_copy` because the caching cron
+	 * (`getNotCachedDocuments()`) only picks up rows where it is empty.
 	 */
 	public const COPY_STREAMED = 'stream';
 	/** the local copy of a local account's avatar: Nextcloud's avatar, at the document's own address */
@@ -71,18 +61,16 @@ class Document extends ACore implements JsonSerializable {
 	private int $sizeBytes = 0;
 
 	/**
-	 * Whether this video has been written at a ladder of smaller sizes: the
-	 * four states of `social_cache_doc.laddered`. Carried so that serving an
-	 * attachment can say there is an adaptive playlist without a second query
-	 * per attachment.
+	 * Whether this video has been written at a ladder of smaller sizes (the four
+	 * states of `social_cache_doc.laddered`), carried to avoid a query per
+	 * attachment.
 	 */
 	private int $laddered = 0;
 
 	/**
 	 * Whether this video has been through the transcoder: the four states of
-	 * `social_cache_doc.transcoded` (`VideoTranscodingWorker::NOT_LOOKED` …).
-	 * Carried so that a new post can tell whether its delivery has a
-	 * conversion to wait for.
+	 * `social_cache_doc.transcoded` (`VideoTranscodingWorker::NOT_LOOKED` …), so
+	 * a new post can tell whether its delivery waits for a conversion.
 	 */
 	private int $transcoded = 0;
 
@@ -92,20 +80,17 @@ class Document extends ACore implements JsonSerializable {
 	public const AI_SOURCE_COMPOSITE = 2;
 
 	/**
-	 * The machine-generation provenance the picture's metadata stated when it
-	 * was stored, read before that metadata was stripped. Carried on the row
-	 * because the bytes no longer say it.
+	 * The machine-generation provenance the photo's metadata stated, read before
+	 * the metadata was stripped.
 	 */
 	private int $aiSource = self::AI_SOURCE_NONE;
 	private array $localCopySize = [0, 0];
 	private array $resizedCopySize = [0, 0];
 
 	/**
-	 * Whether this document is the icon of a cached actor, which makes its
-	 * `resized_copy` a thumbnail of `CacheDocumentService::AVATAR_THUMBNAIL`
-	 * pixels rather than an 800 px preview. Not stored: the caller that knows
-	 * says so (`DocumentService` from `social_cache_actor`), and an icon read
-	 * off an actor document says so by its parent.
+	 * Whether this document is the icon of a cached actor, making its
+	 * `resized_copy` a `CacheDocumentService::AVATAR_THUMBNAIL` thumbnail rather
+	 * than an 800 px preview. Not stored: set by the caller that knows.
 	 */
 	private bool $actorIcon = false;
 
@@ -126,11 +111,8 @@ class Document extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * Whether a `local_copy` or `resized_copy` value names a file in appdata.
-	 *
-	 * Not '', and not one of the three sentinels: `avatar` and `header` are
-	 * served from Nextcloud's own avatar store, and a streamed document is a
-	 * pointer at bytes on another server (`COPY_STREAMED`).
+	 * Whether a `local_copy` or `resized_copy` value names a file in appdata:
+	 * not '', and not a sentinel (`avatar`, `header`, `COPY_STREAMED`).
 	 */
 	public static function isStoredName(string $name): bool {
 		return $name !== '' && $name !== self::COPY_LOCAL_AVATAR && $name !== 'header'
@@ -150,8 +132,7 @@ class Document extends ACore implements JsonSerializable {
 
 	/**
 	 * Whether the file was uploaded here by a local account rather than cached
-	 * from another server. `account` is written by the upload paths only, so
-	 * it is the one thing on a row that says which of the two it is.
+	 * from another server; only upload paths write `account`.
 	 */
 	public function isLocalUpload(): bool {
 		return $this->account !== '';
@@ -170,13 +151,9 @@ class Document extends ACore implements JsonSerializable {
 	 * @return ACore
 	 */
 	/**
-	 * Where the subject of the picture is, as a fraction of the way from the
-	 * centre to each edge: -1 is the left or the bottom, 1 the right or the
-	 * top, 0 the middle.
-	 *
-	 * A client sends this so that a crop -- a thumbnail, the square a profile
-	 * grid draws -- keeps the face in frame instead of cutting it off. Mastodon
-	 * calls it `focus` in its API and `focalPoint` on the wire; both are this.
+	 * Where the subject of the photo is, as a fraction from the centre to each
+	 * edge: -1 is the left or the bottom, 1 the right or the top, 0 the middle.
+	 * Mastodon's `focus` in its API and `focalPoint` on the wire.
 	 */
 	public function getFocusX(): float {
 		return $this->focusX;
@@ -190,7 +167,7 @@ class Document extends ACore implements JsonSerializable {
 		return $this->focusX !== 0.0 || $this->focusY !== 0.0;
 	}
 
-	/** Both values are clamped: outside -1..1 there is no picture to point at. */
+	/** Both values are clamped to -1..1. */
 	public function setFocus(float $x, float $y): self {
 		$this->focusX = max(-1.0, min(1.0, $x));
 		$this->focusY = max(-1.0, min(1.0, $y));
@@ -254,9 +231,9 @@ class Document extends ACore implements JsonSerializable {
 	 * @return Document
 	 */
 	/**
-	 * Whether this is a pointer at a file on another server rather than a copy
-	 * of one -- see `COPY_STREAMED`. Such a document has no bytes here, so
-	 * nothing may serve it from disk and nothing may queue it for download.
+	 * Whether this is a pointer at a file on another server (`COPY_STREAMED`);
+	 * it has no bytes here, so it is never served from disk or queued for
+	 * download.
 	 */
 	public function isStreamed(): bool {
 		return $this->localCopy === self::COPY_STREAMED;
@@ -287,13 +264,9 @@ class Document extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * How many bytes the stored file is, or 0 where nothing measured it.
-	 *
-	 * Recorded rather than measured on demand: PeerTube wants `size` on every
-	 * video file link it is offered and drops a link without one, and a
-	 * filesystem lookup inside a serialisation is not a thing to do per
-	 * delivery. 0 for a streamed file, which has no bytes here at all, and for
-	 * anything stored before the column existed.
+	 * How many bytes the stored file is, or 0 where nothing measured it (a
+	 * streamed file, or one stored before the column existed). Recorded because
+	 * PeerTube drops a video file link without `size`.
 	 */
 	public function getSizeBytes(): int {
 		return $this->sizeBytes;
@@ -439,24 +412,19 @@ class Document extends ACore implements JsonSerializable {
 
 		$this->setMediaType($this->validate(ACore::AS_STRING, 'mediaType', $data, ''));
 
-		// Mastodon and Pixelfed both send `focalPoint: [x, y]`; the context
-		// declares it as an ordered list, so it arrives as a two-element array.
+		// Mastodon and Pixelfed send `focalPoint: [x, y]`, a two-element array.
 		$focalPoint = $this->getArray('focalPoint', $data);
 		if (count($focalPoint) === 2 && is_numeric($focalPoint[0]) && is_numeric($focalPoint[1])) {
 			$this->setFocus((float)$focalPoint[0], (float)$focalPoint[1]);
 		}
-		// on the wire an attachment's alt text is its `name`; without this the
-		// description a remote author wrote never reaches local clients
+		// On the wire an attachment's alt text is its `name`.
 		if ($this->getDescription() === '') {
 			$this->setDescription($this->validate(ACore::AS_STRING, 'name', $data, ''));
 		}
 
-		// An attachment that arrived without an id of its own gets one here, so
-		// that it can be cached and addressed like any other. One that has an
-		// id keeps it, and it is deliberately not held to the activity's own
-		// origin: a server may name its media on a host it does not federate
-		// from, and the id of an attachment is never fetched — only its `url`
-		// is, and CurlService holds that to a scheme it can fetch.
+		// An attachment without an id gets one, so it can be cached and addressed.
+		// An existing id is not held to the activity's origin: it is never fetched,
+		// only `url` is, and CurlService checks that.
 		if ($this->getId() === '') {
 			$this->generateUniqueId('/documents/g');
 		}
@@ -494,9 +462,7 @@ class Document extends ACore implements JsonSerializable {
 			}
 		}
 
-		// The focal point rides in the stored `meta` blob rather than a column of
-		// its own: nothing queries it, and it is only ever read back with the
-		// rest of the attachment's metadata.
+		// The focal point lives in the stored `meta` blob: nothing queries it.
 		$meta = $this->getArray('meta', $data);
 		if ($meta !== []) {
 			$this->setFocus(
@@ -536,10 +502,8 @@ class Document extends ACore implements JsonSerializable {
 
 	/**
 	 * Where this instance serves its copy of the document, or '' while it has
-	 * none: a document that is still being fetched, or was refused. The route
-	 * cannot be built with an empty uuid -- the router throws, and every
-	 * account or post that carried such a document answered 500 -- and with
-	 * only an extension it named `/media/.jpeg`, which has no bytes behind it.
+	 * none (still being fetched, or refused): the route cannot be built with an
+	 * empty uuid.
 	 */
 	public function getMediaUrl(IURLGenerator $urlGenerator, string $mime = ''): string {
 		if ($this->getLocalCopy() === '') {
@@ -562,18 +526,10 @@ class Document extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * The still to show before the file itself is drawn or played.
-	 *
-	 * For an image, the resized copy of the same picture. For a **video**, the
-	 * poster frame -- which is a JPEG rather than a video, so the link says
-	 * `.jpeg` and `/media/{uuid}` answers with the matching type: a browser
-	 * with `nosniff` on refuses to draw an image served as `video/mp4`, and
-	 * every Nextcloud has `nosniff` on.
-	 *
-	 * A video with no poster (an older upload, or a server with no ffmpeg)
-	 * falls back to the media itself, which is what this app told clients
-	 * before posters existed and is still better than nothing: a player handed
-	 * it will show its own first frame.
+	 * The still to show before the file is drawn or played: the resized copy of
+	 * an image, or a video's JPEG poster frame (linked as `.jpeg`, since
+	 * `nosniff` refuses an image served as `video/mp4`). A video without a poster
+	 * falls back to the media itself.
 	 */
 	private function previewUrl(IURLGenerator $urlGenerator, string $mime): string {
 		if ($this->getResizedCopy() === '') {
@@ -589,12 +545,11 @@ class Document extends ACore implements JsonSerializable {
 
 	/**
 	 * Where a streamed document is played from: this instance, proxying the
-	 * origin. Addressed by the cache row's own key, which is the whole of what
-	 * keeps the proxy from being pointed anywhere a caller likes.
+	 * origin, addressed by the cache row's key so the proxy cannot be pointed
+	 * anywhere else.
 	 */
 	public function streamUrl(IURLGenerator $urlGenerator): string {
-		// a playlist names its segments relative to itself, so it is served
-		// with every address in it pointed back through this server
+		// A playlist is served with every address in it pointed back through here.
 		return $urlGenerator->linkToRouteAbsolute(
 			DocumentService::isPlaylist($this->getMediaType()) ? 'social.MediaApi.mediaPlaylist' : 'social.MediaApi.mediaStream',
 			['nid' => (string)$this->getNid()]
@@ -611,7 +566,7 @@ class Document extends ACore implements JsonSerializable {
 		return $this;
 	}
 
-	/** Whether the picture said a model produced it, in whole or in part. */
+	/** Whether the photo said a model produced it, in whole or in part. */
 	public function isAiGenerated(): bool {
 		return $this->aiSource > self::AI_SOURCE_NONE;
 	}
@@ -651,10 +606,8 @@ class Document extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * The master playlist of this video's ladder.
-	 *
-	 * By uuid, like `getMediaUrl()` and for the same reason: a ladder is the
-	 * same video, so it must be no easier to reach than the video.
+	 * The master playlist of this video's ladder, by uuid like `getMediaUrl()`,
+	 * so it is no easier to reach than the video.
 	 */
 	public function ladderUrl(IURLGenerator $urlGenerator): string {
 		return $urlGenerator->linkToRouteAbsolute(
@@ -692,43 +645,29 @@ class Document extends ACore implements JsonSerializable {
 		$mime = '';
 		if (strpos($this->getMediaType(), '/')) {
 			[$type, $mime] = explode('/', $this->getMediaType(), 2);
-			// Mastodon's four kinds, and its word for everything else: a PDF
-			// is not an "application", it is a file a client cannot render.
-			// HLS playlists are application/* MIME types too, but they are the
-			// source of a video and must go through the HLS player, not the
-			// generic file download card (notably for Bluesky video embeds).
+			// Mastodon's four kinds, and `unknown` for everything else. HLS playlists
+			// are application/* too, but must go to the video player, not the file card.
 			$media->setType(DocumentService::isPlaylist($this->getMediaType())
 				? 'video'
 				: (in_array($type, ['image', 'video', 'audio', 'gifv'], true) ? $type : 'unknown'));
 		}
 
-		// the whole of it, not just the half the client entity shows: what
-		// goes back out as an ActivityPub Document has to state it
+		// The full type: the ActivityPub Document has to state it.
 		$media->setMediaType($this->getMediaType());
-		// carried for the wire alone: a PeerTube `Video` states the size of
-		// every file it offers, and drops a link that does not
+		// For the wire: PeerTube drops a file link without a size.
 		$media->setSizeBytes($this->getSizeBytes());
 
 		if (!is_null($urlGenerator)) {
-			// A refused copy names nothing. It used to go out as
-			// `/media/.jpeg` — a link to this server with no bytes behind it.
-			// Every client fetched it, every fetch 404'd, and a third-party
-			// one has no way to tell that from an attachment that is merely
-			// slow. Mastodon leaves the url off such an attachment; so does
-			// this, preview included. `remote_url` and `cache_error` below still say where it
-			// came from and why it was refused, which is what the reader is
-			// shown instead — the origin is deliberately not offered as a
-			// fallback, see MediaAttachment::asLocal().
+			// A refused copy gets no url, as in Mastodon, preview included;
+			// `remote_url` and `cache_error` say where it came from and why. The origin
+			// is not offered as a fallback (see MediaAttachment::asLocal()).
 			if (!$this->isStreamed() && $this->getLocalCopy() === '') {
 				$media->setUrl('')
 					->setPreviewUrl('');
 			} elseif ($this->isStreamed()) {
-				// no local copy to name: the bytes are fetched from the origin
-				// as they are played, and the route that does it is addressed
-				// by the row rather than by a uuid there is none of. The
-				// preview of an image can be the image itself; a video's still is
-				// a document of its own, and the caller that knows which one sets
-				// it (see PeerTubeService).
+				// No local copy: streamed from the origin by a route addressed by the row.
+				// A video's still is a document of its own, set by the caller that knows
+				// (see PeerTubeService).
 				$streamUrl = $this->streamUrl($urlGenerator);
 				$media->setUrl($streamUrl);
 				if (str_starts_with($this->getMediaType(), 'image/')) {
@@ -739,8 +678,7 @@ class Document extends ACore implements JsonSerializable {
 				if ($this->hasLadder()) {
 					$media->setHlsUrl($this->ladderUrl($urlGenerator));
 				}
-				// a file has no preview of itself; handing the file back as
-				// one would have a client try to draw a PDF as a picture
+				// A file is not its own preview: a client would try to draw a PDF as an image.
 				if ($media->getType() !== 'unknown') {
 					$media->setPreviewUrl($this->previewUrl($urlGenerator, $mime));
 				}
@@ -750,12 +688,8 @@ class Document extends ACore implements JsonSerializable {
 		$media->setRemoteUrl($this->getUrl())
 			->setCacheError($this->getError());
 
-		// Filled in rather than built only when absent. A document may already
-		// carry *part* of a meta -- a video is given its duration when it is
-		// stored, before anything knows its dimensions -- and the whole block
-		// used to be skipped whenever anything at all was there, so the video
-		// went out with a running time and no size. Each half is only supplied
-		// where the document has nothing.
+		// Each half is filled in only where missing: a video may already carry its
+		// duration before its dimensions are known.
 		$meta = $this->getMeta() ?? new AttachmentMeta();
 		if ($meta->getOriginal() === null) {
 			$meta->setOriginal(new AttachmentMetaDim($this->getLocalCopySize()));

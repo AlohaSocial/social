@@ -18,51 +18,18 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What the rest of the fediverse is talking about.
+ * What the rest of the fediverse is talking about: asks other servers what is
+ * trending there and shows the answer as theirs.
  *
- * `HashtagService` ranks the hashtags used on *this* instance, which on a small
- * server is a list of what the handful of people here posted today -- and on a
- * new one is empty. That is the same circle relays exist to break, and this
- * breaks a smaller part of it without bringing anybody's posts in: it asks
- * other servers what is trending *there* and shows the answer as theirs.
+ * Nothing is stored or ingested; answers are cached for fifteen minutes.
+ * Tags are ranked by how many servers named them, not by summed counts,
+ * since instance sizes differ by orders of magnitude.
  *
- * **Nothing is stored and nothing is ingested.** No post is fetched, no actor
- * is cached, no row is written. What comes back is a list of strings, kept in
- * the distributed cache for fifteen minutes because trends are recomputed on
- * the hour and a discovery page should not ask forty servers per visit. A tag
- * followed from this page is followed the way any tag is -- see
- * `HashtagService` -- and what fills that timeline is still only what this
- * instance federates with.
- *
- * **Ranked by how many servers named it, not by counts added up.** Instances
- * differ in size by four orders of magnitude, so a sum ranks mastodon.social's
- * opinion above everybody else's; a count of servers is the same model the
- * follow graph already uses, and it is the one a row can explain: "busy on
- * four servers" is a fact a reader can check.
- *
- * **What each kind of server can answer.** The sources are the ones
- * `FediverseDirectoryService` already keeps, since the question "which servers
- * do we ask about people" has the same answer as "which servers do we ask
- * about tags":
- *
- * - `local` -- this instance, from the trend the cron already keeps. Never a
- *   network request, always asked, and marked as this server so the page can
- *   tell "also here" from "only out there".
- * - `mastodon` -- `/api/v1/trends/tags`, public and unauthenticated on
- *   Mastodon and on everything that copies its API. It has **no public tag
- *   search**: `/api/v2/search` needs a token, exactly as it does for accounts.
- *   So a search asks for the same trending page and matches the query against
- *   it, which finds a tag that is busy there and nothing else. That is weaker
- *   than search and is reported as what it is rather than dressed up.
- * - `misskey` -- `hashtags/trend` for the trends and `hashtags/search` for the
- *   search, both public, so a Misskey peer answers a search properly.
- * - `lemmy`, `wordpress` -- not asked at all. Lemmy has communities rather
- *   than hashtags and the curated directory lists people; asking either about
- *   a tag would be asking a question their API does not have.
- *
- * A source that cannot answer is **reported**, not dropped, for the reason the
- * directory search reports one: "no server is talking about that" and "the
- * servers we asked did not reply" are different answers.
+ * Sources are `FediverseDirectoryService`'s: `local` (the cron's trend, no
+ * network), `mastodon` (`/api/v1/trends/tags`; with no public tag search, a
+ * search filters the trending page here), and `misskey` (`hashtags/trend`
+ * and `hashtags/search`). `lemmy` and `wordpress` have no hashtags and are
+ * not asked. A source that cannot answer is reported, not dropped.
  */
 class PeerTrendService {
 	/** How many tags one page holds. */
@@ -76,19 +43,14 @@ class PeerTrendService {
 	public const TIMEOUT = 4;
 
 	/**
-	 * How long the whole fan-out has, in seconds.
-	 *
-	 * A float because it is added to `microtime(true)`, and psalm runs here in
-	 * strict binary operands mode.
+	 * How long the whole fan-out has, in seconds. A float because it is added to
+	 * `microtime(true)` (psalm strict binary operands).
 	 */
 	public const BUDGET = 10.0;
 
 	/**
-	 * How long an answer is kept.
-	 *
-	 * Longer than the directory's five minutes: Mastodon recomputes trends on
-	 * a schedule rather than per request, so asking more often than this
-	 * returns the same list and costs somebody else a request.
+	 * How long an answer is kept; Mastodon recomputes trends on a schedule, so
+	 * asking more often returns the same list.
 	 */
 	public const CACHE_TTL = 900;
 
@@ -96,13 +58,8 @@ class PeerTrendService {
 	private const PER_SOURCE = 20;
 
 	/**
-	 * What a hashtag may look like.
-	 *
-	 * A peer's answer is a string this instance is about to show and offer to
-	 * follow, so it is held to what a hashtag is here: letters, digits and
-	 * underscores, in any script. Anything else -- a URL, a sentence, markup --
-	 * is a server answering a question that was not asked, and is dropped
-	 * rather than displayed.
+	 * What a hashtag may look like: letters, digits and underscores in any
+	 * script. Anything else in a peer's answer is dropped.
 	 */
 	private const SHAPE = '/^[\p{L}\p{N}_]+$/u';
 
@@ -143,9 +100,7 @@ class PeerTrendService {
 			}
 
 			if (!$this->answersAboutTags($source)) {
-				// said rather than skipped silently: a reader looking at four
-				// sources and three answers should not have to guess which
-				// server has no hashtags to speak of
+				// Reported, so the reader can tell which server has nothing to say.
 				$reports[] = $this->report($source, 'unsupported', 0);
 				continue;
 			}
@@ -180,13 +135,8 @@ class PeerTrendService {
 	}
 
 	/**
-	 * Most servers first, then the busiest -- and what a moderator here has
-	 * kept out is gone before either.
-	 *
-	 * The rejection list is this instance's, applied to somebody else's
-	 * answer: a tag a moderator took off the local trending page has been
-	 * decided about, and a discovery surface that shows it anyway because a
-	 * stranger's server likes it has overruled that decision.
+	 * Most servers first, then the busiest, after dropping what a moderator here
+	 * took off the local trending page.
 	 *
 	 * @param array<string, PeerTag> $tags
 	 *
@@ -213,11 +163,8 @@ class PeerTrendService {
 	}
 
 	/**
-	 * Whether it is worth asking this source about hashtags at all.
-	 *
-	 * Lemmy organises by community and the curated directory lists people:
-	 * neither has a hashtag endpoint, and asking anyway would spend one of the
-	 * five slots on a 404.
+	 * Whether this source has a hashtag endpoint at all (Lemmy and the curated
+	 * directory do not).
 	 */
 	private function answersAboutTags(DirectorySource $source): bool {
 		return in_array($source->getKind(), [
@@ -254,10 +201,7 @@ class PeerTrendService {
 	}
 
 	/**
-	 * This instance's own hashtags, from the trend the cron already keeps.
-	 *
-	 * No network, so it is never the reason this page is slow, and it is
-	 * answered even when every other server is unreachable.
+	 * This instance's own hashtags, from the cron's trend; no network.
 	 *
 	 * @return array<string, int>
 	 */
@@ -281,10 +225,8 @@ class PeerTrendService {
 	}
 
 	/**
-	 * Mastodon and everything that copies its API.
-	 *
-	 * The search is the trending page filtered here, because there is no
-	 * public tag search to ask -- see the class docblock.
+	 * Mastodon and everything that copies its API; a search filters the trending
+	 * page here.
 	 *
 	 * @return array<string, int>
 	 */
@@ -302,8 +244,7 @@ class PeerTrendService {
 				continue;
 			}
 
-			// the first spelling a server offers keeps the tag, the way the
-			// directory search keeps the first source's copy of a person
+			// The first spelling a server offers keeps the tag.
 			$found[$name] ??= $this->usesFromHistory($row['history'] ?? null);
 		}
 
@@ -311,10 +252,8 @@ class PeerTrendService {
 	}
 
 	/**
-	 * Mastodon reports a tag's use as a per-day history rather than a total,
-	 * and the days it carries differ between versions. The most recent day is
-	 * what "busy now" means, and is the only figure that means the same thing
-	 * on every server.
+	 * Mastodon reports a per-day history whose length differs between versions;
+	 * the most recent day is the one figure comparable across servers.
 	 */
 	private function usesFromHistory(mixed $history): int {
 		if (!is_array($history) || $history === []) {
@@ -327,11 +266,8 @@ class PeerTrendService {
 	}
 
 	/**
-	 * Misskey, which answers a search properly.
-	 *
-	 * `hashtags/search` returns bare strings with no counts at all, so a tag
-	 * found that way contributes a server and no uses -- which is what the
-	 * ranking is built on anyway.
+	 * Misskey, which has a real search. `hashtags/search` returns bare strings,
+	 * so such a tag counts a server and no uses.
 	 *
 	 * @return array<string, int>
 	 */
@@ -386,9 +322,7 @@ class PeerTrendService {
 		return $this->curlService->retrieveJson(
 			'get',
 			'https://' . $source->getHost() . $path . '?' . http_build_query($params),
-			// a plain REST endpoint, so plain REST headers: the ActivityPub
-			// `Accept` this app otherwise sends asks for the other
-			// representation of whatever is being fetched
+			// Plain REST: the ActivityPub `Accept` would ask for another representation.
 			['timeout' => self::TIMEOUT, 'json_headers' => false, 'headers' => ['Accept' => 'application/json']]
 		);
 	}

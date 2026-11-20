@@ -19,15 +19,10 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Collection;
 
 /**
- * Albums an account curates out of its own posts.
- *
- * The rule that shapes everything here: a collection may only hold posts its
- * owner wrote. A collection of other people's pictures would be a
- * re-publication nobody consented to -- it would put a follower-only post from
- * somebody else on a public page, and no amount of visibility checking at read
- * time would take it back off the peers that had already mirrored the page.
- * Pixelfed has the same rule and it is the only one that makes the feature
- * safe.
+ * Albums an account curates out of its own posts. Only the owner's posts:
+ * collecting other people's would republish them at the album's visibility,
+ * which cannot be taken back once peers mirrored the page (Pixelfed has the
+ * same rule).
  */
 class CollectionService {
 	/** How many posts a collection hands back as its cover. */
@@ -72,13 +67,8 @@ class CollectionService {
 	}
 
 	/**
-	 * Who the posts of a collection are then read for.
-	 *
-	 * Every read path comes through `readable()` or `forProfile()` with the
-	 * reader in hand, and the items are filtered by the same reader: a
-	 * follower sees the followers-only posts the owner put in, a visitor the
-	 * public ones. The request is a service and keeps its viewer between
-	 * reads, so a visitor is set explicitly rather than inherited.
+	 * Sets the reader the collection's posts are read for, explicitly even for a
+	 * visitor, since the request service keeps its viewer between reads.
 	 */
 	private function readAs(?Person $viewer): void {
 		if ($viewer === null) {
@@ -89,12 +79,8 @@ class CollectionService {
 	}
 
 	/**
-	 * A collection as a reader may see it.
-	 *
-	 * A followers-only collection is shown to its owner and to the accounts
-	 * that follow them, and to nobody else -- including a signed-out visitor,
-	 * which is the case that matters, because that is the one a search engine
-	 * is.
+	 * A collection as a reader may see it. A followers-only collection is shown
+	 * only to its owner and their followers, never to a signed-out visitor.
 	 *
 	 * @throws ItemNotFoundException when it does not exist or may not be seen
 	 */
@@ -209,8 +195,7 @@ class CollectionService {
 			$post = $this->streamRequest->getStreamByNid($nid);
 			$this->collectionsRequest->removeItem($collection, $post->getId());
 		} catch (\Exception $e) {
-			// a post that is already gone is already out of the collection;
-			// removing it again is the same no-op
+			// A deleted post is already out of the collection.
 		}
 
 		return $this->own($owner, $id);
@@ -235,8 +220,7 @@ class CollectionService {
 		try {
 			$collection->setAccount($this->cacheActorService->getFromId($collection->getOwnerId()));
 		} catch (\Exception $e) {
-			// a collection whose owner this server cannot name any more is
-			// still a collection; the page just has nobody to head it with
+			// The owner cannot be named any more; the collection still stands.
 			$collection->setAccount(null);
 		}
 

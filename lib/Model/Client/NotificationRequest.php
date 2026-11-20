@@ -15,17 +15,8 @@ use OCA\Social\Model\ActivityPub\Stream;
 
 /**
  * Mastodon's NotificationRequest: everything one held-back account has sent,
- * as one row the reader can decide about.
- *
- * The point of it is that the decision is about the account and not about the
- * notification. Somebody the policy holds back has usually sent more than one
- * thing, and being asked about each in turn is what makes a filtered inbox
- * worse than an unfiltered one.
- *
- * Its `id` is the sender's account id. Mastodon's is a row id of its own
- * because it stores these; here they are derived from the notifications that
- * are already stored, so the account is the only stable name there is — and it
- * is the one thing the accept and dismiss routes need anyway.
+ * as one row to decide about. Its `id` is the sender's account id, since
+ * these are derived from stored notifications rather than stored.
  */
 class NotificationRequest implements \JsonSerializable {
 	public function __construct(

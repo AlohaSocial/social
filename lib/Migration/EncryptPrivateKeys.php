@@ -19,19 +19,9 @@ use Throwable;
 
 /**
  * Rewrites the actor private keys stored as bare PEM into their encrypted
- * form. New keys are written encrypted from the start; this step only exists
- * for rows created before that.
- *
- * The marker is what keeps it affordable. "A no-op once no plaintext key is
- * left" was true of the writes and false of the read: the LIKE scan of
- * social_actor ran on every `occ upgrade` for the life of the instance, with
- * the instance in maintenance mode, to discover there was nothing to do. It is
- * only set once a run finishes with nothing left behind, so a row that could
- * not be encrypted is still retried on the next upgrade.
- *
- * A row that cannot be encrypted is reported and left alone rather than
- * allowed to end the upgrade: the plaintext form is still readable, so the
- * actor keeps working and the next upgrade tries again.
+ * form; new keys are written encrypted. A marker, set only once nothing is
+ * left behind, skips the scan on later upgrades. A row that cannot be
+ * encrypted is reported and left readable for the next upgrade.
  */
 class EncryptPrivateKeys implements IRepairStep {
 	private const MARKER = 'migration_actor_keys_encrypted';
@@ -81,11 +71,9 @@ class EncryptPrivateKeys implements IRepairStep {
 		$failed = [];
 		$output->startProgress(count($plain));
 		foreach ($plain as $row) {
-			// one unusable row must not take the upgrade down with it: seal()
-			// throws when the instance secret is missing or has changed, and
-			// the admin then has to fix that with the instance in maintenance
-			// mode and `occ upgrade` refusing to finish. The key stays as it is
-			// — readable, and picked up by the next run of this step.
+			// One unusable row must not fail the upgrade: seal() throws when the
+			// instance secret is missing or changed. The key stays readable for the
+			// next run.
 			try {
 				$update = $this->connection->getQueryBuilder();
 				$update->update(CoreRequestBuilder::TABLE_ACTORS)

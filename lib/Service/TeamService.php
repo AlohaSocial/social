@@ -20,42 +20,17 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * An account a team posts from.
+ * An account a Nextcloud group posts from.
  *
- * Pixelfed's answer to "several people, one voice" is its `Group*` family:
- * twenty models, still in beta, and a second social graph beside the one it
- * already has. Nextcloud's answer is the one it has had all along — a group of
- * people who already work together — and this is that group given an account.
- * It is the one thing in this comparison that Nextcloud can do and Pixelfed
- * cannot, because Pixelfed has no idea who works with whom.
- *
- * A team account is **an actor like any other**. That is the whole design: it
- * has a key pair, a followers collection, an inbox and an outbox, it can be
- * followed from Mastodon and Pixelfed, it can be moderated, it can be
- * suspended, and none of that needed writing again. What is new is only who is
- * allowed to speak as it.
- *
- * **The membership is the Nextcloud group, live.** No membership is copied
- * here, deliberately: a copy of a group is a copy that drifts, and the drift
- * is somebody who left the organisation still able to post as it. Every check
- * asks the group manager at the moment somebody tries.
- *
- * **Who wrote a post is recorded, and shown inside the team.** Outside it the
- * team speaks with one voice, which is the point of having one; inside it,
- * somebody has to be able to find out which of them wrote the thing everybody
- * is now talking about. A moderator sees it too — a report about a team
- * account is otherwise a report about nobody.
+ * A team account is an actor like any other (keys, followers, inbox, outbox,
+ * moderation); only who may speak as it is new. Membership is the Nextcloud
+ * group, asked live on every check, so somebody who left cannot post. Who
+ * wrote a post is recorded and shown only inside the team and to moderators.
  */
 class TeamService {
 	/**
-	 * The `user_id` a team actor is stored under.
-	 *
-	 * Actors are keyed by the Nextcloud user they belong to, and a team
-	 * belongs to no one user. The prefix is reserved rather than clever: a
-	 * Nextcloud user id may not contain a slash, so nothing a real account is
-	 * ever stored under can collide with this, and a team actor therefore
-	 * never resolves as somebody's own account on any path that looks one up
-	 * by user.
+	 * The `user_id` a team actor is stored under. A Nextcloud user id cannot
+	 * contain a slash, so this never collides with a real account.
 	 */
 	public const USER_PREFIX = 'team/';
 
@@ -79,12 +54,8 @@ class TeamService {
 	}
 
 	/**
-	 * Gives a group an account to post from.
-	 *
-	 * An administrator's act, which is why there is no route for it: creating
-	 * an actor on this instance makes an address other servers will follow and
-	 * cache, and that is not a thing to hand to anybody who happens to be in a
-	 * group.
+	 * Gives a group an account to post from. Admin-only, so there is no route:
+	 * it creates an address other servers will follow and cache.
 	 *
 	 * @throws InvalidResourceException the group is unknown, or it already has one
 	 */
@@ -115,11 +86,8 @@ class TeamService {
 	}
 
 	/**
-	 * The team accounts somebody may post as, right now.
-	 *
-	 * Asked of the group manager rather than of a stored membership: somebody
-	 * who left the group this morning may not post as it this afternoon, and
-	 * the only way to be sure of that is to ask.
+	 * The team accounts somebody may post as right now, asked of the group
+	 * manager.
 	 *
 	 * @return Person[]
 	 */
@@ -168,9 +136,7 @@ class TeamService {
 		}
 
 		if (!$this->isMember($userId, $groupId)) {
-			// not "forbidden": whether an account is a team's, and which group
-			// is behind it, is not something to confirm to somebody who is not
-			// in it
+			// Not "forbidden": whether a team exists is not confirmed to outsiders.
 			throw new ItemNotFoundException('no such team');
 		}
 
@@ -188,8 +154,7 @@ class TeamService {
 		try {
 			$this->teamsRequest->recordAuthor($streamId, $author->getId());
 		} catch (Throwable $e) {
-			// the post is already out; losing the trail is bad but it is not a
-			// reason to fail a post that has been federated
+			// The post is already federated; a lost trail does not fail it.
 			$this->logger->warning('could not record who wrote a team post', [
 				'post' => $streamId, 'exception' => $e,
 			]);
@@ -197,11 +162,8 @@ class TeamService {
 	}
 
 	/**
-	 * Who wrote each of these posts, for a reader who is allowed to know.
-	 *
-	 * Outside the team the team speaks with one voice; inside it, and to a
-	 * moderator, the trail is the point. A reader who is neither gets an empty
-	 * answer rather than a filtered one, so a caller cannot forget to check.
+	 * Who wrote each of these posts, for team members and moderators; anybody
+	 * else gets an empty answer, so a caller cannot forget to check.
 	 *
 	 * @param string[] $streamIds
 	 *

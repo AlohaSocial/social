@@ -26,14 +26,8 @@ use Throwable;
 /**
  * Takes the like, dislike, boost and reply numbers out of every client API
  * answer for a reader who has them hidden (`CountsService`); an account's
- * follower count stays.
- *
- * In one place rather than in each route, because the numbers ride on every
- * status the API hands out — timelines, threads, single posts, profiles,
- * notifications, search, conversations — and a route that
- * was forgotten would be the one that shows them. The client APIs only: the
- * ActivityPub documents and the rest are answered to other servers, not to
- * this reader.
+ * follower count stays. In one place because statuses appear in nearly every
+ * route; ActivityPub documents for other servers are untouched.
  */
 class HideCountsMiddleware extends Middleware {
 	public function __construct(
@@ -46,8 +40,7 @@ class HideCountsMiddleware extends Middleware {
 
 	#[\Override]
 	public function afterController(Controller $controller, string $methodName, Response $response): Response {
-		// a route's DataResponse has already been rendered into a JSONResponse
-		// by the time the after-middlewares run; both are handled
+		// By now a DataResponse may have been rendered into a JSONResponse.
 		if (!($response instanceof DataResponse || $response instanceof JSONResponse) || !self::isClientApi($controller)) {
 			return $response;
 		}

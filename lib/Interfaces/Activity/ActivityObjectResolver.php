@@ -23,22 +23,13 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * The object of a wrapping activity, when it arrived as a bare URI.
+ * The object of a wrapping activity, when it arrived as a bare URI (which
+ * many implementations send, where Mastodon embeds).
  *
- * `object` is defined as a link *or* an embedded object, and both are used in
- * the wild: Mastodon embeds the whole thing in an `Undo`, `Accept`, `Reject`,
- * and a bare id in an `Add`/`Remove`; other implementations send an id in all
- * of them. Every wrapping interface used to return immediately on
- * `!hasObject()`, so against a peer that sends a link the activity did nothing
- * at all — an unhandled `Accept` in particular left the follow pending forever
- * with no posts ever arriving.
- *
- * The URI is looked up in what this instance already stores, in the order the
- * wrapping activities need it: a follow, then a post, then an action (a Like or
- * a pin), an emoji reaction, a block, then an actor. Nothing is fetched over
- * the network — the id names something we were told about before, and a
- * wrapping activity that refers to something unknown here has nothing to undo
- * or accept.
+ * The URI is looked up only in what this instance stores, in the order the
+ * wrapping activities need: a follow, a post, an action (Like, pin), an emoji
+ * reaction, a block, then an actor. Nothing is fetched: something unknown
+ * here has nothing to undo or accept.
  */
 class ActivityObjectResolver {
 	public function __construct(
@@ -52,15 +43,9 @@ class ActivityObjectResolver {
 	}
 
 	/**
-	 * What the activity is about: the stored row when there is one, and the
-	 * embedded copy only when there is not.
-	 *
-	 * The stored row wins because the embedded copy is written by the sender.
-	 * Every one of these activities removes or moves a row that is found by
-	 * the object's id — a like and a follow are both deleted by id — while the
-	 * `actor` the callers check against is a field of the same payload, so a
-	 * copy naming one account's id and another's `actor` acted on a row it did
-	 * not own. The row says who it belongs to; the payload only claims.
+	 * What the activity is about: the stored row when there is one, the embedded
+	 * copy only when not. The sender writes the embedded copy and could pair one
+	 * account's object id with another `actor`; the stored row says whose it is.
 	 *
 	 * @throws ItemNotFoundException when there is neither
 	 */

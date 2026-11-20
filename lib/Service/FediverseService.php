@@ -43,24 +43,11 @@ class FediverseService {
 	/**
 	 * Whether this instance may talk to an address.
 	 *
-	 * `$onBehalfOf` is the instance that *named* the address, where the two
-	 * differ: a picture on a post is fetched from whatever host the post says
-	 * holds it, and that is routinely not the host the post came from —
-	 * Mastodon serves its media from a sibling host (`6-28.mastodon.xyz` for a
-	 * post on `mastodon.xyz`), and object storage or a CDN is common besides.
-	 *
-	 * That distinction only matters to the allow list, which matches exactly.
-	 * An admin allows the instances they mean to federate with, by the names
-	 * those instances are known by; nobody lists the buckets their pictures sit
-	 * in, and there is no way for them to know what those are. Judging the
-	 * media host against that list refused every picture from every allowed
-	 * instance, so an allow-listed instance federated text and nothing else.
-	 * What the admin decided is that *this instance* may be talked to, and its
-	 * pictures are part of what it publishes.
-	 *
-	 * The block list is unchanged and still judges both: it matches subdomains
-	 * already (`isListed()`), so a blocked instance's media host is blocked
-	 * with it, and naming a third party's address does not launder it either.
+	 * `$onBehalfOf` is the instance that named the address, e.g. a post whose
+	 * media is on a sibling host or CDN (`6-28.mastodon.xyz` for
+	 * `mastodon.xyz`). The allow list judges that instance, since nobody can list
+	 * every media bucket; the block list judges both, and covers subdomains
+	 * (`isListed()`).
 	 */
 	public function authorized(string $address, string $onBehalfOf = ''): bool {
 		if ($address === '') {
@@ -75,11 +62,8 @@ class FediverseService {
 		}
 
 		if ($this->getAccessType() === $this->configService->accessTypeList['WHITELIST']) {
-			// an allow list widens no further than what the admin wrote: a
-			// subdomain of an allowed domain is a different instance, and
-			// whoever runs the parent domain is not asked before one appears.
-			// The one thing it does cover is what an allowed instance holds
-			// elsewhere, which is what `$onBehalfOf` names.
+			// The allow list matches exactly: a subdomain is a different instance.
+			// `$onBehalfOf` covers what an allowed instance holds elsewhere.
 			$judged = ($onBehalfOf !== '') ? $onBehalfOf : $address;
 			if ($this->isExactlyListed($judged) || $this->isLocal($judged)) {
 				return true;
@@ -135,15 +119,9 @@ class FediverseService {
 	}
 
 	/**
-	 * Every instance this one has met: the hosts of the remote actors it has
-	 * cached. `occ social:fediverse list` prints them above the access list, so
-	 * an admin adding an entry can read the name off this instance rather than
-	 * guess at it — an empty section was worse than no section.
-	 *
-	 * Taken from the cached shared inboxes, which is one row per instance
-	 * rather than one per account. An actor whose server publishes no shared
-	 * inbox is missing from it; every implementation that federates at any
-	 * volume publishes one.
+	 * Every instance this one has met, from the cached shared inboxes (one row
+	 * per instance), so `occ social:fediverse list` can show names to put on the
+	 * access list. Servers publishing no shared inbox are missing.
 	 *
 	 * @return string[] hostnames, lowercased, in alphabetical order
 	 */
@@ -172,15 +150,9 @@ class FediverseService {
 	}
 
 	/**
-	 * Whether an address is covered by the instance access list.
-	 *
-	 * A listed domain covers the domain itself and everything under it, the way
-	 * every other Fediverse implementation reads a domain block: matching the
-	 * exact string only meant that blocking `evil.test` still let
-	 * `www.evil.test` and `a.evil.test` straight back in, so a suspension
-	 * lasted as long as it took to point another wildcard record at the same
-	 * host. A trailing dot (the absolute form of the same name) is the same
-	 * name, and case never matters in a hostname.
+	 * Whether an address is covered by the instance access list: a listed
+	 * domain covers itself and every subdomain, as elsewhere in the Fediverse.
+	 * A trailing dot and case are ignored.
 	 */
 	public function isListed(string $address): bool {
 		$host = $this->normalizeAddress($address);
@@ -205,11 +177,6 @@ class FediverseService {
 	/**
 	 * The instances whose accounts are silenced: kept out of the public and
 	 * global timelines, still readable by the people who follow them.
-	 *
-	 * Mastodon's middle tier. Without it the only answer to an instance that
-	 * is a nuisance rather than a menace was to block it outright, which also
-	 * cuts off the local users who deliberately follow somebody there — so the
-	 * tool was too blunt to use and the nuisance stayed.
 	 *
 	 * @return string[]
 	 */
@@ -281,11 +248,8 @@ class FediverseService {
 	}
 
 	/**
-	 * Silences a batch of instances with one read and one write of the list.
-	 *
-	 * A published block list is a couple of thousand domains; silencing them
-	 * one call at a time decoded and rewrote the whole list per domain, which
-	 * is quadratic in the list and a settings write per entry.
+	 * Silences a batch of instances with one read and one write of the list,
+	 * for published block lists of thousands of domains.
 	 *
 	 * @param string[] $addresses
 	 * @return int how many were not silenced already
@@ -332,8 +296,8 @@ class FediverseService {
 	}
 
 	/**
-	 * Lifts a silence. Nothing was deleted by it, so everything comes back —
-	 * which is the difference between this and a block, whose purge does not.
+	 * Lifts a silence. Nothing was deleted by it, so everything comes back,
+	 * unlike after a block.
 	 */
 	public function unsilenceAddress(string $address): void {
 		$host = $this->normalizeAddress($address);
@@ -349,10 +313,8 @@ class FediverseService {
 	}
 
 	/**
-	 * Whether the access list carries this exact address — no subdomains.
-	 *
-	 * What an allow list permits, and what `addAddress()` treats as already
-	 * known so an admin can still remove what they added.
+	 * Whether the access list carries this exact address, no subdomains: what an
+	 * allow list permits, and what `addAddress()` treats as already known.
 	 */
 	public function isExactlyListed(string $address): bool {
 		$host = $this->normalizeAddress($address);
@@ -398,9 +360,8 @@ class FediverseService {
 	}
 
 	/**
-	 * Adds a batch of addresses with one settings write. The set is validated
-	 * by its caller before it reaches this method; this method retains the same
-	 * audit and purge behavior as individual additions.
+	 * Adds a batch of addresses, validated by the caller, with one settings
+	 * write and the same audit and purge as individual additions.
 	 *
 	 * @param string[] $addresses
 	 * @return int number of new exact addresses
@@ -434,8 +395,7 @@ class FediverseService {
 		);
 
 		foreach ($added as $address) {
-			// Keep individual audit records and purge jobs: importing a list must
-			// have the same moderation and cleanup effect as adding each domain.
+			// Audit and purge each, as when adding domains one by one.
 			$this->auditService->accessListChanged($address, true, $this->isBlockList());
 			$this->purgeBlocked($address);
 		}
@@ -450,22 +410,9 @@ class FediverseService {
 	 * @throws Exception
 	 */
 	/**
-	 * Hands a newly blocked instance to the purge job.
-	 *
-	 * Here rather than in the admin API, so that `occ social:fediverse add`
-	 * and `POST /api/v1/admin/domain_blocks` behave the same way — a block
-	 * that only purges when it was made through one of the two would be worse
-	 * than one that never purges, because nobody could tell which they got.
-	 *
-	 * Only in block-list mode: the same app value holds the allow list, where
-	 * an entry is an instance this server is choosing to *talk to*, and
-	 * deleting everything it ever sent us would be the exact opposite of what
-	 * the admin asked for.
-	 *
-	 * Queued, not run: blocking a domain is one admin request and the purge is
-	 * however much that instance sent over its lifetime. The block itself is
-	 * already in effect — nothing new arrives while the job works through what
-	 * is left.
+	 * Queues a newly blocked instance for the purge job, here so `occ` and the
+	 * admin API behave the same. Only in block-list mode: in allow-list mode the
+	 * entry is an instance this server chose to talk to.
 	 */
 	private function purgeBlocked(string $address): void {
 		if (!$this->isBlockList()) {

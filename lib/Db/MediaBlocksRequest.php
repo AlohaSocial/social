@@ -14,19 +14,10 @@ use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The pictures this instance refuses, by what is in them rather than by who
- * posted them.
- *
- * Every other moderation tool here acts on an account, and the one thing none
- * of them does is stop a file coming back: the account is suspended, the
- * picture is posted again by the next one, and a moderator is deleting the
- * same image for the third time. This is the list that ends that, and it is
- * deliberately small — a hash, a reason, who decided it, and how many times it
- * has since been refused.
- *
- * The count is the interesting column. A blocklist with no evidence is one
- * nobody dares remove anything from a year later; one that says "refused 41
- * times" and one that says "never" are different decisions to review.
+ * The images this instance refuses by content hash, so a file a moderator
+ * removed cannot simply be posted again by another account. Each row keeps a
+ * reason, the moderator, and how often it has since been refused, which is
+ * the evidence for reviewing it later.
  */
 class MediaBlocksRequest extends CoreRequestBuilder {
 	/**
@@ -55,11 +46,8 @@ class MediaBlocksRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Whether this file is refused, counting the refusal as it answers.
-	 *
-	 * One statement for the question and one for the tally, and the tally is
-	 * allowed to fail: a picture is refused whether or not the counter could
-	 * be written, and a moderation decision must not depend on a statistic.
+	 * Whether this file is refused, counting the refusal; a failed tally does
+	 * not change the answer.
 	 */
 	public function isBlocked(string $hash): bool {
 		$qb = $this->getQueryBuilder();
@@ -80,12 +68,8 @@ class MediaBlocksRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * A page of the list, newest first: the rows added before the one
-	 * `$maxId` names, or from the top without one.
-	 *
-	 * Ordered and cut on the row id, which is unique and only ever grows, so
-	 * the pages neither overlap nor leave a gap between them however many
-	 * files are refused while somebody reads them.
+	 * A page of the list, newest first, before `$maxId` or from the top. Paged on
+	 * the ever-growing row id, so pages neither overlap nor skip.
 	 *
 	 * @return array<int, array{id: int, hash: string, reason: string, moderator: string, blocked: int, creation: string}>
 	 */
@@ -137,7 +121,7 @@ class MediaBlocksRequest extends CoreRequestBuilder {
 				->where($qb->expr()->eq('hash', $qb->createNamedParameter($hash)));
 			$qb->executeStatement();
 		} catch (DBException $e) {
-			// the picture is refused either way
+			// Refused either way.
 		}
 	}
 }

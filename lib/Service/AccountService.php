@@ -78,31 +78,27 @@ class AccountService {
 	public const DELETED_ACTOR_BATCH = 500;
 
 	/**
-	 * What may appear in a `preferredUsername`. Letters, digits and underscore,
-	 * with dot and dash allowed inside but not at either end — the intersection
-	 * of what Mastodon, Pleroma and GoToSocial accept.
+	 * What may appear in a `preferredUsername`: letters, digits and underscore,
+	 * with dot and dash allowed inside but not at either end, which Mastodon,
+	 * Pleroma and GoToSocial all accept.
 	 */
 	private const HANDLE_PATTERN = '/^[a-zA-Z0-9_]+([a-zA-Z0-9_.-]*[a-zA-Z0-9_])?$/';
 	private const HANDLE_MAX_LENGTH = 64;
 
 	/**
-	 * How long a bio may be, in characters. Mastodon's `note` is capped at 500
-	 * and truncates what a client sends beyond it; a longer one would be cut
-	 * on every server that shows it anyway.
+	 * How long a bio may be, in characters; Mastodon caps `note` at 500.
 	 */
 	private const SUMMARY_MAX_LENGTH = 500;
 
 	/**
-	 * Where an account's default post visibility is kept, as a per-user app
-	 * preference. It is a preference of the person, not a property of the
-	 * actor: nothing federates it, and the actor row has no column for it.
+	 * The per-user app preference holding an account's default post visibility.
+	 * It is not federated, so it is not on the actor.
 	 */
 	private const DEFAULT_PRIVACY = 'default_privacy';
 
 	/**
-	 * Age, in days, past which `blindKeyRotation()` would renew an actor's key pair.
-	 * The rotation is not currently scheduled; the constant exists so the method does
-	 * not fatal on an undefined constant if it is ever called.
+	 * Age, in days, past which `blindKeyRotation()` renews an actor's key pair.
+	 * The rotation is not scheduled.
 	 */
 	public const KEY_PAIR_LIFESPAN = 60;
 
@@ -209,14 +205,8 @@ class AccountService {
 	}
 
 	/**
-	 * The cached copy of a local account, rebuilt when it has gone missing.
-	 *
-	 * `social_actor` holds what this instance decides about an account and
-	 * `social_cache_actor` holds what everybody reads — including the follower,
-	 * following and post counts, which live only in the cached copy. A reader
-	 * therefore wants this one, and a cache row that is absent (an account that
-	 * has never been looked at, or one whose row was purged) is a thing to
-	 * rebuild rather than an error to report: the account exists either way.
+	 * The cached copy of a local account, rebuilt when it has gone missing. Only
+	 * the cached copy holds the follower, following and post counts.
 	 *
 	 * @throws CacheActorDoesNotExistException the rebuild did not produce one
 	 */
@@ -244,19 +234,9 @@ class AccountService {
 
 	/**
 	 * Refuses a fediverse identity to a Nextcloud account at a blocked email
-	 * domain.
-	 *
-	 * Mastodon's email-domain block polices its sign-up. For an internal user
-	 * the server decides who gets a Nextcloud account, so this is the same
-	 * question one step later: whether this instance publishes a fediverse
-	 * identity for whoever is behind that address. It matters on a server with
-	 * open registration, which is where a throwaway-address domain turns up.
-	 * A self-registered external user is asked it at the registration form as
-	 * well (`ExternalUserService::assertEmailAvailable()`).
-	 *
-	 * An account with no email address is allowed: there is nothing to check
-	 * it against, and a server that stores no addresses would otherwise hand
-	 * out no fediverse accounts at all.
+	 * domain, the internal-user counterpart of
+	 * `ExternalUserService::assertEmailAvailable()`. An account with no email
+	 * address is allowed.
 	 *
 	 * @throws InvalidHandleException
 	 */
@@ -277,13 +257,7 @@ class AccountService {
 	}
 
 	/**
-	 * Method should be called by the frontend and will generate a fresh Social account for
-	 * the user, using the userId and the username.
-	 *
-	 * Pair of keys are created at this point.
-	 *
-	 * Return exceptions if an account already exist for this user or if the username is already
-	 * taken
+	 * Creates the Social account of a user, with its key pair.
 	 *
 	 * @param string $userId
 	 * @param string $username
@@ -296,14 +270,8 @@ class AccountService {
 	 * @throws UrlCloudException
 	 */
 	public function createActor(string $userId, string $username, string $type = Person::TYPE) {
-		// A team account belongs to a group rather than to a person, and a
-		// channel to an account rather than to a user; both are stored under a
-		// reserved `team/` or `channel/` id that no Nextcloud user can have,
-		// because a user id may not contain a slash. There is nobody to confirm
-		// and no address to check the domain of. Everything after this is the
-		// same actor every account gets — the key pair, the cache row, the
-		// loopback follow — which is what makes either of them followable from
-		// Mastodon without any of it being written twice.
+		// Team and channel accounts live under reserved `team/` and `channel/` ids
+		// (a user id cannot contain a slash) and have no person or email to check.
 		if (!str_starts_with($userId, 'team/') && !str_starts_with($userId, 'channel/')) {
 			$this->confirmUserId($userId);
 			$this->assertEmailDomainIsAllowed($userId);
@@ -332,9 +300,7 @@ class AccountService {
 		$actor = new Person();
 		$actor->setUserId($userId);
 		$actor->setPreferredUsername($username);
-		// what a peer reads to know what kind of thing this is. A channel is a
-		// `Group`, which is the one type PeerTube will accept as the owner of a
-		// video; everything else is the `Person` it has always been.
+		// A channel is a `Group`, the only type PeerTube accepts as a video's owner.
 		$actor->setType($type);
 		$this->signatureService->generateKeys($actor);
 		$this->actorsRequest->create($actor);
@@ -345,8 +311,8 @@ class AccountService {
 		// generate loopback
 		$this->followsRequest->generateLoopbackAccount($actor);
 
-		// a person's account starts calm: strangers and new accounts wait for
-		// review instead of ringing. A team or a channel is nobody's inbox.
+		// A person's account starts with strangers and new accounts waiting for
+		// review; a team or a channel is nobody's inbox.
 		if (!str_starts_with($userId, 'team/') && !str_starts_with($userId, 'channel/')) {
 			$this->notificationPolicyService->startCalm($userId);
 		}
@@ -365,8 +331,7 @@ class AccountService {
 			return;
 		}
 
-		// the channels it owns are accounts of their own with nobody left to
-		// run them: each goes with it, the way an account goes
+		// The channels it owns have nobody left to run them, so each is deleted too.
 		foreach ($this->channelsRequest->getByOwner($actor->getId()) as $channel) {
 			if ($channel->getHandle() === $actor->getPreferredUsername()) {
 				continue;
@@ -383,10 +348,9 @@ class AccountService {
 		// set as deleted locally
 		$this->actorsRequest->setAsDeleted($actor->getPreferredUsername());
 
-		// Revoke app authorizations and approved device grants before deleting
-		// the account. A token that outlived it could make a later
-		// `verify_credentials` quietly recreate the actor under a derived
-		// handle. The app registrations are the instance's and stay.
+		// Revoke app authorizations and device grants first: a surviving token
+		// could make a later `verify_credentials` recreate the actor. The app
+		// registrations are the instance's and stay.
 		if ($actor->getUserId() !== '') {
 			$this->clientAuthRequest->deleteRelatedId($actor->getUserId());
 		}
@@ -400,23 +364,10 @@ class AccountService {
 	}
 
 	/**
-	 * The account's owner deleting it themselves.
-	 *
-	 * The same deletion an administrator's `occ social:account:delete` does —
-	 * the posts go, the follows go, a `Delete` goes out to every server that
-	 * knew the account — with one thing in front of it: the person has to type
-	 * the handle they are deleting. Somebody who wants their Social presence
-	 * gone but their Nextcloud account kept had to ask an administrator for
-	 * this, which meant explaining to somebody else why.
-	 *
-	 * The typed handle is the whole of the guard, and it is deliberately not a
-	 * password: an account signed in through SSO has none to give, and asking
-	 * for one would have made this an administrator's job again for exactly
-	 * the installations that federate most.
-	 *
-	 * The handle stays out of use for the retention hour, so nobody can take
-	 * it the moment it is let go; the person can make a *new* account under a
-	 * different one straight away.
+	 * The account's owner deleting it themselves: the same deletion as
+	 * `occ social:account:delete`, guarded by typing the handle (not a password,
+	 * which SSO accounts do not have). The handle stays reserved for the
+	 * retention period.
 	 *
 	 * @throws ActorDoesNotExistException there is nothing to delete
 	 * @throws InvalidResourceException the confirmation does not name this account
@@ -449,13 +400,8 @@ class AccountService {
 	}
 
 	/**
-	 * Tells the fediverse an account is gone.
-	 *
-	 * Its own method because deletion is not the only thing that ends an
-	 * account here: a moderator suspending a local account deletes everything
-	 * it posted and stops serving its actor, and a suspension that federated
-	 * nothing left every remote instance holding a full copy of an account this
-	 * one had decided to remove — the takedown stopped at our own edge.
+	 * Tells the fediverse an account is gone; used by deletion and by a
+	 * moderator suspending a local account.
 	 */
 	public function federateActorDelete(Person $actor): void {
 		$delete = new Delete();
@@ -519,13 +465,11 @@ class AccountService {
 	 * Stores the directory flags of this user's actor and refreshes the actor
 	 * cache so they reach the actor document and the account entity.
 	 *
-	 * Accepted keys, each a bool (the string forms clients send — `'true'`,
-	 * `'1'` — are read as such): `discoverable`, whether the account may be
-	 * listed in directories and suggestions; `indexable`, whether its public
-	 * posts may be full-text indexed by other servers. Both are opt-in, like
-	 * Mastodon's. A key that is not sent is left as it is; anything else in
-	 * `$flags` is ignored, so the caller can hand over a whole
-	 * `update_credentials` body.
+	 * Accepted bool keys (string forms such as `'true'` and `'1'` are read as
+	 * such): `discoverable` (listed in directories and suggestions) and
+	 * `indexable` (public posts may be full-text indexed elsewhere), both
+	 * opt-in. A key not sent is left alone and other keys are ignored, so a
+	 * whole `update_credentials` body can be passed.
 	 *
 	 * @param array<string, mixed> $flags
 	 *
@@ -564,22 +508,11 @@ class AccountService {
 	/**
 	 * The account's display name, as a Mastodon client edits it.
 	 *
-	 * It belongs to the Nextcloud account rather than to the actor — the actor
-	 * copies it, and `updateCacheLocalActorName()` is what carries it over — so
-	 * this writes it where it lives and re-caches. A backend that will not have
-	 * it written (LDAP, SAML, anything provisioned from elsewhere) says so, and
-	 * that is a refusal the client should see rather than a silent success: the
-	 * name it shows afterwards would be the old one either way, and only one of
-	 * those two outcomes tells the user why.
-	 *
-	 * Nextcloud stores the name with the user backend first and only then
-	 * tells its listeners. Core's own listener re-validates the whole profile
-	 * and throws when it cannot verify the `fediverse` property, which it does
-	 * by fetching that handle's WebFinger over HTTPS — from this very server,
-	 * for the handle this app writes there, which fails wherever the server
-	 * cannot reach itself by its own name. A name the backend stored is kept
-	 * and the listener's failure logged; only a name that was not stored is
-	 * an error.
+	 * It belongs to the Nextcloud account and the actor copies it, so this writes
+	 * it there and re-caches. A backend that refuses the write (LDAP, SAML) is
+	 * reported to the client. Core's listener may then throw while verifying the
+	 * `fediverse` property over WebFinger against this server; once the backend
+	 * has stored the name, that failure is only logged.
 	 *
 	 * @throws InvalidActionException when the user's backend owns the name
 	 * @throws NoUserException
@@ -705,17 +638,9 @@ class AccountService {
 	 * reaches the actor document and the account entity, and tells the
 	 * followers about it.
 	 *
-	 * A bio is kept as **plain text**: it is what the user typed, it is what
-	 * `source.note` has to hand back to a client that opens an edit box on it,
-	 * and it is the only form that cannot carry markup into a reader's
-	 * timeline. It is stored exactly as it was typed — every path that renders
-	 * it escapes it (`Person::bioAsHtml()` for `summary` on the wire and `note`
-	 * on the client API), so there is nothing left for a stripping pass here to
-	 * protect and a great deal for it to break: `strip_tags()` reads a bare
-	 * `<` as the start of a tag and eats the rest of the line, which turned
-	 * `Maths: a<b and b>c` into `Maths: ac`. What is stored is cut to
-	 * `SUMMARY_MAX_LENGTH` characters rather than refused, the way
-	 * `Person::setFields()` caps a field.
+	 * The bio is stored as plain text exactly as typed (`source.note` hands it
+	 * back), cut to `SUMMARY_MAX_LENGTH` characters; every renderer escapes it
+	 * (`Person::bioAsHtml()`), so it is not stripped of tags here.
 	 *
 	 * @throws ActorDoesNotExistException
 	 * @throws SocialAppConfigException
@@ -731,10 +656,9 @@ class AccountService {
 	}
 
 	/**
-	 * The visibility a post of this account gets when the client sends none —
-	 * Mastodon's `source.privacy`, which a client reads at login and offers as
-	 * the preselected audience in its composer. A stored value that is not one
-	 * this app posts with is ignored rather than guessed at.
+	 * The visibility a post of this account gets when the client sends none
+	 * (Mastodon's `source.privacy`). A stored value that is not a valid
+	 * visibility is ignored.
 	 */
 	public function getDefaultPrivacy(string $userId): string {
 		$stored = (string)$this->configService->getValueForUser($userId, self::DEFAULT_PRIVACY);
@@ -778,12 +702,9 @@ class AccountService {
 	}
 
 	/**
-	 * Applies several changes to one profile and tells the followers once.
-	 *
-	 * Each setter tells them on its own, and a peer handed several `Update`s
-	 * of one actor at the same moment may keep any one of them: Mastodon
-	 * processes them in parallel under a lock per actor, and an `Update` that
-	 * loses the race is the change that never shows.
+	 * Applies several changes to one profile and tells the followers once:
+	 * Mastodon processes concurrent `Update`s of one actor in parallel, and the
+	 * one that loses the race is never shown.
 	 *
 	 * @template T
 	 * @param callable(): T $changes
@@ -802,13 +723,13 @@ class AccountService {
 	}
 
 	/**
-	 * The account's Nextcloud avatar changed: the actor takes the new icon,
-	 * and the followers and Bluesky are told — once, at the end, when the
-	 * change is part of a profile edit (`changingProfile()`).
+	 * The account's Nextcloud avatar changed: the actor takes the new icon, and
+	 * the followers and Bluesky are told, once at the end when inside
+	 * `changingProfile()`.
 	 */
 	public function avatarChanged(string $userId, string $username): void {
-		// the change arrives twice — from the app that made it and from
-		// Nextcloud's event for it — and is told once per avatar version
+		// The change arrives twice (from the app that made it and from Nextcloud's
+		// event), so it is told once per avatar version.
 		$version = $this->configService->getUserValueInt('version', $userId, 'avatar');
 		if (($this->avatarsTold[$userId] ?? null) === $version) {
 			return;
@@ -828,10 +749,9 @@ class AccountService {
 	}
 
 	/**
-	 * Tells the followers about a profile change, with the actor document as
-	 * it is served: the stored actor row carries neither the picture nor the
-	 * banner, and a peer reads an `Update` without an `icon` as the picture
-	 * taken away. Signed with the account's own key, which only the row has.
+	 * Tells the followers about a profile change with the actor document as
+	 * served: the actor row carries neither picture nor banner, and a peer reads
+	 * an `Update` without `icon` as the picture removed.
 	 */
 	private function federateProfile(string $userId): void {
 		if ($this->holdingProfileUpdates) {
@@ -858,8 +778,8 @@ class AccountService {
 	}
 
 	/**
-	 * Has the account's Bluesky profile written again, off the request: after
-	 * anything it shows changed — the name, the bio, a picture, a pin.
+	 * Queues a rewrite of the account's Bluesky profile after anything it shows
+	 * changed.
 	 */
 	public function queueBlueskyProfile(Person $actor): void {
 		if ($this->atprotoConfig->isEnabled()) {
@@ -868,18 +788,9 @@ class AccountService {
 	}
 
 	/**
-	 * Tells the followers that the actor document changed, with an
-	 * `Update{Person}` — the path `LocalController` already uses after a new
-	 * header image, signed here with the local actor's own key.
-	 *
-	 * A failure is logged and swallowed: the change is stored either way, and
-	 * a remote server picks it up when it next refreshes the actor.
-	 */
-	/**
-	 * Re-caches a local account and tells its followers' servers the actor as
-	 * it is served now, and nothing else: for a change in how the actor is
-	 * published rather than in anything the account holds, such as the
-	 * address of its icon (`Cron\RepublishAvatars`).
+	 * Re-caches a local account and sends its followers' servers the actor as
+	 * served, for a change in how the actor is published rather than in what the
+	 * account holds, such as its icon address (`Cron\RepublishAvatars`).
 	 */
 	public function republishActor(Person $actor): void {
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
@@ -897,6 +808,11 @@ class AccountService {
 		$this->federateActorUpdate($actor, $served);
 	}
 
+	/**
+	 * Sends the followers an `Update{Person}` signed with the local actor's key.
+	 * A failure is logged: the change is stored and peers see it on their next
+	 * refresh of the actor.
+	 */
 	private function federateActorUpdate(Person $actor, Person $served): void {
 		try {
 			$update = clone $served;
@@ -924,23 +840,16 @@ class AccountService {
 	 */
 	public function cacheLocalActorByUsername(string $username, ?array $profileLayout = null) {
 		try {
-			// A cache refresh runs over every local account. Loading a user
-			// preference here adds one database read per account; ActorService
-			// carries the already published layout from the cached actor instead.
+			// ActorService carries the published layout over from the cached actor,
+			// saving a preference read per account on a full cache refresh.
 			$actor = $this->actorsRequest->getFromUsername($username);
 			if ($profileLayout !== null) {
 				$actor->setProfileLayout($profileLayout);
 			}
 
 			if ($this->moderationRequest->levelOf($actor->getId()) === Moderation::SUSPEND) {
-				// A suspended account is not served from this instance, and
-				// the cached copy is what serves it: the actor document, the
-				// WebFinger answer and the timelines are all read from it. The
-				// suspension drops that copy, and this — reached from the
-				// cron, from every profile change and from the first reader
-				// who finds it missing — used to put it straight back, so a
-				// local account a moderator had suspended went on being served
-				// a few minutes later with an empty outbox.
+				// A suspended account is not served, and the cached copy is what serves it,
+				// so this must not recreate it.
 				$this->cacheActorsRequest->deleteCacheById($actor->getId());
 
 				return;
@@ -952,21 +861,14 @@ class AccountService {
 				return;
 			}
 
-			// Whose channel this is, which PeerTube demands before it will
-			// take a video the channel owns: it fetches the `Group` and looks
-			// for a `Person` here, refusing the video outright when there is
-			// none. Read from the channel table rather than passed in, because
-			// this method is reached from half a dozen places and none of the
-			// others knows or should know what a channel is.
+			// PeerTube refuses a video whose channel `Group` has no owning `Person`.
 			$owner = $this->channelsRequest->ownerOf($actor->getId());
 			if ($owner !== '') {
 				$actor->setAttributedToActors([['type' => Person::TYPE, 'id' => $owner]]);
 			}
 
-			// A team account and a channel have no Nextcloud user and therefore
-			// no avatar to mirror: the picture route would be asked for a user
-			// id nothing can resolve. They get the app's default until somebody
-			// uploads one, which is honest rather than a broken image.
+			// Team and channel accounts have no Nextcloud avatar to mirror; they get
+			// the app's default until somebody uploads one.
 			if (!str_starts_with($actor->getUserId(), 'team/')
 				&& !str_starts_with($actor->getUserId(), 'channel/')
 				&& $this->mayPublish($actor, IAccountManager::PROPERTY_AVATAR)) {
@@ -979,21 +881,16 @@ class AccountService {
 
 			$this->loadLocalActorHeader($actor);
 
-			// The actors row carries neither cached profile layout nor details,
-			// and the cache write replaces both. ActorService carries forward
-			// profile layout and verified-link verdicts unless this call is the
-			// explicit profile-layout update.
+			// The actors row carries no cached profile layout or details and the cache
+			// write replaces both; ActorService carries forward the layout and
+			// verified-link verdicts unless this is the explicit layout update.
 			$this->addLocalActorDetailCount($actor);
 			$this->actorService->cacheLocalActor($actor, $profileLayout === null);
 
-			// once the copy that answers WebFinger is written: Nextcloud
-			// verifies the field through it before storing the handle
+			// After the WebFinger copy is written: Nextcloud verifies the field through it.
 			$this->publishHandleOnProfile($actor);
 		} catch (ActorDoesNotExistException $e) {
-			// every caller has an account in hand and passes its handle, so
-			// there is no ordinary case for this: swallowing it in silence hid
-			// a caller passing a user id instead, and with it the profile
-			// updates of every account whose handle is not its user id
+			// Every caller passes a handle, so this points at a caller passing a user id.
 			$this->logger->warning('no Social account under the handle to cache', [
 				'handle' => $username, 'exception' => $e,
 			]);
@@ -1053,13 +950,8 @@ class AccountService {
 		$count = $recount ? null : $this->cacheActorsRequest->getCounts($actor->getId());
 
 		if ($count === null) {
-			// the four aggregate queries. They are the reason this must not be
-			// on a write path: `countFollowers()` is a `COUNT(*)` over
-			// `social_follow`, which for an account with a million followers
-			// is a million index entries counted so that a number on a profile
-			// can go up by one. Reached from the cron's local-account walk,
-			// which is bounded, and from the places a person explicitly asks
-			// for a refresh.
+			// Aggregate queries (`countFollowers()` is a COUNT(*) over `social_follow`),
+			// so this must not be on a write path.
 			$count = [
 				'followers' => $this->followsRequest->countFollowers($actor->getId()),
 				'following' => $this->followsRequest->countFollowing($actor->getId()),
@@ -1072,9 +964,7 @@ class AccountService {
 		$actor->setDetailArray(Details::COUNT, [
 			'followers' => $count['followers'],
 			'following' => $count['following'],
-			// never incremental: it is bounded by how many people are waiting
-			// for an answer, which is small, and it has to be right the moment
-			// the screen that shows it is opened
+			// Always counted: small, and must be right when the screen opens.
 			'follow_requests' => $this->followsRequest->countPendingRequests($actor->getId()),
 			'post' => $count['post'],
 		]);
@@ -1083,13 +973,8 @@ class AccountService {
 
 	/**
 	 * Moves one of an account's counters by one, for the paths that know
-	 * exactly what changed.
-	 *
-	 * A follow arriving is `+1 followers` on the followed account and
-	 * `+1 following` on the follower; a post written is `+1 posts`. Each used
-	 * to recompute all three with aggregate queries. Where the counter has
-	 * never been counted the bump is skipped rather than applied to a number
-	 * nobody established — see `CacheActorsRequest::bumpCount()`.
+	 * exactly what changed. A counter never counted is left alone; see
+	 * `CacheActorsRequest::bumpCount()`.
 	 */
 	public function bumpActorCount(string $actorId, string $column, int $by = 1): void {
 		if ($actorId === '') {
@@ -1099,8 +984,7 @@ class AccountService {
 		try {
 			$this->cacheActorsRequest->bumpCount($actorId, $column, $by);
 		} catch (Exception $e) {
-			// a counter on a profile is not worth failing a follow or a post
-			// over; the cron's walk reconciles it
+			// Not worth failing a follow or a post over; the cron's walk reconciles it.
 			$this->logger->debug('could not move an actor counter', [
 				'actor' => $actorId, 'column' => $column, 'exception' => $e,
 			]);
@@ -1113,12 +997,8 @@ class AccountService {
 	 * @throws NoUserException
 	 */
 	private function updateCacheLocalActorName(Person $actor) {
-		// A team account belongs to a group rather than to a person, so there
-		// is no Nextcloud account to read a display name off. Its name is the
-		// group's, which is the only name it has — and returning here rather
-		// than raising is what keeps it in the actor cache: an actor that is
-		// not cached is one every read of it 404s on, which is what happened
-		// the first time a team posted anything.
+		// A team account takes its group's name; returning keeps it in the actor
+		// cache, without which every read of it 404s.
 		if (str_starts_with($actor->getUserId(), 'team/')) {
 			if ($actor->getName() === '') {
 				$actor->setName(substr($actor->getUserId(), strlen('team/')));
@@ -1127,10 +1007,7 @@ class AccountService {
 			return;
 		}
 
-		// A channel belongs to an account rather than to a person, so there is
-		// no Nextcloud user here either, and the same rule applies for the same
-		// reason: an actor that is not cached is one every read of it 404s on,
-		// which is exactly what happened to the first channel ever made.
+		// A channel has no Nextcloud user either; same reason as above.
 		if (str_starts_with($actor->getUserId(), 'channel/')) {
 			if ($actor->getName() === '') {
 				$actor->setName($actor->getPreferredUsername());
@@ -1144,12 +1021,8 @@ class AccountService {
 			throw new NoUserException();
 		}
 
-		// A Fediverse actor is public by definition — creating one is the act of
-		// publishing a profile — so anything short of an explicitly private
-		// display name is fair to federate. Requiring SCOPE_PUBLISHED meant
-		// that on a default install (where the scope is SCOPE_FEDERATED)
-		// nobody's display name ever reached their actor, and every client fell
-		// back to `preferredUsername`, i.e. the raw Nextcloud user id.
+		// A Fediverse actor is public by definition, so anything short of an
+		// explicitly private name is published; the default scope is SCOPE_FEDERATED.
 		$publishable = [
 			IAccountManager::SCOPE_PUBLISHED,
 			IAccountManager::SCOPE_FEDERATED,
@@ -1160,43 +1033,27 @@ class AccountService {
 			$displayNameProperty = $account->getProperty(IAccountManager::PROPERTY_DISPLAYNAME);
 
 			if (!in_array($displayNameProperty->getScope(), $publishable, true)) {
-				// deliberately kept private or instance-local: leave whatever
-				// the actor already carries alone rather than publishing it
+				// Private or instance-local: leave the actor's name alone.
 				return;
 			}
 		} catch (Exception $e) {
-			// The property could not be read at all, which is not the same as
-			// the user having asked for privacy: publish the name.
+			// Unreadable is not private: publish the name.
 			$this->logger->warning(
 				'could not read the account of a local actor, publishing its display name',
 				['userId' => $actor->getUserId(), 'exception' => $e]
 			);
 		}
 
-		// The name is the user backend's, as everywhere else in Nextcloud. The
-		// property's value is only a copy, written by core's listener for
-		// UserChangedEvent, which runs after the apps' listeners and not at
-		// all once one of them throws; it can lag behind the stored name.
+		// The user backend's name: the property is a copy written by core's
+		// UserChangedEvent listener and can lag behind.
 		$actor->setName($user->getDisplayName());
 	}
 
 	/**
-	 * Whether one Nextcloud profile property may go on a Fediverse actor.
-	 *
-	 * The same rule the display name has followed for a while, pulled out so
-	 * the picture follows it too: a Fediverse actor is public by definition --
-	 * creating one is the act of publishing a profile -- so anything short of
-	 * an explicitly private or instance-local setting is fair to federate.
-	 * Requiring `SCOPE_PUBLISHED` would mean that on a default install, where
-	 * the scope is `SCOPE_FEDERATED`, nothing ever reached the actor at all.
-	 *
-	 * The picture was published whatever the account said, which is what
-	 * somebody who sets it to "local" is asking this app not to do -- and the
-	 * one thing about the setting a reader can see from another server.
-	 *
-	 * Unknown properties and unreadable accounts answer true: the caller then
-	 * behaves as it did before this existed, which is the safe direction for a
-	 * profile that is already public.
+	 * Whether one Nextcloud profile property may go on a Fediverse actor:
+	 * anything short of an explicitly private or instance-local scope, since an
+	 * actor is public by definition (the default scope is `SCOPE_FEDERATED`).
+	 * Unknown properties and unreadable accounts answer true.
 	 */
 	public function mayPublish(Person $actor, string $property): bool {
 		$user = $this->userManager->get($actor->getUserId());
@@ -1218,28 +1075,13 @@ class AccountService {
 
 	/**
 	 * Writes the actor's handle into the `fediverse` field of the Nextcloud
-	 * profile, where the profile has nothing there yet.
+	 * profile, only when that field is empty, leaving its visibility alone.
 	 *
-	 * The field is Nextcloud's own place for "where I am on the Fediverse", and
-	 * an account created by this app is an answer to that question the person
-	 * did not have to type. It is filled in only when empty: a value already
-	 * there is theirs -- a Mastodon account they have had for years, most likely
-	 * -- and this app is not the one to overwrite it. The field's visibility is
-	 * left exactly as it was, for the same reason.
-	 *
-	 * Writing the account fires `UserUpdatedEvent`, whose listener calls back
-	 * into the cache refresh this runs from. That second pass finds the field
-	 * filled and writes nothing, so the loop is one bounce long and then stops.
-	 *
-	 * Nextcloud verifies the field before it stores it: a WebFinger request
-	 * to the handle's host over https, logged as an error when it fails. On
-	 * a server whose address is plain http that can never succeed, so it is
-	 * not tried; and a failure — a server that cannot reach its own public
-	 * address, say — is left alone for `HANDLE_PUBLISH_RETRY` rather than
-	 * tried again on every profile save and every cron pass. The refused
-	 * value is taken back off the account: it would otherwise stay on core's
-	 * in-memory copy and fail every later write to the account in this
-	 * process, the display name's included.
+	 * The resulting `UserUpdatedEvent` re-enters the cache refresh, which then
+	 * finds the field filled. Nextcloud verifies the field by WebFinger over
+	 * https, so it is not tried on a plain-http server, and a refused write is
+	 * left alone for `HANDLE_PUBLISH_RETRY` and taken back off core's in-memory
+	 * copy, which would otherwise fail every later write to the account.
 	 */
 	private function publishHandleOnProfile(Person $actor): void {
 		$user = $this->userManager->get($actor->getUserId());
@@ -1277,8 +1119,7 @@ class AccountService {
 				$this->configService->setValueForUser($userId, ConfigService::USER_HANDLE_PUBLISH_FAILED, '');
 			}
 		} catch (Exception $e) {
-			// a profile that cannot be written is a profile that stays as it
-			// was; the actor is fine either way
+			// The profile stays as it was; the actor is fine either way.
 			$property?->setValue($previous);
 			$this->configService->setValueForUser($userId, ConfigService::USER_HANDLE_PUBLISH_FAILED, (string)time());
 			$this->logger->debug('could not publish the handle on the Nextcloud profile', [
@@ -1289,9 +1130,8 @@ class AccountService {
 
 	/**
 	 * Whether a person may take this handle for the account they are about
-	 * to create. Their own user id, or anything the pattern allows that is
-	 * nobody else's: not another Nextcloud user's id (which would let one
-	 * person publish as another), not a handle an actor already holds.
+	 * to create: their own user id, or anything the pattern allows that is not
+	 * another Nextcloud user's id or an existing actor's handle.
 	 *
 	 * @throws InvalidHandleException
 	 * @throws AccountAlreadyExistsException
@@ -1310,11 +1150,8 @@ class AccountService {
 	}
 
 	/**
-	 * The fediverse handle a person's Nextcloud profile names, or ''.
-	 *
-	 * Somebody who has had an account on Mastodon for years does not need one
-	 * here; what their colleagues need is to find them, and the profile field
-	 * is where `ColleagueService` looks.
+	 * The fediverse handle a person's Nextcloud profile names, or ''; where
+	 * `ColleagueService` finds people who already have an account elsewhere.
 	 */
 	public function linkedHandle(string $userId): string {
 		$user = $this->userManager->get($userId);
@@ -1367,15 +1204,9 @@ class AccountService {
 	}
 
 	/**
-	 * A Fediverse handle is not a Nextcloud user id.
-	 *
-	 * It ends up in `preferredUsername`, in the actor's URL and in the
-	 * `acct:` WebFinger subject, so it has to survive being put in a URL and
-	 * has to match what other implementations accept — Mastodon and most
-	 * others allow letters, digits and `_`, with `.` and `-` inside. A user id
-	 * that does not (an LDAP UUID, an e-mail address, anything with a space)
-	 * produces an actor no remote server can resolve, which used to happen
-	 * silently because this method validated nothing at all.
+	 * A Fediverse handle ends up in `preferredUsername`, the actor URL and the
+	 * `acct:` WebFinger subject, so it must be URL-safe and match what Mastodon
+	 * and others accept: letters, digits and `_`, with `.` and `-` inside.
 	 *
 	 * @throws InvalidHandleException
 	 */
@@ -1399,13 +1230,10 @@ class AccountService {
 	}
 
 	/**
-	 * Derive a usable Fediverse handle from a Nextcloud user id.
-	 *
-	 * Called by the paths that create an account on the user's behalf, where
-	 * nobody got to choose a handle. The user id is used as-is when it already
-	 * qualifies, so existing installs keep the handles they have; otherwise it
-	 * is folded down to something resolvable and a numeric suffix is added
-	 * until it is free.
+	 * Derives a usable Fediverse handle from a Nextcloud user id, for paths
+	 * that create an account without the user choosing one. A qualifying user
+	 * id is used as is; otherwise it is folded down and given a numeric suffix
+	 * until free.
 	 */
 	public function generateHandleFromUserId(string $userId): string {
 		$candidate = $userId;
@@ -1413,16 +1241,14 @@ class AccountService {
 			$this->checkActorUsername($candidate);
 		} catch (InvalidHandleException $e) {
 			$candidate = strtolower($userId);
-			// anything outside the allowed set becomes an underscore, then
-			// runs of underscores collapse and the edges are trimmed
+			// Disallowed characters become underscores; runs collapse and edges are trimmed.
 			$candidate = preg_replace('/[^a-z0-9_.-]+/', '_', $candidate) ?? '';
 			$candidate = preg_replace('/_{2,}/', '_', $candidate) ?? '';
 			$candidate = trim($candidate, '_.-');
 			$candidate = substr($candidate, 0, self::HANDLE_MAX_LENGTH);
 
 			if ($candidate === '' || preg_match(self::HANDLE_PATTERN, $candidate) !== 1) {
-				// nothing usable survived (a purely non-latin id, say): fall
-				// back to something stable and unique for this user
+				// Nothing usable survived (a purely non-Latin id, say).
 				$candidate = 'user_' . substr(hash('sha256', $userId), 0, 12);
 			}
 
@@ -1462,16 +1288,9 @@ class AccountService {
 	 * Removes the local accounts whose deletion is older than the grace
 	 * period, a bounded batch per pass.
 	 *
-	 * An account that still has deliveries queued — its `Delete` to a server
-	 * that was down, say — is kept a pass longer: every one of them is signed
-	 * with its key when it goes out, and a delivery whose key is gone is
-	 * dropped. The queue gives up on a row after `RequestQueueService::
-	 * MAX_AGE` at the latest, so this keeps an account for days, not for ever.
-	 *
-	 * Asks the database for those rows only: reading every local account, key
-	 * pair included, to find the handful marked deleted is a memory-limit
-	 * fatal on a large instance, which kills the whole cron run rather than
-	 * this step.
+	 * An account with deliveries still queued is kept: they are signed with its
+	 * key when sent. The queue gives up after `RequestQueueService::MAX_AGE`, so
+	 * this is days at most.
 	 *
 	 * @return int
 	 * @throws Exception
@@ -1501,21 +1320,10 @@ class AccountService {
 	 * @throws Exception
 	 */
 	/**
-	 * Refreshes the cached copy of the local accounts, a page at a time.
-	 *
-	 * It used to read **every** local account into one array on every pass,
-	 * twelve minutes apart, and do a dozen queries and an avatar read for each.
-	 * At a million accounts the array does not fit in memory; at a hundred
-	 * thousand it does and the work behind it is hours, in a job that fires
-	 * every twelve minutes — and nothing says so, the cron simply falls behind.
-	 *
-	 * Now it walks: `LOCAL_ACTOR_BATCH` accounts a page, at most
-	 * `LOCAL_ACTOR_PAGES` pages a pass, stopping at the pass deadline, and
-	 * remembering in app config where it got to. A large instance therefore
-	 * takes many passes to go round, which is the correct behaviour for a
-	 * refresh nobody is waiting on — and the things that actually change
-	 * (a display name, an avatar, a follow, a post) already refresh the row
-	 * where they happen.
+	 * Refreshes the cached copy of the local accounts, `LOCAL_ACTOR_BATCH` per
+	 * page and at most `LOCAL_ACTOR_PAGES` pages a pass, remembering where it
+	 * got to. Real changes refresh their row where they happen, so a large
+	 * instance taking many passes is fine.
 	 *
 	 * @param int $deadline when the pass must stop, or 0 for no limit
 	 *

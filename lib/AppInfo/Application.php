@@ -121,8 +121,7 @@ class Application extends App implements IBootstrap {
 	public function register(IRegistrationContext $context): void {
 		$context->registerServiceAlias(IRecommendationSignalEvents::class, RecommendationSignalService::class);
 		$context->registerServiceAlias(IRecommendationSignalRecorder::class, RecommendationSignalService::class);
-		// before anything else it registers: an address at `no_access` is
-		// refused whatever it was asking for
+		// Before anything else: an address at `no_access` is refused for any route.
 		$context->registerMiddleware(AccessBlockMiddleware::class);
 		// after the access check, so a refused address is never counted
 		$context->registerMiddleware(RateLimitHeadersMiddleware::class);
@@ -132,8 +131,7 @@ class Application extends App implements IBootstrap {
 		$context->registerMiddleware(HideCountsMiddleware::class);
 		// the client API readable by browser clients of another origin
 		$context->registerMiddleware(ClientApiCorsMiddleware::class);
-		// global: it keeps self-registered external users out of every other
-		// app's controllers, not only this app's
+		// Global: keeps self-registered external users out of other apps' controllers.
 		$context->registerMiddleware(ExternalScopeMiddleware::class, true);
 		$context->registerSearchProvider(UnifiedSearchProvider::class);
 		$context->registerReferenceProvider(PostReferenceProvider::class);
@@ -149,25 +147,22 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(PostPublishedEvent::class, AtprotoPostListener::class);
 		$context->registerEventListener(PostEditedEvent::class, AtprotoPostListener::class);
 		$context->registerEventListener(PostDeletedEvent::class, AtprotoPostListener::class);
-		// the class is the Files app's, not OCP's; the name is a string here and
-		// the listener is only ever built when Files dispatches the event
+		// The Files app's class, not OCP's; only built when Files dispatches it.
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesScriptsListener::class);
 		// the group lists follow the groups the moment they change
 		$context->registerEventListener(UserAddedEvent::class, GroupListListener::class);
 		$context->registerEventListener(UserRemovedEvent::class, GroupListListener::class);
 		$context->registerEventListener(GroupDeletedEvent::class, GroupListListener::class);
 		$context->registerEventListener(GroupChangedEvent::class, GroupListListener::class);
-		// replies to a post made from Files, as comments on the file, and the
-		// author's comments there as replies
+		// Replies to a post made from Files become comments on the file, and back.
 		$context->registerEventListener(PostPublishedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(PostEditedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(PostDeletedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(CommentAddedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(CommentUpdatedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(CommentDeletedEvent::class, FileCommentsListener::class);
-		// self-registered external users: kept out of the system address
-		// book, the user lists, other apps' first-login setup, the page
-		// chrome, the navigation and WebDAV
+		// Self-registered external users are kept out of the system address book,
+		// user lists, other apps' first-login setup, page chrome, navigation and WebDAV.
 		$context->registerEventListener(CardCreatedEvent::class, ExternalAddressBookListener::class);
 		$context->registerEventListener(CardUpdatedEvent::class, ExternalAddressBookListener::class);
 		$context->registerEventListener(UserEnumerationFilterEvent::class, ExternalUserStatusListener::class);
@@ -187,8 +182,8 @@ class Application extends App implements IBootstrap {
 		$context->registerDashboardWidget(SocialFederationHealthWidget::class);
 		$context->registerNotifierService(Notifier::class);
 		$context->registerUserMigrator(SocialMigrator::class);
-		// Administration → Overview: what breaks federation, or switches a
-		// protection off, silently — in the place an administrator already looks
+		// Administration → Overview: what silently breaks federation or disables
+		// a protection.
 		$context->registerSetupCheck(WebFingerReachable::class);
 		$context->registerSetupCheck(CloudAddressMatches::class);
 		$context->registerSetupCheck(ReachableByStrictPeers::class);
@@ -206,13 +201,10 @@ class Application extends App implements IBootstrap {
 	}
 
 	/**
-	 * Registers the backends of self-registered external users.
-	 *
-	 * This app is of the `extended_authentication` type, so Nextcloud loads
-	 * it before anybody logs in, on every entry point, and an external user
-	 * can log in through the same form as everybody else. `remote.php` loads
-	 * it right before handing the request to WebDAV, which is where an
-	 * external user is turned away from it.
+	 * Registers the backends of self-registered external users. As an
+	 * `extended_authentication` app this loads before login on every entry
+	 * point, so external users use the normal login form; `remote.php` loads it
+	 * before WebDAV, which turns them away.
 	 */
 	#[\Override]
 	public function boot(IBootContext $context): void {

@@ -55,8 +55,7 @@ class DocumentService {
 
 	/**
 	 * The bytes could not be decoded as the image they claimed to be, or were
-	 * too large to decode. Recorded on the row so the caching run stops
-	 * offering it again on every pass.
+	 * too large to decode; recorded so the caching run stops retrying.
 	 */
 	public const ERROR_CONTENT = 4;
 
@@ -78,17 +77,10 @@ class DocumentService {
 	/**
 	 * Seconds one attachment download may take when nobody is waiting for it.
 	 *
-	 * A federation request is capped at ConfigService::DEFAULT_REQUEST_TIMEOUT
-	 * for the *whole* transfer, not per read: the server's HTTP client is
-	 * curl, and curl's timeout ends a download that is still arriving. Ten
-	 * seconds is right inside an inbox request, and is also the end of any
-	 * picture larger than ten seconds of the origin's upstream -- a phone
-	 * photo from a Nextcloud on a home connection is several megabytes, and
-	 * Social stores and serves the original. The inbox leaves such a picture
-	 * to `RemoteMediaPrefetcher`, so the prefetch has to be able to finish it.
-	 *
-	 * Below `CacheDocumentsRequest::CACHING_TIMEOUT`, so that a download
-	 * still running is never started a second time by the next pass.
+	 * curl's timeout covers the whole transfer, and the federation default ends
+	 * a large photo from a slow origin, which the inbox leaves to
+	 * `RemoteMediaPrefetcher`. Below `CacheDocumentsRequest::CACHING_TIMEOUT`, so
+	 * the next pass never restarts a download still running.
 	 */
 	public const BACKGROUND_FETCH_TIMEOUT = 120;
 
@@ -147,16 +139,14 @@ class DocumentService {
 
 	/**
 	 * Stores the file of a remote document whose row is marked as being
-	 * cached, and writes down how it went: the copy and its sniffed type, or
-	 * why there is none. `$store` puts the file in place the way
-	 * `CacheDocumentService::saveRemoteFileToCache()` does -- fetching it
-	 * itself, or from bytes already downloaded -- returns the type the bytes
-	 * turned out to be, and throws what that throws.
+	 * cached, and records the outcome: the copy and its sniffed type, or why
+	 * there is none. `$store` puts the file in place (see
+	 * `CacheDocumentService::saveRemoteFileToCache()`) and returns the type
+	 * the bytes turned out to be.
 	 *
-	 * A failure that will fail the same way again is recorded on the row (or
-	 * the row is forgotten, when the origin says the file is gone or the
-	 * instance is blocked), so that nothing offers it again; a network or
-	 * server failure leaves the row as it was for a later try.
+	 * A permanent failure is recorded on the row (or the row forgotten when the
+	 * file is gone or the instance blocked); a network or server failure leaves
+	 * the row for a later try.
 	 *
 	 * @param \Closure(Document): string $store
 	 *
@@ -169,11 +159,8 @@ class DocumentService {
 		try {
 			$document->setActorIcon($this->cacheDocumentsRequest->isActorIcon($document));
 			$mime = $store($document);
-			// The mime type is sniffed from the bytes at this point and nowhere
-			// else; unpersisted, the copy is later served with no Content-Type.
-			// It replaces the type the peer declared rather than filling in for
-			// it: `/media/{uuid}` serves these bytes from this instance's own
-			// origin, so what it says they are has to be what they are.
+			// The sniffed type replaces the declared one: `/media/{uuid}` serves these
+			// bytes from this instance's own origin.
 			if ($mime !== '') {
 				$document->setMimeType($mime);
 				$document->setMediaType($mime);
@@ -184,9 +171,8 @@ class DocumentService {
 
 			return self::STORED;
 		} catch (CacheContentDecodeException $e) {
-			// A remote peer can hand us a PNG header followed by garbage, which
-			// passes the mime sniff and then fails to decode. Left unrecorded the
-			// row comes back on every caching run, so mark it and move on.
+			// A valid header followed by garbage passes the sniff but fails to decode;
+			// recorded so the row is not retried on every run.
 			$this->miscService->log(
 				'Cannot decode document ' . json_encode($document) . ' ' . json_encode($e), 1
 			);
@@ -203,8 +189,7 @@ class DocumentService {
 			);
 			$document->setError(self::ERROR_PERMISSION);
 		} catch (RequestResultSizeException|CacheContentSizeException $e) {
-			// either the download was cut off at the ceiling, or what arrived
-			// turned out to be larger than this instance stores of that kind
+			// Cut off at the ceiling, or larger than this instance stores of that kind.
 			$this->miscService->log(
 				'Downloaded file is too big ' . json_encode($document) . ' ' . json_encode($e), 1
 			);
@@ -225,10 +210,9 @@ class DocumentService {
 	}
 
 	/**
-	 * `cacheRemoteDocument()` for a caller nobody is waiting on -- the retry
-	 * command -- with the download given
-	 * `BACKGROUND_FETCH_TIMEOUT` rather than the federation default. Reaching
-	 * the origin keeps the default, so a host that is down still fails fast.
+	 * `cacheRemoteDocument()` for a caller nobody is waiting on (the retry
+	 * command), with `BACKGROUND_FETCH_TIMEOUT` for the download; connecting
+	 * keeps the default so a host that is down still fails fast.
 	 *
 	 * @throws CacheDocumentDoesNotExistException
 	 * @throws MalformedArrayException
@@ -286,12 +270,8 @@ class DocumentService {
 
 	/**
 	 * The document behind an id, as the viewer is allowed to see it.
-	 *
-	 * `/document/get` and `/document/get/resized` take a bare document id from
-	 * whoever is asking, so a session alone must not be enough: without this
-	 * check any account could name any id and read another account's
-	 * attachments, direct messages included. Same rule as `/media/{uuid}`,
-	 * widened by what the viewer's own timeline already shows them.
+	 * `/document/get` takes any id from the caller, so without this check any
+	 * account could read another's attachments, direct messages included.
 	 *
 	 * @throws CacheContentException
 	 * @throws CacheDocumentDoesNotExistException
@@ -342,17 +322,15 @@ class DocumentService {
 		$document = $this->cacheDocumentsRequest->getById($id);
 
 		if (!$this->viewerMayRead($document, $viewer)) {
-			// deliberately indistinguishable from an id that does not exist:
-			// probing must not tell the caller which ids are real
+			// Indistinguishable from an unknown id, so probing reveals nothing.
 			throw new CacheDocumentDoesNotExistException('unknown document');
 		}
 	}
 
 	/**
-	 * A public copy is readable by anyone, as `/media/{uuid}` already decided.
-	 * Beyond that a viewer may read their own uploads, their own actor's avatar
-	 * and header, and whatever hangs off a post their timeline would show them —
-	 * which is the check that keeps a direct message's attachment private.
+	 * A public copy is readable by anyone. Otherwise a viewer may read their own
+	 * uploads, their own avatar and header, and whatever hangs off a post their
+	 * timeline would show them.
 	 */
 	private function viewerMayRead(Document $document, ?Person $viewer): bool {
 		if ($document->isPublic()) {
@@ -391,8 +369,7 @@ class DocumentService {
 
 	/**
 	 * The cached copy of a remote url, when the caching run has already fetched
-	 * it. Lets a route hand over bytes this instance holds rather than pointing
-	 * the browser at the remote host.
+	 * it, so a route can serve the bytes instead of pointing at the remote host.
 	 *
 	 * @throws CacheContentException
 	 * @throws CacheDocumentDoesNotExistException
@@ -433,16 +410,13 @@ class DocumentService {
 	}
 
 	/**
-	 * Fetches a cached remote file again when its row names it and the disk
-	 * does not have it: the media cache purge took it (`MediaPurgeService::purgeCache()`),
-	 * or it went missing by other means.
+	 * Fetches a cached remote file again when its row names it and the disk does
+	 * not have it (e.g. `MediaPurgeService::purgeCache()` removed it), under the
+	 * names the row already has.
 	 *
-	 * The file goes back under the names the row already has, which are in
-	 * every link this instance has served. Only for what can be fetched
-	 * again -- not an upload from here, not a row marked as refused -- and at
-	 * most once per `CacheDocumentsRequest::CACHING_TIMEOUT`, which `caching`
-	 * records: a busy page asks for the same picture many times at once, and
-	 * an origin that is down should not be asked on every one of them.
+	 * Only for what can be fetched again (not a local upload, not a refused
+	 * row), and at most once per `CacheDocumentsRequest::CACHING_TIMEOUT`, so a
+	 * busy page does not hammer an origin that is down.
 	 *
 	 * @return bool whether the file is back
 	 */
@@ -461,8 +435,7 @@ class DocumentService {
 			$this->cacheDocumentsRequest->initCaching($document);
 			$document->setActorIcon($this->cacheDocumentsRequest->isActorIcon($document));
 			$resized = $document->getResizedCopy();
-			// the type, size and names of what arrived are set on the
-			// document as it is stored, and written with it
+			// The type, size and names are set on the document as it is stored.
 			$this->configService->withRequestTimeout(
 				self::BACKGROUND_FETCH_TIMEOUT,
 				fn () => $this->cacheService->restoreRemoteCopy($document),
@@ -470,8 +443,7 @@ class DocumentService {
 			);
 			$this->cacheDocumentsRequest->endCaching($document);
 
-			// a preview the row had no name for has one now, and the post
-			// carries its attachments as it last saw them
+			// Record a newly named preview and refresh the post's attachments.
 			if ($document->getResizedCopy() !== $resized) {
 				$this->streamRequest->updateAttachments($document);
 			}
@@ -489,21 +461,11 @@ class DocumentService {
 	/**
 	 * The copy behind `/media/{uuid}`, with the row that describes it.
 	 *
-	 * The uuid *is* the access control. Every copy is named by a version-4
-	 * uuid drawn from `random_bytes()` (`TStringTools::uuid()`), 122 bits
-	 * nobody can enumerate, and the link is only ever handed to the people a
-	 * post was addressed to. This is Mastodon's own model — media is a
-	 * capability URL, reachable by whoever holds it, whatever the visibility
-	 * of the post it hangs off — and it is the model the rest of the fediverse
-	 * relies on: a remote server fetches an attachment unsigned, on behalf of
-	 * a reader it has already checked. This method used to refuse any row not
-	 * flagged `public`, which turned every followers-only or direct post with
-	 * a picture into a broken image on every Mastodon that received it, while
-	 * protecting nothing the uuid did not already protect.
-	 *
-	 * The row is still required — no row, no file — so a copy this app has
-	 * forgotten about is not served, and so the caller learns the visibility
-	 * (`Document::isPublic()`) to decide how shared caches may treat the bytes.
+	 * The uuid is the access control: a random v4 uuid
+	 * (`TStringTools::uuid()`) handed only to the post's audience, which is
+	 * Mastodon's capability-URL model that remote servers rely on when fetching
+	 * unsigned. A row is still required, and tells the caller the visibility
+	 * (`Document::isPublic()`) for its cache headers.
 	 *
 	 * @return array{0: ISimpleFile, 1: Document}
 	 * @throws NotFoundException
@@ -534,13 +496,10 @@ class DocumentService {
 
 	/**
 	 * The remote file behind `/media/stream/{nid}`, open and ready to be
-	 * passed on -- see `StreamedRemoteResponse` for why this instance stands
-	 * in the middle at all.
+	 * passed on (see `StreamedRemoteResponse`).
 	 *
-	 * The row is the allowlist. A proxy that took a url would be an open one,
-	 * so what the route accepts is a key into `social_cache_doc`, and only a
-	 * row this app itself wrote as streamable answers: anything with a local
-	 * copy is served from disk by `/media/{uuid}` and has no business here.
+	 * Only a row this app wrote as streamable answers, so this cannot be used as
+	 * an open proxy; anything with a local copy is served by `/media/{uuid}`.
 	 *
 	 * @param string $range the client's own `Range` header, forwarded verbatim
 	 *
@@ -584,22 +543,10 @@ class DocumentService {
 	}
 
 	/**
-	 * An HLS playlist, with every URI in it pointed back through this server.
-	 *
-	 * A PeerTube transcoding to HLS — the default, and what a public instance
-	 * federates — publishes a `.m3u8` and nothing a browser other than Safari
-	 * can open. hls.js fixes the browser half; this fixes the privacy half.
-	 * A playlist names its segments **relative to itself**, so handing one to a
-	 * player verbatim would have every segment fetched straight from the
-	 * origin — which is exactly the thing the byte proxy exists to prevent, and
-	 * worse, because it is one request per few seconds of video.
-	 *
-	 * So the playlist is read whole (they are kilobytes), every URI in it is
-	 * rewritten to `/media/hls/{nid}?u=…`, and the segments come back through
-	 * the same proxy. A nested playlist — the master listing one per
-	 * resolution — is rewritten the same way and its children are playlists
-	 * again, which is why the rewrite is on URIs rather than on file
-	 * extensions.
+	 * An HLS playlist (as PeerTube publishes), with every URI in it rewritten to
+	 * `/media/hls/{nid}?u=…` so the player fetches no segment from the origin.
+	 * Nested playlists are rewritten the same way, which is why the rewrite is
+	 * on URIs rather than file extensions.
 	 *
 	 * @return array{document: Document, playlist: string}
 	 * @throws NotFoundException
@@ -619,13 +566,8 @@ class DocumentService {
 	}
 
 	/**
-	 * One file out of a playlist, fetched from the origin and streamed on.
-	 *
-	 * The url is **not** trusted from the caller: it has to be on the same host
-	 * as the playlist the nid names, which is what keeps this from being a
-	 * proxy for the whole internet with a server behind it. That is the same
-	 * property `openStreamed()` has by taking a row id rather than a url, one
-	 * level further in.
+	 * One file out of a playlist, fetched from the origin and streamed on. The
+	 * url must be on the playlist's host, so this is not a general proxy.
 	 *
 	 * @return array{type: string, stream: resource, status: int, headers: array}
 	 * @throws NotFoundException
@@ -652,17 +594,10 @@ class DocumentService {
 	}
 
 	/**
-	 * One of a video's subtitle tracks, read from where it was published.
-	 *
-	 * The page may not load a track from another host (`media-src 'self'`),
-	 * and a reader who turns subtitles on should not be introduced to the
-	 * video's server for it, so the track comes through here like the video
-	 * does, stored nowhere. Which track is a position in the list the post
-	 * itself carries (`video.captions`), never a url from the caller, which
-	 * is what keeps this from fetching anything anybody names.
-	 *
-	 * WebVTT only — the one format a `<track>` plays — read whole up to
-	 * `MAX_CAPTION`; anything else is refused rather than passed on.
+	 * One of a video's subtitle tracks, proxied because of `media-src 'self'`
+	 * and the reader's privacy. The track is picked by position in the post's
+	 * own `video.captions`, never by a url from the caller. WebVTT only, up to
+	 * `MAX_CAPTION`.
 	 *
 	 * @param Stream $post the video, already read as the viewer may see it
 	 *
@@ -709,11 +644,8 @@ class DocumentService {
 	}
 
 	/**
-	 * Every URI in a playlist, pointed back through this server.
-	 *
-	 * A line that is not a comment is a URI; a comment that carries one does so
-	 * in a `URI="…"` attribute (the keys and the encryption keys among them).
-	 * Both are rewritten, because a player follows both.
+	 * Every URI in a playlist, pointed back through this server: each
+	 * non-comment line, and each `URI="…"` attribute in a comment line.
 	 *
 	 * @param callable(string): string $proxyUrl
 	 */
@@ -746,10 +678,7 @@ class DocumentService {
 
 	/**
 	 * The master playlist for a stored video, or null when it has no ladder.
-	 *
-	 * Addressed by uuid rather than by row id, exactly as `/media/{uuid}` is:
-	 * a ladder is the same bytes as the video, so it must be no easier to
-	 * reach than the video. A row id is a small integer and would be.
+	 * Addressed by uuid like `/media/{uuid}`, since a row id is guessable.
 	 *
 	 * @param callable(int): string $rungUrl what to call each rung in the
 	 *                                       master playlist, given its height
@@ -802,8 +731,7 @@ class DocumentService {
 		try {
 			return [$this->cacheService->getContentFromCache($rendition->getLocalCopy()), $document];
 		} catch (Exception $e) {
-			// the row says there is a rung and the store disagrees: a 404 for
-			// this rung, and the player falls back to another one
+			// The row names a rung the store lacks: 404 and the player falls back.
 			throw new NotFoundException('the rung is not there');
 		}
 	}
@@ -850,11 +778,8 @@ class DocumentService {
 	}
 
 	/**
-	 * What a file inside a playlist is, by its name.
-	 *
-	 * Stated rather than sniffed, and narrow: these are the only four things a
-	 * playlist ever points at, and a player is handed a type it can act on
-	 * rather than one it has to guess.
+	 * What a file inside a playlist is, by its name: one of the four types a
+	 * playlist points at.
 	 */
 	private function playlistPartType(string $url): string {
 		$path = strtolower((string)parse_url($url, PHP_URL_PATH));
@@ -878,9 +803,8 @@ class DocumentService {
 	}
 
 	/**
-	 * Resolves an edited post's complete attachment list from the author's own uploads.
-	 * The requested order is preserved; an unknown or other account's id is refused
-	 * rather than silently publishing a different list from the one the client chose.
+	 * Resolves an edited post's complete attachment list from the author's own
+	 * uploads, in the requested order; an unknown or other account's id is refused.
 	 *
 	 * @param list<int> $mediaIds
 	 * @return MediaAttachment[]
@@ -932,13 +856,11 @@ class DocumentService {
 
 	/**
 	 * Applies Mastodon's `media_attributes` to the attachments of a post being
-	 * edited: the description and the focal point of each one it names.
+	 * edited: the description and focal point of each one it names.
 	 *
-	 * Only the post's own attachments, and only documents `$account` uploaded:
-	 * an id the post does not carry is ignored, as Mastodon ignores it. Each
-	 * document is updated first, so a later rebuild of the post's copies (a
-	 * poster frame, a conversion) does not bring the old words back, and the
-	 * copy is then rebuilt from it the way `StreamRequest` rebuilds one.
+	 * Only the post's own attachments uploaded by `$account`; other ids are
+	 * ignored, as in Mastodon. The document is updated first, so a later
+	 * rebuild of the post's copies keeps the change.
 	 *
 	 * @param MediaAttachment[] $attachments the post's attachments
 	 * @param list<array<string, mixed>> $attributes `id` and `description` and/or `focus` each
@@ -985,11 +907,8 @@ class DocumentService {
 	}
 
 	/**
-	 * Resolve an explicitly supplied attachment list for a post edit.
-	 *
-	 * Unlike `media_attributes`, which can only update attachments already on
-	 * the post, `media_ids` replaces the full list. Only uploads owned by the
-	 * author can be attached, and their order follows the request.
+	 * Resolves the full `media_ids` list for a post edit: only the author's own
+	 * uploads, in the requested order.
 	 *
 	 * @param list<int|string> $mediaIds
 	 * @return MediaAttachment[]
@@ -1043,22 +962,16 @@ class DocumentService {
 	}
 
 	/**
-	 * Whether one of `$actorId`'s posts carries this upload.
-	 *
-	 * An upload is not tied to its post by `parent_id` (it exists before the
-	 * post does), so the post is found by its stored copy, which is keyed by
-	 * the document's nid.
+	 * Whether one of `$actorId`'s posts carries this upload, found by the post's
+	 * stored copy (an upload has no `parent_id` until posted).
 	 */
 	public function isAttachedToAPostBy(Document $document, string $actorId): bool {
 		return $this->streamRequest->carriesUpload($actorId, (string)$document->getNid());
 	}
 
 	/**
-	 * Stores the focal point a client just set.
-	 *
-	 * The document's cached `meta` is dropped first so that
-	 * `convertToMediaAttachment()` rebuilds it from the new focus rather than
-	 * handing back the blob it was loaded with.
+	 * Stores the focal point a client just set, dropping the cached `meta` so
+	 * `convertToMediaAttachment()` rebuilds it.
 	 */
 	public function updateFocus(Document $document, float $x, float $y): void {
 		$document->setFocus($x, $y);
@@ -1069,18 +982,9 @@ class DocumentService {
 	}
 
 	/**
-	 * Fills in the type of documents that were stored without one.
-	 *
-	 * A row written with an empty `media_type` never gained one: the caching
-	 * run only looks at rows with *no* local copy, so a document that was
-	 * fetched, stored, and whose type was never written stayed that way for
-	 * good -- `convertToMediaAttachment()` leaves `type` unset, which is how a
-	 * client decides to show nothing at all, and the copy went out with no
-	 * Content-Type. The answer is read back from the stored bytes, which is
-	 * the only place it still exists.
-	 *
-	 * Bounded per run like every other sweep here, and it converges: a row
-	 * that is filled in is not a candidate again.
+	 * Fills in the type of stored documents that have none, sniffed from the
+	 * stored bytes; without one a client shows nothing. Bounded per run, and a
+	 * filled row is not a candidate again.
 	 *
 	 * @return int how many rows were filled in
 	 */
@@ -1110,13 +1014,9 @@ class DocumentService {
 
 	/**
 	 * The icon document of a local account: this app's avatar route of the
-	 * username (`Person::localAvatarUrl()`), never Nextcloud's own, which
-	 * names the login. The avatar's version is in the address and each
-	 * version is a document of its own, so the address changes with the
-	 * picture — a peer fetches the picture again only when the address
-	 * changes, and the avatar route is served unchanged for a day. The
-	 * document is local and points at the avatar itself; nothing is
-	 * downloaded from this server's own address.
+	 * username (`Person::localAvatarUrl()`), not Nextcloud's, which names the
+	 * login. The avatar version is in the address, so peers refetch only when
+	 * the picture changes. Nothing is downloaded.
 	 *
 	 * @return string the document's id
 	 * @throws SocialAppConfigException
@@ -1131,8 +1031,7 @@ class DocumentService {
 		try {
 			$icon = $this->cacheDocumentsRequest->getByUrl($url);
 			if ($icon->getMediaType() === '') {
-				// cached before the mime was recorded: fill it in on the way
-				// past rather than wait for the avatar to change
+				// Cached without a type: fill it in now.
 				$icon->setMediaType($this->localAvatarMimeType($actor->getUserId()));
 				$this->cacheDocumentsRequest->update($icon);
 			}
@@ -1141,8 +1040,7 @@ class DocumentService {
 			$icon = AP::instance()->getItemFromType(Image::TYPE);
 			$icon->generateUniqueId('/documents/avatar');
 			$icon->setUrl($url);
-			// what the avatar route will actually serve. It used to be left
-			// empty, and an empty `mediaType` is a field peers validate
+			// Peers validate `mediaType`, so it must not be empty.
 			$icon->setMediaType($this->localAvatarMimeType($actor->getUserId()));
 			$icon->setLocalCopy(Document::COPY_LOCAL_AVATAR);
 			$icon->setLocal(true);
@@ -1159,11 +1057,8 @@ class DocumentService {
 	}
 
 	/**
-	 * The mime of the file Nextcloud's avatar route serves for a user.
-	 *
-	 * PNG where nothing better is known: it is what a generated avatar is,
-	 * and an uploaded one is stored in its own format, which the avatar
-	 * manager knows and this method asks.
+	 * The mime type Nextcloud's avatar route serves for a user; PNG for a
+	 * generated avatar.
 	 */
 	private function localAvatarMimeType(string $userId): string {
 		try {
@@ -1176,16 +1071,10 @@ class DocumentService {
 	}
 
 	/**
-	 * Stores a file that is already on this server as one of an account's own
-	 * attachments, on the post it belongs to.
-	 *
-	 * The bytes go through `saveFromTempToCache()`, which is the path a file
-	 * picked in the composer takes: the type is sniffed from the content,
-	 * anything this app does not store is refused, the camera's metadata comes
-	 * off and a format no browser can draw becomes one it can. So a picture put
-	 * back from an export archive is stored exactly as one posted today, and an
-	 * archive -- a file a user hands the server -- cannot carry in something the
-	 * upload route would have turned away.
+	 * Stores a file already on this server as one of an account's own
+	 * attachments, through the composer's upload path (`saveFromTempToCache()`):
+	 * type sniffed, unsupported types refused, metadata stripped. So an archive
+	 * import cannot carry in what an upload would refuse.
 	 *
 	 * @param string $parentId the post this hangs off, or '' for an upload that
 	 *                         has not been posted yet

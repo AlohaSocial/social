@@ -25,52 +25,30 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The first post an account writes here, and the posts that read like spam.
+ * Holds posts for a moderator: an account's first post (`review_first_post`,
+ * off by default), posts tripping a very small set of spam rules
+ * (`autospam`: a wall of links, mentions scattered at strangers), and posts
+ * with a video (`review_videos`). Rules, not scores, so a moderator can judge
+ * the reason at a glance.
  *
- * Two switches, both on by default, both an administrator's to turn off:
+ * Never held: a direct message (it would show private correspondence to a
+ * moderator who was not addressed; it also does not count as having posted,
+ * see `StreamRequest::countPostsBy()`), and a post by an account a moderator
+ * already decided about.
  *
- *  - **first-post review** holds the first post of an account that has
- *    published nothing here yet. It is the cheapest spam measure there is on a
- *    server whose accounts are Nextcloud users: a spammer has to get an
- *    account on this instance first, and the first thing they do with it is
- *    seen by a person before it reaches anybody else.
- *  - **autospam** holds a post that trips one of a very small set of rules —
- *    a wall of links, or mentions scattered at accounts with no connection to
- *    the author. No wordlist and no score: a queue that says "0.82" tells a
- *    moderator nothing they can act on, while "seven links" is something a
- *    person can agree or disagree with in a second.
- *
- * Two things are never held, and both matter more than the rules do:
- *
- *  - A **direct message**. Holding one would put private correspondence in
- *    front of a moderator who was not addressed, for a machine's reason. A
- *    spammer sending DMs is dealt with by the people who receive them, through
- *    a report — by a person who was actually written to. A direct message does
- *    not count as having posted here either (`StreamRequest::countPostsBy()`):
- *    otherwise an account could send one message to itself and be past
- *    first-post review a second later.
- *  - A post by an account with a **moderation decision** already against it.
- *    That account's posts are being dealt with by whatever the moderator
- *    decided; the queue is for accounts nobody has looked at yet.
- *
- * What is held is the *request*, never a row in `social_stream`. See the
- * migration for why: a held post that existed as a row with a flag on it would
- * be one forgotten predicate away from a timeline, and this app has shipped
- * that leak before.
+ * What is held is the request, never a `social_stream` row, so a held post
+ * cannot leak into a timeline through a forgotten predicate.
  */
 class PostReviewService {
 	/**
-	 * How many posts one account may have waiting.
-	 *
-	 * The cap is what stops a determined spammer turning the queue into the
-	 * thing that has to be moderated. Past it the post is refused outright,
-	 * which is the honest answer: nobody is going to read the fortieth.
+	 * How many posts one account may have waiting; past it a post is refused,
+	 * so a spammer cannot flood the queue.
 	 */
 	public const MAX_PENDING_PER_ACTOR = 20;
 
 	/**
 	 * The most posts an account can be asked to have approved before it is
-	 * trusted. Past this it is not a review queue, it is a permission.
+	 * trusted.
 	 */
 	public const MAX_POSTS_BEFORE_TRUSTED = 20;
 
@@ -105,13 +83,8 @@ class PostReviewService {
 	}
 
 	/**
-	 * How many posts an account publishes before it stops being held.
-	 *
-	 * An account graduates by having that many posts approved — which is a
-	 * person having looked at it that many times, and is the only measure of
-	 * trust this app has that is not a guess. One by default, which is what
-	 * "first-post review" has always meant; bounded so that a mistyped setting
-	 * cannot hold an account's posts for ever.
+	 * How many approved posts an account needs before it stops being held; one
+	 * by default, bounded so a mistyped setting cannot hold an account for ever.
 	 */
 	public function postsBeforeTrusted(): int {
 		return max(1, min(
@@ -132,9 +105,7 @@ class PostReviewService {
 
 	/**
 	 * Which rule says a person should see this post first, or `''` for none.
-	 *
-	 * Deliberately cheap: one count of the account's posts, and string work on
-	 * the text. It runs inside every post anybody writes.
+	 * Cheap (one count and string work), as it runs on every post.
 	 *
 	 * @param string $visibility as the post will be published, not as the
 	 *                           client sent it — an absent visibility has
@@ -150,18 +121,13 @@ class PostReviewService {
 			return '';
 		}
 
-		// Somebody who can empty the queue is not somebody to put in it, and
-		// that holds for the video rule as much as for the other three — the
-		// case that made it obvious was the first post on a brand-new
-		// instance; see `mayModerate()`.
+		// Moderators are never held, for the video rule as for the others.
 		if ($this->mayModerate($actor)) {
 			return '';
 		}
 
-		// Before the "already decided" gate, and deliberately: the other rules
-		// are about an account nobody has vouched for yet and stop applying
-		// once somebody has, while this one is about the video. An instance
-		// that has asked to see videos has asked to see all of them.
+		// Before the "already decided" gate: this rule is about the video, not about
+		// an unvouched account.
 		if ($hasVideo && $this->reviewsVideos()) {
 			return HeldPost::REASON_VIDEO;
 		}
@@ -186,12 +152,8 @@ class PostReviewService {
 	}
 
 	/**
-	 * Whether this account is one of the people the queue is drained by.
-	 *
-	 * Asked of Nextcloud rather than stored: an administrator today is an
-	 * administrator for as long as the group says so, and a copy would drift.
-	 * A team account and any other actor with no Nextcloud user behind it is
-	 * not an administrator, which is what the null check says.
+	 * Whether this account is a Nextcloud admin who drains the queue, asked of
+	 * Nextcloud each time. An actor without a Nextcloud user (a team) is not.
 	 */
 	private function mayModerate(Person $actor): bool {
 		$userId = $actor->getUserId();
@@ -220,9 +182,8 @@ class PostReviewService {
 			->setParams($params)
 			->setReason($reason);
 
-		// 0 means the same post was already waiting: the unique index on the
-		// digest settled it, and the row that is there is the one to answer
-		// with — see PostHoldsRequest::save()
+		// 0: the same post was already waiting (unique digest index); answer with
+		// that row. See PostHoldsRequest::save().
 		if ($this->postHoldsRequest->save($held) === 0) {
 			foreach ($this->postHoldsRequest->getByActor($actor->getId()) as $waiting) {
 				if ($waiting->digest() === $held->digest()) {
@@ -235,12 +196,8 @@ class PostReviewService {
 	}
 
 	/**
-	 * A page of the queue, for a moderator.
-	 *
-	 * The handle is resolved per row rather than left as the actor id: a
-	 * moderator reading a queue of URLs is reading the same forty characters
-	 * over and over with the name buried at the end. One indexed lookup per
-	 * row, on a page somebody opens by hand.
+	 * A page of the queue, for a moderator, with each handle resolved (one
+	 * indexed lookup per row).
 	 *
 	 * @return HeldPost[]
 	 */
@@ -278,17 +235,11 @@ class PostReviewService {
 	/**
 	 * Publishes a held post, down the path it would have taken.
 	 *
-	 * The row is deleted first and the post published after, so a failure
-	 * leaves nothing behind that a second approval could publish twice. The
-	 * cost is that a post whose publishing fails is lost rather than left in
-	 * the queue — the same trade `ScheduledStatusService::publishDue()` takes,
-	 * and for the same reason: a duplicate post cannot be taken back.
-	 *
-	 * The published post is dated now, not when it was written. It became a
-	 * post when it was approved; a post that appeared in a timeline already a
-	 * day old would be one nobody saw. A post held when it was scheduled is
-	 * scheduled for its time instead, while that is still ahead, and the
-	 * answer is null.
+	 * The row is deleted before publishing so a second approval cannot publish
+	 * twice; a failed publish loses the post, as in
+	 * `ScheduledStatusService::publishDue()`. The post is dated now. A post
+	 * held when it was scheduled is scheduled for its time instead while that is
+	 * still ahead, and the answer is null.
 	 *
 	 * @throws ItemNotFoundException no such held post
 	 * @throws Throwable whatever `createPost()` refuses it for
@@ -301,8 +252,7 @@ class PostReviewService {
 
 		$this->postHoldsRequest->delete($id);
 
-		// held when it was scheduled: it goes out at its time, unless that
-		// has passed while it waited
+		// Held when scheduled: it goes out at its time unless that has passed.
 		$when = (int)($held->getParams()['scheduled_at'] ?? 0);
 		if ($this->scheduledStatusService->scheduleApproved($author, $held->getParams(), $when)) {
 			return null;
@@ -315,14 +265,9 @@ class PostReviewService {
 	}
 
 	/**
-	 * Refuses one, and tells its author.
-	 *
-	 * A refusal is recorded as a strike rather than being a deletion nobody
-	 * can see the reason for: the account is told through the same
-	 * notification a takedown uses, the moderators can see it was told, and
-	 * the next moderator to look at this account can see this was not the
-	 * first time. Nothing else about the account changes — a refused post is
-	 * not a silence.
+	 * Refuses one, recorded as a strike so its author is notified as for a
+	 * takedown and later moderators see it. Nothing else about the account
+	 * changes.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -337,8 +282,7 @@ class PostReviewService {
 				($comment !== '') ? $comment : 'A post was not published: ' . $this->reasonText($held->getReason())
 			);
 		} catch (Throwable $e) {
-			// the post is refused either way; a strike that could not be
-			// recorded must not put the row back
+			// The post is refused either way; a failed strike must not restore the row.
 			$this->logger->warning('could not record the refusal of a held post', [
 				'held' => $id, 'exception' => $e,
 			]);
@@ -395,21 +339,15 @@ class PostReviewService {
 	}
 
 	/**
-	 * Whether anybody here has anything to do with this account.
-	 *
-	 * An account with followers scattering mentions is having a bad day in
-	 * public and its followers can say so; an account nobody follows and that
-	 * follows nobody, doing the same thing, is a machine. The second rule is
-	 * the one worth a moderator's time, so the mention rule asks this before
-	 * it holds anything.
+	 * Whether anybody here has anything to do with this account; the mention
+	 * rule only holds posts of accounts that follow and are followed by nobody.
 	 */
 	private function knowsAnyone(Person $actor): bool {
 		try {
 			return $this->followsRequest->countFollowers($actor->getId()) > 0
 				|| $this->followsRequest->countFollowing($actor->getId()) > 0;
 		} catch (Throwable $e) {
-			// an account whose relations cannot be counted is not thereby a
-			// spammer
+			// Unknown relations do not make a spammer.
 			return true;
 		}
 	}
@@ -428,11 +366,8 @@ class PostReviewService {
 	}
 
 	/**
-	 * The handles a post mentions.
-	 *
-	 * Counted off the text rather than off the resolved recipients, because
-	 * this runs before the post is built: a mention of an account that does
-	 * not exist is still a mention, and a hundred of them is still spam.
+	 * The handles a post mentions, counted off the text since this runs before
+	 * the post is built.
 	 *
 	 * @return string[]
 	 */

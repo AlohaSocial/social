@@ -83,9 +83,8 @@ class QueueProcess extends SocialCommand {
 			try {
 				$this->activityService->manageRequest($request);
 			} catch (Throwable $e) {
-				// the row was marked `running` before the attempt: left that
-				// way it is never retried, never counted against MAX_TRIES and
-				// only freed by the stale reaper an hour later
+				// The row was marked `running` before the attempt; left so, it would never
+				// be retried or counted against MAX_TRIES.
 				$output->write('E');
 				$this->miscService->log(
 					'could not deliver ' . $request->getToken() . ': ' . get_class($e) . ' '
@@ -99,8 +98,7 @@ class QueueProcess extends SocialCommand {
 	}
 
 	private function processStreamQueue(OutputInterface $output) {
-		// an item whose drain died mid-resolution stays `running`, and nothing
-		// but this ever looks at a running row again
+		// Only this ever looks at a `running` row again.
 		$this->streamQueueService->reapStaleRunning();
 
 		$total = 0;

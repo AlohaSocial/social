@@ -33,18 +33,11 @@ use Psr\Log\LoggerInterface;
  * with the PLC directory, its signing key sealed here and opened for one
  * signature at a time.
  *
- * A PLC operation is logged before it is sent and goes out in its turn,
- * built on the operation the directory confirmed last. One the directory
- * could not be asked waits in the log for repair(), which compares the
- * log with the directory's and sends what is pending again — signed again
- * on the directory's head where that moved on. One the directory refused
- * or nullified is dead: kept for the record, never sent again, and not
- * the `prev` of anything. The genesis operation decides the DID, so an
- * identity whose registration is pending is kept and the same operation
- * sent again; until the directory takes it the identity is `pending`,
- * nothing is published for it and the firehose does not name it. The
- * `#identity` event goes out when the directory confirms an operation,
- * from wherever that happens.
+ * PLC operations are logged before sending and sent in order, each built on
+ * the directory's last confirmed one. An operation the directory could not
+ * be asked waits for repair(); one it refused or nullified is dead and never
+ * a `prev`. Until the genesis is confirmed the identity is `pending` and
+ * nothing is published for it. `#identity` goes out on each confirmation.
  */
 class IdentityService {
 	public function __construct(
@@ -285,10 +278,9 @@ class IdentityService {
 		try {
 			$this->plc->submit($identity->did, $operation);
 		} catch (AtprotoException $e) {
-			// not left for repair(), which would send it again: a move is
-			// started again by the person, never finished behind their back.
-			// When no answer came the directory may have taken it all the
-			// same; the move asks it (pointsAt()) before it goes on.
+			// Not left for repair(): a move is restarted by the person, never finished
+			// behind their back. Without an answer the directory may still have taken
+			// it; the move checks with pointsAt() before going on.
 			$this->plcLog->remove($logId);
 			throw $e;
 		}
@@ -734,13 +726,10 @@ class IdentityService {
 	}
 
 	/**
-	 * The identity row as the log's confirmed head has it — the directory's
-	 * latest operation, once nothing is pending: its handle, when it is the
-	 * assigned one or a custom handle this server would take (one that
-	 * names the DID, CustomHandleService), and its recovery key only while
-	 * the head still lists it. A signing key or an instance key the head no
-	 * longer names is nothing this server can put right by itself, so it is
-	 * warned of.
+	 * Updates the identity row from the directory's confirmed head: its handle
+	 * (when assigned, or a custom handle that names the DID) and its recovery key
+	 * while the head lists it. A signing or instance key the head no longer names
+	 * cannot be fixed here, so it is warned of.
 	 */
 	private function takeFromHead(string $did): void {
 		$state = null;

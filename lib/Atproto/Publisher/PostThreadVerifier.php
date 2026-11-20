@@ -67,10 +67,8 @@ final class PostThreadVerifier {
 			usort($generatedLinks, static fn (array $a, array $b): int => [$b[0], $b[1]] <=> [$a[0], $a[1]]);
 			foreach ($generatedLinks as [$recordIndex, $start, $end]) {
 				$parts[$recordIndex] = substr($parts[$recordIndex], 0, $start) . substr($parts[$recordIndex], $end);
-				// The Social link is preceded by a paragraph break. Once its
-				// facet is removed for the source-text comparison, that separator
-				// is only trailing whitespace in the final continuation and is
-				// allowed to be trimmed at a thread-part boundary.
+				// Once the Social link's facet is removed, its preceding paragraph break is
+				// trailing whitespace that may be trimmed at a part boundary.
 				$parts[$recordIndex] = rtrim($parts[$recordIndex]);
 				if (self::sourceBodyMatchesParts($sourceText, $parts)) {
 					return true;

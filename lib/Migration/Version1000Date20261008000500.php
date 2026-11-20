@@ -20,17 +20,9 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_action.poll_prim`: the poll a vote was cast in, as an indexed key.
- *
- * A vote's object is the poll's id with an option suffix, so the only way to
- * find the votes of one poll was a `LIKE '<poll>#option-%'` on an unindexed
- * text column of a table that also holds every like and boost — once per
- * poll, on every closed-poll sweep. With the poll as a column the sweep asks
- * for all its polls at once and an index answers.
- *
- * Every other kind of action carries `''`. The existing votes are filled in
- * after the column is added; they are a small part of the table, and the
- * keyset below walks it once.
+ * `social_action.poll_prim`: the poll a vote was cast in, as an indexed key,
+ * so the closed-poll sweep need not `LIKE` the vote objects. Other actions
+ * carry `''`. Existing votes are filled in once, by keyset.
  */
 class Version1000Date20261008000500 extends SimpleMigrationStep {
 	/** Rows per page and per update: three placeholders a row, inside SQLite's ceiling. */
@@ -69,12 +61,10 @@ class Version1000Date20261008000500 extends SimpleMigrationStep {
 
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		// `*PREFIX*` is what the connection rewrites; there is no public API
-		// that hands the prefix over as a string
+		// The connection rewrites `*PREFIX*`; no public API returns the prefix.
 		$table = '*PREFIX*' . CoreRequestBuilder::TABLE_ACTIONS;
 
-		// keyset on `id_prim`, so a vote whose object names no poll — left at
-		// `''`, still matching — cannot bring the same page back
+		// Keyset on `id_prim`, so a vote left at `''` cannot bring the same page back.
 		$after = '';
 		while (true) {
 			$page = $this->connection->executeQuery(

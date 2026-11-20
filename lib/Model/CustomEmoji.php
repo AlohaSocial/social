@@ -13,16 +13,9 @@ use JsonSerializable;
 use OCA\Social\Tools\DbTime;
 
 /**
- * One emoji this instance publishes: Mastodon's `CustomEmoji`.
- *
- * A shortcode and a picture. The picture lives in appdata and is served from
- * a route of its own, so the URL in the entity is the same URL a peer
- * dereferences out of an `Emoji` tag — there is one address for it, and
- * nothing has to know whether the reader is a local client or another server.
- *
- * `static_url` is the same URL: animated emoji would need a second, still
- * rendering of every upload, and a `static_url` that pointed at nothing would
- * be worse than one that points at the picture.
+ * One emoji this instance publishes: Mastodon's `CustomEmoji`. The image is
+ * served from one route, the same URL a peer dereferences from an `Emoji`
+ * tag. `static_url` is the same URL, as no still rendering is made.
  */
 class CustomEmoji implements JsonSerializable {
 	/** What a shortcode may be, as Mastodon reads one out of `:…:`. */
@@ -85,7 +78,7 @@ class CustomEmoji implements JsonSerializable {
 		return $this->creation;
 	}
 
-	/** Where the picture is served from; set by the service that knows. */
+	/** Where the image is served from; set by the service that knows. */
 	public function setUrl(string $url): self {
 		$this->url = $url;
 
@@ -118,8 +111,7 @@ class CustomEmoji implements JsonSerializable {
 			'visible_in_picker' => $this->visible,
 		];
 
-		// Mastodon omits the key rather than sending null for "no category",
-		// and a client groups by its presence
+		// Mastodon omits the key for "no category", and clients group by its presence.
 		if ($this->category !== '') {
 			$emoji['category'] = $this->category;
 		}

@@ -17,16 +17,13 @@ use OCP\AppFramework\Http\DataResponse;
 use Throwable;
 
 /**
- * The signed-in person's own account, for a route that acts as it, and the
- * one answer for somebody who has not set it up yet: 403
+ * The signed-in person's own account, for a route that acts as it, or 403
  * `account-not-set-up` with the setup page's address.
  *
- * Looked up, never made. An account is made where somebody asks for one —
- * `LocalController::accountCreate()`, from the setup page or the sign-in
- * page an app opens, `occ social:account:create` and the account import —
- * and a read that made one would hand them a handle nobody chose.
- *
- * The class using it has an `AccountService` in `$accountService`.
+ * Looked up, never made: accounts are made by
+ * `LocalController::accountCreate()`, `occ social:account:create` and the
+ * import, so nobody gets a handle they did not choose. The using class has
+ * an `AccountService` in `$accountService`.
  */
 trait OwnAccount {
 	/**
@@ -45,9 +42,8 @@ trait OwnAccount {
 	}
 
 	/**
-	 * `$answer`, unless the person has no account here at all, which is
-	 * what they are told instead: for the routes that find nothing of
-	 * theirs to act on and would otherwise say only that.
+	 * `$answer`, unless the person has no account here at all, in which case
+	 * they are told that instead.
 	 */
 	protected function unlessNotSetUp(string $userId, DataResponse $answer): DataResponse {
 		try {

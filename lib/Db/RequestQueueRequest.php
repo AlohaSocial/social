@@ -30,17 +30,11 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	public const INSERT_CHUNK = 500;
 
 	/**
-	 * Writes the whole fan-out of one activity.
+	 * Writes the whole fan-out of one activity with one prepared statement,
+	 * committed in chunks, since it runs in the web request that made the post.
 	 *
-	 * One INSERT per inbox, each its own round trip and its own commit, was
-	 * done in the web request that made the post: a local account followed
-	 * from twenty thousand instances paid twenty thousand sequential
-	 * round trips before `createPost()` returned. The statement is prepared
-	 * once and the rows are committed in chunks instead.
-	 *
-	 * A row that carries a `last` is written with it, so a fan-out that is
-	 * held back until then is never due for a moment between the insert and
-	 * an update — a drain in that moment would deliver it.
+	 * A row with a `last` is inserted with it, so a held fan-out is never due
+	 * between insert and update.
 	 *
 	 * @param RequestQueue[] $queues
 	 *
@@ -125,25 +119,19 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	 */
 	public function getStandby(): array {
 		$backoff = Backoff::outbound();
-		// what the drain has given up on is marked first: the query below cannot
-		// return those rows any more, and the author is entitled to see that a
-		// server never got their post rather than watch the row vanish
+		// Mark what the drain gave up on first, so the author sees that a server
+		// never got their post rather than the row vanishing.
 		$this->abandonExhausted($backoff->maxTries(), time() - RequestQueueService::MAX_AGE);
 
 		$qb = $this->getRequestQueueSelectSql();
 		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
-		// the retry backoff and the give-up threshold, in the query rather than
-		// in PHP afterwards: one dead instance otherwise fills the whole window
-		// with rows that are not due, and starves every other delivery
+		// Backoff and give-up threshold in the query, so one dead instance cannot
+		// fill the window with rows that are not due.
 		$this->limitToQueueDue($qb, $backoff);
-		// what is most urgent first, then what has never been attempted, then
-		// whatever has waited longest since its last attempt or hold. 'id asc'
-		// alone handed the window to whatever was queued earliest regardless
-		// of priority. A row the breaker held back keeps `tries = 0`, so the
-		// try count is no measure of how long a row has waited: ordered by it,
-		// the held rows of dead instances sorted ahead of every retry to a
-		// healthy one. NULL sorts first on MySQL and SQLite and last on
-		// PostgreSQL, so the never-attempted rows are told apart explicitly.
+		// Most urgent first, then never attempted, then longest waiting since the
+		// last attempt or hold (a held row keeps `tries = 0`, so tries do not
+		// measure waiting). NULL sorts first on MySQL and SQLite and last on
+		// PostgreSQL, so never-attempted rows are told apart explicitly.
 		$last = $qb->getColumnName('last', 'rq');
 		$qb->orderBy('rq.priority', 'desc');
 		$qb->addOrderBy($qb->createFunction('CASE WHEN ' . $last . ' IS NULL THEN 0 ELSE 1 END'), 'asc');
@@ -169,23 +157,12 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	 */
 	/**
 	 * When the longest-failing delivery was last attempted, or 0 where nothing
-	 * is failing.
-	 *
-	 * The one figure the federation card could not answer: how long this
-	 * instance has been stuck. The counts say how much is failing and the
-	 * per-instance list says where, but neither says whether it started an
-	 * hour ago or a week ago — which is the difference between a peer
-	 * rebooting and a delivery that is never going to happen.
-	 *
-	 * Attempted rather than queued: `social_request_queue` records the last
-	 * try and not the creation, and the last try is the more useful of the two
-	 * anyway — a row whose last attempt was six days ago has been retried all
-	 * week.
+	 * is failing: how long this instance has been stuck. The table records the
+	 * last try, not the creation.
 	 */
 	public function oldestFailingAttempt(): int {
-		// `last` is a datetime column and not a timestamp: a row that was
-		// never attempted has it NULL rather than zero, and comparing it
-		// against 0 asks PostgreSQL to read "0" as a date.
+		// `last` is a datetime, NULL when never attempted; comparing it with 0
+		// would make PostgreSQL read "0" as a date.
 		$qb = $this->getQueryBuilder();
 		$qb->selectAlias($qb->func()->min('last'), 'oldest')
 			->from(self::TABLE_REQUEST_QUEUE)
@@ -197,8 +174,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		$data = $cursor->fetch();
 		$cursor->closeCursor();
 
-		// what comes back is whatever shape the database writes a datetime
-		// in, so it is parsed the same way a hydrated row's is
+		// Parsed as a hydrated row's datetime is, whatever the database's format.
 		return DbTime::toTimestamp($data['oldest'] ?? null);
 	}
 
@@ -221,13 +197,9 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 
 	/**
 	 * How many standby requests were last attempted before `$before` and are
-	 * still waiting.
-	 *
-	 * The longest wait in the retry schedule is fourteen hours, so a row that
-	 * has sat on standby for a day past its last attempt is one no drain has
-	 * come back for: the cron is not running, or something ahead of it in the
-	 * batch never lets it through. A row that was never attempted has no
-	 * `last` and is not counted — its age is unknown.
+	 * still waiting. The longest retry wait is fourteen hours, so these are rows
+	 * no drain came back for. Never-attempted rows have no `last` and are not
+	 * counted.
 	 *
 	 * @throws Exception
 	 */
@@ -257,8 +229,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	 */
 	public function getFailing(int $minTries = 1, int $limit = 500): array {
 		$qb = $this->getRequestQueueSelectSql();
-		// still in play: a row kept as delivered or abandoned has tries too,
-		// and is not a delivery anybody is worried about
+		// Delivered and abandoned rows have tries too.
 		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
 		$qb->andWhere($qb->expr()->gte('tries', $qb->createNamedParameter($minTries, IQueryBuilder::PARAM_INT)));
 		$qb->orderBy('tries', 'desc');
@@ -275,15 +246,9 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * The deliveries this instance has given up on, the most recently
-	 * abandoned first.
-	 *
-	 * They are the ones nobody saw: a failing request is at least counted
-	 * while it is still being retried, and then it changes status and drops
-	 * out of every summary there is. The rows live `RETENTION_SECONDS` (seven
-	 * days) past their last attempt, which is exactly the window in which an
-	 * administrator can still be told that a server stopped receiving
-	 * anything from here.
+	 * The deliveries this instance has given up on, the most recently abandoned
+	 * first. They are kept `RETENTION_SECONDS` past their last attempt, so an
+	 * administrator can still be told.
 	 *
 	 * @return list<RequestQueue>
 	 * @throws Exception
@@ -356,10 +321,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 
 	/**
 	 * Up to `$limit` standby rows under a token that are due at `$now`, most
-	 * urgent first.
-	 *
-	 * A row whose `last` is still ahead is held back on purpose and left
-	 * out; so is every row already tried, when `$neverTried` asks for that.
+	 * urgent first; with `$neverTried`, only rows not yet attempted.
 	 *
 	 * @return list<RequestQueue>
 	 * @throws Exception
@@ -413,15 +375,10 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Marks a delivered row, and drops the body it carried.
-	 *
-	 * The row is kept for `RequestQueueService::RETENTION_SECONDS` to say that
-	 * this server got the post; the signed activity itself is never read
-	 * again — nothing re-sends a delivered row, `social:queue:retry` included
-	 * — and kept per inbox it was the bulk of the table: one copy of the whole
-	 * document per recipient server, for a week. An abandoned row keeps its
-	 * body, because handing it back to the queue is what `social:queue:retry`
-	 * is for.
+	 * Marks a delivered row and drops its body: the row is kept for
+	 * `RequestQueueService::RETENTION_SECONDS` as proof of delivery, but nothing
+	 * re-sends it, and the per-inbox bodies were the bulk of the table. An
+	 * abandoned row keeps its body for `social:queue:retry`.
 	 *
 	 * @throws QueueStatusException|Exception
 	 */
@@ -464,12 +421,9 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Moves a standby request out of the due window until `$until`.
-	 *
-	 * `last` is what the retry schedule is measured from, so a timestamp in
-	 * the future both holds the row back (`limitToQueueDue()`) and sorts it
-	 * behind everything that is due (`getStandby()`), without spending one of
-	 * its tries on an attempt that was never made.
+	 * Moves a standby request out of the due window until `$until`. A future
+	 * `last` holds it back (`limitToQueueDue()`) and sorts it last
+	 * (`getStandby()`) without spending a try.
 	 *
 	 * @throws QueueStatusException when the row was not on standby any more
 	 * @throws Exception
@@ -490,10 +444,8 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Hands a held request its final body and makes it due at once.
-	 *
-	 * `last` goes back to NULL, which is what a row that has never been
-	 * attempted has, so the next drain delivers it as it would a fresh one.
+	 * Hands a held request its final body and makes it due at once (`last`
+	 * NULL, as for a fresh row).
 	 *
 	 * @throws QueueStatusException when the row was not on standby any more
 	 * @throws Exception
@@ -514,13 +466,9 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Return every request stuck `running` since before $before to standby,
-	 * counted as a failed attempt.
-	 *
-	 * A row is left `running` when the process delivering it died — a fatal
-	 * error, the memory limit, a killed worker — and nothing else ever counts
-	 * that attempt: returned without a try, a delivery whose processing kills
-	 * the worker was picked up and killed it again for ever.
+	 * Returns every request stuck `running` since before $before to standby,
+	 * counted as a failed attempt, so a delivery that kills its worker is not
+	 * retried for ever.
 	 *
 	 * @return int the number of requests re-queued
 	 * @throws Exception
@@ -547,14 +495,6 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Drops the requests that have exhausted their retries. getStandby() no
-	 * longer returns them — the threshold is part of the query — so this is
-	 * what keeps the table from holding them forever.
-	 *
-	 * @return int rows removed
-	 * @throws Exception
-	 */
-	/**
 	 * Gives up on one standby row: kept as abandoned until `deleteFinished()`.
 	 *
 	 * @throws QueueStatusException when the row was not on standby any more
@@ -573,18 +513,11 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
-	 * Marks what the drain has given up on, rather than deleting it.
-	 *
-	 * That is a row that has spent its tries, and one queued before
-	 * `$queuedBefore`: a row whose host the breaker keeps holding back is
-	 * postponed without spending a try, so for an instance that has gone away
-	 * the age is what ends it. Both read on an index (`social_rq_tries`,
-	 * `social_rq_sc`); a row queued before its creation was recorded has none
-	 * and is left to its tries.
-	 *
-	 * The row stays so that the post it belongs to can say a server never got
-	 * it; `deleteFinished()` takes it away with the delivered ones once the
-	 * retention has passed.
+	 * Marks what the drain has given up on: rows that spent their tries, and
+	 * rows queued before `$queuedBefore` (a host the breaker keeps holding back
+	 * spends no tries). Both use an index (`social_rq_tries`, `social_rq_sc`).
+	 * The rows stay until `deleteFinished()`, so the post can say a server never
+	 * got it.
 	 *
 	 * @param int $queuedBefore timestamp, or 0 to give up on tries alone
 	 *
@@ -615,10 +548,8 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 
 	/**
 	 * Which of these authors still have deliveries waiting or going out, a
-	 * query per 500 of them.
-	 *
-	 * Read on `social_rq_as`: a deleted account keeps its row, and with it the
-	 * key its `Delete` is signed with, until this leaves it out.
+	 * query per 500 of them, on `social_rq_as`. A deleted account is kept until
+	 * this leaves it out, since its key signs its `Delete`.
 	 *
 	 * @param string[] $actorIds
 	 * @return array<string, true> actor id => true
@@ -652,8 +583,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 
 	/**
 	 * Removes delivered and abandoned rows whose last attempt is older than
-	 * `$before`: what the author could have asked about has been kept long
-	 * enough, and a queue is not an archive.
+	 * `$before`.
 	 *
 	 * @return int rows removed
 	 */
@@ -672,11 +602,8 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 
 	/**
 	 * The requests about one object that are on standby, never attempted, and
-	 * not due before some moment after `$now`.
-	 *
-	 * Narrowed in the query rather than after it: a post with a large fan-out
-	 * has a row per inbox kept for a week after delivery, and this is asked
-	 * on every delete.
+	 * not due before some moment after `$now`; narrowed in the query because
+	 * this runs on every delete.
 	 *
 	 * @return list<RequestQueue>
 	 * @throws Exception
@@ -735,14 +662,4 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 
 		$qb->executeStatement();
 	}
-
-	//	public function moveAccount(string $actorId, string $newId, string $instance): void {
-	//		$qb = $this->getRequestQueueUpdateSql();
-	//		$qb->set('author', $qb->createNamedParameter($newId))
-	//		   ->set('author_prim', $qb->createNamedParameter($qb->prim($newId)))
-	//		   ->set('instance', $qb->createNamedParameter($instance));
-	//		$qb->limitToDBField('author_prim', $qb->prim($actorId));
-	//
-	//		$qb->executeStatement();
-	//	}
 }

@@ -22,15 +22,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The post a stored request becomes.
- *
- * Two things here keep a request instead of a post — one scheduled for later,
- * one held for a moderator — and both have to turn it back into exactly the
- * `Post` that `StatusApiController::statusNew()` assembles from a live request. A
- * note built by one path and federated by another drifts: the quote approval,
- * the language fallback and the source snapshot all happen inside
- * `PostService::createPost()`, and what reaches it has to be the same shape
- * whichever door the post came in by. One assembler, so there is one shape.
+ * The post a stored request becomes. Scheduled and held posts are stored as
+ * requests and must become exactly the `Post` that
+ * `StatusApiController::statusNew()` assembles live, as
+ * `PostService::createPost()` relies on that shape; one assembler keeps them
+ * the same.
  */
 class StatusAssemblyService {
 	public function __construct(
@@ -41,26 +37,16 @@ class StatusAssemblyService {
 	}
 
 	/**
-	 * The stored request: Mastodon's keys, filled from what the client
-	 * sent, and nothing that was not asked for.
-	 *
-	 * Built from the parsed `Status` rather than copied out of the raw body so
-	 * that what is replayed later is what this app understood at the time —
-	 * the same normalisation an immediate post gets, and not a second reading
-	 * of the request by a second piece of code.
-	 *
-	 * `scheduled_at` stays out of `params`. A scheduled post's time lives on
-	 * its own row, where `reschedule()` keeps it current; a copy in here would
-	 * be the stale one the moment a post is moved, and a client cannot tell
-	 * which of the two it is meant to believe.
+	 * The stored request: Mastodon's keys, filled from the parsed `Status` so a
+	 * replay matches what this app understood at the time. `scheduled_at` stays
+	 * out: it lives on the scheduled row, where `reschedule()` keeps it current.
 	 *
 	 * @return array<string, mixed>
 	 */
 	public function paramsOf(Status $status, string $visibility): array {
 		return [
 			'text' => $status->getStatus(),
-			// strings, because every id Mastodon shows a client is a string,
-			// and this array is echoed back verbatim
+			// Strings, as Mastodon shows every id, since this array is echoed back.
 			'media_ids' => array_map('strval', $status->getMediaIds()),
 			'poll' => $status->getPoll(),
 			'event' => $status->getEvent(),
@@ -75,9 +61,8 @@ class StatusAssemblyService {
 	}
 
 	/**
-	 * The stored request a `Post` is replayed from: what `fromParams()` reads
-	 * back, so a post held for a moderator is approved as it was written,
-	 * whichever door it came in by.
+	 * The stored request a `Post` is replayed from, as `fromParams()` reads it,
+	 * so a held post is approved as written.
 	 *
 	 * @param string $inReplyToNid the nid of the post it answers, '' for none
 	 *
@@ -173,13 +158,10 @@ class StatusAssemblyService {
 
 		$replyTo = (int)$params->paramString('in_reply_to_id');
 		if ($replyTo > 0) {
-			// Read as the author: the cron and a moderator's approval run with
-			// another viewer or none, and a followers-only or direct parent is
-			// invisible to either. A parent the author can no longer see, or
-			// that was deleted while this waited, fails the post rather than
-			// letting it go out on its own: the audience of a reply is decided
-			// by its parent, and without it a reply to a direct message would
-			// be published to the author's default audience.
+			// Read as the author, since the cron and a moderator see a different
+			// audience. A parent the author can no longer see, or that was deleted,
+			// fails the post: without it a reply to a direct message would go to the
+			// default audience.
 			$this->streamService->setViewer($actor);
 			try {
 				$post->setReplyTo($this->streamService->getStreamByNid($replyTo)->getId());

@@ -13,11 +13,9 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * The logins of self-registered external users.
- *
- * Not a `CoreRequestBuilder`: the user backend that reads this table is built
- * on every request, before anybody is logged in, and needs nothing but the
- * connection. The table is still registered in `CoreRequestBuilder::$tables`.
+ * The logins of self-registered external users. Not a `CoreRequestBuilder`:
+ * the user backend reading it is built before login and needs only the
+ * connection. Still registered in `CoreRequestBuilder::$tables`.
  *
  * @psalm-type ExternalUserRow = array{uid: string, password: string, displayname: string, origin: string, creation: int, emailVerified: ?bool}
  */

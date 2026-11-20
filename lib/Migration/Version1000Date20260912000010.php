@@ -16,23 +16,9 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * One authorization per (app, account): `social_client_auth`.
- *
- * `social_client` held the whole of an authorization in its own row — one
- * `auth_code`, one `auth_user_id`, one `token` — so an app row could belong to
- * exactly one person at a time. Elk, Phanpy and every other client that
- * registers one app per instance therefore signed the previous user out the
- * moment a second one signed in: `authClient()` blanked the token on purpose,
- * because leaving it would have let the old token act as the new user.
- *
- * The app registration stays where it is. What moves here is everything about
- * *who authorized it*: the code, the token, the scopes granted and the account
- * they were granted to. Unique on (client, account), so re-authorizing replaces
- * rather than accumulating, which is what Mastodon does and what keeps this
- * table the size of the number of people using the instance.
- *
- * The existing authorization on every client row is carried across, so a token
- * in use today goes on working.
+ * One authorization per (app, account): `social_client_auth`, so several
+ * people can sign in through the same app registration (Elk, Phanpy).
+ * Unique on (client, account), so re-authorizing replaces, as in Mastodon.
  */
 class Version1000Date20260912000010 extends SimpleMigrationStep {
 	public function __construct(
@@ -41,18 +27,9 @@ class Version1000Date20260912000010 extends SimpleMigrationStep {
 	}
 
 	/**
-	 * The columns this step used to add are in `Version1000Date20221118000002`,
-	 * which describes the whole schema and runs before this. What is left here
-	 * is the half a schema cannot express: the rows.
-	 */
-
-	/**
 	 * Carries the authorization already on each client row into a row of its
-	 * own, so a token in use today goes on working.
-	 *
-	 * Only rows that have one: an app registered and never authorized has
-	 * nothing to move, and a row whose token was already blanked has nothing
-	 * worth keeping.
+	 * own, so a token in use keeps working. Rows never authorized or with a
+	 * blanked token are skipped.
 	 */
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {

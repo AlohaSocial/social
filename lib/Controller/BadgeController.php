@@ -24,14 +24,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The three counts the sidebar draws, in one answer: the unread notifications
- * (`/api/v1/notifications/unread_count`), the held senders (the notification
- * policy's `summary`) and the unread conversations
- * (`/api/v1/conversations/unread_count`).
- *
- * One request where a poll or a push made three, under one `ETag` built from
- * the tags of all three, so an unchanged poll is a single `304`. The three
- * routes it combines stay as they are, for Mastodon clients and older pages.
+ * The three counts the sidebar draws, in one answer: unread notifications
+ * (`/api/v1/notifications/unread_count`), held senders (the notification
+ * policy's `summary`) and unread conversations
+ * (`/api/v1/conversations/unread_count`), under one `ETag` combining all
+ * three, so an unchanged poll is a single `304`.
  */
 class BadgeController extends ClientApiController {
 	public function __construct(
