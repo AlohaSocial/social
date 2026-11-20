@@ -239,10 +239,10 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'home', params: {} })
 		expect(timelineStore.type).toBe('home')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('home')
-		expect(wrapper.find('.info-card h2').text()).toBe('About this feed')
+		expect(wrapper.findComponent({ name: 'FeedHelp' }).props('scope')).toBe('home')
 	})
 
-	it('explains when For you has too few different posts to fill the feed', async () => {
+	it('tells the feed help when For you has too few different posts to fill the feed', async () => {
 		const wrapper = mountTimeline({ params: { type: 'interests' } })
 		timelineStore.recommendationCoverage = {
 			[timelineStore.getTimelineIdentity]: { state: 'UNDERFILLED', known_eligible: 3, returned: 3, remote_refresh_queued: true },
@@ -250,18 +250,8 @@ describe('Timeline', () => {
 		timelineStore.addToTimeline([{ id: 'short-feed', created_at: '2026-01-01T00:00:00Z' }])
 		await nextTick()
 
-		expect(wrapper.text()).toContain('Only a few posts are available in this feed right now.')
-	})
-
-	it('explains limited availability when For you has no posts yet', async () => {
-		const wrapper = mountTimeline({ params: { type: 'interests' } })
-		timelineStore.recommendationCoverage = {
-			[timelineStore.getTimelineIdentity]: { state: 'UNDERFILLED', known_eligible: 0, returned: 0, remote_refresh_queued: true },
-		}
-		await nextTick()
-
-		expect(timelineStore.getTimeline).toHaveLength(0)
-		expect(wrapper.text()).toContain('Only a few posts are available in this feed right now.')
+		expect(wrapper.findComponent({ name: 'FeedHelp' }).props('underfilled')).toBe(true)
+		expect(wrapper.find('.info-card').exists()).toBe(false)
 	})
 
 	it.each(['timeline', 'federated', 'favourites'])('switches the store to the %s timeline from the route', (type) => {
@@ -734,10 +724,10 @@ describe('Timeline', () => {
 			.toEqual(['My Feed', 'Local', 'Global'])
 	})
 
-	it('explains how My Feed and For You differ', () => {
+	it('explains the chosen feed behind the (?) beside the tabs, not in a card above the posts', () => {
 		const home = mountTimeline()
-		expect(home.find('.timeline-scope-description p').text())
-			.toBe('My Feed shows posts from accounts you follow, in chronological order.')
+		expect(home.findComponent({ name: 'FeedHelp' }).props('scope')).toBe('home')
+		expect(home.find('.timeline-scope-description').exists()).toBe(false)
 		home.unmount()
 
 		useSettingsStore().setServerData({
@@ -745,23 +735,7 @@ describe('Timeline', () => {
 			interests: { enabled: false, learning: false, recommendationsEnabled: true },
 		})
 		const forYou = mountTimeline({ params: { type: 'interests' } })
-		expect(forYou.find('.timeline-scope-description p').text())
-			.toBe('For You ranks eligible public posts using automatically learned interests, post content, freshness, followed accounts and discovery. Separately enabled activity learning can refine new sessions. It can include posts from beyond the accounts you follow.')
-	})
-
-	it('allows putting away feed explanations without hiding another feed context', async () => {
-		const home = mountTimeline()
-		await home.find('.timeline-scope-description button').trigger('click')
-		expect(home.find('.timeline-scope-description').exists()).toBe(false)
-		home.unmount()
-		const reopened = mountTimeline()
-		expect(reopened.find('.timeline-scope-description').exists()).toBe(false)
-		reopened.unmount()
-		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
-		const forYou = mountTimeline({ params: { type: 'interests' } })
-		expect(forYou.find('.timeline-scope-description').exists()).toBe(true)
-		forYou.unmount()
-		await flushPromises()
+		expect(forYou.findComponent({ name: 'FeedHelp' }).props('scope')).toBe('interests')
 	})
 
 	/**
@@ -1245,7 +1219,7 @@ describe('one column above the feed', () => {
 		expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.feed-notice-enter-active,\s*\.feed-notice-leave-active \{\s*transition: none;/)
 	})
 
-	it('shows one one-time card at a time, the next once it is put away', async () => {
+	it('puts no explanation cards above For you', async () => {
 		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
 		const wrapper = mountTimeline({ params: { type: 'interests' } })
 		timelineStore.recommendationCoverage = {
@@ -1253,12 +1227,6 @@ describe('one column above the feed', () => {
 		}
 		await nextTick()
 
-		expect(wrapper.findAll('.info-card')).toHaveLength(1)
-		expect(wrapper.find('.timeline-recommendation-coverage').exists()).toBe(true)
-
-		await wrapper.find('.timeline-recommendation-coverage button').trigger('click')
-
-		expect(wrapper.findAll('.info-card')).toHaveLength(1)
-		expect(wrapper.find('.timeline-scope-description').exists()).toBe(true)
+		expect(wrapper.findAll('.info-card')).toHaveLength(0)
 	})
 })
