@@ -98,7 +98,7 @@ class SectionsService {
 		return in_array($groupId, $this->groupLists(), true);
 	}
 
-	/** Whether stories are offered at all. */
+	/** Whether shorts (stories) are offered at all. */
 	public function storiesEnabled(): bool {
 		return $this->configService->getAppValueBool(ConfigService::SOCIAL_STORIES);
 	}
