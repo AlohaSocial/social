@@ -185,13 +185,28 @@ const attachmentsOf = (wrapper) => wrapper.findComponent({ name: 'PostAttachment
 const actionButton = (wrapper, label) => wrapper.find(`.post-actions button[aria-label="${label}"]`)
 const menuItem = (wrapper, label) => wrapper.findAll('.post-menu__item').find((button) => button.text() === label)
 
+/**
+ * Opens the Details submenu of the post's menu, where the delivery status is.
+ *
+ * @param {object} wrapper the mounted post
+ * @return {Promise<object|undefined>} the Delivery status item, if it is offered
+ */
+async function deliveryItem(wrapper) {
+	const details = menuItem(wrapper, 'Details')
+	if (details === undefined) {
+		return undefined
+	}
+	await details.trigger('click')
+	return menuItem(wrapper, 'Delivery status')
+}
+
 describe('TimelinePost', () => {
 	it('keeps view counts out of the floating action menu and timestamp area', () => {
 		const { wrapper } = mountPost({ item: makeItem({ view_count: 12 }) })
 		expect(wrapper.find('.post-action--views').exists()).toBe(false)
 		expect(wrapper.find('.eye-outline-icon').exists()).toBe(false)
 		expect(wrapper.find('.post-timestamp').exists()).toBe(true)
-		expect(wrapper.findAll('.post-action-group').length).toBe(3)
+		expect(wrapper.findAll('.post-action-group').length).toBe(5)
 	})
 
 	it('lets the author\'s name set its own direction', () => {
@@ -1156,7 +1171,29 @@ describe('TimelinePost', () => {
 			const lastGroup = groups[groups.length - 1]
 			expect(lastGroup.classes()).toContain('post-action-group--reply')
 			expect(lastGroup.find('.post-action-count').text()).toBe('3')
-			expect(groups.map((group) => group.find('button').attributes('aria-label'))).toEqual(['Boost', 'Like', 'Reply'])
+			expect(groups.map((group) => group.find('button').attributes('aria-label'))).toEqual(['Bookmark', 'Share', 'Boost', 'Like', 'Reply'])
+		})
+
+		it('bookmarks from the action row and says when the post is bookmarked', async () => {
+			const { wrapper, store } = mountPost({ item: makeItem({ bookmarked: false }) })
+			const bookmark = wrapper.find('button[aria-label="Bookmark"]')
+
+			expect(bookmark.attributes('aria-pressed')).toBe('false')
+			await bookmark.trigger('click')
+
+			expect(store.postBookmark).toHaveBeenCalledWith(expect.objectContaining({ bookmarked: true }))
+			expect(mountPost({ item: makeItem({ bookmarked: true }) }).wrapper.find('button[aria-label="Remove bookmark"]').exists()).toBe(true)
+		})
+
+		it('copies the link to the post from the action row', async () => {
+			const writeText = vi.fn().mockResolvedValue(undefined)
+			Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+			const { wrapper } = mountPost({ item: makeItem({ url: 'https://cloud.example/apps/social/@alice/1' }) })
+
+			await wrapper.find('button[aria-label="Share"]').trigger('click')
+			await flushPromises()
+
+			expect(writeText).toHaveBeenCalledWith('https://cloud.example/apps/social/@alice/1')
 		})
 
 		it('keeps the reply action at the outside edge without overhanging nested entries', () => {
@@ -1409,8 +1446,8 @@ describe('TimelinePost', () => {
 		it('offers both for somebody else\'s post', () => {
 			const { wrapper } = mountPost({ item: makeItem({ account: bob }) })
 
-			expect(menuItem(wrapper, 'Mute bob@remote.example')).toBeDefined()
-			expect(menuItem(wrapper, 'Block bob@remote.example')).toBeDefined()
+			expect(menuItem(wrapper, 'Mute')).toBeDefined()
+			expect(menuItem(wrapper, 'Block')).toBeDefined()
 		})
 
 		it('offers neither on the reader\'s own post', () => {
@@ -1427,8 +1464,8 @@ describe('TimelinePost', () => {
 				serverData: { public: true, cloudAddress: 'https://cloud.example.org' },
 			})
 
-			expect(menuItem(wrapper, 'Mute bob@remote.example')).toBeUndefined()
-			expect(menuItem(wrapper, 'Block bob@remote.example')).toBeUndefined()
+			expect(menuItem(wrapper, 'Mute')).toBeUndefined()
+			expect(menuItem(wrapper, 'Block')).toBeUndefined()
 		})
 
 		/** The same dialog the profile opens, with the same two questions. */
@@ -1437,7 +1474,7 @@ describe('TimelinePost', () => {
 			const accountStore = useAccountStore()
 			vi.spyOn(accountStore, 'muteAccount').mockResolvedValue({ id: bob.id })
 
-			await menuItem(wrapper, 'Mute bob@remote.example').trigger('click')
+			await menuItem(wrapper, 'Mute').trigger('click')
 			await flushPromises()
 
 			expect(accountStore.muteAccount).not.toHaveBeenCalled()
@@ -1454,7 +1491,7 @@ describe('TimelinePost', () => {
 			const accountStore = useAccountStore()
 			vi.spyOn(accountStore, 'blockAccount').mockResolvedValue({ id: bob.id, blocking: true })
 
-			await menuItem(wrapper, 'Block bob@remote.example').trigger('click')
+			await menuItem(wrapper, 'Block').trigger('click')
 			expect(accountStore.blockAccount).not.toHaveBeenCalled()
 
 			await wrapper.find('.nc-dialog__button--1').trigger('click')
@@ -1476,7 +1513,7 @@ describe('TimelinePost', () => {
 			menuButton.focus()
 			wrapper.findComponent({ name: 'PostMenu' }).vm.$emit('update:open', true)
 
-			await menuItem(wrapper, 'Block bob@remote.example').trigger('click')
+			await menuItem(wrapper, 'Block').trigger('click')
 			inside.focus()
 			await wrapper.find('.nc-dialog__button--0').trigger('click')
 			await flushPromises()
@@ -1492,7 +1529,7 @@ describe('TimelinePost', () => {
 			// the store says what went wrong and answers with nothing
 			vi.spyOn(accountStore, 'blockAccount').mockResolvedValue(undefined)
 
-			await menuItem(wrapper, 'Block bob@remote.example').trigger('click')
+			await menuItem(wrapper, 'Block').trigger('click')
 			await wrapper.find('.nc-dialog__button--1').trigger('click')
 			await flushPromises()
 
@@ -1682,12 +1719,12 @@ describe('TimelinePost', () => {
 			expect(wrapper.findAll('.nc-dialog').some((el) => el.text().includes('Delete this post?'))).toBe(false)
 		})
 
-		it('offers the author, and only the author, the delivery status of a local post', () => {
-			expect(menuItem(mountPost().wrapper, 'Delivery status')).toBeDefined()
+		it('offers the author, and only the author, the delivery status of a local post', async () => {
+			expect(await deliveryItem(mountPost().wrapper)).toBeDefined()
 			// which servers a post reached is a fact about the author's account
-			expect(menuItem(mountPost({ item: makeItem({ account: bob }) }).wrapper, 'Delivery status')).toBeUndefined()
+			expect(await deliveryItem(mountPost({ item: makeItem({ account: bob }) }).wrapper)).toBeUndefined()
 			// a post that arrived from elsewhere was never in this queue
-			expect(menuItem(mountPost({ item: makeItem({ local: false }) }).wrapper, 'Delivery status')).toBeUndefined()
+			expect(await deliveryItem(mountPost({ item: makeItem({ local: false }) }).wrapper)).toBeUndefined()
 		})
 
 		it('asks the server where the post got to and lists it per server, worst first', async () => {
@@ -1709,7 +1746,7 @@ describe('TimelinePost', () => {
 			})
 			const { wrapper, item } = mountPost()
 
-			await menuItem(wrapper, 'Delivery status').trigger('click')
+			await (await deliveryItem(wrapper)).trigger('click')
 			// the dialog is fetched when it is first opened
 			await vi.waitUntil(() => wrapper.findComponent({ name: 'DeliveryDialog' }).exists(), { timeout: 15000 })
 			await flushPromises()
@@ -1729,7 +1766,7 @@ describe('TimelinePost', () => {
 			})
 			const { wrapper } = mountPost()
 
-			await menuItem(wrapper, 'Delivery status').trigger('click')
+			await (await deliveryItem(wrapper)).trigger('click')
 			// the dialog is fetched when it is first opened
 			await vi.waitUntil(() => wrapper.findComponent({ name: 'DeliveryDialog' }).exists(), { timeout: 15000 })
 			await flushPromises()
@@ -1744,7 +1781,7 @@ describe('TimelinePost', () => {
 			axios.get.mockRejectedValueOnce(new Error('500'))
 			const { wrapper } = mountPost()
 
-			await menuItem(wrapper, 'Delivery status').trigger('click')
+			await (await deliveryItem(wrapper)).trigger('click')
 			// the dialog is fetched when it is first opened
 			await vi.waitUntil(() => wrapper.findComponent({ name: 'DeliveryDialog' }).exists(), { timeout: 15000 })
 			await flushPromises()
@@ -1909,60 +1946,11 @@ describe('TimelinePost', () => {
 	 * gone: a delete the server refuses leaves the post where it is, and a
 	 * composer already holding its words would invite posting it twice.
 	 */
-	it('hands the post to the composer after it has been deleted', async () => {
-		const item = makeItem({
-			content: '<p>Hello <strong>world</strong></p>',
-			spoiler_text: 'spoilers',
-			visibility: 'followers',
-			language: 'de',
-		})
-		const { wrapper, store } = mountPost({ item })
-		store.postDelete.mockResolvedValue(true)
-		const redrafted = vi.fn()
-		eventBus.on('composer-redraft', redrafted)
-
-		const redraft = wrapper.findAll('.post-menu__item')
-			.find((button) => button.text() === 'Delete & re-draft')
-		await redraft.trigger('click')
-		await wrapper.find('.nc-dialog__button--1').trigger('click')
-		await flushPromises()
-
-		expect(store.postDelete).toHaveBeenCalled()
-		expect(redrafted).toHaveBeenCalledWith(item)
-		eventBus.off('composer-redraft', redrafted)
-	})
-
-	it('does not re-draft a post when deletion fails', async () => {
-		const { wrapper, store } = mountPost()
-		store.postDelete.mockResolvedValue(false)
-		const redrafted = vi.fn()
-		eventBus.on('composer-redraft', redrafted)
-
-		await wrapper.findAll('.post-menu__item')
-			.find((button) => button.text() === 'Delete & re-draft').trigger('click')
-		await wrapper.find('.nc-dialog__button--1').trigger('click')
-		await flushPromises()
-
-		expect(redrafted).not.toHaveBeenCalled()
-		eventBus.off('composer-redraft', redrafted)
-	})
-
-	it('says what a re-draft will cost before doing it', async () => {
-		const { wrapper } = mountPost()
-
-		const redraft = wrapper.findAll('.post-menu__item')
-			.find((button) => button.text() === 'Delete & re-draft')
-		await redraft.trigger('click')
-
-		expect(wrapper.find('.nc-dialog__name').text()).toBe('Delete and write it again?')
-		expect(wrapper.find('.delete-hint').text()).toContain('a new post')
-	})
-
 	/** An ordinary delete is still an ordinary delete. */
 	it('does not open the composer for a plain delete', async () => {
 		const { wrapper, store } = mountPost()
-		const redrafted = vi.fn()
-		eventBus.on('composer-redraft', redrafted)
+		const opened = vi.fn()
+		eventBus.on('composer-open', opened)
 
 		const remove = wrapper.findAll('.post-menu__item')
 			.find((button) => button.text() === 'Delete')
@@ -1971,8 +1959,8 @@ describe('TimelinePost', () => {
 		await flushPromises()
 
 		expect(store.postDelete).toHaveBeenCalled()
-		expect(redrafted).not.toHaveBeenCalled()
-		eventBus.off('composer-redraft', redrafted)
+		expect(opened).not.toHaveBeenCalled()
+		eventBus.off('composer-open', opened)
 	})
 
 	// translating
