@@ -19,10 +19,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				<!-- every cell below is interpolated, never `v-html`: a handle,
-				     an instance name and the comment on a report are whatever a
-				     remote server sent, and this is the page whose buttons
-				     delete accounts -->
+				<!-- every cell is interpolated, never `v-html`: its text comes from remote servers -->
 				<tr v-for="report in reports" :key="report.id" class="reports-table__row">
 					<td>
 						<a
@@ -118,11 +115,8 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 
 /**
- * One table of reports, open or resolved.
- *
- * The two tables carry the same nine columns and the same four decisions, so
- * they are one component: the version of this page that drew them twice, once
- * in PHP and once in Javascript, had the two copies to keep in step.
+ * One table of reports, open or resolved; both have the same columns and
+ * decisions.
  */
 export default {
 	name: 'ReportsTable',
@@ -165,7 +159,7 @@ export default {
 		},
 
 		/**
-		 * The date the rows have always carried: UTC, to the minute.
+		 * The date in UTC, to the minute.
 		 *
 		 * @param {number} creation seconds since the epoch, or 0
 		 * @return {string} the date, or ''
@@ -177,13 +171,9 @@ export default {
 		},
 
 		/**
-		 * Whether an id is an address this page will put in an `href`.
-		 *
-		 * Every id in this table — the reported account's, each reported
-		 * post's — is a string a remote server chose, and a `javascript:` one
-		 * in an `href` is a click away from running on the page whose buttons
-		 * delete accounts. Anything that is not plainly `https:` is shown as
-		 * the text it is instead.
+		 * Whether an id is an address this page will put in an `href`. The ids
+		 * come from remote servers, so anything not plainly `https:` is shown as
+		 * text.
 		 *
 		 * @param {string} id the id of a reported account or post
 		 * @return {boolean} whether it is an address a moderator can open
@@ -197,14 +187,8 @@ export default {
 
 <style lang="scss" scoped>
 .reports-table {
-	// a reporter is an actor id, which is a URL as long as its instance's
-	// name plus a username; left to itself one of them takes the width the
-	// decision buttons need and pushes Resolve off the end of the table
-	// An actor id is a URL with no space in it, and a table laying its columns
-	// out automatically will not wrap one however it is asked to: the id is
-	// painted straight across the two columns to its right. Ending it in an
-	// ellipsis keeps the columns where they are, and the whole id is one hover
-	// away — the readable handle is in the column to the left anyway.
+	// an actor id is a long URL without spaces that would not wrap and push
+	// the decision buttons off the table; the handle is in the column before
 	&__actor {
 		display: inline-block;
 		max-width: 24ch;
@@ -214,7 +198,7 @@ export default {
 		vertical-align: bottom;
 	}
 
-	// as is whatever the person filing the report chose to write
+	// the reporter's comment may be just as long
 	&__comment {
 		display: inline-block;
 		max-width: 28ch;

@@ -7,14 +7,11 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 
 /**
- * Bluesky's custom feeds and lists the reader keeps: the same ones a Bluesky
- * app signed in to this account shows, since both read the account's Bluesky
- * preferences.
+ * The Bluesky custom feeds and lists the reader keeps, from the account's
+ * Bluesky preferences.
  *
- * A feed is named by its `at://` URI. In the address bar it is spelled as
- * three path segments — whose it is, which kind, and its key — because the
- * URI's own slashes would have to travel encoded, and web servers refuse an
- * encoded slash in a path.
+ * In the address bar a feed's `at://` URI is spelled as three path segments
+ * (owner, kind, key), because web servers refuse an encoded slash in a path.
  */
 
 /** the collection behind each kind, as the URI names it */

@@ -4,14 +4,7 @@
  */
 
 /*
- * Administration → Social.
- *
- * One entry for the whole page, where there used to be three scripts that each
- * drew a part of it out of plain DOM calls. They were written that way because
- * the page was server-rendered PHP and mounting Vue on it would have pulled the
- * runtime into a page that had none; the app ships a shared `social-framework`
- * chunk now, every other page it has is Vue, and this one had stopped looking
- * like the rest of the administration settings.
+ * Administration → Social: mounts the Vue admin page.
  */
 import { createApp } from 'vue'
 import { generateFilePath } from '@nextcloud/router'

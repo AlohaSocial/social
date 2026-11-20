@@ -90,12 +90,8 @@ const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
 
 /**
- * The poll being written, inside the composer.
- *
- * It holds nothing of its own: the composer keeps the poll, because the poll
- * is part of the post and has to survive being saved as a draft, restored into
- * a re-draft and sent. What this owns is the shape of one — two options at
- * least and four at most, one of the six durations — and drawing it.
+ * The poll being written, inside the composer. The composer holds the poll's
+ * state, so it survives drafts; this draws it and enforces its shape.
  */
 export default {
 	name: 'PollEditor',
@@ -219,33 +215,25 @@ export default {
 		}
 	}
 
-	/* One row: add an option, say whether more than one may be picked, say how
-	   long it runs. They are three controls of one sentence and they read as
-	   one line or as nothing. */
+	/* add an option, multiple choice and duration on one line */
 	&__settings {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		flex-wrap: wrap;
 
-		/* The checkbox and its words are one control, so they are laid out as
-		   a row that centres them on each other. Left to itself the label is
-		   an inline box and the checkbox sits with its *bottom edge* on the
-		   text's baseline — which is why the words read as though they had
-		   slipped a line below everything beside them. */
+		/* a row, so the checkbox centres on its words instead of sitting
+		   on their baseline */
 		label {
 			display: flex;
 			align-items: center;
 			gap: 4px;
 			margin: 0;
-			/* against a wrap that would leave the checkbox on one line and the
-			   words it labels on the next */
+			/* keeps the checkbox and its words on one line */
 			white-space: nowrap;
 		}
 
-		/* The server gives a bare checkbox and a bare select margins of their
-		   own, and they are what tips each of them off the line its
-		   neighbours sit on. */
+		/* the server's margins on a bare checkbox and select push them off the line */
 		input[type='checkbox'] {
 			margin: 0;
 		}

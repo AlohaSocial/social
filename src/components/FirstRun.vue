@@ -47,8 +47,7 @@
 						{{ copied ? t('social', 'Copied') : t('social', 'Copy') }}
 					</NcButton>
 				</div>
-				<!-- the second address, where the administrator has the
-				     account on Bluesky too -->
+				<!-- the Bluesky address, where the account has one -->
 				<p v-if="blueskyHandle" class="first-run__bluesky">
 					{{ t('social', 'On Bluesky:') }} <code class="first-run__bluesky-handle">@{{ blueskyHandle }}</code>
 				</p>
@@ -164,8 +163,7 @@
 				<p class="first-run__hint">
 					{{ t('social', 'Or upload the file your old server exports: Mastodon and servers like it write following_accounts.csv, Pixelfed pixelfed-following.json; each account in it is followed from here.') }}
 				</p>
-				<!-- opened by the button below, which is the control a keyboard
-				     and a screen reader reach; the input stays out of both -->
+				<!-- opened by the button below; the input stays out of the tab order and the accessibility tree -->
 				<input
 					ref="follows"
 					type="file"
@@ -234,19 +232,9 @@
 
 <script>
 /**
- * The first thing a new account sees, in place of a paragraph about beta.
- *
- * The account was made a moment ago by the server, and the reader has three
- * questions the old banner did not answer: what is my address, who do I
- * follow, and can I bring what I had. The last step adds how to use the
- * account from a phone app. Four short steps, each skippable,
- * and it is gone for good once closed -- `firstrun` is true on exactly one
- * page load, the one right after the actor was created.
- *
- * Nothing here is a second implementation of anything: the people come from
- * the suggestions the Discover page reads (the colleagues among them, marked
- * `featured`), the packs from the same starter-pack routes, and the CSV goes
- * to the same import the Settings page posts to.
+ * The introduction a new account sees: its address, people to follow, importing
+ * follows or moving from an old account, and getting started. Shown only on the
+ * page load right after the actor was created (`firstrun`).
  */
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
@@ -401,8 +389,7 @@ export default {
 				logger.debug('No Bluesky identity for the first run', { error: identity.reason })
 			}
 			if (suggestions.status === 'fulfilled' && Array.isArray(suggestions.value.data)) {
-				// the colleagues among the suggestions: `featured` is what
-				// Suggestion::SOURCE_COLLEAGUES is called on the wire
+				// `featured` is Suggestion::SOURCE_COLLEAGUES on the wire
 				this.colleagues = suggestions.value.data
 					.filter((suggestion) => Array.isArray(suggestion.sources) && suggestion.sources.includes('featured'))
 					.map((suggestion) => suggestion.account)
@@ -454,10 +441,7 @@ export default {
 				const { data } = await axios.post(generateUrl(`apps/social/api/v1/starter_packs/${pack.id}/follow`))
 				const count = Array.isArray(data?.followed) ? data.followed.length : 0
 
-				// nobody was followed: every handle in the pack is on a server
-				// this one could not reach. Marking it "Following" and saying
-				// "Followed 0 accounts" was the app reporting success for
-				// something that did not happen
+				// nobody was followed: no server in the pack could be reached
 				if (count === 0) {
 					showError(t('social', 'None of these accounts could be reached. Their servers may be busy — Discover has the pack, and says which ones.'))
 
@@ -475,14 +459,8 @@ export default {
 		},
 
 		/**
-		 * The same upload the Settings page makes, to the same route.
-		 *
-		 * @param {Event} event the file input's change
-		 */
-		/**
-		 * Queues the follows file, then watches the import until it is done:
-		 * the server keeps the file and follows each account in the background,
-		 * where a long list outlives no request.
+		 * Queues the follows file, which the server follows in the background,
+		 * then watches the import until it is done.
 		 *
 		 * @param {Event} event the file input's change
 		 * @return {Promise<void>}
@@ -588,8 +566,7 @@ export default {
 		/**
 		 * Closes the introduction for good.
 		 *
-		 * @param {boolean} compose whether to put the caret in the composer:
-		 *   what the last step's button promises, and not what Skip does
+		 * @param {boolean} compose whether to put the caret in the composer
 		 */
 		finish(compose) {
 			this.$emit('done')
@@ -616,11 +593,7 @@ export default {
 	min-width: 200px;
 }
 
-/*
- * A card in the column, the width of the timeline. Quiet: a hairline, the
- * app's background, one accent — the step dots and the primary button — so
- * it reads as part of the page and not as a modal in its way.
- */
+/* a quiet card the width of the timeline, so it reads as part of the page */
 .first-run {
 	position: relative;
 	margin: calc(var(--default-grid-baseline) * 4);
@@ -647,8 +620,7 @@ export default {
 		list-style: none;
 	}
 
-	/* the dot that is current stretches into a short bar, which is what
-	   says "you are here" without a number */
+	/* the current step's dot stretches into a short bar */
 	&__dot {
 		width: 8px;
 		height: 8px;

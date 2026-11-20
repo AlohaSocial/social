@@ -4,14 +4,9 @@
  */
 
 /**
- * Where the subject of a picture is, in the coordinates Mastodon uses.
- *
- * A focal point is a pair from -1 to 1 with the origin at the centre of the
- * picture and y pointing *up*: (0, 0) is the middle, (1, 1) the top right
- * corner. The browser measures a pointer from the top left corner with y
- * pointing down, and CSS wants `object-position` as two percentages from the
- * same corner. These are the three conversions, in one place, so the editor,
- * the badge and the grid cannot disagree about which way is up.
+ * Focal points in Mastodon's coordinates: x and y from -1 to 1, origin at the
+ * centre and y pointing up. Converts to and from pointer offsets and CSS
+ * `object-position`, which measure from the top left with y pointing down.
  */
 
 /** how far one arrow key press moves the point */
@@ -30,14 +25,13 @@ export const NUDGE = 0.05
 function clamp(value) {
 	const bounded = Math.min(1, Math.max(-1, Number.isFinite(value) ? value : 0))
 
-	// two decimals is finer than any crop can show and keeps the wire value
-	// from being 0.30000000000000004
+	// two decimals is finer than any crop can show and avoids float noise on the wire
 	return Math.round(bounded * 100) / 100
 }
 
 /**
  * @param {FocalPoint} focus a point in any state
- * @return {FocalPoint} the same point, held inside the picture
+ * @return {FocalPoint} the same point, held inside the photo
  */
 export function clampFocus(focus) {
 	return { x: clamp(focus?.x), y: clamp(focus?.y) }
@@ -46,11 +40,11 @@ export function clampFocus(focus) {
 /**
  * Where a pointer landed, as a focal point.
  *
- * @param {number} offsetX pixels from the left edge of the picture
- * @param {number} offsetY pixels from the top edge of the picture
- * @param {number} width the picture's width on screen, in pixels
- * @param {number} height the picture's height on screen, in pixels
- * @return {FocalPoint} the point, or the centre when the picture has no size
+ * @param {number} offsetX pixels from the left edge of the photo
+ * @param {number} offsetY pixels from the top edge of the photo
+ * @param {number} width the photo's width on screen, in pixels
+ * @param {number} height the photo's height on screen, in pixels
+ * @return {FocalPoint} the point, or the centre when the photo has no size
  */
 export function focusFromPoint(offsetX, offsetY, width, height) {
 	if (!(width > 0) || !(height > 0)) {
@@ -64,9 +58,8 @@ export function focusFromPoint(offsetX, offsetY, width, height) {
 }
 
 /**
- * Where a focal point sits on the picture, for CSS: `left` and `top` as
- * percentages of the picture's size, and the same pair as an
- * `object-position` value.
+ * Where a focal point sits on the photo, for CSS: `left` and `top` as
+ * percentages, and the same pair as an `object-position` value.
  *
  * @param {FocalPoint|null|undefined} focus the point; nothing means the centre
  * @return {{left: string, top: string, objectPosition: string}}
@@ -83,7 +76,7 @@ export function positionOfFocus(focus) {
  * @param {FocalPoint} focus the point
  * @param {number} dx how far to move it to the right, in focus units
  * @param {number} dy how far to move it up, in focus units
- * @return {FocalPoint} the moved point, still inside the picture
+ * @return {FocalPoint} the moved point, still inside the photo
  */
 export function nudgeFocus(focus, dx, dy) {
 	const from = isFocalPoint(focus) ? focus : { x: 0, y: 0 }
@@ -113,8 +106,6 @@ export function isFocalPoint(focus) {
 		return false
 	}
 
-	// read through a cast: the argument is `unknown` on purpose, because this
-	// is the guard that decides whether it is a point at all
 	const pair = /** @type {{x?: unknown, y?: unknown}} */ (focus)
 
 	return Number.isFinite(pair.x) && Number.isFinite(pair.y)

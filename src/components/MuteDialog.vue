@@ -57,13 +57,8 @@ export const MUTE_DURATIONS = [
 ]
 
 /**
- * The two questions a mute has — their notifications too, and for how long —
- * asked once, in one place, for the profile menu and the post menu alike.
- *
- * The dialog does the muting itself rather than handing the answers back,
- * because both callers would do exactly the same with them: the store action
- * takes the id and the two options, and the relationship it answers with is
- * what every menu reads.
+ * Asks whether to mute notifications too and for how long, for the profile
+ * menu and the post menu alike, and does the muting itself.
  */
 export default {
 	name: 'MuteDialog',
@@ -138,10 +133,8 @@ export default {
 	},
 
 	watch: {
-		// a dialog opened again asks afresh: the last answer was about
-		// somebody else. Closed, it gives the focus back to the menu button
-		// it was opened from: its own trap would return it to the menu item,
-		// which the menu has taken away by then
+		// reopened, it starts afresh; closed, it returns focus to the menu
+		// button, since the menu item its trap would return to is gone
 		open(open) {
 			if (open) {
 				this.notifications = true

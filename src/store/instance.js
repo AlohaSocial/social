@@ -9,10 +9,8 @@ import { afterFirstTimeline } from '../services/boot.js'
 import { DEFAULT_LIMITS, loadLimits } from '../services/instanceLimits.js'
 
 /**
- * The server's limits, reactive: the composer's counter and its attachment
- * ceiling read these, and they change once when the server has answered.
- * The asking itself lives in `services/instanceLimits.js`, which the Files
- * action shares without a store.
+ * The server's limits, reactive, for the composer. The request itself is in
+ * `services/instanceLimits.js`, which the Files action uses without a store.
  */
 export const useInstanceStore = defineStore('instance', {
 	state: () => ({
@@ -33,11 +31,8 @@ export const useInstanceStore = defineStore('instance', {
 		 */
 		videoSizeLimit: DEFAULT_LIMITS.videoSizeLimit,
 		/**
-		 * Whether this Nextcloud can translate a post at all.
-		 *
-		 * Typed rather than inferred: `DEFAULT_LIMITS` is frozen, so the
-		 * inferred type of this field would be the literal `false` and the
-		 * server's answer could never be written into it.
+		 * Whether this Nextcloud can translate a post at all. Typed
+		 * explicitly: `DEFAULT_LIMITS` is frozen, so it would infer `false`.
 		 *
 		 * @type {boolean}
 		 */
@@ -48,13 +43,8 @@ export const useInstanceStore = defineStore('instance', {
 
 	actions: {
 		/**
-		 * Reads the limits from the server, once per page; every later call
-		 * is answered from what the first one brought.
-		 *
-		 * Behind the timeline, like the sidebar's own requests: the composer
-		 * opens on the fallback numbers and corrects itself, which nobody can
-		 * type fast enough to notice, where a request racing the timeline for
-		 * a PHP worker is something everybody notices.
+		 * Reads the limits from the server once per page, after the
+		 * timeline; until then the composer uses the fallback numbers.
 		 */
 		load() {
 			if (this.loaded) {

@@ -54,13 +54,8 @@ import { showError } from '../services/toast.js'
 import { fullDateTime } from '../utils/relativeTime.js'
 
 /**
- * The reader's own posts that a moderator has not looked at yet.
- *
- * The composer says so when it happens, but a person who closed the tab has to
- * be able to find their writing again — this app must not lose what somebody
- * wrote without telling them where it went. Taking one back deletes it and
- * nothing else: a post nobody has seen, withdrawn by its own author, is not a
- * moderation decision and leaves no record.
+ * The reader's own posts held for moderation, so they can find them again.
+ * Withdrawing one deletes it and leaves no moderation record.
  */
 export default {
 	name: 'HeldPosts',

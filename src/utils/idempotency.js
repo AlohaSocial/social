@@ -8,11 +8,8 @@ import { uuid } from './uuid.js'
 /**
  * The Idempotency-Key of a post being sent, kept across retries.
  *
- * A post whose answer was lost (a timeout, a proxy error after the server
- * had already created it) is sent again with the same key, and the server
- * answers with the post it made the first time instead of making a second.
- * The key belongs to what is sent: a changed post is a new post and gets a
- * new key, and a post that went out lets the next one start afresh.
+ * A retry after a lost answer reuses the key, so the server returns the post
+ * it already made. A changed body or a sent post gets a new key.
  *
  * @return {{keyFor: function(object): string, sent: function(): void}} the keeper
  */

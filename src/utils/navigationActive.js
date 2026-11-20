@@ -10,11 +10,10 @@
 export const MY_FEED_COVERS = Object.freeze(['', 'timeline', 'federated'])
 
 /**
- * Whether a navigation entry is the page on screen. An entry matches its own
- * route and any dot-namespaced child of it, so Profile stays lit on
- * `profile.followers`, while a sibling that differs only by a param does not
- * match. The sidebar and the phone bar both ask this, so the two never
- * disagree about where the reader is.
+ * Whether a navigation entry is the page on screen, for both the sidebar and
+ * the phone bar. An entry matches its own route and any dot-namespaced child
+ * of it (Profile stays lit on `profile.followers`), but not a sibling that
+ * differs only by a param.
  *
  * @param {{name?: unknown, params?: object}} route the current route
  * @param {{to: string|{name: string, params?: object}, covers?: readonly string[]}} item a menu entry
@@ -30,17 +29,13 @@ export function isEntryActive(route, item) {
 		return false
 	}
 
-	// an entry whose page is read at more than one scope owns all of them:
-	// the type says which, and the switcher on the page says which one of the
-	// entry's own scopes is being read
+	// an entry whose page has several scopes stays lit for all of them
 	if (item.covers !== undefined) {
 		return item.covers.includes(String(route.params?.type ?? ''))
 	}
 
-	// An optional param the URL leaves out still arrives as '', so the two
-	// sides are compared value by value across both key sets: counting keys
-	// makes /timeline, whose params are {type: ''}, look different from the
-	// My Feed entry, which carries no params at all.
+	// An optional param the URL leaves out still arrives as '', so compare
+	// values across both key sets instead of counting keys.
 	const wanted = to.params ?? {}
 	const actual = route.params ?? {}
 	for (const key of new Set([...Object.keys(wanted), ...Object.keys(actual)])) {

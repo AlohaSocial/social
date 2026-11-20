@@ -11,13 +11,9 @@
 					:to="tile.route"
 					:data-status-id="tile.key"
 					:aria-label="tile.label">
-					<!-- A tile the reader's own keyword filters matched carries
-					     no picture at all: the grid is the other way this app
-					     draws a timeline, and a filter that covers a post in the
-					     list has to cover it here too. Not merely veiled, as a
-					     sensitive picture is — the file is never fetched, and
-					     the alt text, which a filter matches on as well, is not
-					     in the page either. -->
+					<!-- A tile matched by the reader's keyword filters shows no
+					     photo: the file is never fetched and its alt text is
+					     not in the page. -->
 					<img
 						v-if="tile.preview && !tile.filtered"
 						class="media-grid__image"
@@ -75,18 +71,9 @@ import { positionOfFocus } from '../utils/focalPoint.js'
 import { filterCoverLabel, matchedFilters } from '../utils/filters.js'
 
 /**
- * A profile as a grid of squares, which is what a profile looks like on
- * Pixelfed and is the single most visible difference between the two apps.
- *
- * One tile per post, not per picture: an album is one thing somebody posted and
- * tapping it opens that post, so a ten-picture album taking ten tiles would
- * make a profile look like ten posts. The badge says there is more behind it.
- *
- * The crop is where the focal point says, not the middle. That is the whole
- * reason the focal point exists -- a square crop of a portrait photo cuts the
- * subject out of it about half the time, and `object-position` is what puts it
- * back. A post that never set one is centred, which is what every client
- * assumes when the field is absent.
+ * Posts as a grid of squares, as Pixelfed shows a profile. One tile per post,
+ * with a badge for an album, cropped around the photo's focal point (centred
+ * when it has none).
  */
 export default {
 	name: 'ProfileMediaGrid',
@@ -109,8 +96,7 @@ export default {
 
 		/**
 		 * Whose grid this is, where it is one account's. Empty on Discover,
-		 * which is everybody's: a tile there links at the account that wrote
-		 * the post it draws.
+		 * where each tile links to its post's author.
 		 */
 		account: {
 			type: String,
@@ -131,7 +117,7 @@ export default {
 
 	data() {
 		return {
-			/** Tiles whose picture 404'd, so the next render draws the fallback. */
+			/** Tiles whose photo 404'd, so the next render draws the fallback. */
 			broken: [],
 			/** Observer that only fetches a video when its tile nears the viewport. */
 			/** @type {IntersectionObserver | null} */
@@ -188,9 +174,8 @@ export default {
 				isVideo,
 				sensitive: Boolean(post.sensitive),
 				filtered: matchedFilters(post).length > 0,
-				// For older videos, preview_url is the video itself. An <img> cannot
-				// decode it; use a muted, lazy video frame instead. Images may still
-				// fall back to their full-size source when they have no thumbnail.
+				// For some older videos preview_url is the video itself, which an
+				// <img> cannot decode: draw a muted, lazy video frame instead.
 				preview: broken ? null : (preview || (!isVideo ? first.url || null : null)),
 				videoSource: !broken && isVideo && !preview ? first.url || null : null,
 				alt: first.description || '',
@@ -198,18 +183,15 @@ export default {
 				style: { objectPosition: this.focalPosition(first) },
 				route: {
 					name: 'single-post',
-					// the post's own author first: `account` is a required
-					// route param, and an empty one made `router-link` throw
-					// while resolving — which took every tile on Discover with
-					// it, so the Pictures tab drew nothing at all
+					// `account` is a required route param: an empty one makes
+					// `router-link` throw, so use the post's author first
 					params: { account: post.account?.acct || this.account, id: post.id },
 				},
 			}
 		},
 
 		/**
-		 * Where to crop the tile. The conversion lives with the editor that
-		 * writes the point, so the two cannot disagree about which way is up.
+		 * Where to crop the tile, using the focal point editor's own conversion.
 		 *
 		 * @param {object} attachment the first attachment of the post
 		 * @return {string} an `object-position` value
@@ -224,8 +206,7 @@ export default {
 		 * @return {string} what a screen reader announces for the tile
 		 */
 		labelFor(post, attachment) {
-			// the name of the filter rather than anything of the post: the alt
-			// text is matched by a filter as surely as the words of the post are
+			// the filter's name only: the alt text may be what the filter matched
 			if (matchedFilters(post).length > 0) {
 				return filterCoverLabel(post)
 			}
@@ -250,10 +231,8 @@ export default {
 		},
 
 		/**
-		 * Only fetch a video when its tile is near the viewport. Most videos
-		 * have a server-generated JPEG poster and never reach this path; for old
-		 * uploads without one, this lets the browser draw an actual frame without
-		 * opening a connection for every video in the grid at once.
+		 * Fetches a poster-less video only when its tile nears the viewport,
+		 * so the grid does not open a connection per video at once.
 		 */
 		observeVideoPreviews() {
 			const videoRefs = this.$refs.videoPreviews
@@ -318,8 +297,7 @@ export default {
 .media-grid {
 	&__list {
 		display: grid;
-		// three across is Pixelfed's; auto-fill keeps the squares a sensible
-		// size on a narrow screen instead of shrinking them to nothing
+		// auto-fill keeps the squares a sensible size on a narrow screen
 		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 		gap: 2px;
 		list-style: none;
@@ -329,7 +307,6 @@ export default {
 
 	&__cell {
 		position: relative;
-		// the square the whole thing is for
 		aspect-ratio: 1 / 1;
 		overflow: hidden;
 		background-color: var(--color-background-dark);
@@ -373,8 +350,7 @@ export default {
 		top: 6px;
 		inset-inline-end: 6px;
 		color: #fff;
-		// the pictures underneath are arbitrary, so the icon carries its own
-		// contrast rather than relying on them
+		// the icon carries its own contrast over arbitrary photos
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 		pointer-events: none;
 	}

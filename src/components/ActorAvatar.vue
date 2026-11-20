@@ -3,8 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- `avatarProps` carries `disableMenu`: the account preview in this app is
-	     this app's own, everywhere, and never Nextcloud's -->
+	<!-- `avatarProps` sets `disableMenu`: the preview is this app's hover card, never Nextcloud's -->
 	<AccountHoverCard
 		v-if="showHoverCard"
 		:handle="actor.acct"
@@ -47,25 +46,16 @@ export default {
 			default: 32,
 		},
 
-		/**
-		 * Whether hovering this avatar previews the account. Off where the
-		 * avatar is decoration rather than a reference to somebody — the
-		 * reader's own face in the composer, say.
-		 */
+		/** Whether hovering this avatar previews the account. */
 		hoverCard: {
 			type: Boolean,
 			default: true,
 		},
 
 		/**
-		 * Whether clicking this avatar opens the account's profile.
-		 *
-		 * On by default, because a face is the most obvious thing on screen to
-		 * click and doing nothing is the one thing it should not do. Off where
-		 * the avatar already sits inside a link — nesting one anchor in another
-		 * is invalid and the browser resolves it by dropping content — and
-		 * where following it would interrupt something, as it would from the
-		 * composer's reply and quote lines.
+		 * Whether clicking this avatar opens the account's profile. Turn it off
+		 * where the avatar already sits inside a link, since nested anchors are
+		 * invalid.
 		 */
 		link: {
 			type: Boolean,
@@ -88,13 +78,9 @@ export default {
 		},
 
 		/**
-		 * What wraps the avatar: the router where there is one, a plain link
-		 * where there is not, and nothing at all where there is nowhere to go.
-		 *
-		 * The profile section this app adds to a Nextcloud user's page is a
-		 * custom element with an app of its own and no router in it, so a
-		 * `router-link` there resolves to nothing and swallows the avatar. The
-		 * account's own address is what that surface can offer instead.
+		 * What wraps the avatar: a router link where there is a router, a plain
+		 * link where there is not (the profile section on a Nextcloud user's
+		 * page has none), and a span where there is nowhere to go.
 		 *
 		 * @return {string}
 		 */
@@ -138,8 +124,7 @@ export default {
 		},
 
 		/**
-		 * What NcAvatar is given, in one place so the hovered and the plain
-		 * avatar cannot drift apart.
+		 * What NcAvatar is given, shared by the hovered and the plain avatar.
 		 *
 		 * @return {object}
 		 */
@@ -148,17 +133,12 @@ export default {
 				size: this.size,
 				hideStatus: true,
 				disableTooltip: true,
-				// NcAvatar hangs Nextcloud's own profile card off a local
-				// account's avatar, on hover, and it opened over the top of
-				// this one: two cards about the same person, the larger of
-				// them the one that knows nothing about following. Only local
-				// avatars were affected, so which card a reader got depended
-				// on which instance the account was on
+				// NcAvatar would open Nextcloud's own profile card on a local
+				// account's avatar, on top of this app's hover card
 				disableMenu: true,
-				// an account without a picture of its own gets its flower; a
-				// local account's face is otherwise its Nextcloud user's, by
-				// the user id; where the page was not told it, the picture the
-				// server gave
+				// the placeholder flower for an account without a picture, else
+				// the Nextcloud user's avatar for a local account, else the
+				// server's picture
 				...(this.pattern !== ''
 					? { url: this.pattern }
 					: this.nextcloudUser !== ''
@@ -174,9 +154,8 @@ export default {
 
 		/** @return {string} */
 		avatarUrl() {
-			// Remote actors are delivered with an avatar URL already pointing at this
-			// server's document cache. Actors cached without an icon have none, so fall
-			// back to the endpoint that resolves one from the ActivityPub id.
+			// actors cached without an icon have no avatar URL; the endpoint
+			// resolves one from the ActivityPub id
 			return accountAvatarUrl(this.actor, this.size)
 				|| generateUrl('/apps/social/api/v1/global/actor/avatar?id=' + encodeURIComponent(this.actor.url ?? ''))
 		},

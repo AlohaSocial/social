@@ -70,12 +70,8 @@ import { latestLoad } from '../utils/latestLoad.js'
 const PAGE = 20
 
 /**
- * One place: the public posts taken there, as a grid.
- *
- * Pixelfed's place page. It is deliberately a page of what people said
- * about where they were and nothing more — no map, no geocoding, no
- * "nearby" — because the one thing this app promises about location is
- * that it never infers any.
+ * One place (as on Pixelfed): the public posts tagged with it, as a grid. No
+ * map or "nearby", because the app never infers location.
  */
 export default {
 	name: 'PlacePage',
