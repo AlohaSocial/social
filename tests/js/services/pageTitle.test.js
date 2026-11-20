@@ -28,7 +28,6 @@ describe('the page title', () => {
 		['discover', 'Discover'],
 		['statistics', 'Statistics'],
 		['blocked-accounts', 'Blocking'],
-		['follow-requests', 'Follow requests'],
 		['migration', 'Migration'],
 		['shorts', 'Shorts'],
 		['search', 'Search'],

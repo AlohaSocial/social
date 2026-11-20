@@ -1106,7 +1106,7 @@ hand, it is picked up as one.
   without it ever knowing. **Blocking**, under **Settings**
   in the sidebar, lists both with unblock and unmute inline.
 - **Follow requests.** When your account is locked, people asking to follow
-  you appear under **Follow requests** in the sidebar — **Accept** or
+  you appear at the top of **Activities** — **Accept** or
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
   **Approve who follows you** switch under **Settings → Profile and privacy**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.

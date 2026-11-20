@@ -22,7 +22,6 @@ const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/Pro
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
 const StarterPack = () => import(/* webpackChunkName: "profile" */'./views/StarterPack.vue')
-const FollowRequests = () => import(/* webpackChunkName: "settings" */'./views/FollowRequests.vue')
 const BlockedAccounts = () => import(/* webpackChunkName: "settings" */'./views/BlockedAccounts.vue')
 const Discover = () => import('./views/Discover.vue')
 // Not in the `profile` chunk. Settings and Statistics are pages somebody goes
@@ -362,12 +361,9 @@ const router = createRouter({
 			name: 'discover',
 		},
 		{
+			// follow requests are at the top of Activities
 			path: '/follow_requests',
-			components: {
-				default: FollowRequests,
-			},
-			name: 'follow-requests',
-			meta: { signedIn: true },
+			redirect: { name: 'timeline', params: { type: 'notifications' } },
 		},
 		{
 			path: '/blocked',
