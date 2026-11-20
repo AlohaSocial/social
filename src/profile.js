@@ -35,8 +35,7 @@ const SocialProfileSectionElement = defineCustomElement({
 	// timeline styles and native Nextcloud controls can style its entries too.
 	shadowRoot: false,
 	// the custom element runs an app of its own, and the posts it renders read
-	// the store like every other timeline entry does — a boost used to reach
-	// for a store that was never installed here
+	// the store like every other timeline entry does
 	configureApp(app) {
 		// Custom elements have their own Vue app, outside the app created by
 		// `main.js`. Install the same Nextcloud globals that its templates use.

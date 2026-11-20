@@ -61,8 +61,7 @@
 						<span class="bluesky-feeds__name">{{ feed.name }}</span>
 						<span v-if="feed.description" class="bluesky-feeds__creator">{{ feed.description }}</span>
 					</div>
-					<!-- an icon, as on the kept feeds above: a text label shares
-						     the row with the description and would be cut short -->
+					<!-- an icon, as on the kept feeds above: a text label would be cut short -->
 					<NcButton
 						class="bluesky-feeds__action"
 						variant="secondary"

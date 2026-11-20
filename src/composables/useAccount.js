@@ -21,9 +21,8 @@ export function useAccount(uid) {
 	const { hostname } = useServerData()
 
 	/**
-	 * the complete account name: a local user id is qualified with this host.
-	 * A Bluesky handle has no host to add and the store files it as it is,
-	 * which is the one way to tell it from a local user id with a dot in it
+	 * the complete account name: a local user id is qualified with this host,
+	 * a Bluesky handle is filed as it is
 	 */
 	const profileAccount = computed(() => {
 		const value = toValue(uid)
@@ -41,14 +40,8 @@ export function useAccount(uid) {
 	const accountInfo = computed(() => accountStore.getAccount(profileAccount.value))
 
 	/**
-	 * Whether there is anything to show yet.
-	 *
-	 * This used to be a store getter of its own, with a comment calling it
-	 * "somewhat duplicate with accountInfo(), but needed (for some reason)".
-	 * It was the same lookup with `!== undefined` around it, and it still is —
-	 * one query, asked once. It says "the store has this account", never "the
-	 * server was asked and had none": a view that needs to tell those two
-	 * apart has to watch its own lookup.
+	 * Whether the store has this account. It does not say the server was asked
+	 * and had none; a view that needs that has to watch its own lookup.
 	 */
 	const accountLoaded = computed(() => accountInfo.value !== undefined)
 

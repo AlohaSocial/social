@@ -48,22 +48,9 @@ const EXCERPT = 140
 const DISMISSED_KEY = 'social.onThisDay.dismissed'
 
 /**
- * What the reader wrote on this day in years gone by.
- *
- * An internal feed is a company's memory and nearly all of it is unreachable
- * the moment it scrolls past: a post is found again only by somebody who
- * remembers enough of it to search for it. This is the one place old posts
- * come back without being asked for.
- *
- * Excerpts rather than cards. Six full posts at the top of a timeline would be
- * the timeline; a line each, linking through, is a reminder that something is
- * there rather than a second feed above the first.
- *
- * Dismissal is kept in `localStorage`, as the day it happened on: it is a
- * convenience for this browser and nothing depends on it — a reader who
- * dismisses it on their phone and opens their laptop sees it again, which is
- * a better failure than a preference round-trip for a card that is gone in a
- * day anyway.
+ * What the reader wrote on this day in years gone by, as one-line excerpts
+ * linking to the posts. Dismissal is kept in `localStorage` for the day: a
+ * convenience for this browser that nothing depends on.
  */
 export default {
 	name: 'OnThisDay',
@@ -98,8 +85,7 @@ export default {
 			try {
 				return window.localStorage.getItem(DISMISSED_KEY) === this.today()
 			} catch {
-				// private windows and blocked site data throw on access; a
-				// card that cannot remember being dismissed still works
+				// private windows and blocked site data throw on access
 				return false
 			}
 		},
@@ -142,12 +128,8 @@ export default {
 		},
 
 		/**
-		 * The post as a line of plain text.
-		 *
-		 * `content` is HTML the server built, and this is the one place it is
-		 * not rendered as HTML: the excerpt is a label inside a link, so it is
-		 * parsed for its text and the text alone is shown. Nothing from the
-		 * post can become markup here.
+		 * The post as a line of plain text: the excerpt is a label inside a link, so
+		 * only the text of the server's HTML is shown.
 		 *
 		 * @param {object} memory a post
 		 * @return {string} its first line or so
@@ -174,8 +156,7 @@ export default {
 
 				this.memories = Array.isArray(data) ? data : []
 			} catch (error) {
-				// the timeline is the page; this is an extra on top of it and
-				// a failed extra is not worth an error message
+				// an extra on top of the timeline is not worth an error message
 				logger.debug('Could not read the memories', { error })
 				this.memories = []
 			}

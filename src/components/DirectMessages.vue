@@ -24,15 +24,14 @@
 				</NcButton>
 			</header>
 			<div v-if="conversations.length > 0" class="direct-messages__list-tools">
-				<!-- the feed's own switcher, so All and Unread are the same
-				     control as My Feed and Local -->
+				<!-- the feed's own switcher, for All and Unread -->
 				<TimelineSwitcher
 					class="direct-messages__filters"
 					:options="filterOptions"
 					:value="filterMode"
 					:label="t('social', 'Filter conversations')"
 					@update:value="filterMode = $event" />
-				<!-- only once there are enough conversations to look for one -->
+				<!-- only once there are enough conversations to search -->
 				<label v-if="offersSearch" class="direct-messages__search direct-messages__pill">
 					<Magnify :size="18" aria-hidden="true" />
 					<input
@@ -43,14 +42,8 @@
 				</label>
 			</div>
 
-			<!--
-				Above the chain rather than inside it. A removal that failed is
-				something that happened to one conversation, not a state the
-				inbox is in — and a `v-if` here broke the chain in two, so the
-				empty state rendered under "Loading…", the error and the empty
-				state rendered together, and a failed removal took the whole
-				list off the screen.
-			-->
+			<!-- outside the v-if chain: a failed removal concerns one
+			     conversation and must not replace the list or the empty state -->
 			<p v-if="removeError" class="direct-messages__state" role="alert">
 				{{ t('social', 'Could not remove conversation') }}
 			</p>
@@ -64,8 +57,7 @@
 					{{ t('social', 'Try again') }}
 				</NcButton>
 			</div>
-			<!-- beside the welcome pane a line is enough; on a phone, where this
-			     pane is the whole page, it is the page's empty state -->
+			<!-- a line beside the welcome pane; on a phone, the page's empty state -->
 			<div v-else-if="conversations.length === 0" class="direct-messages__inbox-empty">
 				<p class="direct-messages__inbox-empty-line">
 					{{ t('social', 'No conversations yet') }}
@@ -199,8 +191,8 @@
 				<p v-if="searchError" class="direct-messages__state direct-messages__recipient-feedback" role="alert">
 					{{ t('social', 'Could not search for people. Please try again.') }}
 				</p>
-				<!-- Typing searches this server; the address's own server is
-				     asked only when the reader asks, with Enter or here. -->
+				<!-- typing searches this server; the address's own server is
+				     asked only on Enter or here -->
 				<div v-if="offerRecipientLookup" class="direct-messages__state direct-messages__recipient-feedback direct-messages__recipient-lookup">
 					<span>{{ t('social', '{address} is not known on this server yet.', { address: recipientLookupLabel }) }}</span>
 					<NcButton class="direct-messages__recipient-lookup-button" @click="lookUpRecipient">
@@ -347,8 +339,7 @@
 							element="article"
 							:hideAvatar="true"
 							:hideAuthor="true" />
-						<!-- under the last message of a run; beside the others,
-						     shown when the message is pointed at -->
+						<!-- under the last message of a run; beside the others on hover -->
 						<time
 							class="direct-messages__message-time"
 							:class="{ 'direct-messages__message-time--aside': !endsRun(message, index) }"
@@ -463,12 +454,9 @@ function writtenAt(status) {
 }
 
 /**
- * A handle at the very start of a message, as the composer writes one.
- *
- * `\w` is ASCII whatever else is set, so `@müller@remote.example` — and every
- * handle on an internationalised domain — was not recognised and the routing
- * mention stayed on screen. What a handle may hold is "not whitespace and not
- * another at sign", which is the same rule the recipient box uses.
+ * A handle at the very start of a message, as the composer writes one. A
+ * handle is anything but whitespace and at signs, since `\w` is ASCII only
+ * and would miss internationalised names and domains.
  */
 const LEADING_HANDLE = /^(\s*)@([^\s@]+(?:@[^\s@]+)?)(?=\s|$)/u
 
@@ -514,8 +502,7 @@ export default {
 	emits: ['select'],
 
 	setup() {
-		// the account's username, which is what its messages carry; not the
-		// user id, which a username chosen on the setup screen need not be
+		// the username, which messages carry; the user id may differ from it
 		const { username: ownUsername } = useCurrentUser()
 
 		return { ownUsername, idempotency: idempotencyKeeper() }
@@ -560,8 +547,8 @@ export default {
 			/** whether the search in flight asks other servers */
 			lookingUpRecipient: false,
 			/**
-			 * What other servers were last asked about, so the offer to look
-			 * it up is not made again for the answer it already got.
+			 * What other servers were last asked about, so the lookup is not
+			 * offered again for it.
 			 *
 			 * @type {?string}
 			 */
@@ -591,12 +578,10 @@ export default {
 		/**
 		 * The inbox as the reader sees it: one chat per set of people.
 		 *
-		 * The server answers one conversation per thread, as Mastodon does —
-		 * a direct message that is not a reply starts a new one — so two
-		 * messages to the same person a day apart were two rows "Bob". The
-		 * threads between one set of participants are folded into one chat
-		 * here: it carries the newest thread's id, its newest message, and is
-		 * unread while any of its threads is. Opening it reads every thread.
+		 * The server answers one conversation per thread, as Mastodon does, so
+		 * the threads with the same participants are folded into one chat: it
+		 * carries the newest thread's id and message, and is unread while any
+		 * of its threads is.
 		 *
 		 * @return {object[]} newest first, each with its `threads`
 		 */
@@ -652,9 +637,9 @@ export default {
 		},
 
 		/**
-		 * The reader, in the shape `isProtocolRecipient()` compares a mention
-		 * against — before the account store has them, by their username and
-		 * this server.
+		 * The reader in the shape `isProtocolRecipient()` compares a mention
+		 * against, built from the username and this server until the account
+		 * store has them.
 		 *
 		 * @return {object|null}
 		 */
@@ -699,8 +684,8 @@ export default {
 
 		/**
 		 * The chat the route names, by any of its threads: the route keeps
-		 * the id it was opened with, and the chat's own id moves on when a
-		 * new thread with the same people arrives.
+		 * the id it was opened with, while the chat's id moves to its newest
+		 * thread.
 		 *
 		 * @return {object|null}
 		 */
@@ -730,7 +715,7 @@ export default {
 		/**
 		 * Whether to offer asking the address's own server: an address that
 		 * neither answer holds and that was not asked about yet. A pasted
-		 * profile link counts: the account search matches handles, not links.
+		 * profile link counts, as the account search matches handles only.
 		 *
 		 * @return {boolean}
 		 */
@@ -753,10 +738,8 @@ export default {
 
 		/**
 		 * Who the recipient box offers, in two groups: the people the reader
-		 * knows — accounts they follow and the people they already talk to —
-		 * and after them, under their own heading, every other account the
-		 * search found. A stranger from the directory used to be listed among
-		 * the reader's own contacts with nothing to tell them apart.
+		 * knows (follows and existing chats), then every other account the
+		 * search found, under its own heading.
 		 *
 		 * @return {{key: string, title: string, accounts: object[]}[]} the groups that have anybody in them
 		 */
@@ -775,9 +758,8 @@ export default {
 				accountKeys.forEach((key) => seen.add(key))
 				return true
 			}
-			// the server already matched what it returns, however it was typed
-			// — a pasted profile link is in neither the name nor the handle —
-			// so only the accounts known locally are matched here
+			// the server already matched its results (a pasted profile link is
+			// in neither name nor handle), so only local accounts are matched here
 			const matches = (account) => !query
 				|| String(account?.display_name || account?.username || '').toLocaleLowerCase().includes(query)
 				|| String(account?.acct ?? '').toLocaleLowerCase().includes(query)
@@ -883,9 +865,8 @@ export default {
 		},
 
 		messages(now, before) {
-			// only when a message came or went: a refresh that found nothing
-			// new rebuilds the same list, and must not pull a reader who
-			// scrolled up back to the bottom
+			// only when a message came or went, so a refresh with nothing new
+			// does not pull a reader who scrolled up back to the bottom
 			const ids = (list) => list.map((message) => String(message.id)).join(' ')
 			if (ids(now) === ids(before)) {
 				return
@@ -904,9 +885,8 @@ export default {
 		if (this.selectedConversationId !== '') {
 			await this.loadThread(this.selectedConversationId)
 		}
-		// with notify_push the server says when a direct message arrives;
-		// polling remains as a slow safety net. Without it, poll every 30
-		// seconds, as the feed does.
+		// with notify_push the server says when a direct message arrives and
+		// polling is a slow safety net; without it, poll every 30 seconds
 		const hasPush = onTimelinePush(this.onPushed, [PUSH_DIRECT])
 		this.pollEvery = (hasPush ? 300 : 30) * 1000
 		this.intervalId = window.setInterval(() => this.pollIfVisible(), this.pollEvery)
@@ -947,12 +927,7 @@ export default {
 		},
 
 		/**
-		 * The inbox, a page at a time.
-		 *
-		 * It used to ask for forty and stop there, with no way to reach the
-		 * forty-first: an account that has been using this for a while simply
-		 * could not open its older conversations. The server has been paging
-		 * and sending the cursor in its `Link` header all along.
+		 * The inbox, a page at a time, following the cursor in the `Link` header.
 		 *
 		 * @param {boolean} more whether this is the reader asking for the page
 		 *                       after the one they have
@@ -998,12 +973,9 @@ export default {
 		},
 
 		/**
-		 * The first page again, laid over what is on screen.
-		 *
-		 * The rows the page brings are put first — they are the newest — and
-		 * every row already loaded that the page did not bring stays after
-		 * them, so a reader who paged keeps the older conversations. The
-		 * cursor is kept once the reader has paged: a fresh first page only
+		 * The first page again, laid over what is on screen: its rows go
+		 * first and every older row already loaded stays after them. The
+		 * cursor is kept once the reader has paged, as a fresh first page only
 		 * knows where its own second page starts.
 		 */
 		async refreshConversations() {
@@ -1053,9 +1025,8 @@ export default {
 		},
 
 		/**
-		 * What the server's push event runs. A hidden tab does not fetch —
-		 * opening the chat is what marks it read, and a reader who is not
-		 * looking has not read anything — but remembers that something came.
+		 * What the server's push event runs. A hidden tab does not fetch, as
+		 * opening the chat marks it read; it only remembers that something came.
 		 *
 		 * @return {Promise<void>|undefined} settled once the refresh is in
 		 */
@@ -1088,14 +1059,9 @@ export default {
 		},
 
 		/**
-		 * The same conversation twice is one; two with the same person stay
-		 * two here and become one chat in `chats`.
-		 *
-		 * The key used to be the peer, so a second thread with somebody was
-		 * dropped on the floor — unreachable from the inbox, however many
-		 * messages were in it. The server defines a conversation by its thread
-		 * root and hands that root's id back as the conversation's, which is
-		 * the thing that is actually unique.
+		 * Drops duplicates by conversation id, the thread root the server
+		 * hands back; two threads with the same person stay two here and
+		 * become one chat in `chats`.
 		 *
 		 * @param {object[]} conversations what the server sent
 		 * @return {object[]} the same, without any true duplicate
@@ -1117,13 +1083,12 @@ export default {
 
 		/**
 		 * One search, asked twice at once: narrowed to the accounts the reader
-		 * follows, and not narrowed. The narrowed one is not a filter over the
-		 * other — the server searches the follows themselves — so somebody the
-		 * reader follows is found even when a page of strangers matches first.
+		 * follows, and not narrowed. The server searches the follows
+		 * themselves, so a followed account is found even when a page of
+		 * strangers matches first.
 		 *
 		 * `resolve` lets the server ask the address's own server. It is sent
-		 * only when the reader asks — Enter, or "Look up" — and not while they
-		 * type: every keystroke of a handle would be a lookup of another host.
+		 * only on Enter or "Look up", not on every keystroke.
 		 *
 		 * @param {string} query what was typed
 		 * @param {boolean} resolve whether other servers may be asked
@@ -1199,9 +1164,7 @@ export default {
 
 		startConversation(account, event) {
 			event?.preventDefault?.()
-			// a handle is not case-sensitive, and the filtering beside this
-			// lowercases one — so `Bob@remote.example` opened a second chat
-			// beside the one with `bob@remote.example`
+			// handles are not case-sensitive, so both sides are lowercased
 			const wanted = String(account.acct ?? '').toLocaleLowerCase()
 			const existing = this.chats.find((conversation) => (conversation.accounts ?? []).some((candidate) => (candidate.id && account.id && String(candidate.id) === String(account.id))
 				|| (wanted !== '' && String(candidate.acct ?? '').toLocaleLowerCase() === wanted)))
@@ -1227,8 +1190,8 @@ export default {
 			this.sendingMessage = true
 			this.sendError = false
 			try {
-				// A new-message composer can be opened while another thread remains
-				// selected in the route. That thread is not the parent of this post.
+				// a new-message composer can be open while another thread is still
+				// selected in the route; that thread is not the parent of this post
 				const replyTo = newRecipient ? null : this.activeConversation?.last_status?.id
 				const body = {
 					status: `${this.routingMentions(recipient)} ${text}`,
@@ -1297,8 +1260,8 @@ export default {
 					ancestors: contexts.flatMap(({ data }) => (Array.isArray(data?.ancestors) ? data.ancestors : [])),
 					descendants: contexts.flatMap(({ data }) => (Array.isArray(data?.descendants) ? data.descendants : [])),
 				}
-				// every thread the chat folds, each on its own: the server
-				// counts and marks them one by one, as Mastodon does
+				// each thread the chat folds, as the server counts and marks
+				// them one by one
 				let marked = false
 				for (const thread of threads.filter((candidate) => candidate.unread)) {
 					try {
@@ -1310,9 +1273,7 @@ export default {
 					}
 				}
 				if (marked) {
-					// the sidebar badge is the server's count, read again
-					// rather than guessed at: it stayed up until the next
-					// poll after the one unread chat had been opened
+					// the sidebar badge is the server's count, fetched again
 					useNotificationsStore().fetchUnreadDirectMessages()
 				}
 			} catch (error) {
@@ -1345,15 +1306,12 @@ export default {
 
 		preview(status, conversation = null) {
 			// the open conversation when the caller named none: a mention is
-			// only hidden where there is a peer to compare it against, and a
-			// preview asked for without one would otherwise keep the routing
-			// handle it is there to leave out
+			// hidden only where there is a peer to compare it against
 			const peer = this.conversationPeer(conversation ?? this.activeConversation)
 			let content = this.withoutProtocolRecipient(status, peer)
 			if (content === (status?.content ?? '')) {
 				// a message from the other side opens with the reader's own
-				// handle, which is routing too: the row already says whose
-				// chat this is, so the line under the name starts at the words
+				// handle, which is routing too
 				content = this.withoutProtocolRecipient(status, this.readerAsRecipient)
 			}
 
@@ -1361,9 +1319,8 @@ export default {
 		},
 
 		/**
-		 * Direct posts carry a leading account mention for ActivityPub delivery.
-		 * It is routing metadata in this view; the chat header already identifies
-		 * the peer, so repeating that mention in every bubble is noise.
+		 * Direct posts carry a leading mention for ActivityPub delivery; the
+		 * chat header already names the peer, so it is hidden in the bubbles.
 		 *
 		 * @param {object} message Direct message status.
 		 * @return {object} the original message unless a leading protocol mention was removed
@@ -1374,8 +1331,8 @@ export default {
 		},
 
 		/**
-		 * Remove only the first ActivityPub h-card at the start of a direct
-		 * message. Other mentions in the message body keep their meaning.
+		 * Removes only a leading mention of the recipient; other mentions in
+		 * the message keep their meaning.
 		 *
 		 * @param {object} message Direct message status.
 		 * @param {object|null} recipient Conversation partner whose routing mention is hidden.
@@ -1387,8 +1344,7 @@ export default {
 				return content
 			}
 
-			// parsed into a document of its own: one that never loads an image
-			// or runs a handler, whatever the markup turns out to hold
+			// a separate document never loads images or runs handlers
 			const wrapper = new DOMParser().parseFromString(content, 'text/html').body
 			const paragraph = wrapper.firstElementChild?.tagName === 'P' ? wrapper.firstElementChild : wrapper
 			let first = paragraph.firstChild
@@ -1412,9 +1368,7 @@ export default {
 			}
 			const linkedAccount = mention.querySelector('a[href]')?.getAttribute('href') ?? mention.getAttribute('href') ?? ''
 			const visibleMention = mention.textContent.replace(/^@/, '').trim()
-			// and only when it names the peer. The `.h-card` exemption here
-			// stripped the first mention of *anybody*, so a message opening
-			// "@carol look at this" lost the name it was about.
+			// a mention element is hidden only when it names the peer
 			if (!this.isProtocolRecipient(visibleMention, recipient, linkedAccount)) {
 				return content
 			}
@@ -1441,10 +1395,7 @@ export default {
 		 * @return {boolean} whether it may be hidden
 		 */
 		isProtocolRecipient(mention, recipient, href = '') {
-			// Nothing is hidden when there is nobody to compare against. This
-			// said "yes" instead, so in a conversation whose peer had not
-			// loaded the first mention of the message disappeared whoever it
-			// named.
+			// nothing is hidden when there is nobody to compare against
 			if (!recipient) {
 				return false
 			}
@@ -1463,10 +1414,8 @@ export default {
 				return true
 			}
 
-			// A mention shortened to its local part — which is how a renderer
-			// writes one — counts only where the link beside it points at the
-			// peer's own server. `includes()` was matching `bob` anywhere in
-			// the href, so a message to bobby lost its mention of bob.
+			// a mention shortened to its local part counts only where its link
+			// points at the peer's own server
 			const sameServer = hostOf(href) !== '' && hostOf(href) === home
 			const locals = handles.map((handle) => handle.split('@')[0]).filter(Boolean)
 			if (sameServer && locals.includes(asked)) {
@@ -1481,19 +1430,15 @@ export default {
 		},
 
 		/**
-		 * The mentions a reply has to carry to reach everybody it is a reply to.
-		 *
-		 * A conversation of three people was answered with one mention — the
-		 * first account that was not the reader — so the third person dropped
-		 * out of the exchange at the first reply, without anybody being told.
+		 * The mentions a reply has to carry to reach everybody in the
+		 * conversation.
 		 *
 		 * @param {object} recipient the account the composer was opened for
 		 * @return {string} the mentions, in the order the conversation lists them
 		 */
 		routingMentions(recipient) {
-			// While composing a new chat, the route may still point at the thread
-			// that was open before the recipient picker appeared. Only address the
-			// person explicitly chosen for this new message.
+			// a new chat may be composed while the route still points at the
+			// previous thread; address only the person chosen for it
 			if (this.newMessageOpen && this.newRecipient) {
 				return `@${recipient.acct}`
 			}
@@ -1567,10 +1512,6 @@ export default {
 		},
 
 		/**
-		 * The box grows with what is typed, up to a few lines, and shrinks
-		 * back once the message is sent.
-		 */
-		/**
 		 * Keeps what is typed under the conversation it is written in, so
 		 * switching to another one or leaving the page does not lose it.
 		 *
@@ -1584,6 +1525,7 @@ export default {
 			}
 		},
 
+		/** Grows the box with what is typed, up to a few lines, and shrinks it back once empty. */
 		fitMessageInput() {
 			const box = /** @type {HTMLTextAreaElement|undefined} */ (this.$refs.messageInput)
 			if (!box) {
@@ -1668,12 +1610,10 @@ export default {
 @use '../styles/layout.scss' as layout;
 
 /*
- * No `min-height`: the panes scroll inside the height below, and a floor under
- * it only ever made the box taller than the viewport, which pushed the message
- * field off a short screen and scrolled the whole page instead. Below
- * `$folded` the page starts under the navigation toggle (Timeline.vue), and
- * that distance comes off the height too, or the Send button is below the
- * bottom edge; so does the phone bar's room (PhoneBar.vue).
+ * No `min-height`: the panes scroll inside this height, and a floor would push
+ * the message field off a short screen. Below `$folded` the page starts under
+ * the navigation toggle (Timeline.vue), and that distance and the phone bar's
+ * room (PhoneBar.vue) come off the height too.
  */
 .direct-messages {
 	/* the feed's reading column, which a conversation keeps to as well */
@@ -1714,11 +1654,9 @@ export default {
 }
 
 /*
- * Room for Nextcloud's app-navigation toggle. Where the navigation is pinned
- * the toggle sits over the top-left corner of the content — that corner is
- * this heading, open or closed — and without the room it covers the first
- * letters of the heading. Below `$folded` the page already starts beneath the
- * toggle (Timeline.vue), so the room there would be empty.
+ * Room for Nextcloud's app-navigation toggle, which otherwise covers the start
+ * of this heading. Below `$folded` the page already starts beneath the toggle
+ * (Timeline.vue).
  */
 @media (min-width: layout.$folded + 1px) {
 	.direct-messages__list-heading {
@@ -1749,8 +1687,7 @@ export default {
 	color: var(--color-text-maxcontrast);
 	transition: border-color var(--social-motion-fast) var(--social-ease);
 
-	// the ring is the pill's, round the whole field, rather than the
-	// square one the browser would draw round the text inside it
+	// the pill's own focus ring, round the whole field
 	&:focus-within {
 		border-color: var(--color-primary-element);
 	}
@@ -1862,8 +1799,8 @@ export default {
 	}
 }
 
-/* the row carries the tint; core's own button grey on hover, focus or press
-   outranks a single class and drew a box inside it */
+/* the row carries the tint; two classes outrank core's button background on
+   hover, focus or press, which would draw a box inside the row */
 .direct-messages__row .direct-messages__conversation,
 .direct-messages__row .direct-messages__recipient-option {
 	&:hover,
@@ -2077,9 +2014,8 @@ export default {
 }
 
 /*
- * A time inside a run stands beside its bubble, out of the flow, and only
- * while the message is pointed at: the run reads as one block, and nothing
- * moves when the time appears.
+ * A time inside a run stands beside its bubble, out of the flow, and shows
+ * only on hover, so nothing moves when it appears.
  */
 .direct-messages__message-time--aside {
 	position: absolute;
@@ -2114,11 +2050,9 @@ export default {
 }
 
 /*
- * The bubbles. An incoming one is the neutral grey; an outgoing one is the
- * reader's own colour, the hue their avatar and their like sparks already use
- * (`--account-hue`, which the post sets for its author — on an outgoing
- * message, the reader). Mixed into the page background, so it is a light wash
- * on a light theme and a deep one on a dark theme.
+ * The bubbles: incoming in the neutral grey, outgoing in the reader's own hue
+ * (`--account-hue`, which the post sets for its author), mixed into the page
+ * background so it works on light and dark themes.
  */
 .direct-messages__thread :deep(.post-content) {
 	width: 100%;
@@ -2291,9 +2225,8 @@ export default {
 }
 
 /*
- * One pane at a time from here down. Above it the list keeps its 17.5rem and
- * the thread has at least 32rem, which is wider than the thread already is
- * beside a pinned navigation at 1024px.
+ * One pane at a time from here down; above it the list keeps 17.5rem and the
+ * thread at least 32rem.
  */
 @include layout.below(layout.$crowded) {
 	.direct-messages {

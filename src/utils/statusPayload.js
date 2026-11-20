@@ -22,10 +22,9 @@ export function pollIsComplete(options) {
 /**
  * The body of `POST /api/v1/statuses` for what the composer holds.
  *
- * Only what was actually chosen goes in: a post written as oneself carries
- * no `post_as`, a post without a place no place fields, and a video post
- * only the video fields that were filled in — the server falls back to the
- * first line of the post for a title nobody gave.
+ * Only what was chosen goes in: no `post_as` for oneself, no place fields
+ * without a place, and only the video fields that were filled in (the server
+ * takes the first line of the post for a missing title).
  *
  * @param {object} post what the composer holds
  * @param {string} post.text the words, with any games already played
@@ -58,8 +57,8 @@ export function statusPayload(post) {
 		visibility: post.visibility,
 		...(post.postAs === '' ? {} : { post_as: post.postAs }),
 		...(!post.replyPolicy || post.replyPolicy === 'everyone' ? {} : { reply_policy: post.replyPolicy }),
-		// always, so the post is never without one: the server would fill in
-		// the same default, but what the poster saw is what goes
+		// always: the server would fill in the same default, but what the poster saw
+		// is what goes
 		language: post.language,
 		...(post.video === null ? {} : videoFields(post.video)),
 		...(post.event === null ? {} : { event: post.event }),

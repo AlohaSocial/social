@@ -33,8 +33,7 @@
 			<span v-if="video.licence">{{ video.licence }}</span>
 		</p>
 
-		<!-- the channel, which is what a reader subscribes to: on PeerTube a
-		     video is listed under it rather than under the person -->
+		<!-- the channel, which is what a reader subscribes to on PeerTube -->
 		<div class="watch__channel">
 			<ActorAvatar :actor="status.account" />
 			<router-link
@@ -83,9 +82,8 @@
 					</NcButton>
 					<RollingCount v-if="!hidesCounts" :count="status.reblogs_count || 0" />
 				</div>
-				<!-- PeerTube's other counter, and only here: a dislike button
-				     under a written post is a product this app is not, and a
-				     `Dislike` sent to a server with no model for it is dropped -->
+				<!-- PeerTube's other counter, only on videos: a server with no model for
+				     a `Dislike` drops it -->
 				<div class="watch__action">
 					<NcButton
 						class="watch__dislike"
@@ -146,18 +144,12 @@ import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
 import { formatTime } from '../utils/shortVideo.js'
 
 /**
- * A video's own page, rather than a post with a rectangle in it.
+ * A video's own page, on the same route a post opens on, with the
+ * conversation under it as replies.
  *
- * It is the same route a post opens on, not a second one somebody has to find:
- * every link to a video already leads here, and what changes is what the page
- * says about it. Underneath, the conversation is the conversation — a video's
- * comments are replies, and this app already has replies.
- *
- * What is on it is what a `Video` object actually carries and a timeline card
- * has no room for: the title as a heading (a `Note` has no title, so the reader
- * used to get it as the first line of a paragraph), the counters, the category
- * and licence, the chapters as something to press, and the line the author
- * wrote asking for support.
+ * It shows what a `Video` object carries and a timeline card has no room for:
+ * the title as a heading, the counters, category and licence, the chapters
+ * to press, and the author's support line.
  */
 export default {
 	name: 'VideoHeader',
@@ -210,11 +202,9 @@ export default {
 		},
 
 		/**
-		 * How many people disliked it.
-		 *
-		 * The post's own count where this server has one — it counts the
-		 * `Dislike` activities it received — and the number PeerTube stated
-		 * otherwise, which covers everybody who watched it there.
+		 * How many people disliked it: the post's own count where this server has
+		 * one (the `Dislike` activities it received), PeerTube's stated number
+		 * otherwise.
 		 *
 		 * @return {number}
 		 */
@@ -266,12 +256,8 @@ export default {
 		},
 
 		/**
-		 * What it is called.
-		 *
-		 * The object's own `name` where there is one. A video posted from here
-		 * has no separate title — the composer does not ask for one — so the
-		 * first line of the post stands in, which is where somebody writing
-		 * about a video puts its name.
+		 * What it is called: the object's own `name`, or else the first line of
+		 * the post.
 		 *
 		 * @return {string}
 		 */
@@ -286,9 +272,8 @@ export default {
 		},
 
 		/**
-		 * The pictures and files of the post other than the video the player
-		 * plays, so that nothing it carries is lost and the video is not
-		 * shown twice.
+		 * The photos and files of the post other than the video the player plays,
+		 * so nothing is lost and the video is not shown twice.
 		 *
 		 * @return {object[]}
 		 */
@@ -355,11 +340,8 @@ export default {
 		},
 
 		/**
-		 * Moves the player to a chapter.
-		 *
-		 * The element is found rather than passed down: the player is several
-		 * components below this one and threading a ref through all of them to
-		 * seek would tie each of them to this page.
+		 * Moves the player to a chapter. The element is looked up, as the player is
+		 * several components below this one.
 		 *
 		 * @param {number} seconds where to go
 		 */

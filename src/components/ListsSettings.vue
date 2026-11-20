@@ -149,9 +149,7 @@
 						</NcButton>
 					</div>
 
-					<!-- a list is a view of what the reader follows, so only the
-					     people they follow are offered: the server would refuse
-					     anybody else -->
+					<!-- only the people the reader follows: the server refuses anybody else -->
 					<div v-if="!list.nextcloud_group" class="lists-settings__add">
 						<NcTextField
 							v-model="search"
@@ -182,12 +180,8 @@
 							{{ t('social', 'Nobody you follow by that name.') }}
 						</p>
 					</div>
-					<!-- A group list has no box to type in, because its members
-					     are whoever is in the Nextcloud group: anything added
-					     here would be taken away again the next time the group
-					     changed. Saying so is the point — without it the panel
-					     is a list of people with no way to add one and no
-					     reason given. -->
+					<!-- a group list's members are whoever is in the Nextcloud group, so
+					     there is no box to add one, and this says why -->
 					<p v-else class="lists-settings__hint">
 						{{ t('social', 'Who is in this list follows the “{group}” group in Nextcloud. Add or remove people there and this list follows.', { group: list.nextcloud_group }) }}
 					</p>
@@ -238,27 +232,19 @@ import { latestLoad } from '../utils/latestLoad.js'
 const SEARCH_DELAY_MS = 250
 
 /**
- * How many members one request asks for.
- *
- * The server's own ceiling, and also the most Nextcloud will let through: its
- * dispatcher refuses any `limit` outside 1–500 before the route is reached.
- * A longer list is paged with Show more, on the cursor the server's `Link`
- * header names — the membership row, not the account, because taking
- * somebody out and putting them back gives them a new place in the list.
+ * How many members one request asks for: the server's ceiling, and the most
+ * Nextcloud's dispatcher lets through as a `limit` (1–500). Longer lists page
+ * on the `Link` header's cursor, which is the membership row, not the account.
  */
 const MEMBERS_PER_REQUEST = 500
 
 /**
- * The reader's lists, and everything that can be done to them: made, renamed,
- * made public or private, deleted, and filled or emptied one person at a
- * time. A section of Settings.
+ * The reader's lists, a section of Settings: made, renamed, made public or
+ * private, deleted, and filled or emptied one person at a time.
  *
- * The sidebar only names the lists; it fetches them itself once per page, so
- * every change made here is announced on the event bus and the sidebar asks
- * again. Group lists are shown because they are lists — a reader looks for
- * them here when they wonder who is in "Design" — but they take no rename,
- * no delete and no members: the group decides all three, and the server
- * answers 422 to anybody who tries.
+ * The sidebar fetches the lists itself, so every change is announced on the
+ * event bus. Group lists are shown but take no rename, delete or members: the
+ * group decides those, and the server answers 422.
  */
 export default {
 	name: 'ListsSettings',
@@ -495,13 +481,8 @@ export default {
 		/** @param {object} list the list to ask about */
 		async fetchMembers(list) {
 			try {
-				// As many as one request may carry, which is 500.
-				//
-				// Not `limit=0` — Mastodon's "all of them, no paging" — which
-				// is what this asked for and why the panel only ever showed an
-				// error. Nextcloud's dispatcher applies a range of 1–500 to
-				// any parameter called `limit` and throws before the route is
-				// reached, so 0 came back as an HTML error page.
+				// at most 500: Nextcloud's dispatcher refuses any `limit` outside 1–500
+				// (so Mastodon's `limit=0` for "all" cannot be used)
 				const { data, headers } = await axios.get(generateUrl(`apps/social/api/v1/lists/${list.id}/accounts`), {
 					params: { limit: MEMBERS_PER_REQUEST },
 				})
@@ -526,8 +507,8 @@ export default {
 				const { data, headers } = await axios.get(generateUrl(`apps/social/api/v1/lists/${list.id}/accounts`), {
 					params: { limit: MEMBERS_PER_REQUEST, max_id: cursor },
 				})
-				// the first page was fetched again meanwhile, after an add,
-				// and this one no longer follows on from what is shown
+				// the first page was fetched again meanwhile, and this one no longer
+				// follows on from what is shown
 				if (this.membersCursor[list.id] !== cursor) {
 					return
 				}
@@ -621,9 +602,8 @@ export default {
 			// search for the same words may have been asked since
 			const answers = () => isNewest() && this.search.trim() === term
 			try {
-				// only the people the reader follows: the search is narrowed on
-				// the server, so one of them is found even when a page of
-				// strangers matches first
+				// only the people the reader follows, narrowed on the server so one of
+				// them is found even when strangers match first
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/accounts/search'), {
 					params: { q: term, limit: 8, following: true },
 				})

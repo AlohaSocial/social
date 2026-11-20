@@ -7,16 +7,12 @@
 		<!-- the first thing a new account sees; gone for good once closed -->
 		<FirstRun v-if="showInfo" @done="hideInfo" />
 
-		<!-- what the administrators are telling everybody, above the posts and
-		     above the composer: it is read before anything is written, and it
-		     is only here at all while something in it is unread. Not on a
-		     single post's page, which the reader navigated to for that post -->
+		<!-- administrators' announcements, above the composer and only while
+		     something is unread; not on a single post's page -->
 		<Announcements v-if="type !== 'single-post' && type !== 'direct'" class="feed-notice" />
 
-		<!-- the three timelines that are the same place seen from three
-		     distances: switching between them is something a reader does while
-		     reading, not something they navigate to, so the row stays at the
-		     top of the column while the posts scroll under it -->
+		<!-- the feed scopes, switched while reading, so the row sticks to the top
+		     of the column -->
 		<div v-if="isFeed" class="feed-scopes">
 			<TimelineSwitcher
 				:options="scopes"
@@ -64,9 +60,8 @@
 		</PageHeader>
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
 
-		<!-- said once to an account that existed before the policy did: it
-		     can now choose who reaches it. Gone for good when put away, or
-		     once the policy has been saved -->
+		<!-- shown once to accounts older than the notification policy; gone when
+		     dismissed or once the policy is saved -->
 		<div v-if="type === 'notifications' && notificationsStore.policyNotice" class="policy-notice feed-notice" role="note">
 			<IconBellCogOutline :size="20" class="policy-notice__icon" />
 			<p class="policy-notice__text">
@@ -86,9 +81,8 @@
 			</NcButton>
 		</div>
 
-		<!-- the people the notification policy is holding back: how many,
-		     and the list itself on Review. Here, because this is where
-		     somebody wonders why a mention never arrived -->
+		<!-- the senders the notification policy is holding back, and their list on
+		     Review -->
 		<div v-if="type === 'notifications' && pendingRequests > 0" class="held-requests feed-notice">
 			<div class="held-requests__row">
 				<IconInboxOutline :size="20" />
@@ -106,11 +100,8 @@
 			<NotificationRequests v-if="showRequests" class="held-requests__list" @changed="onRequestsChanged" />
 		</div>
 
-		<!-- what the sidebar badge was counting, where pressing it lands.
-		     The page marks itself read after a dwell, which is something that
-		     happens rather than something anybody did: this says how much
-		     there is, and gives the reader a way to say they are done with it
-		     without reading down to the bottom of the list. -->
+		<!-- what the sidebar badge counts, with a way to mark it all read without
+		     scrolling to the bottom -->
 		<div v-if="type === 'notifications' && unreadActivities > 0" class="new-activities feed-notice">
 			<span class="new-activities__count">
 				{{ n('social', '%n new activity', '%n new activities', unreadActivities) }}
@@ -123,8 +114,7 @@
 			</NcButton>
 		</div>
 
-		<!-- which kinds of activity to show; the same control as the scopes
-		     above the feed, choosing a filter of this page rather than a page -->
+		<!-- which kinds of activity to show: a filter of this page, not a page -->
 		<TimelineSwitcher
 			v-if="type === 'notifications'"
 			class="notifications-filter"
@@ -135,15 +125,9 @@
 
 		<FollowRequests v-if="type === 'notifications' && ['all', 'follows'].includes(notificationFilter)" />
 
-		<!-- what the reader wrote on this day in years gone by, and how their
-		     week went if they asked to be told; only over their own home feed,
-		     which is the one page that is about them -->
-		<!-- whose 24-hour shorts are up: a row of faces above the reader's
-		     own feed, and only there; they are for the people who follow.
-		     Kept while the reader is on another scope of the feed, like the
-		     two cards below, so that coming back to My Feed draws them at
-		     once rather than asking the server again and pushing the posts
-		     down when it answers -->
+		<!-- the shorts bar, the weekly recap and the memories belong to the reader's
+		     own feed only; kept alive across scopes so coming back to My Feed draws
+		     them at once instead of refetching and pushing the posts down -->
 		<KeepAlive>
 			<ShortsBar v-if="isHome" />
 		</KeepAlive>
@@ -226,8 +210,7 @@ import { scrollOffset, scroller } from '../utils/scroller.js'
 const FollowRequests = defineAsyncComponent(() => import(/* webpackChunkName: "follow-requests" */'../components/FollowRequests.vue'))
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
 
-// the conversations page and a new account's welcome: neither is on the
-// screen most people open the app to
+// the conversations page and a new account's welcome, both rarely opened
 const DirectMessages = defineAsyncComponent(() => import(/* webpackChunkName: "direct-messages" */'../components/DirectMessages.vue'))
 const FirstRun = defineAsyncComponent(() => import(/* webpackChunkName: "first-run" */'../components/FirstRun.vue'))
 
@@ -273,19 +256,14 @@ export default {
 			/** the frame the next scroll check is waiting for */
 			scopeFrame: 0,
 			selectedPhotoLayout: photoLayout(),
-			/** the pending fetch-ahead of the other scopes, or 0 */
 			/** the title of the list being read, once the server has said */
 			listTitle: '',
-			/**
-			 * Which kinds of activity the notifications page shows; the
-			 * browser remembers the choice, so the page opens where it was left
-			 */
+			/** which kinds of activity the notifications page shows, remembered by the browser */
 			notificationFilter: rememberedFilter(),
 			/** while the marker is being moved, so it cannot be moved twice */
 			markingAllRead: false,
 			/** whether the held senders are unfolded under their count */
 			showRequests: false,
-			/** the one-time cards put away while this page is open */
 			/** whether this page is the one the learning notice was given to */
 			interestsNoticeHere: false,
 		}
@@ -300,12 +278,8 @@ export default {
 		},
 
 		/**
-		 * How many activities the sidebar badge is counting.
-		 *
-		 * The same number from the same place, rather than something counted
-		 * off this page: the page holds one filter's worth and the badge
-		 * counts them all, and two numbers that disagree would be worse than
-		 * the one that was hard to find.
+		 * How many activities the sidebar badge is counting, from the same source so
+		 * the two numbers cannot disagree.
 		 *
 		 * @return {number}
 		 */
@@ -314,9 +288,7 @@ export default {
 		},
 
 		/**
-		 * The tag's own colour, so `#design` reads as `#design` wherever it is
-		 * met. Only a tag page has one; everywhere else the heading keeps the
-		 * theme's colour and the properties are simply absent.
+		 * The tag's own colour, on a tag page only.
 		 *
 		 * @return {object|null} custom properties, or null off a tag page
 		 */
@@ -325,9 +297,8 @@ export default {
 		},
 
 		/**
-		 * `/timeline/tags` with no tag after it: the page Explore and the
-		 * switch-in wizard link to for the hashtags the reader follows. It has
-		 * no timeline of its own, only the list.
+		 * `/timeline/tags` with no tag: the followed-hashtags list that Explore and
+		 * the switch-in wizard link to, with no timeline of its own.
 		 *
 		 * @return {boolean}
 		 */
@@ -341,8 +312,7 @@ export default {
 				case 'tags':
 					return this.followedTagsOnly ? t('social', 'Followed hashtags') : '#' + this.$route.params.tag
 				case 'list':
-					// the sidebar knows the title; the page asks for it itself
-					// so that a link opened cold has a heading too
+					// fetched here too, so a link opened cold has a heading
 					return this.listTitle || t('social', 'List')
 				case 'bluesky':
 					return this.listTitle || t('social', 'Bluesky feed')
@@ -351,13 +321,10 @@ export default {
 				case 'videos':
 					return t('social', 'Videos')
 				case 'link':
-					// the article is the subject of this page, and the only
-					// thing known about it before the first post arrives is
-					// where it lives
+					// the article's host is all that is known before the first post arrives
 					return this.linkHost || t('social', 'Link')
 				case 'notifications':
-					// the sidebar calls it Activities; the route keeps the name
-					// the API gives it
+					// the sidebar calls it Activities; the route keeps the API's name
 					return t('social', 'Activities')
 				case 'direct':
 					return t('social', 'Direct messages')
@@ -387,10 +354,8 @@ export default {
 		},
 
 		/**
-		 * Whether this page is one page read at three scopes rather than three
-		 * pages. Photos and Videos both are: the sidebar entry stays lit
-		 * whichever of the three the reader chose, which it would not if each
-		 * scope were a `type` of its own.
+		 * Whether this page is one page read at three scopes (Photos and Videos), so
+		 * the sidebar entry stays lit whichever scope is chosen.
 		 *
 		 * @return {boolean}
 		 */
@@ -408,8 +373,7 @@ export default {
 
 		/** @return {string} shared list, media grid or video browse presentation */
 		display() {
-			// the Videos page is a video site's front page; it has its own
-			// "Upload a video" in place of the composer
+			// the Videos page has its own "Upload a video" in place of the composer
 			if (this.type === 'videos') {
 				return 'videos'
 			}
@@ -418,19 +382,9 @@ export default {
 		},
 
 		/**
-		 * Whether this is the reader's own feed.
-		 *
-		 * The memories, the recap and the Shorts bar belong here and nowhere
-		 * else; on a tag page or a profile they would be an interruption from
-		 * another subject.
-		 *
-		 * The *route* of the home feed carries no `type` — see `scopes()`: the
-		 * local and global feeds are `timeline` and `federated`, and home is
-		 * the one with nothing. This compared against that empty route
-		 * parameter, but `type` above never answers with it: a route without
-		 * one is reported as `'home'`, which is the word the rest of this view
-		 * uses. So `isHome` was false on every page including the home feed,
-		 * and the three cards it guards had never once been drawn.
+		 * Whether this is the reader's own feed, where the memories, the recap and
+		 * the Shorts bar belong. `type` reports the home route, which has no `type`
+		 * parameter, as `'home'`.
 		 *
 		 * @return {boolean}
 		 */
@@ -439,16 +393,11 @@ export default {
 		},
 
 		/**
-		 * The three distances the same posts can be read at, as the switcher
-		 * above them offers them.
+		 * The three distances the same posts can be read at, for the switcher.
 		 *
-		 * On Photos and Videos they are the same three, so those stay one page
-		 * with a scope on it: the scope rides in the query, which keeps the
-		 * sidebar entry lit whichever is chosen and keeps each of them one
-		 * timeline rather than three that look alike. On the feed itself each
-		 * scope is its own route, and `home` is the route with no `type` at
-		 * all — passing `type: 'home'` would ask for a timeline of that name,
-		 * which nothing serves.
+		 * On Photos and Videos the scope rides in the query, so each stays one page
+		 * and one sidebar entry. On the feed each scope is its own route, and home is
+		 * the route with no `type`; no timeline is served under `type: 'home'`.
 		 *
 		 * @return {object[]} what to give the switcher
 		 */
@@ -468,17 +417,14 @@ export default {
 			}
 
 			const scopes = [
-				// "My Feed" rather than "Home": next to Local and Global, what
-				// distinguishes it is whose posts it holds, not where it sits
+				// "My Feed": next to Local and Global, what distinguishes it is whose posts it holds
 				{ value: 'home', label: t('social', 'My Feed'), icon: IconHome, to: routeFor('home') },
 				{ value: 'timeline', label: t('social', 'Local'), icon: IconAccountMultiple, to: routeFor('timeline') },
 				{ value: 'federated', label: t('social', 'Global'), icon: IconEarth, to: routeFor('federated') },
 			]
 
-			// the reader's own again, chosen by subject rather than by whom they
-			// follow, so it sits beside My Feed rather than after the distances.
-			// On Photos and Videos it is the same ranking narrowed to that
-			// kind, which the server keeps as a ranking of its own
+			// ranked by subject rather than by whom the reader follows, so it sits beside
+			// My Feed; on Photos and Videos the server ranks that kind on its own
 			if (this.hasInterestsTab) {
 				scopes.splice(1, 0, {
 					value: 'interests',
@@ -522,9 +468,8 @@ export default {
 		},
 
 		/**
-		 * Whether the learning notice is on this page: due, and the first page
-		 * of the session it was due on. Unanswered, it is not repeated above
-		 * every other feed the reader opens; the next session asks again.
+		 * Whether the learning notice is on this page: due, and the first page of the
+		 * session it was due on, so it is not repeated above every feed.
 		 *
 		 * @return {boolean}
 		 */
@@ -533,13 +478,9 @@ export default {
 		},
 
 		/**
-		 * Which of the three scopes is being read.
-		 *
-		 * Photos and Videos are each one page with a scope on it rather than
-		 * three pages, so on them the scope comes from the query; everywhere
-		 * else the type *is* the scope. A query that says anything else is read
-		 * as the default rather than trusted: it arrives from the address bar.
-		 * `interests` is For you, for a reader who has it.
+		 * Which of the three scopes is being read: from the query on Photos and
+		 * Videos, the type everywhere else. An unknown query value falls back to the
+		 * default, since it comes from the address bar. `interests` is For you.
 		 *
 		 * @return {string} `home`, `timeline`, `federated` or `interests`
 		 */
@@ -565,10 +506,7 @@ export default {
 				&& coverage?.state === 'UNDERFILLED'
 		},
 
-		/**
-		 * The two that were on the page before stay on the page; the rest name
-		 * the view for a screen reader without changing what anyone sees.
-		 */
+		/** Only the feed and tag headings are drawn; the rest name the view for screen readers. */
 		headingIsVisible() {
 			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky'
 		},
@@ -606,16 +544,13 @@ export default {
 			} else if (this.$route.name === 'single-post') {
 				return this.$route.params
 			} else if (this.isScopedPage) {
-				// part of what identifies this timeline, so that changing the
-				// scope refetches rather than leaving the previous photos up
+				// part of the timeline identity, so changing the scope refetches
 				return { scope: this.scope }
 			} else if (this.type === 'link') {
-				// the article being talked about. Same reason: another link is
-				// another page, not the same page filtered
+				// the article being talked about; another link is another list
 				return { url: this.linkUrl }
 			} else if (this.type === 'notifications') {
-				// the same reason: a filter is a question for the server, and
-				// a different one is a different list
+				// a filter is a question for the server, so another filter is another list
 				return { filter: this.notificationFilter }
 			}
 			return {}
@@ -631,9 +566,7 @@ export default {
 		},
 
 		/**
-		 * Where that article lives, which is what the page is headed with.
-		 * A URL that will not parse is not one this page can say anything
-		 * about, and the heading falls back to the plain word.
+		 * Where that article lives, for the heading; '' when the URL does not parse.
 		 *
 		 * @return {string} the host, or '' when there is nothing to show
 		 */
@@ -646,10 +579,7 @@ export default {
 		},
 
 		/**
-		 * Which list this is. A route parameter is `string | string[]`, and
-		 * every reader of this compares it against one string or looks it up
-		 * in a list of them, so it is narrowed here rather than at each of
-		 * them.
+		 * Which list this is, narrowed from the route parameter's `string | string[]`.
 		 *
 		 * @return {string}
 		 */
@@ -670,9 +600,8 @@ export default {
 		},
 
 		showInfo() {
-			// `firstrun` from the server, or `?welcome=1`, which is what the
-			// setup screen reloads with once the account exists and what
-			// Settings links to for somebody who wants it again
+			// `firstrun` from the server, or `?welcome=1`, which the setup screen
+			// reloads with and Settings links to
 			const replay = this.$route.query?.replay === '1'
 			const requested = this.settingsStore.getServerData.firstrun || this.$route.query?.welcome === '1'
 			let dismissedLocally = false
@@ -710,9 +639,7 @@ export default {
 			},
 		},
 
-		// the router-view is no longer keyed on the full path, so switching
-		// from Home to Global reuses this view: without this the store would
-		// keep serving the previous timeline
+		// this view is reused across timelines, so the store must be told to switch
 		timelineKey() {
 			if (this.type !== 'direct') {
 				this.timelineStore.changeTimelineType({ type: this.type, params: this.params })
@@ -741,8 +668,7 @@ export default {
 		eventBus.off('post-published', this.onPostPublished)
 		this.scopeScroller?.removeEventListener('scroll', this.onScopeScroll)
 		cancelAnimationFrame(this.scopeFrame)
-		// navigating away mid-celebration must not leave the flag standing for
-		// whatever timeline mounts next
+		// navigating away mid-celebration must not leave the flag set for the next timeline
 		if (this.celebratingFirstPost) {
 			this.timelineStore.endFirstPostCelebration()
 		}
@@ -782,10 +708,8 @@ export default {
 
 		/**
 		 * Fetches the first page of a scope the reader is pointing at on the
-		 * switcher, so that the click puts it on screen at once. Only on that
-		 * intent: most readers never switch, and the federated scope is the
-		 * slowest and largest page there is. The store skips a page it holds
-		 * fresh or is already fetching.
+		 * switcher, so the click shows it at once. Only on that intent, since the
+		 * federated scope is the largest page there is.
 		 *
 		 * @param {string} value the scope's timeline type
 		 */
@@ -855,19 +779,16 @@ export default {
 
 		hideInfo() {
 			this.infoHidden = true
-			// Keep the dismissal with the account, so it survives refreshes and
-			// signing in on another device. Settings can still explicitly reopen it.
+			// kept with the account, so it survives refreshes and other devices
 			try {
 				window.localStorage.setItem(`social:introduction:${this.accountStore.currentAccountHandle}`, 'dismissed')
 			} catch {
-				// Storage can be disabled by the browser; the server-side setting
-				// remains the source of truth in that case.
+				// storage can be disabled; the server-side setting is the source of truth
 			}
 			try {
 				axios.post(generateUrl('apps/social/api/v1/introduction/dismiss'))?.catch(() => {})
 			} catch {
-				// The local dismissal is enough for this browser session if the
-				// preference endpoint cannot be reached.
+				// the local dismissal covers this session if the endpoint cannot be reached
 			}
 			this.settingsStore.setServerDataEntry({ key: 'introductionDismissed', value: true })
 			if (this.$route.query?.welcome !== undefined || this.$route.query?.replay !== undefined) {
@@ -887,9 +808,8 @@ export default {
 		},
 
 		/**
-		 * Asks how many senders are held, on the one page that shows them.
-		 * The list starts folded, unless the address asks for it
-		 * (`?requests=1`, where the Blocking page links).
+		 * Asks how many senders are held. The list starts folded unless the address
+		 * asks for it (`?requests=1`, linked from Blocking in Settings).
 		 */
 		fetchPendingRequests() {
 			this.showRequests = this.type === 'notifications' && this.$route?.query?.requests === '1'
@@ -912,11 +832,8 @@ export default {
 		},
 
 		/**
-		 * Says the reader is done with the lot, whatever the filter shows.
-		 *
-		 * The list below has frozen where the line between new and already
-		 * seen goes, so it is told where the marker ended up rather than left
-		 * drawing a boundary that has stopped meaning anything.
+		 * Marks all activities read, whatever the filter shows, and tells the list
+		 * where the marker ended up so it can redraw its new/seen boundary.
 		 */
 		async markAllRead() {
 			this.markingAllRead = true
@@ -931,11 +848,7 @@ export default {
 			}
 		},
 
-		/**
-		 * A post went out. Whether that is the reader's first is the store's
-		 * decision; asking costs nothing and nothing here waits on the answer,
-		 * so the post itself appears exactly as it did before.
-		 */
+		/** A post went out; the store decides whether it was the reader's first. */
 		onPostPublished() {
 			this.timelineStore.celebrateFirstPost()
 		},
@@ -956,12 +869,8 @@ export default {
 @use '../styles/layout.scss' as layout;
 
 /*
- * The column, and nothing about what is in it. `.social__timeline` is another
- * component's root element, and a scoped style still reaches a child's root —
- * so a rule here lands on it with the same specificity as the list's own and
- * wins or loses on bundle order. This view used to set `margin: 0` on it, which
- * beat the list's own `margin: 0 auto` and left the timeline flush to one side
- * while the composer beside it stayed centred.
+ * The column only. `.social__timeline` is another component's root, which a
+ * scoped rule here would reach with equal specificity, so it is left alone.
  */
 .social__wrapper {
 	max-width: var(--social-column);
@@ -970,9 +879,8 @@ export default {
 }
 
 /*
- * Information cards share one calm, centered layout across every feed, as wide
- * as the posts under them: the reading column less its gutters, which is where
- * a post's own box ends (TimelineList.scss).
+ * Information cards share one centred layout across every feed, as wide as
+ * a post's own box (TimelineList.scss).
  */
 .social__wrapper > :deep(.feed-notice) {
 	position: relative;
@@ -1316,25 +1224,8 @@ export default {
 	}
 }
 
-/*
- * Seven options where the switcher was drawn for three.
- *
- * They used to be squeezed here — half the switcher's own padding — because
- * every option was as wide as the widest of them, and seven of those ran past
- * the column. An option is as wide as its own words now and the pill is
- * measured rather than assumed, so the squeeze is gone and the row keeps the
- * spacing every other switcher has.
- *
- * What is still needed is the point where even that stops fitting: below this
- * width the labels give way to the icons they sit beside, staying in the
- * accessibility tree because the label is the option's name. The switcher does
- * the same thing itself further down; this only brings the point forward for a
- * row twice as long as the ones it was built for.
- */
-/* The row the badge lands on: how much there is on one side, the way out of
-   it on the other. Tinted rather than bordered -- it is the page saying
-   something, not another card to read -- and gone entirely at zero, so the
-   list does not keep a permanent header it has no news for. */
+/* The row the badge lands on: the count on one side, the way out on the
+   other. Tinted rather than bordered, and gone at zero. */
 .new-activities {
 	display: flex;
 	align-items: center;
@@ -1351,20 +1242,13 @@ export default {
 	color: var(--color-primary-element-light-text);
 }
 
-// The notification filter has twice the options of the timeline switcher, and
-// no rule of its own any more: the switcher scrolls rather than hides its
-// labels, so the seven of them stay readable in the reading column and the
-// fades say there is more to the side. Only the phone width takes the labels
-// away, and the switcher decides that from its own width.
-
 #app-content {
 	position: relative;
 }
 
-/* while the sidebar is collapsed its toggle sits over the top-left corner of
-   the content, where the composer or the heading begins; the first thing on
-   the page starts below it. The distance is a property so that a page sized
-   to the viewport (DirectMessages.vue) can take it off its own height */
+/* while the sidebar is collapsed its toggle covers the top-left corner of the
+   content, so the page starts below it. The distance is a property so that a
+   page sized to the viewport (DirectMessages.vue) can subtract it */
 @include layout.below(layout.$folded) {
 	.social__wrapper {
 		--social-toggle-clearance: calc(var(--default-clickable-area, 44px) + var(--default-grid-baseline, 4px) * 2);
@@ -1375,10 +1259,8 @@ export default {
 	}
 }
 
-/* A feed of text is read, and a line much wider than 600 pixels is hard to
-   follow back to its start. The grids keep the wider column: a picture is
-   looked at, not read. Everything in the column — composer, switcher,
-   the Shorts bar, posts — follows the one property. */
+/* A line much wider than 600px is hard to read; the grids keep the wider
+   column. Everything in the column follows this one property. */
 .social__wrapper--reading {
 	--social-column: var(--social-reading-column);
 }

@@ -30,11 +30,7 @@ import { translate as t } from '@nextcloud/l10n'
 import { useServerData } from '../composables/useServerData.js'
 import { showError, showSuccess } from '../services/toast.js'
 
-/**
- * How pictures and videos their author marked sensitive are shown. A reading
- * preference, so it lives with the other reading settings rather than with
- * the account's privacy.
- */
+/** How photos and videos their author marked sensitive are shown; a reading preference. */
 export default {
 	name: 'SensitiveMediaSettings',
 
@@ -47,11 +43,8 @@ export default {
 
 		return {
 			/**
-			 * What this account chose, or '' for "follow the instance".
-			 *
-			 * Out of the page rather than a request: the effective policy is
-			 * already there because the timeline needs it before it draws, and
-			 * the choice behind it travels with it.
+			 * What this account chose, or '' for "follow the instance". Read from the
+			 * page, which carries it with the effective policy.
 			 */
 			sensitive: serverData?.nsfwChoice ?? '',
 			saving: false,
@@ -60,9 +53,8 @@ export default {
 
 	computed: {
 		/**
-		 * The three policies, plus the fourth thing that is not one of them:
-		 * following the instance, which is different from choosing whatever
-		 * the instance happens to do today.
+		 * The three policies, plus following the instance, which is not the same as
+		 * choosing what the instance does today.
 		 *
 		 * @return {Array<{id: string, text: string}>}
 		 */
@@ -91,12 +83,9 @@ export default {
 		t,
 
 		/**
-		 * Writes the preference.
-		 *
-		 * It takes effect on the next page rather than at once: the policy is
-		 * read out of the page's own initial state, because it decides what
-		 * the first screenful looks like and a timeline that uncovered itself
-		 * a moment after drawing would be worse than either policy.
+		 * Writes the preference. It takes effect on the next page: the policy is
+		 * read from the page's initial state, as it decides how the first screen is
+		 * drawn.
 		 *
 		 * @return {Promise<void>}
 		 */

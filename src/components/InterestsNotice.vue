@@ -3,9 +3,8 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- learning is opted into, and the reader is told once what it learns
-	     from: once per account, and the answer is kept on the server so
-	     another browser does not ask again -->
+	<!-- shown once per account; the answer is kept on the server so another
+	     browser does not ask again -->
 	<section class="interests-notice" :aria-label="t('social', 'About For you')">
 		<TagHeart class="interests-notice__icon" :size="20" />
 		<p class="interests-notice__text">
@@ -38,11 +37,8 @@ import { useSettingsStore } from '../store/settings.js'
 const PAGE_KEYS = ['enabled', 'learning', 'paused', 'noticeAcknowledged']
 
 /**
- * The one-time notice that For you is learning.
- *
- * Whether it shows is the page's decision; what it does is change the page
- * state the decision is made from, so it goes away — and with Turn off, the
- * tracking and the feed tab go with it — without a reload.
+ * The one-time notice that For you is learning. Its buttons change the page
+ * state that decides whether it shows, so it goes away without a reload.
  */
 export default {
 	name: 'InterestsNotice',

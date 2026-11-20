@@ -4,8 +4,6 @@
 -->
 <template>
 	<div class="social__wrapper not-found">
-		<!-- a mistyped or stale deep link used to draw the sidebar and an
-		     empty column, with nothing to say where the reader was -->
 		<EmptyContent :item="item" />
 	</div>
 </template>

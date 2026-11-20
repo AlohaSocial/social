@@ -137,20 +137,14 @@ export function columnsFor(width) {
 
 /**
  * The Videos page drawn as a video site's front page: large cards in rows,
- * chips over them to narrow what is shown, and shelves between the rows —
- * Continue watching, Shorts, and From channels you follow.
+ * chips to narrow them, and shelves between the rows (Continue watching,
+ * Shorts, From channels you follow).
  *
- * The timeline itself stays `TimelineList`'s: paging, new posts arriving, the
- * pill, the errors and the empty state are all there. This only draws it, and
- * says when it needs another page (`more`).
- *
- * The chips choose among the videos the page has loaded, and the categories
- * on offer are the ones those videos have. A chip that leaves the grid short
- * asks for further pages, up to `MAX_FILL_PAGES` of them, and then offers to
- * look further rather than paging through the whole timeline on its own.
- *
- * The shelves are each asked for once per page view, beside the timeline
- * rather than in it, and are only drawn when they hold something.
+ * Paging, new posts, errors and the empty state stay `TimelineList`'s; this
+ * only draws the timeline and emits `more` for another page. A chip that
+ * leaves the grid short asks for up to `MAX_FILL_PAGES` pages, then offers
+ * to look further. Each shelf is asked for once per page view and only drawn
+ * when it holds something.
  */
 export default {
 	name: 'VideoBrowse',
@@ -292,11 +286,9 @@ export default {
 		},
 
 		/**
-		 * The grid cut into runs of whole rows, with a shelf after each run.
-		 * Not one grid with the shelves inside it: a shelf in the middle of a
-		 * grid either leaves a hole in the row before it or pulls a later
-		 * card up into the hole, out of the order the keyboard and a screen
-		 * reader go through them in. A chip shows only cards.
+		 * The grid cut into runs of whole rows, with a shelf after each run, so a
+		 * shelf neither leaves a hole in a row nor reorders cards for the keyboard
+		 * and screen readers. A chip shows only cards.
 		 *
 		 * @return {Array<{key: string, kind: string, items?: import('../types/Mastodon.js').Status[], start?: number, shelf?: Shelf}>}
 		 */
@@ -305,8 +297,7 @@ export default {
 			const sections = []
 			let start = 0
 			for (const shelf of shelves) {
-				// a shelf with nothing on it yet says its piece without cutting
-				// the grid of cards short before it has drawn a row
+				// a shelf with nothing on it yet does not cut the grid short
 				const rows = shelf.state !== undefined && shelf.state !== 'ready' ? 0 : SHELF_AFTER_ROWS[shelf.id]
 				const end = Math.min(this.shown.length, Math.max(start, rows * this.columns))
 				if (end > start) {
@@ -473,9 +464,8 @@ export default {
 
 		/**
 		 * The arrow keys move between the cards of the grid: a column to the
-		 * side, a row up or down, Home and End to the first and last. Left
-		 * and right follow the reading direction, so they swap in a
-		 * right-to-left language.
+		 * side, a row up or down, Home and End to the first and last. Left and
+		 * right follow the reading direction.
 		 *
 		 * @param {KeyboardEvent} event the key
 		 */

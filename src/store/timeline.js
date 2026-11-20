@@ -12,29 +12,21 @@ import { generateUrl } from '@nextcloud/router'
 import { defineStore } from 'pinia'
 
 /**
- * How many lists are held aside at once.
- *
- * Five covers the switcher — My Feed, For you, Local, Global — plus whatever
- * the reader came from, which is the round trip that used to cost a request
- * and a skeleton every time. The status index is pruned to what these lists
- * still name, so this is a memory number as much as a UX one.
+ * How many lists are held aside at once: the feed switcher's four plus the one
+ * the reader came from. The status index is pruned to what these lists name, so
+ * this also bounds memory.
  */
 const REMEMBERED = 5
 
-/**
- * How long a page fetched ahead stands in for the list it was fetched for, in
- * milliseconds. Older than this, a switch asks the server as if nothing had
- * been fetched: a feed read ten minutes ago is not news.
- */
+/** How long, in ms, a page fetched ahead stands in for its list before a switch asks the server again. */
 const PREFETCH_FRESH = 3 * 60 * 1000
 
 /** The identities being fetched ahead right now, so none is asked for twice. */
 const prefetching = new Set()
 
 /**
- * The page requests on their way, by the identity they were asked for, so a
- * switch can cancel the ones for the list being left rather than let them run
- * to the end and throw the answer away.
+ * The page requests in flight, by list identity, so a switch can cancel the
+ * ones for the list being left.
  *
  * @type {Map<string, Set<AbortController>>}
  */
@@ -85,13 +77,9 @@ import { useAccountStore } from './account.js'
 export const FIRST_POST_KEY = 'social.firstPostCelebrated'
 
 /**
- * Whether this browser has already seen the celebration.
- *
- * Reading localStorage throws outright in a private window and wherever site
- * data is blocked, which is why this answers rather than raises: an
- * unreadable store means this guard is simply gone, and the account's own post
- * count below is the one that actually keeps an established reader from being
- * congratulated.
+ * Whether this browser has already seen the celebration. Unreadable storage
+ * (private windows, blocked site data) answers false; the account's post count
+ * is the guard that keeps established readers from being congratulated.
  *
  * @return {boolean} whether the flag is set
  */
@@ -110,17 +98,12 @@ function rememberCelebrated() {
 	try {
 		window.localStorage.setItem(FIRST_POST_KEY, String(Date.now()))
 	} catch {
-		// nothing to do about it: `firstPostCelebrated` in the state still
-		// stops a second celebration for as long as this page is open
+		// `firstPostCelebrated` in the state still prevents a second celebration on this page
 	}
 }
 
 /**
  * What this store holds, for the helpers and getters that are handed it.
- *
- * Written down because they are plain functions taking the state as an
- * argument: without it every one of them read `state.statuses` off an untyped
- * `object`, which TypeScript 7 no longer lets through.
  *
  * @typedef {object} TimelineState
  * @property {Record<string, import('../types/Mastodon.js').Status>} statuses every status seen, by id
@@ -192,11 +175,8 @@ function readProfileSyncState(state, headers = {}) {
 }
 
 /**
- * Indexes a status, and the status it boosts, by id.
- *
- * A notification is indexed under its own id like anything else a list
- * holds, and so is the post it is about: the card reads that post from the
- * index, which is where a like or a boost on it lands.
+ * Indexes a status, the status it boosts and, for a notification, the post it
+ * is about, by id.
  *
  * @param {TimelineState} state the store state
  * @param {IndexedEntry|null|undefined} status the entry to index
@@ -206,8 +186,7 @@ function indexStatus(state, status) {
 		return
 	}
 
-	// assigned in place: replacing the whole map per status meant fifteen full
-	// copies of every status in memory for each page that loaded
+	// assigned in place: replacing the map would copy every status for each one indexed
 	state.statuses[status.id] = status
 	if (status.reblog !== undefined && status.reblog !== null) {
 		state.statuses[status.reblog.id] = status.reblog
@@ -235,14 +214,9 @@ function rememberRecommendationReasons(state, items, identity) {
 /**
  * Drops from the index every status that no kept list names.
  *
- * The index is one map shared by the list on screen and the remembered ones,
- * so that a like, an edit or a delete reaches every list that shows the post
- * rather than the copy of the list it happened in. What keeps that from being
- * the leak `resetTimeline()` was written to stop is this: a status is kept
- * while some list the reader can come back to names it, and goes when none
- * does. The status a boost wraps and the post a notification is about are
- * indexed under their own ids and read by them, so they are kept with their
- * entry.
+ * The index is shared by the list on screen and the remembered ones, so a
+ * change to a post reaches every list showing it; pruning keeps it bounded.
+ * Boosted statuses and notification subjects are kept with their entry.
  *
  * @param {TimelineState} state the store state
  */
@@ -303,9 +277,8 @@ export function isPersonalizedFeed(state) {
 }
 
 /**
- * Whether the list is a ranking rather than a timeline: For you, whole or as
- * the For you scope of Photos, Videos and Shorts, and a Bluesky feed or list,
- * whose order is the feed's own.
+ * Whether the list is a ranking rather than a timeline: For you (whole or as
+ * the scope of Photos, Videos and Shorts) and Bluesky feeds and lists.
  *
  * @param {{type: string, params?: {scope?: string}}} state the store state, or anything with its type and params
  * @return {boolean}
@@ -320,9 +293,7 @@ export function isRanked(state) {
  * @return {object[]} the statuses those ids name, newest first
  */
 function sortedByDate(state, ids) {
-	// Date.parse() in the comparator ran twice per comparison — about 2n·log n
-	// string parses every time the getter recomputed, which is every time a page
-	// arrived. Each date is parsed once here and the comparator only subtracts.
+	// each date is parsed once rather than on every comparison
 	return ids
 		.map((statusId) => state.statuses[statusId])
 		.filter(Boolean)
@@ -332,13 +303,8 @@ function sortedByDate(state, ids) {
 }
 
 /**
- * Appends the statuses a list does not already hold, in order.
- *
- * The membership test was `list.indexOf(id) === -1` per incoming status, which
- * is a full walk of a reactive array for each one — quadratic in the length of
- * a timeline that pages. It also ran before any of the pushes, so a page that
- * carried the same status twice appended it twice; a Set that grows as the list
- * does catches that as well.
+ * Appends the statuses a list does not already hold, in order, skipping
+ * duplicates within the page too.
  *
  * @param {string[]} list the id list to append to, in place
  * @param {import('../types/Mastodon.js').Status[]} statuses what arrived
@@ -355,8 +321,8 @@ function appendNew(list, statuses) {
 }
 
 /**
- * Whether a timeline request asks for what is newer than the list holds,
- * as the poll and its catch-up do, rather than for a page further down.
+ * Whether a timeline request asks for what is newer than the list holds, as
+ * the poll does, rather than for a page further down.
  *
  * @param {object} params the query
  * @return {boolean} whether it pages forward
@@ -376,9 +342,8 @@ function usesV4RecommendationTimeline(list) {
 
 /**
  * Where a list is asked for, and what the request has to add to say which.
- *
- * Shared by the list on screen and by the ones fetched ahead of a switch, so
- * that a page fetched ahead is the page the list would have asked for.
+ * Shared with prefetching, so a page fetched ahead is the page the list would
+ * have asked for.
  *
  * @param {{type: string, account: string, params: object}} list which list
  * @param {object} params the query, completed in place
@@ -389,10 +354,8 @@ function timelineRequest(list, params) {
 	switch (list.type) {
 		case 'account':
 			url = generateUrl(`apps/social/api/v1/accounts/${list.account}/statuses`)
-			// the profile's Photos and Videos tabs. `media_type` is a
-			// Social extension; `only_media` is Mastodon's own and
-			// says what the two have in common, so a client that knows
-			// neither still gets a sensible answer to the first.
+			// the profile's Photos and Videos tabs: `media_type` is a Social extension,
+			// `only_media` is Mastodon's fallback for clients that do not know it
 			if (list.params.media === 'image' || list.params.media === 'video') {
 				params.only_media = true
 				params.media_type = list.params.media
@@ -435,13 +398,8 @@ function timelineRequest(list, params) {
 		case 'photos':
 		case 'videos':
 		case 'shorts':
-		// a timeline with the text-only posts left out: what people
-		// showed rather than what they said. Which people is the scope
-		// the switcher sets — the ones you follow by default, this
-		// instance, or everywhere — so this is the same three feeds
-		// above, one predicate narrower. Or For you narrowed to the
-		// same kind, which is a ranking rather than a circle of people
-		// and asks nothing about attachments: the server narrows it.
+		// a timeline without text-only posts, in the scope the switcher sets
+		// (following, local or global), or For you narrowed to the same kind by the server
 			if (list.params.scope === 'interests') {
 				url = generateUrl(usesV4RecommendationTimeline(list)
 					? 'apps/social/api/v1/recommendations/timeline'
@@ -463,13 +421,11 @@ function timelineRequest(list, params) {
 			} else {
 				url = generateUrl('apps/social/api/v1/timelines/home')
 			}
-			// Photos is a visual feed: images and videos, never audio-only or text.
-			// Filter before pagination; only_media stays for older server compatibility.
+			// Photos: images and videos only, filtered before pagination; `only_media`
+			// is for older servers
 			params.only_media = true
 			if (list.type === 'shorts') {
-				// the Shorts stack: a single video of at most three minutes,
-				// upright or square, by the rule the server keeps
-				// (`Stream::shortKindOf()`) rather than a copy of it here
+				// the Shorts stack, by the rule the server keeps in `Stream::shortKindOf()`
 				params.only_short = true
 			} else if (list.type === 'videos') {
 				params.only_video = true
@@ -479,18 +435,14 @@ function timelineRequest(list, params) {
 			}
 			break
 		case 'link':
-		// everything said here about one article. The link is the
-		// subject, so it rides in the query rather than the path: a URL
-		// inside a path segment is a URL that has to survive two rounds
-		// of encoding and one web server's idea of what a slash means.
+		// everything said about one article; the link rides in the query, since a URL
+		// in a path segment would have to survive double encoding
 			url = generateUrl('apps/social/api/v1/timelines/link')
 			params.url = list.params.url ?? ''
 			break
 		case 'notifications': {
 			url = generateUrl('apps/social/api/v1/notifications')
-			// the page's filter, as the server takes it: what to leave
-			// out. Part of the params, so changing it is a different
-			// timeline and refetches rather than filtering the page
+			// what the page's filter leaves out; part of the params, so changing it refetches
 			const excluded = excludeTypesFor(list.params.filter ?? 'all')
 			if (excluded.length > 0) {
 				params.exclude_types = excluded
@@ -508,26 +460,20 @@ function timelineRequest(list, params) {
 	return url
 }
 
-/**
- * The list currently on screen: which one it is, what it holds, and everything
- * the reader does to a post in it.
- */
 /** How long after a conversation is opened its replies from elsewhere are asked for again. */
 const THREAD_REFETCH_MS = 1000
 const THREAD_REFETCH_MAX_MS = 5000
 const MAX_THREAD_REFETCHES = 30
 const PROFILE_REFETCH_MS = 2000
-// Remote Fediverse profile posts are imported by a queued outbox job. A
-// healthy Nextcloud cron can take longer than the conversation/AppView reads,
-// so keep checking that specific job for up to five minutes, while easing off
-// after the first few quick checks.
+// Remote profile posts are imported by a queued outbox job that cron can be
+// slow to run, so it is checked for up to five minutes, backing off after the
+// first few checks.
 const REMOTE_PROFILE_REFETCH_MS = 5000
 const MAX_REMOTE_PROFILE_REFETCHES = 60
 const STATUS_REFETCH_MS = 1000
 const STATUS_REFETCH_MAX_MS = 3000
-// Visible count reads back off for fifteen seconds after a failed request.
-// Keep the opened post fresh long enough to cross that cooldown and to show
-// the result of the queued refresh, while bounding both requests and lifetime.
+// Counts back off for fifteen seconds after a failed request, so the opened
+// post is refreshed long enough to cross that cooldown, within a bound.
 const MAX_STATUS_REFETCHES = 10
 /** the most posts one counts request asks about, as the server caps it */
 export const COUNTS_BATCH = 20
@@ -560,10 +506,8 @@ export const useTimelineStore = defineStore('timeline', {
 		type: 'home',
 
 		/**
-		 * The first screenful of the home timeline, put in the document by the
-		 * server that rendered it — see `NavigationController::provideFirstPage()`.
-		 * Read once and then dropped; null on every page that was not rendered
-		 * with one.
+		 * The first screenful of the home timeline, embedded by the server (see
+		 * `NavigationController::provideFirstPage()`). Read once, then dropped.
 		 *
 		 * @type {Array|null}
 		 */
@@ -572,25 +516,13 @@ export const useTimelineStore = defineStore('timeline', {
 		params: {},
 		account: '',
 		/**
-		 * The lists the reader has been in lately, kept so that coming back to
-		 * one finds the pages they had loaded.
+		 * The lists the reader has been in lately, so that coming back to one finds
+		 * the pages they had loaded. Capped at `REMEMBERED`, oldest first out, since
+		 * the index keeps every status they name.
 		 *
-		 * A few, not one, and not all of them. One was enough for Back out of a
-		 * post, and wrong for the thing people actually do: My Feed, Local,
-		 * Global and back is four switches, and with a single slot three of
-		 * them threw the list away and asked the server again — 150 ms of
-		 * skeleton where content had been. All of them would be the leak
-		 * `resetTimeline()` was written to stop, because the index keeps every
-		 * status they name, so this is capped at `REMEMBERED` and the oldest
-		 * goes.
-		 *
-		 * Only the ids are held. The statuses themselves stay in the one
-		 * `statuses` map, so a like or an edit in one list is seen in every
-		 * list that shows the post; a copy per list showed the reader the post
-		 * as it was when they left.
-		 *
-		 * A list fetched ahead of a switch is held here too, marked with when
-		 * it was fetched, so that it is only put back while still fresh.
+		 * Only ids are held; statuses stay in the shared `statuses` map so a change in
+		 * one list shows in all. A list fetched ahead is held here too, with
+		 * `fetchedAt`, and only put back while fresh.
 		 *
 		 * @type {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object, fetchedAt?: number}[]}
 		 */
@@ -601,19 +533,12 @@ export const useTimelineStore = defineStore('timeline', {
 		recommendationReasons: {},
 		/** Coverage returned by the ranked-feed endpoint, keyed by timeline identity. */
 		recommendationCoverage: {},
-		/**
-		 * Whether the list on screen was put back rather than loaded: what tells
-		 * the view that it already holds its pages and must not ask for another
-		 * one on top of them.
-		 */
+		/** Whether the list on screen was put back rather than loaded, so the view does not fetch another page on top of it. */
 		restored: false,
 		/**
-		 * The lists that have shown at least one post this session, by
-		 * identity. A switch holds the list being left on screen only while
-		 * the next one is known to have something to replace it with; a feed
-		 * opened for the first time, or one that was empty last time, shows
-		 * its own loading state rather than somebody else's posts that then
-		 * vanish.
+		 * The lists that have shown at least one post this session, by identity. A
+		 * switch keeps the list being left on screen only while the next one is known
+		 * to have something to replace it with.
 		 *
 		 * @type {Object<string, true>}
 		 */
@@ -623,15 +548,9 @@ export const useTimelineStore = defineStore('timeline', {
 		searchQuery: '',
 		/** whether the one-time first-post celebration is on screen right now */
 		firstPostCelebration: false,
-		/**
-		 * whether this session has already celebrated — the guard that still holds
-		 * when the browser refuses to remember anything
-		 */
+		/** whether this session has already celebrated, which holds when the browser cannot remember */
 		firstPostCelebrated: false,
-		/**
-		 * The post this reader has just published, for the moment it takes to
-		 * make its entrance at the top of the timeline; '' the rest of the time.
-		 */
+		/** The post this reader has just published, while it makes its entrance; '' otherwise. */
 		arrivedId: '',
 		/**
 		 * The `home` read marker as the server last stated it or was told it:
@@ -639,10 +558,9 @@ export const useTimelineStore = defineStore('timeline', {
 		 */
 		homeReadUpTo: '0',
 		/**
-		 * The like, boost and bookmark requests on their way, by `id:kind`.
-		 * A second press while the first is pending is ignored: two requests
-		 * racing for one button left the count a step off and whichever
-		 * answer came last as the state.
+		 * The like, boost and bookmark requests in flight, by `id:kind`. A second
+		 * press while one is pending is ignored, so racing requests cannot leave the
+		 * count off by one.
 		 *
 		 * @type {Object<string, true>}
 		 */
@@ -685,17 +603,11 @@ export const useTimelineStore = defineStore('timeline', {
 		/**
 		 * The timeline, newest first.
 		 *
-		 * This used to also filter by `searchQuery` with String.includes over the
-		 * ~15 statuses that happened to be loaded, which answered "No posts match
-		 * your search" for posts the instance was holding. Searching now asks the
-		 * server (`/api/v2/search`), so the timeline is only the timeline.
-		 *
 		 * @param {TimelineState} state the store state
 		 * @return {object[]} the statuses
 		 */
 		getTimeline(state) {
-			// For you is ranked, not chronological: the server's order is
-			// the point of it, and sorting it by date would undo the ranking
+			// ranked lists keep the server's order
 			if (isRanked(state)) {
 				return state.timeline.map((statusId) => state.statuses[statusId]).filter(Boolean)
 			}
@@ -724,12 +636,9 @@ export const useTimelineStore = defineStore('timeline', {
 			return state.firstPostCelebration
 		},
 		/**
-		 * What list the store is currently holding, as one comparable value.
-		 *
-		 * The router-view is no longer keyed on the full path, so a view — and the
-		 * TimelineList inside it — is reused across a navigation. This is what
-		 * tells the list that the thing it is showing has been swapped underneath
-		 * it, whether by a type, a tag, an account or a single post.
+		 * What list the store is currently holding, as one comparable value. Views are
+		 * reused across navigations, so this is what tells a list it has been swapped
+		 * underneath it.
 		 *
 		 * @param {TimelineState} state the store state
 		 * @return {string} the identity of the current timeline
@@ -780,13 +689,9 @@ export const useTimelineStore = defineStore('timeline', {
 
 	actions: {
 		/**
-		 * Where this reader had got to on the home timeline, from the server.
-		 *
-		 * The `home` marker of `GET /api/v1/markers` is the one every Mastodon
-		 * client reads and writes, so a feed read on the phone moves the line
-		 * here and the other way round. Asked when the home timeline opens.
-		 * A failure answers null rather than a guess: the list is still
-		 * readable, and the line falls back to what this browser remembers.
+		 * Where this reader had got to on the home timeline, from the `home` marker of
+		 * `GET /api/v1/markers` that all Mastodon clients share. A failure answers
+		 * null, and the line falls back to what this browser remembers.
 		 *
 		 * @return {Promise<{id: string, at: number}|null>} the marker and when it was last moved; null when the server has none, or did not answer
 		 */
@@ -810,12 +715,8 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 
 		/**
-		 * Tells the server the home timeline has been read up to `id`.
-		 *
-		 * Said once per position: the server never moves a marker backwards,
-		 * so there is nothing to say about an id it already holds or has
-		 * passed. Quiet on failure — a place not saved is a line drawn a
-		 * little low next time, not something to interrupt reading for.
+		 * Tells the server the home timeline has been read up to `id`. Sent once per
+		 * position, since the server never moves a marker backwards; quiet on failure.
 		 *
 		 * @param {string|number} id the newest post the reader has had on screen
 		 */
@@ -851,13 +752,9 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 
 		/**
-		 * The first page the server put in the document, if this request is
-		 * the one it was rendered for.
-		 *
-		 * Consumed rather than read: it answers the first fetch of the home
-		 * timeline and nothing afterwards, because it is a snapshot of one
-		 * moment and a second request means the reader asked for something
-		 * else — a cursor, a filter, a refresh.
+		 * The first page the server put in the document, if this request is the one
+		 * it was rendered for. Consumed by the first plain fetch of the home timeline;
+		 * any later request is a different question.
 		 *
 		 * @param {object} params what the fetch was going to ask for
 		 * @return {Array|null} the posts, or null to go and ask
@@ -870,8 +767,7 @@ export const useTimelineStore = defineStore('timeline', {
 			const page = this.seededPage
 			this.seededPage = null
 
-			// a cursor, a narrowing, or any other question the seeded page was
-			// not the answer to
+			// a cursor, a narrowing, or any other question the seeded page does not answer
 			const asked = { ...params }
 			delete asked.limit
 			if (Object.keys(asked).length > 0) {
@@ -899,12 +795,9 @@ export const useTimelineStore = defineStore('timeline', {
 		 * Takes a status off the list on screen.
 		 *
 		 * @param {import('../types/Mastodon.js').Status} status the status to take off
-		 * @param {boolean} [gone] whether the status itself is gone — deleted,
-		 *                         archived — and leaves the index too, so a
-		 *                         remembered list drops it on return. One that
-		 *                         is only off this list, unliked out of the
-		 *                         likes or unbookmarked out of the bookmarks,
-		 *                         stays known to the lists that still show it.
+		 * @param {boolean} [gone] whether the status itself is gone (deleted,
+		 *                         archived) and leaves the index too; one only off
+		 *                         this list stays known to the lists still showing it
 		 */
 		removeStatus(status, gone = true) {
 			const timelineIndex = this.timeline.indexOf(status.id)
@@ -918,8 +811,7 @@ export const useTimelineStore = defineStore('timeline', {
 			// which list it came from, so a failed delete puts it back where it was
 			this.removedFrom = { ...this.removedFrom, [status.id]: parentsTimelineIndex !== -1 ? 'parents' : 'timeline' }
 			if (gone) {
-				// a boost is listed under its own id, and with the post gone
-				// it would stay on screen as an empty entry
+				// a boost is listed under its own id and would stay as an empty entry
 				const boosts = []
 				for (const list of ['timeline', 'parentsTimeline']) {
 					for (let index = this[list].length - 1; index >= 0; index--) {
@@ -942,9 +834,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * Puts a status back after a delete the server refused. `addToTimeline`
-		 * always appended to `timeline`, so a failed delete of an ancestor
-		 * reappeared among the replies.
+		 * Puts a status back, in the list it came from, after a delete the server
+		 * refused.
 		 *
 		 * @param {import('../types/Mastodon.js').Status} status the status that could not be deleted
 		 * @param {number} [index] where in the list it was, for a list whose
@@ -983,10 +874,8 @@ export const useTimelineStore = defineStore('timeline', {
 			this.removedBoosts = removedBoosts
 		},
 		/**
-		 * Drops the "where it came from" hint for a removal that is final. Only
-		 * restoreStatus cleared it, so unliking from the liked timeline and
-		 * un-bookmarking from the bookmarks left a hint behind for a status that
-		 * is not coming back — and the next rollback of that id read it.
+		 * Drops the "where it came from" hint for a removal that is final, so a later
+		 * rollback of the same id does not read it.
 		 *
 		 * @param {import('../types/Mastodon.js').Status} status the status whose removal stands
 		 */
@@ -1033,9 +922,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.remoteProfilePageFilling = false
 			this.profileSyncState = ''
 			this.timelinePageEmpty = false
-			// the id lists used to be the only thing cleared, so `statuses` grew
-			// for the whole session: every page of every timeline ever opened.
-			// Pruned rather than emptied, because the remembered lists read it
+			// pruned rather than emptied, because the remembered lists read the index
 			pruneIndex(this)
 		},
 		setTimelineType(type) {
@@ -1054,9 +941,8 @@ export const useTimelineStore = defineStore('timeline', {
 			this.searchQuery = query
 		},
 		/**
-		 * Marks a post as the one just published, and unmarks it once its
-		 * entrance is over -- so a timeline that is reloaded a minute later
-		 * does not play it a second time.
+		 * Marks a post as the one just published, and unmarks it once its entrance is
+		 * over, so a reload does not play it again.
 		 *
 		 * @param {string} id the new post's id
 		 * @param {number} [lasts] how long the entrance runs, in milliseconds
@@ -1123,19 +1009,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * A vote reaches every view of the same post, not just the component that
-		 * cast it.
-		 *
-		 * @param {object} payload the status and its new poll
-		 * @param {string} payload.statusId the status that carries the poll
-		 * @param {object} payload.poll the poll as the server returned it
-		 */
-		/**
-		 * Whether a post of the reader's own is put away.
-		 *
-		 * In the store rather than on the card: the same post is often drawn
-		 * twice — a thread and the timeline behind it — and a card that flipped
-		 * its own copy would leave the other one saying the opposite.
+		 * Whether a post of the reader's own is put away. Kept in the store because
+		 * the same post is often drawn twice, in a thread and the timeline behind it.
 		 *
 		 * @param {object} root0 the post and its new state
 		 * @param {string} root0.statusId the post
@@ -1148,11 +1023,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * The people named in a post's pictures, after somebody changed them.
-		 *
-		 * In the store for the same reason as the archive flag: one post is
-		 * often drawn twice, and a card that edited its own copy would leave
-		 * the other one still carrying a name that has been taken off.
+		 * The people named in a post's photos, after somebody changed them. Kept in
+		 * the store for the same reason as the archive flag.
 		 *
 		 * @param {object} root0 the post and its new list
 		 * @param {string} root0.statusId the post
@@ -1177,6 +1049,14 @@ export const useTimelineStore = defineStore('timeline', {
 				this.statuses[statusId] = { ...known, reply_policy: replyPolicy }
 			}
 		},
+		/**
+		 * A vote reaches every view of the same post, not just the component that
+		 * cast it.
+		 *
+		 * @param {object} payload the status and its new poll
+		 * @param {string} payload.statusId the status that carries the poll
+		 * @param {object} payload.poll the poll as the server returned it
+		 */
 		updateStatusPoll({ statusId, poll }) {
 			const known = this.statuses[statusId]
 			if (known !== undefined) {
@@ -1184,11 +1064,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * The reaction bar of a post, as the server rebuilt it.
-		 *
-		 * Kept in the store rather than on the card, so the same post shown
-		 * twice — a thread and the timeline behind it — does not end up with
-		 * two different bars.
+		 * The reaction bar of a post, as the server rebuilt it, kept in the store so
+		 * every copy of the post shows the same bar.
 		 *
 		 * @param {object} root0 the arguments
 		 * @param {string} root0.statusId which post
@@ -1231,16 +1108,10 @@ export const useTimelineStore = defineStore('timeline', {
 		 * Decides whether the post that just went out is the first this reader has
 		 * ever published, and starts the celebration if it is.
 		 *
-		 * Two guards, because neither is right on its own. The stored flag is what
-		 * stops the second post of the same account being celebrated, and it is
-		 * cheap — no request, no endpoint. The account's own `statuses_count` is
-		 * what stops a reader of five years who cleared their browser storage from
-		 * being congratulated on post number 1001; it is already in the store,
-		 * fetched once when the page opened, so reading it costs nothing and it
-		 * does not yet count the post that just went out.
-		 *
-		 * An account that has not loaded has an unknown count, and unknown is not
-		 * proof of a first post: nothing happens.
+		 * The stored flag stops a second celebration cheaply; the account's
+		 * `statuses_count`, loaded with the page and not yet counting the new post,
+		 * stops one for a long-time reader who cleared their storage. An account not
+		 * loaded yet is not proof of a first post, so nothing happens.
 		 *
 		 * @return {boolean} whether the celebration was started
 		 */
@@ -1270,25 +1141,15 @@ export const useTimelineStore = defineStore('timeline', {
 		 * @param {string} media which kind of attachment to keep, '' for all
 		 */
 		changeTimelineTypeAccount(account, media = '') {
-			// the media kind is part of what identifies this timeline, so that
-			// changing the tab asks the server again rather than filtering the
-			// page on screen
+			// the media kind is part of the timeline identity, so changing the tab refetches
 			this.switchTimeline('account', media === '' ? {} : { media }, account)
 		},
 		/**
 		 * Points the store at a list, keeping what is loaded when it can.
 		 *
-		 * Opening a post and pressing Back mounts the timeline view again,
-		 * which comes through here. It used to throw the whole index away every
-		 * time: the reader came back to the first fifteen posts of a list they
-		 * had read four pages into, so the browser had nothing to put the
-		 * scroll offset back on and clamped it to the bottom of what little was
-		 * there. The list is now only cleared when it is genuinely a different
-		 * list, and the one just left is remembered so that coming straight
-		 * back to it — which is what Back out of a post is — finds it whole.
-		 *
-		 * An explicit reset is still `resetTimeline()`, and a reload of the
-		 * page is still a reload.
+		 * The list is only cleared when it is a different list, and the one left is
+		 * remembered, so Back out of a post finds the list whole and the scroll
+		 * position can be restored. `resetTimeline()` clears explicitly.
 		 *
 		 * @param {string} type which timeline
 		 * @param {object} params what narrows it: a tag, a list id, a post
@@ -1315,8 +1176,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.profileSyncState = ''
 			this.timelinePageEmpty = false
 
-			// a page still on its way for the list being left would be dropped
-			// on arrival; cancelled, it costs the server nothing more either
+			// cancel pages still on their way for the list being left
 			abortRequests(left.identity)
 			this.cancelBackgroundRefetch()
 
@@ -1333,11 +1193,8 @@ export const useTimelineStore = defineStore('timeline', {
 				return
 			}
 
-			// the ids, read back against the shared index: a post deleted
-			// while the reader was in another list has left it, and the list
-			// drops it rather than naming a post that is not there. The
-			// index is then pruned of whatever the list that fell off the
-			// shelf was the last to name
+			// ids read back against the shared index drop posts deleted meanwhile; the
+			// index is then pruned of what only the list that fell off named
 			const stillKnown = (statusId) => this.statuses[statusId] !== undefined
 			this.timeline = returning.timeline.filter(stillKnown)
 			this.parentsTimeline = returning.parentsTimeline.filter(stillKnown)
@@ -1345,20 +1202,9 @@ export const useTimelineStore = defineStore('timeline', {
 			pruneIndex(this)
 		},
 		/**
-		 * Tells the server what an attachment shows, so it federates as alt text.
-		 *
-		 * @param {object} media the attachment
-		 * @param {string} media.id its id on this server
-		 * @param {string} media.description what it shows
-		 */
-		/**
-		 * Fetches the first page of a list the reader is likely to switch to,
-		 * and holds it with the remembered lists, so that the switch puts it
-		 * on screen at once instead of waiting for the server.
-		 *
-		 * Quiet: a failure is the switch asking for itself, as it always has.
-		 * Put in front of the lists the reader has left, because from the feed
-		 * the next list is most likely another scope of it.
+		 * Fetches the first page of a list the reader is likely to switch to and
+		 * holds it with the remembered lists, so the switch shows it at once. Quiet
+		 * on failure: the switch then asks for itself.
 		 *
 		 * @param {object} list which list
 		 * @param {string} list.type the timeline type, as the store names it
@@ -1415,11 +1261,9 @@ export const useTimelineStore = defineStore('timeline', {
 			pruneIndex(this)
 		},
 		/**
-		 * The first page of another list, for a shelf drawn beside the one on
-		 * screen: the Shorts and the channels the reader follows, above the
-		 * Videos grid. Asked the way that list would ask for itself, and not
-		 * held — the list on screen, its paging and the lists remembered for
-		 * a switch are left exactly as they were.
+		 * The first page of another list, for a shelf beside the one on screen (the
+		 * Shorts and followed channels above the Videos grid). Not held: the list on
+		 * screen and the remembered lists are left as they were.
 		 *
 		 * @param {object} list which list
 		 * @param {string} list.type the timeline type, as the store names it
@@ -1440,6 +1284,13 @@ export const useTimelineStore = defineStore('timeline', {
 				return []
 			}
 		},
+		/**
+		 * Tells the server what an attachment shows, so it federates as alt text.
+		 *
+		 * @param {object} media the attachment
+		 * @param {string} media.id its id on this server
+		 * @param {string} media.description what it shows
+		 */
 		async describeMedia({ id, description }) {
 			try {
 				await axios.put(generateUrl('apps/social/api/v1/media/' + id), { description })
@@ -1451,10 +1302,8 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 
 		/**
-		 * Tells the server where the subject of an attachment is, so a square
-		 * crop — the profile grid here, the timeline on Mastodon — keeps it in
-		 * frame. The same `PUT` the description travels by; it federates as
-		 * `focalPoint`.
+		 * Tells the server where the subject of an attachment is, so square crops
+		 * keep it in frame. It federates as `focalPoint`.
 		 *
 		 * @param {object} media the attachment
 		 * @param {string} media.id its id on this server
@@ -1464,16 +1313,15 @@ export const useTimelineStore = defineStore('timeline', {
 			try {
 				await axios.put(generateUrl('apps/social/api/v1/media/' + id), { focus })
 			} catch (error) {
-				// the picture is still attached and still centred, which is
-				// what it was before the point was set
+				// the photo is still attached, just centred
 				showError(t('social', 'Could not save the focal point of an attachment'))
 				logger.error('Failed to set the focal point of a media', { error })
 			}
 		},
 
 		/**
-		 * One of the reader's own uploads as the server holds it now: what a
-		 * kept draft asks about each attachment it comes back with.
+		 * One of the reader's own uploads as the server holds it now, as a restored
+		 * draft asks about each attachment.
 		 *
 		 * @param {string} id the upload's id
 		 * @return {Promise<object|null|undefined>} the media entity; null when
@@ -1494,9 +1342,8 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 
 		/**
-		 * The bytes of an upload, as a file the browser can draw from again:
-		 * a filter is baked in from the file as the post is sent, and after a
-		 * reload the file that was picked is gone.
+		 * The bytes of an upload as a file, so a filter can be baked in when a
+		 * restored draft is sent.
 		 *
 		 * @param {object} media the upload
 		 * @param {string} media.url where it is
@@ -1546,23 +1393,11 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.info('Media created with id ' + data.id)
 				return data
 			} catch (error) {
-				// a refusal says why — too large, a kind the server does not
-				// take — and that stays behind "Details"
+				// the server's reason (too large, an unsupported kind) stays behind "Details"
 				showError(errorOf(error, t('social', 'Could not upload the attachment')))
 				logger.error('Failed to create a media', { error })
 			}
 		},
-		/**
-		 * Attaches a file the reader already keeps in Nextcloud.
-		 *
-		 * The bytes never leave the server: the path is all the browser sends, and
-		 * what comes back is the same attachment an upload would have produced.
-		 *
-		 * @param {object} media what to attach
-		 * @param {string} media.path the file, relative to the reader's own files
-		 * @param {string} [media.description] what it shows
-		 * @return {Promise<object|undefined>} the media entity, or undefined when the server refused
-		 */
 		/**
 		 * Copies a picture out of the instance's shared library onto a post.
 		 *
@@ -1584,6 +1419,15 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.error('Failed to attach a picture from the library', { error })
 			}
 		},
+		/**
+		 * Attaches a file the reader already keeps in Nextcloud. Only the path is
+		 * sent; the server returns the same attachment an upload would.
+		 *
+		 * @param {object} media what to attach
+		 * @param {string} media.path the file, relative to the reader's own files
+		 * @param {string} [media.description] what it shows
+		 * @return {Promise<object|undefined>} the media entity, or undefined when the server refused
+		 */
 		async createMediaFromFile({ path, description = '' }) {
 			try {
 				const { data } = await axios.post(
@@ -1593,18 +1437,14 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.info('Media created from ' + path + ' with id ' + data.id)
 				return data
 			} catch (error) {
-				// named, because a picker run attaches several at once and "it
-				// failed" would not say which one to try again
+				// named, because a picker attaches several files at once
 				showError(t('social', 'Could not attach {file}', { file: path }))
 				logger.error('Failed to attach a file from Nextcloud', { error })
 			}
 		},
 		/**
-		 * Sends a status.
-		 *
-		 * Resolves with what the server created and with `undefined` when it
-		 * refused, so the composer can tell the two apart: it used to clear itself
-		 * either way, and an offline moment threw away what was typed.
+		 * Sends a status. Resolves with `undefined` when the server refused, so the
+		 * composer keeps what was typed.
 		 *
 		 * @param {object} status the status to send
 		 * @param {object} [options] how it is sent
@@ -1621,10 +1461,8 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.info('Post created', data.id)
 				return data
 			} catch (error) {
-				// A post the server held for a moderator is not a failure: it
-				// has been kept, and writing it again would only put a second
-				// copy in the queue. Said as information, and the box is
-				// cleared, because there is nothing left for the author to do.
+				// a post held for a moderator has been kept, so it is reported as information
+				// and the composer is cleared
 				if (error.response?.data?.held_for_review === true) {
 					showInfo(t('social', 'Your post is waiting for a moderator to look at it. It has been kept — there is no need to write it again.'))
 					logger.info('Post held for review')
@@ -1668,9 +1506,7 @@ export const useTimelineStore = defineStore('timeline', {
 				this.forgetBoosts(status)
 				return true
 			} catch (error) {
-				// restoreStatus puts it back in the list it came from; addToTimeline
-				// always appended to the replies, so a failed delete of an ancestor
-				// reappeared among its own answers
+				// back into the list it came from
 				this.restoreStatus(status)
 				showError(t('social', 'Could not delete the post'))
 				logger.error('Failed to delete the status', { error })
@@ -1678,20 +1514,12 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * One status by its id, for a page that has to draw a post nothing has
-		 * loaded yet: a link somebody sent, a reload, or a tile on Discover,
-		 * whose posts are the view's own and never went through here.
+		 * One status by its id, for a post nothing has loaded yet: a shared link, a
+		 * reload, or a Discover tile. `/context` never includes the post itself.
 		 *
-		 * `/context` answers with the posts around one, never the post itself,
-		 * so without this the page had nothing to draw and said the post did
-		 * not exist.
-		 *
-		 * Only a 404 or a 410 says the post is not there. Anything else — no
-		 * connection, a server error, a timeout — is thrown, so the page can
-		 * offer to try again rather than call the post deleted.
-		 *
-		 * Reading a post this way is opening it: the server counts it as a
-		 * view. Counts of posts merely on screen come from `refreshCounts()`.
+		 * Only a 404 or 410 means the post is not there; anything else is thrown so
+		 * the page can offer to retry. The server counts this as a view; counts of
+		 * posts merely on screen come from `refreshCounts()`.
 		 *
 		 * @param {string} id the status id
 		 * @param {boolean} [forceCounts] ask the origin even when the last count refresh was recent
@@ -1705,8 +1533,7 @@ export const useTimelineStore = defineStore('timeline', {
 					: axios.get(url)
 				const response = await get()
 				this.addToStatuses(response.data)
-				// its counts are being asked for where it lives: read once more
-				// a little later, so the page shows them without a reload
+				// its counts are being fetched from its origin: read again a little later
 				if (response.headers?.['x-social-filling'] === '1' && !this.statusRefetching[id]) {
 					this.statusRefetching = { ...this.statusRefetching, [id]: true }
 					const refetch = (attempt) => setTimeout(async () => {
@@ -1736,18 +1563,16 @@ export const useTimelineStore = defineStore('timeline', {
 				if (status !== 404 && status !== 410) {
 					throw error
 				}
-				// a deleted post and one this server never had look the same
-				// from here, and the page says so either way
+				// a deleted post and one this server never had look the same from here
 				logger.debug('A single status is not there', { error, id })
 
 				return null
 			}
 		},
 		/**
-		 * The current counts of posts on screen, written onto the statuses the
-		 * store holds. Asks for nothing but the numbers and records no view;
-		 * the server reads a post's counts from its network when they are
-		 * older than the window its age allows.
+		 * The current counts of posts on screen, written onto the stored statuses.
+		 * Records no view; the server refreshes counts from the network once they
+		 * are older than the post's age allows.
 		 *
 		 * @param {string[]} ids the ids of the posts, at most `COUNTS_BATCH`
 		 * @return {Promise<void>}
@@ -1773,10 +1598,9 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * Each of the four below answers the updated status, nothing when the
-		 * server refused and the change was rolled back, and null when a
-		 * request for the same post was still on its way and this one was
-		 * ignored.
+		 * Each of the like and boost actions answers the updated status, nothing when
+		 * the server refused and the change was rolled back, and null when a request
+		 * for the same post was already in flight.
 		 *
 		 * @param {object} root0 the status to like
 		 * @param {import('../types/Mastodon.js').Status} root0.status that status
@@ -1801,11 +1625,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		/**
-		 * PeerTube's other counter, which only a video carries.
-		 *
-		 * No optimistic update: unlike a like, nothing on the page depends on
-		 * it being instant, and the count that matters is the author's
-		 * server's. The answer carries the new one.
+		 * PeerTube's dislike counter, which only a video carries. Not optimistic: the
+		 * server's answer carries the new count.
 		 *
 		 * @param {object} root0 the status to dislike
 		 * @param {import('../types/Mastodon.js').Status} root0.status that status
@@ -1844,8 +1665,7 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 			try {
 				if (this.type === 'favourites') {
-					// off this list, not gone: the home timeline behind it
-					// still shows the post
+					// off this list, not gone: other lists still show the post
 					this.removeStatus(status, false)
 				}
 				this.unlikeStatus({ status })
@@ -1856,9 +1676,7 @@ export const useTimelineStore = defineStore('timeline', {
 				return response
 			} catch (error) {
 				if (this.type === 'favourites') {
-					// restoreStatus puts back the caller's pre-unlike copy of the
-					// status (favourited, original count) — a likeStatus on top of
-					// that would count the like twice.
+					// restores the caller's pre-unlike copy, so no likeStatus on top of it
 					this.restoreStatus(status)
 				} else {
 					this.likeStatus({ status })
@@ -1908,11 +1726,8 @@ export const useTimelineStore = defineStore('timeline', {
 		/**
 		 * Mutes or unmutes the conversation a post belongs to, for this reader.
 		 *
-		 * The thread stays on every timeline; only what it would tell the
-		 * reader stops. The server keeps the mute against the thread's root,
-		 * so the flag the server answers with is the one to trust — a reply
-		 * elsewhere in the same thread is muted too, and this one copy is
-		 * what is flipped at once so the menu answers.
+		 * The server keeps the mute against the thread's root, so its answer is the
+		 * one to trust; this copy is flipped at once so the menu responds.
 		 *
 		 * @param {object} payload which post, and which way
 		 * @param {import('../types/Mastodon.js').Status} payload.status the post
@@ -1942,8 +1757,7 @@ export const useTimelineStore = defineStore('timeline', {
 			if (!this.startActing(status.id, 'bookmark')) {
 				return null
 			}
-			// the flag flips first so the button answers at once, and is put back
-			// if the server refuses
+			// flipped first so the button responds at once, and put back if the server refuses
 			this.bookmarkStatus({ status, bookmarked })
 			try {
 				const action = bookmarked ? 'bookmark' : 'unbookmark'
@@ -1967,8 +1781,7 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 		async postPin({ status, pinned }) {
-			// the flag is flipped first so the menu answers at once, and rolled
-			// back if the server refuses (somebody else's post, or the pin limit)
+			// flipped first and rolled back if the server refuses (somebody else's post, or the pin limit)
 			this.pinStatus({ status, pinned })
 			try {
 				const action = pinned ? 'pin' : 'unpin'
@@ -1992,16 +1805,9 @@ export const useTimelineStore = defineStore('timeline', {
 				params.limit = 15
 			}
 
-			// The page was rendered for this reader and carries the first
-			// screenful of their home timeline with it, so the first fetch has
-			// nothing to go and ask for. Without this the first screen is a
-			// staircase: fetch the bundle, mount, *then* ask the server —
-			// a second round trip and a full Nextcloud boot before anything a
-			// person came to read is on screen.
-			//
-			// Once only, and only for the list it was rendered for: a seeded
-			// page handed to a second request would be a stale answer to a
-			// different question.
+			// The page arrives with the first screenful of the home timeline, saving a
+			// round trip before anything is on screen. Used once, and only for the request
+			// it was rendered for.
 			const seeded = this.takeSeededPage(params)
 			if (seeded !== null) {
 				this.timelinePageFilling = false
@@ -2033,9 +1839,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 			const url = timelineRequest(this, params)
 
-			// which list this page was asked for, so an answer that arrives after
-			// the reader has moved on is dropped instead of being committed under
-			// the new heading
+			// which list this page was asked for, so a late answer is dropped rather than
+			// committed under the list the reader has moved to
 			const controller = startRequest(identity)
 			const request = axios.get(url, { params, signal: controller.signal })
 			// the sidebar's own requests wait for the first of these
@@ -2059,9 +1864,8 @@ export const useTimelineStore = defineStore('timeline', {
 				this.recommendationCursors = { ...this.recommendationCursors, [identity]: data?.next_cursor ?? null }
 				this.recommendationCoverage = { ...this.recommendationCoverage, [identity]: data?.coverage ?? null }
 			}
-			// A request for what is newer than the top of the list says nothing
-			// about the end of it: an empty answer there means only that nothing
-			// new has arrived, and the page flags belong to the paging requests.
+			// an empty answer to a request for newer posts says nothing about the end of
+			// the list, so the page flags are left to the paging requests
 			if (isForwardRequest(params)) {
 				this.addToTimeline(timelineData)
 				return timelineData
@@ -2129,16 +1933,14 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 
 		/**
-		 * The rest of a page is being read from the servers it lives on: asked
-		 * for once more a little later, and what came in meanwhile added to
-		 * what is already shown.
+		 * The rest of a page is being read from the servers it lives on: asks again a
+		 * little later and adds what came in to what is shown.
 		 *
 		 * @param {string} url the context the page was read from
 		 * @param {object} params its query
 		 * @param {string} identity the timeline it belongs to
 		 * @param {number} attempt the retry number, starting at zero
 		 */
-
 		refetchThreadLater(url, params, identity, attempt = 0) {
 			if (this.backgroundRefetchTimer !== null) {
 				return
@@ -2157,8 +1959,7 @@ export const useTimelineStore = defineStore('timeline', {
 					return
 				}
 				try {
-					// Each poll must reach the server afresh. Reusing a timeline URL
-					// can let its ETag short-circuit the count refresh as a 304.
+					// a unique parameter, so an ETag cannot answer the refresh with a 304
 					const response = await axios.get(url, { params: { ...params, _social_refresh: Date.now() } })
 					if (this.getTimelineIdentity === identity && this.backgroundRefetchGeneration === generation) {
 						this.timelinePageFilling = response.headers?.['x-social-filling'] === '1'

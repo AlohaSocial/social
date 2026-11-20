@@ -138,7 +138,7 @@ export default {
 		},
 	},
 
-	// Start fetching account information before mounting the component
+	// fetch the account before mounting the component
 	async beforeMount() {
 		this.fetchProfileData()
 	},
@@ -164,9 +164,8 @@ export default {
 				return
 			}
 
-			// a handle with a dot and no host is asked for as it is: it is a
-			// Bluesky handle, or a local user id the server answers for either
-			// way — qualifying it with this host would make it neither
+			// a handle with a dot and no host is a Bluesky handle or a local user id,
+			// and the server answers for either as it is
 			const requestedHandle = String(this.$route.params.account || this.serverData.account || this.resolvedAccount || '')
 			const remote = requestedHandle.includes('@') || isBlueskyHandle(requestedHandle)
 			const fetchMethod = this.serverData.public && !remote ? 'fetchPublicAccountInfo' : 'fetchAccountInfo'
