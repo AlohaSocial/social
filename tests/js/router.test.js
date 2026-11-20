@@ -139,11 +139,17 @@ describe('router', () => {
 		expect(route.matched[0].props.default).toBe(true)
 	})
 
-	it('resolves the blocked accounts route', () => {
-		const route = router.resolve('/blocked')
+	it.each([
+		['/blocked', '#blocked'],
+		['/blocked#filters', '#filters'],
+		['/filtered', '#filtered-notifications'],
+		['/migration', '#migration'],
+		['/migration#bring', '#bring'],
+	])('opens %s in Settings, at %s', async (path, hash) => {
+		await router.push(path)
 
-		expect(route.name).toBe('blocked-accounts')
-		expect(route.matched).toHaveLength(1)
+		expect(router.currentRoute.value.name).toBe('settings')
+		expect(router.currentRoute.value.hash).toBe(hash)
 	})
 
 	it('resolves the search route, with and without a term', () => {
@@ -419,9 +425,7 @@ describe('router navigation', () => {
 describe('the reader\'s own pages', () => {
 	const ownPages = [
 		'/settings',
-		'/migration',
 		'/switch',
-		'/blocked',
 		'/timeline/notifications',
 		'/timeline/direct',
 		'/@alice/saved',
@@ -491,12 +495,12 @@ describe('the reader\'s own pages', () => {
 			expect(instance.currentRoute.value.path).toBe('/timeline/timeline')
 		})
 
-		it('follows the old address of the held senders to the Blocking page, and so to the login', async () => {
+		it('follows the old address of the held senders to Settings, and so to the login', async () => {
 			const instance = await routerFor(true)
 
 			await instance.push('/filtered')
 
-			expect(assign).toHaveBeenCalledWith('/index.php/login?redirect_url=' + encodeURIComponent('/index.php/apps/social/blocked'))
+			expect(assign).toHaveBeenCalledWith('/index.php/login?redirect_url=' + encodeURIComponent('/index.php/apps/social/settings#filtered-notifications'))
 		})
 
 		it('lets a visitor go on to a public page', async () => {

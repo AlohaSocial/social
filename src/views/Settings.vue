@@ -125,23 +125,18 @@
 import PageHeader from '../components/PageHeader.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
-import IntroductionSettings from '../components/IntroductionSettings.vue'
-import ShortcutsSettings from '../components/ShortcutsSettings.vue'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import IconAccount from 'vue-material-design-icons/AccountCircleOutline.vue'
 import IconAccountCheck from 'vue-material-design-icons/AccountCheckOutline.vue'
 import IconApps from 'vue-material-design-icons/KeyOutline.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconBellRing from 'vue-material-design-icons/BellRingOutline.vue'
+import IconBlocked from 'vue-material-design-icons/Cancel.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
-import IconDirectMessages from 'vue-material-design-icons/MessageLockOutline.vue'
-import IconHelp from 'vue-material-design-icons/HelpCircleOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
-import IconIntroduction from 'vue-material-design-icons/HandWaveOutline.vue'
-import IconInvite from 'vue-material-design-icons/EmailPlusOutline.vue'
-import IconKeyboard from 'vue-material-design-icons/KeyboardOutline.vue'
-import IconLists from 'vue-material-design-icons/FormatListBulleted.vue'
+import IconMigration from 'vue-material-design-icons/SwapHorizontal.vue'
 import IconNotifications from 'vue-material-design-icons/BellOutline.vue'
+import IconProfileLayout from 'vue-material-design-icons/ViewDashboardOutline.vue'
 import IconReading from 'vue-material-design-icons/BookOpenPageVariantOutline.vue'
 import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import IconSearch from 'vue-material-design-icons/Magnify.vue'
@@ -151,7 +146,6 @@ import IconSensitive from 'vue-material-design-icons/EyeOffOutline.vue'
 import IconCounts from 'vue-material-design-icons/HeartOffOutline.vue'
 import IconFilesComments from 'vue-material-design-icons/CommentTextMultipleOutline.vue'
 import IconStorage from 'vue-material-design-icons/Harddisk.vue'
-import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
 import { n, t } from '@nextcloud/l10n'
 import { useServerData } from '../composables/useServerData.js'
@@ -163,12 +157,9 @@ import { matchesQuery } from '../services/settingsSearch.js'
 // loads.
 const ProfileLayoutSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ProfileLayoutSettings.vue'))
 const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/AccountSettings.vue'))
-const DirectMessagesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/DirectMessagesSettings.vue'))
 const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
 const RecapSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/RecapSettings.vue'))
-const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ListsSettings.vue'))
 const BlueskyFeedsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskyFeedsSettings.vue'))
-const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FeaturedTagsSettings.vue'))
 const ForYouSettings = defineAsyncComponent(() => import(/* webpackChunkName: "for-you-settings" */'../components/ForYouSettings.vue'))
 const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
 const SensitiveMediaSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensitiveMediaSettings.vue'))
@@ -176,9 +167,27 @@ const CountsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "s
 const FeedDisplaySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FeedDisplaySettings.vue'))
 const FilesCommentsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FilesCommentsSettings.vue'))
 const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationDeliverySettings.vue'))
-const NotificationPolicySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationPolicySettings.vue'))
+const ContactSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ContactSettings.vue'))
+const BlockedAccounts = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'./BlockedAccounts.vue'))
+const MigrationSettings = defineAsyncComponent(() => import(/* webpackChunkName: "migration" */'../components/MigrationSettings.vue'))
 const ExternalStorage = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ExternalStorage.vue'))
-const InviteSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InviteSettings.vue'))
+
+/**
+ * Anchors inside a section, and the section each is in: the parts of Moving
+ * your account (which it opens by the hash) and of Blocked and muted.
+ */
+const INNER_ANCHORS = {
+	'direct-messages': 'contact',
+	'notification-policy': 'contact',
+	bring: 'migration',
+	copy: 'migration',
+	leave: 'migration',
+	'moderation-lists': 'blocked',
+	filters: 'blocked',
+	'ai-content': 'blocked',
+	labelers: 'blocked',
+	'filtered-notifications': 'blocked',
+}
 
 /**
  * Settings: what this app holds about how the reader uses it.
@@ -199,29 +208,25 @@ export default {
 	components: {
 		PageHeader,
 		AccountSettings,
+		BlockedAccounts,
+		ContactSettings,
+		MigrationSettings,
+		IconBlocked,
+		IconMigration,
+		IconProfileLayout,
 		ProfileLayoutSettings,
 		AuthorizedApps,
 		BlueskySettings,
 		DeleteAccount,
-		DirectMessagesSettings,
 		ExternalStorage,
-		FeaturedTagsSettings,
 		ForYouSettings,
-		IntroductionSettings,
-		InviteSettings,
 		IconAccount,
 		IconAccountCheck,
 		IconApps,
 		IconBluesky,
 		IconBellRing,
 		IconDelete,
-		IconDirectMessages,
-		IconHelp,
 		IconInterests,
-		IconIntroduction,
-		IconInvite,
-		IconKeyboard,
-		IconLists,
 		IconNotifications,
 		IconReading,
 		IconRecap,
@@ -232,19 +237,15 @@ export default {
 		IconSenses,
 		IconSensitive,
 		IconStorage,
-		IconTags,
-		ListsSettings,
 		BlueskyFeedsSettings,
 		NcTextField,
 		NotificationDeliverySettings,
-		NotificationPolicySettings,
 		RecapSettings,
 		CountsSettings,
 		FeedDisplaySettings,
 		FilesCommentsSettings,
 		SensesSettings,
 		SensitiveMediaSettings,
-		ShortcutsSettings,
 	},
 
 	setup() {
@@ -271,72 +272,76 @@ export default {
 		/**
 		 * Every section, in the order it is read, each naming its group.
 		 *
-		 * @return {object[]} one entry per section
+		 * @return {object[]}
 		 */
 		sections() {
 			const external = Boolean(this.serverData?.externalMedia)
+			const interests = this.serverData?.interests
+			const bluesky = this.serverData?.bluesky?.enabled === true
 
 			return [
 				{
 					id: 'account',
 					group: 'profile',
-					icon: 'IconAccountCheck',
+					icon: 'IconAccount',
 					component: 'AccountSettings',
-					title: t('social', 'Who can find and follow you'),
+					title: t('social', 'Who can find you'),
 					lede: t('social', 'How others find you, and who sees what you post.'),
+				},
+				{
+					id: 'contact',
+					group: 'profile',
+					icon: 'IconAccountCheck',
+					component: 'ContactSettings',
+					title: t('social', 'Who can contact you'),
+					lede: t('social', 'Who may follow you, send you direct messages and reach your activities without waiting.'),
 				},
 				{
 					id: 'profile-layout',
 					group: 'profile',
-					icon: 'IconAccount',
+					icon: 'IconProfileLayout',
 					component: 'ProfileLayoutSettings',
 					title: t('social', 'Public profile layout'),
 					lede: t('social', 'Choose the first tab visitors see and which tabs appear on your profile.'),
 				},
 				{
-					id: 'direct-messages',
+					id: 'blocked',
 					group: 'profile',
-					icon: 'IconDirectMessages',
-					component: 'DirectMessagesSettings',
-					title: t('social', 'Who may send you direct messages'),
-					lede: t('social', 'A message from anybody else does not notify you, and waits among your requests.'),
+					icon: 'IconBlocked',
+					component: 'BlockedAccounts',
+					props: { embedded: true },
+					title: t('social', 'Blocked and muted'),
+					lede: t('social', 'Accounts, servers and words you would rather not see, and the senders waiting for you to decide.'),
 				},
 				{
-					id: 'featured-tags',
+					id: 'migration',
 					group: 'profile',
-					icon: 'IconTags',
-					component: 'FeaturedTagsSettings',
-					title: t('social', 'Featured hashtags'),
-					lede: t('social', 'Hashtags shown under your bio. Anyone can click one to read what you posted with it.'),
+					icon: 'IconMigration',
+					component: 'MigrationSettings',
+					title: t('social', 'Moving your account'),
+					lede: t('social', 'Bring an account here, keep a copy of yours, or move it to another server.'),
 				},
-				// only where the administrator has the feature on: without it
-				// there is no feed for the list to shape
-				...(this.serverData?.interests?.enabled === true || this.serverData?.interests?.recommendationsEnabled === true
+				{
+					id: 'delete',
+					group: 'profile',
+					icon: 'IconDelete',
+					component: 'DeleteAccount',
+					title: t('social', 'Delete your Aloha Social account'),
+					lede: external
+						? t('social', 'Your account on this server and everything you posted. This cannot be undone.')
+						: t('social', 'Your fediverse account and everything you posted. Your Nextcloud account stays as it is. This cannot be undone.'),
+
+					danger: true,
+				},
+				// only where the administrator has the feature on
+				...(interests?.enabled === true || interests?.recommendationsEnabled === true
 					? [{
 							id: 'interests',
 							group: 'reading',
 							icon: 'IconInterests',
 							component: 'ForYouSettings',
-							title: t('social', 'For You'),
-							lede: t('social', 'One personalized feed that learns automatically, with controls for learning and languages.'),
-						}]
-					: []),
-				{
-					id: 'lists',
-					group: 'reading',
-					icon: 'IconLists',
-					component: 'ListsSettings',
-					title: t('social', 'Lists'),
-					lede: t('social', 'A list is a few of the people you follow, read as a timeline of its own. Your lists are in the sidebar.'),
-				},
-				...(this.serverData?.bluesky?.enabled === true
-					? [{
-							id: 'bluesky-feeds',
-							group: 'reading',
-							icon: 'IconBluesky',
-							component: 'BlueskyFeedsSettings',
-							title: t('social', 'Bluesky feeds'),
-							lede: t('social', 'Custom feeds and lists from Bluesky, read here as timelines of their own. A Bluesky app signed in to this account keeps the same ones.'),
+							title: t('social', 'For you'),
+							lede: t('social', 'What For you learns from, and the languages it shows.'),
 						}]
 					: []),
 				{
@@ -385,19 +390,11 @@ export default {
 					icon: 'IconBellRing',
 					component: 'NotificationDeliverySettings',
 					title: t('social', 'When to tell you'),
-					lede: t('social', 'Right away or in a digest, and the hours to stay quiet.'),
-				},
-				{
-					id: 'notification-policy',
-					group: 'notifications',
-					icon: 'IconAccountCheck',
-					component: 'NotificationPolicySettings',
-					title: t('social', 'Who may reach you'),
-					lede: t('social', 'Whose posts, likes and follows reach you right away, and whose wait for you to look.'),
+					lede: t('social', 'Right away or once a day, and the hours to stay quiet.'),
 				},
 				{
 					id: 'apps',
-					group: 'security',
+					group: 'apps',
 					icon: 'IconApps',
 					component: 'AuthorizedApps',
 					title: t('social', 'Authorized apps'),
@@ -408,73 +405,44 @@ export default {
 					? []
 					: [{
 							id: 'files-comments',
-							group: 'security',
+							group: 'apps',
 							icon: 'IconFilesComments',
 							component: 'FilesCommentsSettings',
 							title: t('social', 'Replies in Files'),
 							lede: t('social', 'A photo you post from Files keeps a link to its file. Replies to the post can be read in the file\'s Comments tab, next to the photo they are about.'),
 						}]),
-				// where this server gives every account a Bluesky identity
-				...(this.serverData?.bluesky?.enabled === true
-					? [{
-							id: 'bluesky',
-							group: 'security',
-							icon: 'IconBluesky',
-							component: 'BlueskySettings',
-							title: t('social', 'Bluesky'),
-							lede: t('social', 'This account is also reachable on Bluesky, because this server offers one.'),
-						}]
-					: []),
-				// where the administrator lets people invite others to register
-				...(this.serverData?.externalInvites === true
-					? [{
-							id: 'invites',
-							group: 'security',
-							icon: 'IconInvite',
-							component: 'InviteSettings',
-							title: t('social', 'Invite people'),
-							lede: t('social', 'A link somebody without an account can use to register on this server. Each link works once and for a week.'),
-						}]
-					: []),
 				// a self-registered external user's media quota
 				...(external
 					? [{
 							id: 'storage',
-							group: 'security',
+							group: 'apps',
 							icon: 'IconStorage',
 							component: 'ExternalStorage',
 							title: t('social', 'Your storage'),
 							lede: t('social', 'The photos and videos you uploaded here, against what this server lets each account keep. Media from other servers does not count.'),
 						}]
 					: []),
-				{
-					id: 'delete',
-					group: 'security',
-					icon: 'IconDelete',
-					component: 'DeleteAccount',
-					title: t('social', 'Delete your Aloha Social account'),
-					lede: external
-						? t('social', 'Your account on this server and everything you posted. This cannot be undone.')
-						: t('social', 'Your fediverse account and everything you posted. Your Nextcloud account stays as it is. This cannot be undone.'),
-
-					danger: true,
-				},
-				{
-					id: 'introduction',
-					group: 'help',
-					icon: 'IconIntroduction',
-					component: 'IntroductionSettings',
-					title: t('social', 'Introduction'),
-					lede: t('social', 'The four steps shown when your account was new: your address, people to follow, and the follows you had on another server.'),
-				},
-				{
-					id: 'shortcuts',
-					group: 'help',
-					icon: 'IconKeyboard',
-					component: 'ShortcutsSettings',
-					title: t('social', 'Keyboard shortcuts'),
-					lede: t('social', 'The keys this app listens for while you are reading, and the switch that turns them off.'),
-				},
+				// where this server gives every account a Bluesky identity
+				...(bluesky
+					? [
+							{
+								id: 'bluesky',
+								group: 'bluesky',
+								icon: 'IconBluesky',
+								component: 'BlueskySettings',
+								title: t('social', 'Your Bluesky account'),
+								lede: t('social', 'This account is also reachable on Bluesky, because this server offers one.'),
+							},
+							{
+								id: 'bluesky-feeds',
+								group: 'bluesky',
+								icon: 'IconBluesky',
+								component: 'BlueskyFeedsSettings',
+								title: t('social', 'Bluesky feeds'),
+								lede: t('social', 'Custom feeds and lists from Bluesky, read here as timelines of their own. A Bluesky app signed in to this account keeps the same ones.'),
+							},
+						]
+					: []),
 			]
 		},
 
@@ -489,8 +457,8 @@ export default {
 				{
 					id: 'profile',
 					icon: 'IconAccount',
-					title: t('social', 'Profile and privacy'),
-					description: t('social', 'Who can find you, follow you and see your posts.'),
+					title: t('social', 'Account and privacy'),
+					description: t('social', 'Who can find and contact you, what you blocked, and moving or deleting the account.'),
 				},
 				{
 					id: 'reading',
@@ -502,19 +470,19 @@ export default {
 					id: 'notifications',
 					icon: 'IconNotifications',
 					title: t('social', 'Activities'),
-					description: t('social', 'When the app may interrupt you, and who may reach you.'),
+					description: t('social', 'When the app tells you what happened.'),
 				},
 				{
-					id: 'security',
+					id: 'apps',
 					icon: 'IconSecurity',
-					title: t('social', 'Apps and account'),
-					description: t('social', 'Apps signed in as you, invitations, and deleting the account.'),
+					title: t('social', 'Apps'),
+					description: t('social', 'Apps signed in as you, and Files.'),
 				},
 				{
-					id: 'help',
-					icon: 'IconHelp',
-					title: t('social', 'Help'),
-					description: t('social', 'The introduction again, and the keyboard shortcuts.'),
+					id: 'bluesky',
+					icon: 'IconBluesky',
+					title: t('social', 'Bluesky'),
+					description: t('social', 'Your Bluesky account and the Bluesky feeds you read.'),
 				},
 			]
 				.map((group) => ({ ...group, sections: this.sections.filter((section) => section.group === group.id) }))
@@ -595,30 +563,21 @@ export default {
 				return
 			}
 
-			// Migration is a page of its own now, and `#migration` is what has
-			// been linked to and bookmarked for as long as it was a section
-			// here. Sent on rather than ignored: landing on a settings page
-			// with nothing highlighted is the one answer that says nothing.
-			if (id === 'migration') {
-				this.scrolledTo = id
-				this.$router.replace({ name: 'migration' })
-
-				return
-			}
-
-			const group = this.groupOf(id)
-			if (group.sections.some((section) => section.id === id) && (this.openedGroup !== group.id || this.searching)) {
+			// a link to a part of a section opens that section
+			const sectionId = INNER_ANCHORS[id] ?? id
+			const group = this.groupOf(sectionId)
+			if (group.sections.some((section) => section.id === sectionId) && (this.openedGroup !== group.id || this.searching)) {
 				this.query = ''
 				this.openedGroup = group.id
 				// drawn on the next update, which calls this again
 				return
 			}
-			const section = document.getElementById(id)
+			const section = document.getElementById(id) ?? document.getElementById(sectionId)
 			if (!section || typeof section.scrollIntoView !== 'function') {
 				return
 			}
 			this.scrolledTo = id
-			this.current = id
+			this.current = sectionId
 			// the first section of a group is where the group starts: the
 			// group's own heading stays in view above it
 			const target = id === group.sections[0].id ? this.$el : section

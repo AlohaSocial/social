@@ -300,7 +300,7 @@
 				</NcButton>
 				<p class="bluesky-settings__hint">
 					{{ t('social', 'Your posts, photos and the history of your Bluesky identifier, in the files Bluesky tools read, with a guide to moving the account even if this server is gone. The archive from the Migration page holds the same files.') }}
-					<router-link :to="{ name: 'migration', hash: '#copy' }">
+					<router-link :to="{ name: 'settings', hash: '#copy' }">
 						{{ t('social', 'Open Migration') }}
 					</router-link>
 				</p>

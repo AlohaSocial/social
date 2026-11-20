@@ -27,7 +27,7 @@ async function mountTags(answered = tags, editable = false) {
 
 	const wrapper = mount(FeaturedTags, {
 		props: { accountId: '42', editable },
-		global: { stubs: { RouterLink: RouterLinkStub } },
+		global: { stubs: { RouterLink: RouterLinkStub, FeaturedTagsSettings: true, NcModal: { name: 'NcModal', template: '<div><slot /></div>' } } },
 	})
 	await flushPromises()
 
@@ -97,7 +97,7 @@ describe('FeaturedTags', () => {
 
 		const wrapper = mount(FeaturedTags, {
 			props: { accountId: '42' },
-			global: { stubs: { RouterLink: RouterLinkStub } },
+			global: { stubs: { RouterLink: RouterLinkStub, FeaturedTagsSettings: true, NcModal: { name: 'NcModal', template: '<div><slot /></div>' } } },
 		})
 		await flushPromises()
 
@@ -107,7 +107,7 @@ describe('FeaturedTags', () => {
 	it('asks for nothing until it knows whose profile it is on', async () => {
 		mount(FeaturedTags, {
 			props: { accountId: '' },
-			global: { stubs: { RouterLink: RouterLinkStub } },
+			global: { stubs: { RouterLink: RouterLinkStub, FeaturedTagsSettings: true, NcModal: { name: 'NcModal', template: '<div><slot /></div>' } } },
 		})
 		await flushPromises()
 
@@ -120,13 +120,18 @@ describe('FeaturedTags', () => {
 		expect(wrapper.find('.featured-tags__edit').exists()).toBe(false)
 	})
 
-	it('sends the reader to the editor from their own profile', async () => {
+	it('opens the editor on the reader\'s own profile, and reads the tags again once it closes', async () => {
 		const wrapper = await mountTags(tags, true)
-		const edit = wrapper.find('.featured-tags__edit')
 
-		expect(edit.exists()).toBe(true)
-		expect(wrapper.findAllComponents(RouterLinkStub).at(-1).props('to'))
-			.toEqual({ name: 'settings', hash: '#featured-tags' })
+		await wrapper.find('.featured-tags__edit').trigger('click')
+		const dialog = wrapper.findComponent({ name: 'SettingsDialog' })
+		expect(dialog.props('title')).toBe('Featured hashtags')
+
+		const reads = axios.get.mock.calls.length
+		dialog.vm.$emit('close')
+		await flushPromises()
+		expect(wrapper.findComponent({ name: 'SettingsDialog' }).exists()).toBe(false)
+		expect(axios.get.mock.calls.length).toBe(reads + 1)
 	})
 
 	// featuring none is exactly when somebody needs telling that they could

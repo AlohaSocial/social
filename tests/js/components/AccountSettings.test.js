@@ -71,21 +71,22 @@ describe('AccountSettings', () => {
 	})
 
 	it('shows what the account currently says', async () => {
-		axios.get.mockResolvedValue({ data: credentials({ locked: true, indexable: false }) })
+		axios.get.mockResolvedValue({ data: credentials({ indexable: false }) })
 		const wrapper = mountSettings()
 		await flushPromises()
 
-		expect(switchFor(wrapper, 'Approve who follows you').find('input').element.checked).toBe(true)
+		expect(switchFor(wrapper, 'Approve who follows you')).toBeUndefined()
 		expect(switchFor(wrapper, 'Suggest this account to others').find('input').element.checked).toBe(true)
 		expect(switchFor(wrapper, 'Let search find your public posts').find('input').element.checked).toBe(false)
 		expect(switchFor(wrapper, 'This is an automated account').find('input').element.checked).toBe(false)
 	})
 
-	it('offers the five switches the route writes', async () => {
+	/** Approving followers is under Who can contact you. */
+	it('offers the four switches about being found', async () => {
 		const wrapper = mountSettings()
 		await flushPromises()
 
-		expect(switches(wrapper)).toHaveLength(5)
+		expect(switches(wrapper)).toHaveLength(4)
 	})
 
 	it('shows whether the follower lists are hidden, from the account’s source', async () => {
@@ -131,15 +132,15 @@ describe('AccountSettings', () => {
 	it('saves a switch as soon as it is flipped, sending only that', async () => {
 		const wrapper = mountSettings()
 		await flushPromises()
-		axios.patch.mockResolvedValue({ data: credentials({ locked: true }) })
+		axios.patch.mockResolvedValue({ data: credentials({ bot: true }) })
 
-		await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
+		await switchFor(wrapper, 'This is an automated account').find('input').setValue(true)
 		await flushPromises()
 
-		// the display name and the three other flags are untouched, so a
-		// backend that owns the name is never asked to write it back
+		// the display name and the other flags are untouched, so a backend
+		// that owns the name is never asked to write it back
 		expect(axios.patch).toHaveBeenCalledTimes(1)
-		expect(axios.patch).toHaveBeenCalledWith(`${API}/accounts/update_credentials`, { locked: true })
+		expect(axios.patch).toHaveBeenCalledWith(`${API}/accounts/update_credentials`, { bot: true })
 		expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
 	})
 
@@ -149,13 +150,13 @@ describe('AccountSettings', () => {
 		let answer
 		axios.patch
 			.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
-			.mockResolvedValueOnce({ data: credentials({ locked: true, bot: true }) })
+			.mockResolvedValueOnce({ data: credentials({ indexable: false, bot: true }) })
 
-		await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
+		await switchFor(wrapper, 'Let search find your public posts').find('input').setValue(false)
 		await switchFor(wrapper, 'This is an automated account').find('input').setValue(true)
 		expect(axios.patch).toHaveBeenCalledTimes(1)
 
-		answer({ data: credentials({ locked: true }) })
+		answer({ data: credentials({ indexable: false }) })
 		await flushPromises()
 
 		expect(axios.patch).toHaveBeenCalledTimes(2)
@@ -167,11 +168,11 @@ describe('AccountSettings', () => {
 		await flushPromises()
 		axios.patch.mockRejectedValue(new Error('refused'))
 
-		await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
+		await switchFor(wrapper, 'This is an automated account').find('input').setValue(true)
 		await flushPromises()
 
 		expect(showError).toHaveBeenCalled()
-		expect(wrapper.vm.draft.locked).toBe(false)
+		expect(wrapper.vm.draft.bot).toBe(false)
 		expect(axios.patch).toHaveBeenCalledTimes(1)
 	})
 
@@ -211,9 +212,9 @@ describe('AccountSettings', () => {
 		it('is never sent, even when everything else is', async () => {
 			const wrapper = mountSettings()
 			await flushPromises()
-			axios.patch.mockResolvedValue({ data: credentials({ locked: true }) })
+			axios.patch.mockResolvedValue({ data: credentials({ bot: true }) })
 
-			await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
+			await switchFor(wrapper, 'This is an automated account').find('input').setValue(true)
 			await flushPromises()
 
 			const [, body] = axios.patch.mock.calls[0]

@@ -56,7 +56,7 @@ On the first visit the app shows a four-step introduction: your address with a
 copy button (and your Bluesky address under it, where the account has one), people to follow, a way to bring the follows you already have from
 another server, and a button that puts you in the composer, above the *Use it
 in an app* card (see [Using it from an app](#using-it-from-an-app)). Every step can be
-skipped; once closed it stays closed, and **Settings → Help → Introduction** shows it
+skipped; once closed it stays closed, and **Show the introduction again** in the command palette (⌘K or Ctrl+K) shows it
 again.
 
 ### Signing in from an app for the first time
@@ -79,8 +79,7 @@ app again.
 ### Using it from an app
 
 The **Use it in an app** card says what to type into an app on your phone or
-computer. It is in the last step of the introduction, in **Settings → Apps and
-account → Authorized apps** while no app is signed in, and on **About this
+computer. It is in the last step of the introduction, in **Settings → Apps → Authorized apps** while no app is signed in, and on **About this
 server**. It shows only what works on this server:
 
 - **In a Mastodon app**, the server's domain, with a copy button. The app opens
@@ -89,7 +88,7 @@ server**. It shows only what works on this server:
   Mastodon apps; until then the card says that Mastodon apps cannot sign in
   yet.
 - **In a Bluesky app**, where Bluesky is switched on, the hosting provider
-  address, and a link to the app passwords in **Settings → Apps and account →
+  address, and a link to the app passwords in **Settings → Apps →
   Bluesky** (see [Bluesky apps](#bluesky)).
 - **Apps known to work**: Aloha Social for iPhone, iPad and Mac, Aloha Social
   for Android, and Elk and Phanpy in a browser, all of them Mastodon apps, and
@@ -118,11 +117,11 @@ two-factor authentication if you set it up or the server requires it, and
 land in Aloha Social. Your personal settings for your details, password, security,
 appearance and notifications are there; Files, Talk and the other apps are
 not, and Nextcloud's own desktop and mobile clients are refused. Mastodon apps
-can. **Settings → Apps and account → Your storage** shows how much of the space the server gives
+can. **Settings → Apps → Your storage** shows how much of the space the server gives
 each such account your pictures and videos take up. Deleting your Aloha Social
 account deletes the whole account.
 
-Where the administrators let everybody invite people, **Settings → Apps and account → Invite
+Where the administrators let everybody invite people, **Settings → Apps → Invite
 people** makes an invitation link: it works once and for a week. Such an
 account for Aloha Social only cannot invite people.
 
@@ -187,7 +186,7 @@ account for Aloha Social only cannot invite people.
 - **Coming from another server?** Every Mastodon-like server exports the
   people you follow as `following_accounts.csv`, and Pixelfed as
   `pixelfed-following.json`. Upload it in the first-run
-  introduction or on the **Migration** page and each account is followed
+  introduction or in **Settings → Account and privacy → Moving your account** and each account is followed
   again from here.
 
 ## Writing a post
@@ -370,7 +369,7 @@ can see the post. Comments from anybody else who can open the file stay on this
 server, as they always did. Editing or deleting your comment edits or deletes
 the reply.
 
-This is on unless you turn it off: **Settings → Apps and account → Replies in Files**. Followers-only
+This is on unless you turn it off: **Settings → Apps → Replies in Files**. Followers-only
 posts and direct messages are never linked.
 
 ### Where it was taken
@@ -599,7 +598,7 @@ in the sidebar.
   its own; a Nextcloud group you belong to (up to 500 members) is a list too
   when your administrator has chosen that group for it — none are, until they
   do — kept in step with the group, and your own are made in
-  **Settings → Reading → Lists**. Explore shows as much as the sidebar has room for and
+  **Manage lists** in the Explore menu of the sidebar. Explore shows as much as the sidebar has room for and
   no more — make the window taller and more appears. What you follow is never
   pushed out by what happens to be trending: the trending tags take only the
   room the rest leave, and a tag you already follow is not offered twice.
@@ -837,7 +836,7 @@ under the post takes your name off, and needs nobody's permission.
 
 ### Who may reach you, and requests
 
-**Settings → Notifications → Who may reach you** is one place for
+**Settings → Account and privacy → Who can contact you** is one place for
 everything about being interrupted: the digests and quiet hours first, then
 who may reach you at all. Five rows, each answered **Allow** or **Hold for
 review**:
@@ -855,7 +854,7 @@ person does waits together — mentions, replies, direct messages, likes,
 boosts, follows. A choice is saved the moment you make it; if the server
 refuses it, the row goes back and says why.
 
-**Who may send you direct messages** — in Settings → Profile and privacy —
+**Who may send you direct messages** — in Settings → Account and privacy → Who can contact you —
 is the private-mentions row seen from the other side: *Everybody*, *People
 you follow* (a message from anybody else waits with the rest), or *Nobody*
 (every direct message waits, except from people you allowed). People on
@@ -881,8 +880,8 @@ list there, one row per person with how many notifications they sent and the
 first words of their most recent post. The count is part of the Activities
 badge in the sidebar; a request never rings the bell. If a digest is due while
 somebody waits, it ends with *2 people are waiting to reach you*; nobody
-waiting never raises a digest of its own. (**Filtered notifications** on the
-Blocking page links to the same list.)
+waiting never raises a digest of its own. (**Filtered activities** under
+**Settings → Account and privacy → Blocked and muted** links to the same list.)
 
 You decide about the **person**, not about each notification. **Show these**
 accepts them: what they sent moves into Activities — counted as unread, without
@@ -895,7 +894,7 @@ Under the rows, **Always allowed** lists everybody you accepted, each with
 until you accept somebody.
 
 **Digests and quiet hours.** Who may reach you is about *whether* you are
-told; **Settings → Notifications → When to tell you** is about *when* the Nextcloud
+told; **Settings → Activities → When to tell you** is about *when* the Nextcloud
 bell — and with it the mobile app and the notification mail — rings for what
 happens in Aloha Social. Left at **instant**, it rings the moment somebody
 mentions, favorites, boosts or follows you, as it always did. Set to
@@ -1094,7 +1093,7 @@ hand, it is picked up as one.
   drops that field's tick straight away — the tick belongs to the address, not
   to the row — and it returns once the page at the new address has been
   checked. Your other fields keep theirs.
-- **Featured hashtags.** **Settings → Profile and privacy → Featured hashtags** decides which tags sit under
+- **Featured hashtags.** **Edit featured hashtags** on your own profile decides which tags sit under
   your bio — up to ten, and anybody reading your profile can click one to see what you
   posted under it. It opens with the hashtags you post with most and have not featured
   yet, so you pick from your own writing rather than guessing; anything else goes in
@@ -1105,15 +1104,15 @@ hand, it is picked up as one.
   **Block** severs the relationship in both directions, hides the account
   everywhere, and tells the other server (unless the administrator turned
   that off). **Mute** hides the account from your timelines and notifications
-  without it ever knowing. **Blocking**, under **Settings**
+  without it ever knowing. **Blocked and muted**, in **Settings → Account and privacy**,
   in the sidebar, lists both with unblock and unmute inline.
 - **Follow requests.** When your account is locked, people asking to follow
   you appear at the top of **Activities** — **Accept** or
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
-  **Approve who follows you** switch under **Settings → Profile and privacy**, which
+  **Approve who follows you** switch under **Settings → Account and privacy → Who can contact you**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.
 - **Hiding your followers and following.** **Hide my followers and following**,
-  under **Settings → Profile and privacy → Who can find and follow you**, keeps
+  under **Settings → Account and privacy → Who can find you**, keeps
   the two lists to yourself: anybody else, here or on another server, sees how
   many followers you have and how many accounts you follow, but not who they
   are, and your profile shows the numbers without links. You are not named
@@ -1147,7 +1146,7 @@ hand, it is picked up as one.
   changing the setting does not take back a quote somebody has already posted
   and other people have read. Detaching tells the other server, which then
   shows the quote as withdrawn; the post itself is theirs and stays where it is.
-- **Authorized apps.** **Settings → Apps and account → Authorized apps** lists every app you have
+- **Authorized apps.** **Settings → Apps → Authorized apps** lists every app you have
   signed in to with this account — a phone client, a cross-poster, anything
   that asked — with what it may do, when you granted it and when it was last
   used. An app you have not opened for 90 days is signed out by itself.
@@ -1164,8 +1163,7 @@ hand, it is picked up as one.
   only after you enter your password on the sign-in page, which says so
   before you agree.
 - **Export and migration.** The whole move, in order, is one page:
-  [Moving.md](Moving.md). **Migration** (in the account menu at the foot of
-  the sidebar, a page of its own) opens with three choices, and each shows
+  [Moving.md](Moving.md). **Moving your account**, in **Settings → Account and privacy**, opens with three choices, and each shows
   only its own steps: **Bring an account here**, **Keep a copy** and **Leave
   this server**. The longer explanations of each step are behind **How this
   works**. A link can open one choice directly: `…/apps/social/migration#bring`,
@@ -1204,7 +1202,7 @@ hand, it is picked up as one.
   already have is filled rather than made a second time, and a list that
   follows a Nextcloud group is left alone — its members are the group's.
 - **Moving in from another server.** The quickest way in is under **Bring an
-  account here** on the **Migration** page: type the handle of your old account
+  account here** in **Settings → Account and privacy → Moving your account**: type the handle of your old account
   (`@you@mastodon.example`) and press **Look it up**. You are shown who that
   is, how many accounts it follows and how many posts it has, and whether its
   server lets those be read — Mastodon hides them if you turned on *Hide your
@@ -1233,7 +1231,7 @@ hand, it is picked up as one.
   handle (`@you@pixelfed.social`) and press Add. Nothing is sent to anybody — it is a note this server keeps about an
   account it owns — and you can take it off again whenever you like. The
   wizard above sets it for you.
-- **Moving away.** **Leave this server** on the **Migration** page moves this
+- **Moving away.** **Leave this server** in **Settings → Account and privacy → Moving your account** moves this
   account to another server. First, on the new account, name this one as an
   account you also answer to — on Mastodon, *Preferences → Account → Moving
   from a different account* — then type the new account's handle here, type
@@ -1264,10 +1262,10 @@ hand, it is picked up as one.
   captions and the hashtags you wrote in them. Two things are worth knowing
   before you press it. An Instagram post does not record who could see it, so
   every one of them is posted here with **your own default visibility** — set
-  that first, in **Settings → Profile and privacy**, if you would rather they were not
+  that first, in **Settings → Account and privacy**, if you would rather they were not
   public. And **what Instagram showed for only a day, your archived posts and
   anything you deleted are not imported**: you put those away on purpose.
-- **Leaving.** **Settings → Apps and account → Delete your Aloha Social account** deletes your fediverse
+- **Leaving.** **Settings → Apps → Delete your Aloha Social account** deletes your fediverse
   account and keeps your Nextcloud one. Everything you posted goes, your
   followers and the people you follow are let go, and every server that knew
   the account is told it is gone — a post already on somebody else's server is
@@ -1302,8 +1300,7 @@ composer says beside each of them, and a reply to a post that is not on
 Bluesky goes out as a post with a link to what it answers.
 
 Your profile page shows both handles under your name, each with a Copy button,
-and the Bluesky one leads to your profile on bsky.app. **Settings → Apps and
-account → Bluesky** shows the handle and the DID — the permanent identifier your Bluesky
+and the Bluesky one leads to your profile on bsky.app. **Settings → Bluesky → Your Bluesky account** shows the handle and the DID — the permanent identifier your Bluesky
 account has — and offers a **recovery phrase**: twelve words that are a key of
 your own on that identifier: on an identifier this server made, it ranks
 second, after the server's; on one you brought here, your own keys rank first,
@@ -1340,7 +1337,7 @@ files after your password: your repository (every post, like, follow and the
 profile, in the CAR format other Bluesky servers import), the pictures and videos,
 the history of your identifier from the PLC directory, and a README with the
 steps to move the account with your recovery phrase, even when this server is gone;
-it carries the recovery tool too. The archive from the **Migration** page holds the same files
+it carries the recovery tool too. The archive from **Settings → Account and privacy → Moving your account** holds the same files
 under `social/bluesky/`.
 
 *Details → Delivery status* in the menu of your own post shows whether a post is on Bluesky and opens
@@ -1366,7 +1363,7 @@ shows in Activities like anything else, under your notification policy.
 
 **Labels and reports.** Bluesky's moderation service labels posts, and its
 labels always apply here: a post it hides never arrives, and adult or
-upsetting pictures come with a warning. Under *Settings → Blocking → Bluesky
+upsetting pictures come with a warning. Under *Settings → Account and privacy → Blocked and muted → Bluesky
 labelers* you can add other labelers by their handle and choose, label by
 label, whether it does nothing, shows a warning, or hides the post. When you
 report a Bluesky account or post, *Also send to the moderators of their server*
@@ -1385,7 +1382,7 @@ here too, as if you had done it in Aloha Social; blocks stay here and cannot
 be made from the app. Revoking the app password signs the app out. App
 passwords are made and revoked only here in Settings, never from an app.
 
-**Pausing.** *Be on Bluesky* in Settings → Apps and account → Bluesky switches
+**Pausing.** *Be on Bluesky* in Settings → Bluesky → Your Bluesky account switches
 your presence there off, after asking: nothing new is published, Bluesky is told the
 account is inactive, Bluesky apps are signed out, and what you had posted comes back
 when you switch it on again — same handle, same identity. What you write while it is
@@ -1393,7 +1390,7 @@ off never reaches Bluesky.
 
 ## Keyboard shortcuts
 
-Press `?` anywhere, or open **Settings → Help → Keyboard shortcuts**, for the list.
+Press `?` anywhere, or open the command palette's **Keyboard shortcuts**, for the list.
 Shortcuts are off while you are typing in a field or the composer, while a
 modifier key is held, and while a dialog such as the picture viewer is open.
 The switch **Use keyboard shortcuts** on the same Settings page turns them off

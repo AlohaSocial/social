@@ -369,7 +369,7 @@ describe('FirstRun', () => {
 
 	// Migration is a page of its own, in the account menu; Settings has no
 	// such section to send anybody to
-	it('links to the Migration page wherever it sends the reader there', async () => {
+	it('links to moving the account in Settings wherever it sends the reader there', async () => {
 		serverHas()
 		axios.post.mockResolvedValue({ data: { import: { id: 9, kind: 'move_in', status: 'queued' } } })
 		finishedImports = [{ id: 9, kind: 'move_in', status: 'done', done: 15, report: { followed: 12, imported: 3 } }]
@@ -383,7 +383,7 @@ describe('FirstRun', () => {
 		const links = wrapper.findAllComponents(RouterLinkStub)
 		expect(links).toHaveLength(2)
 		for (const link of links) {
-			expect(link.props('to')).toEqual({ name: 'migration', hash: '#bring' })
+			expect(link.props('to')).toEqual({ name: 'settings', hash: '#bring' })
 			expect(link.text()).toBe('Open Migration')
 		}
 		expect(wrapper.text()).not.toContain('Settings → Migration')

@@ -6,7 +6,7 @@
 	<NcModal v-if="open" :name="t('social', 'Keyboard shortcuts')" @close="$emit('close')">
 		<div class="shortcuts">
 			<h2>{{ t('social', 'Keyboard shortcuts') }}</h2>
-			<ShortcutList />
+			<ShortcutsSettings />
 		</div>
 	</NcModal>
 </template>
@@ -14,20 +14,17 @@
 <script>
 import NcModal from '@nextcloud/vue/components/NcModal'
 import { translate as t } from '@nextcloud/l10n'
-import ShortcutList from './ShortcutList.vue'
+import ShortcutsSettings from './ShortcutsSettings.vue'
 
 /**
- * The `?` dialog: the shortcut list over whatever the reader was looking at.
- *
- * The list itself is `ShortcutList`, which the Settings page shows too — a
- * shortcut is a promise about a keystroke, and two places making that promise
- * must not be able to disagree about it.
+ * The `?` dialog over whatever the reader was looking at: the switch that
+ * turns the shortcuts on or off, and the list of them.
  */
 export default {
 	name: 'ShortcutHelp',
 	components: {
 		NcModal,
-		ShortcutList,
+		ShortcutsSettings,
 	},
 
 	props: {
