@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { Fragment, h } from 'vue'
+import { cloneVNode, Fragment, h } from 'vue'
 
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 
@@ -23,19 +23,29 @@ const NcActions = {
 			if (vnode.type === Fragment) {
 				collect(vnode.children)
 			} else if (vnode.type?.name?.startsWith('NcAction')) {
-				actions.push(vnode)
+				actions.push(cloneVNode(vnode))
 			}
 		})
 		collect(this.$slots.default?.() ?? [])
-		return h('div', actions)
+		// a fresh element each time: the menu swaps every row when a submenu opens
+		return h('div', { key: Symbol('render') }, actions)
 	},
 }
 const NcActionButton = {
 	name: 'NcActionButton',
 	// `closeAfterClick` is written as a bare attribute, which is only true for a Boolean prop
-	props: { disabled: Boolean, icon: String, closeAfterClick: Boolean, title: String },
+	props: { disabled: Boolean, icon: String, closeAfterClick: Boolean, isMenu: Boolean, title: String },
 	emits: ['click'],
-	template: '<button class="action" :disabled="disabled" :data-closes="closeAfterClick ? \'yes\' : \'no\'" @click="$emit(\'click\')"><slot /></button>',
+	template: '<button class="action" :disabled="disabled" :data-closes="closeAfterClick ? \'yes\' : \'no\'" :data-menu="isMenu ? \'yes\' : \'no\'" @click="$emit(\'click\')"><slot /></button>',
+}
+const NcActionCaption = {
+	name: 'NcActionCaption',
+	props: ['name'],
+	template: '<p class="caption">{{ name }}</p>',
+}
+const NcActionSeparator = {
+	name: 'NcActionSeparator',
+	template: '<hr>',
 }
 const NcActionLink = {
 	name: 'NcActionLink',
@@ -62,7 +72,7 @@ function mountMenu(item = {}, props = {}) {
 			currentAccount: ME,
 			...props,
 		},
-		global: { stubs: { NcActions, NcActionButton, NcActionLink } },
+		global: { stubs: { NcActions, NcActionButton, NcActionLink, NcActionCaption, NcActionSeparator } },
 	})
 }
 
@@ -78,23 +88,37 @@ function itemFor(wrapper, label) {
 	return wrapper.findAll('.action').find((one) => one.text() === label)
 }
 
-/** A post the reader wrote, on this server, with a picture in it. */
+/**
+ * Opens one of the menu's submenus.
+ *
+ * @param {object} wrapper the mounted menu
+ * @param {string} label what the submenu entry says
+ */
+async function openSubmenu(wrapper, label) {
+	await itemFor(wrapper, label).trigger('click')
+}
+
+/** @param {object} wrapper the mounted menu @return {string[]} its section captions */
+const captions = (wrapper) => wrapper.findAll('.caption').map((one) => one.text())
+
+/** A post the reader wrote, on this server, with a photo in it. */
 const MINE = { account: ME, local: true, media_attachments: [{ id: '1' }] }
 
 describe('the post menu', () => {
 	describe('somebody else post', () => {
 		it('offers what can be done to it and nothing that cannot', () => {
-			expect(items(mountMenu())).toEqual([
+			const wrapper = mountMenu()
+			expect(items(wrapper)).toEqual([
 				'Quote',
 				'Open on original instance',
-				'Copy code',
-				'Bookmark',
 				'Add a reaction',
 				'Mute conversation',
-				'Mute jens@chaos.social',
-				'Block jens@chaos.social',
+				'Copy embed code',
+				'Mute',
+				'Block',
 				'Report',
 			])
+			expect(captions(wrapper)).toEqual(['About jens@chaos.social'])
 		})
 
 		it('offers a reaction to a keyboard, which has no hold or right-click', async () => {
@@ -119,21 +143,27 @@ describe('the post menu', () => {
 				feedbackContext: { similarity_available: true, format: 'image' },
 			})
 
-			expect(items(wrapper)).toContain('Hide this post from For You')
-			expect(items(wrapper)).toContain('Show me more like this post')
-			expect(items(wrapper)).toContain('Show me less like this post')
-			expect(items(wrapper)).toContain('Show me more from this author')
-			expect(items(wrapper)).toContain('Show me more photo posts')
+			expect(items(wrapper)).toContain('Tune For you')
+			await openSubmenu(wrapper, 'Tune For you')
+			expect(items(wrapper)).toEqual([
+				'Back',
+				'More like this',
+				'Less like this',
+				'More from this author',
+				'More photo posts',
+				'Hide from For you',
+			])
 
-			await itemFor(wrapper, 'Show me more like this post').trigger('click')
+			await itemFor(wrapper, 'More like this').trigger('click')
 			expect(wrapper.emitted('recommendationFeedback')).toEqual([['MORE_SIMILAR']])
 			expect(items(mountMenu(post, { timelineType: 'home', recommendationFeedbackEnabled: true })))
-				.toContain('Hide this post from For You')
-			expect(items(mountMenu(post, { timelineType: 'photos', recommendationFeedbackEnabled: true })))
-				.toContain('Hide this post from For You')
+				.toContain('Tune For you')
+
+			await itemFor(wrapper, 'Back').trigger('click')
+			expect(items(wrapper)).toContain('Tune For you')
 		})
 
-		it('keeps context-dependent actions present and disabled when no automatic cluster is available', () => {
+		it('keeps context-dependent actions present and disabled when no automatic cluster is available', async () => {
 			const post = { id: '2', nid: '123', account: { acct: 'bob@remote.example' } }
 			const wrapper = mountMenu(post, {
 				timelineType: 'interests',
@@ -141,9 +171,10 @@ describe('the post menu', () => {
 				feedbackContext: { similarity_available: false, format: 'text' },
 			})
 
-			expect(itemFor(wrapper, 'Show me more like this post').element.disabled).toBe(true)
-			expect(itemFor(wrapper, 'Show me less like this post').element.disabled).toBe(true)
-			expect(itemFor(wrapper, 'Show me more text posts').element.disabled).toBe(false)
+			await openSubmenu(wrapper, 'Tune For you')
+			expect(itemFor(wrapper, 'More like this').element.disabled).toBe(true)
+			expect(itemFor(wrapper, 'Less like this').element.disabled).toBe(true)
+			expect(itemFor(wrapper, 'More text posts').element.disabled).toBe(false)
 		})
 
 		it('keeps recommendation menu rows stable while their context loads', async () => {
@@ -153,12 +184,13 @@ describe('the post menu', () => {
 				recommendationFeedbackEnabled: true,
 				recommendationFeedbackLoading: true,
 			})
+			await openSubmenu(wrapper, 'Tune For you')
 			const labels = [
-				'Show me more like this post',
-				'Show me less like this post',
-				'Hide this post from For You',
-				'Show me more from this author',
-				'Show me more posts like this',
+				'More like this',
+				'Less like this',
+				'Hide from For you',
+				'More from this author',
+				'More posts like this',
 			]
 
 			const before = items(wrapper)
@@ -179,10 +211,10 @@ describe('the post menu', () => {
 			expect(after).toHaveLength(beforeCount)
 			expect(after.indexOf(labels[0])).toBe(before.indexOf(labels[0]))
 			expect(after.indexOf(labels[1])).toBe(before.indexOf(labels[1]))
-			expect(after.indexOf('Show me more photo posts')).toBe(before.indexOf(labels[4]))
+			expect(after.indexOf('More photo posts')).toBe(before.indexOf(labels[4]))
 			expect(itemFor(wrapper, labels[0]).element.disabled).toBe(false)
 			expect(itemFor(wrapper, labels[1]).element.disabled).toBe(false)
-			expect(itemFor(wrapper, 'Show me more photo posts').element.disabled).toBe(false)
+			expect(itemFor(wrapper, 'More photo posts').element.disabled).toBe(false)
 		})
 
 		it('offers to unmute the conversation it is in once it is muted, and says so to the post', async () => {
@@ -216,31 +248,37 @@ describe('the post menu', () => {
 		it('never offers to edit, delete or archive it', () => {
 			const offered = items(mountMenu())
 
-			for (const own of ['Edit', 'Delete', 'Archive', 'Delete & re-draft', 'Delivery status']) {
+			for (const own of ['Edit', 'Delete', 'Archive', 'Details', 'Delivery status']) {
 				expect(offered).not.toContain(own)
 			}
 		})
 	})
 
 	describe('the reader own post', () => {
-		it('offers everything an author can do with it', () => {
-			expect(items(mountMenu(MINE))).toEqual([
+		it('offers everything an author can do with it', async () => {
+			const wrapper = mountMenu(MINE)
+			expect(items(wrapper)).toEqual([
 				'Quote',
-				'Edit',
-				'Archive',
-				'Quotes of this post',
-				'Who can reply',
-				'Tag people',
-				'Delete',
-				'Delete & re-draft',
-				'Delivery status',
-				'Copy code',
-				'Bookmark',
 				'Add a reaction',
 				'Mute conversation',
-				'Add to a collection',
+				'Edit',
+				'Who can reply',
+				'Quotes of this post',
+				'Tag people',
 				'Pin to profile',
+				'Add to a collection',
+				'Archive',
+				'Details',
+				'Delete',
 			])
+			expect(captions(wrapper)).toEqual(['Your post'])
+
+			await openSubmenu(wrapper, 'Details')
+			expect(items(wrapper)).toEqual(['Back', 'Delivery status', 'Copy embed code'])
+		})
+
+		it('no longer offers to delete and write it again: Edit does that', () => {
+			expect(items(mountMenu(MINE))).not.toContain('Delete & re-draft')
 		})
 
 		/**
@@ -272,18 +310,20 @@ describe('the post menu', () => {
 		it('does not offer this server records for a post it did not write', () => {
 			const offered = items(mountMenu({ ...MINE, local: false }))
 
-			expect(offered).not.toContain('Delivery status')
+			expect(offered).not.toContain('Details')
 			expect(offered).not.toContain('Quotes of this post')
 			expect(offered).not.toContain('Who can reply')
 			expect(offered).not.toContain('Pin to profile')
 		})
 
 		/** `local` is absent on a post from before the column existed. */
-		it('treats a post that never said where it is from as local', () => {
+		it('treats a post that never said where it is from as local', async () => {
 			const withoutLocal = { ...MINE }
 			delete withoutLocal.local
+			const wrapper = mountMenu(withoutLocal)
 
-			expect(items(mountMenu(withoutLocal))).toContain('Delivery status')
+			await openSubmenu(wrapper, 'Details')
+			expect(items(wrapper)).toContain('Delivery status')
 		})
 	})
 
@@ -297,12 +337,31 @@ describe('the post menu', () => {
 	 * just opened covered Save and Cancel, and one left open behind the delete
 	 * confirmation was still there when the dialog closed.
 	 */
-	it('closes itself after any item is chosen', () => {
-		for (const wrapper of [mountMenu(), mountMenu(MINE), mountMenu({ in_reply_to_id: '9', can_hide: true, tags: [{ name: 'x' }] }, { canTranslate: true })]) {
+	it('closes itself after any item is chosen', async () => {
+		const tuned = { recommendationFeedbackEnabled: true, feedbackContext: { similarity_available: true, format: 'image' } }
+		const menus = [mountMenu(), mountMenu(MINE), mountMenu({ nid: '5', in_reply_to_id: '9', can_hide: true, tags: [{ name: 'x' }] }, { canTranslate: true, ...tuned })]
+		const stayingOpen = (wrapper) => wrapper.findAll('button.action')
+			.filter((one) => one.attributes('data-closes') !== 'yes' && one.attributes('data-menu') !== 'yes' && one.text() !== 'Back')
+			.map((one) => one.text())
+		for (const wrapper of menus) {
 			// the link to the original instance closes the menu by leaving the page
-			const stayingOpen = wrapper.findAll('button.action').filter((one) => one.attributes('data-closes') !== 'yes')
-			expect(stayingOpen.map((one) => one.text())).toEqual([])
+			expect(stayingOpen(wrapper)).toEqual([])
 		}
+
+		await openSubmenu(menus[1], 'Details')
+		expect(stayingOpen(menus[1])).toEqual([])
+		await openSubmenu(menus[2], 'Tune For you')
+		expect(stayingOpen(menus[2])).toEqual([])
+	})
+
+	it('opens on its main level again after a submenu was left open', async () => {
+		const wrapper = mountMenu(MINE)
+		await openSubmenu(wrapper, 'Details')
+
+		wrapper.findComponent(NcActions).vm.$emit('update:open', false)
+		await wrapper.vm.$nextTick()
+
+		expect(items(wrapper)).toContain('Edit')
 	})
 
 	describe('what may be passed on', () => {
@@ -313,28 +372,30 @@ describe('the post menu', () => {
 		})
 
 		it('offers embed code only for a local public post', () => {
-			expect(items(mountMenu({ ...MINE, visibility: 'public' }))).toContain('Copy code')
-			expect(items(mountMenu({ ...MINE, visibility: 'unlisted' }))).not.toContain('Copy code')
-			expect(items(mountMenu({ ...MINE, visibility: 'public', local: false }))).not.toContain('Copy code')
+			const local = { account: { acct: 'bob' }, local: true }
+			expect(items(mountMenu({ ...local, visibility: 'public' }))).toContain('Copy embed code')
+			expect(items(mountMenu({ ...local, visibility: 'unlisted' }))).not.toContain('Copy embed code')
+			expect(items(mountMenu({ visibility: 'public', local: false }))).not.toContain('Copy embed code')
 		})
 
 		it('copies the dedicated embed endpoint rather than the app page', async () => {
 			const writeText = vi.fn().mockResolvedValue(undefined)
 			Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-			const wrapper = mountMenu({ ...MINE, visibility: 'public', url: 'https://cloud.example/apps/social/@alice/1?view=post#top' })
+			const wrapper = mountMenu({ account: { acct: 'bob' }, local: true, visibility: 'public', url: 'https://cloud.example/apps/social/@bob/1?view=post#top' })
 
-			await itemFor(wrapper, 'Copy code').trigger('click')
+			await itemFor(wrapper, 'Copy embed code').trigger('click')
 
-			expect(writeText).toHaveBeenCalledWith('<iframe src="https://cloud.example/apps/social/@alice/1/embed" width="550" height="480" loading="lazy" frameborder="0" style="max-width:100%;border:0;border-radius:12px" title="Aloha Social post"></iframe>')
+			expect(writeText).toHaveBeenCalledWith('<iframe src="https://cloud.example/apps/social/@bob/1/embed" width="550" height="480" loading="lazy" frameborder="0" style="max-width:100%;border:0;border-radius:12px" title="Aloha Social post"></iframe>')
 		})
 
 		it('says through the lazily loaded toasts whether the code was copied', async () => {
 			Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } })
-			await itemFor(mountMenu({ ...MINE, visibility: 'public' }), 'Copy code').trigger('click')
+			const local = { account: { acct: 'bob' }, local: true, visibility: 'public' }
+			await itemFor(mountMenu(local), 'Copy embed code').trigger('click')
 			await vi.waitFor(() => expect(showSuccess).toHaveBeenCalledWith('Copied'))
 
 			Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } })
-			await itemFor(mountMenu({ ...MINE, visibility: 'public' }), 'Copy code').trigger('click')
+			await itemFor(mountMenu(local), 'Copy embed code').trigger('click')
 			await vi.waitFor(() => expect(showError).toHaveBeenCalled())
 		})
 
@@ -355,7 +416,6 @@ describe('the post menu', () => {
 
 	describe('the items that change what they say', () => {
 		it('offers to undo whatever already stands', () => {
-			expect(items(mountMenu({ bookmarked: true }))).toContain('Remove bookmark')
 			expect(items(mountMenu({ ...MINE, pinned: true }))).toContain('Unpin from profile')
 			expect(items(mountMenu({ ...MINE, archived: true }))).toContain('Put back on my profile')
 		})
@@ -413,10 +473,9 @@ describe('the post menu', () => {
 	describe('what it asks for', () => {
 		it.each([
 			['Quote', 'quote'],
-			['Bookmark', 'bookmark'],
 			['Report', 'report'],
-			['Mute jens@chaos.social', 'mute'],
-			['Block jens@chaos.social', 'block'],
+			['Mute', 'mute'],
+			['Block', 'block'],
 		])('asks for %s', (label, event) => {
 			const wrapper = mountMenu()
 
@@ -432,8 +491,6 @@ describe('the post menu', () => {
 			['Who can reply', 'manageReplies'],
 			['Tag people', 'tagPeople'],
 			['Delete', 'delete'],
-			['Delete & re-draft', 'redraft'],
-			['Delivery status', 'delivery'],
 			['Add to a collection', 'collect'],
 			['Pin to profile', 'pin'],
 		])('asks for %s', (label, event) => {
@@ -442,6 +499,15 @@ describe('the post menu', () => {
 			itemFor(wrapper, label).trigger('click')
 
 			expect(wrapper.emitted(event)).toHaveLength(1)
+		})
+
+		it('asks for the delivery status from the details', async () => {
+			const wrapper = mountMenu(MINE)
+			await openSubmenu(wrapper, 'Details')
+
+			itemFor(wrapper, 'Delivery status').trigger('click')
+
+			expect(wrapper.emitted('delivery')).toHaveLength(1)
 		})
 
 		it('lets the author of a conversation hide a reply in it, and show it again', () => {

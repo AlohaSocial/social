@@ -41,7 +41,7 @@ other hidden settings) require review in the popup before sending. This one-line
 entry supersedes the earlier strict modal-only creation requirement.
 
 The compact instance unmounts while the popup is open, avoiding two editors
-writing the same draft. Replies, quotes, delete-and-re-draft, Files handoffs,
+writing the same draft. Replies, quotes, Files handoffs,
 video uploads and the keyboard shortcut use the shared modal host. Search no
 longer owns a hidden editor. PostEditForm adapts the same Composer inside that
 modal for editing supported fields. Stories keep their existing dialog.

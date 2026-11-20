@@ -3444,6 +3444,15 @@ OC.L10N.register(
     "The post is removed everywhere it reached, and its words, photos and content warning are put back in the composer. What you post next is a new post: the boosts, likes and replies this one collected stay with it and are gone." : "Der Beitrag wird überall gelöscht, wo er angekommen ist. Text, Fotos und Inhaltshinweis werden wieder in den Editor eingefügt. Dein nächster Beitrag ist ein neuer Beitrag; die bisherigen Boosts, Likes und Antworten gehen dabei verloren.",
     "With a photo or a video" : "Mit Foto oder Video",
     "You can now choose who reaches your activities — new accounts and people you don't follow can wait for your review." : "Du kannst jetzt wählen, wer deine Aktivitäten erreicht – neue Konten und Personen, denen du nicht folgst, können warten, bis du sie prüfst.",
-    "Your photos" : "Deine Fotos"
+    "Your photos" : "Deine Fotos",
+    "Share" : "Teilen",
+    "More like this" : "Mehr davon",
+    "More from this author" : "Mehr von diesem Konto",
+    "More {format}" : "Mehr {format}",
+    "Hide from For you" : "Aus „Für dich“ ausblenden",
+    "Copy embed code" : "Einbettungscode kopieren",
+    "Your post" : "Dein Beitrag",
+    "Tune For you" : "„Für dich“ anpassen",
+    "About {account}" : "Über {account}"
 },
 "nplurals=2; plural=(n != 1);");
