@@ -283,16 +283,10 @@ class Item {
 	}
 
 	/**
-	 * Whether this names the public collection, in any of the four fields it
-	 * could name it in.
-	 *
-	 * The same question `social_stream_dest` answers after the fact: a
-	 * recipient row is written for each account a post names, the public
-	 * collection among them, and every count of "how many posts does this
-	 * account have" is a count of rows that carry it. Asking it here — before
-	 * the rows exist, and after they have gone — is what lets the stored
-	 * counter be moved by the same rule the recount uses. Public and unlisted
-	 * both say yes, which is Mastodon's `statuses_count` as well.
+	 * Whether this names the public collection in any of its four addressing
+	 * fields: the rule the post-count recount applies to recipient rows,
+	 * asked here so the stored counter moves by the same rule. Public and
+	 * unlisted both count, as in Mastodon's `statuses_count`.
 	 */
 	public function addressesPublic(): bool {
 		return in_array(

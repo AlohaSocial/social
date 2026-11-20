@@ -84,12 +84,9 @@ class Notifier implements INotifier {
 	#[\Override]
 	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== Application::APP_ID) {
-			// `UnknownNotificationException` and not the `InvalidArgumentException`
-			// it extends: the server asks every notifier about every
-			// notification, so "not mine" is the ordinary answer and is given
-			// hundreds of times a day. Answered with the general exception it
-			// is a deprecation warning each time — 31 000 lines in a
-			// development instance's log, drowning anything real in it.
+			// `UnknownNotificationException` rather than its parent: "not mine"
+			// is the ordinary answer to the server asking every notifier, and
+			// the parent exception logs a deprecation warning each time.
 			throw new UnknownNotificationException();
 		}
 
@@ -196,9 +193,8 @@ class Notifier implements INotifier {
 				break;
 
 			case 'moderation_warning':
-				// the account was told nothing before this: a decision it was
-				// not told about is one it can only discover by noticing that
-				// its posts stopped appearing
+				// without this, the account could only notice the decision by
+				// its posts no longer appearing
 				$text = trim((string)($params['text'] ?? ''));
 				$notification->setParsedSubject(match ((string)($params['action'] ?? '')) {
 					Moderation::SILENCE => $l10n->t(
@@ -210,9 +206,8 @@ class Notifier implements INotifier {
 					Strike::TAKEDOWN => $l10n->t(
 						'A post of yours has been taken down by a moderator of this server'
 					),
-					// the one entry in the history that is good news, and the
-					// one the account most needs told: until it is, somebody
-					// let off has no way of knowing they were
+					// the one entry that is good news, and the only way somebody
+					// let off learns of it
 					Strike::LIFT => $l10n->t(
 						'What stood against your account has been lifted by a moderator of this server'
 					),
@@ -243,17 +238,11 @@ class Notifier implements INotifier {
 	}
 
 	/**
-	 * Points the notification at the post or the profile it is about, and
-	 * shows the acting account's avatar instead of the picture of the action.
-	 *
-	 * The link is taken only when it is an absolute http(s) URL: the
-	 * parameters come from a stored notification, whose actor may be on
-	 * another server, and a relative or exotic value there would be rendered
-	 * as a link out of the Nextcloud interface to something nobody vouched
-	 * for. The avatar is taken only when this server serves it: the web
-	 * interface's content policy does not load pictures from anywhere else,
-	 * and a stored notification may name the picture on the account's own
-	 * server.
+	 * Points the notification at the post or profile it is about, with the
+	 * acting account's avatar instead of the action's icon. The link is used
+	 * only when it is an absolute http(s) URL, as the stored actor may be
+	 * remote; the avatar only when this server serves it, as the content
+	 * policy blocks other origins.
 	 */
 	private function point(INotification $notification, array $params): void {
 		$link = (string)($params['link'] ?? '');
@@ -282,11 +271,10 @@ class Notifier implements INotifier {
 	}
 
 	/**
-	 * Accept and Decline, on the bell entry itself. Both POST to the routes a
-	 * Mastodon client uses for the same answer, and the answer takes the entry
-	 * down (`NotificationService::onFollowRequestAnswered()`). Offered only
-	 * when the follower's id is known -- an entry raised before it was stored
-	 * still says who asked and links to them.
+	 * Accept and Decline on the bell entry, posting to the Mastodon client
+	 * routes; answering takes the entry down
+	 * (`NotificationService::onFollowRequestAnswered()`). Only offered when the
+	 * follower's id is known.
 	 */
 	private function offerToAnswer(INotification $notification, array $params, IL10N $l10n): void {
 		$nid = $params['nid'] ?? '0';
@@ -311,12 +299,9 @@ class Notifier implements INotifier {
 	}
 
 	/**
-	 * The counts of what a reader was not told about one by one, read out in
-	 * the order `NotificationService::SUBJECTS` declares them. Kinds the
-	 * digest has no words for are left out of the sentence and stay in the
-	 * total, so the headline never says less than the list behind the link.
-	 * When senders are waiting in the requests inbox, the message ends with a
-	 * line saying how many.
+	 * The digest's counts, in the order `NotificationService::SUBJECTS`
+	 * declares. Kinds without wording are left out of the sentence but stay
+	 * in the total; waiting message requests add a closing line.
 	 *
 	 * @param array<string, mixed> $params `counts`, `total`, `link`, and `waiting` when anyone is
 	 */

@@ -19,18 +19,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_stream.poll_ends_at`: when a poll closes, as an indexed Unix time.
- *
- * The end of a poll lived only in the stored wire object, so the sweep that
- * announces closed polls read the newest few hundred polls of the last six
- * months and asked each one in PHP. A poll outside that page — one of many,
- * or one published long before it closed — was never announced. With the
- * end as a column the sweep asks for exactly the polls that closed in its
- * window.
- *
- * NULL on everything that is not a poll, and on a poll with no end. The
- * existing polls are filled in from their wire objects after the column is
- * added; they are a small part of the table.
+ * `social_stream.poll_ends_at`: when a poll closes, as an indexed Unix time,
+ * so the sweep announcing closed polls finds exactly those that closed in
+ * its window. NULL for everything that is not a poll or has no end; existing
+ * polls are filled from their wire objects.
  */
 class Version1000Date20261008000501 extends SimpleMigrationStep {
 	/** Rows read per page: each carries its wire object. */

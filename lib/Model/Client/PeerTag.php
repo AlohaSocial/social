@@ -12,19 +12,9 @@ namespace OCA\Social\Model\Client;
 use JsonSerializable;
 
 /**
- * One hashtag, as several servers report it.
- *
- * Not a Mastodon `Tag`: that entity describes a tag on the server answering
- * for it and has nowhere to say *whose* view this is. The whole point of this
- * one is the `servers` list -- a tag four servers are busy with is a different
- * recommendation from a tag one server is busy with, and a reader deciding
- * whether to follow it is owed the difference.
- *
- * `uses` is deliberately not the headline. Instances differ in size by four
- * orders of magnitude, so adding their counts together ranks the biggest
- * server's opinion above everybody else's; it is kept because it is what the
- * servers said, and used only to break ties between tags that the same number
- * of servers named.
+ * One hashtag as several servers report it, unlike a Mastodon `Tag`, which
+ * is one server's view. Ranked by how many servers named it; summed `uses`
+ * only break ties, as instance sizes differ by orders of magnitude.
  */
 class PeerTag implements JsonSerializable {
 	/** Lower-cased, without the leading '#': the key a tag is merged on. */
@@ -48,11 +38,8 @@ class PeerTag implements JsonSerializable {
 	}
 
 	/**
-	 * Records that a server reports this tag.
-	 *
-	 * A server that names the same tag twice -- Mastodon's trends and its
-	 * search can both answer for it -- counts once, because what is being
-	 * counted is servers and not answers.
+	 * Records that a server reports this tag; a server counts once however
+	 * often it names it.
 	 */
 	public function reportedBy(string $host, string $label, int $uses, bool $local = false): self {
 		if (!array_key_exists($host, $this->servers)) {
@@ -84,11 +71,8 @@ class PeerTag implements JsonSerializable {
 	}
 
 	/**
-	 * Whether any server other than this one named it.
-	 *
-	 * What the "elsewhere" half of the hashtags page is: a tag only this
-	 * instance has seen belongs in its own trending list, which is already on
-	 * the screen above.
+	 * Whether any server other than this one named it; tags only this
+	 * instance saw are in its own trending list.
 	 */
 	public function isRemote(): bool {
 		return $this->countServers() > ($this->local ? 1 : 0);
