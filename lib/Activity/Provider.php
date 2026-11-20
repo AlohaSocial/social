@@ -74,7 +74,7 @@ class Provider implements IProvider {
 	public static function templates(IL10N $l10n): array {
 		return [
 			'mention' => $l10n->t('{account} mentioned you'),
-			'favourite' => $l10n->t('{account} favorited your post'),
+			'favourite' => $l10n->t('{account} liked your post'),
 			'reblog' => $l10n->t('{account} boosted your post'),
 			'follow' => $l10n->t('{account} followed you'),
 			'follow_request' => $l10n->t('{account} asked to follow you'),
