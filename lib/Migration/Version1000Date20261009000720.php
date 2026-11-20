@@ -18,8 +18,8 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_list.visibility`: whether a list is its owner's alone (`private`,
- * what every list was before) or `public`, published to Bluesky as a curate
- * list with its members (`BlueskyLists`).
+ * the default) or `public`, published to Bluesky as a curate list with its
+ * members (`BlueskyLists`).
  */
 class Version1000Date20261009000720 extends SimpleMigrationStep {
 	/**

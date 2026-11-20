@@ -15,12 +15,10 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether there is a memcache for Social's short-lived state.
- *
- * Without `memcache.local` or `memcache.distributed`, every cache the app asks
- * Nextcloud for is one that forgets each write. Nextcloud's own check says a
- * memcache would be faster; what it cannot say is that here some of what is
- * lost is protection rather than speed, and nothing else reports it.
+ * Whether there is a memcache for Social's short-lived state: without one the
+ * inbox throttle, the accepted-signature record and the duplicate-post
+ * protection fall back to the database, and computed figures are worked out
+ * again on every request.
  */
 class MemcacheConfigured implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#no-memory-cache';

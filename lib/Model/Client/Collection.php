@@ -18,20 +18,12 @@ use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * An album an account curates out of its own posts.
+ * An album an account curates out of its own posts, as on Pixelfed: the
+ * owner's own posts, in a chosen order, under a title.
  *
- * Pixelfed's organising feature, and the one an account arriving from there
- * notices is missing the first time it looks at its own profile. It is neither a
- * timeline nor a list: the posts are the owner's own, the order is chosen rather
- * than chronological, and the album has a title of its own.
- *
- * `id` is an integer in the row and a string in the JSON, like every other id a
- * client is handed here.
- *
- * `ownerId` is not part of the entity a client sees. It is carried so the row a
- * request names can be checked against the account that asked, as a SQL
- * predicate rather than a comparison made after the row was read -- see
- * CollectionsRequest.
+ * `id` is an integer in the row and a string in the JSON. `ownerId` is not
+ * shown to clients; it lets CollectionsRequest check the owner as a SQL
+ * predicate.
  */
 class Collection implements IQueryRow, JsonSerializable {
 	use TArrayTools;
@@ -203,8 +195,7 @@ class Collection implements IQueryRow, JsonSerializable {
 			'created_at' => date('c', $this->getCreation()),
 			'updated_at' => date('c', ($this->getUpdated() === 0) ? $this->getCreation() : $this->getUpdated()),
 			'size' => $this->getSize(),
-			// whose it is: a page for a collection needs somebody to head it
-			// and somebody to say whether the reader may manage it
+			// whose it is, to head the page and decide whether the reader may manage it
 			'account' => $this->account,
 			// exported in the client format, as every other post a client is
 			// handed by this API is

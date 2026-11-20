@@ -18,13 +18,10 @@ use OCA\Social\Model\RequestQueue;
 use Psr\Log\LoggerInterface;
 
 /**
- * Signing outbound HTTP requests (RFC 9421's predecessor, the draft-cavage
- * scheme every ActivityPub implementation speaks).
- *
- * Verification lives in SignatureService; generation lives here because a GET
- * has to be signed from inside CurlService, and CurlService is what
- * SignatureService uses to fetch keys — a service that did both would be a
- * dependency cycle.
+ * Signs outbound HTTP requests (the draft-cavage scheme ActivityPub
+ * implementations speak). Verification is SignatureService's; signing is
+ * here because CurlService signs GETs and SignatureService fetches keys
+ * through CurlService.
  */
 class HttpSignatureService {
 	public const DATE_HEADER = 'D, d M Y H:i:s T';
@@ -37,12 +34,8 @@ class HttpSignatureService {
 	private const DELIVERY_HEADERS = ['(request-target)', 'content-length', 'date', 'host', 'digest'];
 
 	/**
-	 * The headers a fetch GET signs.
-	 *
-	 * A GET has no body, so there is no digest to sign and no content-length
-	 * worth signing — and a peer that receives either on a GET is entitled to
-	 * find it strange. This is the set Mastodon, GoToSocial and Pleroma all
-	 * produce and all verify.
+	 * The headers a fetch GET signs: no body, so no digest or content-length.
+	 * The set Mastodon, GoToSocial and Pleroma produce and verify.
 	 */
 	private const FETCH_HEADERS = ['(request-target)', 'host', 'date'];
 
@@ -77,10 +70,8 @@ class HttpSignatureService {
 			$localActor,
 			self::DELIVERY_HEADERS,
 			[
-				// a queued delivery is a POST; the only queue rows that are not
-				// are unreachable (every InstancePath that reaches the queue is
-				// an inbox or a shared inbox), and were signed as a POST here
-				// before this was written down
+				// a queued delivery is a POST: every InstancePath that reaches the queue
+				// is an inbox or a shared inbox
 				'(request-target)' => $this->requestTarget('post', $url),
 				'date' => gmdate(self::DATE_HEADER),
 				'host' => $this->authority($url),
@@ -91,14 +82,10 @@ class HttpSignatureService {
 	}
 
 	/**
-	 * The delivery signature for an activity the **instance** sends as itself.
-	 *
-	 * `signDelivery()` cannot be used for these: it resolves the signing key
-	 * from `oc_social_actor` by the queue row's author, and the instance actor
-	 * is deliberately not a row there (see `InstanceActorService`). So the
-	 * activities that must be signed as the server — a forwarded report, a
-	 * relay subscription — are exactly the ones the queue cannot sign, and
-	 * they go out inline with these headers.
+	 * The delivery signature for an activity the instance sends as itself (a
+	 * forwarded report, a relay subscription). `signDelivery()` resolves the key
+	 * from `oc_social_actor`, where the instance actor is not
+	 * (`InstanceActorService`), so these go out inline with these headers.
 	 *
 	 * @param string $url the inbox the request is sent to; the signature covers
 	 *                    the path of that very URL
@@ -108,9 +95,8 @@ class HttpSignatureService {
 	 * @return array<string, string> the headers to send
 	 *
 	 * @throws SignatureException there is no instance actor, or its key is
-	 *                            unusable — either way the activity must fail
-	 *                            loudly rather than go out unsigned, which the
-	 *                            peer would reject for the wrong reason
+	 *                            unusable: the activity must fail rather than
+	 *                            go out unsigned
 	 */
 	public function signAsInstance(string $url, string $body): array {
 		$actor = $this->instanceActorService->getSigningActor();
@@ -132,29 +118,16 @@ class HttpSignatureService {
 	}
 
 	/**
-	 * Signs an outbound ActivityPub GET, so that a peer running Mastodon's
-	 * `AUTHORIZED_FETCH` or GoToSocial's secure mode answers it.
+	 * Signs an outbound ActivityPub GET, so that peers running Mastodon's
+	 * `AUTHORIZED_FETCH` or GoToSocial's secure mode answer it.
 	 *
-	 * Unsigned, those peers answer 401 to every actor, object, collection and
-	 * outbox fetch: resolving an account fails ("user not found" when
-	 * following), a thread stops at the first remote reply, poll refresh and
-	 * timeline sync return nothing. Roughly a third of the fediverse by
-	 * instance count runs in that mode.
-	 *
-	 * **Whose key.** The instance's own `Application` actor, never a person.
-	 * Not whoever triggered the fetch — that tells the remote instance which of
-	 * our accounts is reading which of their posts, on every thread expansion.
-	 * And not a fixed local account either: the owner of the signing key is
-	 * dereferenced by every peer that checks the signature, so that one person
-	 * appears in every peer's logs as this instance's reader, and a block or
-	 * suspension of their account anywhere stops every signed fetch from here.
-	 * An instance whose users have not created Social accounts yet has no such
-	 * account to borrow at all, and could not sign anything.
+	 * Signed with the instance's own `Application` actor, never a person: not the
+	 * one who triggered the fetch, which would tell peers who reads what, and not
+	 * a fixed account, whose block anywhere would stop every signed fetch.
 	 *
 	 * @return array<string, string> the headers to add; empty means the request
-	 *                               goes out exactly as it did before, which is
-	 *                               what a peer that does not demand a
-	 *                               signature still answers
+	 *                               goes out unsigned, which a peer that does
+	 *                               not demand a signature still answers
 	 */
 	public function signFetch(string $url): array {
 		$actor = $this->instanceActorService->getSigningActor();
@@ -173,8 +146,8 @@ class HttpSignatureService {
 				]
 			);
 		} catch (SignatureException $e) {
-			// an unsignable key must not stop the fetch: unsigned is what this
-			// request was until now, and against most peers it still works
+			// an unsignable key must not stop the fetch: unsigned still works against
+			// most peers
 			$this->logger->warning('cannot sign an outgoing fetch', [
 				'actor' => $actor->getId(), 'exception' => $e,
 			]);
@@ -184,11 +157,8 @@ class HttpSignatureService {
 	}
 
 	/**
-	 * What the signature says the request is: the method and the path — with
-	 * the query string, when there is one — of the URL the request is sent to.
-	 *
-	 * Derived from that URL and from nothing else, so that a peer rebuilding
-	 * this string from the request it received arrives at the same bytes.
+	 * What the signature says the request is: the method and the path, with any
+	 * query string, of the URL it is sent to, so a peer rebuilds the same bytes.
 	 */
 	private function requestTarget(string $method, string $url): string {
 		$parts = parse_url($url);

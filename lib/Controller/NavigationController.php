@@ -58,11 +58,6 @@ use OCP\IURLGenerator;
 use OCP\Server;
 use Psr\Log\LoggerInterface;
 
-/**
- * Class NavigationController
- *
- * @package OCA\Social\Controller
- */
 class NavigationController extends Controller {
 	/** How many posts the page is handed before it asks for any. */
 	private const FIRST_PAGE = 15;
@@ -116,8 +111,7 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * Display the navigation page of the Social app.
-	 *
+	 * The app page, for the client-side router's public routes.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -125,20 +119,16 @@ class NavigationController extends Controller {
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[PublicPage]
-	// The client-side router owns `/discover`, `/search` and `/shorts`; the
-	// server has to answer them too, or reloading or bookmarking one of those
-	// pages is a 404 — and a page nobody can link to is one nobody can be
-	// sent. The pages that are the reader's own are personal()'s.
-	// `postfix` keeps the route names apart: a route is keyed by controller,
-	// method and postfix, so several routes on one method without it would
-	// leave only the last. The profile and post pages, `/@{username}` and
-	// `/@{username}/{token}`, are ActivityPub urls first and are answered by
-	// `ActivityPubController`, which hands a browser to `SocialPubController`.
+	// The client-side router's pages have to be answered by the server too, or
+	// reloading or bookmarking one is a 404; the reader's own pages are
+	// personal()'s. `postfix` keeps the route names apart, since a route is keyed
+	// by controller, method and postfix. `/@{username}` and `/@{username}/{token}`
+	// are `ActivityPubController`'s, which hands a browser to `SocialPubController`.
 	#[FrontpageRoute(verb: 'GET', url: '/')]
 	#[FrontpageRoute(verb: 'GET', url: '/discover', postfix: 'discover')]
 	#[FrontpageRoute(verb: 'GET', url: '/shorts', postfix: 'shorts')]
-	// the Shorts stack's earlier address, kept for old links and bookmarks;
-	// the client router sends it on to `/shorts`
+	// the Shorts stack's old address, for old links; the client router sends it
+	// on to `/shorts`
 	#[FrontpageRoute(verb: 'GET', url: '/reels', postfix: 'reels')]
 	#[FrontpageRoute(verb: 'GET', url: '/search', postfix: 'search')]
 	// the server's rules, contact and legal links, which a visitor needs before signing up
@@ -149,10 +139,9 @@ class NavigationController extends Controller {
 	// a Bluesky starter pack, at the path bsky.app gives it
 	#[FrontpageRoute(verb: 'GET', url: '/starter-pack/{actor}/{rkey}', postfix: 'starterpack')]
 	public function navigate(string $path = ''): TemplateResponse {
-		// A visitor may read public posts from this instance without an account.
-		// Do this before any account-specific setup or state is requested: the
-		// normal root page is the private home feed, which must never be exposed
-		// as a guest page.
+		// A visitor may read public posts without an account. Handled before any
+		// account-specific state is requested: the root page is otherwise the
+		// private home feed.
 		if ($this->userId === null) {
 			$this->initialState->provideInitialState('serverData', [
 				'public' => true,
@@ -189,32 +178,22 @@ class NavigationController extends Controller {
 			// which is the moderators' (VerificationController)
 			'canVerify' => $this->moderatorService?->isModerator($this->userId) ?? false,
 			'cliUrl' => $this->getCliUrl(),
-			// what to do with a post somebody marked sensitive: this reader's
-			// own choice, or what the instance does for somebody who has not
-			// chosen. In the page rather than behind a request because it
-			// decides what the very first screenful looks like, and a timeline
-			// that uncovered itself a moment after it drew would be worse than
-			// either policy.
+			// what to do with a post marked sensitive: this reader's choice, or the
+			// instance default. In the page so the first screenful is drawn right.
 			'nsfwPolicy' => $this->sensitiveMediaService->policyFor($this->userId),
-			// and what this reader *chose*, which is a different thing: the
-			// settings page has to be able to show "follow the instance" as
-			// the state it is rather than as whichever policy that currently
-			// resolves to
+			// and what this reader chose, so the settings page can show "follow the
+			// instance" as such
 			'nsfwChoice' => $this->sensitiveMediaService->choiceOf($this->userId),
 			'hideCounts' => $this->countsService->hides($this->userId),
 			'hideRepliesInFeeds' => $this->feedDisplayService->hidesReplies($this->userId),
 			// whether j, k, l, b and the rest act on the timeline, read before
 			// the first key can be pressed
 			'keyboardShortcuts' => $this->configService->getUserValue(ConfigService::USER_KEYBOARD_SHORTCUTS, $this->userId) !== '0',
-			// which sections this instance offers. In the page rather than
-			// behind a request for the same reason the policy above is: the
-			// sidebar is drawn before anything is fetched, and entries that
-			// appeared and then vanished would read as a bug rather than as a
-			// setting.
+			// which sections this instance offers, in the page since the sidebar is
+			// drawn before anything is fetched
 			'sections' => $this->sectionsService->current(),
-			// For you: whether the feed, its settings and the tracking
-			// that teaches it are on for this reader, decided before the
-			// switcher above the timeline is drawn
+			// For you: whether the feed, its settings and its tracking are on for
+			// this reader
 			'interests' => $this->interestService->pageState($this->userId),
 			// a self-registered external user: no Files to attach from, and a
 			// media quota the settings page shows. Null for everybody else.
@@ -243,9 +222,8 @@ class NavigationController extends Controller {
 				'cloudAddress' => $serverData['cloudAddress']
 			]);
 		} catch (SocialAppConfigException $e) {
-			// Nothing is stored until an administrator confirms the address:
-			// every id is built from it, and it cannot change afterwards
-			// without deleting everything.
+			// Nothing is stored until an administrator confirms the address: every id
+			// is built from it, and it cannot change afterwards.
 			$this->checkService->checkInstallationStatus(true);
 			$serverData['setup'] = true;
 
@@ -281,19 +259,14 @@ class NavigationController extends Controller {
 		}
 
 		/*
-		 * A person without an account is asked, not given one. The actor used
-		 * to be created on the first click of the app icon -- an RSA key pair,
-		 * a WebFinger-resolvable identity and a handle derived from the user
-		 * id, with no consent and no choice -- and somebody who already had an
-		 * account on Mastodon could not say so. The page carries what the
-		 * setup screen needs (alohasocial/social#1130, #1624); the account is
-		 * created by `LocalController::accountCreate()` when they ask.
+		 * A person without an account is asked, not given one: the page carries
+		 * what the setup screen needs, and `LocalController::accountCreate()`
+		 * creates the account when they ask.
 		 */
 		try {
 			$actor = $this->accountService->getActorFromUserId($this->userId);
-			// the account's own name, chosen on the setup screen, which need
-			// not be the user id: the page says this address and checks what
-			// is the reader's own by it
+			// the account's own name, chosen on the setup screen, which need not be
+			// the user id
 			$serverData['viewer'] = [
 				'username' => $actor->getPreferredUsername(),
 				'address' => $actor->getPreferredUsername() . '@' . $this->configService->getSocialAddress(),
@@ -335,12 +308,8 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * The pages that are the reader's own: their settings, their statistics,
-	 * moving their account, the people asking to follow them and the ones they
-	 * blocked. The same app
-	 * page as navigate(), for a signed-in reader only — not a public page, so
-	 * Nextcloud sends anybody else to its login, with this address to come
-	 * back to.
+	 * The reader's own pages: the same app page as navigate(), but not public,
+	 * so Nextcloud sends anybody else to its login and back.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -358,16 +327,9 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * The reader's own account, handed to the page instead of waited for.
-	 *
-	 * The app used to ask for it from `beforeMount()`, so every load spent a
-	 * second authenticated round trip — `GET /api/v1/global/account/info` — on
-	 * something this request is already holding, and nothing could render until
-	 * it came back. The reply is the same cached actor this reads, in the same
-	 * export format, so the store is seeded with what it would have received.
-	 *
-	 * A failure here is not one worth showing anybody: the page falls back to
-	 * asking, which is what it did before.
+	 * The reader's own account, handed to the page so it need not ask
+	 * `GET /api/v1/global/account/info` before rendering. Same cached actor and
+	 * export format as that reply. On failure the page asks itself.
 	 */
 	private function provideViewerAccount(): void {
 		if ($this->userId === null) {
@@ -389,30 +351,13 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * The first page of the home timeline, in the page that asks for it.
+	 * The first page of the home timeline, handed to the page so the first
+	 * screenful needs no second round trip after the JavaScript loads.
 	 *
-	 * Without this the first screenful is a staircase: the browser fetches
-	 * 290 KB of JavaScript, mounts, and only then asks the server for the
-	 * posts — a second round trip, and a full Nextcloud boot, before anything
-	 * a person came to read is on screen. The page is already doing a database
-	 * request and already holds the viewer; the posts cost one more and are
-	 * bytes the browser was going to ask for anyway.
-	 *
-	 * Only the home timeline, and only when the home timeline is what was
-	 * asked for. Seeding a profile or a hashtag page would be seeding whatever
-	 * happened to be in the URL, and a page reached with a cursor is one the
-	 * reader has scrolled to rather than the one they arrived on.
-	 *
-	 * The reader's keyword filters are applied to it, exactly as the API route
-	 * applies them to the page it answers with. Without that the one screenful
-	 * a person is handed on every full page load is the only place in the app
-	 * where a word they muted comes back — and it is the first thing they see.
-	 * It is `FilterService::apply()` that also exports each post for the
-	 * client, so what the page is handed is now byte for byte what
-	 * `/api/v1/timelines/home` would have answered.
-	 *
-	 * A failure is not worth showing anybody: the page asks, which is what it
-	 * did before.
+	 * Only when the home timeline itself was asked for, without a cursor. The
+	 * reader's keyword filters are applied by `FilterService::apply()`, which
+	 * also exports the posts, so this is what `/api/v1/timelines/home` answers.
+	 * On failure the page asks itself.
 	 */
 	private function provideFirstPage(string $path): void {
 		if ($this->userId === null || !$this->isHomeTimeline($path)) {
@@ -445,11 +390,8 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * Whether this address is the home timeline.
-	 *
-	 * The app's root and `timeline/home` are the two ways of naming it;
-	 * everything else — a profile, a hashtag, the notifications — is a
-	 * different list and is not what this seeds.
+	 * Whether this address is the home timeline: the app's root or
+	 * `timeline/home`.
 	 */
 	private function isHomeTimeline(string $path): bool {
 		$path = trim($path, '/');
@@ -479,8 +421,8 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * Display the navigation page of the Social app.
-	 *
+	 * The app page, for a timeline; signed-in timelines send a visitor to the
+	 * login.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -502,8 +444,7 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * Display the navigation page of the Social app.
-	 *
+	 * The app page.
 	 *
 	 * @param string $path
 	 *
@@ -518,11 +459,8 @@ class NavigationController extends Controller {
 	}
 
 	/**
-	 * The Social actor of the session, when there is one.
-	 *
-	 * A document id says nothing about who may read the document, so the routes
-	 * below need to know who is asking; a session without a Social account (or
-	 * no session at all) is nobody in particular and sees only public copies.
+	 * The Social actor of the session, when there is one: a session without a
+	 * Social account, or none, sees only public copies.
 	 */
 	private function viewer(): ?Person {
 		if ($this->userId === null) {
@@ -632,26 +570,6 @@ class NavigationController extends Controller {
 		}
 	}
 
-	/**
-	 * How long a cached picture may be kept by whoever asked for it.
-	 *
-	 * These two routes serve every avatar and every attachment on a public
-	 * page, and said nothing about caching at all — so a browser asked this
-	 * server for the same forty pictures on every page load, and a shared
-	 * cache in front of the instance could not help.
-	 *
-	 * A day, publicly cacheable, and **not immutable**. A local upload never
-	 * changes under its id and could be kept for a year; a remote avatar is
-	 * the bytes at somebody else's URL, and a peer may replace them — an
-	 * immutable year would mean a profile picture that changed today still
-	 * being drawn next spring. A day is the same bound the avatar route beside
-	 * it already applies, and it is the difference between forty requests a
-	 * page and forty requests a day.
-	 */
-	/**
-	 * A stored attachment as the document routes answer with it: a picture,
-	 * a video or a sound inline, anything else a sandboxed download.
-	 */
 	private function storedFile(ISimpleFile $file, string $mime): FileDisplayResponse {
 		$response = new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => $mime]);
 		RangedFileResponse::guardStoredFile($response, $mime);
@@ -659,6 +577,10 @@ class NavigationController extends Controller {
 		return $response;
 	}
 
+	/**
+	 * A day, publicly cacheable, not immutable: a remote avatar is somebody
+	 * else's URL and may change.
+	 */
 	private function cacheMedia(Response $response): void {
 		$response->cacheFor(86400, true, false);
 	}

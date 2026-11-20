@@ -18,24 +18,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The people on this Nextcloud, as the Fediverse knows them.
+ * The people on this Nextcloud, as the Fediverse knows them: the handle each
+ * wrote in their profile's `fediverse` field.
  *
- * Every Nextcloud profile has a `fediverse` field. It is where a person writes
- * their handle -- the account here, or one on Mastodon they have had for years
- * -- and this app never read it. That was the one signal about who to follow
- * that no other server could have: not a graph the reader is not yet part of,
- * but the colleagues they already share an instance with, saying where they are.
- *
- * Read with the field's own visibility. `private` is skipped outright. `local`
- * -- the default -- is honoured for a reader on this instance, which is what
- * the scope means: visible to people logged in here, and every reader of this
- * page is one. Nothing here widens a scope or writes one.
- *
- * Bounded, because it walks accounts rather than querying them: the account
- * store can find users by an exact value but not by "has one", so the first
- * `LIMIT` users are looked at and no more. An instance with thousands of people
- * gets suggestions from the first few hundred, which is a shortcut and not a
- * lie -- the answer is still only ever people who wrote a handle down.
+ * The field's visibility is respected: `private` is skipped, `local` (the
+ * default) is shown to readers here. Bounded, since the account store cannot
+ * query "has one": only the first `LIMIT` users are looked at.
  */
 class ColleagueService {
 	/** How many Nextcloud users are looked at for a handle. */
@@ -74,14 +62,8 @@ class ColleagueService {
 
 	/**
 	 * The accounts those handles name, as far as this instance already knows
-	 * them.
-	 *
-	 * A handle on this instance is the account itself. A handle elsewhere is
-	 * looked up in the actor cache and nowhere else: resolving one means a
-	 * WebFinger lookup and an actor fetch against another server, and this is
-	 * read while drawing a page. An account nobody here has met yet is left
-	 * out until somebody has -- following, searching, or the cache cron -- and
-	 * then it appears.
+	 * them: a local handle is the account, a remote one is looked up in the actor
+	 * cache only, since this runs while drawing a page.
 	 *
 	 * @return Person[] in the order the handles were found, each once
 	 */

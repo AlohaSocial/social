@@ -18,12 +18,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The Aloha Directory, every five minutes: the signed lists once a day, and,
- * for a server that takes part, the outcome of a verification, the hourly
- * heartbeat, profile changes and the status.
- *
- * On a server that neither uses the curated search list nor takes part, a run
- * reads two app settings and stops.
+ * The Aloha Directory, every five minutes: the signed lists once a day and,
+ * for a participating server, verification, the hourly heartbeat, profile
+ * changes and the status. Otherwise a run reads two app settings and stops.
  */
 class AlohaDirectory extends TimedJob {
 	public function __construct(

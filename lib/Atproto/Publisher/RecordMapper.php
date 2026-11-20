@@ -38,16 +38,14 @@ use OCP\L10N\IFactory;
 use Throwable;
 
 /**
- * What a Social post or profile becomes as a Bluesky record.
+ * What a Social post or profile becomes as a Bluesky record; the one place
+ * that decides what leaves for Bluesky.
  *
- * This is the one place that decides what leaves for Bluesky: a public
- * post's text with facets, split into thread replies when it does not fit;
- * a "Content warning: …" line and a `!warn` self-label for a content
- * warning; a poll as its question and options; up to ten pictures as
- * blobs, the words added for these in the post's language; a reply to or
- * quote of a post that is on Bluesky — a published local post or a
- * Bluesky post read here — as a reply or record embed there, any other as
- * a link; a link preview as an external card. Nothing else is ever written.
+ * A public post's text with facets, split into a thread when it does not
+ * fit; a content warning as a line and a `!warn` self-label; a poll as its
+ * question and options; up to ten pictures as blobs; a reply to or quote of
+ * a post on Bluesky as a reply or record embed, any other as a link; a link
+ * preview as an external card.
  */
 class RecordMapper {
 	public const POST = 'app.bsky.feed.post';
@@ -159,9 +157,8 @@ class RecordMapper {
 			if ($picture['width'] > 0 && $picture['height'] > 0) {
 				$image['aspectRatio'] = ['width' => $picture['width'], 'height' => $picture['height']];
 			} elseif (count($pictures) > PictureService::MAX_PER_IMAGES_EMBED) {
-				// Gallery items require an aspect ratio. Keep an unknown-size
-				// image readable with a neutral square ratio instead of emitting
-				// an invalid record or silently dropping it.
+				// Gallery items require an aspect ratio: an image of unknown size gets a
+				// square one rather than an invalid record.
 				$image['aspectRatio'] = ['width' => 1, 'height' => 1];
 			}
 			$images[] = $image;
@@ -231,8 +228,11 @@ class RecordMapper {
 		return $this->text->fromHtml($post->getContent(), $this->mentionResolver())['text'];
 	}
 
-	/** The poll choices that must accompany the source body on Bluesky. */
-	/** @return string[] */
+	/**
+	 * The poll choices that must accompany the source body on Bluesky.
+	 *
+	 * @return string[]
+	 */
 	public function sourcePollOptions(Stream $post): array {
 		if (!$post instanceof Question) {
 			return [];
@@ -245,18 +245,11 @@ class RecordMapper {
 	}
 
 	/**
-	 * The postgate of a post whose author restricts quoting: Bluesky can
-	 * only switch quoting off, so a followers-only quote policy is kept the
-	 * stricter way rather than opened to everybody. Null when anybody may
-	 * quote.
+	 * Who may reply on Bluesky, as the author's reply rule says (an empty gate
+	 * for nobody), and the replies the author hid that are on Bluesky; null for
+	 * everybody and nothing hidden.
 	 *
 	 * @param string $postUri the post's `at://` URI
-	 */
-	/**
-	 * Who may reply on Bluesky, as the author's reply rule says — a gate of
-	 * the one rule, an empty one for nobody — and the replies the author hid
-	 * (`hiddenReplies`, those that are on Bluesky); none for everybody and
-	 * nothing hidden.
 	 */
 	public function threadgate(Stream $post, string $postUri): ?array {
 		$allow = $this->allowOf($post);
@@ -595,9 +588,8 @@ class RecordMapper {
 	}
 
 	/**
-	 * The app's translations in the language the post is written in, else
-	 * in its author's Nextcloud language: the words a post gains on its way
-	 * to Bluesky are read with the post.
+	 * The app's translations in the post's language, else in its author's
+	 * Nextcloud language, for the words a post gains on its way to Bluesky.
 	 */
 	private function l10nOf(Stream $post, Person $author): IL10N {
 		$language = Stream::normalizeLanguage($post->getLanguage());

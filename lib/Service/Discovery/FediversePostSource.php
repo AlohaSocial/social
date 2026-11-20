@@ -22,12 +22,10 @@ use Throwable;
 
 /**
  * Posts with a hashtag on the fediverse: the public hashtag timelines of the
- * servers this one talks to (`FediverseDirectoryService::sources()`, the
- * same peers the people search and the trending hashtags ask), each post
- * fetched from its own server (`StreamQueueService::fetchNow()`), so only
- * what its author's server says is stored. Origin fetches have a per-request
- * timeout and a shared time budget. The fediverse has no public search of
- * posts — Mastodon's needs an account there — so a search is not asked of it.
+ * servers this one talks to (`FediverseDirectoryService::sources()`), each
+ * post fetched from its own server (`StreamQueueService::fetchNow()`) within
+ * a time budget. The fediverse has no public post search, so searches are
+ * not asked of it.
  */
 class FediversePostSource implements PostSource {
 	/** how many servers are asked */

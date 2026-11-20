@@ -16,23 +16,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Gets an uploaded picture into a state it can be stored and federated in:
- * decodable by a browser, the right way up, and carrying none of the metadata
- * the camera wrote into it.
+ * Gets an uploaded picture into a state to store and federate: decodable by
+ * a browser, upright, and without the camera's metadata.
  *
- * Two formats arrive that a browser cannot draw. HEIC is the default on an
- * iPhone, so refusing it -- which is what the app did -- meant a large share of
- * the people this is for could not post a photo at all without converting it
- * first. It has to be transcoded. AVIF a browser *can* draw, so it is kept as
- * AVIF and only rewritten if it actually carries metadata.
- *
- * The order of preference throughout is "do nothing": a JPEG that is upright and
- * carries no Exif is stored byte for byte as it was uploaded. Re-encoding costs
- * a generation of quality every time and the app should not be the reason
- * somebody's photos look worse here than on their phone. So the expensive path
- * is taken only when something actually requires it -- a format nothing can
- * draw, an orientation tag that is about to be dropped, or metadata in a
- * container this cannot edit in place.
+ * HEIC (an iPhone's default) is transcoded to JPEG; AVIF is kept and only
+ * rewritten when it carries metadata. Otherwise nothing is re-encoded: an
+ * upright JPEG without Exif is stored byte for byte, since every re-encode
+ * costs quality.
  *
  * @see ImageMetadataService for the lossless path
  */
@@ -63,12 +53,8 @@ class ImageConversionService {
 	}
 
 	/**
-	 * The bytes to store, and the mime they are now.
-	 *
-	 * The mime can change: a HEIC upload is stored as a JPEG, and everything
-	 * downstream -- the allow-list the file is served under, the `mediaType`
-	 * that goes out on the wire -- has to be told the new one rather than the
-	 * one the upload claimed.
+	 * The bytes to store, and their mime, which can change (a HEIC is stored as
+	 * a JPEG) and must be used downstream instead of the claimed one.
 	 *
 	 * @return array{0: string, 1: string} the content and its mime
 	 *
@@ -78,9 +64,8 @@ class ImageConversionService {
 	public function prepareForStorage(string $content, string $mime): array {
 		[$content, $mime] = $this->convert($content, $mime);
 
-		// Last, and only when an administrator asked for it: everything above
-		// is about storing what was uploaded correctly, and this is about
-		// storing less of it.
+		// last, and only when an administrator asked for it: storing less of
+		// what was uploaded
 		return $this->shrink($content, $mime);
 	}
 
@@ -95,9 +80,8 @@ class ImageConversionService {
 			return [$this->transcodeToJpeg($content), self::TRANSCODE_TARGET];
 		}
 
-		// The orientation tag is about to be removed with the rest of the Exif
-		// block, and it is the only record that the picture is meant to be
-		// turned. Turn the pixels instead, which means re-encoding.
+		// The orientation tag goes with the Exif block, so turn the pixels
+		// instead, which means re-encoding.
 		if ($this->metadataService->needsRotation($content, $mime)) {
 			$orientation = $this->metadataService->orientation($content, $mime);
 			$rotated = $this->rotate($content, $orientation);
@@ -105,10 +89,8 @@ class ImageConversionService {
 				return [$rotated, $mime];
 			}
 
-			// Rotating failed. Keeping the Exif block would keep the picture
-			// upright, but it is the block with the coordinates in it, so the
-			// privacy of the person posting wins over the orientation of their
-			// photo.
+			// Rotating failed. The Exif block is dropped anyway, since it holds the
+			// coordinates: privacy wins over orientation.
 			$this->logger->warning('[ImageConversionService] could not rotate an upload; storing it stripped and unrotated');
 		}
 
@@ -124,17 +106,8 @@ class ImageConversionService {
 	}
 
 	/**
-	 * The picture, no larger than this instance asked for.
-	 *
-	 * Off unless `image_max_edge` is set, and deliberately so: this app's
-	 * promise has been that nothing loses a generation of quality. An instance
-	 * where storage costs money, or whose people post from a 48-megapixel
-	 * phone, wants the other trade — and a picture that is 8000 pixels wide is
-	 * not being looked at at 8000 pixels by anybody.
-	 *
-	 * A picture already inside the ceiling is returned untouched rather than
-	 * re-encoded at the configured quality: shrinking nothing and losing a
-	 * generation anyway is the worst of both.
+	 * The picture, no larger than `image_max_edge`, when that is set. A picture
+	 * already within it is returned untouched rather than re-encoded.
 	 *
 	 * @return array{0: string, 1: string}
 	 */
@@ -156,9 +129,8 @@ class ImageConversionService {
 			$image->resizeToBestFit($edge, $edge);
 			$smaller = $image->getImageAsString();
 		} catch (Throwable $e) {
-			// a picture that cannot be resized is stored as it arrived: the
-			// upload is the person's, and a setting about disk space is not a
-			// reason to refuse it
+			// a picture that cannot be resized is stored as it arrived rather than
+			// refused
 			$this->logger->notice('[ImageConversionService] could not shrink an upload', [
 				'mime' => $mime, 'exception' => $e->getMessage(),
 			]);
@@ -175,11 +147,8 @@ class ImageConversionService {
 	}
 
 	/**
-	 * Decodes a HEIC and re-encodes it as a JPEG.
-	 *
-	 * Imagick only: GD has no HEIC decoder in any build, so on a server without
-	 * Imagick and libheif this cannot work and says so rather than storing
-	 * something no browser will draw.
+	 * Decodes a HEIC and re-encodes it as a JPEG, with Imagick and libheif only,
+	 * since GD has no HEIC decoder.
 	 *
 	 * @throws CacheContentMimeTypeException when there is no decoder
 	 * @throws CacheContentDecodeException when there is one and it fails
@@ -287,11 +256,9 @@ class ImageConversionService {
 	}
 
 	/**
-	 * An AVIF with no metadata is returned untouched; one that has some is
-	 * re-encoded, because its metadata lives in an ISO base-media `meta` box
-	 * whose items are addressed by byte offset -- removing one means rewriting
-	 * every offset after it, which is a great deal of risk for a case that a
-	 * re-encode handles.
+	 * An AVIF with no metadata is returned untouched; one with some is
+	 * re-encoded, since removing an item from its `meta` box means rewriting
+	 * every byte offset after it.
 	 *
 	 * @throws CacheContentMimeTypeException when it has metadata and nothing
 	 *                                       here can re-encode it
@@ -332,22 +299,17 @@ class ImageConversionService {
 			}
 		}
 
-		// The metadata may hold where the picture was taken, and once stored it
-		// is federated; refusing the picture is what a HEIC gets without a
-		// decoder too.
+		// The metadata may hold where the picture was taken and would be
+		// federated, so the picture is refused, as a HEIC without a decoder is.
 		throw new CacheContentMimeTypeException(
 			'this server cannot remove the metadata from AVIF images; it needs the imagick extension with AVIF support, or GD built with AVIF'
 		);
 	}
 
 	/**
-	 * Whether an ISO base-media file (AVIF, HEIC) declares an Exif or XMP item.
-	 *
-	 * The item types are listed in `infe` entries inside the `meta` box as plain
-	 * four-character strings, so finding out whether there is anything to strip
-	 * needs no offset arithmetic -- which is the part that makes *removing* them
-	 * hard. Only the header is searched: past a few hundred kilobytes it is
-	 * image data, and a false positive there would cost a needless re-encode.
+	 * Whether an ISO base-media file (AVIF, HEIC) declares an Exif or XMP item,
+	 * as four-character types in the `meta` box's `infe` entries. Only the header
+	 * is searched, as image data could give a false positive.
 	 */
 	private function isoBmffHasMetadata(string $content): bool {
 		$head = substr($content, 0, 65536);

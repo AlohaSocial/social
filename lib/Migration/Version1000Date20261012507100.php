@@ -17,15 +17,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Hangs the profile banners already stored off the account they belong to.
- *
- * A banner a local user uploads (`BannerService::setFromTempFile()`) is a
- * `social_cache_doc` row under `/documents/header/`, with the account's handle
- * in `account`. It was written without a `parent_id`, and deleting an account
- * removes the documents hanging off it by parent, so the banner and its file
- * outlived the account. This gives each such row the id of the local actor
- * whose handle it names. A banner whose handle no actor has any more is left
- * as it is. Run again, it finds no banner without a parent that it can place.
+ * Hangs the stored profile banners (`social_cache_doc` rows under
+ * `/documents/header/`) off the local actor whose handle they name, so
+ * deleting the account removes them by parent. A banner whose handle no
+ * actor has is left alone; run again, it finds nothing to place.
  */
 class Version1000Date20261012507100 extends SimpleMigrationStep {
 	/** How many banners one statement looks at. */

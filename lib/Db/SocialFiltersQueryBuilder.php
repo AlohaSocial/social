@@ -9,24 +9,11 @@ declare(strict_types=1);
 
 namespace OCA\Social\Db;
 
-/**
- * Class SocialFiltersQueryBuilder
- *
- * @package OCA\Social\Db
- */
 class SocialFiltersQueryBuilder extends SocialLimitsQueryBuilder {
 	/**
-	 * Keep the viewer's own boosts out of their home timeline.
-	 *
-	 * `filter_duplicate` is set on `Announce` (see `AP::getItemFromType()`), so
-	 * the rule is: keep everything that is not a boost, plus every boost that
-	 * is not the viewer's own.
-	 *
-	 * This used to be written as a call whose third argument looks like the
-	 * `$cs` (case-sensitivity) flag but is in fact `$eq`. It happened to
-	 * produce the right SQL; spelling the comparison out means the next reader
-	 * does not have to work that out, and a `$eq`/`$cs` mix-up here would
-	 * otherwise silently hide every boost by everybody the viewer follows.
+	 * Keep the viewer's own boosts out of their home timeline: everything that
+	 * is not a boost (`filter_duplicate`, set on `Announce` by
+	 * `AP::getItemFromType()`), plus every boost that is not the viewer's own.
 	 */
 	public function filterDuplicate() {
 		if (!$this->hasViewer()) {

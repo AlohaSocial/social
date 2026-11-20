@@ -29,11 +29,10 @@ use OCP\IRequest;
  * The two well-known documents of a PDS: a handle's DID, served on the
  * handle's own host, and the instance's `did:web` document.
  *
- * `/.well-known/atproto-did` is asked for at `https://alice.<host>/`, which
- * the web server routes here (contrib/webserver) and Nextcloud accepts
- * when `*.<host>` is a trusted domain. The handle is the request's host;
- * a handle this app never issued is a 404, so nothing is resolved by
- * pattern. For a proxy that cannot keep the host, `?handle=` says it.
+ * `https://alice.<host>/.well-known/atproto-did` reaches this app through
+ * the web server (contrib/webserver) when `*.<host>` is a trusted domain. The
+ * handle is the request's host, or `?handle=` behind a proxy that cannot keep
+ * it; a handle this app never issued is a 404.
  */
 class AtprotoWellKnownController extends Controller {
 	public function __construct(

@@ -18,10 +18,9 @@ use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
 
 /**
- * Has every Bluesky profile written once more, off the upgrade: the profiles
- * published so far named the account by its username rather than by the
- * name it federates. Queued, one profile per account that is on Bluesky;
- * the marker keeps a later upgrade from queueing them again.
+ * Queues every Bluesky profile to be written once more, so it names the
+ * account by the name it federates rather than its username. The marker
+ * keeps a later upgrade from queueing them again.
  */
 class RepublishBlueskyProfiles implements IRepairStep {
 	private const MARKER = 'migration_bluesky_profiles_named';

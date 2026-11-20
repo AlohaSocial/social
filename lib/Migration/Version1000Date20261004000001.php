@@ -16,22 +16,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * When a post's interaction counts were last read from the server that hosts it.
- *
- * A post's `details` carried what its origin said about likes, boosts and
- * replies when this instance first stored the document, and nothing ever asked
- * again — a post federated in with five likes still said five a year and four
- * thousand later, and a reply written here never appeared in the count of the
- * post it answered. `Cron\Cache` asks on an interval now, and this is the
- * schedule: NULL has never been asked and is due, and a timestamp is not due
- * again until it is old enough.
- *
- * A column rather than a key in `details` because the rows that are due are
- * found by a range predicate, which wants an index: on the JSON blob it would
- * be a scan of the largest table in the app on every pass, on three databases
- * that each spell a JSON lookup differently. The index is on `local` first,
- * because the rows asked about are the remote ones and that is the half of the
- * table the query does not want to read.
+ * When a post's interaction counts were last read from its origin, the
+ * schedule `Cron\Cache` asks again on: NULL is due, a timestamp once old
+ * enough. A column rather than a key in `details` so the due rows are an
+ * index range; the index leads with `local`, since only remote rows are
+ * asked about.
  */
 class Version1000Date20261004000001 extends SimpleMigrationStep {
 	#[\Override]

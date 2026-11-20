@@ -35,29 +35,17 @@ use Psr\Log\LoggerInterface;
 
 class Cache extends TimedJob {
 	/**
-	 * How long one pass may spend on the steps below, in seconds.
-	 *
-	 * `Cron\Queue` has had a budget for a while; this job, which does more and
-	 * talks to more servers, had none. Eleven steps ran one after another, two
-	 * of them a request per remote actor, until they were done or something
-	 * killed the process — so a handful of slow peers could hold a cron slot
-	 * open past the twelve-minute interval and overlap the next run. Same
-	 * value as the queue's, and for the same reason: well inside the interval,
-	 * so two runs cannot meet.
-	 *
-	 * Nothing is lost when the budget runs out. Every step is resumable by
-	 * design — each takes a bounded batch of whatever is due — and the steps
-	 * that did not get a turn are where the next run starts.
+	 * How long one pass may spend on the steps below, in seconds: well inside the
+	 * twelve-minute interval, as `Cron\Queue`'s, so slow peers cannot make two
+	 * runs overlap. Every step takes a bounded batch, and the next run starts
+	 * with the steps that did not get a turn.
 	 */
 	public const MAX_DURATION = 300;
 
 	/**
-	 * How long each of the two remote-actor refresh steps may take, in
-	 * seconds, inside the pass's own budget.
-	 *
-	 * They take batch after batch until this runs out, rather than one batch
-	 * of fifty — which could not keep a ten-day lifetime past about 60,000
-	 * cached actors. Ninety each leaves the other steps a third of the pass.
+	 * How long each of the two remote-actor refresh steps may take, in seconds,
+	 * inside the pass's own budget; they take batch after batch until it runs
+	 * out. Ninety each leaves the other steps a third of the pass.
 	 */
 	public const REMOTE_ACTOR_SECONDS = 90;
 
@@ -65,12 +53,9 @@ class Cache extends TimedJob {
 	public const SWEEP_BATCH = 500;
 
 	/**
-	 * How long one pass may spend asking remote servers what a post's counts
-	 * are now, in seconds, inside the pass's own budget.
-	 *
-	 * Like the two steps above, it takes round after round of posts until this
-	 * runs out rather than one batch: twenty posts in parallel, sixty seconds
-	 * of them, and the posts still due are the next run's to start with.
+	 * How long one pass may spend asking remote servers for posts' current
+	 * counts, in seconds, inside the pass's own budget: twenty posts in parallel,
+	 * round after round, the rest left for the next run.
 	 */
 	public const COUNTS_SECONDS = 60;
 
@@ -82,10 +67,8 @@ class Cache extends TimedJob {
 	public const MEDIA_SECONDS = 90;
 
 	/**
-	 * How often the disk is added up, in seconds.
-	 *
-	 * Once a day: it is a `stat` per stored file, and a number about disk does
-	 * not change in ways an administrator has to see within the hour.
+	 * How often the disk is added up, in seconds: once a day, as it is a `stat`
+	 * per stored file.
 	 */
 	public const MEDIA_USAGE_EVERY = 86400;
 
@@ -120,8 +103,8 @@ class Cache extends TimedJob {
 	 * The steps of one pass, in the order they are meant to run.
 	 *
 	 * @param int $deadline the wall clock past which this run is over; the two
-	 *                      steps that loop over remote servers watch it themselves,
-	 *                      because either can outlast the whole budget on its own
+	 *                      remote-actor steps watch it themselves, since either
+	 *                      can outlast the whole budget
 	 *
 	 * @return array<string, callable(): void>
 	 */
@@ -131,8 +114,7 @@ class Cache extends TimedJob {
 				$this->accountService->manageDeletedActors();
 			},
 			'manageCacheLocalActors' => function () use ($deadline): void {
-				// the one step that used to read the whole of a table into
-				// memory; it pages and resumes now, and is told when to stop
+				// pages and resumes, and is told when to stop
 				$this->accountService->manageCacheLocalActors($deadline);
 			},
 			'manageCacheRemoteActors' => function () use ($deadline): void {
@@ -169,10 +151,8 @@ class Cache extends TimedJob {
 				$this->syncRemoteTimelines($deadline);
 			},
 			'refreshRemoteCounts' => function () use ($deadline): void {
-				// what a remote post's likes, boosts and replies are now, asked
-				// of the server that holds it: the counts stored with a post
-				// were what its document said the moment it arrived, and
-				// nothing has asked again since
+				// what a remote post's likes, boosts and replies are now, asked of the
+				// server that holds it
 				$this->remoteCountService?->refresh(
 					false, RemoteCountService::BATCH,
 					min($deadline, $this->time->getTime() + self::COUNTS_SECONDS)
@@ -184,10 +164,8 @@ class Cache extends TimedJob {
 				$this->profileLinkVerifier?->verifyLocalActors(ProfileLinkVerifier::LOCAL_BATCH, $deadline);
 			},
 			'measureMediaUsage' => function (): void {
-				// a `stat` per stored file, which is why it is here and not on
-				// the administration page: the page reads what this left and
-				// says when it was measured. Once a day is enough for a number
-				// about disk.
+				// a `stat` per stored file, so here and not on the administration page,
+				// which reads what this left
 				if ($this->time->getTime() - $this->lastMediaMeasurement() >= self::MEDIA_USAGE_EVERY) {
 					$this->mediaUsageService?->measureAndStore();
 				}
@@ -218,8 +196,7 @@ class Cache extends TimedJob {
 				$this->videoViewService?->forgetEarlierDays();
 			},
 			'thumbnailAvatars' => function (): void {
-				// the small copy the web UI draws, for the icons cached before
-				// icons were stored with one; nothing once it has been through them
+				// the small copy the web UI draws, for icons cached without one
 				$this->avatarThumbnailBackfill?->next();
 			},
 		];
@@ -266,15 +243,9 @@ class Cache extends TimedJob {
 	}
 
 	/**
-	 * Which step this pass begins with.
-	 *
-	 * The order above is the order the steps want to run in, not an order any
-	 * of them depends on — each reads what is due and writes what it finished.
-	 * Run from the top every time under a budget, though, the tail of the list
-	 * is the part that never runs on a busy instance: `verifyProfileLinks` and
-	 * `reconcileGroupLists` sit behind two steps that each make one request per
-	 * remote actor. So a pass that ran out of time hands the next one the step
-	 * it stopped at, and a pass that finished starts from the top again.
+	 * Which step this pass begins with. The steps depend on no order, but run
+	 * from the top under a budget the tail would never run on a busy instance,
+	 * so a pass that ran out of time hands the next one the step it stopped at.
 	 */
 	private function startingStep(int $steps): int {
 		$stored = $this->configService?->getAppValueInt(ConfigService::SOCIAL_CACHE_CRON_START) ?? 0;
@@ -295,18 +266,13 @@ class Cache extends TimedJob {
 	}
 
 	/**
-	 * Runs one step of the cron and keeps going if it fails.
-	 *
-	 * At `warning`, not `debug`: Nextcloud's default loglevel is 2, so a
-	 * `debug` line is written on no default instance, and the four cron steps
-	 * that keep the caches alive used to fail invisibly. The step is named,
-	 * because seven identical messages could not tell an administrator which
-	 * one broke.
+	 * Runs one step of the cron and keeps going if it fails, logging at
+	 * `warning` with the step's name, since Nextcloud's default log level drops
+	 * `debug`.
 	 */
 	private function step(string $step, callable $work): void {
-		// each step reads the actors it touches afresh: cron.php is one process
-		// for every job it runs, and an actor memoised by an earlier step
-		// would hide what that step wrote
+		// each step reads the actors it touches afresh: cron.php runs every job in
+		// one process, and an actor memoised earlier would hide what a step wrote
 		$this->cacheActorService->forgetMemoised();
 		try {
 			$work();
@@ -319,15 +285,9 @@ class Cache extends TimedJob {
 	}
 
 	/**
-	 * One unreachable remote instance must not stop the sync of the others,
-	 * so each actor is caught on its own — but it is still logged, with the
-	 * actor it happened on.
-	 *
-	 * One request per actor, and the batch is fifty: on its own this step can
-	 * outlast the whole budget against a slow peer, so it checks the clock
-	 * between actors rather than only at its own start.
-	 *
-	 * Its own batch, not the refresh's: `getRemoteActorsToSync()` says why.
+	 * Syncs remote actors, each caught and logged on its own so one unreachable
+	 * instance does not stop the others. One request per actor, so the clock is
+	 * checked between actors. Its own batch: see `getRemoteActorsToSync()`.
 	 */
 	private function syncRemoteTimelines(int $deadline): void {
 		foreach ($this->cacheActorsRequest->getRemoteActorsToSync() as $actor) {

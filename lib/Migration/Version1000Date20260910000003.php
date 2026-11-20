@@ -16,25 +16,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Fills the hashtag trend counters of rows that predate them.
- *
- * The columns were added with a default of 0 and no backfill, on the
- * assumption that the next trends cron pass would fill them in. It does not:
- * the cron skips a hashtag whose freshly counted trend equals the JSON already
- * stored, and on an upgraded instance that is the usual case — the JSON was
- * written by the previous version and the counts of a given hashtag rarely
- * move between two passes. The columns are what `getTrending()` orders and
- * filters on, so those hashtags dropped out of the trends endpoint and the
- * dashboard widget, on a quiet instance permanently.
- *
- * The cron now also writes a row whose columns disagree with its JSON, which
- * repairs an instance over time; this makes it true immediately, and covers
- * hashtags nothing will count again because their last post has aged out of
- * the widest window.
- *
- * The JSON column is the source of truth here: it is what the previous version
- * maintained and what the API still hands back. Rows already in agreement are
- * left alone, so this is a no-op on a fresh install and safe to re-run.
+ * Fills the hashtag trend counters of rows whose columns disagree with their
+ * JSON. `getTrending()` orders and filters on the columns, and the trends cron
+ * skips a hashtag whose count is unchanged, so such hashtags would stay out of
+ * the trends. The JSON is the source of truth; rows in agreement are left
+ * alone, so this is safe to re-run.
  */
 class Version1000Date20260910000003 extends SimpleMigrationStep {
 	/** Rows read per round trip — the table has one row per hashtag ever seen. */
@@ -60,9 +46,7 @@ class Version1000Date20260910000003 extends SimpleMigrationStep {
 		}
 
 		$backfilled = 0;
-		// paged on the primary key rather than by offset: the table can be
-		// large on an instance that has been federating for years, and an
-		// offset scan would re-read everything it has already walked
+		// paged on the primary key, not by offset, so a large table is walked once
 		$after = '';
 		while (true) {
 			$rows = $this->chunkAfter($after);

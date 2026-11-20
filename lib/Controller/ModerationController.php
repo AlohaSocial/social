@@ -46,16 +46,11 @@ use OCP\IRequest;
 use OCP\IUserSession;
 
 /**
- * Moderation actions behind the Social section of the admin settings. Every
- * route requires a session and a CSRF token — none of this is part of the
- * client API.
+ * Moderation actions behind the Social section of the admin settings; session
+ * and CSRF token only, not part of the client API.
  *
- * `AuthorizedAdminSetting` rather than the admin-by-default a controller has
- * without `NoAdminRequired`: an administrator passes, and so does a group the
- * administrator has handed `AdminSettings` to under Administration
- * privileges, which is what lets somebody moderate without administering the
- * whole server. The page itself is reachable to exactly the same people,
- * because core gates it on the same delegation.
+ * `AuthorizedAdminSetting`, so administrators and groups delegated
+ * `AdminSettings` can moderate, the same people core lets see the page.
  */
 class ModerationController extends Controller {
 	/** What one page of the account browser holds. */
@@ -145,17 +140,9 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * A page of the accounts this instance knows, for the browser on the
-	 * settings page.
-	 *
-	 * The same read the Mastodon admin API answers `GET
-	 * /api/v1/admin/accounts` with, narrowed to what a table needs: until
-	 * this, only a *reported* account could be acted on from the web, and
-	 * everything else needed a moderation client and a token.
-	 *
-	 * `query` is what a moderator would type — a username, a handle, or an
-	 * instance — and is tried as all three, because asking which of them it
-	 * was is a question the person already answered by typing it.
+	 * A page of the accounts this instance knows, for the browser on the settings
+	 * page: the read `GET /api/v1/admin/accounts` answers, narrowed to a table.
+	 * `query` is tried as a username, a handle and an instance.
 	 *
 	 * @param string $query username, handle or instance
 	 * @param string $origin 'local', 'remote', or '' for both
@@ -188,8 +175,7 @@ class ModerationController extends Controller {
 			$maxId,
 		);
 
-		// one query for the page rather than one an account: the column is a
-		// number, and forty of them are not worth forty round trips
+		// one query for the page rather than one per account
 		$strikes = $this->moderationService->strikeCounts(array_map(
 			static fn (AdminAccount $account): string => $account->getActorId(), $page['accounts']
 		));
@@ -212,11 +198,9 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * What was typed, as the two halves the query takes.
-	 *
-	 * `@bob@noisy.test` and `bob@noisy.test` are an account on an instance,
-	 * `noisy.test` is the instance, and a bare `bob` is a username anywhere —
-	 * which is what somebody typing each of those means by it.
+	 * What was typed, as the two halves the query takes: `@bob@noisy.test` and
+	 * `bob@noisy.test` are an account on an instance, `noisy.test` the instance,
+	 * and a bare `bob` a username anywhere.
 	 *
 	 * @return array{0: string, 1: string} username, instance
 	 */
@@ -235,11 +219,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * What has been decided about one account before now, newest first.
-	 *
-	 * Reached from the strike count in the browser: a number is what a
-	 * moderator scans a page for, and the history is what they need once one
-	 * of them is not zero.
+	 * What has been decided about one account, newest first, reached from the
+	 * strike count in the browser.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'GET', url: '/moderation/accounts/history')]
@@ -288,14 +269,9 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * One page of the open reports, or of the resolved ones, for the table on
-	 * the settings page.
-	 *
-	 * The page renders the first fifty open reports itself; this is what the
-	 * "Show more" button and the collapsed resolved section read. Each row
-	 * carries what the table draws, including what stands against the
-	 * reported account right now, so a resolved report from last month says
-	 * whether the account it named is still suspended.
+	 * One page of the open or resolved reports, for the "Show more" button and
+	 * the resolved section; the page renders the first fifty open ones itself.
+	 * Each row says what stands against the reported account now.
 	 *
 	 * @param bool $resolved the resolved ones instead of the open ones
 	 * @param int $page 1-based
@@ -332,11 +308,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * The posts waiting for somebody to look at them, oldest first.
-	 *
-	 * Text and all: the queue exists to be read, and a row that only said
-	 * "a post by @alice was held" would send a moderator looking for a post
-	 * that is deliberately nowhere to be found.
+	 * The posts waiting for review, oldest first, with their text, since a held
+	 * post cannot be found anywhere else.
 	 *
 	 * @param int $page 1-based
 	 */
@@ -396,13 +369,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Turns the three rules on and off: a new account's first post, the spam
-	 * rules, and videos.
-	 *
-	 * `reviewVideos` defaults to off in the signature as well as in the config
-	 * so that an older card, which sends two fields and not three, does not
-	 * silently turn it on — or off, once somebody has turned it on. That is why
-	 * the card sends all three together.
+	 * Turns the three review rules on and off: a new account's first post, the
+	 * spam rules, and videos. The card always sends all three.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/review/settings')]
@@ -425,12 +393,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Marks everything an account posts sensitive, or stops.
-	 *
-	 * The step between doing nothing and silencing: an account can be asked to
-	 * put a content warning on its pictures without being taken out of the
-	 * timelines. It applies from the next post — rewriting somebody's old
-	 * posts is a different and much larger decision.
+	 * Marks everything an account posts sensitive, or stops: the step between
+	 * doing nothing and silencing. Applies from the next post on.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/accounts/sensitive')]
@@ -450,14 +414,6 @@ class ModerationController extends Controller {
 		return new DataResponse(['actorId' => $actorId, 'sensitive' => $sensitive]);
 	}
 
-	/**
-	 * The pictures this instance refuses, by what is in them.
-	 *
-	 * Every other tool here acts on an account, and none of them stops a file
-	 * coming back: the account is suspended, the picture is posted again by
-	 * the next one, and a moderator is deleting the same image for the third
-	 * time.
-	 */
 	/**
 	 * The subjects this instance says it is about, as the administration page
 	 * edits them.
@@ -518,13 +474,9 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * A page of the refused files, newest first.
-	 *
-	 * `next` is the `maxId` of the page after this one and null on the last,
-	 * found by reading one row more than the page holds; `total` is how many
-	 * there are in all. A refused file is enforced whether or not anybody can
-	 * see it, so every one of them has to be reachable from here, and a page
-	 * that is not the whole list has to say so.
+	 * A page of the refused files, newest first. `next` is the `maxId` of the
+	 * following page, null on the last; `total` counts them all, since every
+	 * refused file is enforced and must be reachable from here.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'GET', url: '/moderation/media/blocks')]
@@ -552,8 +504,7 @@ class ModerationController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/media/blocks')]
 	public function mediaBlockAdd(string $hash, string $reason = ''): DataResponse {
 		$hash = strtolower(trim($hash));
-		// sha256, hex, as the upload path computes it — anything else would be
-		// a row that can never match a file
+		// sha256, hex, as the upload path computes it, or the row never matches
 		if (preg_match('/^[a-f0-9]{64}$/', $hash) !== 1) {
 			return new DataResponse(
 				['error' => 'that is not a sha256 hash'], Http::STATUS_UNPROCESSABLE_ENTITY
@@ -574,11 +525,10 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Adds an instance to the access list.
-	 *
-	 * On a block list it is blocked or silenced, with the reasons for it,
-	 * through the same service `POST /api/v1/admin/domain_blocks` uses; on an
-	 * allow list it is allowed, and the severity and reasons mean nothing.
+	 * Adds an instance to the access list: on a block list it is blocked or
+	 * silenced with its reasons, through the service
+	 * `POST /api/v1/admin/domain_blocks` uses; on an allow list severity and
+	 * reasons are ignored.
 	 *
 	 * @param string $severity 'suspend' (the default) or 'silence'
 	 * @param string $privateComment the reason the moderators keep
@@ -674,17 +624,11 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Reads an uploaded block list, and says what applying it would do.
-	 *
-	 * Two steps on purpose. Every domain a block list adds deletes what this
-	 * instance holds of that server, so the number in front of an
-	 * administrator before they agree to it is the whole point of the page —
-	 * a file from somebody else naming two hundred servers is not a thing to
-	 * apply and then read.
-	 *
-	 * Fail-closed, as `occ social:fediverse import` is: a row that names no
-	 * instance is something to look at rather than something to skip past,
-	 * because this is a file the administrator chose.
+	 * Reads an uploaded block list and says what applying it would do: every
+	 * domain added deletes what this instance holds of that server, so the
+	 * administrator sees the numbers first. Fail-closed like
+	 * `occ social:fediverse import`: a row that names no instance is reported,
+	 * not skipped.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/fediverse/blocklist/preview')]
@@ -745,11 +689,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Reads one followed list now, rather than waiting for the daily job.
-	 *
-	 * `dryRun` is what the administrator presses before turning a source on:
-	 * it fetches the list and reports what following it would do, without
-	 * following it.
+	 * Reads one followed list now rather than waiting for the daily job; with
+	 * `dryRun`, only reports what following it would do.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/fediverse/blocklist/fetch')]
@@ -827,10 +768,8 @@ class ModerationController extends Controller {
 	// What may trend, what the instance's emoji are, and what its rules say
 
 	/**
-	 * The hashtags, links and posts a moderator has decided about.
-	 *
-	 * All three kinds in one answer, because the panel shows one list: what is
-	 * being kept out of Explore, whatever kind of thing it is.
+	 * The hashtags, links and posts a moderator kept out of Explore, in one list
+	 * as the panel shows them.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'GET', url: '/moderation/trends')]
@@ -869,7 +808,7 @@ class ModerationController extends Controller {
 		return $this->trendDecisions();
 	}
 
-	/** The instance's own emoji, which were `occ`-only until now. */
+	/** The instance's own emoji. */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'GET', url: '/moderation/emojis')]
 	public function emojis(): DataResponse {
@@ -877,11 +816,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Adds one from an uploaded picture.
-	 *
-	 * The upload is written to a temporary file and handed to the same service
-	 * `occ social:emoji` calls, so the checks on the shortcode, the size and
-	 * the format are in one place rather than two that could drift.
+	 * Adds one from an uploaded picture, through the service `occ social:emoji`
+	 * uses, so the shortcode, size and format checks are in one place.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/emojis')]
@@ -915,9 +851,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * The instance's own GIF library — what the composer's picker offers
-	 * before the animated emoji — which was `occ`-only until now. The pack
-	 * every instance has is not part of it.
+	 * The instance's own GIF library, which the composer's picker offers before
+	 * the animated emoji. The pack every instance has is not part of it.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'GET', url: '/moderation/gifs')]
@@ -926,10 +861,8 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * Adds one from an uploaded picture, replacing whatever the slug named.
-	 *
-	 * The upload is handed to the same service `occ social:gif add` calls, so
-	 * the checks on the slug, the size and the format are the command's.
+	 * Adds one from an uploaded picture, replacing whatever the slug named,
+	 * through the service `occ social:gif add` uses.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/gifs')]
@@ -972,12 +905,9 @@ class ModerationController extends Controller {
 	}
 
 	/**
-	 * The rules this instance asks people to follow.
-	 *
-	 * One per line in an app value, which is how they were already stored and
-	 * how `occ config:app:set social rules` sets them; what was missing was a
-	 * place to read and write them without a shell. Every client shows them on
-	 * sign-up, and `/api/v1/instance/rules` serves them.
+	 * The rules this instance asks people to follow, one per line in the app
+	 * value `occ config:app:set social rules` sets. Clients show them on sign-up,
+	 * and `/api/v1/instance/rules` serves them.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'GET', url: '/moderation/rules')]
@@ -990,10 +920,8 @@ class ModerationController extends Controller {
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[FrontpageRoute(verb: 'POST', url: '/moderation/rules')]
 	public function rulesSave(string $rules = ''): DataResponse {
-		// stored as it was typed, trimmed of the blank lines a text area
-		// collects; the reader splits on newlines and drops the empties anyway,
-		// and storing what somebody typed is easier to explain than storing a
-		// normalised version of it
+		// stored as typed, trimmed of blank lines; the reader splits on newlines
+		// and drops empty ones
 		$this->configService->setAppValue('rules', trim($rules));
 
 		return $this->rules();

@@ -18,41 +18,23 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who the people you follow follow — the "Followgraph" question.
+ * Who the people you follow follow, asked of the servers they live on rather
+ * than this instance's own database (which `SuggestionService` asks). Each
+ * followed account's public `following` collection is fetched, and an account
+ * named by more of them ranks higher.
  *
- * `SuggestionService` asks the same question of this instance's own database,
- * and on a small server the answer is nearly empty: the follows it holds are
- * the ones that happened here. This asks the *other servers* instead. For each
- * account the viewer follows, their `following` collection is fetched from
- * wherever they live, and an account named by several of them is a better
- * suggestion than an account named by one. That is the whole model: a count of
- * who vouched, and the names of the ones who did.
- *
- * It is worth being clear about what this reads. A `following` collection is
- * published by the server that owns the account, to whoever asks, and many
- * servers do not publish it at all — Mastodon has a "hide your social graph"
- * setting and honours it here by answering with an empty collection or a 403.
- * A viewer's own follows are never sent anywhere: what leaves this instance is
- * a request for a public collection, one per account followed, which is the
- * same request their server answers for anyone.
- *
- * **It needs a starting handful of follows and says so.** Following nobody
- * means there is no graph to walk, and a page that answers that with "no
- * suggestions" has told the reader they are uninteresting rather than that
- * they have not started. `MINIMUM_FOLLOWS` is where it starts trying, and
- * below it the answer carries `needs` so the page can say what to do instead.
+ * Only public collections are requested, the same request anybody can make;
+ * the viewer's follows are never sent anywhere. Servers that hide the graph
+ * answer empty or 403. Below `MINIMUM_FOLLOWS` nothing is walked and the
+ * answer carries `needs`, so the page can say what to do instead.
  */
 class FollowGraphService {
 	/** Below this the graph has nothing to say, and says that instead. */
 	public const MINIMUM_FOLLOWS = 2;
 
 	/**
-	 * How many of the viewer's follows are asked who *they* follow.
-	 *
-	 * The cost of this is one HTTP request per account, so it is a ceiling on
-	 * politeness as much as on time: twenty servers being asked one public
-	 * question each is a reasonable thing to do on somebody pressing a
-	 * button, and two hundred is not.
+	 * How many of the viewer's follows are asked who they follow: one HTTP
+	 * request each, so a limit on politeness as much as on time.
 	 */
 	public const SAMPLE = 20;
 
@@ -60,20 +42,14 @@ class FollowGraphService {
 	public const PAGE = 80;
 
 	/**
-	 * How long one account has to answer.
-	 *
-	 * There is no separate budget for the whole walk any more: the twenty
-	 * requests go together, so the walk takes as long as the slowest single
-	 * answer rather than as long as all of them added up, and a ceiling on one
-	 * request is a ceiling on the set.
+	 * How long one account has to answer; the requests run together, so this
+	 * also bounds the whole walk.
 	 */
 	public const TIMEOUT = 4;
 
 	/**
-	 * How long an answer is kept. Long, because it is expensive to make and
-	 * because a follow graph does not change between two glances at a page —
-	 * and it is dropped the moment the viewer follows somebody, which is the
-	 * one thing that really changes it.
+	 * How long an answer is kept: long, since it is expensive and the graph
+	 * barely changes; dropped when the viewer follows somebody.
 	 */
 	public const CACHE_TTL = 1800;
 
@@ -141,11 +117,8 @@ class FollowGraphService {
 	}
 
 	/**
-	 * Whether there is a graph to walk at all, without walking it.
-	 *
-	 * The page asks this when it opens, and the walk itself only when somebody
-	 * presses the button: twenty outgoing requests is a thing to do because a
-	 * reader asked for suggestions, not because they opened a tab.
+	 * Whether there is a graph to walk, without walking it: the page asks this
+	 * on opening, and walks only when the button is pressed.
 	 *
 	 * @return array{suggestions: array<empty>, asked: int, needs: int}
 	 */
@@ -185,11 +158,8 @@ class FollowGraphService {
 	}
 
 	/**
-	 * Asks each of them who they follow.
-	 *
-	 * A server that will not say is not an error and not retried: "I do not
-	 * publish that" is a real answer, given by every Mastodon account with the
-	 * social graph hidden.
+	 * Asks each of them who they follow. A server that will not say is not an
+	 * error and is not retried.
 	 *
 	 * @param string[] $follows
 	 *
@@ -200,11 +170,8 @@ class FollowGraphService {
 		$via = [];
 		$asked = 0;
 
-		// the collections first, then all of them at once: these are twenty
-		// servers that have nothing to do with each other, and asking them one
-		// after another let the slowest of them set the pace for the whole
-		// page. The budget is what it was; it now covers the batch rather than
-		// being spent a request at a time.
+		// the collections first, then all of them at once, so the slowest server
+		// does not set the pace
 		$collections = [];
 		foreach ($follows as $followedId) {
 			try {
@@ -246,13 +213,9 @@ class FollowGraphService {
 	}
 
 	/**
-	 * The actor ids in one fetched `following` collection, one page of it.
-	 *
-	 * A collection answers either with its items or with a `first` page that
-	 * has them; both shapes are in the wild and the difference is not
-	 * interesting here. Nothing pages further: a walk of somebody's entire
-	 * following list is a different act from reading the front of it, and it
-	 * is not one this instance should perform on a button press.
+	 * The actor ids in one fetched `following` collection: its items, or those
+	 * of its `first` page. Nothing pages further; reading a whole following list
+	 * is not for a button press.
 	 *
 	 * @param array<string, mixed> $document
 	 *
@@ -294,12 +257,9 @@ class FollowGraphService {
 	}
 
 	/**
-	 * Turns the counted ids into accounts, dropping the ones nobody should be
-	 * offered.
-	 *
-	 * The exclusions are `SuggestionService`'s, because "who may be suggested"
-	 * is one question with one answer, and a second copy of it here would be
-	 * the place where a blocked account eventually gets recommended.
+	 * Turns the counted ids into accounts, dropping those nobody should be
+	 * offered, by `SuggestionService`'s exclusions so there is one answer to who
+	 * may be suggested.
 	 *
 	 * @param array<string, int> $counts
 	 * @param array<string, string[]> $via
@@ -342,10 +302,8 @@ class FollowGraphService {
 	}
 
 	/**
-	 * The handles of the accounts that vouched, for the line that says why.
-	 *
-	 * Only ones already held here are named — this is a reason shown to the
-	 * viewer, not a reason to make more requests.
+	 * The handles of the accounts that vouched, for the line that says why; only
+	 * those already held here, without further requests.
 	 *
 	 * @param string[] $ids
 	 *

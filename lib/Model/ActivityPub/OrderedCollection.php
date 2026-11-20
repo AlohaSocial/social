@@ -15,9 +15,8 @@ class OrderedCollection extends ACore implements JsonSerializable {
 	public const TYPE = 'OrderedCollection';
 
 	/**
-	 * How many entries one page of a collection holds. Mastodon serves 40 at a
-	 * time; the number only has to be stable, because it is what the page
-	 * boundaries on `first`/`last` and `next`/`prev` are computed from.
+	 * How many entries one page of a collection holds, as Mastodon's 40; it only
+	 * has to be stable, since page boundaries are computed from it.
 	 */
 	public const PAGE_SIZE = 40;
 
@@ -81,19 +80,9 @@ class OrderedCollection extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * A collection that says where its pages actually are.
-	 *
-	 * followers, following and outbox have always advertised `first` as
-	 * `?page=1`, but nothing read the parameter: `?page=1` returned the
-	 * identical collection, whose `first` pointed at itself. A consumer
-	 * following `first` either looped or gave up, so no peer could enumerate any
-	 * of the three — which is how another instance discovers who to deliver to
-	 * when its own record is incomplete, and how migration and archiving tools
-	 * read an account.
-	 *
-	 * `last` names the highest page number the collection has; with nothing in
-	 * it, that is still page one — an empty page is a truthful answer, a page
-	 * number that does not exist is not.
+	 * A collection that says where its pages are: `first` is `?page=1`, and
+	 * `last` the highest page number, still page one when empty, since an empty
+	 * page is a truthful answer and a missing page is not.
 	 */
 	public static function paged(string $id, int $totalItems, string $pageUrl): self {
 		$collection = new self();
@@ -130,10 +119,8 @@ class OrderedCollection extends ACore implements JsonSerializable {
 	}
 
 	/**
-	 * `totalItems` is always stated, 0 included: an empty collection says it
-	 * holds nothing, where one that leaves the count out says nothing. PeerTube
-	 * reads a missing count on a video's `likes` as undefined, and its write of
-	 * that undefined crashed the whole server.
+	 * `totalItems` is always stated, 0 included: PeerTube reads a missing count
+	 * on a video's `likes` as undefined, and writing that crashes it.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

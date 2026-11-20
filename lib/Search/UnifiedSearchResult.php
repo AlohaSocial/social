@@ -11,11 +11,6 @@ namespace OCA\Social\Search;
 
 use OCP\Search\SearchResultEntry;
 
-/**
- * Class SearchResultEntry
- *
- * @package OCA\Social\Search
- */
 class UnifiedSearchResult extends SearchResultEntry {
 	public function __construct(
 		string $thumbnailUrl = '', string $title = '', string $subline = '', string $resourceUrl = '',

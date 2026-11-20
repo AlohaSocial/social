@@ -19,19 +19,13 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_stream_act.liked_nid` and `bookmarked_nid`: when a post was
- * favourited or bookmarked, as a sortable id.
+ * favourited or bookmarked, as a sortable id, so `/api/v1/favourites` and
+ * `/api/v1/bookmarks` page by the mark, newest first, as Mastodon does. Minted
+ * when the flag is set (`StreamActionService`), zero when cleared, on the
+ * same scale as a post's nid.
  *
- * Mastodon pages `/api/v1/favourites` and `/api/v1/bookmarks` by the
- * favourite's own id, newest mark first; this app paged them by the post's
- * id, so a post from last month marked today landed at the bottom of the
- * list, below marks made weeks ago. The row has no timestamp, and a mark that
- * is taken back and set again has to move to the top, so each mark carries
- * its own id: minted when the flag is set (`StreamActionService`), zero when
- * it is cleared, on the same time scale as a post's nid.
- *
- * The marks already stored are given the id of their post, which keeps them
- * in the order they were listed in until now; new marks sort above them by
- * the time they are made. Run again, it finds no set mark without an id.
+ * Existing marks get their post's id; run again, it finds no set mark
+ * without an id.
  */
 class Version1000Date20261013100200 extends SimpleMigrationStep {
 	/** How many action rows one backfill statement looks at. */

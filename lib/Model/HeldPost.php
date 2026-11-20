@@ -15,16 +15,11 @@ use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
  * A post that was accepted, stored and not published, because a rule said a
- * person should look at it first.
+ * person should look at it first. It is the request, not the post: nothing
+ * is written to `social_stream` until it is approved. The account is carried
+ * so the row can be checked against the caller in SQL.
  *
- * It is the request, not the post — see the migration for why nothing is
- * written to `social_stream` until it is approved. The account is carried so
- * that the one row a request names can be checked against the caller in SQL
- * rather than after the row has been read.
- *
- * `reason` is which rule held it. The set is closed and small on purpose: a
- * queue that says "spam score 0.82" tells a moderator nothing they can act on,
- * while "this account's first post" and "seven links" are things a person can
+ * `reason` is which rule held it, from a small closed set a moderator can
  * agree or disagree with.
  */
 class HeldPost implements JsonSerializable, StatusParams {
@@ -44,11 +39,8 @@ class HeldPost implements JsonSerializable, StatusParams {
 	public const REASON_REPEAT = 'repeat';
 
 	/**
-	 * There is a video on it, and this instance looks at videos first.
-	 *
-	 * Unlike the other four this is not about the *account*: a trusted account
-	 * with a thousand posts behind it is held by this rule too, every time,
-	 * because what it is about is the video.
+	 * There is a video on it, and this instance looks at videos first. About
+	 * the video, not the account, so trusted accounts are held too.
 	 */
 	public const REASON_VIDEO = 'video';
 
@@ -116,11 +108,8 @@ class HeldPost implements JsonSerializable, StatusParams {
 	}
 
 	/**
-	 * The md5 of the account and the text, which the unique index is on.
-	 *
-	 * Computed here rather than in the request builder so that the check for
-	 * "is this one already waiting" and the write of it cannot disagree about
-	 * what the same post means.
+	 * The md5 of the account and the text, which the unique index is on;
+	 * computed here so the duplicate check and the write agree.
 	 */
 	public function digest(): string {
 		if ($this->digest !== '') {
@@ -162,13 +151,9 @@ class HeldPost implements JsonSerializable, StatusParams {
 	}
 
 	/**
-	 * What the author and the moderator are both shown.
-	 *
-	 * The text is in here, which is the point of the queue: a moderator
-	 * decides on what was written, and an author has to be able to recognise
-	 * which of their posts is waiting. The account is a handle and its id
-	 * rather than an Account entity — the queue is a table of rows, not a
-	 * timeline, and nothing here draws an avatar.
+	 * What the author and the moderator are both shown: the text, so it can be
+	 * judged and recognised, and the account as a handle and id, not an Account
+	 * entity.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

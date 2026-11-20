@@ -48,12 +48,9 @@ class ModerationRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Records the decision about an account, replacing any earlier one.
-	 *
-	 * Insert first and update on conflict, rather than delete and then insert:
-	 * that order loses the old decision the moment the insert fails, and the
-	 * failure was only logged — so the account ended up under no decision at
-	 * all while the panel reported the new one as applied.
+	 * Records the decision about an account, replacing any earlier one. Insert,
+	 * then update on conflict: deleting first would leave the account under no
+	 * decision if the insert failed.
 	 */
 	public function save(Moderation $moderation): void {
 		$qb = $this->getQueryBuilder();
@@ -158,14 +155,9 @@ class ModerationRequest extends CoreRequestBuilder {
 		}
 	}
 
-	/** @return string the level, or '' when the instance has decided nothing */
 	/**
-	 * Whether every post by this account is to be marked sensitive.
-	 *
-	 * A decision of its own rather than a level: an account can be asked to
-	 * put a content warning on its pictures without being taken out of the
-	 * timelines, which is precisely the case the silence tier is too heavy
-	 * for. Mastodon's moderators have it and Pixelfed calls it `cw`.
+	 * Whether every post by this account is to be marked sensitive: a decision
+	 * apart from the levels, lighter than silencing (Pixelfed's `cw`).
 	 */
 	public function setForceSensitive(string $actorId, bool $sensitive): void {
 		$qb = $this->getQueryBuilder();
@@ -177,11 +169,8 @@ class ModerationRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The accounts every post of which is marked sensitive.
-	 *
-	 * Read as a set rather than one account at a time: it is consulted while
-	 * a post is being stored, it is empty on almost every instance, and a
-	 * query per post for a list of nothing is a query per post.
+	 * The accounts every post of which is marked sensitive, read as a set since
+	 * it is consulted for every stored post and almost always empty.
 	 *
 	 * @return string[] actor ids
 	 */

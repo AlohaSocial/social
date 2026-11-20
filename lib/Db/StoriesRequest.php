@@ -22,15 +22,9 @@ use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
 /**
- * Stories, and who has seen them.
- *
- * Every read here filters on `expires_at`, and the cron job deletes what has
- * expired. Two independent guards on purpose: if the job never runs nothing
- * expired is ever shown, and if a read is ever written without the filter the
- * job has already removed the row. A story whose day is up must not come back
- * because one of the two was forgotten.
- *
- * @package OCA\Social\Db
+ * Stories, and who has seen them. Every read filters on `expires_at` and the
+ * cron job deletes what expired: two guards, so an expired story never comes
+ * back if one of them is missing.
  */
 class StoriesRequest extends CoreRequestBuilder {
 	use TArrayTools;
@@ -90,12 +84,8 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Writes a story.
-	 *
-	 * A local one is stamped now and given a day; one that arrived keeps the
-	 * times its author put on it, bounded — `StoryService` is where that
-	 * bounding is decided, because it is a rule about what this instance will
-	 * hold rather than about how a row is written.
+	 * Writes a story: a local one is stamped now and given a day; one that
+	 * arrived keeps its author's times, bounded by `StoryService`.
 	 */
 	public function save(Story $story): Story {
 		$now = ($story->getCreation() > 0) ? new DateTime('@' . $story->getCreation()) : $this->now();
@@ -124,10 +114,8 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Writes the ActivityPub id of a story that has just been given one.
-	 *
-	 * A local story's id is built out of the row's own number, so it can only
-	 * be written once the row exists.
+	 * Writes the ActivityPub id of a story, which for a local story is built
+	 * from the row's own number.
 	 */
 	public function setSourceId(int $id, string $sourceId): void {
 		$qb = $this->getQueryBuilder();
@@ -157,14 +145,11 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Removes a story by its ActivityPub id, on its author's word.
-	 *
-	 * The author is checked here rather than by the caller: a `Delete` naming
-	 * somebody else's story is the one thing this row must never honour.
+	 * Removes a story by its ActivityPub id, on its author's word, checked here
+	 * so a `Delete` can never remove somebody else's story.
 	 */
 	public function deleteBySourceId(string $sourceId, string $actorId): void {
-		// read first, so that what hangs off the row can be deleted with it:
-		// a story withdrawn by its author used to leave its views behind
+		// read first, so that its views are deleted with it
 		try {
 			$story = $this->getBySourceId($sourceId);
 			if ($story->getOwnerId() === $actorId) {
@@ -303,10 +288,8 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Deletes what has expired and says how many went.
-	 *
-	 * Bounded per run: an instance that has not swept in a while has more due
-	 * than one cron slot should take, and what is left is the next run's.
+	 * Deletes what has expired and says how many went, bounded per run; what is
+	 * left is the next run's.
 	 */
 	public function deleteExpired(int $limit = 500): int {
 		return $this->deleteByIds(
@@ -315,11 +298,8 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * What is due to go, before it goes.
-	 *
-	 * Read rather than deleted in one statement because a story is more than
-	 * its row: the picture it was posted as is a document with files behind
-	 * it, and the row is the only thing that names them.
+	 * What is due to go, read first since the row is the only thing naming the
+	 * document and files of the story's picture.
 	 *
 	 * @return Story[]
 	 */
@@ -352,11 +332,8 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Marks a story seen.
-	 *
-	 * A repeat is a no-op: the unique index refuses the second row and that is
-	 * the whole of the handling, which is what makes the route a client calls
-	 * as it scrolls safe to call twice.
+	 * Marks a story seen; the unique index makes a repeat a no-op, so clients
+	 * can call it twice.
 	 */
 	public function markSeen(int $storyId, string $viewerId): void {
 		$qb = $this->getQueryBuilder();
@@ -369,11 +346,8 @@ class StoriesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Which of these stories the viewer has already seen.
-	 *
-	 * One query for the whole carousel rather than one per story: a carousel
-	 * draws dozens and asking per story is how a screen becomes dozens of round
-	 * trips.
+	 * Which of these stories the viewer has already seen, in one query for the
+	 * whole carousel.
 	 *
 	 * @param int[] $storyIds
 	 *
@@ -400,7 +374,7 @@ class StoriesRequest extends CoreRequestBuilder {
 		return $seen;
 	}
 
-	/** How many accounts have seen each of these stories. */
+	/** How many accounts have seen a story. */
 	public function countViews(int $storyId): int {
 		$qb = $this->getQueryBuilder();
 		$qb->selectAlias($qb->func()->count('*'), 'seen')
@@ -414,13 +388,9 @@ class StoriesRequest extends CoreRequestBuilder {
 		return (int)($data['seen'] ?? 0);
 	}
 
-	/** @param int[] $storyIds */
 	/**
-	 * Who watched one story, newest viewer first.
-	 *
-	 * The view rows hold only the viewer's id hash, so the cached actors are
-	 * joined to get an id a caller can resolve; a viewer this server no longer
-	 * caches is simply not in the answer.
+	 * Who watched one story, newest viewer first. The view rows hold only a hash,
+	 * so cached actors are joined; viewers no longer cached are left out.
 	 *
 	 * @return string[] actor ids
 	 */

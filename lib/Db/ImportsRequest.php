@@ -15,14 +15,9 @@ use OCA\Social\Tools\DbTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The imports an account asked for, and where each one got to.
- *
- * Three reads, all small: one row by id for the job that runs it, one
- * account's recent rows for the page that watches them, and whether an
- * account already has one of a kind under way, which is what keeps a second
- * press of the same button from queueing the same file twice.
- *
- * @package OCA\Social\Db
+ * The imports an account asked for, and where each one got to: by id for the
+ * job, one account's recent rows for the page, and whether one of a kind is
+ * already under way, so a second press does not queue the file twice.
  */
 class ImportsRequest extends CoreRequestBuilder {
 	/** How many of an account's imports the page is shown, newest first. */
@@ -108,8 +103,8 @@ class ImportsRequest extends CoreRequestBuilder {
 
 	/**
 	 * One account's runs still marked running that have not written their
-	 * progress since `$before`: a run writes it every couple of seconds, so
-	 * these are runs whose process died without recording an outcome.
+	 * progress since `$before`; a run writes it every couple of seconds, so
+	 * their process died.
 	 *
 	 * @return ImportJob[]
 	 */

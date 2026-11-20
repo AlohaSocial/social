@@ -13,12 +13,10 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * Registrations of external users that are not accounts yet.
- *
- * A row waits either for its email to be confirmed (`verified` 0) or, once it
- * is, for an administrator (`approval` 1). A row reserves its handle and its
- * email address for as long as it exists. The verification token is stored
- * as a SHA-256 hash, never as sent.
+ * Registrations of external users that are not accounts yet, waiting for
+ * their email to be confirmed (`verified` 0) and then for an administrator
+ * (`approval` 1). A row reserves its handle and email; the verification
+ * token is stored as a SHA-256 hash.
  *
  * @psalm-type ExternalSignupRow = array{id: int, handle: string, email: string, password: string, token: string, verified: bool, approval: bool, inviteId: int, ipHash: string, creation: int, emailVerified: bool, noticeVersion: string, noticeAcceptedAt: int, noticeSnapshot: string, returnTo: string, codeHash: string, codeAttempts: int}
  */
@@ -70,11 +68,10 @@ class ExternalSignupsRequest {
 	}
 
 	/**
-	 * A row that only counts: a registration that was answered as if it had
-	 * been taken, and made nothing. It weighs on the limits per address and in
-	 * all as a real one does, so the limits do not tell the two apart. Its
-	 * handle is one no form can ask for, it holds no address and no token,
-	 * and it is purged with the unconfirmed registrations.
+	 * A placeholder row for a registration answered as if taken but made
+	 * nothing: it counts against the limits like a real one so the two cannot be
+	 * told apart. It has an unrequestable handle, no address or token, and is
+	 * purged with the unconfirmed registrations.
 	 */
 	public function createPlaceholder(string $ipHash, int $creation): void {
 		$this->create('~' . bin2hex(random_bytes(16)), '', '', '', false, false, 0, $ipHash, $creation);
@@ -228,10 +225,8 @@ class ExternalSignupsRequest {
 	}
 
 	/**
-	 * Forgets the registrations whose email was never confirmed in time.
-	 *
-	 * A row waiting for an administrator is kept however old it is: it is
-	 * somebody's request, and only a decision ends it.
+	 * Forgets the registrations whose email was never confirmed in time. A row
+	 * waiting for an administrator is kept until somebody decides.
 	 */
 	public function purgeUnverifiedBefore(int $before): int {
 		$qb = $this->connection->getQueryBuilder();

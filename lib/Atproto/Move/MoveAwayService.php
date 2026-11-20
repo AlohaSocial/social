@@ -34,17 +34,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Moving a Bluesky account away from this server (§13.2), driven from here:
- * the person names the PDS they move to and the account they want there,
- * and this server — which holds the account's signing key and a rotation
- * key of its DID — does what a migration tool would.
+ * Moves a Bluesky account from this server to another PDS (§13.2), doing
+ * what a migration tool would with the signing and rotation keys held here.
  *
- * Started in the request, so what the other PDS refuses is said at once:
- * the account is made there with a token the account signs, deactivated.
- * Then a background job copies the repository, the blobs and the
- * preferences, points the DID at the other PDS, activates the account there
- * and switches it off here. A step that fails can be started again; the
- * DID only moves once everything it needs is there.
+ * The request makes the deactivated account on the other PDS, so its refusal
+ * is shown at once; a background job copies the repository, blobs and
+ * preferences, points the DID there, activates it there and deactivates it
+ * here. A failed step can be retried; the DID moves only once everything is
+ * there.
  */
 class MoveAwayService {
 	private const CREATE_ACCOUNT = 'com.atproto.server.createAccount';
@@ -225,13 +222,11 @@ class MoveAwayService {
 	}
 
 	/**
-	 * Calls off a move away before the DID moved. The account made on the
-	 * other server stays there, deactivated: deleting it takes a code that
-	 * server e-mails to the address given there
-	 * (`com.atproto.server.requestAccountDelete`, then `deleteAccount`), so
-	 * the person is told to delete it there. Once the DID moved, or while
-	 * it is being moved, a move is not called off but finished; one that
-	 * failed handing the DID over is first asked of the directory.
+	 * Calls off a move away before the DID moved. The account made on the other
+	 * server stays there, deactivated: deleting it needs a code that server
+	 * e-mails, so the person is told to delete it there. A move whose DID moved
+	 * or is moving is finished instead; one that failed handing the DID over is
+	 * first checked with the directory.
 	 *
 	 * @throws MoveErrorException
 	 */
@@ -377,12 +372,10 @@ class MoveAwayService {
 	}
 
 	/**
-	 * A move that stopped handing the DID over goes on from the
-	 * activation when the directory points the DID at the other PDS
-	 * already: it took the operation although its answer did not come.
-	 * Signed again, the operation would be refused for good — this
-	 * server's key no longer rotates the DID — and called off, the account
-	 * would be left on a server where it is not active.
+	 * A move that failed handing the DID over continues from the activation when
+	 * the directory already points the DID at the other PDS (it took the
+	 * operation but the answer was lost). Signing again would be refused for good,
+	 * and calling off would leave the account inactive everywhere.
 	 *
 	 * @return bool whether it goes on from the activation now
 	 * @throws MoveErrorException `plc-unreachable` when the directory cannot be asked
@@ -449,11 +442,9 @@ class MoveAwayService {
 	}
 
 	/**
-	 * Writes where a running move got to, with its stage — unless the
-	 * person called it off meanwhile, which stops the run here. The write
-	 * is conditional on the move still running, so a call-off between a
-	 * read and a write is not written over; a stopped move started again
-	 * is written as it is.
+	 * Writes where a running move got to, with its stage, unless the person
+	 * called it off meanwhile, which stops the run. The write is conditional on
+	 * the move still running, so a call-off is never overwritten.
 	 *
 	 * @throws MoveErrorException when the move was called off
 	 */
@@ -498,13 +489,10 @@ class MoveAwayService {
 	}
 
 	/**
-	 * Right before the DID moves: the posts written here during the move
-	 * and held back meanwhile are published, the repository is exported
-	 * again when its head moved on since it was, and the other PDS is
-	 * asked whether everything arrived (`checkAccountStatus`): the
-	 * repository at this one's head commit, as many records, every blob it
-	 * names. What is missing stops the move for the person to decide —
-	 * copy again, or switch without it.
+	 * Right before the DID moves: publishes the posts held back during the move,
+	 * exports the repository again when its head moved on, and asks the other
+	 * PDS whether everything arrived (`checkAccountStatus`). What is missing
+	 * stops the move for the person to decide: copy again, or switch without it.
 	 *
 	 * @throws AtprotoException
 	 * @throws MoveErrorException blobs-missing or repo-incomplete

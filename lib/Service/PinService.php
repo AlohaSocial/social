@@ -26,13 +26,10 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Pinned posts: the handful of own posts an account keeps at the top of its
- * profile. A pin is a row in the actions table (`Pin`), like a Like or a poll
- * vote, so no schema change is needed; pins are never federated as activities
- * of their own — remote servers read them from the actor's `featured`
- * collection, the same way Mastodon publishes them.
- *
- * Only the author can pin, so `pinned` is a property of the post rather than
- * of the viewer. On Bluesky the newest pin is the profile's `pinnedPost`.
+ * profile, stored as `Pin` rows in the actions table. Remote servers read
+ * them from the actor's `featured` collection, as Mastodon publishes them.
+ * Only the author pins, so `pinned` is a property of the post. On Bluesky the
+ * newest pin is the profile's `pinnedPost`.
  */
 class PinService {
 	public const TYPE = 'Pin';
@@ -102,18 +99,10 @@ class PinService {
 	}
 
 	/**
-	 * Tells the followers that a post entered or left the featured collection.
-	 *
-	 * A pin is not an activity of its own on the wire: what travels is an
-	 * `Add` or a `Remove` whose `target` is the actor's `featured` collection
-	 * and whose `object` is the post. Without it a pin was visible only to a
-	 * peer that happened to re-read the collection — which nothing prompts it
-	 * to do — so a pin made here appeared on other instances late or never,
-	 * and an unpin never at all.
-	 *
-	 * The pin itself is already stored. A failure to federate is logged and
-	 * nothing else: the profile here is correct either way, and a pin is not
-	 * worth failing a request over.
+	 * Tells the followers that a post entered or left the featured collection,
+	 * with an `Add` or `Remove` whose `target` is the actor's `featured`, so
+	 * peers need not re-read the collection. A failure to federate is only
+	 * logged.
 	 */
 	private function federate(Person $actor, Stream $post, ACore $activity): void {
 		$activity->setId($post->getId() . '#' . strtolower($activity->getType()) . '/featured');
@@ -176,10 +165,8 @@ class PinService {
 		$posts = [];
 		foreach ($this->getPinnedIds($actorId) as $id) {
 			try {
-				// always through the visibility filter: with no viewer that is
-				// the public-only one an anonymous reader gets. Reading these
-				// unfiltered served a pinned followers-only post to whoever
-				// asked for the featured collection.
+				// always through the visibility filter, the public-only one without a
+				// viewer, so no followers-only pin is served
 				$post = $this->streamRequest->getStreamById($id, true, ACore::FORMAT_LOCAL);
 			} catch (StreamNotFoundException $e) {
 				continue;

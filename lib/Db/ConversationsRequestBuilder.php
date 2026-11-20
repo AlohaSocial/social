@@ -12,19 +12,12 @@ namespace OCA\Social\Db;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Class ConversationsRequestBuilder
+ * Statements for conversations: threads, derived from `social_stream` and
+ * stored nowhere, and what one account did with a thread (read, dismissed),
+ * which has rows of its own.
  *
- * Two kinds of statement live here, because a conversation in this app is two
- * things: a thread, which is derived from `social_stream` and stored nowhere,
- * and what one account has done with that thread — read it, dismissed it —
- * which is the only part that needs a row of its own.
- *
- * The thread statements select four columns and join nothing. They walk a
- * thread up and down, and the only questions they answer are which post is
- * whose parent and what its nid is; hydrating a Stream for each step would
- * read the whole post — content, attachments, actor — to look at one id.
- *
- * @package OCA\Social\Db
+ * The thread statements select four columns and join nothing: walking a
+ * thread needs only parents and nids, not whole posts.
  */
 class ConversationsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
@@ -80,15 +73,10 @@ class ConversationsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The same reduction, narrowed to the posts of a thread that were
-	 * addressed to — or sent by — one account as a direct message.
-	 *
-	 * The join is against `social_stream_dest`, which is where
-	 * `StreamRequest::getTimelineDirect()` reads the direct timeline from and
-	 * which carries the author beside the recipients, so a thread the account
-	 * only ever spoke in is theirs too. Being a `dm` dest of one post of the
-	 * thread is what makes the conversation the account's own: it is the same
-	 * predicate that put the post in their direct timeline in the first place.
+	 * The same reduction, narrowed to the posts of a thread that were addressed
+	 * to, or sent by, one account as a direct message: a `dm` row in
+	 * `social_stream_dest`, which `StreamRequest::getTimelineDirect()` reads too
+	 * and which carries the author beside the recipients.
 	 */
 	protected function getThreadLinkForDestSql(string $actorId): SocialQueryBuilder {
 		$qb = $this->getThreadLinkSelectSql();

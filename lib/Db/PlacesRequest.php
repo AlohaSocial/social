@@ -16,13 +16,8 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The places this instance has seen.
- *
- * Shared rows: two posts taken at the same place point at one, which is what
- * makes "everything posted here" a single indexed lookup rather than a scan for
- * a matching string.
- *
- * @package OCA\Social\Db
+ * The places this instance has seen, shared between posts, so "everything
+ * posted here" is one indexed lookup.
  */
 class PlacesRequest extends CoreRequestBuilder {
 	use TArrayTools;
@@ -55,12 +50,9 @@ class PlacesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The row for this place, creating it if the instance has not seen it.
-	 *
-	 * The unique index on (name_prim, country) is what makes posting "Berlin"
-	 * twice yield one Berlin: the second insert is refused and the existing row
-	 * is read instead. Two callers racing therefore both end up with the same
-	 * row rather than one of them failing.
+	 * The row for this place, creating it if the instance has not seen it. The
+	 * unique index on (name_prim, country) refuses a second insert, so racing
+	 * callers both end up with the same row.
 	 */
 	public function findOrCreate(Place $place): Place {
 		try {
@@ -140,14 +132,9 @@ class PlacesRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Places whose name begins with what was typed.
-	 *
-	 * A prefix match, not a substring one: `LIKE '%term%'` cannot use an index
-	 * and this route is called on every keystroke. The name column is TEXT and
-	 * has no index of its own, so the search is bounded hard and is a scan of a
-	 * table that holds one row per distinct place this instance has ever seen --
-	 * which is small, and is the reason a geocoder is not needed to make this
-	 * useful.
+	 * Places whose name begins with what was typed. A prefix match, called on
+	 * every keystroke; the TEXT name has no index, so the search is bounded and
+	 * scans the small table of distinct places.
 	 *
 	 * @return Place[]
 	 */

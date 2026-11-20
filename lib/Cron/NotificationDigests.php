@@ -17,14 +17,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Raises the notification digests whose time has come.
- *
- * Every five minutes, like `ScheduledPosts` and for the same reason: a
- * digest is something a user asked for at a time of day they chose, and a
- * twelve-minute job would make every one of them up to twelve minutes late.
- * Only the users whose setting needs a digest are visited — the flag
- * `NotificationDeliveryService` keeps names them — so an instance where
- * nobody chose one does one config query per run and nothing else.
+ * Raises the notification digests whose time has come, every five minutes
+ * like `ScheduledPosts`, since a digest is due at a chosen time of day. Only
+ * the users flagged by `NotificationDeliveryService` are visited.
  */
 class NotificationDigests extends TimedJob {
 	/** How long one run may take before leaving the rest to the next one. */
@@ -34,9 +29,8 @@ class NotificationDigests extends TimedJob {
 	public const MAX_USERS = 1000;
 
 	/**
-	 * The most digests one user gets per run. A user whose instance was down
-	 * for a week is owed one digest per missed time, but not that week's
-	 * worth at once; the rest follow on the next runs.
+	 * The most digests one user gets per run: one per missed time is owed after
+	 * downtime, but not all at once.
 	 */
 	public const MAX_PER_USER = 4;
 
@@ -67,12 +61,9 @@ class NotificationDigests extends TimedJob {
 	}
 
 	/**
-	 * Visits every scheduled user and raises what they are owed.
-	 *
-	 * The cut of each digest is the time it was due at, not the moment the
-	 * job happened to run: a job that runs at 18:04 reports the window up to
-	 * 18:00, and the next window starts at 18:00, so nothing falls between
-	 * two digests and nothing is counted twice.
+	 * Visits every scheduled user and raises what they are owed. Each digest is
+	 * cut at the time it was due, not when the job ran, so windows neither
+	 * overlap nor leave gaps.
 	 *
 	 * @return int digests raised
 	 */
