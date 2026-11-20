@@ -67,21 +67,17 @@ class MemoriesService {
 	/**
 	 * How the reader's week went, and the one before for comparison, read off
 	 * the profile's twelve-week chart so the two agree. Deliberately no
-	 * streak, which would pressure people to post.
+	 * streak, which would pressure people to post. `enabled` is whether the
+	 * reader wants it as a line in their feed, in the apps that offer that.
 	 *
 	 * @return array{enabled: bool, this_week: int, last_week: int}
 	 */
 	public function recap(Person $actor, string $userId): array {
-		$enabled = $this->recapEnabled($userId);
-		if (!$enabled) {
-			return ['enabled' => false, 'this_week' => 0, 'last_week' => 0];
-		}
-
 		$weeks = $this->profileHighlightsService->forActor($actor)['weeks'];
 		$count = count($weeks);
 
 		return [
-			'enabled' => true,
+			'enabled' => $this->recapEnabled($userId),
 			'this_week' => ($count > 0) ? $weeks[$count - 1] : 0,
 			'last_week' => ($count > 1) ? $weeks[$count - 2] : 0,
 		];

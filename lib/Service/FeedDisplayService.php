@@ -14,35 +14,23 @@ use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 
-/** Per-reader choices about which posts appear as cards in the feeds. */
+/** Which posts appear as cards in a reader's feeds. */
 class FeedDisplayService {
-	public const USER_KEY_HIDE_REPLIES = 'hide_replies_in_feeds';
-
-	/** @var array<string, bool> user id => hide replies */
-	private array $hideReplies = [];
-
 	public function __construct(
 		private ConfigService $configService,
 	) {
 	}
 
-	/** Whether this reader hides replies as standalone feed cards. */
+	/**
+	 * Whether replies stay out of this reader's feeds as cards of their own.
+	 * They do for every signed-in reader; replies are read in their
+	 * conversations.
+	 */
 	public function hidesReplies(string $userId): bool {
-		if ($userId === '') {
-			return false;
-		}
-
-		$this->hideReplies[$userId] ??= $this->configService->getUserValue(self::USER_KEY_HIDE_REPLIES, $userId) === '1';
-
-		return $this->hideReplies[$userId];
+		return $userId !== '';
 	}
 
-	public function setHidesReplies(string $userId, bool $hide): void {
-		$this->configService->setValueForUser($userId, self::USER_KEY_HIDE_REPLIES, $hide ? '1' : '0');
-		$this->hideReplies[$userId] = $hide;
-	}
-
-	/** The switch as the client API answers it. */
+	/** The feed preferences as the client API answers them. */
 	public function export(string $userId): array {
 		return [
 			'hide_replies' => $this->hidesReplies($userId),

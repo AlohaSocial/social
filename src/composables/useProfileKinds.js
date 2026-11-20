@@ -24,19 +24,15 @@ import { useAccountStore } from '../store/account.js'
  * filters of the account's posts.
  *
  * @param {string} account the handle in the route
- * @param {object} [layout] public presentation preferences
- * @param {string} [selected] the explicitly opened tab, retained for keyboard navigation
  * @return {Array<{value: string, label: string, icon: object, to: object}>}
  */
-export function profileKinds(account, layout = {}, selected = '') {
+export function profileKinds(account) {
 	const to = (media) => ({
 		name: 'profile',
 		params: { account },
 		query: { media: media === '' ? 'posts' : media },
 	})
 
-	const tabs = Array.isArray(layout.tabs) ? layout.tabs : ['posts', 'photos', 'videos', 'tagged', 'collections']
-	const names = { '': 'posts', image: 'photos', video: 'videos', tagged: 'tagged', collections: 'collections' }
 	return [
 		{ value: '', label: t('social', 'Posts'), icon: IconTextBoxMultiple, to: to('') },
 		{ value: 'image', label: t('social', 'Photos'), icon: IconImageMultiple, to: to('image') },
@@ -53,8 +49,7 @@ export function profileKinds(account, layout = {}, selected = '') {
 			icon: IconFolderMultipleImage,
 			to: { name: 'profile.collections', params: { account } },
 		},
-	].filter((tab) => tab.value === '' || tab.value === selected || tabs.includes(names[tab.value]))
-		.concat(isOwnProfile(account) ? ownTabs(account) : [])
+	].concat(isOwnProfile(account) ? ownTabs(account) : [])
 }
 
 /**

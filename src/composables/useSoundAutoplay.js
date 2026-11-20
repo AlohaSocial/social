@@ -5,7 +5,6 @@
 
 import { computed, ref } from 'vue'
 import logger from '../services/logger.js'
-import { videoSoundEnabled } from '../services/senses.js'
 import { userKey } from '../utils/browserStore.js'
 
 /** Where the reader's mute choice is kept for the rest of the tab's life. */
@@ -44,18 +43,6 @@ function rememberMute(muted) {
 }
 
 /**
- * Forgets the choice made in this tab, so that the device's own switch in
- * Settings is what the next video starts with.
- */
-export function forgetMuteChoice() {
-	try {
-		session()?.removeItem(userKey(SESSION_KEY))
-	} catch {
-		// nothing was kept, so there is nothing to forget
-	}
-}
-
-/**
  * Plays a video with its sound on wherever the browser allows it, and with
  * one tap otherwise.
  *
@@ -71,8 +58,8 @@ export function forgetMuteChoice() {
  *         the state a player draws its speaker from, and the two things it does
  */
 export function useSoundAutoplay() {
-	/** the reader's choice: this tab's, or else the device's */
-	const muted = ref(rememberedMute() ?? !videoSoundEnabled())
+	/** the reader's choice in this tab; sound on until they mute */
+	const muted = ref(rememberedMute() ?? false)
 	/** the browser would not start the current video with sound */
 	const soundHeld = ref(false)
 	/** whether what is playing is actually silent, for the speaker to show */

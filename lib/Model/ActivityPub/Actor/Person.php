@@ -1327,7 +1327,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 		$source = json_decode($this->getSource(), true);
 		if (is_array($source)) {
-			$this->setProfileLayout(['default_tab' => $source['profileDefaultTab'] ?? 'posts', 'tabs' => $source['profileTabs'] ?? ProfileLayout::TABS]);
+			// a local profile always opens on Posts with every tab
+			if (!$this->isLocal()) {
+				$this->setProfileLayout(['default_tab' => $source['profileDefaultTab'] ?? 'posts', 'tabs' => $source['profileTabs'] ?? ProfileLayout::TABS]);
+			}
 			$banner = self::largestImage($source, 'image');
 			$image = $this->validate(self::AS_URL, 'url', $banner, '');
 			if ($image !== '') {

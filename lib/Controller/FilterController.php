@@ -138,30 +138,13 @@ class FilterController extends ClientApiController {
 		}
 	}
 
-	/** Whether replies are hidden as standalone cards in the reader's feeds. */
+	/** Whether replies are left out of the reader's feeds, and the thread order. */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/feed_preferences')]
 	public function feedPreferences(): DataResponse {
 		try {
 			$this->initViewer(['read:filters', 'read']);
-
-			return new DataResponse($this->feedDisplayService->export($this->viewer->getUserId()), Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/** Turns the reply-card switch, and answers with the stored state. */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'PATCH', url: '/api/v1/social/feed_preferences')]
-	public function feedPreferencesUpdate(mixed $hide_replies = null): DataResponse {
-		try {
-			$this->initViewer(['write:filters', 'write']);
-			$this->feedDisplayService->setHidesReplies(
-				$this->viewer->getUserId(), $this->requiredFlag($hide_replies, 'hide_replies')
-			);
 
 			return new DataResponse($this->feedDisplayService->export($this->viewer->getUserId()), Http::STATUS_OK);
 		} catch (Throwable $e) {

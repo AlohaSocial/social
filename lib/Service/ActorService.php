@@ -42,15 +42,12 @@ class ActorService {
 	 *
 	 * @throws ItemAlreadyExistsException
 	 */
-	public function cacheLocalActor(Person $actor, bool $preserveProfileLayout = true) {
+	public function cacheLocalActor(Person $actor) {
 		$actor->setLocal(true);
 		$cached = null;
 		try {
 			$cached = $this->cacheActorsRequest->getFromId($actor->getId());
 			$this->carryVerifiedFields($actor, $cached);
-			if ($preserveProfileLayout) {
-				$actor->setProfileLayout($cached->getProfileLayout());
-			}
 		} catch (CacheActorDoesNotExistException $e) {
 			// The first published copy has no previous fields to preserve.
 		}

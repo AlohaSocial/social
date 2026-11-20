@@ -32,13 +32,12 @@ class StartupHintsService {
 	}
 
 	/**
-	 * @return array{has_announcements: bool, has_stories: bool, recap_enabled: bool, has_memories: bool, has_teams: bool}
+	 * @return array{has_announcements: bool, has_stories: bool, has_memories: bool, has_teams: bool}
 	 */
 	public function forViewer(Person $actor, string $userId): array {
 		return [
 			'has_announcements' => $this->hint('has_announcements', fn (): bool => $this->announcementService->hasActive()),
 			'has_stories' => $this->hint('has_stories', fn (): bool => $this->storiesRequest->hasLive()),
-			'recap_enabled' => $this->hint('recap_enabled', fn (): bool => $this->memoriesService->recapEnabled($userId)),
 			'has_memories' => $this->hint('has_memories', fn (): bool => $this->memoriesService->mayHaveMemories($actor)),
 			'has_teams' => $this->hint('has_teams', fn (): bool => $this->teamService->hasTeamsFor($userId)),
 		];
