@@ -1040,13 +1040,11 @@ hand, it is picked up as one.
   post is still there to look at, and so is every reply; your own follower
   count, following and post counts are not hidden — your profile, Statistics
   and your phone apps all tell you how many people follow you.
-- **Sound and touch.** **Settings → Reading → Sound and touch** has three switches:
-  **Play sounds** (a tick on a like, a breath of air when a post goes out, a
-  chime when a direct message arrives; off until you turn it on, with
-  **Listen** to hear them first), **Vibrate** (a short tap on a phone; on
-  unless you turn it off, and off whenever your system asks for less motion)
-  and **Start videos with sound** (Shorts; on unless you turn it
-  off). All three belong to the device you are on, not to your account.
+- **Sound and touch.** A tick on a like, a breath of air when a post goes
+  out, a chime when a direct message arrives, and on a phone a short tap in the
+  hand (not when your system asks for less motion). Shorts start with their
+  sound on where the browser allows it; muting one keeps the rest muted until
+  you close the tab.
 - **Profile.** **My profile** (behind your portrait at the bottom of the
   sidebar) → **Edit profile**: a banner (upload one or give the address of
   one), a bio, and up to four name/value fields shown under it — your website,

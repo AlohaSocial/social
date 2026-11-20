@@ -12,22 +12,15 @@ requirements.
 
 ## Public profile presentation (FR-01 / FR-02)
 
-Settings → Public profile layout selects Posts, Photos or Videos as the default,
-and hides optional navigation tabs. Posts remain available. Existing accounts
-retain their current default and all five tabs until they save a preference.
-
-The existing profile routes and `profileKinds` switcher are reused. An unspecified
-profile URL resolves the owner's default; an explicit `media=posts`, `image` or
+Every profile opens on Posts and shows all of its tabs (Posts, Photos, Videos,
+Tagged, Collections, and on the reader's own profile Saved, Drafts and
+Statistics) from one `profileKinds` list. An explicit `media=posts`, `image` or
 `video` keeps the reader's selection, including back navigation from a post.
-The parent passes the same layout to Posts/Photos/Videos, Tagged and Collections;
-Collections no longer adds an extra horizontal inset. An explicitly opened hidden
-tab remains available in its own navigation for keyboard access.
 
-These are public presentation preferences, stored per Nextcloud user. They do not
-change post audiences, authorize a team identity or bypass album/post permission
-checks. Hiding a tab is not a way to make its posts private. Native ActivityPub
-actors publish the optional `profileDefaultTab` and `profileTabs` Social extension;
-other servers may ignore it. The local profile API exposes `profile_layout`. Public local lookups use the bare username and receive the configured cloud address; aliases such as `localhost` no longer produce an invented remote handle. Guest profile navigation does not read or write private home read markers.
+Native ActivityPub actors publish the `profileDefaultTab` and `profileTabs` Social
+extension, always Posts and every tab for a local account; a remote account's is
+kept but the web app does not apply it. The local profile API exposes
+`profile_layout`. Public local lookups use the bare username and receive the configured cloud address; aliases such as `localhost` no longer produce an invented remote handle. Guest profile navigation does not read or write private home read markers.
 
 ## Shared composer and progressive entry (FR-03, revised interaction)
 
