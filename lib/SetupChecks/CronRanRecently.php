@@ -17,13 +17,9 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether the job that delivers everything this instance sends has run lately.
- *
- * Every post, follow and like leaves through `Cron\Queue`. When the server's
- * cron is not running, or is running but never reaches this job, nothing is
- * delivered and nothing says so: the author sees their post in their own
- * timeline and nowhere else. The server's own cron check only says whether
- * *any* job ran; this one asks about the job that matters here.
+ * Whether `Cron\Queue`, which delivers everything this instance sends, has
+ * run lately. Without it nothing is delivered and nothing says so; the
+ * server's own cron check only says whether any job ran.
  */
 class CronRanRecently implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#the-delivery-job-has-not-run';

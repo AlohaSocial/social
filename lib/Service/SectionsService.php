@@ -15,17 +15,9 @@ use OCP\IGroupManager;
 
 /**
  * What this instance offers: the sections of the app, and the Nextcloud groups
- * that become lists.
- *
- * Separate from ServerSettingsService, which is about how the server behaves
- * towards its peers -- what it will accept, what it will publish, how it
- * stores what it is given. These are about what the people using it are shown,
- * and an administrator turning off Videos is not making a decision about
- * federation.
- *
- * Turning a section off hides it and stops it being offered. It does not touch
- * what is already there: the posts remain what they are, and turning the
- * section back on shows them again.
+ * that become lists. Separate from ServerSettingsService, which governs
+ * federation. Turning a section off hides it; existing posts stay and show
+ * again when it is turned back on.
  */
 class SectionsService {
 	/** The keys this card owns, in the order the card shows them. */
@@ -75,13 +67,9 @@ class SectionsService {
 	}
 
 	/**
-	 * The groups that become lists.
-	 *
-	 * Read through here rather than from the config directly, because what is
-	 * stored is JSON and what has been stored includes a group that has since
-	 * been deleted. A missing group is dropped on the way out rather than
-	 * written back: the administrator may be about to recreate it, and a read
-	 * is not the place to decide they were not.
+	 * The groups that become lists, in the order chosen. Deleted groups are
+	 * dropped on read but not from the stored JSON, as the administrator may
+	 * recreate them.
 	 *
 	 * @return string[] group ids, in the order they were chosen
 	 */
@@ -116,12 +104,10 @@ class SectionsService {
 	}
 
 	/**
-	 * Validates every value and writes them all, or writes none.
+	 * Validates every value and writes them all, or none, so a form is never
+	 * half saved.
 	 *
-	 * All-or-nothing for the same reason ServerSettingsService is: a form that
-	 * saved four of its five fields leaves the administrator guessing which.
-	 *
-	 * @param bool $stories whether stories are offered
+	 * @param bool $stories whether shorts (stories) are offered
 	 * @param bool $photos whether the Photos timeline is offered
 	 * @param bool $videos whether the Videos timeline is offered
 	 * @param string[] $groupLists the Nextcloud groups that become lists
@@ -140,10 +126,8 @@ class SectionsService {
 			if ($groupId === '' || in_array($groupId, $groups, true)) {
 				continue;
 			}
-			// refused rather than dropped: an id that names no group is a
-			// mistake in what was sent, and silently saving four of the five
-			// groups somebody picked is the failure this method exists to
-			// avoid
+			// refused rather than dropped: an id naming no group is a mistake,
+			// and saving only part of the selection is what this avoids
 			if (!$this->groupManager->groupExists($groupId)) {
 				throw new SettingRefusedException('no such group: ' . $groupId, 'group-unknown', null, ['group' => $groupId]);
 			}
