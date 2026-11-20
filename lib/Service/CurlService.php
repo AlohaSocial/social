@@ -912,18 +912,7 @@ class CurlService {
 		return ['stream' => $stream, 'status' => $status, 'headers' => $response->getHeaders()];
 	}
 
-	/**
-	 * Sends the request and returns the body.
-	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
-	 *
-	 * @throws RequestContentException
-	 * @throws RequestNetworkException
-	 * @throws RequestResultSizeException
-	 * @throws RequestServerException
-	 * @throws SocialAppConfigException
-	 * @throws UnauthorizedFediverseException
-	 */
+	/** Sends the request and returns the body. */
 	public function doRequest(
 		string $method,
 		string $url,
