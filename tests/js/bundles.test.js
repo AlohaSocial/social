@@ -89,7 +89,8 @@ describe('the built bundles', () => {
 				continue
 			}
 
-			for (const [, chunk] of content.matchAll(/\.e\("([^"]+)"\)/g)) {
+			// `__webpack_require__.e("chunk")`, not a spread like `...e("photos")` of a minified function
+			for (const [, chunk] of content.matchAll(/(?<!\.\.)\.e\("([^"]+)"\)/g)) {
 				references++
 				expect(files.has(`social-${chunk}.js`), `${name} requests missing lazy chunk social-${chunk}.js`).toBe(true)
 			}
