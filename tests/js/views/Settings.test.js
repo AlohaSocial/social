@@ -94,7 +94,7 @@ describe('Settings', () => {
 
 		// the page's one h1, which is what a screen reader jumps to
 		expect(wrapper.find('h1').text()).toBe('Settings')
-		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Activities', 'Your posts', 'Apps and account', 'Help'])
+		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Activities', 'Apps and account', 'Help'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Profile and privacy')
 		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Public profile layout', 'Who may send you direct messages', 'Featured hashtags'])
 	})
@@ -121,12 +121,8 @@ describe('Settings', () => {
 			'Sound and touch',
 			'When to tell you',
 			'Who may reach you',
-			'Drafts',
-			'Scheduled posts',
-			'Waiting for review',
-			'Archived posts',
-			'Replies in Files',
 			'Authorized apps',
+			'Replies in Files',
 			'Delete your Aloha Social account',
 			'Introduction',
 			'Keyboard shortcuts',
@@ -150,7 +146,7 @@ describe('Settings', () => {
 		 * #notification-policy. A link opens the group the section is in.
 		 */
 		it.each([
-			['#scheduled', 'Your posts'],
+			['#files-comments', 'Apps and account'],
 			['#notification-policy', 'Activities'],
 			['#featured-tags', 'Profile and privacy'],
 			['#shortcuts', 'Help'],
@@ -195,7 +191,7 @@ describe('Settings', () => {
 	describe('the rail', () => {
 		it('lists the sections of the open group, pointing at each', async () => {
 			const wrapper = await mountSettings()
-			await openGroup(wrapper, 'Your posts')
+			await openGroup(wrapper, 'Apps and account')
 
 			const links = wrapper.findAll('.settings__toc-link')
 			expect(links.map((link) => link.text())).toEqual(headings(wrapper))
@@ -207,7 +203,7 @@ describe('Settings', () => {
 			const wrapper = await mountSettings()
 
 			expect(wrapper.findAll('.settings__group-link').map((link) => link.attributes('href')))
-				.toEqual(['#account', '#lists', '#notifications', '#drafts', '#apps', '#introduction'])
+				.toEqual(['#account', '#lists', '#notifications', '#apps', '#introduction'])
 		})
 
 		it('puts the group opened into the address', async () => {
@@ -275,10 +271,10 @@ describe('Settings', () => {
 
 		it('needs every word, in any case and with or without accents', async () => {
 			const wrapper = await mountSettings()
-			await wrapper.find('.settings__search input').setValue('  SCHEDULED   later ')
+			await wrapper.find('.settings__search input').setValue('  SENSITIVE   médïa ')
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual(['Scheduled posts'])
+			expect(headings(wrapper)).toEqual(['Sensitive media'])
 		})
 
 		it('says so when nothing matches', async () => {
@@ -355,7 +351,7 @@ describe('Settings', () => {
 	/** A self-registered external user has no Files to read replies in. */
 	it('offers replies in Files only to somebody who has Files', async () => {
 		useSettingsStore().setServerData({ externalMedia: { quota: 10, used: 0 } })
-		const wrapper = await mountSettings({ hash: '#scheduled' })
+		const wrapper = await mountSettings({ hash: '#apps' })
 
 		expect(headings(wrapper)).not.toContain('Replies in Files')
 	})
@@ -385,18 +381,11 @@ describe('Settings', () => {
 		expect(wrapper.find('.filters-settings-stub').exists()).toBe(false)
 	})
 
-	/**
-	 * A page of its own for a list that is usually empty would be a
-	 * navigation entry earning its place from nothing. The composer's clock
-	 * is where a post is scheduled; this is where one is moved or taken back.
-	 */
-	it('holds the posts waiting to go out, and says they can be moved', async () => {
+	/** Drafts, scheduled, held and archived posts are on the reader's profile now. */
+	it('holds no lists of posts', async () => {
 		const wrapper = await mountSettings({ hash: '#scheduled' })
 
-		expect(wrapper.findComponent(ScheduledPosts).exists()).toBe(true)
-		const lede = wrapper.find('#scheduled .settings__section-lede').text()
-		expect(lede).toContain('Move one to another time')
-		expect(lede).not.toContain('write it again')
+		expect(wrapper.findComponent(ScheduledPosts).exists()).toBe(false)
 	})
 
 	/**

@@ -397,15 +397,12 @@ import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.v
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
 import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
-import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
-import IconBookmark from 'vue-material-design-icons/Bookmark.vue'
 import IconPound from 'vue-material-design-icons/Pound.vue'
 import IconTrendingUp from 'vue-material-design-icons/TrendingUp.vue'
 import IconAccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
-import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { cssUrl } from '../utils/cssUrl.js'
 import { capacityFrom, chooseEntries, entriesThatFit } from '../utils/explore.js'
@@ -487,9 +484,7 @@ export default {
 		IconAccountCircle,
 		IconBell,
 		IconCommentAccount,
-		IconHeart,
 		IconPlus,
-		IconBookmark,
 		IconPound,
 		IconTrendingUp,
 		IconAccountGroup,
@@ -823,28 +818,9 @@ export default {
 					},
 				]),
 
-				// The sidebar's top level is for the timelines a reader moves
-				// between all day; these three are things they go looking for,
-				// and eight equal-weight entries made the first five harder to
-				// pick out. They keep their routes, their icons and their
-				// active state — only where they are drawn changes.
+				// Under the reader's face at the foot of the sidebar. The profile
+				// holds what they saved, their drafts and their statistics.
 				more: [
-					// first, because it is the reader's own page rather than
-					// somewhere they go looking: the button this menu hangs off
-					// used to *be* the link to it, and moving that button here
-					// without putting the link back would have left a profile
-					// nobody could reach.
-					//
-					// One entry, not two. There were "My profile", pointing at
-					// Nextcloud's user page, and "Social profile", pointing at
-					// the profile this app publishes — two rows a few pixels
-					// apart, both called somebody's profile, and no way to tell
-					// from the sidebar which one had your posts on it. This is
-					// the app's own profile: the page with the posts, the
-					// followers and the bio, which is what somebody clicking
-					// their own name in a social app is looking for. Nextcloud's
-					// user page is still where Nextcloud puts it, under the
-					// avatar at the top right of every app.
 					...(this.currentAccount?.acct
 						? [{
 								key: 'social-profile',
@@ -853,24 +829,6 @@ export default {
 								to: { name: 'profile', params: { account: this.currentAccount.acct } },
 							}]
 						: []),
-					{
-						key: 'social-liked',
-						icon: IconHeart,
-						title: t('social', 'Favorites'),
-						to: { name: 'timeline', params: { type: 'favourites' } },
-					},
-					{
-						key: 'social-bookmarks',
-						icon: IconBookmark,
-						title: t('social', 'Bookmarks'),
-						to: { name: 'timeline', params: { type: 'bookmarks' } },
-					},
-					{
-						key: 'social-statistics',
-						icon: IconChartBox,
-						title: t('social', 'Statistics'),
-						to: { name: 'statistics' },
-					},
 				],
 
 			}

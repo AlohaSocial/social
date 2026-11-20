@@ -216,7 +216,7 @@ addressed to is not kept. **Drafts (N)** under the compact post field on your
 home feed and your own profile (and beside **Share photos or a video** on
 Photos) lists every kept draft — new posts, replies, quotes and re-drafts —
 newest first; pick one to continue it, or delete it there. The same list is
-always at hand under **Settings → Your posts → Drafts**, whatever page you are
+always at hand under **your profile → Drafts**, whatever page you are
 on; drafts of direct messages stay in their conversations and are not listed
 in either place. A re-draft of a
 deleted reply or quote is still that reply or quote: the post it answered and
@@ -293,7 +293,7 @@ discarding. **Escape** closes the popup subject to that protection.
   and on other servers.
 - **Send it later.** The clock button turns **Post** into **Schedule**: pick a
   time at least five minutes from now and the post waits on the server until
-  then. What is waiting is listed under **Settings → Your posts → Scheduled posts**, where
+  then. What is waiting is listed under **your profile → Drafts**, where
   one can be cancelled or moved: the clock beside an entry opens the same
   picker at the time it has, and **Save** sends the new one. The five-minute
   rule applies again, and so does the limit of 25 posts a day; a time the
@@ -326,7 +326,7 @@ A post you no longer want on your profile does not have to be deleted. **Archive
 in the post's own `…` menu, takes it off your profile and out of every timeline,
 search and hashtag page on this server, and leaves it exactly where it is
 otherwise: nobody is told, nothing is sent anywhere, and you can put it back at
-any time from **Settings → Your posts → Archived posts**.
+any time from **your profile → Drafts**.
 
 What archiving is not is a way to take a post back from the fediverse. Other
 servers that received it still have it, and somebody who kept the link still
@@ -346,7 +346,7 @@ person the queue is waiting for.
 When it happens the app says so at once, and your writing is kept — there is
 no need to write it again, and writing it again only finds the copy already
 waiting. Nobody but you and the moderators can see it in the meantime: it is
-in no timeline, not even your own. **Settings → Your posts → Waiting for review** is
+in no timeline, not even your own. **your profile → Drafts** is
 where yours are, and you can take one back from there, which deletes it and
 tells nobody.
 
@@ -370,7 +370,7 @@ can see the post. Comments from anybody else who can open the file stay on this
 server, as they always did. Editing or deleting your comment edits or deletes
 the reply.
 
-This is on unless you turn it off: **Settings → Your posts → Replies in Files**. Followers-only
+This is on unless you turn it off: **Settings → Apps and account → Replies in Files**. Followers-only
 posts and direct messages are never linked.
 
 ### Where it was taken
@@ -603,10 +603,12 @@ in the sidebar.
   no more — make the window taller and more appears. What you follow is never
   pushed out by what happens to be trending: the trending tags take only the
   room the rest leave, and a tag you already follow is not offered twice.
-- **Favorites** and **Bookmarks** — what you liked, and what you saved
-  with the bookmark button under a post. Bookmarks are private and never leave
-  this server.
-- **Statistics** — what you have posted here and what came back: likes,
+- **Your profile** — besides your posts, your own profile has three tabs only
+  you see: **Saved** (your **Favorites**, the posts you liked, and your
+  **Bookmarks**, saved with the bookmark button under a post; bookmarks are
+  private and never leave this server), **Drafts** (drafts, scheduled posts,
+  posts waiting for review and archived posts) and **Statistics**.
+- **Statistics** (on your profile) — what you have posted here and what came back: likes,
   boosts, replies and quotes per post, your best posts, when your posts do
   best, which of your hashtags work, which servers your followers and the
   people who answer you are on, and where else your posts went out.

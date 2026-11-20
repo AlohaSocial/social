@@ -1061,9 +1061,6 @@ describe('Navigation', () => {
 			'Direct messages',
 			'Discover',
 			// the profile entry appears only when an ActivityPub account exists
-			'Favorites',
-			'Bookmarks',
-			'Statistics',
 			'Blocking',
 			'Migration',
 			'About this server',
@@ -1080,9 +1077,6 @@ describe('Navigation', () => {
 		const wrapper = mountNavigation()
 
 		expect(moreNames(wrapper)).toEqual([
-			'Favorites',
-			'Bookmarks',
-			'Statistics',
 			'Blocking',
 			'Migration',
 			'About this server',
@@ -1257,9 +1251,6 @@ describe('Navigation', () => {
 		['My Feed', { name: 'timeline' }],
 		['Activities', { name: 'timeline', params: { type: 'notifications' } }],
 		['Direct messages', { name: 'timeline', params: { type: 'direct' } }],
-		['Favorites', { name: 'timeline', params: { type: 'favourites' } }],
-		['Statistics', { name: 'statistics' }],
-		['Bookmarks', { name: 'timeline', params: { type: 'bookmarks' } }],
 		['About this server', { name: 'about' }],
 		['Settings', { name: 'settings' }],
 	])('points the %s entry at its route', async (name, to) => {
@@ -1373,8 +1364,6 @@ describe('Navigation', () => {
 		['/timeline/federated', 'My Feed'],
 		['/timeline/photos', 'Photos'],
 		['/timeline/videos', 'Videos'],
-		['/timeline/favourites', 'Favorites'],
-		['/timeline/bookmarks', 'Bookmarks'],
 	])('marks only one entry active on %s', (path, active) => {
 		const wrapper = mountNavigation({}, appRouter.resolve(path))
 		expect(activeNames(wrapper)).toEqual([active])
@@ -1848,8 +1837,6 @@ describe('Navigation entries are links', () => {
 		['My Feed', '/index.php/apps/social/timeline'],
 		['Activities', '/index.php/apps/social/timeline/notifications'],
 		['Direct messages', '/index.php/apps/social/timeline/direct'],
-		['Favorites', '/index.php/apps/social/timeline/favourites'],
-		['Bookmarks', '/index.php/apps/social/timeline/bookmarks'],
 		['Blocking', '/index.php/apps/social/blocked'],
 		['Migration', '/index.php/apps/social/migration'],
 	])('gives %s a real href', async (name, href) => {
@@ -1863,11 +1850,10 @@ describe('Navigation entries are links', () => {
 		// timeline the reader had actually chosen.
 		const entry = (wrapper, name) => wrapper.findAll('li').find((li) => li.text().startsWith(name))
 		const lit = (wrapper, names) => names.filter((name) => entry(wrapper, name)?.find('.app-navigation-entry').classes().includes('active'))
-		const names = ['My Feed', 'Photos', 'Videos', 'Activities', 'Direct messages', 'Favorites', 'Bookmarks']
+		const names = ['My Feed', 'Photos', 'Videos', 'Activities', 'Direct messages']
 
 		expect(lit(await mountReal('/timeline/direct'), names)).toEqual(['Direct messages'])
 		expect(lit(await mountReal('/timeline'), names)).toEqual(['My Feed'])
-		expect(lit(await mountReal('/timeline/favourites'), names)).toEqual(['Favorites'])
 	})
 
 	it('does not let the browser follow the anchor as well', async () => {
