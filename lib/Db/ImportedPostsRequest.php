@@ -13,19 +13,14 @@ use DateTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * What an account has already brought over, and what it became here.
- *
- * The importer asks this twice per run: once for everything the archive
- * names, so that a second run of the same file writes nothing, and once per
- * post it writes, to remember it. A reply asks a third time, because the only
- * place an imported post's original id is still written down is here.
+ * What an account has already imported, and what each item became here, so
+ * re-running an archive writes nothing twice and replies can find the local
+ * copy of their imported parent.
  */
 class ImportedPostsRequest extends CoreRequestBuilder {
 	/**
-	 * Remembers that a post was brought over.
-	 *
-	 * A repeat is not an error: two imports racing each other is a person
-	 * pressing a button twice, and the unique index is what settles it.
+	 * Remembers that a post was imported; a duplicate from two racing imports
+	 * is settled by the unique index.
 	 */
 	public function remember(string $actorId, string $sourceId, string $streamId): void {
 		$qb = $this->getQueryBuilder();
@@ -40,12 +35,8 @@ class ImportedPostsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Which of these original ids this account has already brought over, and
-	 * what each became.
-	 *
-	 * One query for the whole archive rather than one per post: an import is
-	 * thousands of items, and the answer decides whether any work is done at
-	 * all for each of them.
+	 * Which of these original ids this account has already imported, and what
+	 * each became, in one query for the whole archive.
 	 *
 	 * @param string[] $sourceIds
 	 * @return array<string, string> original id => the local post's id_prim

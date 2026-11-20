@@ -16,12 +16,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Fetches and caches one remote actor a page needed and did not have.
- *
- * Queued with the actor id by `RemoteFetchQueue::resolveActors()`, or with
- * a `user@host` handle by `RemoteFetchQueue::resolveAccounts()`, so — like
- * `DomainPurge` — it is not registered in `info.xml`. The page that asked
- * showed what was cached; the next look at it finds the actor here.
+ * Fetches and caches one remote actor a page needed and did not have. Queued
+ * by `RemoteFetchQueue::resolveActors()` or `resolveAccounts()`, so not
+ * registered in `info.xml`; the next look at the page finds the actor.
  */
 class ResolveActor extends QueuedJob {
 	public function __construct(

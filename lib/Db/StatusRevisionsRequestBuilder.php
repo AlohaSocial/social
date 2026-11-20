@@ -15,9 +15,8 @@ use OCA\Social\Tools\Traits\TArrayTools;
 /**
  * Class StatusRevisionsRequestBuilder
  *
- * Extends CoreRequestBuilder and not StreamRequestBuilder: a revision is a
- * row hanging off a status by its prim and is never read through a stream
- * query — the history route has the status in hand before it asks for one.
+ * Extends CoreRequestBuilder, not StreamRequestBuilder: a revision hangs off
+ * a status by its prim and is never read through a stream query.
  *
  * @package OCA\Social\Db
  */

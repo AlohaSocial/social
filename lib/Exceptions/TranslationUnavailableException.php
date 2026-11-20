@@ -12,12 +12,8 @@ namespace OCA\Social\Exceptions;
 use Exception;
 
 /**
- * No translation provider answered, so nothing was translated.
- *
- * Mastodon's own answer to this is a 503, and a client reads it as "ask again
- * later" rather than "this post cannot be translated" — which is what the
- * server means: install or enable a translation provider and the same request
- * works.
+ * No translation provider answered, so nothing was translated. Answered with
+ * a 503, as Mastodon does, which clients read as "try again later".
  */
 class TranslationUnavailableException extends Exception {
 }

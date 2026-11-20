@@ -20,17 +20,10 @@ use OCA\Social\Model\Details;
 use Psr\Log\LoggerInterface;
 
 /**
- * "Your reply may be shown": FEP-5624, as PeerTube ≥ 6.2 sends it.
- *
- * A video that moderates its comments takes a reply in and shows it to nobody
- * until somebody has looked at it, then tells the server the reply came from.
- * This is that message arriving, and all it does is move a state on our own
- * reply — the reply is already stored and already ours, and nothing about the
- * post it answers changes.
- *
- * **Only about a reply of ours, and only from the author of what it
- * answers**, on the server that holds it. An `ApproveReply` from anybody else
- * would be a stranger deciding what has been approved on somebody else's post.
+ * FEP-5624 `ApproveReply`, as PeerTube ≥ 6.2 sends it when a moderated video
+ * approves one of our replies; it only moves the state of our stored reply.
+ * Accepted only from the author of the post replied to, on the server that
+ * holds it.
  */
 class ApproveReplyInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(

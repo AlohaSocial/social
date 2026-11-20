@@ -20,30 +20,13 @@ use ReflectionMethod;
 use Throwable;
 
 /**
- * Tells a client how much of its budget is left.
+ * Adds the `X-RateLimit-Limit`, `-Remaining` and `-Reset` headers Mastodon
+ * clients expect, so they can pace themselves.
  *
- * Every write route here carries a `UserRateLimit`, and Nextcloud enforces it:
- * past the limit the request is refused with a **429**, which is correct and is
- * not what was missing. What was missing is the three headers Mastodon sends
- * with *every* response — `X-RateLimit-Limit`, `-Remaining` and `-Reset` — so
- * a client can pace itself. Without them a client either hammers until it is
- * refused or backs off blindly, and every Mastodon client is written expecting
- * to read them.
- *
- * **The count here is advisory and the refusal is not.** Nextcloud's limiter
- * owns the enforcement and does not expose what it has counted, so this counts
- * the same requests in its own key: the same identity, the same route, the same
- * window. Both see every request through the same path, so they agree — and
- * where they cannot, the number that decides is Nextcloud's. A header that is
- * one out is a client pacing itself slightly early; a *limit* that was one out
- * would be a request refused for the wrong reason, which is why this does not
- * touch the refusal.
- *
- * A route with no rate-limit attribute gets no headers, rather than a made-up
- * budget: "unlimited" and "I did not measure" are different answers and a
- * client should be able to tell them apart. The same rule decides what happens
- * on an instance with no memcache, where there is nowhere to keep a counter:
- * the budget is published and the spending is not.
+ * The count is advisory: Nextcloud's limiter enforces the `UserRateLimit`
+ * and this never touches the refusal. Routes without a rate-limit attribute
+ * get no headers, and without a memcache only the limit is sent, as an
+ * unmeasured remainder is worse than none.
  */
 class RateLimitHeadersMiddleware extends Middleware {
 	public function __construct(
@@ -68,21 +51,10 @@ class RateLimitHeadersMiddleware extends Middleware {
 			[$bucket, $limit, $period] = $route;
 			$response->addHeader('X-RateLimit-Limit', (string)$limit);
 
-			// An instance with no memcache configured has nowhere to keep a
-			// counter, and `createDistributed()` hands back a cache that
-			// stores nothing — so the count would come back 1 on every request
-			// and the header would report "29 left" for ever. Found on devel,
-			// which has no memcache: two posts in a row both said 29.
-			//
-			// A number that was never measured is worse than no number, so the
-			// budget is still published and the spending is not. A client
-			// reading `Limit` without `Remaining` knows what the budget is and
-			// paces itself by counting its own requests, which is what it did
-			// before any of these headers existed.
-			// the app's own default is counted by the middleware that enforces
-			// it, and reading that count rather than keeping a second one is
-			// what stops a client being told it has budget left and then
-			// refused for spending it
+			// Without a memcache `createDistributed()` stores nothing and the
+			// count would stay at 1, so `Remaining` is left out (see the class
+			// comment). The app's default bucket reads the enforcing
+			// middleware's own count, so the header never disagrees with it.
 			$used = ($bucket === RateLimitService::BUCKET_API)
 				? $this->rateLimitService->used($bucket, $period)
 				: $this->rateLimitService->count($bucket, $period);
@@ -103,10 +75,8 @@ class RateLimitHeadersMiddleware extends Middleware {
 
 	/**
 	 * The limit and period this route carries, or null when it has none.
-	 *
-	 * `UserRateLimit` first: a signed-in caller is what almost every route
-	 * here needs, and where both attributes are present Nextcloud applies the
-	 * user one to a signed-in caller.
+	 * `UserRateLimit` first, as Nextcloud applies it to a signed-in caller
+	 * when both attributes are present.
 	 *
 	 * @return array{0: string, 1: int, 2: int}|null bucket, limit and period
 	 */

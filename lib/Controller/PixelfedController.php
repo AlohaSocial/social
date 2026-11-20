@@ -39,25 +39,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The routes the Pixelfed app asks for that live nowhere else.
+ * The Pixelfed-only routes: the config object its app reads on launch, and
+ * the parts of the `v1.1` namespace it calls to start up and draw discover.
+ * Everything else Pixelfed uses is the Mastodon client API.
  *
- * Pixelfed speaks the Mastodon client API for almost everything, and everything
- * it shares is served by the Mastodon client API controllers. What is left is a small
- * surface of its own: a config object it reads on launch, and a `v1.1` namespace
- * its discover screen uses. They are gathered here rather than scattered,
- * because they have one thing in common that the rest of this API does not --
- * they exist to satisfy one client, and a reader should be able to see the whole
- * of that in one file.
- *
- * **This is not all of Pixelfed's `v1.1`.** It is the part its official app
- * actually calls to start up and to draw discover. Routes are added when
- * something asks for them, not to fill in a namespace.
- *
- * Nothing here ranks or selects anything of its own. Discover is the same
- * `TrendService` the Mastodon trend routes use and the same `SuggestionService`
- * behind `/api/v2/suggestions` -- so a post or an account cannot be popular on
- * one route and absent from the other, which is the kind of disagreement nobody
- * finds until they are looking at two screens side by side.
+ * Discover reuses `TrendService` and `SuggestionService`, as the Mastodon
+ * routes do, so the two cannot disagree.
  */
 class PixelfedController extends ClientApiController {
 	/** What one page of discover holds. */
@@ -104,15 +91,9 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * Accounts worth following: `/api/v1.1/discover/accounts/popular`.
-	 *
-	 * The same suggestions `/api/v2/suggestions` answers, unwrapped -- Mastodon
-	 * wraps each account in a `{source, account}` suggestion and Pixelfed sends
-	 * the accounts themselves. One list, two shapes, rather than two lists that
-	 * can disagree.
-	 *
-	 * Needs a viewer, as the Mastodon route does: there is no such thing as an
-	 * anonymous "accounts you might follow".
+	 * Accounts worth following: `/api/v1.1/discover/accounts/popular`. The
+	 * suggestions `/api/v2/suggestions` answers, without Mastodon's
+	 * `{source, account}` wrapper. Needs a viewer.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -140,11 +121,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * The pictures being looked at: `/api/v1.1/discover/posts`.
-	 *
-	 * The same answer as `/api/v2/discover/posts`, at the path the app asks for.
-	 * Deliberately a second route onto one implementation rather than a second
-	 * implementation: a post cannot then trend on one and not the other.
+	 * Trending photos: `/api/v1.1/discover/posts`, the same answer as
+	 * `/api/v2/discover/posts`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -172,10 +150,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * The hashtags being used: `/api/v1.1/discover/posts/hashtags`.
-	 *
-	 * Pixelfed's discover screen draws a row of tags above the grid. The same
-	 * trending tags `/api/v1/trends/tags` answers.
+	 * Trending hashtags: `/api/v1.1/discover/posts/hashtags`, the same as
+	 * `/api/v1/trends/tags`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -197,10 +173,8 @@ class PixelfedController extends ClientApiController {
 		}
 	}
 	/**
-	 * How the app names a trend window, as this app counts one.
-	 *
-	 * Pixelfed's `range` is daily, monthly or yearly; the trend counters here
-	 * run to ten days, which is where both longer ranges land.
+	 * Pixelfed's trend `range` (daily, monthly, yearly) as a window here; the
+	 * counters run to ten days, where both longer ranges land.
 	 */
 	private function periodFor(string $range): string {
 		return match (strtolower(trim($range))) {
@@ -286,11 +260,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * An emoji sent back to whoever posted a story.
-	 *
-	 * Pixelfed's own spelling of the route, down to `sid` for the story. A
-	 * story the viewer may not see and one that does not exist are the same
-	 * 404: whether an account has a story up is told to its followers alone.
+	 * An emoji sent back to whoever posted a story (a short, in the UI). A
+	 * story the viewer may not see is the same 404 as a missing one.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -314,11 +285,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * A sentence sent back to whoever posted a story.
-	 *
-	 * Pixelfed calls this a comment and turns it into a direct message. Here it
-	 * stays beside the story: it is a private answer to something that is gone
-	 * tomorrow, and a post would outlive what it was about.
+	 * A text reply to a story. Pixelfed turns it into a direct message; here
+	 * it stays with the story, which expires after a day.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -342,12 +310,9 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * Names the people in one of the viewer's own photographs.
-	 *
-	 * `accounts` is the whole list the post should end up naming, not what to
-	 * add: anybody dropped from it is untagged, which is what makes a client
-	 * that sends its list again on every edit a no-op rather than a growing
-	 * pile. Only the post's author may name anybody in it.
+	 * Names the people in one of the viewer's own photos. `accounts` is the
+	 * full list, so anybody left out is untagged and resending it is a no-op.
+	 * Only the post's author may tag.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -369,11 +334,7 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * Takes the viewer's own name off a photograph.
-	 *
-	 * Pixelfed's route, and its whole remedy for being named in somebody
-	 * else's picture: being in one is not something to need their permission
-	 * to leave.
+	 * Takes the viewer's own name off a photo, without the author's say.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -395,14 +356,9 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * The photographs somebody is named in — "photos of you", for anybody.
-	 *
-	 * Which of them the reader may see is not decided here: the ids come out
-	 * of the tag table and each post is read the way any other post is read
-	 * for this reader, so one they may not see is simply not among them —
-	 * and a page can therefore be short without being the last. Whether there
-	 * is another is said by the `Link` header, whose `max_id` is the last tag
-	 * row read rather than the last post shown.
+	 * The photos somebody is tagged in. Each post is read with the reader's
+	 * visibility, so a page can be short without being the last; the `Link`
+	 * header's `max_id` is the last tag row read.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -427,12 +383,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * The team accounts the viewer may post as, right now.
-	 *
-	 * Asked of the group manager rather than of a stored membership: somebody
-	 * who left the group this morning may not post as it this afternoon, and
-	 * the only way to be sure of that is to ask. An empty list is the ordinary
-	 * answer on an instance that has no team accounts, which is most of them.
+	 * The team accounts the viewer may post as, asked live of the group
+	 * manager so a member who left loses access at once.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -574,14 +526,9 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * The app's own switches, kept on the server so a reinstall finds the app
-	 * as it was left.
-	 *
-	 * GET and POST on one method because the app uses one URL for both, and
-	 * a POST with no `common` is a read — which is what the app sends when it
-	 * wants to know what is stored without changing it. Storing is a write to
-	 * the account, so it needs the scope that says so; a token that may only
-	 * read could otherwise turn content warnings off in somebody's app.
+	 * The app's own settings, kept on the server. GET and POST share one URL
+	 * as the app uses them; a POST without `common` is a read. Storing needs
+	 * a write scope, so a read-only token cannot change someone's settings.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -604,11 +551,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * Putting one of your own posts away, and getting it back.
-	 *
-	 * Pixelfed's three screens, at Pixelfed's own paths. Nothing federates: an
-	 * archived post is still on every server that received it, and taking it
-	 * back from them is what deleting is for.
+	 * Archiving one of your own posts and restoring it. Nothing federates:
+	 * other servers keep their copy, which only deletion withdraws.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -657,13 +601,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * What this instance says it is about: a few named subjects, each a
-	 * handful of hashtags an administrator chose.
-	 *
-	 * Curated rather than computed, which is the point of it. Trending on a
-	 * small instance is four hashtags and a wedding; what the instance would
-	 * *like* to be known for is a decision, and no counter can work it out.
-	 * Public, because it is the page a visitor lands on.
+	 * The instance's curated subjects, each a few hashtags an administrator
+	 * chose. Public, for visitors.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -705,10 +644,8 @@ class PixelfedController extends ClientApiController {
 	}
 
 	/**
-	 * Turning push off or on. Nothing is stored, since there is no push here
-	 * to switch, but these are the app's requests to change the account and
-	 * are held to the scope a change needs, as Mastodon holds its own push
-	 * subscription to `push`.
+	 * Turning push off or on. Nothing is stored, as there is no push here,
+	 * but the scope a change needs is still required, as Mastodon does.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

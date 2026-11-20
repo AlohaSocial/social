@@ -138,12 +138,8 @@ class ActorRelationRequest extends ActorRelationRequestBuilder {
 	}
 
 	/**
-	 * Every relation between one actor and a *set* of others, keyed by the
-	 * other's id.
-	 *
-	 * The single-pair version answers one account; a client asking about a page
-	 * of forty paid forty round trips for it, and the same again for the follow
-	 * rows and the notes. Same query, one `IN`.
+	 * Every relation between one actor and a set of others, keyed by the
+	 * other's id, in one query for a whole page of accounts.
 	 *
 	 * @param string[] $objectIds
 	 *
@@ -181,18 +177,10 @@ class ActorRelationRequest extends ActorRelationRequestBuilder {
 	}
 
 	/**
-	 * The **local** accounts on the other end of a relation of that type — the
-	 * subscribers to one account rather than what one account subscribes to.
-	 *
-	 * Local only, and that is a join rather than a filter: the table stores the
-	 * subscriber as an md5 and nothing else, so the actor id has to be read
-	 * from somewhere that holds it, and `social_actor` holds exactly the
-	 * accounts worth reading. A remote subscriber is told by their own server
-	 * from the same post, so there is nothing here to do for one.
-	 *
-	 * Bounded: an account with more subscribers than this is one where a
-	 * notification fan-out is the wrong shape anyway, and walking an unbounded
-	 * set on every post is worse than walking a bounded one.
+	 * The local accounts on the other end of a relation of that type (the
+	 * subscribers to one account). Joined to `social_actor` because the table
+	 * stores the subscriber only as an md5; remote subscribers are notified by
+	 * their own server. Bounded, as an unbounded fan-out per post is worse.
 	 *
 	 * @return string[] actor ids
 	 */
@@ -217,13 +205,9 @@ class ActorRelationRequest extends ActorRelationRequestBuilder {
 	}
 
 	/**
-	 * Removes only the relations the actor holds over other accounts.
-	 *
-	 * What other accounts hold over *it* is theirs and outlives it being taken
-	 * out of the timelines: a suspension can be lifted, and an account that
-	 * came back into the timelines, notifications and follow pipeline of
-	 * everybody who had blocked it would be a block silently undone by a
-	 * moderator's decision about somebody else.
+	 * Removes only the relations the actor holds over other accounts. Those
+	 * others hold over it outlive it, so lifting a suspension does not
+	 * silently undo anybody's block.
 	 */
 	public function deleteByActor(string $actorId): void {
 		$qb = $this->getActorRelationDeleteSql();

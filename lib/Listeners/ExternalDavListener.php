@@ -17,12 +17,9 @@ use OCP\IUserSession;
 use Sabre\DAV\Exception\Forbidden;
 
 /**
- * Refuses every DAV method to an external user, once the DAV server has
- * authenticated the request.
- *
- * Sabre's authentication runs on `beforeMethod:*` at priority 10; this runs
- * after it, so the user is known whatever the credential was. See
- * `ExternalDavGuard` for the check that runs before the DAV server exists.
+ * Refuses every DAV method to an external user. Runs after Sabre's
+ * authentication (`beforeMethod:*` at priority 10), so the user is known;
+ * `ExternalDavGuard` checks before the DAV server exists.
  *
  * @template-implements IEventListener<SabrePluginAddEvent>
  */

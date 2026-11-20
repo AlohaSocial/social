@@ -15,21 +15,15 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
 /**
- * Conditional GETs for the routes a client polls.
- *
- * An `ETag` only works when it reaches the wire next to a `Cache-Control`
- * that lets the browser keep the body, and a `DataResponse` cannot carry one:
- * Nextcloud's json responder merges the fresh response's defaults —
- * `no-cache, no-store, must-revalidate` — over the controller's headers (see
- * `MastodonApiController::tagged()`). So what these helpers hand back is a
- * `JSONResponse`, which the dispatcher passes through as it is.
+ * Conditional GETs for the routes a client polls. They return a
+ * `JSONResponse`, because Nextcloud's JSON responder overwrites a
+ * `DataResponse`'s `Cache-Control` with `no-store`, which defeats the `ETag`
+ * (see `MastodonApiController::tagged()`).
  */
 final class Revalidation {
 	/**
-	 * The headers every `Response` works out for itself, left behind when a
-	 * response changes class: the new one computes the same values, and
-	 * copying them would freeze today's — `Cache-Control` above all, which is
-	 * the one being set on purpose.
+	 * Headers every `Response` computes itself; not copied when changing
+	 * class, so `Cache-Control` is not frozen at its old value.
 	 */
 	public const FRAMEWORK_HEADERS = [
 		'Cache-Control',
@@ -80,11 +74,8 @@ final class Revalidation {
 
 	/**
 	 * The answer `$answer` builds, tagged with `$tag`, or a `304` without
-	 * building it when the caller holds that tag already.
-	 *
-	 * For a count a client polls whose answer costs more than knowing whether
-	 * it changed: the tag is what the answer changes with, worked out cheaply,
-	 * as `MastodonApiController::notModified()` does for the timelines.
+	 * building it when the caller holds that tag, for polled answers whose
+	 * tag is cheaper than the answer.
 	 *
 	 * @param \Closure(): mixed $answer
 	 */
@@ -102,13 +93,9 @@ final class Revalidation {
 	}
 
 	/**
-	 * An answer tagged by what it says, or a `304` when the caller has it.
-	 *
-	 * For the sidebar routes — emoji, trends, lists, followed tags, the
-	 * instance — which are small, cheap to build and asked for on every page
-	 * load: the server still builds the answer, but the body is not sent
-	 * again and the browser keeps the copy it has. A response that is not a
-	 * `200` is passed through untagged.
+	 * An answer tagged by its content, or a `304` when the caller has it: for
+	 * small sidebar routes fetched on every page load, saving the body. A
+	 * non-`200` passes through untagged.
 	 */
 	public static function byContent(IRequest $request, DataResponse $response): JSONResponse {
 		$json = self::asJson($response);

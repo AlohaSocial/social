@@ -15,10 +15,8 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * Who is named in which post's pictures.
- *
- * Two reads, and an index for each: the people in one post (or in a page of
- * them, which is the same query over a list), and the posts one person is in.
+ * Who is tagged in which post's photos: the people in one post (or a page of
+ * posts), and the posts one person is in.
  *
  * `stream_id` is the post's nid, so it is bound as its decimal string, never
  * as a PHP int: see `Nid`.
@@ -29,11 +27,8 @@ class MediaTagsRequest extends CoreRequestBuilder {
 	use TArrayTools;
 
 	/**
-	 * How many people may be named in one post.
-	 *
-	 * A photograph of a party is the case this has to hold; a list longer than
-	 * this is not naming people, it is addressing a mailing list, and every
-	 * name on it is a notification somebody did not ask for.
+	 * How many people may be tagged in one post: enough for a group photo,
+	 * and a bound on the notifications one post can send.
 	 */
 	public const MAX_PER_POST = 20;
 
@@ -41,11 +36,8 @@ class MediaTagsRequest extends CoreRequestBuilder {
 	public const MAX_PAGE = 40;
 
 	/**
-	 * Names one account in one post.
-	 *
-	 * Writing the same pair twice is not an error: a client that sends its
-	 * whole list again on every edit would otherwise fail on everything it had
-	 * already sent, and the pair is the whole of the fact being recorded.
+	 * Tags one account in one post. A repeat is not an error, so a client can
+	 * resend its whole list on every edit.
 	 *
 	 * @return bool whether this was new
 	 */
@@ -73,11 +65,7 @@ class MediaTagsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The accounts named in each of a page of posts.
-	 *
-	 * One query for the page rather than one per post: a timeline is forty
-	 * statuses, and forty queries to put names under them is the kind of thing
-	 * that is invisible in development and is the whole page in production.
+	 * The accounts tagged in each of a page of posts, in one query.
 	 *
 	 * @param string[] $streamIds
 	 *
@@ -133,10 +121,8 @@ class MediaTagsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The posts one account is named in, newest first.
-	 *
-	 * Ids only: which of them the reader may actually see is a question about
-	 * posts, and it is answered by the query that reads them.
+	 * The posts one account is tagged in, newest first. Ids only: visibility
+	 * is checked by the query that reads the posts.
 	 *
 	 * @return string[]
 	 */

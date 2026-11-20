@@ -23,11 +23,8 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Pixelfed's administration API, `/api/admin/*`, for its app's admin screens.
- *
- * Behind the same gate as Mastodon's admin API and answered by the same
- * service, so who may moderate and what a moderation does are decided in
- * one place. See `PixelfedAdminService` for what each screen is shown.
+ * Pixelfed's administration API, `/api/admin/*`, behind the same gate and
+ * service as Mastodon's admin API (`PixelfedAdminService`).
  */
 class PixelfedAdminController extends AdminApiControllerBase {
 	public function __construct(
