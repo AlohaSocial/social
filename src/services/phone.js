@@ -4,14 +4,10 @@
  */
 
 /**
- * Whether the app is on a phone-sized screen.
- *
- * One media query, shared by every component that lays itself out differently
- * on a phone, so they all switch at the same width — the same number the
- * stylesheets use in their `@media (max-width: …)` rules. Nextcloud's own
- * "mobile" breakpoint (1024px, where the sidebar collapses) is not it: a
- * tablet in portrait has the sidebar collapsed and still has room for the
- * avatar column beside a post. A phone does not.
+ * Whether the app is on a phone-sized screen: one width shared by every
+ * component and by the stylesheets' `@media (max-width: …)` rules. Not
+ * Nextcloud's 1024px breakpoint, where a portrait tablet still has room for
+ * the avatar column beside a post.
  */
 export const PHONE_WIDTH = 600
 

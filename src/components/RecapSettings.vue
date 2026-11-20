@@ -27,11 +27,9 @@ import { setHint } from '../services/startupHints.js'
 import { showError } from '../services/toast.js'
 
 /**
- * The switch that turns the weekly recap on.
- *
- * It exists because the recap is opt-in and opt-in needs somewhere to opt in.
- * The wording under it is the whole promise: it is private, it is once a week,
- * and there is nothing to keep up — see WeeklyRecap for why there is no streak.
+ * The switch that turns the opt-in weekly recap on. The wording under it is
+ * the whole promise: private, once a week, nothing to keep up (see WeeklyRecap
+ * for why there is no streak).
  */
 export default {
 	name: 'RecapSettings',
@@ -65,8 +63,7 @@ export default {
 		 * @param {boolean} enabled what the switch was moved to
 		 */
 		async save(enabled) {
-			// moved at once rather than on the way back: a switch that waits
-			// for a round-trip before it moves reads as one that did not work
+			// moved at once: a switch that waits for the round trip reads as broken
 			const previous = this.enabled
 			this.enabled = enabled
 			this.loading = true

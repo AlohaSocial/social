@@ -16,8 +16,7 @@
 			</div>
 		</header>
 
-		<!-- the explainer reads, the answers sit: two columns while there
-		     is room, one below it -->
+		<!-- two columns while there is room, one below it -->
 		<div class="account-setup__body">
 			<div class="account-setup__about">
 				<h2 class="account-setup__about-title">
@@ -57,9 +56,8 @@
 							</p>
 						</div>
 					</li>
-					<!-- what the administrator has switched on, not what every
-					     Aloha Social does: an instance that is also on Bluesky
-					     says so here, and one that is not says nothing -->
+					<!-- only what the administrator has enabled: Bluesky is named
+					     only where it is on -->
 					<li v-if="blueskyEnabled" class="account-setup__point">
 						<IconAt class="account-setup__point-icon" :size="20" />
 						<div class="account-setup__point-text">
@@ -109,8 +107,7 @@
 				<p v-if="linkedBefore" class="account-setup__linked-note">
 					{{ t('social', 'Your Nextcloud profile says you are @{handle}, so the people on this Nextcloud can find you. You can still create an account here.', { handle: linkedBefore }) }}
 				</p>
-				<!-- the two answers, one at a time: the question is which of them,
-					     not two forms to read past each other -->
+				<!-- the two answers, one at a time: the question is which of them -->
 				<div class="account-setup__modes" role="group" :aria-label="t('social', 'How do you want to continue?')">
 					<button
 						type="button"
@@ -356,9 +353,7 @@ export default {
 	align-items: center;
 	padding: 80px 16px 24px;
 
-	// the setup question fills the page, not the reading column: the app
-	// centers its pages at 800px, and an explainer beside two answers
-	// does not fit in it
+	// wider than the 800px reading column, so the explainer fits beside the answers
 	#app-content-vue &.social__wrapper {
 		max-width: 1080px;
 	}
@@ -404,8 +399,7 @@ export default {
 		text-wrap: pretty;
 	}
 
-	// the explainer reads, the answers sit: two columns while there is
-	// room, one below it
+	// two columns while there is room, one below it
 	&__body {
 		display: grid;
 		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);

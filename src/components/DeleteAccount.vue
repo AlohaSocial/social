@@ -70,17 +70,8 @@ import { errorOf } from '../utils/serverError.js'
 
 /**
  * Deleting your own Social account, and the hosting account when it exists
- * only to provide Social.
- *
- * `occ social:account:delete` was the only way to do this, so somebody who
- * wanted their fediverse presence gone had to ask an administrator — which
- * means explaining to a colleague why.
- *
- * Two things stand in front of it, and neither is a password: an account
- * signed in through SSO has none to give. The button asks first, and then the
- * handle has to be typed out. The page is reloaded afterwards rather than
- * patched, because what is left of this session is a client holding the state
- * of an account that no longer exists.
+ * only to provide Social. No password is asked, since an SSO account has none:
+ * the button asks first, then the handle has to be typed out.
  */
 export default {
 	name: 'DeleteAccount',
@@ -141,9 +132,7 @@ export default {
 					window.location.assign(generateUrl('apps/social/account-deleted'))
 					return
 				}
-				// not a redirect and not a state change: what is left here is a
-				// client holding an account that no longer exists, and the
-				// setup screen is what the app shows somebody without one
+				// reload: the setup screen is what the app shows somebody without an account
 				window.location.reload()
 			} catch (error) {
 				logger.error('could not delete the account', { error })

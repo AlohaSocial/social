@@ -3,9 +3,8 @@
  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- no account yet: the page is the question, not the app. Nothing here
-	     may call the API, which would create the account behind the reader's
-	     back, so the navigation and the timeline stay out until they answer -->
+	<!-- no account yet: nothing here may call the API, which would create the
+	     account before the reader has answered the setup question -->
 	<NcContent v-if="!serverData.setup && serverData.needsAccount" appName="social">
 		<NcAppContent>
 			<AccountSetup @created="onAccountCreated" />
@@ -16,19 +15,12 @@
 		<PhoneBar v-if="!serverData.public && phone" />
 		<ShortcutHelp :open="shortcutHelpOpen" @close="shortcutHelpOpen = false" />
 		<CommandPalette v-if="paletteOpen && !serverData.public" @close="paletteOpen = false" />
-		<!-- one emoji picker for the page, fetched the first time a reaction
-		     bar asks for one; see ReactionPicker for why it is not on the card.
-		     Rendered, even unopened, it is the chunk and all its emoji data -->
+		<!-- one emoji picker for the page, mounted on the first reaction request:
+		     even unopened it pulls in its chunk and all its emoji data -->
 		<ReactionPicker v-if="firstReactionAsk" :firstAsk="firstReactionAsk" />
 		<NcAppContent>
-			<!--
-				A visitor reading a public page has no sidebar and therefore no
-				way back into their own Nextcloud -- somebody who follows a link
-				to a post, likes what they see and has an account here had to
-				know to go to the front page and find the app themselves. The
-				address they are on is carried through the login, so they come
-				back to the page they were reading rather than to a dashboard.
-			-->
+			<!-- a visitor on a public page has no sidebar; the login link carries
+			     the current address so they come back to this page -->
 			<div v-if="serverData.public" class="social__visitor">
 				<p class="social__visitor-text">
 					{{ t('social', 'You are reading this as a visitor.') }}
@@ -44,38 +36,21 @@
 					:addresses="serverData.checks.addresses"
 					:clientApi="serverData.checks.clientApi || []" />
 			</div>
-			<!-- not keyed on the full path: that remounted the whole view on
-			     every route change, so opening a post and pressing Back
-			     refetched page one and landed at the top of the timeline.
-			     The views watch their own route params instead.
-
-			     Which is also what decides when the page animates: the
-			     transition runs when the view itself changes -- one sidebar
-			     entry to another -- and not when the same view is handed new
-			     params, where a fade would be the timeline blinking at
-			     somebody who only opened a post. -->
+			<!-- not keyed on the full path, which would remount the view and lose
+			     the timeline's place on every route change. The views watch their
+			     own route params, so the transition runs only when the view changes. -->
 			<div class="social__pages">
 				<router-view v-slot="{ Component }">
-					<!-- No `out-in` any more: the two pages share one grid cell
-					     and overlap, so the incoming one does not wait for the
-					     outgoing one to finish. `out-in` added the whole leave
-					     to every change, which on a page already waiting for
-					     its chunk is the wrong place to spend a tenth of a
-					     second.
-
-					     The name carries the direction -- which way down the
-					     sidebar the reader went, see services/pageOrder.js.
-					     Where the browser has the View Transitions API this
-					     runs at all: `transitionName` is empty there and the
-					     browser animates two pictures instead. -->
+					<!-- no `out-in`: the two pages share one grid cell, so the incoming
+					     one does not wait for the leave. The name carries the direction
+					     (services/pageOrder.js); with the View Transitions API it is
+					     empty and the browser animates instead. -->
 					<transition :name="transitionName">
 						<component :is="Component" />
 					</transition>
 				</router-view>
-				<!-- A lazily loaded page holds the navigation until its chunk
-				     arrives, so the reader presses an entry and, for a moment,
-				     nothing happens at all. This is what happens instead, and
-				     only once the wait is long enough to notice. -->
+				<!-- shown while a lazily loaded page's chunk is on its way, once
+				     the wait is long enough to notice -->
 				<transition name="pending">
 					<TimelineSkeleton
 						v-if="pending"
@@ -136,15 +111,12 @@ import { useTimelineStore } from './store/timeline.js'
 import { useCurrentUser } from './composables/useCurrentUser.js'
 import { useServerData } from './composables/useServerData.js'
 
-// one page load in an account's life: not worth a place in the entry every
-// other load pays for, so it arrives as its own chunk when it is needed
+// needed once in an account's life, so it is a chunk of its own
 const AccountSetup = defineAsyncComponent(() => import(/* webpackChunkName: "account-setup" */'./views/AccountSetup.vue'))
-// shown to an administrator only, and only while the instance is not set up:
-// every other visit to the app need not download them
+// for an administrator only, while the instance is not set up
 const SetupChecks = defineAsyncComponent(() => import(/* webpackChunkName: "setup" */'./components/SetupChecks.vue'))
 const CloudAddressSetup = defineAsyncComponent(() => import(/* webpackChunkName: "setup" */'./components/CloudAddressSetup.vue'))
-// the emoji picker is most of a megabyte; it travels in its own chunk and is
-// fetched the first time somebody presses "add a reaction"
+// most of a megabyte, fetched the first time somebody adds a reaction
 const ReactionPicker = defineAsyncComponent(() => import(/* webpackChunkName: "reaction-picker" */'./components/ReactionPicker.vue'))
 // only ever shown after a video's own page, so it travels with that page
 const MiniPlayer = defineAsyncComponent(() => import(/* webpackChunkName: "watch" */'./components/MiniPlayer.vue'))
@@ -230,9 +202,8 @@ export default {
 		},
 
 		/**
-		 * The server the visitor is already looking at, named so that the
-		 * button says which Nextcloud it will sign them in to -- somebody who
-		 * arrived from a link on another server has no other way to tell.
+		 * The server the visitor is on, so the button says which Nextcloud it
+		 * signs them in to.
 		 *
 		 * @return {string} the host
 		 */
@@ -255,8 +226,7 @@ export default {
 
 	watch: {
 		$route(to) {
-			// the query lives in the URL now; keep the store in step with it
-			// so the navigation's search box shows what is being searched
+			// keep the store's query in step with the URL for the navigation's search box
 			this.timelineStore.setSearchQuery(to.name === 'search' ? String(to.params.term ?? '') : '')
 		},
 	},
@@ -290,20 +260,14 @@ export default {
 		this.settingsStore.setServerData(loadState('social', 'serverData'))
 
 		if (!this.serverData.public) {
-			// The page was rendered for this reader and carries their account
-			// with it, so there is nothing to go and ask for. Asking was a
-			// second authenticated round trip that everything else waited on.
-			// A page rendered before the account existed sends nothing, and
-			// then the old question is still the right one.
+			// The page was rendered with this reader's account, so there is no need
+			// to fetch it; a page rendered before the account existed has none.
 			const seeded = loadState('social', 'currentAccount', null)
 			if (seeded?.url) {
 				this.accountStore.setOwnAccount(seeded)
 			} else if (!this.serverData.needsAccount && this.cloudId !== '') {
-				// ...but not while the setup screen is up. Asking the API for
-				// this reader's account is what creates it, handle and all, so
-				// the question the screen is asking would already have been
-				// answered for them -- and pressing the button then failed with
-				// "that handle is taken", by them, a second earlier.
+				// not while the setup screen is up: fetching this reader's account
+				// creates it, taking the handle the screen is asking them to choose
 				this.accountStore.fetchCurrentAccountInfo(this.cloudId)
 			}
 		}
@@ -315,24 +279,17 @@ export default {
 
 	methods: {
 		/**
-		 * Watches for a page change, and decides how it is animated.
-		 *
-		 * `beforeResolve` rather than `beforeEach`: by then the route's component
-		 * has been fetched, so the change is about to be drawn rather than about
-		 * to be waited for -- which is what a view transition needs, since it
-		 * holds a picture of the old page until the new one is there.
+		 * Watches for page changes and decides how each is animated. The
+		 * animation starts in `beforeResolve`, once the route's component is
+		 * loaded, because a view transition holds the old page's picture until then.
 		 */
 		watchNavigation() {
 			const router = this.$router
-			// a mounted app always has a real router; a test may have a stub
-			// standing in for one, and a stub that cannot be hooked is not a
-			// reason for the app to fail to start
+			// a test may provide a router stub that cannot be hooked
 			if (typeof router?.beforeEach !== 'function' || typeof router?.beforeResolve !== 'function') {
 				return
 			}
 
-			// the wait for a chunk happens before this, so the skeleton is armed
-			// at the start of the navigation and disarmed when it lands
 			// what was pressed, so the card or face that started a navigation
 			// can be carried into the page it opens
 			this.stopPresses = listenForPresses()
@@ -344,8 +301,7 @@ export default {
 
 			this.stopAfter = router.beforeResolve((to, from) => {
 				this.disarmPending()
-				// a switch of scope keeps the page where it is: animating it
-				// moved the switcher out from under the pointer that used it
+				// a switch of scope keeps the page still, so the switcher stays under the pointer
 				if (isSamePage(to, from)) {
 					return true
 				}
@@ -368,11 +324,8 @@ export default {
 		},
 
 		/**
-		 * A page that is slow enough to notice says so.
-		 *
-		 * Not at once: most changes are a few milliseconds, and a skeleton that
-		 * flashed up for every one of them would be the busiest thing on screen.
-		 * The placeholder is the one the route being opened names.
+		 * Shows the route's placeholder once a page change takes long enough to
+		 * notice; most take a few milliseconds and should not flash a skeleton.
 		 *
 		 * @param {object} [to] the route being opened
 		 */
@@ -392,9 +345,8 @@ export default {
 		},
 
 		/**
-		 * The account was just made. The page reloads with `welcome`, so the
-		 * server hands it the new account and the first-run introduction shows:
-		 * everything on the page was mounted for somebody without an account.
+		 * Reloads with `welcome` so the server hands the page the new account and
+		 * the first-run introduction shows.
 		 */
 		onAccountCreated() {
 			this.reloadTo(generateUrl('/apps/social/') + '?welcome=1')
@@ -446,12 +398,7 @@ export default {
 		},
 
 		/**
-		 * Searching asks the server, on its own route.
-		 *
-		 * It used to commit the term to the store, where two getters filtered
-		 * the ~15 statuses that happened to be loaded with String.includes —
-		 * so a fresh timeline answered "No posts match your search" for posts
-		 * this instance was holding.
+		 * Searches on the server, on its own route.
 		 *
 		 * @param {string} term what was typed
 		 * @param {boolean} submitted whether the reader pressed Enter, which
@@ -504,9 +451,8 @@ export default {
 </script>
 
 <style scoped lang="scss">
-/* A line across the top of a public page, not a banner: the page is somebody
-   else's post, and this is a way back into one's own account rather than an
-   advertisement for signing up. */
+/* A slim line, not a banner: the page is somebody else's post, and this only
+   offers a way back into one's own account. */
 .social__visitor {
 	display: flex;
 	flex-wrap: wrap;
@@ -534,19 +480,8 @@ export default {
 	padding: calc(var(--default-grid-baseline) * 4);
 	max-width: 800px;
 	/*
-	 * Inline only. `margin: auto` centres the page in the block axis too, and
-	 * auto margins take precedence over every alignment property — so a page
-	 * shorter than its grid row sits in the middle of it whatever
-	 * `align-content` says.
-	 *
-	 * Normally the row is the page's own height and there is nothing to
-	 * centre in. During a page change there is: the two pages share one grid
-	 * cell, so while the outgoing one is still there the row is as tall as
-	 * *it* is, and the incoming page was dropped halfway down it. Leaving
-	 * Settings — eight thousand pixels of it — for a short page therefore drew
-	 * the new page four thousand pixels below the viewport and showed a blank
-	 * column until the old page unmounted, which on a first visit is however
-	 * long the new page's chunk takes to arrive.
+	 * Inline only: auto block margins would centre the page vertically in its
+	 * grid row, which during a page change is as tall as the outgoing page.
 	 */
 	margin-inline: auto;
 }
@@ -638,14 +573,10 @@ a.external_link {
 	}
 }
 
-/* Moving between the pages the sidebar lists.
-
-   Two ways of doing it, and only one of them ever runs. Where the browser has
-   the View Transitions API it takes a picture of the page before and after and
-   animates those, which costs nothing however tall the page is; everywhere
-   else the same move is a Vue transition over the live DOM. Both read the
-   direction off `data-page-direction` on the root, which the app sets from
-   where the two pages sit in the sidebar -- see services/pageOrder.js. */
+/* Moving between the pages the sidebar lists. With the View Transitions API the
+   browser animates pictures of the two pages; elsewhere a Vue transition makes
+   the same move. Both read the direction from `data-page-direction` on the root
+   (services/pageOrder.js). */
 
 /* The pages share one cell, so the one arriving does not wait for the one
    leaving. It also means neither of them is in flow while both exist, which is
@@ -654,41 +585,24 @@ a.external_link {
 	display: grid;
 	min-block-size: 100%;
 	/*
-	 * Lay the page out from the top. The grid is at least as tall as the
-	 * window, and with the default `normal` the single row takes the leftover
-	 * height and sits in the middle of it -- so a page with little on it, which
-	 * in practice means an empty one, floated halfway down the window with a
-	 * screenful of nothing above it. The composer went with it.
-	 *
-	 * `align-self` on the page does not help: what is centred is the row, not
-	 * the item in it. Only pages shorter than the window move; every page with
-	 * enough content to fill it was already starting at the top and is
-	 * untouched.
+	 * Lay the page out from the top: with `normal` the single row is centred in
+	 * a grid at least as tall as the window, so a short page floats halfway down.
 	 */
 	align-content: start;
 	/* the foot of every page stays above the phone bar (PhoneBar.vue) */
 	box-sizing: border-box;
 	padding-block-end: var(--social-phone-bar-space, 0px);
-	/* What the browser animates. Without a name of its own the only thing
-	   there is to animate is `root`, which is a picture of the whole window --
-	   so the sidebar, the header and the search box all slid across with the
-	   page. Naming this element lifts it out of that picture and leaves the
-	   rest of the app still. */
+	/* A name of its own lifts the page out of the `root` picture, so only the
+	   page moves and the sidebar and header stay still. */
 	view-transition-name: social-page;
 
 	> * {
 		grid-area: 1 / 1;
 		min-width: 0;
 		/*
-		 * Every page centres itself with `margin-inline: auto`, and auto
-		 * margins opt a grid item out of stretching to its track: the page is
-		 * then sized to its content, clamped only by its own `max-width`. A
-		 * results row with a long handle on it therefore widened Discover to
-		 * the full 1000px it is allowed inside a 963px column, and the Follow
-		 * buttons at the end of each row were clipped by the edge of the app.
-		 *
-		 * A definite width puts the track back in charge; `max-width` still
-		 * clamps it, and the auto margins still centre what is left over.
+		 * Auto inline margins stop a grid item stretching to its track, so the
+		 * page would size to its content; a definite width keeps it in the
+		 * column while `max-width` still clamps it.
 		 */
 		inline-size: 100%;
 	}
@@ -725,9 +639,8 @@ a.external_link {
 	transition: opacity var(--social-motion-fast) var(--social-ease), transform var(--social-motion-fast) var(--social-ease);
 }
 
-/* no direction to give -- the same page, or two pages the sidebar does not
-   list: a rise rather than a slide, which says "replaced" without claiming a
-   geography that is not there */
+/* no direction (the same page, or pages the sidebar does not list): a rise
+   rather than a slide */
 .page-enter-from {
 	opacity: 0;
 	transform: translateY(8px);
@@ -845,15 +758,10 @@ a.external_link {
 }
 
 /**
- * Two levels of elevation, defined once, so every card in the app agrees about
- * what "resting" and "lifted" look like.
- *
- * Nextcloud's own --color-box-shadow is built for modals: rgba(77,77,77,.5) in
- * the light theme and solid black in the dark one. Used raw under a timeline it
- * would put a hard slab under every post, so it is thinned with color-mix and
- * split in two — a tight contact shadow that seats the card on the page, and a
- * wider ambient one that gives it depth. A browser without color-mix drops the
- * declaration and gets the borders, which is what the app looked like before.
+ * Two levels of elevation shared by every card. Nextcloud's --color-box-shadow
+ * is made for modals and too heavy under a timeline, so it is thinned with
+ * color-mix and split into a tight contact shadow and a wider ambient one. A
+ * browser without color-mix drops the declaration and gets the borders.
  */
 :root {
 	--social-elevation-resting:
@@ -864,14 +772,9 @@ a.external_link {
 		0 6px 16px color-mix(in srgb, var(--color-box-shadow) 12%, transparent);
 
 	/*
-	 * One column, stated once. The composer and the timeline used to each
-	 * carry their own max-width — the same number, but the list also had a
-	 * horizontal padding and the composer did not, so the two boxes were a
-	 * gutter's width apart at both edges and nothing on the page lined up.
-	 * Anything that sits in the column is `--social-column` wide. The list
-	 * keeps a gutter inside that, so a post is narrower than the column by
-	 * `--social-column-gutter` on each side and the composer, which takes the
-	 * column whole, stands that much proud of the posts beneath it.
+	 * The content column. The list keeps a gutter inside it, so a post is
+	 * `--social-column-gutter` narrower on each side than the composer, which
+	 * takes the column whole.
 	 */
 	--social-column: 900px;
 	--social-column-gutter: calc(var(--default-grid-baseline, 4px) * 2);
@@ -903,11 +806,9 @@ img.emoji {
 }
 
 /**
- * The transition both timeline <transition-group>s use, defined once here
- * because this style block is global. Vue 3 names the starting class
- * `-enter-from` (Vue 2 called it `-enter`, which never matched and left the
- * enter animation dead), and `-move` is what makes the surrounding entries
- * slide when one is inserted or removed instead of jumping.
+ * The transition both timeline <transition-group>s use, here because this style
+ * block is global. `-move` makes the surrounding entries slide when one is
+ * inserted or removed.
  */
 .list-enter-active,
 .list-leave-active,
@@ -930,10 +831,8 @@ img.emoji {
 }
 
 /**
- * Posts ease in as they scroll into view. The browser drives this off the
- * scroll position on the compositor — no scroll listener, no observer, no
- * work on the main thread — and where the property is missing nothing
- * happens at all, which is why it needs no fallback.
+ * Posts ease in as they scroll into view, driven by the browser off the scroll
+ * position; where the property is missing nothing happens, so no fallback.
  */
 @supports (animation-timeline: view()) {
 	@media (prefers-reduced-motion: no-preference) {
@@ -1012,12 +911,10 @@ img.emoji {
 
 <style>
 /*
- * The on-dark palette. Shorts, the short composer and the day panel draw
- * over video, and the switch wizard's network marks sit on a brand tint:
- * black ground and white words whatever the theme, so none of Nextcloud's
- * colours -- which turn light in a light theme -- fits. One set, on the
- * root, that the four components read; a high-contrast reader is served
- * by their `forced-colors` rules instead.
+ * The on-dark palette for what draws over video (shorts, the short composer,
+ * the day panel) or on a brand tint (the switch wizard's network marks): black
+ * ground and white words whatever the theme. High contrast is served by each
+ * component's `forced-colors` rules.
  */
 :root {
 	--social-on-dark-ground: #000;

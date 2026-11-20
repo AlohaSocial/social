@@ -74,11 +74,8 @@ import { showError, showSuccess } from '../../services/toast.js'
 import { errorOf } from '../../utils/serverError.js'
 
 /**
- * The instance's own emoji.
- *
- * The upload goes to a route that hands the file to the same service
- * `occ social:emoji` calls, so what is refused here is exactly what the
- * command refuses — one set of rules rather than two that drift.
+ * The instance's own emoji. Uploads go through the same service as
+ * `occ social:emoji`, so both refuse the same files.
  */
 export default {
 	name: 'EmojiSection',

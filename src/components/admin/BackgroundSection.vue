@@ -44,12 +44,9 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import { duration } from '../../utils/duration.js'
 
 /**
- * Whether the work that happens away from a request is happening.
- *
- * Read-only, and its whole content arrives with the page: the summary is one
- * read of Nextcloud's own job list, and there is nothing here to write —
- * running a job from a button would be a different thing, and would need the
- * job to be safe to run twice at once.
+ * Whether the background jobs are running. Read-only, from initial state: the
+ * summary is one read of Nextcloud's job list, and running a job from here
+ * would need it to be safe to run twice at once.
  */
 export default {
 	name: 'BackgroundSection',
@@ -60,11 +57,8 @@ export default {
 
 	props: {
 		/**
-		 * `BackgroundHealthService::summary()`, as initial state.
-		 *
-		 * Not required: the page is also drawn on an instance whose server
-		 * told it nothing, and a card that throws takes the whole page with
-		 * it.
+		 * `BackgroundHealthService::summary()`, as initial state. Not required,
+		 * so the page still draws when the server sent nothing.
 		 */
 		background: {
 			type: Object,

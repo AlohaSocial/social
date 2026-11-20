@@ -6,9 +6,7 @@
 	<div
 		v-if="profileAccount && accountInfo"
 		class="user-profile">
-		<!-- decorative: the banner is changed from the Edit profile dialog, and
-		     a click here is a shortcut for people who have a pointer, not the
-		     only way in -->
+		<!-- decorative: a pointer shortcut; the banner is changed from the Edit profile dialog -->
 		<div
 			ref="bannerEl"
 			class="user-profile__banner"
@@ -26,10 +24,7 @@
 			style="display:none"
 			@change="uploadBanner">
 		<div class="user-profile__content">
-			<!-- `disableMenu`, like every other avatar in this app: the
-			     account preview a reader gets is this app's own, and
-			     Nextcloud's would open over the top of the profile they are
-			     already reading -->
+			<!-- `disableMenu`: Nextcloud's account menu would open over the profile being read -->
 			<NcAvatar
 				v-if="patternAvatarUrl(accountInfo) !== ''"
 				:url="patternAvatarUrl(accountInfo)"
@@ -52,14 +47,11 @@
 				{{ displayName }}
 				<BlueskyBadge v-if="isBluesky" />
 				<VerifiedBadge :account="accountInfo" />
-				<!-- beside the name, which is where a pronoun belongs and where
-				     every other network puts it; it is still a profile field and
-				     still federates as one -->
+				<!-- beside the name; still an ordinary profile field when federated -->
 				<span v-if="pronouns" class="user-profile__pronouns">{{ pronouns }}</span>
 			</h1>
-			<!-- the addresses this account answers to, each with a way to take
-			     it along. One account, two networks: the Bluesky handle is the
-			     same person and leads to where that network shows them -->
+			<!-- the addresses this account answers to, each with a copy button; the
+			     Bluesky handle is the same person on that network -->
 			<div class="user-profile__handles">
 				<!-- a Bluesky account has no fediverse address: its one handle
 				     is the Bluesky one below -->
@@ -104,9 +96,8 @@
 					</NcButton>
 				</span>
 			</div>
-			<!-- the redirect every other server shows for a moved account; a
-			     local account that moved is the reader's own, and Settings →
-			     Migration is where it is undone -->
+			<!-- the moved notice other servers show; a local account that moved is
+			     the reader's own, and Settings → Migration is where it is undone -->
 			<p v-if="accountInfo.moved" class="user-profile__moved">
 				{{ t('social', 'This account has moved to {acct}.', { acct: '@' + accountInfo.moved.acct }) }}
 				<router-link :to="{ name: 'profile', params: { account: accountInfo.moved.acct } }">
@@ -123,9 +114,7 @@
 					? t('social', 'Muted until {date}', { date: muteExpiry })
 					: t('social', 'Muted') }}
 			</span>
-			<!-- one string each, counted and formatted: "1 posts" was wrong in
-			     English and the three labels were unpluralisable in every
-			     language that does not build them the way English does -->
+			<!-- one pluralised string per counter -->
 			<ul class="user-profile__info user-profile__sections">
 				<li>
 					<router-link :to="{ name: 'profile', params: { account: uid } }">
@@ -206,9 +195,8 @@
 						</template>
 						{{ t('social', 'Unmute') }}
 					</NcActionButton>
-					<!-- both of these ride along with the follow, which is the
-					     only route Mastodon has for either, so they are offered
-					     only to somebody who is already following -->
+					<!-- both ride along with the follow, Mastodon's only route for
+					     either, so they are offered only to a follower -->
 					<NcActionButton
 						v-if="relationship.following"
 						:disabled="relationshipLoading"
@@ -264,14 +252,8 @@
 					</NcActionButton>
 				</NcActions>
 			</div>
-			<!-- A private note, for the reader alone: it never leaves this
-			     server and the account it is about is never told of it.
-
-			     Folded away, because it was the loudest thing on somebody
-			     else's profile: an open textarea saying "Only you ever see
-			     this" sat above their bio, their links and their posts, on
-			     every profile, whether or not anybody had ever written a note.
-			     Open from the start when there is a note to read. -->
+			<!-- a private note: it never leaves this server and the account is never
+			     told. Folded away unless there is a note to read. -->
 			<details
 				v-if="canModerate"
 				class="user-profile__private-note-fold"
@@ -314,22 +296,13 @@
 				<!-- eslint-disable-next-line vue/no-v-html -->
 				<div class="user-profile__note" dir="auto" v-html="note" />
 			</template>
-			<!-- the hashtags this account pins to itself: a claim it makes
-			     about what it is about, so it sits with the bio rather than
-			     among the numbers -->
+			<!-- the hashtags this account pins to itself, with the bio rather than among the numbers -->
 			<FeaturedTags :accountId="highlightsAccountId" :editable="isOwnProfile" />
-			<!-- The people the reader already follows who follow this account.
-			     The strongest reason there is to follow somebody, and the
-			     server has been able to answer it since `familiar_followers`
-			     landed without anything asking. -->
+			<!-- the people the reader follows who follow this account -->
 			<p v-if="familiarLine" class="user-profile__familiar">
 				<span class="user-profile__familiar-faces">
-					<!-- Plain images rather than `ActorAvatar`: these are
-					     decoration beside a sentence, and the avatar component
-					     brings a hover card and a popover wrapper that takes
-					     itself out of the flow -- the three of them ended up
-					     stacked on top of each other in the banner. Nothing
-					     here is a link, and the names are in the sentence. -->
+					<!-- plain images rather than `ActorAvatar`, whose hover card and
+					     popover wrapper break this inline row; the names are in the sentence -->
 					<img
 						v-for="account in familiar"
 						:key="account.id || account.acct"
@@ -433,9 +406,8 @@
 							aria-describedby="social-profile-bio-count"
 							:aria-invalid="bioTooLong ? 'true' : 'false'"
 							:placeholder="t('social', 'A few words about you, shown on your profile and shared with other servers.')" />
-						<!-- no maxlength: the server truncates an over-long bio instead of
-						     refusing it, and silently swallowing the tail of a pasted bio
-						     is worse than saying that it is too long -->
+						<!-- no maxlength: the server truncates an over-long bio, so the
+						     count says it is too long rather than the box cutting it off -->
 						<span
 							id="social-profile-bio-count"
 							class="user-profile__bio-count"
@@ -453,11 +425,8 @@
 						role="status">
 						{{ fieldsUsedLabel }}
 					</p>
-					<!-- Two of those four rows are worth naming, because this app
-					     draws them differently: the pronouns beside your name, and
-					     a support address as a button. Filling either in writes an
-					     ordinary field, so Mastodon and the rest still show them in
-					     their table. -->
+					<!-- the pronouns and the support address are drawn specially here,
+					     but are saved as ordinary fields that other servers show -->
 					<div class="user-profile__fields-known">
 						<input
 							v-model="pronounsDraft"
@@ -495,9 +464,8 @@
 								</template>
 							</NcButton>
 						</div>
-						<!-- what the server has decided about this row, or why it can
-							     decide nothing. `role="status"` because the line changes
-							     under the reader as they type -->
+						<!-- what the server decided about this row, or why it cannot;
+						     `role="status"` as it changes while the reader types -->
 						<p class="user-profile__fields-status" role="status">
 							<template v-if="fieldVerifiedAt(row) !== ''">
 								<VerifiedCheck :verifiedAt="fieldVerifiedAt(row)" />
@@ -511,10 +479,8 @@
 							</template>
 						</p>
 					</div>
-					<!-- the instructions arrive with the first link and not before:
-						     most fields are pronouns or a job and have nothing to verify.
-						     Plain markup rather than NcNoteCard, like the rest of this
-						     dialog, so the profile bundle gains nothing for it -->
+					<!-- shown once there is a link to verify; plain markup like the rest
+					     of this dialog, so the profile bundle does not need NcNoteCard -->
 					<div v-if="fieldsHaveLink" class="user-profile__fields-verify">
 						<p class="user-profile__fields-verify-heading">
 							{{ t('social', 'How a link gets its tick') }}
@@ -530,8 +496,8 @@
 								{{ snippetCopied ? t('social', 'Copied') : t('social', 'Copy') }}
 							</NcButton>
 						</div>
-						<!-- both paragraphs are built in the script: a literal `<` in an
-							     interpolation is a tag to the template compiler -->
+						<!-- built in the script: a literal `<` in an interpolation is a
+						     tag to the template compiler -->
 						<p>{{ verificationRule }}</p>
 						<p>{{ verificationSchedule }}</p>
 					</div>
@@ -617,9 +583,7 @@ import { defineAsyncComponent } from 'vue'
 import { bannerOf } from '../utils/banner.js'
 import { accountAvatarUrl } from '../utils/accountAvatar.js'
 
-// Neither is any use until the reader asks for it, and both bring a dialog
-// with them; they share one chunk, which is the same one the post overflow
-// menu fetches its copy of the mute dialog from.
+// Both load on demand and share a chunk with the post menu's mute dialog.
 const ListMembershipDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ListMembershipDialog.vue'))
 const MuteDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./MuteDialog.vue'))
 const ReportDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ReportDialog.vue'))
@@ -715,10 +679,8 @@ export default {
 			pronounsDraft: '',
 			supportDraft: '',
 			/**
-			 * When each verified field value was last seen linking back, keyed
-			 * by the value itself, which is how the server keys it: a value
-			 * that is edited has no verdict until it has been looked at again,
-			 * and one typed back as it was keeps the one it had.
+			 * When each verified field value was last seen linking back, keyed by
+			 * the value as the server keys it.
 			 *
 			 * @type {Record<string, string>}
 			 */
@@ -772,12 +734,8 @@ export default {
 		},
 
 		/**
-		 * Which account the highlights are asked for.
-		 *
-		 * The numeric id when the entity carries one, and the handle
-		 * otherwise: the route takes either, and the id is the cheaper lookup
-		 * of the two. Empty until the account has loaded, which is what keeps
-		 * the component from asking for a profile nobody is looking at yet.
+		 * Which account the highlights are asked for: the numeric id when there
+		 * is one, else the handle; empty until the account has loaded.
 		 *
 		 * @return {string}
 		 */
@@ -855,9 +813,7 @@ export default {
 		},
 
 		/**
-		 * The account's pronouns, from the server, which recognises the row
-		 * they are written in — a client should not have to know which
-		 * spellings of "Pronouns" people use.
+		 * The account's pronouns, as the server found them among the fields.
 		 *
 		 * @return {string}
 		 */
@@ -1001,19 +957,14 @@ export default {
 				: ''
 		},
 
-		/** @return {boolean} whether the note is worth saving */
 		/** @return {boolean} whether there is a note to read, which is what opens the fold */
 		hasNote() {
 			return this.noteStored !== ''
 		},
 
 		/**
-		 * The people the reader follows who also follow this account.
-		 *
-		 * The most useful thing one profile can say about another, and the
-		 * server has answered it since `familiar_followers` landed -- nothing
-		 * was asking. Capped at three faces and a count, because the sentence
-		 * is the point and ten avatars is a list.
+		 * The people the reader follows who also follow this account, capped at
+		 * three faces and a count.
 		 *
 		 * @return {string} the sentence, or '' when there is nobody or nobody has been fetched
 		 */
@@ -1035,6 +986,7 @@ export default {
 			return n('social', 'Followed by {first}, {second} and %n other you follow', 'Followed by {first}, {second} and %n others you follow', names.length - 2, { first: names[0], second: names[1] })
 		},
 
+		/** @return {boolean} whether the note is worth saving */
 		noteChanged() {
 			return this.noteDraft.trim() !== this.noteStored
 		},
@@ -1087,14 +1039,13 @@ export default {
 		},
 	},
 
-	// The immediate watcher above runs before the banner element exists and bails,
-	// so paint any existing header once the ref is available on first render.
 	beforeUnmount() {
 		window.clearTimeout(this.snippetCopyTimer)
 		window.clearTimeout(this.handleCopyTimer)
 	},
 
 	mounted() {
+		// the immediate watcher ran before the banner element existed
 		this.applyBanner(this.bannerStyle)
 		this.readFamiliar()
 	},
@@ -1105,13 +1056,8 @@ export default {
 		patternAvatarUrl,
 
 		/**
-		 * Asks who the reader follows that also follows this account.
-		 *
-		 * A failure is silence: the line is a nicety, and a profile that could
-		 * not answer it should say nothing rather than say something went wrong.
-		 * The viewer's own profile answers an empty list, as Mastodon's does,
-		 * and a visitor who is not logged in follows nobody here and is not
-		 * allowed to ask.
+		 * Asks who the reader follows that also follows this account. A failure
+		 * stays silent; the reader's own profile and a logged-out visitor do not ask.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -1171,11 +1117,9 @@ export default {
 		},
 
 		/**
-		 * Rings or silences the bell: "tell me when this account posts".
-		 *
-		 * Sent as a follow with `notify`, which is the only route Mastodon has
-		 * for it. Nothing else about the follow changes — the server leaves
-		 * every switch the request does not name exactly as it was.
+		 * Rings or silences the bell: "tell me when this account posts". Sent as
+		 * a follow with `notify`, Mastodon's only route for it; the server leaves
+		 * the rest of the follow as it was.
 		 */
 		async toggleNotify() {
 			this.relationshipLoading = true
@@ -1217,9 +1161,7 @@ export default {
 		},
 
 		/**
-		 * Puts the box back to the note the server holds, which is the way out
-		 * of an edit the reader does not want to keep. The box is always open,
-		 * so without this a typed word can only be removed by hand.
+		 * Puts the box back to the note the server holds, discarding the edit.
 		 */
 		discardNote() {
 			if (this.savingNote) {
@@ -1338,21 +1280,11 @@ export default {
 		},
 
 		/**
-		 * Opens the editor on what is actually stored.
-		 *
-		 * The bio has to be asked for, and this is why: `source` is an
-		 * account's own editable copy of its profile, and it lives on exactly
-		 * two routes -- `verify_credentials` and `update_credentials` -- because
-		 * it carries `follow_requests_count`, which is nobody's business but the
-		 * account's own. This page is drawn from `/global/account/info`, which
-		 * is answered to anybody and therefore has no `source` at all, so
-		 * `source.note` was `undefined` here and the editor opened with an empty
-		 * box over a bio that was still there. `note` is not a substitute: it is
-		 * the rendered HTML and would put markup in a plain-text field.
-		 *
-		 * Read before the dialog opens rather than after, so there is never a
-		 * moment where an empty box is on screen and typing into it would be
-		 * typing over something.
+		 * Opens the editor on what is actually stored. The page's account comes
+		 * from `/global/account/info`, which has no `source`, so the editable
+		 * copy is read from `verify_credentials` (`note` is rendered HTML, not a
+		 * substitute). It is read before the dialog opens, so an empty box is
+		 * never shown over an existing bio.
 		 */
 		async openProfileModal() {
 			if (this.openingProfile) {
@@ -1362,9 +1294,7 @@ export default {
 			this.openingProfile = true
 			this.profileOpener = focusedElement()
 			let source = null
-			// the verdicts are on the entity's own `fields`, never on
-			// `source.fields`, which is the editable copy and carries no
-			// `verified_at`
+			// the verdicts are on the entity's own `fields`; `source.fields` carries no `verified_at`
 			let verdicts = null
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/accounts/verify_credentials'))
@@ -1377,10 +1307,8 @@ export default {
 				this.openingProfile = false
 			}
 
-			// `??`, not `||`: an account with no fields answers `[]`, which is
-			// truthy, and `||` would quietly fall back to the rendered copy on
-			// the page. The fallback is for a `source` that could not be read
-			// at all, and for nothing else.
+			// `??`, not `||`: an account with no fields answers `[]`, which must
+			// not fall back to the rendered copy on the page
 			const fields = source?.fields ?? this.accountInfo.fields ?? []
 			this.fieldRows = fields.map((field) => ({ name: field.name, value: field.value }))
 			if (this.fieldRows.length === 0) {
@@ -1392,11 +1320,7 @@ export default {
 				.map((field) => [field.value, field.verified_at])
 			this.fieldVerified = Object.fromEntries(proved)
 
-			// An unreadable profile leaves both of these empty and equal, which
-			// is what `bioChanged` reads: a bio nobody could load is never one
-			// this editor sends back, so a failure here cannot erase it.
-			// the two named rows come out of the same four, so the editor shows
-			// each of them once: in its own box, and not again in the table
+			// the named rows are shown in their own boxes, not again in the table
 			this.pronounsDraft = this.accountInfo.pronouns ?? ''
 			this.supportDraft = this.accountInfo.support_link ?? ''
 			this.fieldRows = this.fieldRows.filter((row) => !this.isKnownRow(row, this.pronounsDraft) && !this.isKnownRow(row, this.supportDraft))
@@ -1404,17 +1328,17 @@ export default {
 				this.fieldRows.push({ name: '', value: '' })
 			}
 
+			// both stay empty when the profile could not be read, so a bio nobody
+			// loaded is never sent back
 			this.bioStored = normalizeBio(source?.note)
 			this.bioDraft = this.bioStored
 			this.showProfileModal = true
 		},
 
 		/**
-		 * Whether a row of the table is one of the two the boxes above own, so
-		 * that it is not shown twice and not saved twice.
-		 *
-		 * Compared on the value: the server matched the row by its *name* out
-		 * of a dozen spellings, and the value is what came back.
+		 * Whether a table row is one of the two the boxes above own, so it is
+		 * neither shown nor saved twice. Compared on the value, since the server
+		 * recognised the row by one of many spellings of its name.
 		 *
 		 * @param {object} row the row in the table
 		 * @param {string} value what one of the boxes holds

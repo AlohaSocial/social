@@ -48,16 +48,10 @@ import logger from '../services/logger.js'
 import { errorOf } from '../utils/serverError.js'
 
 /**
- * Naming the people in a photograph.
- *
- * The field holds the **whole** list, pre-filled with whoever is named now, so
- * that removing somebody is deleting their handle rather than a second control
- * to go and find. That is also what the server's route expects: the list it is
- * sent is the list the post ends up with.
- *
- * Handles typed rather than picked off a list: an account this instance has
- * never seen has nothing to pick from, and the people most worth naming in a
- * photograph are exactly the ones on other servers.
+ * Naming the people in a photograph. The field holds the whole list, as the
+ * server's route takes it, so removing somebody is deleting their handle.
+ * Handles are typed rather than picked, as people on other servers may be
+ * unknown to this instance.
  */
 export default {
 	name: 'TagPeopleDialog',

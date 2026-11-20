@@ -7,20 +7,10 @@ import { userKey } from '../utils/browserStore.js'
 
 /**
  * Sound and touch: the small confirmations that are felt or heard rather than
- * seen.
- *
- * Both are a property of the device rather than of the account -- sound on the
- * laptop at home, silence on the one at work, vibration on the phone -- so the
- * two switches live in this browser and not on the server. Sound is **off**
- * until somebody turns it on: Nextcloud is used in offices. Vibration is on,
- * because the app already vibrated on a like before these switches existed,
- * and turning it off by default would take something away from everybody who
- * never opens Settings.
- *
- * The sounds are synthesised rather than shipped as files. Each is a few
- * oscillators and an envelope, well under a second, so there is nothing to
- * download, nothing to license, and nothing to decode before the first one can
- * play.
+ * seen. Both belong to the device, not the account, so the switches live in
+ * this browser. Sound is off until turned on (Nextcloud is used in offices);
+ * vibration is on unless turned off. The sounds are synthesised from a few
+ * oscillators, so there is nothing to download or decode.
  */
 
 const SOUND_KEY = 'social.sounds'

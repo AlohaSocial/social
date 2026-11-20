@@ -6,11 +6,8 @@
 import { generateUrl } from '@nextcloud/router'
 
 /**
- * The routes the administration page reads and writes.
- *
- * They are the same routes the page used before it was a Vue application, with
- * the same bodies: everything below is where a URL is spelled, so that a
- * section cannot drift from the endpoint it is about.
+ * The routes the administration page reads and writes, spelled in one place
+ * so a section cannot drift from its endpoint.
  */
 
 /**

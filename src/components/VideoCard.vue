@@ -76,15 +76,11 @@ import { compactCount, mayPreview, videoAttachmentOf, videoCardOf, videoPostOf }
 export const PREVIEW_AFTER = 600
 
 /**
- * One video in the Videos page's grid, as a video site draws one: a 16:9
- * picture with its running time on it, the channel's face, the title, the
- * channel and "1.2K views · 3 days ago". `upright` is the Shorts shelf's
- * kind, a tall picture with the title under it.
- *
- * Everything it says comes from the status's `video_card`
- * (`Stream::exportVideoCard()`), so a PeerTube video, an upload here and a
- * video from Mastodon or Bluesky are drawn the same way, each with what it
- * actually said: a count nobody kept is left out rather than shown as zero.
+ * One video in the Videos page's grid: a 16:9 picture with its running time,
+ * the channel's face, the title, the channel, views and age. `upright` is the
+ * Shorts shelf's tall card. Everything comes from the status's `video_card`
+ * (`Stream::exportVideoCard()`), so videos from any network are drawn alike,
+ * and a count nobody kept is left out rather than shown as zero.
  */
 export default {
 	name: 'VideoCard',
