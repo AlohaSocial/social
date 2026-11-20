@@ -14,19 +14,14 @@ use OCA\Social\Model\CustomEmoji;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The instance's own custom emoji.
- *
- * Small by nature — an instance has tens of these, not thousands — and read on
- * every post that mentions one, so the whole set is what the readers below
- * fetch and the service above caches for the length of a request.
+ * The instance's own custom emoji: tens, not thousands, and read on every post
+ * that uses one, so readers fetch the whole set and the service caches it for
+ * the request.
  */
 class EmojiRequest extends CoreRequestBuilder {
 	/**
-	 * Stores one, replacing whatever the shortcode named before.
-	 *
-	 * Insert first and update on conflict: the shortcode is unique, and an
-	 * admin re-uploading a picture under a name that is already in use means
-	 * to replace it, not to be told it exists.
+	 * Stores one, replacing whatever the shortcode named before: an admin
+	 * re-uploading under an existing name means to replace it.
 	 */
 	public function save(CustomEmoji $emoji): void {
 		$qb = $this->getQueryBuilder();

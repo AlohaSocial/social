@@ -17,14 +17,10 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether the two index repairs got past every stored post.
- *
- * `Cron\Index` rebuilds the timeline and hashtag side rows of posts stored
- * by an older version, and `Cron\SearchIndex` puts the words of those posts
- * into the content search. Both pass over a post that keeps failing rather
- * than stop at it for good — and a post passed over is one no timeline or
- * search will find, with nothing but a warning in the log to say so. The
- * counts the two jobs keep are shown here, where an administrator looks.
+ * Whether the two index repairs got past every stored post: `Cron\Index`
+ * (timeline and hashtag side rows of older posts) and `Cron\SearchIndex`
+ * (content search). Both skip a post that keeps failing, which no timeline
+ * or search will then find, so their skip counts are shown here.
  */
 class IndexRepairsComplete implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#posts-the-index-repairs-skipped';

@@ -17,32 +17,18 @@ use OCA\Social\Tools\Nid;
  * Mastodon 4.3's grouped notifications: "eight people favourited your post"
  * instead of eight rows saying the same thing.
  *
- * The grouping is the whole feature. A notification list where one popular
- * post produces forty rows is a list in which everything else is unreachable,
- * and a client cannot fix that for itself — it would have to fetch every page
- * to know how many of the forty there were.
+ * Grouped is what a reader sees as one event: several people doing the same
+ * thing to the same post, or several people following the reader. Mentions,
+ * polls, edits and moderation decisions are never grouped.
  *
- * What may be grouped is decided by what the reader would recognise as one
- * event: several people doing the same thing to the same post (favourites,
- * boosts, reactions), or several people following the reader. A mention is
- * never grouped — two people writing to you are two things to read, not one
- * thing that happened twice — and neither is anything about a poll, an edit or
- * a moderation decision.
- *
- * The group key is what a client uses to fetch, dismiss or refresh one group,
- * so it has to name the same group tomorrow. It is built from what the group
- * *is* — the type and the post, or the type alone — never from the ids of the
- * notifications in it, which change as more arrive. An ungrouped notification
- * gets `ungrouped-{id}`, which is Mastodon's convention and lets a client
- * treat both kinds the same way.
+ * The group key must name the same group tomorrow, so it is built from the
+ * type and the post (or the type alone), never from notification ids. An
+ * ungrouped notification gets `ungrouped-{id}`, Mastodon's convention.
  */
 class NotificationGroupService {
 	/**
-	 * The notification types that group. Everything else stands alone.
-	 *
-	 * Favourites and boosts, because several people doing the same thing to
-	 * the same post is one event to the reader. Not mentions: two people
-	 * writing to you are two things to read.
+	 * The notification types that group. Everything else stands alone; two
+	 * people writing to you are two things to read.
 	 */
 	public const GROUPED_TYPES = ['favourite', 'reblog'];
 
@@ -53,11 +39,9 @@ class NotificationGroupService {
 	public const SAMPLE_ACCOUNTS = 8;
 
 	/**
-	 * Groups a page of notifications, newest group first.
-	 *
-	 * The page is grouped, not the account's whole history: a group says how
-	 * many of it are *on this page*, which is what `page_min_id` and
-	 * `page_max_id` are for. A client that wants the rest pages on.
+	 * Groups a page of notifications, newest group first. Only the page is
+	 * grouped, so a group counts what is on this page (`page_min_id`,
+	 * `page_max_id`).
 	 *
 	 * @param Stream[] $notifications newest first, as the timeline serves them
 	 * @param string[] $groupedTypes the types the client asked to have grouped;
@@ -134,9 +118,8 @@ class NotificationGroupService {
 
 		return [
 			'notification_groups' => array_values($groups),
-			// the accounts and statuses the groups refer to, each once: that is
-			// the point of the v2 shape, and why a page of forty favourites of
-			// one post carries one status rather than forty copies of it
+			// the accounts and statuses the groups refer to, each once, as the
+			// v2 shape intends
 			'accounts' => array_values($accounts),
 			'statuses' => array_values($statuses),
 		];

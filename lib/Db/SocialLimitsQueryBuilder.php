@@ -21,11 +21,6 @@ use OCA\Social\Tools\Exceptions\DateTimeException;
 use OCP\DB\QueryBuilder\ICompositeExpression;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
-/**
- * Class SocialLimitsQueryBuilder
- *
- * @package OCA\Social\Db
- */
 class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	public function limitToType(string $type, string $alias = ''): self {
 		$this->limitToDBField('type', $type, true, $alias);
@@ -81,7 +76,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the Id (string)
+	 * Limit the request to replies to the given post id
 	 *
 	 * @param string $id
 	 * @param bool $prim
@@ -154,14 +149,14 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the ActorId
+	 * Limit the request to public rows
 	 */
 	public function limitToPublic() {
 		$this->limitToDBFieldInt('public', 1);
 	}
 
 	/**
-	 * Limit the request to the ActorId
+	 * Limit the request to the id_prim
 	 */
 	public function limitToIdPrim(string $id) {
 		$this->limitToDBField('id_prim', $id);
@@ -187,7 +182,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the ActorId
+	 * Limit the request to the hashtag
 	 *
 	 * @param string $hashtag
 	 */
@@ -235,7 +230,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the FollowId
+	 * Limit the request to accepted (or pending) rows
 	 *
 	 * @param bool $accepted
 	 * @param string $alias
@@ -245,7 +240,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the ServiceId
+	 * Limit the request to the ObjectId
 	 *
 	 * @param string $objectId
 	 */
@@ -254,7 +249,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the ActorId
+	 * Limit the request to the ObjectId (prim)
 	 *
 	 * @param string $actorId
 	 * @param string $alias
@@ -273,7 +268,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the creation
+	 * Limit the request to rows whose caching started at least `$delay` minutes ago
 	 *
 	 * @param int $delay
 	 *
@@ -296,7 +291,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the url
+	 * Limit the request to the author
 	 *
 	 * @param string $actorId
 	 * @param bool $prim
@@ -321,7 +316,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the instance
+	 * Limit the request to the address
 	 *
 	 * @param string $address
 	 */
@@ -330,7 +325,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit the request to the instance
+	 * Limit the request to local or remote rows
 	 *
 	 * @param bool $local
 	 */
@@ -348,15 +343,10 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Bounds and orders a page on a nid.
-	 *
-	 * On the post's own by default. A timeline whose recipient join fixes the
-	 * collection and the type — public, notifications, direct — passes the
-	 * recipient row's alias instead: that row carries the post's nid too, and
-	 * `social_sd_atn` (actor_id, type, nid) then serves the filter and the
-	 * order as one descending range. Ordered on `s.nid`, MariaDB drove from the
-	 * same recipient rows anyway, joined every one of them to its post and
-	 * sorted the lot in a temporary table to keep twenty.
+	 * Bounds and orders a page on a nid: the post's own by default. A
+	 * timeline whose recipient join fixes the collection and type passes the
+	 * recipient row's alias instead, so `social_sd_atn` (actor_id, type, nid)
+	 * serves filter and order as one range instead of a temporary-table sort.
 	 *
 	 * @param string $alias the table whose nid pages; '' for the post's
 	 * @param string $column the id column of that table the page is cut and
@@ -472,11 +462,8 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 		bool $allowDirect = false, string $hiddenLevel = self::HIDDEN_TIMELINE, string $publicSubType = '',
 	) {
 		if (!$this->hasViewer()) {
-			// No viewer means no follows are consulted, so the follows table
-			// must not be in the FROM list at all: a plain `FROM social_follow`
-			// with nothing to join it against is a cartesian product, and on an
-			// instance with no follows at all it collapses every row. Passing
-			// '' suppresses it, exactly as the viewer branch below does.
+			// no viewer: the follows table must not be in the FROM list at
+			// all, or it becomes a cartesian product; '' suppresses it
 			$this->selectDestFollowing($aliasDest, '');
 			$this->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
 			$this->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', $publicSubType, $aliasDest);
@@ -519,26 +506,18 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit to posts that carry at least one attachment.
-	 *
-	 * `attachments` is the JSON list the post was stored with, and "no media"
-	 * has three spellings in it — NULL for a row written before the column
-	 * existed, `''` and `'[]'` — so all three are excluded rather than the one
-	 * that happens to be commonest. Plain string comparison, not a JSON
-	 * function: the same predicate has to run on MySQL, PostgreSQL and SQLite.
+	 * Limit to posts that carry at least one attachment. "No media" has three
+	 * spellings in the stored JSON (NULL, `''`, `'[]'`), all excluded with
+	 * plain string comparison, which runs on MySQL, PostgreSQL and SQLite.
 	 */
 	public function limitToMedia(): self {
 		$expr = $this->expr();
 		$pf = $this->getDefaultSelectAlias();
 
-		// `media_kind` says this in one indexed column, and is what answers
-		// wherever it has been filled in. The three string comparisons below
-		// are what a row written before that column existed is judged by, and
-		// they are the reason this predicate could never use an index: they are
-		// applied *after* the join, so a Photos timeline on a ten-million-row
-		// table read every candidate row and then decided. Once the flag says
-		// every row has its kind, the `OR` that admits them is left out: a
-		// planner that sees it stops trusting the index.
+		// `media_kind` answers in one indexed column where filled in; the
+		// string comparisons cover rows not yet backfilled and are left out
+		// once the flag says every row has its kind, since the `OR` keeps the
+		// planner off the index
 		$byKind = $expr->andX(
 			$expr->isNotNull($pf . '.media_kind'),
 			$expr->neq($pf . '.media_kind', $this->createNamedParameter(Stream::MEDIA_KIND_NONE))
@@ -589,30 +568,19 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit to posts that are a video.
-	 *
-	 * Two ways of being one, because there are two ways a video reaches this
-	 * app. Somebody here -- or on Mastodon, or on Pixelfed -- posts a file,
-	 * and it is an attachment whose Mastodon type is `video`. PeerTube
-	 * publishes a `Video` object instead, whose whole existence is the video;
-	 * that arrives as a `Note` carrying `Video` in `subtype` (see
-	 * `AP::NOTE_LIKE_TYPES`), and it counts whether or not this instance found
-	 * a file in it that a browser can play.
-	 *
-	 * The attachment half is a substring test rather than a JSON function, for
-	 * the same reason `limitToMedia()` is one: the predicate has to run on
-	 * MySQL, PostgreSQL and SQLite alike. It is exact rather than approximate
-	 * -- `json_encode` writes no spaces, and a `"` inside a *value* is escaped
-	 * as `\"`, so the seven characters `"video"` preceded by `"type":` cannot
-	 * occur anywhere but in the field this is asking about.
+	 * Limit to posts that are a video: an attachment of Mastodon type `video`,
+	 * or a PeerTube `Video` object, which arrives as a `Note` with `Video` in
+	 * `subtype` (see `AP::NOTE_LIKE_TYPES`) and counts even without a
+	 * playable file. The attachment test is an exact substring match on
+	 * `"type":"video"`, since `json_encode` writes no spaces and escapes `"`
+	 * in values, and it runs on all three databases.
 	 */
 	public function limitToVideo(): self {
 		$expr = $this->expr();
 		$pf = $this->getDefaultSelectAlias();
 
-		// the indexed answer, wherever the column has been filled in.
-		// `mixed` counts: a post with a photograph and a video in it is a
-		// video post, and the column had to choose one word for it.
+		// the indexed answer, wherever the column has been filled in; `mixed`
+		// (a photo and a video) counts as video
 		$byKind = $expr->in($pf . '.media_kind', $this->createNamedParameter(
 			['video', Stream::MEDIA_KIND_MIXED], IQueryBuilder::PARAM_STR_ARRAY
 		));
@@ -624,7 +592,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 
 		$this->andWhere($expr->orX(
 			$byKind,
-			// and the old question, for a row the backfill has not reached
+			// and the string test, for a row the backfill has not reached
 			$expr->andX(
 				$expr->isNull($pf . '.media_kind'),
 				$expr->orX(
@@ -641,24 +609,11 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Narrows the media to one kind of attachment, for the kinds that have no
-	 * method of their own.
-	 *
-	 * `video` is not one of them: a video can also arrive as a PeerTube
-	 * `Video` object with no attachment at all, so that question is
-	 * `limitToVideo()` and `StreamRequest::filterMedia()` sends it there.
-	 * What is left is `image` and `audio`, where the attachment is the only
-	 * way the post can be one.
-	 *
-	 * The column holds the attachments as the client sees them
-	 * (`MediaAttachment::asLocal()`), so each one carries `"type":"image"` —
-	 * the first half of its MIME type. There is no column to compare and no
-	 * JSON support to rely on across the three databases this app supports, so
-	 * it is a `LIKE` on that pair, exactly as `limitToVideo()` does it.
-	 *
-	 * Unindexed, like the silenced-instance filter and for the same reason:
-	 * it runs on a list that something else has already narrowed — a profile,
-	 * which is one account's posts.
+	 * Narrows the media to one kind of attachment (`image` or `audio`);
+	 * `video` goes to `limitToVideo()` via `StreamRequest::filterMedia()`,
+	 * since a PeerTube `Video` has no attachment. A `LIKE` on `"type":"…"` in
+	 * the client-format JSON, as in `limitToVideo()`. Unindexed, but only run
+	 * on an already narrowed list such as a profile.
 	 */
 	public function limitToMediaType(string $type): self {
 		$expr = $this->expr();
@@ -688,12 +643,9 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit to posts that are a short video.
-	 *
-	 * One indexed column, `(short_kind, nid)`, like `limitToNews()` and for
-	 * the same reason without a fallback: whether a video is short is read out
-	 * of the attachment's meta in PHP (`Stream::shortKindOf()`), which no
-	 * database can be asked across the three this app runs on.
+	 * Limit to posts that are a short video: one indexed column,
+	 * `(short_kind, nid)`, with no fallback, since shortness is read from the
+	 * attachment's meta in PHP (`Stream::shortKindOf()`).
 	 */
 	public function limitToShort(): self {
 		$pf = $this->getDefaultSelectAlias();
@@ -706,18 +658,11 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit to posts that are news: an article, or a post linking to one.
-	 *
-	 * One indexed column, unlike its media siblings, and with no `LIKE`
-	 * fallback for a row the backfill has not reached — see
-	 * `Version1000Date20260917000005`. The question this answers cannot be put
-	 * to a database at all ("is there a link in this markup that is not a
-	 * mention"), so there is nothing to fall back *to*: an unclassified row is
-	 * not news yet, and the backfill is what makes it so.
-	 *
-	 * `IN` rather than `!= ''` because the column is nullable and `NULL` must
-	 * not match, and because naming the two values is what lets a caller later
-	 * ask for only one of them.
+	 * Limit to posts that are news: an article, or a post linking to one. One
+	 * indexed column with no fallback, since "is there a non-mention link"
+	 * cannot be asked of a database; an unclassified row is not news until the
+	 * backfill (`Version1000Date20260917000005`) reaches it. `IN` rather than
+	 * `!= ''` so that `NULL` does not match.
 	 */
 	public function limitToNews(): self {
 		$expr = $this->expr();
@@ -731,30 +676,13 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	}
 
 	/**
-	 * Limit to posts carrying a hashtag the viewer follows.
-	 *
-	 * Two inner joins: the post's tags, and the ones this account follows. It
-	 * says nothing about *visibility* — a followed hashtag is not a
-	 * relationship with the author — so the caller adds that; see
-	 * `StreamRequest::followedTagNids()`, which limits to public.
-	 *
-	 * Both sides hold the tag in one form — `FollowedTagsRequest::normalise()`,
-	 * which `social_stream_tag` is written in as well (see
-	 * `Version1000Date20260925000001`) — so they are compared as they stand.
-	 * It is the same comparison `hashtagTimelineNids()` makes on the same
-	 * column, which is what keeps "posts tagged #x" and "I follow #x" meaning
-	 * one thing. With no function over either column the join can be driven
-	 * from the account's followed tags (`social_followed_tag`'s
-	 * `(actor_id_prim, hashtag)` index) to the posts carrying them
-	 * (`social_st_ht`), as well as from the stream through the
-	 * `(stream_id, hashtag)` unique index.
-	 *
-	 * A post carrying two followed tags matches twice; the caller selects
-	 * DISTINCT over the one column it pages by, which is the cheap place to
-	 * fold that back into one row.
-	 *
-	 * No viewer, no followed tags, and this adds nothing — which would leave
-	 * an unconstrained query, so callers must only use it with a viewer.
+	 * Limit to posts carrying a hashtag the viewer follows, by two inner
+	 * joins. Says nothing about visibility, which the caller adds (see
+	 * `StreamRequest::followedTagNids()`). Both sides hold the tag normalised
+	 * (`FollowedTagsRequest::normalise()`), so they compare as they stand and
+	 * either index can drive the join. A post with two followed tags matches
+	 * twice; the caller selects DISTINCT. Without a viewer this adds nothing,
+	 * so only call it with one.
 	 */
 	public function limitToFollowedTags(string $aliasTags = 'ft_st', string $aliasFollowed = 'ft'): self {
 		if (!$this->hasViewer()) {
@@ -838,11 +766,9 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 				)
 			);
 			if ($level === self::HIDDEN_TIMELINE) {
-				// a mute whose expiry has passed is not a mute: it stops
-				// applying on the read, with nothing deleting the row. The
-				// expiry belongs in this ON clause and not in the WHERE —
-				// there, a second matching relation row would let the post
-				// through whenever one of them satisfied the relaxed predicate
+				// an expired mute no longer applies; the expiry is in the ON
+				// clause, since in the WHERE a second matching relation row
+				// could let the post through
 				$onTypes = $expr->orX(
 					$onTypes,
 					$expr->andX(
@@ -866,24 +792,15 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 		);
 		$this->andWhere($expr->isNull('hd_r.id'));
 
-		// an instance the viewer blocked for themselves, which is not a row in
-		// social_actor_relation and cannot be one: it applies to accounts that
-		// do not exist yet
+		// an instance the viewer blocked, which applies to accounts that do
+		// not exist yet and so is not a social_actor_relation row
 		DomainBlocksRequestBuilder::filterDomainBlocked($this);
 	}
 
 	/**
-	 * Drops the boosts of accounts whose boosts this viewer has turned off.
-	 *
-	 * Mastodon's `reblogs: false` on a follow: "I want to read you, not what
-	 * you pass on." Only the boost rows go — the account's own posts are why
-	 * the viewer follows them, and hiding those would be a mute under another
-	 * name.
-	 *
-	 * The type predicate is in the ON clause rather than the WHERE for the
-	 * reason the mute expiry is: in the WHERE it would apply to every row, and
-	 * a post that is not a boost would be dropped whenever the viewer had a
-	 * row of this type about its author.
+	 * Drops the boosts of accounts whose boosts this viewer has turned off
+	 * (Mastodon's `reblogs: false`); their own posts stay. The type predicate
+	 * is in the ON clause, as the mute expiry is, so non-boosts are not dropped.
 	 */
 	public function filterHiddenBoosts(): void {
 		if (!$this->hasViewer()) {

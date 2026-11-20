@@ -15,18 +15,9 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 /**
  * The local profile directory: `GET /api/v1/directory`.
  *
- * Opt-in, and that is the whole of the access rule. `discoverable` has been
- * stored on `social_actor` and federated on the actor since
- * `Version1000Date20260911000002`, and until this route existed nothing read
- * it — the flag a user could turn off had no effect anywhere, because there
- * was no listing for it to keep them out of. The flag is applied as a
- * predicate of the deciding query rather than as a filter over its result, so
- * an account that did not opt in never occupies a slot in the page.
- *
- * Remote accounts are never listed. Mastodon's `local` parameter is accepted
- * and makes no difference: `discoverable` is only meaningful for accounts this
- * instance holds the profile of, and listing a cached remote actor would be
- * this instance publishing a directory of somebody else's users.
+ * Opt-in through `discoverable`, applied in the deciding query so an account
+ * that did not opt in never takes a slot. Remote accounts are never listed;
+ * Mastodon's `local` parameter is accepted and changes nothing.
  */
 class DirectoryService {
 	/** What Mastodon defaults and caps a page of the directory at. */
@@ -61,13 +52,8 @@ class DirectoryService {
 	}
 
 	/**
-	 * Drops every account a moderator has made a decision about.
-	 *
-	 * Any decision, not only a suspension. Silencing means the instance stops
-	 * putting the account in front of people who did not ask for it, and a
-	 * directory is the instance putting an account in front of exactly those
-	 * people — so a silenced account that still appeared here would have been
-	 * removed from the public timeline and left in the shop window.
+	 * Drops every account a moderator has made a decision about, silencing
+	 * included: a directory puts accounts in front of people who did not ask.
 	 *
 	 * @param string[] $prims
 	 *

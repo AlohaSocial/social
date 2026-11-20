@@ -15,23 +15,18 @@ use OCP\IUserManager;
 use OCP\IUserSession;
 
 /**
- * Keeps external users off WebDAV, CalDAV and CardDAV.
+ * Keeps external users off WebDAV, CalDAV and CardDAV, which `remote.php`
+ * serves without the middleware. Two checks:
  *
- * WebDAV is served by `remote.php`, not by a controller, so the middleware
- * never sees it. Two checks cover it together:
- *
- * - `refuses()`, from `Application::boot()`, which `remote.php` runs for this
- *   app right before it hands the request to the DAV server: a browser
- *   session or HTTP basic credentials naming an external user. This is the
- *   only hook the legacy `/remote.php/caldav` and `/remote.php/carddav`
- *   endpoints have, and they would otherwise list the system address book.
+ * - `refuses()`, from `Application::boot()`, which `remote.php` runs before
+ *   the DAV server: a session or basic credentials naming an external user.
+ *   The only hook the legacy `/remote.php/caldav` and `/remote.php/carddav`
+ *   endpoints have.
  * - `ExternalDavListener`, inside the DAV server of `/remote.php/dav` and
- *   `/remote.php/webdav`, after authentication: whatever credential it was,
- *   a bearer token included.
+ *   `/remote.php/webdav`, after authentication, for any credential.
  *
- * A basic-auth login name is refused before its password is checked, which
- * tells anybody that the name is an external user's. That is no secret: it is
- * the user's public fediverse handle.
+ * Refusing a basic-auth name before its password reveals that it is an
+ * external user's, which is its public fediverse handle anyway.
  */
 class ExternalDavGuard {
 	public function __construct(

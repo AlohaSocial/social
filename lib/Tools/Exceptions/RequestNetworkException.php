@@ -11,10 +11,5 @@ namespace OCA\Social\Tools\Exceptions;
 
 use Exception;
 
-/**
- * Class RequestNetworkException
- *
- * @package OCA\Social\Tools\Exceptions
- */
 class RequestNetworkException extends Exception {
 }

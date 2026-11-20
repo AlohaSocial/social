@@ -13,33 +13,20 @@ use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Model\ActivityPub\Object\Document;
 
 /**
- * How much disk this app is using, and on whose behalf.
+ * How much disk this app is using, and on whose behalf: this instance's own
+ * uploads versus cached copies of other servers' media.
  *
- * An administrator finds out that Social is filling the disk from the disk.
- * There is nothing in the app that says how much of it is this instance's own
- * uploads — which are somebody's posts and are not going anywhere — and how
- * much is the cached copies of other servers' pictures, which the retention
- * sweep exists to remove.
- *
- * **Measured on a schedule, never on page load.** The only honest number here
- * is the size of the files, and that is a `stat` per file: tens of thousands
- * of them on an instance that has been federating for a year. So the walk
- * happens in the cron, the answer is written to app config with the moment it
- * was taken, and the administration page reads that and says when it was
- * measured. A number that is a day old and cheap is worth more than one that
- * is exact and makes the settings page take a minute to open.
- *
- * The walk itself was `occ social:media:usage`, which is now this class with a
- * command and a cron job on top of it.
+ * Measured by a `stat` per file, so the walk runs in the cron (and as
+ * `occ social:media:usage`), and the result is stored in app config with the
+ * moment it was taken for the administration page to read.
  */
 class MediaUsageService {
 	/** Rows read per query; the work is a file lookup per row, not the read. */
 	private const PAGE = 500;
 
 	/**
-	 * The three ids this app gives its own documents. A cached copy of another
-	 * Social instance's picture carries the same shape — hence the cloud url,
-	 * which is what actually decides it.
+	 * The three ids this app gives its own documents. Another Social instance's
+	 * documents have the same shape, so the cloud url decides.
 	 */
 	private const LOCAL_MARKERS = ['/documents/local/', '/documents/avatar/', '/documents/header/'];
 
@@ -88,9 +75,8 @@ class MediaUsageService {
 				$usage['rows']++;
 
 				$side = self::isLocalDocumentId($row['id'], $cloudUrl) ? 'local' : 'remote';
-				// the parent being a cached actor is what makes a document that
-				// actor's picture; a local avatar has no parent at all, and is
-				// recognised by the id this app gave it
+				// a cached actor parent makes a document that actor's picture; a
+				// local avatar has no parent and is recognised by its id
 				$kind = ($row['actor_local'] !== null || $this->looksLikeAvatar($row['id']))
 					? 'avatars' : 'attachments';
 
@@ -119,21 +105,16 @@ class MediaUsageService {
 			ConfigService::SOCIAL_MEDIA_USAGE, (string)json_encode($usage)
 		);
 
-		// everything the per-domain quota was counting since the last walk is
-		// in the figure just written; leaving those counters would charge the
-		// same bytes twice and shrink the quota with every pass
+		// the per-domain quota's counters are now part of the figure just
+		// written; leaving them would count the same bytes twice
 		$this->remoteMediaQuotaService->forgetAll(array_keys($usage['domains']));
 
 		return $usage;
 	}
 
 	/**
-	 * The last measurement, or null where none has been taken.
-	 *
-	 * Null rather than zeroes: "nothing has been measured yet" and "this
-	 * instance stores nothing" are different things to show an administrator,
-	 * and a page that cannot tell them apart says the second when it means the
-	 * first.
+	 * The last measurement, or null where none has been taken (not zeroes,
+	 * which would claim nothing is stored).
 	 *
 	 * @return array<string, mixed>|null
 	 */
@@ -149,17 +130,9 @@ class MediaUsageService {
 	}
 
 	/**
-	 * Fills in the size of a video row that has none.
-	 *
-	 * `social_cache_doc.size` arrived with the video work; every row written
-	 * before it carries 0, which is what the per-account quota and the
-	 * PeerTube file link both read. This walk is already asking the store how
-	 * big each file is, so it writes the answer down as it passes — and the
-	 * quota becomes accurate after one pass rather than never.
-	 *
-	 * Videos only, and only where the row says nothing: an image's size is not
-	 * read anywhere, and overwriting a size that is already there would mean
-	 * this run could disagree with what was published.
+	 * Fills in the size of a video row that has none, since the per-account
+	 * quota and the PeerTube file link read it and older rows carry 0. Videos
+	 * only, and never overwriting a stored size.
 	 *
 	 * @param array<string, mixed> $row
 	 */

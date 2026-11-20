@@ -34,21 +34,16 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The posts of a Bluesky account that moved here (§13.1, step 6) become
- * the account's posts in this app's timelines: through the import path,
- * dated when they were written, a reply under its parent when that is one
- * of them too, the pictures and the video from the blobs held here.
- * Nothing is published — not to the Fediverse, which the import path never
- * does, and not to Bluesky, where each post is already: every Social post
- * is tied to the record it came from, so likes and replies there reach it
- * here, and the publisher leaves an imported post's record as it came.
+ * The posts of a Bluesky account that moved here (§13.1, step 6) become the
+ * account's posts in this app's timelines, through the import path: dated as
+ * written, replies under their parents, photos and video from the blobs held
+ * here. Nothing is published; each post is tied to its record, so likes and
+ * replies on Bluesky reach it here.
  *
- * A reply to somebody else's post hangs off it here too, and the account's
- * latest likes and reposts become likes and boosts here, each tied to its
- * record so taking it back here takes it back there. Somebody else's post
- * is fetched from the AppView when it is not here, for at most FETCHES of
- * them in one run; the rest of the replies stand alone, the rest of the
- * likes and reposts stay on Bluesky only.
+ * Replies to other people's posts hang off them here, and the latest likes and
+ * reposts become likes and boosts tied to their records. A post not held here
+ * is fetched from the AppView, at most FETCHES per run; beyond that, replies
+ * stand alone and likes and reposts stay on Bluesky only.
  */
 class PostHistory {
 	private const PAGE = 100;
@@ -252,7 +247,7 @@ class PostHistory {
 	}
 
 	/**
-	 * The pictures, or the video, a post embeds, each as a temporary file of
+	 * The photos, or the video, a post embeds, each as a temporary file of
 	 * the blob held here; a blob that is not here is left out.
 	 *
 	 * @param string[] $files

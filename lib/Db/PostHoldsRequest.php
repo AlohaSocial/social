@@ -15,25 +15,14 @@ use OCA\Social\Model\HeldPost;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The posts waiting for a moderator.
- *
- * Two kinds of reader ask here and they are scoped differently on purpose.
- * An **author** may only ever reach their own rows, so every method they can
- * reach takes an actor id and compares it in SQL — a held post is unpublished
- * text nobody has seen, and the only person entitled to it is whoever wrote
- * it. A **moderator** reads the queue unscoped, because reading it is the
- * whole of their job; who is allowed to be that moderator is decided above,
- * in `AdminApiService`, not here.
+ * The posts waiting for a moderator. An author may only reach their own rows,
+ * so their methods take an actor id and compare it in SQL. A moderator reads
+ * the queue unscoped; who may moderate is decided in `AdminApiService`.
  */
 class PostHoldsRequest extends PostHoldsRequestBuilder {
 	/**
-	 * Holds one post.
-	 *
-	 * A repeat is not an error. A client that has been told its post is
-	 * waiting will be pressed again by its user, and the Pixelfed app retries
-	 * a 422 on its own; the unique index on the digest is what makes the
-	 * second attempt find the first rather than give a moderator the same post
-	 * twice.
+	 * Holds one post. A repeat is not an error: the unique index on the digest
+	 * makes a retried post find the first rather than queue it twice.
 	 *
 	 * @return int the id it was stored under, or 0 when it was already waiting
 	 */
@@ -135,11 +124,7 @@ class PostHoldsRequest extends PostHoldsRequestBuilder {
 	}
 
 	/**
-	 * Forgets what one account had waiting.
-	 *
-	 * Called when the account is purged: a suspended account's unpublished
-	 * posts are not going to be approved by anybody, and leaving them would
-	 * leave a moderator a queue of decisions that cannot be taken.
+	 * Forgets what one account had waiting, when the account is purged.
 	 */
 	public function deleteByActor(string $actorId): void {
 		$qb = $this->getPostHoldDeleteSql();

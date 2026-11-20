@@ -25,14 +25,10 @@ use Throwable;
  * this server accepts them for itself.
  *
  * `com.atproto.server.getServiceAuth` hands an app a token signed with the
- * account's key, for one service and one method. Only the pairs a video
- * upload needs are granted: Bluesky's video service, to ask the account's
- * upload limits and take the video, and this server, for the video
- * service to store what it made with `uploadBlob` in the account's name.
- * Beside those, a session allowed to change the identity may have a token
- * for `createAccount` at another PDS, which a tool moving the account away
- * needs. Anything else would be the account's signature in the hands of a
- * service this server knows nothing of, so it is refused.
+ * account's key for one service and method. Only what a video upload needs is
+ * granted (Bluesky's video service, and this server's `uploadBlob` for that
+ * service), plus `createAccount` at another PDS for a session allowed to
+ * change the identity, which moving away needs. Anything else is refused.
  */
 class ServiceAuthGrant {
 	public const UPLOAD = 'com.atproto.repo.uploadBlob';

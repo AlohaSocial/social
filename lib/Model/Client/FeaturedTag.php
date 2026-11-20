@@ -16,20 +16,10 @@ use OCA\Social\Tools\Traits\TArrayTools;
  * Mastodon's FeaturedTag entity: a hashtag an account has pinned to its own
  * profile.
  *
- * `statuses_count` and `last_status_at` are not stored on the row. They are
- * counted from `social_stream_tag` when the entity is built and set here, so
- * a featured tag cannot report a number that a post created, deleted or edited
- * since would have changed.
- *
- * `url` is set by the service for the same reason it is in
- * `HashtagService::tagEntity()`: a model has no URL generator, and a link to
- * this instance's own tag timeline is not something it can derive from the tag
- * alone.
- *
- * `owner` is not part of the entity a client sees. It is carried so that the
- * one row a request names can be checked against the account that asked before
- * anything is done with it — see FeaturedTagsRequest, where the check is a SQL
- * predicate rather than a comparison made after the row was read.
+ * `statuses_count` and `last_status_at` are counted from `social_stream_tag`
+ * when the entity is built. `url` is set by the service, as in
+ * `HashtagService::tagEntity()`, since a model has no URL generator. `owner`
+ * is not shown to clients; FeaturedTagsRequest checks it in SQL.
  */
 class FeaturedTag implements JsonSerializable {
 	use TArrayTools;
@@ -111,10 +101,8 @@ class FeaturedTag implements JsonSerializable {
 	}
 
 	/**
-	 * `last_status_at` is a date and not a timestamp — Mastodon sends
-	 * `2022-08-29` here — and is null rather than an empty string when the
-	 * account has not posted with the tag: a client renders the field as a
-	 * date and an empty string is not one.
+	 * `last_status_at` is a date, not a timestamp (Mastodon sends
+	 * `2022-08-29`), and null rather than '' when the tag was never used.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

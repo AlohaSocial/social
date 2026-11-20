@@ -17,25 +17,13 @@ use Throwable;
 /**
  * How big the network is, and how much of it this instance has met.
  *
- * Everything else on the statistics page is counted from this server's own
- * rows, which is what makes it trustworthy and also what makes it small: a
- * person reading "31 posts, 4 followers" has no idea whether the place those
- * posts went is a village or a city. These are the numbers that say.
+ * The totals come from fedidb.com, which counts servers by crawling NodeInfo;
+ * they are quoted with source and date rather than adopted. The request
+ * carries nothing about this instance, and the answer is kept for six hours.
+ * One number is counted here: how many servers this instance federates with.
  *
- * They come from **fedidb.com**, which counts servers by crawling their
- * NodeInfo, and they are quoted rather than adopted: the page names the source
- * and the date, because a figure about the whole fediverse is somebody's
- * survey and not a fact this instance can check. Nothing is sent — the request
- * carries no account, no query and nothing about this instance — and the
- * answer is kept for six hours, because it moves by tenths of a percent a day.
- *
- * One number is this instance's own and is counted here: how many servers it
- * federates with. Beside the total that exists, it is the only honest answer
- * to "how far does what I write actually go".
- *
- * An administrator who would rather this instance made no outbound request for
- * a statistics page sets `network_stats` to `0`, and the section disappears
- * rather than showing zeros.
+ * Setting `network_stats` to `0` stops the outbound request and hides the
+ * section.
  */
 class NetworkStatsService {
 	/** The app value that turns the whole thing off. */
@@ -48,11 +36,8 @@ class NetworkStatsService {
 	private const SOFTWARE_ENDPOINT = 'https://api.fedidb.org/v1/software';
 
 	/**
-	 * How many platforms are named before the rest are added together.
-	 *
-	 * Six and a remainder: the seventh is under two per cent of accounts, and
-	 * a bar with twenty slivers in it says less than one with six bands and a
-	 * number for everything else.
+	 * How many platforms are named before the rest are added together: the
+	 * seventh is under two per cent of accounts.
 	 */
 	public const SOFTWARE_NAMED = 6;
 
@@ -104,18 +89,9 @@ class NetworkStatsService {
 	}
 
 	/**
-	 * What the fediverse is made of: the platforms, largest first.
-	 *
-	 * The totals above say how big it is and nothing about what it is. "Forty
-	 * thousand servers" is an abstraction; "Mastodon, Misskey, Pixelfed,
-	 * PeerTube, and this is where the video ones are" is a picture of a place
-	 * — and for somebody reading this page from inside a Nextcloud, the fact
-	 * that the network is many kinds of software talking to each other is the
-	 * whole point of it.
-	 *
-	 * The named few carry a share; everything else is added into one row
-	 * rather than dropped, so the shares still sum to the whole and nobody has
-	 * to wonder what is missing.
+	 * What the fediverse is made of: the platforms, largest first. The named
+	 * few carry a share; everything else is added into one row, so the shares
+	 * sum to the whole.
 	 *
 	 * @return array{
 	 *     platforms: list<array{name: string, accounts: int, servers: int, active: int, posts: int, share: float}>,
@@ -165,12 +141,8 @@ class NetworkStatsService {
 	}
 
 	/**
-	 * The platforms as the survey lists them, largest by accounts first and
-	 * the empty ones left out.
-	 *
-	 * A platform with no accounts and no servers is one the survey knows the
-	 * name of and has never met — of the seventy-odd it lists, a third are
-	 * that — and a bar band of zero width with a name on it is noise.
+	 * The platforms as the survey lists them, largest by accounts first, without
+	 * the ones with no accounts and no servers.
 	 *
 	 * @return list<array{name: string, accounts: int, servers: int, active: int, posts: int}>|null
 	 */
@@ -227,11 +199,8 @@ class NetworkStatsService {
 	}
 
 	/**
-	 * The survey's four figures, remembered.
-	 *
-	 * A failure is remembered too, as an empty answer: a statistics page that
-	 * cannot reach the survey must not spend four seconds finding that out
-	 * again for the next reader.
+	 * The survey's four figures, cached. A failure is cached too, as an empty
+	 * answer, so the next reader does not wait for it again.
 	 *
 	 * @return array{servers: int, accounts: int, active: int, posts: int, measured: string}|null
 	 */
@@ -263,12 +232,9 @@ class NetworkStatsService {
 	}
 
 	/**
-	 * What this app reads out of the answer, and nothing else.
-	 *
-	 * An answer missing the count of servers is not an answer: the figure this
-	 * page exists to put next to "the servers this one talks to" is that one,
-	 * and a section headed "the fediverse" showing three numbers and a blank
-	 * is worse than no section.
+	 * What this app reads out of the answer, and nothing else. An answer
+	 * without the server count is no answer, since that is the figure the
+	 * page is for.
 	 *
 	 * @param array<string, mixed> $answer
 	 *

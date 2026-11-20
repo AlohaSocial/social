@@ -17,14 +17,10 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Place;
 
 /**
- * Where a post was taken.
- *
- * Nothing here geocodes anything. Sending somebody's location to a third party
- * at the moment they are deciding whether to publish it is the same failure the
- * Exif stripping in this release exists to prevent, and doing it deliberately
- * would be worse than doing it by accident. A place is therefore either one this
- * instance has already seen, or one the client names outright with coordinates
- * it already had.
+ * Where a post was taken. Nothing here geocodes: sending somebody's location
+ * to a third party as they decide whether to publish it is what Exif
+ * stripping prevents. A place is one this instance has seen, or one the
+ * client names outright with coordinates it already had.
  */
 class PlaceService {
 	public function __construct(
@@ -49,11 +45,9 @@ class PlaceService {
 	}
 
 	/**
-	 * The public posts taken at a place, newest first, for the caller to
-	 * dress (`PostDecorationService`), which puts the place on them.
-	 *
-	 * Public only, whoever asks: the place page is a public page, and a
-	 * followers-only post's location is as private as the post.
+	 * The public posts taken at a place, newest first, for the caller to dress
+	 * (`PostDecorationService`). Public only, whoever asks, since the place
+	 * page is public.
 	 *
 	 * @return Stream[]
 	 */
@@ -70,13 +64,9 @@ class PlaceService {
 	}
 
 	/**
-	 * The place a client asked a post to carry, or null for "nowhere".
-	 *
-	 * A client may name one by id -- one it got from the search route -- or
-	 * outright, with a name and optionally coordinates. An id that is not there
-	 * means nowhere rather than an error: a post is worth more than its
-	 * location, and refusing to publish it over a stale place id would be the
-	 * wrong trade.
+	 * The place a client asked a post to carry, or null for "nowhere". Named
+	 * by id (from the search route) or outright with a name and optional
+	 * coordinates. An unknown id means nowhere rather than refusing the post.
 	 */
 	public function resolve(int $placeId, string $name, string $country, string $lat, string $lon): ?Place {
 		if ($placeId > 0) {
@@ -96,13 +86,9 @@ class PlaceService {
 	}
 
 	/**
-	 * Fills in the place of every post on a page, in one query.
-	 *
-	 * The same shape as `LinkPreviewService::attachCards()` and for the same
-	 * reason: a timeline draws dozens of posts, and asking per post is how a
-	 * screen becomes dozens of round trips. The alternative -- joining
-	 * `social_place` into every timeline query -- would put the cost on every
-	 * page whether or not any post on it has a place, and almost none do.
+	 * Fills in the place of every post on a page, in one query, as
+	 * `LinkPreviewService::attachCards()` does, rather than joining
+	 * `social_place` into every timeline query.
 	 *
 	 * @param Stream[] $posts
 	 */
@@ -118,9 +104,7 @@ class PlaceService {
 			return;
 		}
 
-		// a page whose posts share a place asked for it once per post: sixty
-		// bound parameters for three places, and a query that grows with the
-		// page rather than with the number of places on it
+		// each place once, however many posts on the page share it
 		$places = $this->placesRequest->getByIds(array_values(array_unique($ids)));
 		foreach ($posts as $post) {
 			if (!$post instanceof Stream) {

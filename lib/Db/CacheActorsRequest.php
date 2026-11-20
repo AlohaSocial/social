@@ -26,8 +26,7 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 class CacheActorsRequest extends CacheActorsRequestBuilder {
 	/**
 	 * The most rows a search will read, whatever it was asked for: a search
-	 * box shows a handful, and a caller that asks for a thousand is asking the
-	 * database to build a page nobody will look at.
+	 * box shows a handful.
 	 */
 	public const SEARCH_LIMIT = 25;
 
@@ -41,14 +40,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 
 	/**
 	 * How many refreshes in a row may fail before an actor is left alone.
-	 *
 	 * With `syncWait()` doubling from an hour, ten failures span about six
-	 * weeks: long enough to outlast any outage a server comes back from, short
-	 * enough that a server that is gone stops costing a request every pass.
-	 * Past this the row is kept as it is — the follows that point at it, the
-	 * posts it wrote — and only the refresh stops; a fetch that is asked for
-	 * (a mention, a profile opened) still goes to the network and, when it
-	 * works, resets the count.
+	 * weeks. Past this only the refresh stops; the row is kept, and a fetch
+	 * that is asked for (a mention, a profile opened) still goes out and,
+	 * when it works, resets the count.
 	 */
 	public const SYNC_MAX_FAILURES = 10;
 
@@ -56,16 +51,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	public const SYNC_BACKOFF_BASE = 3600;
 
 	/**
-	 * How long a cached remote actor is left alone after a refresh attempt.
-	 *
-	 * With no failure on record it is the cache lifetime: the actor is due
-	 * again CACHE_TTL after the last attempt. After `n` failures in a row it
-	 * is `SYNC_BACKOFF_BASE * 2^(n-1)` — an hour, two, four ... — so one dead
-	 * instance costs the cron a request an hour, then a request a day, then
-	 * nothing, instead of fifty requests every twelve minutes for ever. The
-	 * same schedule has to be applied by the query that reads the queue
-	 * (`limitToSyncDue()`) and by the caller that judges an actor in PHP, so
-	 * both call this.
+	 * How long a cached remote actor is left alone after a refresh attempt:
+	 * CACHE_TTL with no failure on record, else `SYNC_BACKOFF_BASE * 2^(n-1)`
+	 * after `n` failures in a row. Shared by `limitToSyncDue()` and by
+	 * callers judging an actor in PHP.
 	 */
 	public static function syncWait(int $failures): int {
 		if ($failures < 1) {
@@ -86,9 +75,6 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 		return mb_strtolower($account, 'UTF-8');
 	}
 
-	/**
-	 * Insert cache about an Actor in database.
-	 */
 	/**
 	 * The server an account is on: the part after the `@`, or, for a Bluesky
 	 * handle (no `@`, a domain of its own), the handle's domain.
@@ -128,8 +114,7 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 			->setValue('source', $qb->createNamedParameter($actor->getSource()))
 			->setValue('details', $qb->createNamedParameter(json_encode($actor->getDetailsAll())))
 			// the server this account is on, so "which servers do we know"
-			// is a grouped query rather than a read of every row; derived
-			// from the handle, which never changes for a row
+			// is a grouped query; derived from the handle, which never changes
 			->setValue('host', $qb->createNamedParameter(self::hostOf($actor)))
 			// what an account search matches a prefix of; see searchAccounts()
 			->setValue('account_lower', $qb->createNamedParameter(self::lowerAccount($actor->getAccount())));
@@ -158,10 +143,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 		$qb->setValue('icon_id', $qb->createNamedParameter($qb->prim($iconId)));
 		$qb->generatePrimaryKey($actor->getId());
 
-		// the counters the actor arrives with — a local account's, counted a
-		// moment ago by AccountService::addLocalActorDetailCount() — go into
-		// the columns too: a new row otherwise starts at "never counted", the
-		// bumps skip it, and the profile says 0 until the cron's walk
+		// the counters the actor arrives with (a local account's, just counted
+		// by AccountService::addLocalActorDetailCount()) go into the columns
+		// too, or a new row starts at "never counted" and shows 0
 		$count = $actor->getDetails(Details::COUNT);
 		if (isset($count['followers'])) {
 			$qb->setValue('count_followers', $qb->createNamedParameter(max(0, (int)$count['followers']), IQueryBuilder::PARAM_INT))
@@ -178,11 +162,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	public function update(Person $actor): int {
 		$qb = $this->getCacheActorsUpdateSql();
 
-		// The handle is derived, not carried on the wire: a local actor gets it
-		// from the configured address, and a remote one from the host it was
-		// fetched over. A caller that has one is correcting it — refreshing a
-		// local actor after the address changed is the case that matters — and
-		// one that has none must not be able to erase what is stored.
+		// The handle is derived, not carried on the wire. A caller that has one
+		// is correcting it (a local actor after the address changed); one that
+		// has none must not erase what is stored.
 		if ($actor->getAccount() !== '') {
 			$qb->set('account', $qb->createNamedParameter($actor->getAccount()));
 			$qb->set('account_lower', $qb->createNamedParameter(self::lowerAccount($actor->getAccount())));
@@ -233,24 +215,11 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * Moves one of an account's counters, without counting anything.
-	 *
-	 * The three counters used to live only in the `details` JSON, so the only
-	 * way to change one was to recompute all of them — four aggregate queries,
-	 * on every post written and every follow accepted. For an account with a
-	 * million followers that is a million index entries counted so a number can
-	 * go up by one.
-	 *
-	 * `SET col = col + ?` is one row and is atomic, which is the whole reason
-	 * the counters are columns: a read-modify-write of the JSON would lose
-	 * updates whenever two follows arrived together, and the drift would be
-	 * unexplainable. A counter that has never been counted (`-1`) is left
-	 * alone — adding one to "unknown" gives a number that looks authoritative
-	 * and is not; the cron's walk will count it properly.
-	 *
-	 * A decrement stops at 0 in the same statement, so no step can write the
-	 * "not counted" marker over a real number. `CASE` rather than `GREATEST`,
-	 * which SQLite does not have.
+	 * Moves one of an account's counters by `$by`, without counting anything.
+	 * `SET col = col + ?` is atomic, so concurrent follows lose no update. A
+	 * counter never counted (`-1`) is left for the cron's walk. A decrement
+	 * stops at 0 in the same statement; `CASE` rather than `GREATEST`, which
+	 * SQLite does not have.
 	 *
 	 * @param string $column one of `count_followers`, `count_following`, `count_posts`
 	 */
@@ -274,8 +243,8 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * Writes the counters the cron walk counted, which is what reconciles the
-	 * drift the increments above can accumulate.
+	 * Writes the counters the cron walk counted, reconciling any drift of the
+	 * increments.
 	 *
 	 * @param array{followers?: int, following?: int, post?: int} $count
 	 */
@@ -292,7 +261,7 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 
 	/**
 	 * The three counters as they stand, or null where this account has never
-	 * been counted — which is every row written before they were columns.
+	 * been counted.
 	 *
 	 * @return array{followers: int, following: int, post: int}|null
 	 */
@@ -352,11 +321,8 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * The cached actors behind a set of ids, in one query.
-	 *
-	 * For the callers that hold a list of actor ids and want whatever is known
-	 * about them — a page of reports, a page of blocks — instead of a lookup,
-	 * and a federated fetch on every miss, per row.
+	 * The cached actors behind a set of ids, in one query, for callers holding
+	 * a page of actor ids (reports, blocks) that must not fetch on a miss.
 	 *
 	 * @param string[] $ids
 	 *
@@ -424,18 +390,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * The cached accounts whose handle starts with what was typed.
-	 *
-	 * Asked on every keystroke of the composer's mention picker, and of
-	 * `/api/v2/search`, `/api/v1/accounts/search` and the unified search. The
-	 * handle used to be matched through `account LIKE ?`, which MySQL was told
-	 * to compare `COLLATE utf8mb4_general_ci` to make it case-insensitive — and
-	 * an unindexed column compared under another collation is a scan of every
-	 * cached actor. The lowercased copy `account_lower` carries the index
-	 * `social_ca_al`, and a prefix `LIKE` on it, compared as it stands, is a
-	 * range scan on MySQL and MariaDB. PostgreSQL and SQLite plan a `LIKE` as
-	 * a range only under a C collation or `case_sensitive_like`; there it is
-	 * still a scan, of one short column.
+	 * The cached accounts whose handle starts with what was typed, asked on
+	 * every keystroke of mention pickers and account searches. A prefix
+	 * `LIKE` on the lowercased, indexed `account_lower` is a range scan on
+	 * MySQL and MariaDB; PostgreSQL and SQLite scan the one short column.
 	 *
 	 * @param string $followedBy when set, only the accounts this actor follows
 	 *                           — narrowed in the query, so the limit counts
@@ -466,14 +424,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * The cached remote actors whose refresh is due, the longest-waiting first.
-	 *
-	 * Due means the wait `syncWait()` prescribes for the row's failure count
-	 * has passed since its last attempt, whether or not that attempt worked;
-	 * a row past SYNC_MAX_FAILURES is not due at all. The selection used to
-	 * read `creation`, which for a remote actor is the `published` date its
-	 * instance reports and never moves, so every remote actor was always
-	 * stale and, with no order, the same fifty came back on every run.
+	 * The cached remote actors whose refresh is due, the longest-waiting
+	 * first: the wait `syncWait()` prescribes for the row's failure count has
+	 * passed since its last attempt. A row past SYNC_MAX_FAILURES is never due.
 	 *
 	 * @param int|null $now the clock to judge "due" by; the wall clock when null
 	 *
@@ -501,25 +454,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 
 	/**
 	 * The cached remote actors whose timeline the cron syncs next, the
-	 * longest-untried first.
-	 *
-	 * A batch of its own rather than the refresh's. The timeline sync used to
-	 * be handed whatever `getRemoteActorsToUpdate()` returned, which worked
-	 * only because nothing the refresh did could make an actor stop being
-	 * stale — every remote actor always was. Now that a refresh stamps what it
-	 * touched, the refresh step would consume the whole due set before the
-	 * sync step ran, and on an instance with fewer than SYNC_BATCH remote
-	 * actors no timeline would ever be synced again.
-	 *
-	 * Ordering on the same attempt stamp still rotates it: the actors the
-	 * refresh just stamped sort last, so this gets the ones it did not reach.
-	 * The give-up threshold is shared, because a dead instance has no timeline
-	 * to read either.
-	 *
-	 * Only the actors somebody here follows. A synced timeline feeds the home
-	 * timelines of the followers, and nothing else reads it: an actor the
-	 * instance merely met — a like, a boost seen in passing — has no reader
-	 * for its outbox, and every cached actor was fetched on every rotation.
+	 * longest-untried first. A batch of its own, since the refresh stamps
+	 * what it touches and would otherwise leave nothing for the sync; on the
+	 * same stamp, the actors just refreshed sort last. Only actors somebody
+	 * here follows, since a synced timeline only feeds followers' homes.
 	 *
 	 * @return Person[]
 	 * @throws Exception
@@ -564,14 +502,11 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 			$date = new DateTime('now');
 			$date->sub(new DateInterval('PT' . self::DETAILS_TTL . 'M'));
 			$qb->limitToDBFieldDateTime('details_update', $date, true);
-			// an actor whose refresh just failed is not asked three more
-			// questions; one that has been given up on is not asked at all.
-			// Without this the fifty oldest `details_update` were the fifty
-			// dead ones, on every pass, since a failure never advanced it
+			// a failed or given-up actor is skipped, or the oldest
+			// `details_update` would be the dead ones on every pass
 			$this->limitToSyncDue($qb, $now ?? time(), false);
 			// three outbound requests per actor (followers, following, outbox),
-			// so one cron pass takes a bounded batch just as the sibling above
-			// does — the rest are picked up by the next pass
+			// so one cron pass takes a bounded batch
 			$qb->setMaxResults(self::SYNC_BATCH);
 		}
 
@@ -607,13 +542,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * Stamps a refresh attempt on one cached actor.
-	 *
-	 * Written whether the attempt worked or not — that is the whole point: a
-	 * row that is never stamped is due again on the next pass, and fifty of
-	 * those on a dead instance were the only fifty the refresh ever saw. A
-	 * success clears the failure count; a failure adds to it, in SQL, so two
-	 * workers stamping the same row cannot lose a count between them.
+	 * Stamps a refresh attempt on one cached actor, whether it worked or not,
+	 * so a dead instance's rows are not due again on every pass. A success
+	 * clears the failure count; a failure adds to it in SQL, so concurrent
+	 * workers lose no count.
 	 */
 	public function recordSyncAttempt(string $id, bool $success, int $now): void {
 		$qb = $this->getCacheActorsUpdateSql();
@@ -630,13 +562,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * Records on a cached actor that it moved to `$target`.
-	 *
-	 * A cache row has no column for `movedTo`: like `alsoKnownAs` it is read
-	 * off the stored source document, so that is where it is written. The
-	 * document is what the actor's server will serve once its own caches have
-	 * turned over — Mastodon keeps serving the pre-move one for minutes — and
-	 * a refresh that gets the new document says the same thing.
+	 * Records on a cached actor that it moved to `$target`. Written into the
+	 * stored source document, where `movedTo` is read like `alsoKnownAs`,
+	 * since Mastodon keeps serving the pre-move document for minutes.
 	 *
 	 * @throws CacheActorDoesNotExistException
 	 */
@@ -657,19 +585,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 
 	/**
 	 * The cached remote actors nothing here refers to any more, a page at a
-	 * time: not followed by and not following any account this instance
-	 * knows, no follow request or block/mute/endorsement either way, no post
-	 * of theirs stored, and neither seen (`creation`) nor tried (`sync_attempt`)
-	 * since `$cutoff`.
-	 *
-	 * Both dates have to be old. `creation` is the `published` date the
-	 * actor's instance reports, or the moment it was first cached when it
-	 * reports none; `sync_attempt` is when the refresh last looked, 0 for
-	 * never. A row that was tried last week is one the cron still cares
-	 * about, however old its profile says it is.
-	 *
-	 * Bounded because the caller deletes what it is handed and asks again; the
-	 * next call returns the next page without an offset to keep track of.
+	 * time: no follow, follow request or block/mute/endorsement either way,
+	 * no stored post, and neither `creation` nor `sync_attempt` since
+	 * `$cutoff` (a row tried recently is one the cron still cares about). The
+	 * caller deletes each page and asks again.
 	 *
 	 * @return string[] actor ids, the longest-untouched first
 	 */
@@ -732,11 +651,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * The cached actors of one instance, a page at a time.
-	 *
-	 * Bounded because a domain purge must not read a whole instance's accounts
-	 * into memory to delete them; the caller deletes each row it is handed, so
-	 * the next call returns the next page without an offset to keep track of.
+	 * The cached actors of one instance, a page at a time, so a domain purge
+	 * does not read them all into memory; the caller deletes each page and
+	 * asks again.
 	 *
 	 * @return string[] actor ids
 	 *
@@ -766,8 +683,7 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$qb->selectDistinct('shared_inbox')
 			->from(self::TABLE_CACHE_ACTORS)
-			// an actor with no shared inbox used to come back as '', which the
-			// caller then turned into a delivery to the host ''
+			// an actor with no shared inbox has ''
 			->where($qb->expr()->neq('shared_inbox', $qb->createNamedParameter('')))
 			->andWhere($qb->expr()->eq('local', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
 		$inbox = [];
@@ -781,15 +697,10 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * One shared inbox per server that has answered since `$since`: what an
-	 * activity addressed to everybody — an account deletion — goes to.
-	 *
-	 * Grouped on the indexed `host` rather than a DISTINCT over the TEXT
-	 * `shared_inbox`, which read every cached actor to come back with a few
-	 * thousand inboxes, every one of them delivered to however long ago its
-	 * server was last heard from. A server counts as seen when a refresh of
-	 * one of its accounts worked inside the window (`sync_attempt` with no
-	 * failure since) or one of its accounts was made inside it.
+	 * One shared inbox per server that has answered since `$since`, for an
+	 * activity addressed to everybody (an account deletion). Grouped on the
+	 * indexed `host`. A server counts as seen when a refresh of one of its
+	 * accounts worked in the window or one of its accounts was made in it.
 	 *
 	 * @return string[]
 	 */
@@ -917,9 +828,7 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 
 	/**
 	 * The cached actors behind a set of numeric ids, with their cached icon
-	 * joined in: without it the avatar has no local copy to name, and the
-	 * account read by id was given its placeholder while every other route
-	 * gave its picture.
+	 * joined in so the avatar has a local copy to name.
 	 *
 	 * @param array $ids
 	 *
@@ -935,15 +844,9 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * How big an audience each of these accounts has, as far as this server
-	 * has been told.
-	 *
-	 * Read out of the cached `details` rather than counted here: a remote
-	 * account's followers are not on this server, and what is stored is
-	 * whatever its own instance last reported to the details refresh. An
-	 * account nothing is known about is *absent* from the answer rather than
-	 * present as a zero, so a caller can say "not known" instead of stating a
-	 * number that is only a gap.
+	 * How many followers each of these accounts has, as its instance last
+	 * reported in the cached `details`. An account nothing is known about is
+	 * absent rather than zero, so a caller can say "not known".
 	 *
 	 * @param string[] $ids the accounts, by id
 	 * @return array<string, int> actor id => how many followers it has

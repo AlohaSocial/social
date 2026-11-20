@@ -19,24 +19,12 @@ use Throwable;
 /**
  * Turning stored videos into the one format the rest of the network plays.
  *
- * A job of its own rather than a step of `Cron\Cache`, for one reason: that
- * job budgets five minutes for eleven steps that each do a little, and
- * converting one video can take longer than the whole budget. A step that
- * regularly overran would starve every step behind it.
- *
- * **One video per run.** The job is not trying to drain a backlog quickly; it
- * is trying never to be the reason a server's cron is slow. A hundred videos
- * are a day's work at this rate, which is the right speed for something that
- * makes old uploads travel better and is not urgent for any of them.
- *
- * A new post does not wait for this: `Cron\TranscodeBeforeDelivery` converts
- * the video a held post is waiting on at the next cron run. This is the sweep
- * behind it — older uploads, a job that never ran, a server where the setting
- * was switched on after the fact.
- *
- * On by default, and a no-op on a server without ffmpeg; an administrator can
- * switch it off, because re-encoding is lossy and the converted file replaces
- * the original.
+ * A job of its own rather than a step of `Cron\Cache`, whose five-minute
+ * budget one conversion can exceed. One video per run, so it is never the
+ * reason a cron is slow. New posts do not wait for this:
+ * `Cron\TranscodeBeforeDelivery` handles a held post's video; this is the
+ * sweep for older uploads and missed jobs. A no-op without ffmpeg, and can be
+ * switched off, since re-encoding is lossy and replaces the original.
  */
 class Transcode extends TimedJob {
 	public function __construct(

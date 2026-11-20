@@ -21,11 +21,6 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Output\OutputInterface;
 
-/**
- * Class StreamDetails
- *
- * @package OCA\Social\Command
- */
 class StreamDetails extends ExtendedBase {
 	private DetailsService $detailsService;
 

@@ -16,24 +16,15 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Poster frames for the stored videos that have none, a few at a time.
+ * Poster frames for the stored videos that have none, a few at a time, called
+ * by `Cron\VideoPosters` every run (`occ social:media:posters` does all at
+ * once). Uploads get a poster on the way in (`CacheDocumentService`), but
+ * older ones, or ones stored without ffmpeg, have none.
  *
- * A video uploaded here is given its poster on the way in
- * (`CacheDocumentService`); one stored before that existed, or while the
- * server had no ffmpeg, has none, and a card of it on the Videos page is a
- * black rectangle. `Cron\VideoPosters` calls this every run until it has been
- * through them all, so nobody has to know that `occ social:media:posters`
- * exists — the command is still there for doing it all at once.
- *
- * It walks the videos in nid order from a cursor in the app settings
- * (`poster_backfill_cursor`), so a video it could not take a frame from is
- * tried once and left behind rather than retried every run. Nothing is
- * walked while the server has no ffmpeg: the cursor waits there, and the
- * videos are done once an administrator installs it.
- *
- * The poster is the same frame, JPEG and `resized_copy` an upload gets
- * (`CacheDocumentService::generatePoster()`, which takes no metadata from the
- * file), and only the posts that carry each video are rewritten to show it.
+ * Walks in nid order from `poster_backfill_cursor`, so a video that fails is
+ * tried once; without ffmpeg the cursor waits. The poster is the same one an
+ * upload gets (`CacheDocumentService::generatePoster()`), and only the posts
+ * carrying each video are rewritten.
  */
 class VideoPosterBackfill {
 	/** How many videos one run looks at: each is a copy out of storage and an ffmpeg. */

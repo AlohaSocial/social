@@ -28,20 +28,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Following a hashtag, as Mastodon's client API does it.
+ * Following a hashtag, as Mastodon's client API does it: the public posts
+ * carrying it join the follower's home timeline
+ * (`StreamRequest::followedTagNids()`); these routes say which tags.
  *
- * A followed hashtag is not a relationship with anybody: it puts the *public*
- * posts carrying it into the follower's home timeline, and that is the whole
- * of it. The timeline half lives in `StreamRequest::followedTagNids()`; these
- * four routes are what a client uses to say which tags, and to draw the
- * follow button.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController`, and for the
- * same reason: a Mastodon client authenticates with a bearer token and has no
- * Nextcloud session or CSRF token to present, so `#[NoAdminRequired]` would
- * refuse every real caller before the handler ran. Every route here then
- * requires a viewer itself — no token, no session, 401 — so nothing is public
- * in fact.
+ * `#[PublicPage]` with `#[NoCSRFRequired]` like `ApiController`, since a
+ * Mastodon client has a bearer token and no session; every route requires a
+ * viewer itself.
  */
 class TagController extends ClientApiController {
 	/** What Mastodon caps a page of this list at. */
@@ -122,8 +115,8 @@ class TagController extends ClientApiController {
 			$this->initViewer(['write:follows', 'follow']);
 			$tag = $this->tag($hashtag);
 			$this->followedTagsRequest->save($this->viewer->getId(), $tag);
-			// posts carrying it are part of their home timeline from now on,
-			// which no id it is keyed on says — see TimelineRevisionService
+			// the home timeline changes without any id saying so; see
+			// TimelineRevisionService
 			$this->timelineRevisionService->bumpForActor($this->viewer->getId());
 
 			return new DataResponse($this->hashtagService->tagEntity($tag, true), Http::STATUS_OK);
@@ -165,11 +158,8 @@ class TagController extends ClientApiController {
 
 	/**
 	 * A page of Tag entities with the `Link` header masto.js reads its cursor
-	 * from — without it Elk and Phanpy show the first page of a list and stop.
-	 *
-	 * The cursor is the `social_followed_tag` row id, not the tag: a tag can be
-	 * unfollowed and followed again, so its name does not move in one
-	 * direction and cannot page.
+	 * from. The cursor is the `social_followed_tag` row id, since a tag can be
+	 * unfollowed and followed again.
 	 *
 	 * @param int[] $ids the row ids of the page, in its order
 	 */

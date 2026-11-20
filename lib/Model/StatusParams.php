@@ -10,13 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Model;
 
 /**
- * A post request that has been accepted and not published.
- *
- * Two things in this app keep one: a post scheduled for later, and a post held
- * for a moderator to look at. Both store the client's request rather than a
- * rendered note — the reasons are set out on `ScheduledStatus` — and both
- * replay it through `StatusAssemblyService::fromParams()`, which is why the
- * readers of `params` are an interface rather than a method on either class.
+ * A post request that has been accepted and not published: a scheduled post
+ * or a post held for a moderator. Both store the client's request (see
+ * `ScheduledStatus`) and replay it through
+ * `StatusAssemblyService::fromParams()`, hence an interface.
  */
 interface StatusParams {
 	public function paramText(): string;

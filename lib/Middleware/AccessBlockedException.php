@@ -12,12 +12,9 @@ namespace OCA\Social\Middleware;
 use Exception;
 
 /**
- * Thrown by AccessBlockMiddleware and caught by it: the request came from an
- * address this instance answers nothing from.
- *
- * Its own type rather than a bare Exception so that `afterException()` can
- * tell the refusal it raised from every other failure a controller may throw,
- * and re-throw those untouched.
+ * Thrown and caught by AccessBlockMiddleware: the request came from an
+ * address this instance answers nothing from. Its own type so
+ * `afterException()` re-throws every other failure untouched.
  */
 class AccessBlockedException extends Exception {
 }

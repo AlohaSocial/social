@@ -17,21 +17,11 @@ use OCP\SetupCheck\SetupResult;
 /**
  * Whether the proxy in front of the client API tells Nextcloud the scheme.
  *
- * The rules that put the Mastodon client API at the domain root proxy to plain
- * HTTP on the loopback address. `mod_proxy` sends `X-Forwarded-For` and
- * `X-Forwarded-Host` by itself and stops there, so without
- * `RequestHeader set X-Forwarded-Proto "https"` Nextcloud believes every
- * proxied request arrived over `http` and builds every absolute URL it answers
- * with accordingly — on a site that is `https`.
- *
- * **Nothing about this is visible from inside.** The app answers, the routes
- * work, and the addresses in the answers are wrong. An iOS client refuses them
- * outright under App Transport Security and its sign-in stops dead, which is
- * how this was found: in a web server's access log, not in the app. Hence a
- * check — the alternative is an administrator with a working instance and a
- * client that will not sign in, and nothing anywhere connecting the two.
- *
- * Read from what the client-API probe already saw, so this costs nothing and
+ * The domain-root rules proxy to plain HTTP on loopback; `mod_proxy` sends
+ * `X-Forwarded-For` and `X-Forwarded-Host` only, so without
+ * `RequestHeader set X-Forwarded-Proto "https"` every absolute URL is built
+ * as `http`. Nothing shows this from inside, but iOS clients refuse such URLs
+ * and cannot sign in. Read from what the client-API probe already saw, so it
  * says nothing until that probe has run.
  */
 class ProxyForwardsTheScheme implements ISetupCheck {

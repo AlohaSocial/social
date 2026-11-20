@@ -15,13 +15,9 @@ use OCP\EventDispatcher\IEventListener;
 use OCP\User\Events\UserFirstTimeLoggedInEvent;
 
 /**
- * An external user's first login sets up nothing but Social.
- *
- * Other apps use the first login to prepare an account: Files copies the
- * skeleton files into the home folder, the calendar makes a default calendar.
- * None of it is reachable for an external user, and the skeleton alone is
- * several megabytes per account. Registered ahead of every other listener,
- * it stops the event for external users before they see it.
+ * An external user's first login sets up nothing but Social. Registered ahead
+ * of every other listener, it stops the event so other apps do not prepare
+ * what the user cannot reach (Files' skeleton alone is several megabytes).
  *
  * @template-implements IEventListener<UserFirstTimeLoggedInEvent>
  */

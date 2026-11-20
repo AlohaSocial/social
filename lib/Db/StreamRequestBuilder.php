@@ -22,11 +22,6 @@ use OCA\Social\Tools\Exceptions\RowNotFoundException;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
-/**
- * Class StreamRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class StreamRequestBuilder extends CoreRequestBuilder {
 	/** how deep a reply chain is followed to find its root; the bound ConversationsRequest::rootOf() uses */
 	private const MAX_THREAD_DEPTH = 40;
@@ -69,21 +64,11 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The posts, every column of them, with no `DISTINCT`.
-	 *
-	 * A `DISTINCT` over these columns — `source`, `cache`, `details`, `content`
-	 * and the like are TEXT — makes the database build a temporary table of
-	 * every matching row (on disk, on MySQL and MariaDB) before it can return
-	 * one, for a read by primary key as much as for a page. Most of the joins
-	 * a read adds cannot repeat a post: the author and the boosted post are
-	 * joined on unique keys. The ones that can repeat it with identical
-	 * columns — the recipient rows `limitToViewer()` joins, the expiry rows of
-	 * `filterHiddenActors()` — are deduplicated by `getStreamsFromRequest()`,
-	 * and a read that pages over them chooses its page by nid first
-	 * (`getStreamNidsSelectSql()`) and reads the rows by nid afterwards. The
-	 * rest (two raced copies of an avatar's document row, an action row on a
-	 * boost and on the post it boosts) differ in a selected column, which a
-	 * `DISTINCT` never collapsed either.
+	 * The posts, every column of them, with no `DISTINCT`: over these TEXT
+	 * columns it would build a temporary table of every matching row. Joins
+	 * that can repeat a post are deduplicated by `getStreamsFromRequest()`,
+	 * and paged reads choose their page by nid first
+	 * (`getStreamNidsSelectSql()`).
 	 *
 	 * @param bool $narrow read without what a client-format export does not
 	 *                     use (`SocialCrossQueryBuilder::setNarrowStreamRead()`);
@@ -119,17 +104,10 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * A post its author has put away is out of every list this server builds,
-	 * and the filter is here rather than in each of them.
-	 *
-	 * Fail-closed on purpose: a read that should show archived posts — the
-	 * author's own list of them, and a single post fetched by its address —
-	 * asks for them, and a read written later shows none until somebody
-	 * decides it should. The other way round, every list written from now on
-	 * would leak one until somebody noticed.
-	 *
-	 * `$admitUnfilled` keeps the `OR … IS NULL` after the backfill has made
-	 * it dead weight, for a query whose plan depends on it.
+	 * Leaves archived posts out of every list this server builds. Fail-closed:
+	 * a read that should show them (the author's own list, a single post by
+	 * its address) asks. `$admitUnfilled` keeps the `OR … IS NULL` after the
+	 * backfill, for a query whose plan depends on it.
 	 */
 	protected function hideArchived(SocialQueryBuilder $qb, bool $withArchived, bool $admitUnfilled = false): void {
 		if ($withArchived) {
@@ -143,37 +121,23 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 			return;
 		}
 
-		// rows written before the column existed carry NULL until the
-		// backfill has reached them; an `OR` a planner estimates badly, so
-		// it is dropped the moment the flag says it is dead weight
+		// rows not yet backfilled carry NULL; the `OR` is dropped once the
+		// flag says it is dead weight, since planners estimate it badly
 		$qb->andWhere($qb->expr()->orX($notArchived, $qb->expr()->isNull('s.archived')));
 	}
 
 	/**
-	 * The same query, projecting one column.
-	 *
-	 * Joining the recipients and follows tables can return a post more than
-	 * once, and a page with repeats in it is a page short. Deduplicating whole
-	 * rows means building and sorting the whole matching set first, eighty
-	 * columns of it, several TEXT; deduplicating one integer is cheap, so the
-	 * page is chosen here and the rows are fetched afterwards by id.
+	 * The same query, projecting one column, so a page can be chosen and
+	 * deduplicated on one integer and its rows fetched afterwards by id.
 	 *
 	 * @param bool $distinct whether the joins this page uses can return a post
 	 *                       more than once.
 	 *
-	 * The recipient join is `social_stream_dest`, whose unique index is
-	 * `(stream_id, actor_id, type)`: a query that fixes **both** the actor and
-	 * the type — the public timeline, notifications, direct messages — can
-	 * match at most one row per post and cannot duplicate. The home timeline
-	 * and the marked timelines can: a post addressed to three accounts the
-	 * viewer follows matches three rows, which is precisely what the
-	 * deduplication is for.
-	 *
-	 * It is not free. `SELECT DISTINCT` makes the database materialise every
-	 * matching row before it can take a page: measured on the public timeline
-	 * of an instance with 22,000 posts, 37.4 ms with it and 0.21 ms without —
-	 * for the same twenty rows, with no duplicates among them. So it is asked
-	 * for where it is needed rather than always.
+	 * `social_stream_dest` is unique on `(stream_id, actor_id, type)`, so a
+	 * query fixing both actor and type (public, notifications, direct) cannot
+	 * duplicate, while the home and marked timelines can. `DISTINCT` is
+	 * costly (37.4 ms against 0.21 ms on a 22,000-post public timeline), so
+	 * it is only asked for where needed.
 	 */
 	protected function getStreamNidsSelectSql(
 		bool $distinct = true,
@@ -205,18 +169,14 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 		}
 		$cursor->closeCursor();
 
-		// Deduplicated here as well as in SQL, and cheaply — this is twenty
-		// integers. A page that asked for no `DISTINCT` because its recipient
-		// join cannot duplicate can still be handed a repeat by one of the
-		// left joins the hidden-actor filter adds: a viewer with an expired
-		// timed mute on both the booster and the boosted author matches the
-		// expiry table twice. That is rare enough to be worth a page one row
-		// short and not worth making every other read materialise itself.
+		// deduplicated here too: a page without `DISTINCT` can still get a
+		// repeat from the hidden-actor filter's left joins (expired mutes on
+		// both booster and author); rare enough to leave a page one row short
 		return array_values(array_unique($nids));
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */
@@ -349,15 +309,10 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Marks the posts whose conversation the viewer has muted.
-	 *
-	 * Mastodon's `muted` on a status is about the thread: the mute is kept
-	 * against the thread's root (`social_convo_state`) and a post does not
-	 * store its root, so the roots of a page are walked here — a level at a
-	 * time, one query per level — and compared with the viewer's muted roots.
-	 * Those are asked once per request and nothing more is asked for a viewer
-	 * who muted nothing, which is nearly every viewer. A notification is a
-	 * stream too, and the post it is about is its object.
+	 * Marks the posts whose conversation the viewer has muted. The mute is
+	 * kept against the thread's root (`social_convo_state`), so the roots of
+	 * a page are walked a level at a time; nothing more is asked for a viewer
+	 * who muted nothing. A notification's post is its object.
 	 *
 	 * @param Stream[] $streams
 	 */
@@ -420,13 +375,9 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The thread root of each post, by id.
-	 *
-	 * The parent chain is followed a level at a time, every level one query
-	 * for the whole page, at most `MAX_THREAD_DEPTH` levels — a malformed
-	 * chain must not walk for ever. A post that replies to nothing, or whose
-	 * parent this instance does not hold, is its own root, as
-	 * `ConversationsRequest::rootOf()` has it for one post.
+	 * The thread root of each post, by id: one query per level, at most
+	 * `MAX_THREAD_DEPTH` levels. A post without a held parent is its own
+	 * root, as in `ConversationsRequest::rootOf()`.
 	 *
 	 * @param string[] $ids
 	 * @return array<string, string> id => root id

@@ -17,11 +17,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * The emoji this instance publishes.
- *
- * `/api/v1/custom_emojis` answered `[]` unconditionally and outbound posts
- * carried no `Emoji` tags, so emoji from every other instance rendered here
- * and this one could publish none.
+ * The emoji this instance publishes, served by `/api/v1/custom_emojis` and
+ * sent as `Emoji` tags on outbound posts.
  */
 class Emoji extends SocialCommand {
 	public function __construct(

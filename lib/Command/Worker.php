@@ -27,41 +27,18 @@ use Throwable;
  * A process that drains the queues continuously, instead of every twelve
  * minutes.
  *
- * `Cron\Queue` reads **200 rows every 12 minutes** and delivers them one after
- * another with a 30-second timeout each, inside a 300-second budget. That is
- * about a thousand deliveries an hour at best and **ten** at worst — ten
- * unresponsive peers at 30 seconds each fill the whole budget. An instance
- * whose accounts are followed across twenty thousand servers therefore takes
- * the better part of a day to deliver one popular post, with every other post
- * queued behind it. Nextcloud runs one `cron.php` at a time, so there is no
- * parallelism to be had by adding servers.
+ * `Cron\Queue` reads 200 rows every 12 minutes with a 30-second timeout each
+ * inside a 300-second budget, so ten unresponsive peers fill a whole pass, and
+ * Nextcloud runs one `cron.php` at a time. This is the same delivery in a
+ * loop. Claiming a row is atomic (`setAsRunning()` is an
+ * `UPDATE … WHERE status = standby` that throws when it loses the race), so
+ * several workers may run at once, e.g. under systemd.
  *
- * This is the same delivery, in a loop that does not stop. A healthy peer
- * answers in a fraction of a second, so one worker moves thousands of rows an
- * hour rather than a thousand a day; and because claiming a row is already
- * atomic — `setAsRunning()` is an `UPDATE … WHERE status = standby` that throws
- * when it loses the race — **several workers may run at once** and will not
- * collide. Run it under systemd with as many instances as the instance needs.
- *
- * Three things it is careful about.
- *
- * **It gives the row back.** A worker killed mid-delivery leaves the row
- * `running`, where nothing retries it until the stale reaper an hour later. So
- * every attempt that ends outside `ActivityService`'s own error handling puts
- * the row back on standby, and the loop reaps stale rows as it goes.
- *
- * **It sleeps when there is nothing to do.** An empty queue polled in a tight
- * loop is a busy CPU and a database asked the same question thousands of times
- * a second. An empty pass waits, and the wait grows to `IDLE_MAX` so an idle
- * instance costs nothing.
- *
- * **It stops when asked.** `--once` drains what is there and returns, which is
- * what a cron entry wants; `--max-seconds` gives systemd something to restart
- * around; and SIGTERM finishes the row in hand before returning, because a
- * delivery abandoned halfway is one the peer may have already taken.
- *
- * The cron job stays exactly as it is. An instance that will not run a daemon
- * keeps the behaviour it has, and one that will gets the throughput.
+ * A row whose attempt ends outside `ActivityService`'s own error handling is
+ * put back on standby, and the loop reaps stale rows. An empty pass sleeps,
+ * growing up to `IDLE_MAX`. `--once` drains and returns, `--max-seconds` gives
+ * systemd something to restart around, and SIGTERM finishes the row in hand
+ * first. The cron job is unchanged.
  */
 class Worker extends SocialCommand {
 	/** How long an empty queue waits before asking again, and the ceiling on that. */
@@ -163,13 +140,9 @@ class Worker extends SocialCommand {
 	}
 
 	/**
-	 * One batch of deliveries.
-	 *
-	 * A row whose host has an open circuit breaker is not attempted, and must
-	 * not count: a batch of nothing but those is skipped in milliseconds, and
-	 * counting it as work made the loop `continue` without ever sleeping —
-	 * re-running the standby query thousands of times a second for as long as
-	 * the breaker was open, which is up to an hour.
+	 * One batch of deliveries. A row whose host has an open circuit breaker is
+	 * not attempted and does not count, or a batch of only those would keep
+	 * the loop from ever sleeping.
 	 *
 	 * @return int how many rows were attempted
 	 */
@@ -248,12 +221,9 @@ class Worker extends SocialCommand {
 	}
 
 	/**
-	 * Finish the row in hand, then stop.
-	 *
-	 * A delivery abandoned halfway is one the receiving server may already have
-	 * taken, and the row would be retried against it. `pcntl` is not present on
-	 * every PHP build, so a worker without it simply runs until it is killed —
-	 * which is what it did before there was a signal handler.
+	 * Finish the row in hand, then stop: a delivery abandoned halfway may
+	 * already have been taken by the peer. Without `pcntl` a worker runs
+	 * until it is killed.
 	 */
 	private function listenForStop(): void {
 		if (!function_exists('pcntl_signal') || !function_exists('pcntl_async_signals')) {

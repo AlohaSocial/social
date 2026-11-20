@@ -14,16 +14,10 @@ use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Where a post was taken.
- *
- * Never inferred and never required: a post has a place because its author said
- * so. Nothing in this app geocodes anything -- see the migration for why -- so a
- * place is either one the instance has already seen or one a client named
- * outright with coordinates it already had.
- *
- * The coordinates are strings the whole way through. They arrive from a client
- * and go back to a client unchanged, nothing here does arithmetic on them, and
- * treating them as floats would round a coordinate somebody typed.
+ * Where a post was taken: never inferred and never required. Nothing here
+ * geocodes, so a place is one the instance has seen or one a client named
+ * with coordinates it already had. Coordinates stay strings throughout, so
+ * nothing rounds what somebody typed.
  */
 class Place implements IQueryRow, JsonSerializable {
 	use TArrayTools;
@@ -67,8 +61,7 @@ class Place implements IQueryRow, JsonSerializable {
 
 	/**
 	 * ISO 3166-1 alpha-2, upper-cased. Anything that is not two letters is
-	 * dropped rather than stored: a country column holding "United Kingdom" in
-	 * one row and "GB" in another cannot group anything.
+	 * dropped, so the column can group.
 	 */
 	public function setCountry(string $country): self {
 		$country = strtoupper(trim($country));

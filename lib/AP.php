@@ -96,35 +96,17 @@ class AP {
 
 	/**
 	 * Object types other servers `Create` into a timeline that this app has no
-	 * model of its own for.
-	 *
-	 * PeerTube posts `Video`, Plume and WriteFreely post `Article`, Mobilizon
-	 * posts `Event`, Lemmy posts `Page` and Funkwhale posts `Audio`. Every one
-	 * of them arrives inside an ordinary `Create` addressed to an actor's
-	 * followers, and Mastodon shows them as statuses.
-	 *
-	 * Without a mapping they were not merely unrendered, they were invisible:
-	 * `getObjectFromData()` swallowed the `ItemUnknownException` and — because
-	 * `object` had arrived as an array — set neither `object` nor `objectId`, so
-	 * `CreateInterface` returned on `!hasObject()` and nothing was logged.
-	 * Following a PeerTube channel or a Plume blog produced a permanently empty
-	 * timeline.
-	 *
-	 * They are therefore modelled as a `Note`, which is the shape everything
-	 * downstream (storage, the client API, the timeline queries) understands;
-	 * the type as it arrived on the wire is kept in `subtype`. Article and Page
-	 * titles are rendered as an escaped heading before a non-empty body.
+	 * model of its own for: PeerTube's `Video`, Plume and WriteFreely's
+	 * `Article`, Mobilizon's `Event`, Lemmy's `Page` and Funkwhale's `Audio`.
+	 * They are modelled as a `Note`, which everything downstream understands,
+	 * with the wire type kept in `subtype`. Article and Page titles become an
+	 * escaped heading before a non-empty body.
 	 */
 	public const NOTE_LIKE_TYPES = ['Video', 'Article', 'Page', 'Event', 'Audio'];
 
 	/**
-	 * Resolved on first use by instance(), not at autoload time.
-	 *
-	 * This used to be a public mutable static filled in by an `AP::init();`
-	 * statement at the bottom of this file, so merely autoloading the class
-	 * built all 24 interface services out of the container -- on every request
-	 * that touched ActivityPub, needed or not -- and anything anywhere could
-	 * overwrite the registry.
+	 * Resolved on first use by instance(), so autoloading the class builds
+	 * none of the interface services.
 	 */
 	private static ?AP $instance = null;
 
@@ -166,38 +148,25 @@ class AP {
 	}
 
 	/**
-	 * The registry, built on first use.
-	 *
-	 * A failure here used to be logged and swallowed, which left the static
-	 * null and turned every call site into "call to a member function on null"
-	 * somewhere else entirely. Letting the container exception out says what
-	 * actually could not be built.
+	 * The registry, built on first use. A container exception is let out,
+	 * since it says what could not be built.
 	 */
 	public static function instance(): self {
 		return self::$instance ??= Server::get(self::class);
 	}
 
 	/**
-	 * Replace the registry, or clear it with null so the next instance() rebuilds.
-	 *
-	 * The unit suite has no server to resolve the real thing from, so it
-	 * installs a double here. This is the one way in: the property behind it is
-	 * private, which is the difference from the public static it replaced --
-	 * that could be reassigned from anywhere, including by accident.
+	 * Replace the registry, or clear it with null so the next instance()
+	 * rebuilds. For the unit suite, which installs a double here.
 	 */
 	public static function set(?self $instance): void {
 		self::$instance = $instance;
 	}
 
 	/**
-	 * Builds an item from a document somebody else wrote.
-	 *
-	 * `actor_info` is deliberately not read here. It is this app's own
-	 * `FORMAT_LOCAL` field, holding a whole serialised actor, and `getActorId()`
-	 * answers from it whenever it is set — so a peer that put one in its
-	 * payload handed over the acting account itself, with the followers
-	 * collection a boost is then addressed to and the account a notification
-	 * names, none of it fetched and none of it checked. Who acted is the
+	 * Builds an item from a document somebody else wrote. `actor_info`, this
+	 * app's own `FORMAT_LOCAL` field, is not read here: `getActorId()` would
+	 * trust it, so a peer could hand over an unchecked actor. Who acted is the
 	 * `actor` id and what the actor cache says about it.
 	 */
 	public function getItemFromData(array $data, ?ACore $parent = null, int $level = 0, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false): ACore {
@@ -229,11 +198,8 @@ class AP {
 		try {
 			$item->setObject($this->getItemFromData($objectData, $item, $level, $atprotoStreamedBlobs, $deferAttachmentDownloads));
 		} catch (ItemUnknownException $e) {
-			// A type this app has no model for. The activity used to be left
-			// referring to nothing at all — neither `object` nor `objectId` —
-			// so it was discarded with no trace of what had arrived. Keeping
-			// the id names it, and lets the inbox log it and a later pass
-			// resolve it.
+			// a type this app has no model for: keep the id so the inbox can
+			// log it and a later pass resolve it
 			$objectId = $this->get('id', $objectData, '');
 			if ($objectId !== '') {
 				$item->setObjectId($objectId);
@@ -243,9 +209,8 @@ class AP {
 
 	public function getSimpleItemFromData(array $data, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false): Acore {
 		$type = $this->get('type', $data, '');
-		// Misskey represents an emoji reaction as an ordinary Like plus its
-		// `_misskey_reaction` extension. Keep ordinary Likes unchanged, but
-		// preserve actual reactions in the shared EmojiReact model.
+		// Misskey sends an emoji reaction as a Like with `_misskey_reaction`;
+		// those become EmojiReact, ordinary Likes stay Likes
 		$misskeyReaction = $data['_misskey_reaction']
 			?? $data['misskey:_misskey_reaction']
 			?? $data['https://misskey-hub.net/ns#_misskey_reaction']
@@ -285,14 +250,10 @@ class AP {
 
 	/**
 	 * A `Video`, `Audio` or `Event` usually carries its title in `name` and
-	 * nothing at all in `content`. Rendered as-is that is an empty post, so the
-	 * title (and the link to the thing itself, when it is not the object id
-	 * again) becomes the content — the same substitution Mastodon makes.
-	 *
-	 * The title is not also copied into the note's `name`: on a Note that field
-	 * means one thing here, the option a poll vote chose (see
-	 * PollService::handleIncomingVote), and giving it a second meaning is how a
-	 * post would end up counted as a vote.
+	 * nothing in `content`, so the title (and its link, when that is not the
+	 * object id) becomes the content, as Mastodon does. The note's `name` is
+	 * not set: on a Note it means the option a poll vote chose
+	 * (PollService::handleIncomingVote).
 	 */
 	private function fillNoteLikeContent(ACore $item, array $data): void {
 		if (!$item instanceof Note) {
@@ -354,13 +315,10 @@ class AP {
 	}
 
 	/**
-	 * The link a link post is about, which Lemmy sends as the only
-	 * `attachment` of a `Page` — `{type: "Link", href: …}` — and nowhere else:
-	 * no `url`, nothing in the content. There is no model for a `Link`
-	 * attachment, so it used to be dropped with the rest of what
-	 * `importAttachments()` cannot store, and the one thing a link post is
-	 * went with it. It is appended to the content as a link, which is also
-	 * what the link preview is made from.
+	 * The link a link post is about, which Lemmy sends only as the sole
+	 * `attachment` of a `Page` (`{type: "Link", href: …}`). There is no model
+	 * for a `Link` attachment, so it is appended to the content as a link,
+	 * which the link preview is also made from.
 	 */
 	private function appendLinkAttachment(Note $item, array $data): void {
 		foreach (ACore::listOf('attachment', $data) as $attachment) {
@@ -386,25 +344,12 @@ class AP {
 	}
 
 	/**
-	 * A `Video` is the one note-like type this app understands in detail,
-	 * because it is the one whose whole point is a file to play. PeerTube --
-	 * which is what publishes them -- writes four things somewhere an ordinary
-	 * `Note` does not look:
-	 *
-	 * - `url` is a *list*: the watch page, one link per transcoded resolution,
-	 *   the HLS playlist, a torrent and a magnet URI. `Item::setUrl()` asked
-	 *   for a string and got none of them.
-	 * - `attributedTo` is a list of two actors, the channel and the account
-	 *   behind it, where every other server sends one id.
-	 * - the title is in `name`, and `content` is the description in *markdown*
-	 *   (the object says so in its own `mediaType`).
-	 * - the thumbnail is in `icon`.
-	 *
-	 * So a federated video used to arrive as a post attributed to nobody,
-	 * pointing nowhere, with a wall of unrendered markdown for a body and no
-	 * picture. What it becomes here is a post with a title that links to the
-	 * video, its description under it, and one attachment: the video itself,
-	 * streamed from the instance that holds it rather than copied here.
+	 * A PeerTube `Video` puts four things where a `Note` does not look: `url`
+	 * is a list (watch page, one link per resolution, HLS, torrent, magnet),
+	 * `attributedTo` lists the channel and the account, the title is in
+	 * `name` with a markdown `content`, and the thumbnail is in `icon`. It
+	 * becomes a post with a title linking to the video, its description, and
+	 * one attachment: the video, streamed from its instance.
 	 *
 	 * @see PeerTubeService
 	 */
@@ -425,16 +370,14 @@ class AP {
 
 		$item->setContent($this->peerTubeService->content($data));
 
-		// whether a reply to this will be shown to anybody before a human has
-		// looked at it: a reply written here to a moderated video is held on
-		// the other side, and this is what lets the client say so
+		// a reply here to a moderated video is held on the other side; this
+		// lets the client say so
 		if ($this->peerTubeService->repliesNeedApproval($data)) {
 			$item->setReplyPolicy(Stream::REPLY_POLICY_APPROVAL);
 		}
 
-		// everything else the object says that a `Note` has nowhere to put —
-		// the category, the licence, the chapters, the captions, the counters.
-		// A video is not a post with a rectangle in it.
+		// everything else a `Note` has nowhere to put: category, licence,
+		// chapters, captions, counters
 		$meta = $this->peerTubeService->videoMeta($data);
 		if ($meta !== []) {
 			$item->setVideoMeta($meta);
@@ -674,12 +617,8 @@ class AP {
 				return $this->removeInterface;
 			case Service::TYPE:
 				return $this->serviceInterface;
-				// Actor types that are not Person: parsed and modelled all along, but
-				// absent here they raised ItemUnknownException, which CacheActorService
-				// swallows — so a Lemmy community, an a.gup.pe/Friendica group or a
-				// Mastodon instance or relay actor was never written to the actor cache.
-				// One signature check passed on the in-memory copy and every later
-				// request re-fetched over HTTP; following one was impossible.
+				// actor types that are not Person (Lemmy communities, groups,
+				// instance and relay actors), so they reach the actor cache
 			case Group::TYPE:
 				return $this->groupInterface;
 			case Organization::TYPE:

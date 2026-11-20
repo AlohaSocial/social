@@ -11,9 +11,6 @@ namespace OCA\Social\Tools\Traits;
 
 /**
  * @deprecated
- * Trait TAsync
- *
- * @package OCA\Social\Tools\Traits
  */
 trait TAsync {
 	/**

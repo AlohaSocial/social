@@ -40,32 +40,20 @@ use OCP\Settings\IDelegatedSettings;
 use OCP\Util;
 
 /**
- * Moderation panel: the open reports (the resolved ones a click away), the
- * posts waiting to be looked at, the state of outbound federation, the Fediverse access list the occ
- * social:fediverse command manages, the announcements the instance is showing
- * everybody — and, for an administrator proper, the Server card.
+ * Moderation panel: open reports (resolved ones a click away), posts waiting
+ * for review, outbound federation state, the Fediverse access list the
+ * `occ social:fediverse` command manages, announcements, and for an
+ * administrator proper the Server card.
  *
- * The page is one Vue application (`src/adminSettings.js`); the template is
- * the element it mounts on and nothing else, and what is known at render time
- * travels as initial state.
+ * One Vue application (`src/adminSettings.js`); render-time data travels as
+ * initial state. Announcements are read from `/admin/announcements`, the
+ * route the section writes through.
  *
- * The announcements section carries no data from here. It is read from
- * `/admin/announcements` when the page loads, because that is the same route
- * the section writes through, and a list rendered here would disagree with it
- * the moment an announcement was posted.
- *
- * Delegated rather than plain admin settings: moderating used to mean
- * administering the whole server, which is a great deal of power to hand
- * somebody so they can act on a report. An administrator can now pass this
- * section to a group under Administration privileges, and Nextcloud's own
- * machinery — `AuthorizedAdminSetting` on the routes below the page, and
- * `IManager::getAllowedAdminSettings()` on the Mastodon admin API — lets that
- * group act without letting it near anything else.
- *
- * The Server card is the exception, and is not rendered for a delegate: what
- * it holds (whether unsigned fetches are answered, how large an upload may
- * be, who to write to about the instance) is administration, not moderation,
- * and its endpoint refuses anybody who is not an administrator anyway.
+ * Delegated settings, so an administrator can hand moderation to a group
+ * under Administration privileges; `AuthorizedAdminSetting` and
+ * `IManager::getAllowedAdminSettings()` let that group act without reaching
+ * anything else. The Server card is administration, not moderation, and is
+ * not rendered for a delegate.
  */
 class AdminSettings implements IDelegatedSettings {
 	public function __construct(
@@ -99,25 +87,19 @@ class AdminSettings implements IDelegatedSettings {
 
 	#[\Override]
 	public function getForm(): TemplateResponse {
-		// the framework chunk first, then the page's own entry: an entry of
-		// this app is no longer self-contained, and one served without the
-		// framework leaves the page empty without saying anything
+		// the framework chunk first, then the page's own entry, which is not
+		// self-contained
 		Util::addScript('social', 'social-framework');
 		Util::addScript('social', 'social-adminSettings');
 
 		$open = $this->reportService->page(false, 1);
 		$decisions = $this->currentDecisions();
 
-		// The page is a Vue application; what the server knows when it renders
-		// is handed over as initial state rather than as markup, and
-		// everything after it — a further page of reports, the account
-		// browser, the announcements — is read from the routes the page also
-		// writes through.
+		// render-time data as initial state; everything after is read from
+		// the routes the page writes through
 		$this->initialState->provideInitialState('adminSettings', [
-			// the first page of the open reports, in the shape
-			// `ModerationController::reports()` answers in, so a row that
-			// arrived with the page and one fetched afterwards are the same
-			// thing to the table that draws them
+			// the first page of open reports, in the shape
+			// `ModerationController::reports()` answers in
 			'reports' => array_map(
 				static fn (Report $report): array => $report->moderationRow($decisions),
 				$open['reports']
@@ -126,11 +108,9 @@ class AdminSettings implements IDelegatedSettings {
 			'resolvedReports' => $this->reportService->countResolved(),
 			'reportsPerPage' => $open['perPage'],
 			'server' => $this->isAdministrator() ? $this->serverSettingsService->current() : null,
-			// what the app offers everybody, and the groups there are to
-			// choose from. Both only for an administrator proper, for the same
-			// reason the Server card is: it is a decision about the instance
-			// rather than about a report. The group names travel with the ids
-			// because a picker showing raw ids is a picker nobody can use.
+			// what the app offers everybody, and the groups to choose from
+			// (with names, for the picker); administrators only, like the
+			// Server card
 			'sections' => $this->isAdministrator() ? $this->sectionsService->current() : null,
 			'groups' => $this->isAdministrator() ? $this->availableGroups() : null,
 			// Bluesky: the switch, the relays and whether the instance is a
@@ -146,10 +126,8 @@ class AdminSettings implements IDelegatedSettings {
 				: [],
 			'retentionDays' => (int)$this->configService->getAppValue(ConfigService::SOCIAL_RETENTION_DAYS),
 			'federation' => $this->federationHealthService->summary(),
-			// whether the work that happens away from a request is happening
-			// at all. When cron stops, the symptom is a post that never
-			// arrives and a disk that never shrinks, and nothing in the app
-			// said so
+			// whether background jobs are running at all, since a stopped cron
+			// shows only as posts that never arrive
 			'background' => $this->backgroundHealthService->summary(),
 			// what this instance's own people have been doing: the two numbers
 			// an administrator asks for first, and the page had neither
@@ -164,11 +142,8 @@ class AdminSettings implements IDelegatedSettings {
 				'sizeMb' => intdiv($this->mediaPurgeService->cacheBytes(), 1024 * 1024),
 				'lastPurge' => $this->mediaPurgeService->lastCachePurge(),
 			],
-			// who is holding the video, which is the one question a full disk
-			// actually raises and the one the storage figures could not answer.
-			// Live rather than from the last measurement: it is one grouped
-			// query over a column the rows already carry, not a walk of the
-			// files.
+			// who is holding the video, live: one grouped query over a column
+			// the rows carry
 			'videoStorage' => $this->isAdministrator() ? [
 				'quota' => $this->videoQuotaService->quota(),
 				'accounts' => $this->videoQuotaService->byAccount(),
@@ -208,11 +183,7 @@ class AdminSettings implements IDelegatedSettings {
 
 	/**
 	 * Posts written here in the last day and the last week, and how many
-	 * accounts wrote them.
-	 *
-	 * Local posts only: a count that included what arrived would be a number
-	 * about everybody else's activity and about this instance's retention
-	 * settings rather than about this instance.
+	 * accounts wrote them; local posts only.
 	 *
 	 * @return array{day: array{posts: int, authors: int}, week: array{posts: int, authors: int}}
 	 */
@@ -278,12 +249,9 @@ class AdminSettings implements IDelegatedSettings {
 	}
 
 	/**
-	 * The groups an administrator may turn into Social lists.
-	 *
-	 * Every group on the instance, by id and display name. Not paged and not
-	 * searched: the picker is a multiselect that filters what it was given,
-	 * and an instance with more groups than that has an administrator who
-	 * will reach for `occ config:app:set social group_lists` instead.
+	 * The groups an administrator may turn into Social lists: every group, by
+	 * id and display name, unpaged; very large instances can use
+	 * `occ config:app:set social group_lists`.
 	 *
 	 * @return array<array{id: string, name: string}>
 	 */
@@ -316,12 +284,10 @@ class AdminSettings implements IDelegatedSettings {
 	}
 
 	/**
-	 * No app config is reachable through core's own settings API: everything
-	 * this panel writes — the retention period, the access mode and list —
-	 * goes through `ModerationController`, which is guarded by
-	 * `AuthorizedAdminSetting` and validates what it is given, and the Server
-	 * card through `ServerSettingsController`, which admits administrators
-	 * only. A delegate can change the first and nothing else under `social`.
+	 * No app config is reachable through core's settings API: the panel
+	 * writes through `ModerationController` (guarded by
+	 * `AuthorizedAdminSetting`) and the Server card through
+	 * `ServerSettingsController` (administrators only).
 	 */
 	#[\Override]
 	public function getAuthorizedAppConfig(): array {
