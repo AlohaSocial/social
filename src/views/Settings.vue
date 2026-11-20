@@ -134,12 +134,9 @@ import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
 import IconMigration from 'vue-material-design-icons/SwapHorizontal.vue'
 import IconNotifications from 'vue-material-design-icons/BellOutline.vue'
-import IconProfileLayout from 'vue-material-design-icons/ViewDashboardOutline.vue'
 import IconReading from 'vue-material-design-icons/BookOpenPageVariantOutline.vue'
-import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import IconSearch from 'vue-material-design-icons/Magnify.vue'
 import IconSecurity from 'vue-material-design-icons/ShieldKeyOutline.vue'
-import IconSenses from 'vue-material-design-icons/VolumeHigh.vue'
 import IconSensitive from 'vue-material-design-icons/EyeOffOutline.vue'
 import IconCounts from 'vue-material-design-icons/HeartOffOutline.vue'
 import IconFilesComments from 'vue-material-design-icons/CommentTextMultipleOutline.vue'
@@ -151,16 +148,12 @@ import { currentSection, scrollToSection, watchSections } from '../services/sect
 import { matchesQuery } from '../services/settingsSearch.js'
 
 // only ever drawn on this page, so these load in a chunk of their own
-const ProfileLayoutSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ProfileLayoutSettings.vue'))
 const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/AccountSettings.vue'))
 const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
-const RecapSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/RecapSettings.vue'))
 const BlueskyFeedsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskyFeedsSettings.vue'))
 const ForYouSettings = defineAsyncComponent(() => import(/* webpackChunkName: "for-you-settings" */'../components/ForYouSettings.vue'))
-const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
 const SensitiveMediaSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensitiveMediaSettings.vue'))
 const CountsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/CountsSettings.vue'))
-const FeedDisplaySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FeedDisplaySettings.vue'))
 const FilesCommentsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FilesCommentsSettings.vue'))
 const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationDeliverySettings.vue'))
 const ContactSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ContactSettings.vue'))
@@ -203,8 +196,6 @@ export default {
 		MigrationSettings,
 		IconBlocked,
 		IconMigration,
-		IconProfileLayout,
-		ProfileLayoutSettings,
 		AuthorizedApps,
 		BlueskySettings,
 		DeleteAccount,
@@ -219,22 +210,17 @@ export default {
 		IconInterests,
 		IconNotifications,
 		IconReading,
-		IconRecap,
 		IconSearch,
 		IconSecurity,
 		IconCounts,
 		IconFilesComments,
-		IconSenses,
 		IconSensitive,
 		IconStorage,
 		BlueskyFeedsSettings,
 		NcTextField,
 		NotificationDeliverySettings,
-		RecapSettings,
 		CountsSettings,
-		FeedDisplaySettings,
 		FilesCommentsSettings,
-		SensesSettings,
 		SensitiveMediaSettings,
 	},
 
@@ -285,14 +271,6 @@ export default {
 					component: 'ContactSettings',
 					title: t('social', 'Who can contact you'),
 					lede: t('social', 'Who may follow you, send you direct messages and reach your activities without waiting.'),
-				},
-				{
-					id: 'profile-layout',
-					group: 'profile',
-					icon: 'IconProfileLayout',
-					component: 'ProfileLayoutSettings',
-					title: t('social', 'Public profile layout'),
-					lede: t('social', 'Choose the first tab visitors see and which tabs appear on your profile.'),
 				},
 				{
 					id: 'blocked',
@@ -349,30 +327,6 @@ export default {
 					component: 'CountsSettings',
 					title: t('social', 'Likes and followers'),
 					lede: t('social', 'Whether you see how many likes, boosts, replies and followers posts and people have. Off unless you turn it on.'),
-				},
-				{
-					id: 'feed-display',
-					group: 'reading',
-					icon: 'IconFilesComments',
-					component: 'FeedDisplaySettings',
-					title: t('social', 'Feed posts'),
-					lede: t('social', 'Choose whether replies appear as separate cards in your feeds.'),
-				},
-				{
-					id: 'recap',
-					group: 'reading',
-					icon: 'IconRecap',
-					component: 'RecapSettings',
-					title: t('social', 'Looking back'),
-					lede: t('social', 'A short note about your week at the top of your feed, next to your posts from this day in earlier years.'),
-				},
-				{
-					id: 'senses',
-					group: 'reading',
-					icon: 'IconSenses',
-					component: 'SensesSettings',
-					title: t('social', 'Sound and touch'),
-					lede: t('social', 'Small confirmations you hear or feel. They are kept on this device only, so a laptop at work can stay quiet while your phone taps back.'),
 				},
 				{
 					id: 'notifications',

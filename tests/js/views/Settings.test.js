@@ -94,7 +94,7 @@ describe('Settings', () => {
 		expect(wrapper.find('h1').text()).toBe('Settings')
 		expect(groupTitles(wrapper)).toEqual(['Account and privacy', 'Reading', 'Activities', 'Apps'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Account and privacy')
-		expect(headings(wrapper)).toEqual(['Who can find you', 'Who can contact you', 'Public profile layout', 'Blocked and muted', 'Moving your account', 'Delete your Aloha Social account'])
+		expect(headings(wrapper)).toEqual(['Who can find you', 'Who can contact you', 'Blocked and muted', 'Moving your account', 'Delete your Aloha Social account'])
 	})
 
 	it('has every section in exactly one group, in the order they are read', async () => {
@@ -109,15 +109,11 @@ describe('Settings', () => {
 		expect(seen).toEqual([
 			'Who can find you',
 			'Who can contact you',
-			'Public profile layout',
 			'Blocked and muted',
 			'Moving your account',
 			'Delete your Aloha Social account',
 			'Sensitive media',
 			'Likes and followers',
-			'Feed posts',
-			'Looking back',
-			'Sound and touch',
 			'When to tell you',
 			'Authorized apps',
 			'Replies in Files',
@@ -196,7 +192,7 @@ describe('Settings', () => {
 		it('marks the last section whose heading has passed the top', async () => {
 			const wrapper = await mountSettings()
 
-			const tops = { account: -800, contact: 40, 'profile-layout': 320 }
+			const tops = { account: -800, contact: 40, blocked: 320 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)
@@ -215,9 +211,9 @@ describe('Settings', () => {
 		 */
 		it('marks the first section before any has passed the top', async () => {
 			const wrapper = await mountSettings()
-			wrapper.vm.current = 'profile-layout'
+			wrapper.vm.current = 'blocked'
 
-			const tops = { account: 150, contact: 600, 'profile-layout': 900 }
+			const tops = { account: 150, contact: 600, blocked: 900 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)
@@ -234,12 +230,12 @@ describe('Settings', () => {
 		/** For the reader who knows what they want but not where it is. */
 		it('shows the sections of every group that match what was typed', async () => {
 			const wrapper = await mountSettings()
-			await wrapper.find('.settings__search input').setValue('phone')
+			await wrapper.find('.settings__search input').setValue('replies')
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual(['Sound and touch', 'Authorized apps'])
+			expect(headings(wrapper)).toEqual(['Likes and followers', 'Replies in Files'])
 			expect(wrapper.findAll('.settings__section-group').map((label) => label.text())).toEqual(['Reading', 'Apps'])
-			expect(wrapper.find('.settings__results').text()).toBe('2 settings match “phone”')
+			expect(wrapper.find('.settings__results').text()).toBe('2 settings match “replies”')
 			expect(wrapper.find('.settings__group-link--current').exists()).toBe(false)
 		})
 
