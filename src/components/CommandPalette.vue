@@ -182,7 +182,7 @@ export default {
 				{ key: 'activities', icon: IconBell, title: t('social', 'Activities'), to: { name: 'timeline', params: { type: 'notifications' } } },
 				{ key: 'direct', icon: IconCommentAccount, title: t('social', 'Direct messages'), to: { name: 'timeline', params: { type: 'direct' } } },
 				...(account?.acct ? [{ key: 'profile', icon: IconAccountCircle, title: t('social', 'My profile'), to: { name: 'profile', params: { account: account.acct } } }] : []),
-				{ key: 'follow-requests', icon: IconAccountClock, title: t('social', 'Follow requests'), to: { name: 'follow-requests' } },
+				{ key: 'follow-requests', icon: IconAccountClock, title: t('social', 'Follow requests'), to: { name: 'timeline', params: { type: 'notifications' } } },
 				{ key: 'liked', icon: IconHeart, title: t('social', 'Favorites'), to: { name: 'timeline', params: { type: 'favourites' } } },
 				{ key: 'bookmarks', icon: IconBookmark, title: t('social', 'Bookmarks'), to: { name: 'timeline', params: { type: 'bookmarks' } } },
 				{ key: 'statistics', icon: IconChartBox, title: t('social', 'Statistics'), to: { name: 'statistics' } },

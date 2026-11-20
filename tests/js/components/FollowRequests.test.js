@@ -8,7 +8,7 @@ import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import axios from '@nextcloud/axios'
 import { showError } from '../../../src/services/toast.js'
 
-import FollowRequests from '../../../src/views/FollowRequests.vue'
+import FollowRequests from '../../../src/components/FollowRequests.vue'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn() },
@@ -60,16 +60,19 @@ describe('FollowRequests', () => {
 		expect(entries[0].text()).toContain('bob@remote.tld')
 	})
 
-	it('shows the empty state when nothing is pending', async () => {
+	it('takes no room in Activities when nothing is pending', async () => {
 		const wrapper = await mountView([])
 
-		expect(wrapper.find('.empty-content').exists()).toBe(true)
-		expect(wrapper.findAll('.follow-request')).toHaveLength(0)
+		expect(wrapper.find('.follow-requests').exists()).toBe(false)
+	})
+
+	it('says how many people are waiting', async () => {
+		expect((await mountView()).find('.follow-requests__heading').text()).toBe('2 people ask to follow you')
+		expect((await mountView([bob])).find('.follow-requests__heading').text()).toBe('1 person asks to follow you')
 	})
 
 	it('offers a retry after the first request fails without claiming the list is empty', async () => {
 		const wrapper = await mountView(new Error('offline'))
-		expect(wrapper.find('.empty-content').exists()).toBe(false)
 		expect(wrapper.get('[role="alert"]').text()).toContain('Failed to load follow requests')
 
 		axios.get.mockResolvedValueOnce({ data: [bob], headers: {} })
@@ -78,15 +81,6 @@ describe('FollowRequests', () => {
 
 		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
 		expect(wrapper.get('.follow-request').text()).toContain('Bob')
-	})
-
-	it('sends the reader to the switch the empty state talks about', async () => {
-		const wrapper = await mountView([])
-
-		expect(wrapper.find('.empty-content').text()).toContain('When your account is locked')
-		expect(wrapper.findComponent({ name: 'NobodyYet' }).exists()).toBe(true)
-		expect(wrapper.findComponent({ name: 'EmptyContent' }).props('item').action.to)
-			.toEqual({ name: 'settings', hash: '#account' })
 	})
 
 	it('accepts a request and removes it from the list', async () => {
@@ -201,18 +195,14 @@ describe('FollowRequests', () => {
 			expect(after[0].textContent).toContain('Carol')
 		})
 
-		it('brings the empty state in through a transition once the last one is answered', async () => {
+		it('goes away once the last one is answered', async () => {
 			const wrapper = await mountView([bob])
-			expect(wrapper.find('.empty-content').exists()).toBe(false)
 			axios.post.mockResolvedValueOnce({ data: {} })
 
 			await wrapper.findAll('.follow-request__actions button')[0].trigger('click')
 			await flushPromises()
 
-			expect(wrapper.findAll('.follow-request')).toHaveLength(0)
-			const empty = wrapper.find('transition-stub')
-			expect(empty.attributes('name')).toBe('empty')
-			expect(empty.find('.empty-content').exists()).toBe(true)
+			expect(wrapper.find('.follow-requests').exists()).toBe(false)
 		})
 	})
 })
