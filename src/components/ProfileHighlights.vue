@@ -33,9 +33,7 @@
 					r="2.5" />
 			</svg>
 			<p class="profile-highlights__summary">
-				{{ summary }}<template v-if="rhythm">
-					· {{ rhythm }}
-				</template>
+				{{ summary }}
 			</p>
 		</div>
 
@@ -68,9 +66,6 @@ import InfoCard from './InfoCard.vue'
  * following them, so a chart of that would show a quiet year for an account
  * that was busy — see ProfileHighlightsService.
  */
-/** the recent weeks the rhythm is read off, against the weeks before them */
-const RECENT_WEEKS = 4
-
 export default {
 	name: 'ProfileHighlights',
 	components: { InfoCard },
@@ -161,60 +156,6 @@ export default {
 			const points = this.points
 
 			return points.length === 0 ? null : points[points.length - 1]
-		},
-
-		/**
-		 * Whether the account has been here long enough for "usual" to mean
-		 * anything: at least twice the recent window, so the weeks before it
-		 * are weeks the account existed. A twenty-minute-old account with
-		 * one post was "busier than usual" against eleven empty weeks it was
-		 * not there for.
-		 *
-		 * @return {boolean}
-		 */
-		hasAUsual() {
-			return this.since > 0 && (Date.now() / 1000 - this.since) >= 2 * RECENT_WEEKS * 7 * 86400
-		},
-
-		/**
-		 * One sentence about the shape of it.
-		 *
-		 * The chart says how much; this says what kind. Which of the three it
-		 * is comes from comparing the last third of the weeks with the rest,
-		 * so an account that has stopped posting says so rather than showing a
-		 * line that trails off and leaving the reader to notice. Only once
-		 * there is a "usual": an account old enough, with posts in the weeks
-		 * before the recent ones.
-		 *
-		 * @return {string} the sentence, or '' when there is nothing to say
-		 */
-		rhythm() {
-			const weeks = this.weeks
-			if (!this.hasPosts || weeks.length < 2 * RECENT_WEEKS || !this.hasAUsual) {
-				return ''
-			}
-
-			const recent = weeks.slice(-RECENT_WEEKS)
-			const before = weeks.slice(0, -RECENT_WEEKS)
-			const perWeek = (list) => list.reduce((total, count) => total + count, 0) / Math.max(list.length, 1)
-			const now = perWeek(recent)
-			const then = perWeek(before)
-
-			// nothing before the recent weeks is nothing to compare them with
-			if (then === 0) {
-				return ''
-			}
-			if (now === 0) {
-				return t('social', 'Quiet lately')
-			}
-			if (now > then * 1.6) {
-				return t('social', 'Busier than usual')
-			}
-			if (now < then * 0.5) {
-				return t('social', 'Slowing down')
-			}
-
-			return t('social', 'Posting steadily')
 		},
 
 		/**

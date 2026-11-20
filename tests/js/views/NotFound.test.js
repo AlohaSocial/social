@@ -19,4 +19,14 @@ describe('the page for an address that names nothing', () => {
 		expect(home.text()).toBe('Back to my feed')
 		expect(JSON.parse(home.attributes('data-to'))).toEqual({ name: 'timeline' })
 	})
+
+	it('sends a visitor, who has no feed of their own, to the public one', () => {
+		globalThis.setInitialState('social', 'serverData', { public: true })
+		const wrapper = mount(NotFound, { global: { stubs: { NcButton: NcButtonStub } } })
+
+		const home = wrapper.find('.nc-button-stub')
+		expect(home.text()).toBe('Read the public feed')
+		expect(JSON.parse(home.attributes('data-to'))).toEqual({ name: 'timeline', params: { type: 'timeline' } })
+		document.getElementById('initial-state-social-serverData')?.remove()
+	})
 })

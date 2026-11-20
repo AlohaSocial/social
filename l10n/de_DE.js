@@ -3453,6 +3453,8 @@ OC.L10N.register(
     "Copy embed code" : "Einbettungscode kopieren",
     "Your post" : "Dein Beitrag",
     "Tune For you" : "„Für dich“ anpassen",
-    "About {account}" : "Über {account}"
+    "About {account}" : "Über {account}",
+    "Anybody here can be followed from Mastodon or any other fediverse app." : "Allen hier kannst du von Mastodon oder einer anderen Fediverse-App aus folgen.",
+    "Read the public feed" : "Öffentlichen Feed lesen"
 },
 "nplurals=2; plural=(n != 1);");

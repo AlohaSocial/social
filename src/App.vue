@@ -32,6 +32,7 @@
 			<div v-if="serverData.public" class="social__visitor">
 				<p class="social__visitor-text">
 					{{ t('social', 'You are reading this as a visitor.') }}
+					<span class="social__visitor-hint">{{ t('social', 'Anybody here can be followed from Mastodon or any other fediverse app.') }}</span>
 				</p>
 				<NcButton variant="primary" :href="loginUrl">
 					{{ t('social', 'Log in to {host}', { host: instanceHost }) }}
@@ -519,7 +520,14 @@ export default {
 }
 
 .social__visitor-text {
+	margin: 0;
+	text-align: center;
 	color: var(--color-text-maxcontrast);
+}
+
+.social__visitor-hint {
+	display: block;
+	font-size: 0.9em;
 }
 
 #app-content-vue .social__wrapper {
@@ -619,6 +627,17 @@ a.external_link {
 </style>
 
 <style lang="scss">
+/* a visitor has no sidebar, so nothing needs room for its toggle */
+#content-vue.public {
+	.social__wrapper {
+		--social-toggle-clearance: 0px;
+	}
+
+	.page-header--clear-navigation {
+		padding-block-start: 0;
+	}
+}
+
 /* Moving between the pages the sidebar lists.
 
    Two ways of doing it, and only one of them ever runs. Where the browser has

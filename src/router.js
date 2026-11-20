@@ -4,7 +4,7 @@
  */
 
 import { createRouter, createWebHistory } from 'vue-router'
-import { generateUrl } from '@nextcloud/router'
+import { generateUrl, getRootUrl } from '@nextcloud/router'
 import { loadState } from '@nextcloud/initial-state'
 
 import eventBus from './services/eventBus.js'
@@ -40,29 +40,24 @@ const VideoShorts = () => import(/* webpackChunkName: "shorts" */'./views/VideoS
 const NotFound = () => import(/* webpackChunkName: "not-found" */'./views/NotFound.vue')
 
 /**
- * The path the app is actually served from, which is what the history base has
- * to be: vue-router can only strip a base that prefixes the current path, and
- * writes `base + path` into the address bar when it cannot.
+ * The path the app is served from, which vue-router needs as its history base.
  *
- * `generateUrl()` is the only thing that knows which of the two shapes this
- * instance uses — `/apps/social/` where mod_rewrite is working, and
- * `/index.php/apps/social/` where it is not. Building the base by hand from
- * the web root assumes the first and breaks the second: the address bar ends
- * up at `/nextcloud/apps/social/nextcloud/index.php/apps/social/`, and a
- * reload of that 404s.
- *
- * An instance with pretty URLs still answers at `/index.php/apps/social/`, and
- * links made without the web server, by cron and occ, point there; opened at
- * such a link the app takes that shape, or the page stays empty at
- * `/apps/social/index.php/apps/social/`.
+ * The page can be reached both as `/index.php/apps/social/` and as
+ * `/apps/social/`, whichever the instance is configured for: a link from
+ * another instance, from cron or from occ may use the other shape. The base is
+ * the one the address actually starts with, and otherwise the one
+ * `generateUrl()` would build.
  *
  * @return {string} the base path, without a trailing slash
  */
 function getBase() {
-	const withIndex = generateUrl('/apps/social', {}, { noRewrite: true }).replace(/\/+$/, '')
 	const path = window.location.pathname
-	if (path === withIndex || path.startsWith(withIndex + '/')) {
-		return withIndex
+	const withIndex = generateUrl('/apps/social', {}, { noRewrite: true }).replace(/\/+$/, '')
+	const withoutIndex = getRootUrl().replace(/\/+$/, '') + '/apps/social'
+	for (const base of [withIndex, withoutIndex]) {
+		if (path === base || path.startsWith(base + '/')) {
+			return base
+		}
 	}
 
 	return generateUrl('/apps/social').replace(/\/+$/, '')
@@ -458,7 +453,6 @@ const router = createRouter({
 				default: About,
 			},
 			name: 'about',
-			meta: { signedIn: true },
 		},
 		{
 			path: '/search/:term?',
