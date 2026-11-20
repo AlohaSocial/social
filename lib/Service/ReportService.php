@@ -125,18 +125,12 @@ class ReportService {
 	 * A report received from a remote instance as a Flag activity. Mastodon
 	 * sends `object` as a list mixing the reported account and status ids; the
 	 * first id that resolves to a local account is stored as the target, the
-	 * remaining ids as the reported statuses. A Flag that names no local
-	 * account but a local post is a report about that post's author.
+	 * rest as the reported statuses. A Flag naming no local account but a
+	 * local post is a report about that post's author.
 	 *
-	 * Resolved against the cache alone, in one query: a local account is
-	 * always there, and a lookup that fetched every id it missed made this
-	 * instance send a request to each URL a sender cared to list, inside the
-	 * inbox request. The posts are looked up by id in the local table only.
-	 *
-	 * A Flag naming nothing of this instance is dropped, and null is returned:
-	 * there is nothing here for a moderator to act on, and storing it put a
-	 * row and a notification in front of every moderator for any URL a sender
-	 * cared to list.
+	 * Ids are resolved against the cache only, in one query, so a sender
+	 * cannot make the inbox fetch arbitrary URLs. A Flag naming nothing of
+	 * this instance is dropped and null returned.
 	 */
 	public function reportFromFlag(Flag $flag): ?Report {
 		$cached = $this->cacheActorService->getCachedFromIds($flag->getObjectIds());
@@ -202,14 +196,8 @@ class ReportService {
 
 	/**
 	 * The reports for the moderation panel, with their target accounts filled
-	 * in from what is already cached.
-	 *
-	 * One query for the accounts of the whole page, and no federated request
-	 * on a miss: resolving per report meant up to 200 synchronous requests to
-	 * other instances per admin page load, and a single unreachable one held
-	 * the page for its curl timeout. A report whose account is not cached
-	 * still shows — with the id it was filed against, which is what the
-	 * moderator needs to act on it.
+	 * in from the cache in one query, never by federated requests. A report
+	 * whose account is not cached shows the id it was filed against.
 	 *
 	 * @return Report[] target accounts resolved where possible
 	 */
@@ -385,14 +373,9 @@ class ReportService {
 	}
 
 	/**
-	 * Tells everyone who can act on it, which is not only the `admin` group:
-	 * the moderation routes accept whoever the Social settings section has
-	 * been delegated to, and a moderator who is never told a report was filed
-	 * is a moderator who finds it a week later.
-	 *
-	 * Read from the groups that hold the right. This used to walk every
-	 * Nextcloud account and ask the group manager about each one, on a path a
-	 * remote `Flag` can trigger at will.
+	 * Tells everyone who can act on it: the `admin` group and whoever the
+	 * Social settings section is delegated to, read from the groups that hold
+	 * the right rather than by walking every account.
 	 */
 	private function notifyAdmins(Report $report): void {
 		try {

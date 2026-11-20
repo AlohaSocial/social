@@ -15,20 +15,11 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether PHP will accept the uploads this app promises to accept.
- *
- * Social tells every client a `max_size` — it is in `/api/v1/instance`, in
- * Pixelfed's `/api/v2/config`, and in the composer's own refusal message — and
- * PHP enforces `upload_max_filesize` and `post_max_size` regardless. When the
- * app's number is the larger one, a phone photograph of four megabytes is
- * offered, accepted by the client, and refused by the server with nothing in
- * the log: the request never reaches PHP's code at all, so this app cannot
- * even say what happened.
- *
- * It is the single most common "it does not work" an admin of a photo server
- * meets, it is invisible from inside the app, and it is two lines of `php.ini`
- * to fix. Nothing here changes anything: an admin might genuinely want a low
- * ceiling, in which case the app's own number is what should come down.
+ * Whether PHP will accept the uploads this app promises to accept: the app
+ * advertises a `max_size` to clients, but PHP enforces `upload_max_filesize`
+ * and `post_max_size`, and a larger upload is refused before the app sees
+ * it, with nothing logged. Only reported; the fix is either `php.ini` or a
+ * lower app limit.
  */
 class UploadLimitsAgree implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#the-setup-checks';
@@ -104,10 +95,8 @@ class UploadLimitsAgree implements ISetupCheck {
 	}
 
 	private function human(int $bytes): string {
-		// the division is written in floats and the result cast back: `round()`
-		// gives 2.0, and "2 MB" rather than "2.0 MB" is what somebody reading a
-		// setup check wants. Mixing an int and a float in one expression is
-		// what strict operand mode refuses, so neither side is left implicit.
+		// written in floats and cast back, so the result reads "2 MB" rather
+		// than "2.0 MB" without mixing int and float under strict operands
 		$mb = 1024.0 * 1024.0;
 
 		return ($bytes >= 1024 * 1024)

@@ -30,27 +30,20 @@ use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
 
 /**
- * Reacting to a post with an emoji, and taking it back.
- *
- * Built on the same parts as `LikeService` — an activity is made, signed,
- * stored and requested — because a reaction *is* a like with a picture chosen
- * for it. What is different is that the emoji has to survive the round trip,
- * and that not every emoji a peer might send is one this app will show.
+ * Reacting to a post with an emoji, and taking it back, built like
+ * `LikeService`, as a reaction is a like with an emoji.
  *
  * Unicode emoji and bounded custom shortcode labels are accepted on input.
- * A remote custom reaction's image is deliberately never fetched or rendered:
- * it could track each reader. Outbound custom reactions are allowed only for
- * emoji this instance owns, whose locally served Emoji tag is verifiable.
+ * A remote custom reaction's image is never fetched or rendered, as it could
+ * track readers. Outbound custom reactions use only emoji this instance owns.
  */
 class ReactionService {
 	use TStringTools;
 
 	/**
-	 * How long an emoji may be, in bytes.
-	 *
-	 * One emoji, not a sentence. A family with skin tones and zero-width
-	 * joiners is around 30 bytes in UTF-8, so this leaves room for the longest
-	 * real sequences and nothing like room for text. The column is 63.
+	 * How long an emoji may be, in bytes: room for the longest real sequences
+	 * (a ZWJ family with skin tones is about 30), not for text. The column is
+	 * 63.
 	 */
 	public const MAX_LENGTH = 63;
 
@@ -98,12 +91,9 @@ class ReactionService {
 			return false;
 		}
 
-		// and at least one character that is actually an emoji, rather than a
-		// run of symbols that merely is not text.
-		//
-		// Regional indicators are the second half of this and not a detail: a
-		// flag is two of them and they are *not* Extended_Pictographic, so
-		// that property alone refuses every flag there is.
+		// and at least one character that is actually an emoji. Regional
+		// indicators count too: flags are made of them and are not
+		// Extended_Pictographic.
 		return self::isUnicodeEmoji($emoji);
 	}
 
@@ -183,12 +173,8 @@ class ReactionService {
 	}
 
 	/**
-	 * Takes a reaction back.
-	 *
-	 * The row goes whether or not the `Undo` can be built and sent: a reader
-	 * who presses their own reaction again has taken it off, and leaving it in
-	 * place because a peer is unreachable would be the app disagreeing with
-	 * what they just did.
+	 * Takes a reaction back. The row is removed even if the `Undo` cannot be
+	 * sent, so the reader's action always takes effect here.
 	 *
 	 * @throws StreamNotFoundException when there is no such post
 	 */

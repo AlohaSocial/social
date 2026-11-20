@@ -15,17 +15,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What the web app need not ask for when it opens.
- *
- * Opening the home timeline used to send five requests that nearly always
- * came back empty: the announcements, the stories carousel, the weekly recap,
- * the memories of this day and the team accounts. Each is answered here
- * by one cheap question, and the page carries the answers as
- * `serverData.startup`; the app skips a request whose hint is `false`.
- *
- * A hint is only ever a reason *not* to ask: `false` means the answer is
- * certainly empty, `true` that it may not be. A check that fails says `true`,
- * so the app asks as it always did.
+ * Hints that let the web app skip requests that would come back empty when
+ * the home timeline opens: announcements, the shorts carousel, the weekly
+ * recap, memories of this day and team accounts. Passed as
+ * `serverData.startup`; `false` means certainly empty, `true` that it may
+ * not be, and a failed check says `true`.
  */
 class StartupHintsService {
 	public function __construct(

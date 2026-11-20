@@ -15,14 +15,10 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether deliveries are leaving, or piling up.
- *
- * Two things in the queue do not move on their own: a row the drain has
- * given up on after every retry, and a row it should have come back for a
- * day ago and has not. The first is an instance that is gone or refusing
- * us; the second is a drain that is not draining. Both are worth an
- * administrator's eye, and until now neither had one — the Federation health
- * section shows them, but only to whoever opens the Social settings.
+ * Whether deliveries are leaving or piling up: rows given up on after every
+ * retry (a peer gone or refusing us), and rows overdue by a day (a drain
+ * that is not draining). The Federation health section shows the same in
+ * the Social settings.
  */
 class OutboundQueueNotStuck implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#deliveries-are-stuck';
