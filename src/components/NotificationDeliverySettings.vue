@@ -54,11 +54,8 @@
 				</p>
 			</div>
 
-			<!-- Only drawn while something is being held back, which is the
-			     only time an exception means anything: a digest, or quiet
-			     hours over an otherwise instant account. The state is kept
-			     either way, so turning the digest off and on again does not
-			     lose it. -->
+			<!-- only while something is held back (a digest, or quiet hours), the
+			     only time an exception means anything; the state is kept either way -->
 			<fieldset v-if="holdsAnything" class="delivery-settings__group">
 				<legend class="delivery-settings__legend">
 					{{ t('social', 'Still at once') }}
@@ -149,16 +146,14 @@ const QUIET_DEFAULT = Object.freeze({ from: '22:00', to: '07:00' })
 
 /**
  * When Aloha Social may interrupt: as things happen, or in a digest at the
- * times the reader picked, with direct messages and mentions from people they
- * follow allowed through, and quiet hours over the lot.
+ * times the reader picked, with exceptions let through, and quiet hours over
+ * the lot. Everything still lands in Activities; this is only about the bell,
+ * the phone and the mail.
  *
- * Everything still lands in the notifications page; this is only about the
- * bell, the phone and the mail. The server holds one object per account and
- * answers the whole of it to every change, so `state` is always what the
- * server last confirmed and `draft` is what the page shows. A switch moves
- * at once and is saved at once; a time field is saved after a short pause in
- * the typing, because a time arrives in pieces and each half-typed piece is
- * not a time the server would take.
+ * The server answers the whole settings object to every change, so `state` is
+ * what it last confirmed and `draft` is what the page shows. A switch is saved
+ * at once, a time field after a pause in typing, since a half-typed time is
+ * not one the server would take.
  */
 export default {
 	name: 'NotificationDeliverySettings',
@@ -183,8 +178,7 @@ export default {
 			/** why the quiet hours are not being saved */
 			quietError: '',
 			/**
-			 * The debounced saves, made once in `created()`. Declared so they
-			 * are part of the instance rather than appearing on it.
+			 * The debounced saves, made once in `created()`.
 			 *
 			 * @type {((...args: unknown[]) => void) & {clear?: () => void, flush?: () => void}|null}
 			 */
@@ -318,11 +312,8 @@ export default {
 		},
 
 		/**
-		 * Saves the times, once they are all times and all different.
-		 *
-		 * The refusal is written here rather than left to the server because
-		 * a half-typed field is not worth a round trip, and the way out of
-		 * "two are the same" is on this page.
+		 * Saves the times once they are all times and all different; the page
+		 * refuses a half-typed or repeated time itself rather than asking the server.
 		 */
 		saveTimes() {
 			if (!this.isDigest) {
@@ -347,9 +338,8 @@ export default {
 		},
 
 		/**
-		 * The switch: on starts the pair at a late evening and an early
-		 * morning, which is what most people mean by quiet hours and is saved
-		 * straight away; off clears both ends.
+		 * The switch: on starts quiet hours at QUIET_DEFAULT and saves at once;
+		 * off clears both ends.
 		 *
 		 * @param {boolean} on the new position
 		 */

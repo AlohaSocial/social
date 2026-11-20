@@ -16,7 +16,6 @@
 				</p>
 			</NcNoteCard>
 
-			<!-- Taking part -->
 			<h4 class="aloha-directory__heading">
 				{{ t('social', 'Listing') }}
 			</h4>
@@ -136,7 +135,6 @@
 				</template>
 			</template>
 
-			<!-- Profile -->
 			<h4 class="aloha-directory__heading">
 				{{ t('social', 'Profile') }}
 			</h4>
@@ -189,7 +187,6 @@
 				</NcButton>
 			</form>
 
-			<!-- Settings and lists -->
 			<h4 class="aloha-directory__heading">
 				{{ t('social', 'Settings') }}
 			</h4>

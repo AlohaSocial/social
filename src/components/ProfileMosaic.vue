@@ -27,13 +27,10 @@ const COLUMNS = 3
 const ROWS = 3
 
 /**
- * The latest pictures of an account, three rows of them above its posts,
- * opening on the Photos tab.
- *
- * The pictures are the first page of that tab, fetched ahead through the
- * timeline store: opening Photos afterwards puts the same page on screen
- * without asking the server again, and coming back to Posts finds it held.
- * An account with fewer pictures than fill a row has no preview at all.
+ * The latest pictures of an account, three rows above its posts, opening on
+ * the Photos tab. They are that tab's first page, held in the timeline store,
+ * so opening Photos does not ask the server again. An account with fewer
+ * pictures than fill a row shows no preview.
  */
 export default {
 	name: 'ProfileMosaic',

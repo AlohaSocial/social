@@ -4,16 +4,9 @@
  */
 
 /**
- * The code points of an emoji, as the filename its image is stored under.
- *
- * This is the one function the app used the `twemoji` package for, and the
- * package brought a few hundred kilobytes and its whole asset index into the
- * bundle to provide it. The images themselves are shipped in `img/twemoji/`,
- * so all that was ever needed was the name.
- *
- * Surrogate pairs are combined back into the single code point they encode;
- * everything else is emitted as it stands, which is what keeps the zero-width
- * joiners and variation selectors of a composed emoji in the name.
+ * The code points of an emoji, as the filename its image in `img/twemoji/` is
+ * stored under. Surrogate pairs are combined; everything else, zero-width
+ * joiners and variation selectors included, is kept as it stands.
  *
  * @param {string} emoji one emoji, composed or not
  * @param {string} separator between code points, `-` as the filenames use

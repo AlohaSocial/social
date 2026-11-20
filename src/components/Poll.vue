@@ -76,11 +76,8 @@ export default {
 	emits: ['update:poll'],
 	data() {
 		return {
-			// A literal name made every poll on the page one document-wide
-			// radio group — the inputs are not inside a <form> — so choosing
-			// in one poll visibly cleared another's selection while that
-			// component's `selected` was untouched, and it went on to submit
-			// the choice that was no longer shown.
+			// unique per poll: the inputs are not in a <form>, so a shared name
+			// would make every poll on the page one radio group
 			groupName: `poll-option-${nextGroup++}`,
 			/** @type {number|number[]|null} the option picked, or all of them on a multiple-choice poll */
 			selected: this.poll.multiple ? [] : null,

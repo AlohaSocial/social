@@ -6,9 +6,8 @@
 import { getCanonicalLocale, getLanguage } from '@nextcloud/l10n'
 
 /**
- * The locale `Intl` formats in: the reader's Nextcloud locale, else the
- * language they read the interface in, else the browser's own. A tag Intl
- * does not accept is passed over rather than thrown at every formatter.
+ * The locale `Intl` formats in: the reader's Nextcloud locale, else their
+ * interface language, else the browser's. A tag Intl rejects is skipped.
  *
  * @return {string|undefined} a locale tag, or nothing for the browser's
  */

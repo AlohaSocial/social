@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// the list being left, while the next one loads: visibly not current, and not
-// clickable — acting on a post that belongs to the timeline you just left is
-// worse than waiting 150 ms for the one you asked for
+// the list being left while the next one loads: faded and not clickable, so
+// nobody acts on a post from the timeline they just left
 .timeline-list--settling {
 	opacity: .55;
 	pointer-events: none;
@@ -79,9 +78,8 @@
 	// Timeline.vue); where there is a composer, the component sets `top` to
 	// just below it instead
 	top: calc(var(--social-sticky-top, 0px) + 8px);
-	// above the composer rather than below it: the offset keeps the two apart,
-	// and if the composer grows between two measurements the pill is still the
-	// one you can see
+	// above the composer, so the pill stays visible if the composer grows
+	// between two measurements
 	z-index: 101;
 	display: flex;
 	align-items: center;
@@ -119,9 +117,6 @@
 		transition: none;
 	}
 }
-/* The line between what arrived since the reader last looked and what was
-   already there. A heading rather than a rule: "New" and "Earlier" say what
-   the two runs are, where a bare line only says that there are two of them. */
 /**
  * Where the reader had got to: a small drawing between two hairlines, and a
  * few quiet words under it, with everything below drawn a shade back. What it
@@ -205,6 +200,8 @@
 	}
 }
 
+/* The line between what arrived since the reader last looked and what was
+   already there: a heading ("New", "Earlier") rather than a bare rule. */
 .timeline-divider {
 	margin: 4px 0 10px;
 	padding: 0 2px;
@@ -216,11 +213,9 @@
 	list-style: none;
 }
 
-/* "New" is the boundary the sidebar badge was pointing at, so it is drawn in
-   the accent and carries a rule across the rest of the row: at 12px uppercase,
-   maxcontrast grey is exactly as quiet as the timestamps it has to stand out
-   from, and the heading read as the first line of the card beneath it.
-   "Earlier" stays grey -- it labels what has already been read. */
+/* "New" is the boundary the sidebar badge pointed at, so it is drawn in the
+   accent with a rule across the row; "Earlier" stays grey, as it labels what
+   has been read. */
 .timeline-divider--new {
 	display: flex;
 	align-items: center;
@@ -244,10 +239,8 @@
 }
 
 /*
- * The list has been a <transition-group name="list"> for as long as it has
- * existed, with no rules to go with the name: deleting a post made it vanish
- * and everything under it jump. Entering is the entry's own business — it
- * staggers itself, see TimelineEntry — so only leaving and moving are here.
+ * Entries stagger their own entrance (TimelineEntry), so only leaving and
+ * moving are here.
  */
 .list-leave-active {
 	transition: opacity .2s ease, transform .2s ease;
@@ -262,8 +255,7 @@
 	transform: translateY(-4px);
 }
 
-/* a swap replaces every entry at once: the old ones are not worth a fade
-   each, and twenty of them fading on top of twenty rising is a slow page */
+/* a swap replaces every entry at once, so the old ones are not faded one by one */
 .timeline-list--swapping .list-leave-active {
 	display: none;
 }

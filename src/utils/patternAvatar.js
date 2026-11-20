@@ -6,17 +6,10 @@
 import { tagHue } from './tagColour.js'
 
 /**
- * A face for an account that has not chosen one.
- *
- * The server says when an account's picture is a placeholder
- * (`avatar_default`, see docs/API.md): Nextcloud's initials for a local
- * account without an uploaded picture, the app icon for a remote one whose
- * picture is missing. In their place goes a soft flower, the app's own motif,
- * tinted with a hue taken from the handle — the same account gets the same
- * flower on every page and every device, and nothing is stored.
- *
- * It is decoration: the name beside it is what says who this is, so the
- * picture carries no text of its own and needs none read out.
+ * A face for an account that has not chosen one (`avatar_default`, see
+ * docs/API.md): a soft flower tinted with a hue from the handle, the same on
+ * every page and device with nothing stored. Decoration only: the name beside
+ * it says who this is.
  */
 
 /**

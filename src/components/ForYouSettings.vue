@@ -87,12 +87,10 @@ const resetUrl = () => generateUrl('apps/social/api/v1/recommendations/reset')
 
 /**
  * Everything For you can be told, in one place: whether it learns from the
- * reader (on, paused or off), whether it also learns from likes, saves and
- * watching, which languages it shows, and starting again.
- *
- * Two stores answer underneath: the hashtag interests (`/social/interests`)
- * and, where the administrator has the newer recommendations on, the
- * activity profile (`/recommendations`). The one choice sets both.
+ * reader (on, paused or off), whether likes, saves and watching count too,
+ * which languages it shows, and starting again. The one choice writes both the
+ * hashtag interests (`/social/interests`) and, where the administrator enabled
+ * activity recommendations, the activity profile (`/recommendations`).
  */
 export default {
 	name: 'ForYouSettings',

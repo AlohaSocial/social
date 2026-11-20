@@ -41,24 +41,9 @@ import SettingsDialog from './SettingsDialog.vue'
 import { tagStyle } from '../utils/tagColour.js'
 
 /**
- * The hashtags an account pins to its own profile.
- *
- * The server has answered `/api/v1/accounts/{account}/featured_tags` for a
- * while and clients could read it, but nothing on this app's own profile page
- * showed them — so an account could feature a tag here and only somebody using
- * a third-party client would ever see it.
- *
- * A featured tag is a claim an account makes about itself, which is why it
- * belongs at the top of the profile next to the bio rather than among the
- * statistics: it says what this account is about, in its own words.
- *
- * Each tag wears the colour it wears everywhere else (utils/tagColour.js), so
- * `#design` on a profile is recognisably the `#design` on the tag page it
- * leads to.
- *
- * On the reader's own profile it also opens the editor, including when there
- * is nothing to draw: "you feature none" is when somebody needs to be told
- * they could.
+ * The hashtags an account pins to its own profile, shown next to the bio. Each
+ * tag wears its colour from utils/tagColour.js. On the reader's own profile it
+ * also opens the editor, even when there are no tags yet.
  */
 export default {
 	name: 'FeaturedTags',
@@ -154,8 +139,7 @@ export default {
 	}
 }
 
-/* deliberately not a chip: it is not one of the tags, and reading as one would
-   make the reader's own profile look like it features something it does not */
+/* not a chip, so it does not read as one of the featured tags */
 .featured-tags__edit {
 	margin: 0;
 	border: none;

@@ -118,16 +118,11 @@ export const REACTIONS = ['❤️', '🔥', '😂', '😮', '👏', '😢']
 const REPLY_MAX = 500
 
 /**
- * What a 24-hour short carries over its slide in the Shorts stack.
- *
- * The "24h" mark and the hours left; for the poster, how many have seen it,
- * what was said about it and a delete; for everybody else, a row of reactions
- * and a reply. While its slide is the one on screen it is marked seen (the
- * server's rule: never the poster's own), and a picture or a text card runs a
- * clock for the seconds its poster gave it and says `done` when they are up.
- * The clock stands still while `held`, and while a reply is being written,
- * which is also reported as `hold` so that a video stops under the writer.
- * The stack moves on; this component only says when.
+ * What a 24-hour short carries over its slide in the Shorts stack: the hours
+ * left; for the poster, views, answers and a delete; for others, reactions and
+ * a reply. On screen it is marked seen, and a picture or text card runs a clock
+ * for its duration and emits `done`. The clock pauses while `held` or while a
+ * reply is written (emitted as `hold`, so a video stops too).
  *
  * In the API a 24-hour short is a story; the routes are the stories routes.
  */

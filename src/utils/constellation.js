@@ -6,16 +6,8 @@
 /**
  * The follow suggestions as a small sky: the reader in the middle, the people
  * they follow who led somewhere around them, and the suggestions at the edge,
- * each tied to whoever it came through.
- *
- * A force layout, and a deliberately small one: every node pushes every other
- * away, every tie pulls its two ends to a resting length, and a weak pull to
- * the middle keeps the whole thing on the card. It runs in the browser for a
- * second or two and then stops; twenty suggestions and a handful of the
- * reader's follows is a few hundred pairs, which is nothing.
- *
- * Positions are in a unit square, 0 to 1 each way, so the same layout draws at
- * whatever size the card happens to be.
+ * each tied to whoever it came through. A small force layout in a unit square
+ * (0 to 1 each way), so it draws at whatever size the card is.
  */
 
 /** how hard nodes push each other apart */

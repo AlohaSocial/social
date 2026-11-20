@@ -50,9 +50,8 @@ export default {
 		},
 
 		/**
-		 * Whether the post is to go out later rather than now. The button
-		 * then says so, whatever the audience: pressing "Post to followers"
-		 * and having nothing appear is a button that lied.
+		 * Whether the post goes out later; the button then says so whatever
+		 * the audience.
 		 */
 		scheduled: {
 			type: Boolean,
