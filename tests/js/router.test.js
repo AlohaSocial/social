@@ -341,11 +341,11 @@ describe('the page title', () => {
 	}, 10000)
 
 	it('leaves a page that names itself alone', async () => {
-		await router.push('/statistics')
+		await router.push('/about')
 		await router.push('/timeline/notifications')
 
 		// the view sets it once mounted; the router must not clear it on the way
-		expect(document.title).toBe('Statistics - Aloha - Nextcloud')
+		expect(document.title).toBe('About this server - Aloha - Nextcloud')
 	})
 })
 
@@ -419,14 +419,14 @@ describe('router navigation', () => {
 describe('the reader\'s own pages', () => {
 	const ownPages = [
 		'/settings',
-		'/statistics',
 		'/migration',
 		'/switch',
 		'/blocked',
 		'/timeline/notifications',
 		'/timeline/direct',
-		'/timeline/favourites',
-		'/timeline/bookmarks',
+		'/@alice/saved',
+		'/@alice/drafts',
+		'/@alice/statistics',
 		'/timeline/interests',
 		'/timeline/list/4',
 	]
@@ -525,6 +525,24 @@ describe('follow requests', () => {
 
 		expect(router.currentRoute.value.name).toBe('timeline')
 		expect(router.currentRoute.value.params.type).toBe('notifications')
+	})
+})
+
+describe('the pages that moved onto the reader\'s profile', () => {
+	it.each([
+		['/statistics', 'profile.statistics', {}],
+		['/timeline/favourites', 'profile.saved', {}],
+		['/timeline/bookmarks', 'profile.saved', { list: 'bookmarks' }],
+	])('sends %s to the profile', async (path, name, query) => {
+		globalThis.setInitialState('social', 'currentAccount', { acct: 'alice' })
+		vi.resetModules()
+		const { default: testRouter } = await import('../../src/router.js')
+		await testRouter.push(path)
+
+		expect(testRouter.currentRoute.value.name).toBe(name)
+		expect(testRouter.currentRoute.value.params.account).toBe('alice')
+		expect(testRouter.currentRoute.value.query).toEqual(query)
+		document.getElementById('initial-state-social-currentAccount')?.remove()
 	})
 })
 

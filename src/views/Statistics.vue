@@ -5,6 +5,7 @@
 <template>
 	<div class="stats">
 		<PageHeader
+			v-if="!embedded"
 			:title="t('social', 'Statistics')"
 			:description="t('social', 'What you have posted here, and what came back. Counted from this server when you opened the page, so it is never a stale number.')"
 			clearNavigation />
@@ -55,7 +56,7 @@
 
 		<template v-else-if="stats">
 			<!-- who -->
-			<section class="stats__card stats__hero">
+			<section v-if="!embedded" class="stats__card stats__hero">
 				<div class="stats__hero-who">
 					<NcAvatar
 						:user="uid"
@@ -899,6 +900,11 @@ export default {
 		NcAvatar,
 		NcButton,
 		NcLoadingIcon,
+	},
+
+	props: {
+		/** on the owner's profile, under its header, rather than a page of its own */
+		embedded: { type: Boolean, default: false },
 	},
 
 	data() {

@@ -5,10 +5,11 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import Settings from '../../../src/views/Settings.vue'
+import ProfileDrafts from '../../../src/views/ProfileDrafts.vue'
 import DraftsButton from '../../../src/components/DraftsButton.vue'
 import { loadDraft, saveDraft } from '../../../src/services/draft.js'
 import eventBus from '../../../src/services/eventBus.js'
+import { useAccountStore } from '../../../src/store/account.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
 vi.mock('@nextcloud/auth', () => ({ getCurrentUser: () => ({ uid: 'alice' }) }))
@@ -18,16 +19,12 @@ vi.mock('@nextcloud/axios', () => ({
 
 const stub = (name) => ({ name, template: `<section class="${name}-stub" />` })
 
-// every other section reads the server on mount or arrives in an async chunk
+// the other sections read the server on mount
 const stubs = Object.fromEntries([
-	'AccountSettings',
-	'ProfileLayoutSettings',
-	'DirectMessagesSettings',
-	'FeaturedTagsSettings',
 	'ScheduledPosts',
 	'HeldPosts',
 	'ArchivedPosts',
-	'FilesCommentsSettings',
+	'TimelineSwitcher',
 ].map((name) => [name, stub(name)]))
 
 const NcDialogStub = {
@@ -37,13 +34,14 @@ const NcDialogStub = {
 }
 
 /**
- * @return {Promise<object>} the page opened at the Drafts section
+ * @return {Promise<object>} the Drafts tab of the reader's own profile
  */
 async function mountDrafts() {
-	const wrapper = mount(Settings, {
+	useAccountStore().setOwnAccount({ id: '1', acct: 'alice', username: 'alice', url: 'https://cloud.example/apps/social/@alice' })
+	const wrapper = mount(ProfileDrafts, {
 		global: {
 			stubs: { ...stubs, NcDialog: NcDialogStub },
-			mocks: { $route: { hash: '#drafts' }, $router: { replace: vi.fn().mockResolvedValue() } },
+			mocks: { $route: { params: { account: 'alice' }, hash: '' }, $router: { replace: vi.fn().mockResolvedValue() } },
 		},
 	})
 	await flushPromises()
@@ -56,15 +54,15 @@ beforeEach(() => {
 	eventBus.all.clear()
 })
 
-describe('the Drafts section of Settings', () => {
-	it('is in Your posts and lists the saved drafts with the composer\'s list', async () => {
+describe('the Drafts tab of the reader\'s profile', () => {
+	it('lists the saved drafts with the composer\'s list, beside the scheduled, held and archived posts', async () => {
 		saveDraft({ text: 'A post for later' })
 		saveDraft({ text: 'An answer for later' }, 'reply.42')
 		const wrapper = await mountDrafts()
 
-		expect(wrapper.find('.settings__group-heading').text()).toBe('Your posts')
-		const section = wrapper.find('section.settings__section#drafts')
-		expect(section.find('.settings__section-heading').text()).toBe('Drafts')
+		expect(wrapper.findAll('.profile-drafts__title').map((title) => title.text()))
+			.toEqual(['Drafts', 'Scheduled posts', 'Waiting for review', 'Archived posts'])
+		const section = wrapper.find('section#drafts')
 		expect(section.findComponent(DraftsButton).props('inline')).toBe(true)
 		const rows = section.findAll('.drafts-list__item')
 		expect(rows.map((row) => row.find('strong').text()).sort()).toEqual(['A post for later', 'An answer for later'])
@@ -153,12 +151,14 @@ describe('the Drafts section of Settings', () => {
 
 		expect(wrapper.find('#drafts').text()).toContain('Written in the composer')
 	})
+})
 
-	it('is found by searching for it', async () => {
-		const wrapper = await mountDrafts()
-		await wrapper.find('.settings__search input').setValue('drafts')
-		await flushPromises()
+describe('somebody else\'s profile', () => {
+	it('has no Drafts tab: the page goes back to the profile', async () => {
+		useAccountStore().setOwnAccount({ id: '1', acct: 'alice', username: 'alice', url: 'https://cloud.example/apps/social/@alice' })
+		const replace = vi.fn()
+		mount(ProfileDrafts, { global: { stubs, mocks: { $route: { params: { account: 'bob@remote.example' } }, $router: { replace } } } })
 
-		expect(wrapper.findAll('.settings__section-heading').map((heading) => heading.text())).toContain('Drafts')
+		expect(replace).toHaveBeenCalledWith({ name: 'profile', params: { account: 'bob@remote.example' } })
 	})
 })

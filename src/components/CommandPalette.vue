@@ -85,6 +85,7 @@ import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
 import IconCog from 'vue-material-design-icons/Cog.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
 import IconCompass from 'vue-material-design-icons/Compass.vue'
+import IconFileDocumentEditOutline from 'vue-material-design-icons/FileDocumentEditOutline.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconImageMultiple from 'vue-material-design-icons/ImageMultiple.vue'
@@ -181,11 +182,16 @@ export default {
 				{ key: 'discover', icon: IconCompass, title: t('social', 'Discover'), to: { name: 'discover' } },
 				{ key: 'activities', icon: IconBell, title: t('social', 'Activities'), to: { name: 'timeline', params: { type: 'notifications' } } },
 				{ key: 'direct', icon: IconCommentAccount, title: t('social', 'Direct messages'), to: { name: 'timeline', params: { type: 'direct' } } },
-				...(account?.acct ? [{ key: 'profile', icon: IconAccountCircle, title: t('social', 'My profile'), to: { name: 'profile', params: { account: account.acct } } }] : []),
+				...(account?.acct
+					? [
+							{ key: 'profile', icon: IconAccountCircle, title: t('social', 'My profile'), to: { name: 'profile', params: { account: account.acct } } },
+							{ key: 'liked', icon: IconHeart, title: t('social', 'Favorites'), to: { name: 'profile.saved', params: { account: account.acct } } },
+							{ key: 'bookmarks', icon: IconBookmark, title: t('social', 'Bookmarks'), to: { name: 'profile.saved', params: { account: account.acct }, query: { list: 'bookmarks' } } },
+							{ key: 'drafts', icon: IconFileDocumentEditOutline, title: t('social', 'Drafts'), to: { name: 'profile.drafts', params: { account: account.acct } } },
+							{ key: 'statistics', icon: IconChartBox, title: t('social', 'Statistics'), to: { name: 'profile.statistics', params: { account: account.acct } } },
+						]
+					: []),
 				{ key: 'follow-requests', icon: IconAccountClock, title: t('social', 'Follow requests'), to: { name: 'timeline', params: { type: 'notifications' } } },
-				{ key: 'liked', icon: IconHeart, title: t('social', 'Favorites'), to: { name: 'timeline', params: { type: 'favourites' } } },
-				{ key: 'bookmarks', icon: IconBookmark, title: t('social', 'Bookmarks'), to: { name: 'timeline', params: { type: 'bookmarks' } } },
-				{ key: 'statistics', icon: IconChartBox, title: t('social', 'Statistics'), to: { name: 'statistics' } },
 				{ key: 'blocking', icon: IconCancel, title: t('social', 'Blocking'), to: { name: 'blocked-accounts' } },
 				{ key: 'migration', icon: IconSwapHorizontal, title: t('social', 'Migration'), to: { name: 'migration' } },
 				{ key: 'about', icon: IconInformationOutline, title: t('social', 'About this server'), to: { name: 'about' } },
@@ -193,8 +199,6 @@ export default {
 				inSettings('account', t('social', 'Who can find and follow you')),
 				inSettings('lists', t('social', 'Lists')),
 				inSettings('notifications', t('social', 'When to tell you')),
-				inSettings('drafts', t('social', 'Drafts')),
-				inSettings('scheduled', t('social', 'Scheduled posts')),
 				inSettings('shortcuts', t('social', 'Keyboard shortcuts')),
 			]
 		},

@@ -26,7 +26,6 @@ describe('the page title', () => {
 	it.each([
 		['settings', 'Settings'],
 		['discover', 'Discover'],
-		['statistics', 'Statistics'],
 		['blocked-accounts', 'Blocking'],
 		['migration', 'Migration'],
 		['shorts', 'Shorts'],

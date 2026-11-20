@@ -21,6 +21,9 @@ const ProfileCollections = () => import(/* webpackChunkName: "profile" */'./view
 const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/ProfileTagged.vue')
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
+const ProfileSaved = () => import(/* webpackChunkName: "profile" */'./views/ProfileSaved.vue')
+const ProfileDrafts = () => import(/* webpackChunkName: "profile" */'./views/ProfileDrafts.vue')
+const ProfileStatistics = () => import(/* webpackChunkName: "profile" */'./views/ProfileStatistics.vue')
 const StarterPack = () => import(/* webpackChunkName: "profile" */'./views/StarterPack.vue')
 const BlockedAccounts = () => import(/* webpackChunkName: "settings" */'./views/BlockedAccounts.vue')
 const Discover = () => import('./views/Discover.vue')
@@ -32,7 +35,6 @@ const Discover = () => import('./views/Discover.vue')
 const Migration = () => import(/* webpackChunkName: "migration" */'./views/Migration.vue')
 const SwitchWizard = () => import(/* webpackChunkName: "switch" */'./views/SwitchWizard.vue')
 const Settings = () => import(/* webpackChunkName: "settings" */'./views/Settings.vue')
-const Statistics = () => import(/* webpackChunkName: "statistics" */'./views/Statistics.vue')
 const About = () => import(/* webpackChunkName: "about" */'./views/About.vue')
 const Search = () => import('./components/Search.vue')
 const VideoShorts = () => import(/* webpackChunkName: "shorts" */'./views/VideoShorts.vue')
@@ -60,6 +62,19 @@ function getBase() {
 	}
 
 	return generateUrl('/apps/social').replace(/\/+$/, '')
+}
+
+/**
+ * A page of the reader's own profile, where Favorites, Bookmarks and
+ * Statistics live; the home feed for a reader without an account.
+ *
+ * @param {string} name the profile route
+ * @param {object} query what the page is told besides
+ * @return {object} the route
+ */
+function ownProfile(name, query = {}) {
+	const account = loadState('social', 'currentAccount', null)?.acct
+	return account ? { name, params: { account }, query } : { name: 'timeline' }
 }
 
 /**
@@ -245,6 +260,14 @@ const router = createRouter({
 		// News was a timeline of its own and is gone; an address somebody
 		// kept for it opens their feed rather than an empty page
 		{
+			path: '/timeline/favourites',
+			redirect: () => ownProfile('profile.saved'),
+		},
+		{
+			path: '/timeline/bookmarks',
+			redirect: () => ownProfile('profile.saved', { list: 'bookmarks' }),
+		},
+		{
 			path: '/timeline/news',
 			redirect: { name: 'timeline', params: { type: 'home' } },
 		},
@@ -324,6 +347,30 @@ const router = createRouter({
 					components: {
 						details: ProfileCollections,
 					},
+				},
+				{
+					path: 'saved',
+					name: 'profile.saved',
+					components: {
+						details: ProfileSaved,
+					},
+					meta: { signedIn: true },
+				},
+				{
+					path: 'drafts',
+					name: 'profile.drafts',
+					components: {
+						details: ProfileDrafts,
+					},
+					meta: { signedIn: true },
+				},
+				{
+					path: 'statistics',
+					name: 'profile.statistics',
+					components: {
+						details: ProfileStatistics,
+					},
+					meta: { signedIn: true },
 				},
 			],
 		},
@@ -436,11 +483,7 @@ const router = createRouter({
 		},
 		{
 			path: '/statistics',
-			components: {
-				default: Statistics,
-			},
-			name: 'statistics',
-			meta: { signedIn: true },
+			redirect: () => ownProfile('profile.statistics'),
 		},
 		{
 			// the server's rules, contact and legal links, for the people on it

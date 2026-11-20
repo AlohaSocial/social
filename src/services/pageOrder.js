@@ -25,9 +25,6 @@ const ORDER = [
 	'timeline:direct',
 	'discover',
 	'profile',
-	'timeline:favourites',
-	'timeline:bookmarks',
-	'statistics',
 	'blocked-accounts',
 	'settings',
 ]
