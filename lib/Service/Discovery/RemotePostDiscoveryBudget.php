@@ -29,15 +29,10 @@ class RemotePostDiscoveryBudget {
 	}
 
 	/**
-	 * Reserve one outbound discovery request across all workers and providers.
-	 *
-	 * A fixed hourly bucket makes the cap understandable to operators. Each
-	 * outbound request claims a unique shared slot using the database table's
-	 * unique key, so local APCu and concurrent workers cannot spend the same
-	 * slot. Expired slots are reclaimed without deleting a live concurrent
-	 * claim.
-	 * If the budget store itself fails, discovery fails closed while local and
-	 * cached candidates remain available.
+	 * Reserves one outbound discovery request in a fixed hourly budget shared
+	 * by all workers and providers. Each request claims a slot via the table's
+	 * unique key; expired slots are reclaimed. If the store fails, discovery
+	 * fails closed.
 	 */
 	public function reserve(): bool {
 		$now = $this->timeFactory->getTime();

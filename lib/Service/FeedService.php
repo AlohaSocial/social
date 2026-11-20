@@ -13,23 +13,12 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 
 /**
- * An account's public posts as an RSS feed.
+ * An account's public posts as an RSS 2.0 feed, as PeerTube and Mastodon
+ * publish (`/@user.rss`).
  *
- * PeerTube publishes one per channel and per account, and its users live in
- * feed readers and podcast apps: a channel with no feed is one they cannot
- * subscribe to from outside, whatever else it offers. Mastodon publishes one
- * too, at `/@user.rss`, so this is not a PeerTube idea — it is a thing every
- * other implementation has and this app did not.
- *
- * **Public posts only, and nothing else.** The feed is readable signed out, so
- * it is built from the same anonymous read a stranger's visit to the profile
- * gets. A feed is also the easiest possible way to leak a followers-only post
- * — one wrong predicate and it is in somebody's RSS reader and out of reach
- * for ever — so the caller passes posts that were fetched with **no viewer**,
- * and this class refuses anything that is not public a second time.
- *
- * RSS 2.0 rather than Atom, because that is what PeerTube and Mastodon both
- * publish and what every podcast client reads.
+ * Readable signed out, so the caller passes posts read with no viewer, and
+ * this class refuses anything that is not public a second time: a leaked
+ * followers-only post in a feed reader cannot be taken back.
  */
 class FeedService {
 	/** How many posts a feed carries. PeerTube's own is twenty. */
@@ -49,9 +38,7 @@ class FeedService {
 
 		$items = '';
 		foreach ($posts as $post) {
-			// the second refusal: a feed is the easiest possible way to leak a
-			// followers-only post, and one wrong predicate upstream would put
-			// it in somebody's reader and out of reach for ever
+			// the second refusal of non-public posts (see the class comment)
 			if (!$post->isPublic()) {
 				continue;
 			}
@@ -74,10 +61,8 @@ class FeedService {
 	}
 
 	/**
-	 * One post as an item.
-	 *
-	 * A video carries an `enclosure`, which is what makes the feed usable in a
-	 * podcast client: that is the whole reason PeerTube publishes one.
+	 * One post as an item. A video carries an `enclosure`, which podcast
+	 * clients play.
 	 */
 	private function item(Stream $post, Person $actor): string {
 		$title = $this->titleOf($post, $actor);
@@ -108,11 +93,8 @@ class FeedService {
 	}
 
 	/**
-	 * What to call a post in a list of titles.
-	 *
-	 * A video has a name; everything else has to make do with its first line,
-	 * which is what a feed reader shows in a list and what somebody writing a
-	 * post puts first anyway.
+	 * What to call a post in a list of titles: a video's name, or else the
+	 * post's first line.
 	 */
 	private function titleOf(Stream $post, Person $actor): string {
 		$video = $post->getVideoMeta();
