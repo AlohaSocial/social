@@ -19,14 +19,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_cache_doc.local_copy_prim` and `resized_copy_prim`: the md5 of each
- * copy name, indexed, so `/media/{uuid}` finds its row without scanning the
- * table. The copy columns themselves are unindexed text.
- *
- * The rows already there get theirs computed in PHP, as SQLite has no md5():
- * keyset pages of 500 by `nid`, and the rows of a page that lack a key are
- * written back with one statement. Run again, it reads the table once and
- * writes nothing.
+ * `social_cache_doc.local_copy_prim` and `resized_copy_prim`: the indexed md5
+ * of each copy name, so `/media/{uuid}` finds its row without a scan.
+ * Existing rows are filled in PHP (SQLite has no md5()), in keyset pages of
+ * 500 by `nid`; a rerun writes nothing.
  */
 class Version1000Date20261110000001 extends SimpleMigrationStep {
 	private const TABLE = CoreRequestBuilder::TABLE_CACHE_DOCUMENTS;
@@ -73,8 +69,8 @@ class Version1000Date20261110000001 extends SimpleMigrationStep {
 		$keyed = 0;
 		$after = 0;
 		while (true) {
-			// the keyset alone in SQL, so every page is a primary key range on
-			// every platform; which rows lack a key is decided here
+			// Only the keyset in SQL, a primary-key range everywhere; which rows lack a
+			// key is decided here.
 			$page = $this->connection->executeQuery(
 				'SELECT `nid`, `local_copy`, `resized_copy`, `local_copy_prim`, `resized_copy_prim`'
 				. ' FROM `' . $table . '` WHERE `nid` > ' . $after . ' ORDER BY `nid` ASC LIMIT ' . self::BATCH

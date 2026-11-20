@@ -29,12 +29,9 @@ use OCP\IConfig;
 use Throwable;
 
 /**
- * What the administrator sees of the Bluesky side: the settings, the
- * numbers, the daemon, and whether the requirements of a PDS are met.
- *
- * The requirement checks that need the network (the well-known and XRPC
- * surfaces reachable at the root) are cached for a while, as the client
- * API check is: an admin page must not probe the instance on every load.
+ * What the administrator sees of the Bluesky side: settings, numbers, the
+ * daemon, and the PDS requirements. Network checks are cached so the page
+ * does not probe the instance on every load.
  */
 class AtprotoStatusService {
 	private const CACHE_KEY = 'social_atproto_checks';
@@ -78,9 +75,8 @@ class AtprotoStatusService {
 				'events_in_window' => $this->events->countInWindow(),
 				'head_seq' => $this->events->latestSeq(),
 				'relay_crawl' => $this->relayCrawlStatus(),
-				// reading Bluesky: the followed authors and the local accounts
-				// whose notifications are asked for, and how far behind the
-				// slowest of each is
+				// Reading Bluesky: followed authors and notification accounts, and how far
+				// behind the slowest of each is.
 				'reading' => $this->reading(),
 				'blocks' => $this->blocklist?->list() ?? [],
 				'rotation_key_age' => $this->rotationKeyAgeDays(),
@@ -297,10 +293,8 @@ class AtprotoStatusService {
 			$upgraded = $this->curlService->doWebSocketHandshake($endpoint . '/xrpc/com.atproto.sync.subscribeRepos', $status);
 		} catch (Throwable) {
 		}
-		// HTTP 426 confirms that the path exists, but it is not a WebSocket
-		// connection. Relays need the firehose to see repository commits, so
-		// enabling this PDS without a successful upgrade leaves its posts
-		// invisible to Bluesky clients.
+		// 426 proves the path exists but not a WebSocket; relays need the firehose,
+		// so without a working upgrade posts never reach Bluesky.
 
 		return [
 			'id' => 'firehose',
@@ -316,11 +310,9 @@ class AtprotoStatusService {
 
 	/**
 	 * What each relay says of this server (`com.atproto.sync.getHostStatus`):
-	 * whether it crawls it, how many of its accounts it carries, and whether
-	 * it throttles or bans it. A relay limits how many accounts and events a
-	 * new data server may have; past that it throttles, and the posts of
-	 * the accounts over the limit do not reach Bluesky. Never an error: a
-	 * relay's view does not decide whether this server can be one.
+	 * whether it crawls it, how many accounts it carries, whether it throttles
+	 * or bans it. Past a relay's limits for a new server, posts stop reaching
+	 * Bluesky. Never an error.
 	 */
 	private function relayCheck(): array {
 		$host = (string)parse_url($this->safe(fn (): string => $this->config->pdsEndpoint()), PHP_URL_HOST);

@@ -54,10 +54,8 @@ class ScheduledStatusApiController extends MastodonApiController {
 
 	/**
 	 * The posts this account has asked to have published later, soonest first.
-	 *
-	 * No `Link` header: a ScheduledStatus is not a Stream and carries no nid
-	 * for `paged()` to page on. The three cursors are honoured, so a client
-	 * that builds its own still pages.
+	 * No `Link` header (a ScheduledStatus is not a Stream, so has no nid for
+	 * `paged()`), but the three cursors are honoured.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]

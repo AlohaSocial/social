@@ -43,26 +43,15 @@ use Throwable;
 
 /**
  * Finding things: the profile directory, who to follow, what is being read,
- * and the hashtags an account pins to its own profile.
+ * and the hashtags an account pins to its own profile, in one controller
+ * because together they make a Mastodon client's explore screen. None of
+ * them may show an account or post the caller would not be shown anywhere
+ * else.
  *
- * Four features in one controller because they are one thing to a client — a
- * Mastodon "explore" screen calls `/directory`, `/suggestions`, `/trends/*`
- * and `/featured_tags` to draw a single page — and because they share the one
- * rule that matters here: none of them may show an account or a post that the
- * caller would not have been shown anywhere else. A discovery surface is the
- * place where that goes wrong quietly, because nobody asked for the thing it
- * put in front of them.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController`,
- * `ListController` and `HistoryController`: a Mastodon client authenticates
- * with a bearer token and has no Nextcloud session or CSRF token to present.
- *
- * Which routes then require a viewer follows Mastodon exactly, and the split
- * is not arbitrary. The directory, the trends and another account's featured
- * tags are things this instance publishes about itself and are answered to
- * anybody. The suggestions and an account's own featured tags are about the
- * asking account and require a viewer — there is no such thing as an anonymous
- * "accounts you might follow".
+ * `#[PublicPage]` with `#[NoCSRFRequired]`, as Mastodon clients use a bearer
+ * token. As in Mastodon, the directory, trends and another account's featured
+ * tags are answered to anybody; suggestions and one's own featured tags
+ * require a viewer.
  */
 class DiscoveryController extends ClientApiController {
 
@@ -89,20 +78,9 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The local profile directory: the accounts that opted in to being listed.
-	 *
-	 * Opted in, and nothing else. `discoverable` has been stored on
-	 * `social_actor` and federated on the actor since
-	 * `Version1000Date20260911000002` and was read by nothing at all — a user
-	 * could turn the flag off and it changed nothing, because there was no
-	 * listing to be kept out of. It is honoured here as a predicate of the
-	 * query, so an account that did not opt in is never a row that was read
-	 * and then dropped.
-	 *
-	 * `local` is accepted and ignored, as documented: only accounts this
-	 * instance holds the profile of have the flag, and publishing a directory
-	 * of cached remote actors would be this instance listing somebody else's
-	 * users.
+	 * The local profile directory: only accounts that opted in with
+	 * `discoverable`, filtered in the query. `local` is accepted and ignored:
+	 * listing cached remote actors would publish somebody else's users.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -126,11 +104,7 @@ class DiscoveryController extends ClientApiController {
 
 	/**
 	 * The directories this instance will ask about people, in the order it asks
-	 * them — this instance first.
-	 *
-	 * Published rather than assumed by the client, because which servers get
-	 * asked is an administrator's decision and a reader is entitled to see
-	 * whose directory they are searching before they search it.
+	 * them, this instance first, so a reader sees whose directory they search.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -146,17 +120,10 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * Looks for people in those directories.
-	 *
-	 * A viewer is required, unlike the local directory beside it. This one
-	 * makes requests to other servers on the caller's say-so, and an
-	 * endpoint that does that for anonymous callers is an open proxy with
-	 * extra steps — the rate limit is the second half of the same argument.
-	 *
-	 * The answer carries `sources` as well as `accounts`, and a client is
-	 * expected to show it: "nobody by that name" and "that server did not
-	 * answer" are different answers, and a reader deciding whether to try
-	 * another spelling needs to know which one they got.
+	 * Looks for people in those directories. Requires a viewer and is rate
+	 * limited, since it makes requests to other servers on the caller's behalf.
+	 * `sources` beside `accounts` tells "nobody by that name" apart from "that
+	 * server did not answer".
 	 *
 	 * @param string $q what to look for; empty asks each source who is active
 	 * @param string $source one host to ask, or '' for all of them
@@ -183,21 +150,10 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The hashtags other servers are busy with, and a search across them.
-	 *
-	 * The trending list this app has always had ranks the tags used *here*,
-	 * which on a small instance is what the handful of people on it posted
-	 * today and on a new one is nothing at all. This asks other servers the
-	 * same question and answers with what they said, attributed to them.
-	 *
-	 * Nothing is fetched, ingested or stored -- what comes back is a list of
-	 * strings. See `PeerTrendService` for which kinds of server can answer a
-	 * search rather than only a trending page, which is a fact about their
-	 * APIs rather than a choice made here.
-	 *
-	 * The answer carries `sources` beside `tags` for the reason
-	 * `/api/v1/directories/search` does: "nobody is talking about that" and
-	 * "the servers we asked did not answer" are different answers.
+	 * The hashtags other servers are busy with, and a search across them,
+	 * attributed to the servers that answered; nothing is stored. See
+	 * `PeerTrendService` for which servers can search. `sources` beside `tags`
+	 * tells "nobody is talking about that" apart from "no answer".
 	 *
 	 * @param string $q a tag to look for; empty asks each server what is trending there
 	 * @param string $source one host to ask, or '' for all of them
@@ -223,12 +179,8 @@ class DiscoveryController extends ClientApiController {
 
 	/**
 	 * Accounts the viewer might want to follow, as Mastodon v2 `Suggestion`
-	 * entities.
-	 *
-	 * Never somebody they already follow, have a pending request to, have
-	 * blocked or muted, who has blocked them, or themselves — see
-	 * SuggestionService, where those exclusions are gathered before either
-	 * half of the list is built.
+	 * entities. SuggestionService excludes accounts already followed, requested,
+	 * blocked or muted, those who blocked the viewer, and the viewer.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -247,18 +199,10 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * Accounts followed by the accounts the viewer follows — the Followgraph
-	 * question, asked of the servers those accounts live on rather than of
-	 * this database.
-	 *
-	 * Not part of Mastodon's API and deliberately its own route: what it
-	 * answers with carries the count and the handles behind each suggestion,
-	 * and `/api/v2/suggestions` has nowhere to put them. The suggestions there
-	 * are cheap and local; these cost one request per account followed, so
-	 * they are asked for rather than included by default.
-	 *
-	 * Rate-limited per account and per address, because that is what a button
-	 * that makes twenty outgoing requests needs.
+	 * Accounts followed by the accounts the viewer follows (the Followgraph
+	 * question), asked of the servers those accounts live on. Not Mastodon's API:
+	 * it carries the count and handles behind each suggestion and costs a request
+	 * per account followed, so it is on request and rate limited.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -273,8 +217,7 @@ class DiscoveryController extends ClientApiController {
 
 			return new DataResponse([
 				'suggestions' => $answer['suggestions'],
-				// what it asked and what it still needs, so the page can say
-				// "follow one more account" rather than "nothing found"
+				// What it asked and still needs, so the page can say "follow one more account".
 				'asked' => $answer['asked'],
 				'needs' => $answer['needs'],
 			], Http::STATUS_OK);
@@ -284,11 +227,8 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * Whether the graph is worth walking, which the page asks when it opens.
-	 *
-	 * Its own route rather than a parameter on the one above, because the two
-	 * cost such different things: this reads one row count and goes nowhere
-	 * near the network, so it is not rate-limited and the walk is.
+	 * Whether the graph is worth walking, asked when the page opens. One row
+	 * count and no network, so unlike the walk it is not rate limited.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -304,12 +244,8 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The v1 shape of the same list: bare `Account` entities, without the
-	 * source that explains them.
-	 *
-	 * Served from the same query rather than deprecated away, because clients
-	 * that never moved to v2 would otherwise show an empty "who to follow"
-	 * panel with no indication why.
+	 * The v1 shape of the same list: bare `Account` entities, for clients that
+	 * never moved to v2.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -332,17 +268,10 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * "Stop suggesting this account."
-	 *
-	 * Mastodon's `DELETE /api/v1/suggestions/{account_id}`, and the reason the
-	 * panel is usable at all: without it the same handful of accounts comes
-	 * back on every visit, including the ones the reader has already decided
-	 * about. The dismissal is permanent — see
-	 * `AccountRelationService::TYPE_SUGGESTION_DISMISSED`.
-	 *
-	 * Mastodon answers an empty object, and does so whether or not the account
-	 * was ever suggested: the client asked for a state, and that state is what
-	 * it gets.
+	 * "Stop suggesting this account": Mastodon's
+	 * `DELETE /api/v1/suggestions/{account_id}`, permanent (see
+	 * `AccountRelationService::TYPE_SUGGESTION_DISMISSED`). Answers an empty
+	 * object whether or not the account was ever suggested, as Mastodon does.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -361,12 +290,9 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The public statuses interacted with most in the window.
-	 *
-	 * `period` is this app's own parameter and is the one
-	 * `/api/v1/trends/tags` already takes, so a client that asks all three
-	 * trend routes reports on the same stretch of time. Mastodon has no such
-	 * parameter and sends none; the default is what it gets.
+	 * The public statuses interacted with most in the window. `period` is this
+	 * app's own parameter, shared with `/api/v1/trends/tags`; Mastodon clients
+	 * send none and get the default.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -390,25 +316,11 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The pictures being looked at right now: `/api/v2/discover/posts`.
+	 * The photos being looked at right now: Pixelfed's `/api/v2/discover/posts`.
 	 *
-	 * Pixelfed's route, and the one its clients ask for the discover screen. It
-	 * is the trending statuses narrowed to the ones with a picture, because a
-	 * discover screen is a grid of squares and a text post is a poor thing to
-	 * put in one -- not a different ranking, so a post cannot trend here and not
-	 * there.
-	 *
-	 * `media` narrows it again to one kind, which is this app's own parameter
-	 * and not Pixelfed's: its clients send none and get what they always got,
-	 * every post with an attachment. The page this app draws asks for `image`
-	 * and `video` separately, because a grid of squares and a grid of players
-	 * are two screens. Anything else is ignored rather than refused -- an
-	 * unknown kind is a client asking for something this instance does not
-	 * sort by, not an error worth a 4xx on a shop window.
-	 *
-	 * Public statuses only, as the trends are: this is a shop window, and the
-	 * one rule a discovery surface must not break is showing somebody something
-	 * they would not have been shown anywhere else.
+	 * The trending public statuses narrowed to those with media, not a separate
+	 * ranking. `media` (this app's own parameter) narrows to one kind, `image`
+	 * or `video`; anything else is ignored.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -433,16 +345,9 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The starter packs: named handfuls of accounts worth following.
-	 *
-	 * The index resolves nobody. A handle becomes a profile through a WebFinger
-	 * lookup and an actor fetch against somebody else's server, and doing that
-	 * for every handle of every pack in order to draw a list of pack *names*
-	 * would make this page wait on the internet for nothing.
-	 *
-	 * Public: what this instance suggests is something it publishes about
-	 * itself, and a signed-out visitor deciding whether to join deserves to see
-	 * it.
+	 * The starter packs: named handfuls of accounts worth following. The index
+	 * resolves nobody, so drawing the list never waits on other servers. Public,
+	 * so a signed-out visitor can see it.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -456,12 +361,8 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * One pack, with its handles resolved to the profiles held here.
-	 *
-	 * A route of its own rather than a fatter index: the profiles are read
-	 * when somebody opens a pack, not when they glance at the page. Nobody is
-	 * fetched from another server to draw it; who is not held here yet is
-	 * listed as unresolved and fetched in the background.
+	 * One pack, with its handles resolved to the profiles held here; those not
+	 * held yet are listed as unresolved and fetched in the background.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -475,12 +376,9 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * Follows everyone in a pack that can be reached.
-	 *
-	 * The whole point of the button is that nobody has to follow six accounts by
-	 * hand, so one unreachable host skips that account rather than failing the
-	 * lot. A member not held here yet is fetched now. The answer says who was
-	 * actually followed.
+	 * Follows everyone in a pack that can be reached: an unreachable host skips
+	 * that account rather than failing the lot, and a member not held here is
+	 * fetched now. The answer says who was followed.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -506,15 +404,9 @@ class DiscoveryController extends ClientApiController {
 
 	/** The links most often attached to a public status in the window. */
 	/**
-	 * The public posts carrying one link, newest first.
-	 *
-	 * What a reader gets by tapping a trending link rather than following it
-	 * off the instance. The links themselves were already served at
-	 * `/api/v1/trends/links`, so the data was here and the timeline that reads
-	 * it was not.
-	 *
-	 * A missing or unknown `url` is an empty timeline, not an error: the link
-	 * a client holds may be one nobody here has posted since.
+	 * The public posts carrying one link, newest first, for a tapped trending
+	 * link (`/api/v1/trends/links`). A missing or unknown `url` is an empty
+	 * timeline, not an error.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -574,12 +466,8 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * Pins a hashtag to the viewer's profile.
-	 *
-	 * A name that is not a hashtag is a 422 rather than a row nobody can post
-	 * with, and so is one tag past the ceiling this instance advertises: a
-	 * client that pre-checked against `max_featured_tags` and got it wrong
-	 * must be told, not quietly refused.
+	 * Pins a hashtag to the viewer's profile. A name that is not a hashtag, or
+	 * one past the advertised `max_featured_tags`, is a 422.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -617,8 +505,8 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	// Not reachable as a featured tag with the id "suggestions": the `{id}` of
-	// unfeatureTag() is a `\d+`, and it has to stay one.
+	// The `{id}` of unfeatureTag() must stay `\d+` so this path is not taken
+	// for a featured tag with the id "suggestions".
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/featured_tags/suggestions')]
 	public function featuredTagSuggestions(): DataResponse {
 		try {
@@ -633,11 +521,8 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * Somebody's featured tags.
-	 *
-	 * Public, as the profile it is drawn on is: a featured tag is a claim an
-	 * account makes about itself, and the posts the counts are taken from are
-	 * the public ones. A viewer is neither required nor used.
+	 * Somebody's featured tags. Public, as the profile is; counts come from
+	 * public posts and no viewer is used.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -657,15 +542,8 @@ class DiscoveryController extends ClientApiController {
 
 	/**
 	 * The shape of somebody's posting history, for the top of their profile.
-	 *
-	 * Public for the same reason the featured tags above are: it is drawn on a
-	 * profile page, which is public, and it is built from the account's public
-	 * posts alone. A viewer is neither required nor used, so it cannot differ
-	 * per viewer — a chart that did would say which posts the viewer is
-	 * allowed to see.
-	 *
-	 * Rate limited by the anonymous limiter the other public reads use: it is
-	 * two queries rather than a lookup.
+	 * Built from public posts only and never per viewer, so it reveals nothing
+	 * about what the viewer may see. Rate limited like the other public reads.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -685,8 +563,7 @@ class DiscoveryController extends ClientApiController {
 	}
 
 	/**
-	 * The account cache hands out relationships relative to the viewer, so it
-	 * is told who that is.
+	 * The account cache hands out relationships relative to the viewer.
 	 */
 	#[\Override]
 	protected function prepareViewer(Person $viewer): Person {

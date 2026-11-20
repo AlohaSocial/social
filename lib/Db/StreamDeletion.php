@@ -21,21 +21,14 @@ use Throwable;
 
 /**
  * Removing posts and everything that hangs off them, and the reads that
- * choose what a purge removes.
- *
- * A trait used by `StreamRequest` for the reason `StreamTimelines` gives: it
- * separates the file, not the object.
+ * choose what a purge removes. A trait of `StreamRequest`, splitting the
+ * file, not the object (see `StreamTimelines`).
  */
 trait StreamDeletion {
 	/**
-	 * Removes a post and everything that hangs off it.
-	 *
-	 * A post is not one row: its recipients (which is what puts it in a
-	 * timeline), the interaction flags on it, its hashtags, its link card, the
-	 * Like/Announce rows pointing at it and its cached attachments all key on
-	 * it. Deleting only the `social_stream` row left every one of those behind
-	 * in five tables plus the files on disk, for good — nothing else ever
-	 * looks at them again.
+	 * Removes a post and everything that hangs off it: recipients, interaction
+	 * flags, hashtags, link card, the Like/Announce rows pointing at it and its
+	 * cached attachments.
 	 *
 	 * @param string $type when given, the post is only removed if it is of
 	 *                     that type — and then nothing else is touched either
@@ -66,8 +59,7 @@ trait StreamDeletion {
 		$this->markTrendHoursOf([$prim]);
 		$deleted = $qb->executeStatement();
 		if ($type !== '' && $deleted === 0) {
-			// a guarded delete that matched nothing: the post is of another
-			// type and still exists, so its related rows are still in use
+			// The post is of another type and still exists; its related rows stay.
 			return;
 		}
 		if ($deleted > 0 && $status !== null) {
@@ -81,9 +73,8 @@ trait StreamDeletion {
 	}
 
 	/**
-	 * Removes every post of an author, and everything that hangs off each of
-	 * them. Done in batches: an account at scale has more posts than the
-	 * cascade wants to name in one IN () list.
+	 * Removes every post of an author, and everything that hangs off each, in
+	 * batches to keep the IN () lists bounded.
 	 */
 	public function deleteByAuthor(string $actorId) {
 		while (true) {
@@ -101,20 +92,15 @@ trait StreamDeletion {
 				$qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
 			));
 			if ($qb->executeStatement() === 0) {
-				// nothing was removed, so the next pass would select the very
-				// same rows: stop rather than spin
+				// Nothing removed: the next pass would select the same rows.
 				return;
 			}
 		}
 	}
 
 	/**
-	 * The authors of one instance that still have something stored here.
-	 *
-	 * Distinct authors rather than posts: the caller deletes an author's posts
-	 * with `deleteByAuthor()`, which is already batched, so this only has to
-	 * name who is left. Once an author's posts are gone they are not named
-	 * again, which is what lets a purge resume where it stopped.
+	 * The authors of one instance that still have something stored here. An
+	 * author whose posts are gone is not named again, so a purge can resume.
 	 *
 	 * @return string[] actor ids
 	 *
@@ -157,9 +143,8 @@ trait StreamDeletion {
 
 	/**
 	 * The in-app notification rows (`SocialAppNotification`) created before a
-	 * cutoff, oldest first. A notification is a local row about a local user's
-	 * post; it is never federated, and nothing reads it again once it has
-	 * scrolled out of the notifications timeline.
+	 * cutoff, oldest first; local, never federated, and unread once out of the
+	 * notifications timeline.
 	 *
 	 * @return string[] id_prim
 	 */
@@ -199,9 +184,8 @@ trait StreamDeletion {
 	}
 
 	/**
-	 * Removes the stream rows themselves; what hangs off them is
-	 * `deleteRelatedTo()`'s business and goes first, because the cascade is
-	 * keyed on rows that are about to be gone.
+	 * Removes the stream rows themselves; `deleteRelatedTo()` must run first, as
+	 * it is keyed on these rows.
 	 *
 	 * @param string[] $prims
 	 */
@@ -219,9 +203,8 @@ trait StreamDeletion {
 	}
 
 	/**
-	 * Removes the rows and the cached files that belong to a set of posts,
-	 * addressed by their id_prim. The single place that knows what "related to
-	 * a post" means.
+	 * Removes the rows and cached files that belong to a set of posts, by
+	 * id_prim: the single place that knows what "related to a post" means.
 	 *
 	 * @param string[] $prims
 	 *
@@ -246,35 +229,27 @@ trait StreamDeletion {
 			[self::TABLE_ACTIONS, 'object_id_prim'],
 			// and the emoji reactions on it, which are a table of their own
 			[self::TABLE_REACTIONS, 'object_id_prim'],
-			// and its place in any album its author put it in: a collection
-			// entry pointing at a post that is gone would draw a gap
+			// Its place in any album.
 			[self::TABLE_COLLECTION_ITEMS, 'stream_id_prim'],
-			// and who opened it, which is a row about a post that no longer
-			// exists and that nothing will ever read again
+			// Who opened it.
 			[self::TABLE_STREAM_VIEWS, 'stream_id_prim'],
-			// and the people named in its pictures
+			// The people tagged in its photos.
 			[self::TABLE_MEDIA_TAGS, 'stream_id_prim'],
-			// and which documents it carries, which is how a finished
-			// transcode finds it
+			// Which documents it carries, which is how a finished transcode finds it.
 			[self::TABLE_STREAM_MEDIA, 'stream_id_prim'],
-			// where readers had got to in it, which is a bookmark into a video
-			// that no longer exists
+			// Where readers had got to in it.
 			[self::TABLE_WATCH, 'stream_id_prim'],
 			// and how many times it was watched, and by whom today
 			[self::TABLE_VIDEO_VIEWS, 'stream_id_prim'],
 			[self::TABLE_VIDEO_SEEN, 'stream_id_prim'],
-			// and which member of a team wrote it, which is the trail a team
-			// account keeps and has nothing left to be about
+			// Which team member wrote it.
 			[self::TABLE_TEAM_POSTS, 'stream_id_prim'],
-			// and that it was brought over from an archive: the import skips
-			// any source id it remembers, so a deleted import could never be
-			// brought over again
+			// That it was imported: the import skips remembered source ids, so a
+			// deleted import could otherwise never be imported again.
 			[self::TABLE_IMPORTED_POSTS, 'stream_id_prim'],
-			// and its words, which would otherwise keep answering a search
-			// for a post that is gone
+			// Its search terms.
 			[self::TABLE_SEARCH_TERMS, 'stream_id_prim'],
-			// and the approvals of quotes it was the quoted or the quoting
-			// post of
+			// Quote approvals it was the quoted or quoting post of.
 			[self::TABLE_QUOTE_GRANTS, 'target_id_prim'],
 			[self::TABLE_QUOTE_GRANTS, 'quoting_id_prim'],
 		] as [$table, $field]) {
@@ -290,9 +265,9 @@ trait StreamDeletion {
 	}
 
 	/**
-	 * The cached attachments of a set of posts, and the ladders built from
-	 * them: the files first, then the rows that name them — a row without its
-	 * file is recoverable, a file without its row is not.
+	 * The cached attachments of a set of posts, and the ladders built from them:
+	 * files first, then rows, since a row without its file is recoverable and a
+	 * file without its row is not.
 	 *
 	 * @param string[] $prims
 	 */
@@ -315,10 +290,7 @@ trait StreamDeletion {
 			$this->cacheDocumentService->removeFromCache((string)$row['local_copy']);
 			$this->cacheDocumentService->removeFromCache((string)$row['resized_copy']);
 
-			// and the rungs of its ladder, which are files of this server's
-			// own making that nothing else names: a document's row going away
-			// without them is disk that no later run would ever free, because
-			// the only thing that knew about them was the row
+			// The ladder rungs: only the document row knows them, so they go first.
 			foreach ($this->renditionsRequest->deleteForDocument((string)$row['nid']) as $rung) {
 				$this->cacheDocumentService->removeFromCache($rung);
 			}
@@ -335,10 +307,8 @@ trait StreamDeletion {
 	}
 
 	/**
-	 * A post is addressed either by its uri or, from the dest table, by the
-	 * prim it is stored under there — the two are not distinguishable by the
-	 * signature, and reading an already-hashed id as a uri hashes it twice and
-	 * silently matches nothing.
+	 * A post is addressed by its uri or, from the dest table, by its prim; the
+	 * signature cannot tell them apart, and hashing a prim again matches nothing.
 	 */
 	private function streamPrim(SocialQueryBuilder $qb, string $id): string {
 		$prim = $qb->prim($id);

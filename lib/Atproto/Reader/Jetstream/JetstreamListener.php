@@ -17,13 +17,12 @@ use Throwable;
 
 /**
  * `occ social:atproto:listen` (§9.4): one WebSocket to the configured
- * Jetstream, asking for the posts, reposts, profiles and blocks of the
- * Bluesky accounts somebody here follows, and for nothing until it has said whose —
- * an empty list would be the whole network. What arrives is handed to
- * `JetstreamEvents`; the poller keeps running beside it, so the listener
- * being down costs latency and nothing else. Where it got to is kept every
- * few seconds, on a lost connection and on stopping, and picked up again,
- * a few seconds early, after a restart (`JetstreamState`).
+ * Jetstream for posts, reposts, profiles and blocks of the Bluesky accounts
+ * somebody here follows, asking nothing until it names them (an empty list
+ * means the whole network). Events go to `JetstreamEvents`; the poller keeps
+ * running, so a down listener only costs latency. The cursor is kept
+ * periodically and resumed a few seconds early after a restart
+ * (`JetstreamState`).
  */
 class JetstreamListener {
 	/** how many accounts one connection asks for, Jetstream's limit */
@@ -33,15 +32,14 @@ class JetstreamListener {
 	/** how far back a reconnect starts, in microseconds */
 	private const REWIND = 5000000;
 	/**
-	 * how long, and how many events, the cursor may run ahead of the kept
-	 * one: each kept value is a write to the database; the rewind on a
-	 * reconnect covers what was not kept yet
+	 * How long, and how many events, the cursor may run ahead of the kept one;
+	 * each keep is a database write, and the rewind on reconnect covers the gap.
 	 */
 	public const KEEP_EVERY = 5;
 	public const KEEP_EVENTS = 200;
 	/**
-	 * how often the status is reported, a write too, connected or not; the
-	 * admin page counts a listener silent for a minute as gone
+	 * How often the status is reported; the admin page counts a listener silent
+	 * for a minute as gone.
 	 */
 	public const REPORT_EVERY = 15;
 	private const READ_TIMEOUT = 0.5;

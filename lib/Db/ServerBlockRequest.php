@@ -14,12 +14,9 @@ use OCA\Social\Tools\DbTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * What is recorded about an instance-wide block or silence: why, for the
- * moderators and for the published list, and since when.
- *
- * Whether a domain is blocked is decided by the two lists in app config
- * (`FediverseService`); a row here only describes an entry on one of them,
- * and goes when the domain leaves both.
+ * Why and since when an instance is blocked or silenced, for moderators and
+ * the published list. The lists themselves are in app config
+ * (`FediverseService`); a row goes when its domain leaves both.
  */
 class ServerBlockRequest extends CoreRequestBuilder {
 	/**
@@ -47,10 +44,8 @@ class ServerBlockRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Records the reasons for one domain.
-	 *
-	 * A null reason leaves what is stored alone, '' clears it. A domain with
-	 * no row yet gets one, dated now.
+	 * Records the reasons for one domain: null leaves a reason alone, '' clears
+	 * it. A new row is dated now.
 	 */
 	public function save(string $domain, ?string $privateComment, ?string $publicComment): void {
 		$qb = $this->getQueryBuilder();

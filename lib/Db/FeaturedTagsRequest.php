@@ -19,41 +19,29 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * The hashtags an account pins to its profile.
  *
- * The list itself is public — it is drawn on a profile page, and
- * `GET /api/v1/accounts/:id/featured_tags` serves anybody's — so unlike the
- * lists next door the reads here are not scoped to an owner. The *writes* are:
- * every statement that creates or removes a row carries the owner's prim, so a
- * featured tag belonging to somebody else is a 404 and not a row that was read
- * and then rejected.
+ * Reads are public, as the profile is. Every write carries the owner's prim,
+ * so somebody else's featured tag is a 404.
  */
 class FeaturedTagsRequest extends FeaturedTagsRequestBuilder {
 	/** The width of `social_featured_tag.hashtag`, which is `social_stream_tag`'s. */
 	public const MAX_HASHTAG_LENGTH = 127;
 
 	/**
-	 * A hashtag as this app stores one, from whatever the client sent: no
-	 * leading `#`, lowercased, and no wider than the column the posts are
-	 * tagged in.
-	 *
-	 * Returns '' for something that is not a hashtag at all. A tag that did
-	 * not fit `social_stream_tag.hashtag` could be featured and would count
-	 * zero posts forever, because nothing it matched could have been stored.
+	 * A hashtag as this app stores one: no leading `#`, lowercased, and no wider
+	 * than `social_stream_tag.hashtag`, so it can match stored posts. '' for
+	 * something that is not a hashtag.
 	 */
 	public static function normaliseHashtag(string $hashtag): string {
 		$hashtag = ltrim(trim($hashtag), '#');
 		$hashtag = mb_strtolower(mb_substr($hashtag, 0, self::MAX_HASHTAG_LENGTH, 'UTF-8'), 'UTF-8');
 
-		// the character class `SearchService` and the tag routes already treat
-		// as a hashtag; anything else is not one and is refused rather than
-		// stored as something the user cannot post with
+		// The character class `SearchService` and the tag routes treat as a hashtag.
 		return (preg_match('/^[\p{L}\p{N}_]+$/u', $hashtag) === 1) ? $hashtag : '';
 	}
 
 	/**
-	 * Idempotent: featuring a tag that is already featured changes nothing and
-	 * is not an error — Mastodon answers with the existing entity, and a
-	 * client that lost the answer and retried must not get a failure for a
-	 * request that succeeded.
+	 * Idempotent: featuring an already featured tag answers the existing entity,
+	 * as Mastodon does, so a retry succeeds.
 	 */
 	public function create(FeaturedTag $tag): FeaturedTag {
 		$qb = $this->getFeaturedTagsInsertSql();
@@ -71,12 +59,8 @@ class FeaturedTagsRequest extends FeaturedTagsRequestBuilder {
 	}
 
 	/**
-	 * Every tag an account features, oldest first — the order a profile draws
-	 * them in.
-	 *
-	 * Not paged: Mastodon does not page this either, and the instance
-	 * advertises a ceiling (`accounts.max_featured_tags`) precisely so that a
-	 * client knows the list is short.
+	 * Every tag an account features, oldest first. Not paged, as in Mastodon;
+	 * `accounts.max_featured_tags` keeps the list short.
 	 *
 	 * @return FeaturedTag[]
 	 */
@@ -136,8 +120,7 @@ class FeaturedTagsRequest extends FeaturedTagsRequestBuilder {
 	}
 
 	/**
-	 * A featured tag is a thing on a profile, so it has nobody to outlive:
-	 * this is what makes the rows go when the account does.
+	 * Deletes an account's featured tags when the account goes.
 	 */
 	public function deleteRelatedId(string $actorId): void {
 		$qb = $this->getFeaturedTagsDeleteSql();
@@ -149,17 +132,10 @@ class FeaturedTagsRequest extends FeaturedTagsRequestBuilder {
 	}
 
 	/**
-	 * How often an account has used each of a set of hashtags, and when it
-	 * last did.
+	 * How often an account has used each of a set of hashtags, and when it last
+	 * did, in one grouped query on `social_stream_tag` by hashtag.
 	 *
-	 * One grouped query for the whole profile rather than one per tag: a
-	 * profile draws every featured tag at once, and the index this reads
-	 * (`social_stream_tag` by hashtag, from
-	 * `Version1000Date20260910000001`) answers all of them in one pass.
-	 *
-	 * Public and unlisted posts only. `statuses_count` is shown to anybody who
-	 * opens the profile, and a count that included followers-only posts would
-	 * be this instance reporting how much somebody posts privately.
+	 * Public and unlisted posts only, since `statuses_count` is shown to anybody.
 	 *
 	 * @param string[] $hashtags
 	 *

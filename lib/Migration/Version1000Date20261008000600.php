@@ -18,24 +18,16 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * A post's four interaction counters as columns of `social_stream`.
- *
- * They lived in the `details` JSON, and the only way to change one key of a
- * JSON blob is to read all of it and write all of it back. Five writers did
- * that — a like, a boost, a reply, a dislike and the cron that asks other
- * servers for their totals — and also every writer of the blob's other keys,
- * so two of them landing on one post together kept whichever wrote last and
- * lost the other. As columns each one is recounted in a single statement
- * that touches nothing else (`StreamRequest::recount()`).
- *
- * Existing rows are filled from the JSON here, in pages of `nid`. Only the
- * totals move: the origin's halves (`remote_likes` and the like) are absolute
- * numbers written by one writer and stay in `details`.
+ * Fills the interaction counter columns of `social_stream` from the
+ * `details` JSON, in pages of `nid`. As columns they are recounted in one
+ * statement (`StreamRequest::recount()`) without concurrent writers losing
+ * each other's changes. The origin's halves (`remote_likes` etc.) stay in
+ * `details`.
  */
 class Version1000Date20261008000600 extends SimpleMigrationStep {
 	/**
-	 * `details` key => column. Every value written is an int cast here and
-	 * clamped at zero, so it is inlined into the statement rather than bound.
+	 * `details` key => column. Values are int-cast and clamped at zero, so they
+	 * are inlined rather than bound.
 	 */
 	public const COLUMNS = [
 		'replies' => 'count_replies',
@@ -79,13 +71,11 @@ class Version1000Date20261008000600 extends SimpleMigrationStep {
 
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		// `*PREFIX*` is what the connection rewrites; there is no public API
-		// that hands the prefix over as a string
+		// The connection rewrites `*PREFIX*`; no public API returns the prefix.
 		$table = '*PREFIX*' . CoreRequestBuilder::TABLE_STREAM;
 
-		// only rows whose counters are all still at their default: a row this
-		// step has already filled is left alone if it runs again, because by
-		// then the column is what moves and the JSON is what has gone stale
+		// Only rows with all counters still at default, so a rerun leaves filled
+		// rows alone.
 		$untouched = '';
 		foreach (self::COLUMNS as $column) {
 			$untouched .= ' AND `' . $column . '` = 0';
@@ -144,10 +134,8 @@ class Version1000Date20261008000600 extends SimpleMigrationStep {
 
 	/**
 	 * The counters a `details` blob holds, as ints from 1 to the largest an
-	 * INTEGER column takes on every platform; empty when it holds none worth
-	 * writing. A blob written before remote counts had a ceiling may hold a
-	 * figure no column can, and MySQL's strict mode refuses it rather than
-	 * storing it.
+	 * INTEGER column takes everywhere (MySQL strict mode refuses larger); empty
+	 * when it holds none worth writing.
 	 *
 	 * @return array<string, int>
 	 */

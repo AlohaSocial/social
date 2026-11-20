@@ -23,29 +23,18 @@ use Psr\Log\LoggerInterface;
 /**
  * Nextcloud groups as Social lists.
  *
- * The one thing this instance knows that no other server can: who works
- * together. Every group a person is in becomes a list of theirs -- "Design",
- * "Berlin office" -- holding the group's members that have a Social account,
- * readable as a timeline like any list. Nobody has to build it and nobody has
- * to keep it: membership follows the group.
+ * Each group an administrator chose (`group_lists`) becomes a private list
+ * of each member, holding the members that have a Social account. The list
+ * timeline applies the home timeline's visibility, nobody is followed, and
+ * nothing federates.
  *
- * A group list is a private list like any other, owned by the person who is
- * in the group, and it shows them only what they could see anyway -- the list
- * timeline applies the same visibility as the home timeline. What it does is
- * gather it. The group's members are not followed by being in it, and nothing
- * federates: a list is a view, not a relationship.
- *
- * Kept in step three ways, each cheap where it runs: the lists a person is
- * missing are made when they open their lists (`ensureForViewer()`), a group
- * change is applied the moment it happens (`GroupListListener`), and the cron
- * reconciles every group list against its group (`reconcile()`) for whatever
- * the first two did not see -- an account created after the lists were.
+ * Kept in step when a person opens their lists (`ensureForViewer()`), when a
+ * group changes (`GroupListListener`), and by the cron (`reconcile()`).
  */
 class GroupListService {
 	/**
-	 * A group larger than this gets no list. The list would be every account
-	 * on the instance under the name "everyone", which the Local timeline
-	 * already is, and filling it is a query per member.
+	 * A group larger than this gets no list: it would be the Local timeline
+	 * under another name, and filling it is a query per member.
 	 */
 	public const MAX_GROUP_SIZE = 500;
 
@@ -66,8 +55,7 @@ class GroupListService {
 
 	/**
 	 * Makes the group lists the viewer is missing, and removes the ones for
-	 * groups they have left. Called when they ask for their lists, which is
-	 * when they would notice either.
+	 * groups they have left, when they ask for their lists.
 	 *
 	 * @return int how many lists were made
 	 */
@@ -106,7 +94,7 @@ class GroupListService {
 			$made++;
 		}
 
-		// what is left are lists for groups the viewer is no longer in
+		// What is left are lists for groups the viewer is no longer in.
 		foreach ($existing as $list) {
 			$this->listsRequest->delete($list);
 		}
@@ -115,9 +103,8 @@ class GroupListService {
 	}
 
 	/**
-	 * Every group list against its group: title, membership, and whether the
-	 * group still exists. The catch-all the cron runs; the listener and
-	 * `ensureForViewer()` do the same work sooner where they can see it.
+	 * Checks every group list against its group: title, membership, and whether
+	 * the group still exists and is still chosen.
 	 *
 	 * @return int how many lists were looked at
 	 */
@@ -125,11 +112,7 @@ class GroupListService {
 		$seen = 0;
 		foreach ($this->listsRequest->getGroupIds() as $groupId) {
 			$group = $this->groupManager->get($groupId);
-			// gone, or no longer one of the groups the administrator chose:
-			// either way the lists made for it stop being made and the ones
-			// that exist go, which is the only place a deselected group is
-			// cleaned up -- `ensureForViewer` only ever looks at the groups
-			// the viewer is in
+			// Gone or deselected: its lists go. Only this cleans up a deselected group.
 			if ($group === null || !$this->isListable($group)) {
 				$this->listsRequest->deleteByGroup($groupId);
 				continue;
@@ -214,17 +197,15 @@ class GroupListService {
 	}
 
 	private function isListable(IGroup $group): bool {
-		// nothing at all until an administrator has chosen, which is what the
-		// empty default means: a group becoming a list tells everybody in it
-		// who else is in it, and that is not the instance's to give away
+		// Nothing until an administrator chooses: a group list reveals who is in
+		// the group.
 		if (!$this->sectionsService->groupHasList($group->getGID())) {
 			return false;
 		}
 
 		$count = $group->count();
 		if ($count === false) {
-			// a backend that cannot count; counting what it can list is the
-			// same answer, one round trip later
+			// A backend that cannot count.
 			$count = count($group->getUsers());
 		}
 

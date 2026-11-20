@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Model\ActivityPub\Activity;
 
 /**
- * An emoji sent back to whoever posted a story.
+ * An emoji sent back to whoever posted a short (a story in the code).
  *
  * @see StoryInteraction for the shape and why it is Pixelfed's
  */

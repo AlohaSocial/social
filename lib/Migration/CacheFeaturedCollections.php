@@ -18,21 +18,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
 
 /**
- * Refresh the cached copy of every local actor, once, when something the cache
- * carries has changed.
- *
- * Two things have needed this so far: pinned posts added a `featured` URL that
- * actors cached earlier do not have, and the display name only started being
- * published at all once the scope check was relaxed (it required
- * SCOPE_PUBLISHED, while Nextcloud's default is SCOPE_FEDERATED, so no local
- * actor had a `name` and every client fell back to the user id).
- *
- * The marker is what makes this affordable. Rebuilding one actor's cache is
- * several queries plus avatar handling, so doing it for every local actor on
- * *every* app upgrade — which is what this step used to do, on the grounds
- * that re-runs are "harmless" — costs an instance with many users a great deal
- * of time inside `occ upgrade`, with the instance in maintenance mode, forever.
- * Bump VERSION when a change needs the cache rebuilt again.
+ * Refreshes the cached copy of every local actor once per VERSION, for a
+ * change in what the cache carries. Bump VERSION when the cache must be
+ * rebuilt again; rebuilding every actor on each upgrade would be costly in
+ * maintenance mode.
  */
 class CacheFeaturedCollections implements IRepairStep {
 	/** Bump this when a change means local actor caches must be rebuilt again. */
@@ -62,15 +51,11 @@ class CacheFeaturedCollections implements IRepairStep {
 			return;
 		}
 
-		// counted, not loaded: `getAll()` builds a Person per row with no limit,
-		// so asking it how many there are is exactly the work this guard exists
-		// to avoid — on a large instance it can hit the memory limit and fail
-		// the upgrade before the guard ever gets to decline the job.
+		// Counted, not loaded: `getAll()` builds every Person and can hit the
+		// memory limit.
 		$total = $this->countLocalActors();
 		if ($total > self::INLINE_LIMIT) {
-			// Doing this inline would hold the upgrade open for a long time.
-			// `occ social:cache:refresh` does the same work and can be run
-			// whenever it suits the operator.
+			// Too long for the upgrade; `occ social:cache:refresh` does the same later.
 			$output->warning(
 				sprintf(
 					'%d local actors need their cache refreshed; skipping it here to keep the '
@@ -84,8 +69,7 @@ class CacheFeaturedCollections implements IRepairStep {
 			return;
 		}
 
-		// walked, not loaded: what is refreshed is read back from the table
-		// anyway, so holding every account as a model at once bought nothing
+		// Walked, not loaded: each refresh reads its row back anyway.
 		$refreshed = 0;
 		$output->startProgress($total);
 		foreach ($this->actorsRequest->walk() as $actor) {
@@ -110,8 +94,8 @@ class CacheFeaturedCollections implements IRepairStep {
 	}
 
 	/**
-	 * Same rows `ActorsRequest::getAll()` returns, without building a model for
-	 * any of them.
+	 * The number of rows `ActorsRequest::getAll()` returns, without building
+	 * models.
 	 */
 	private function countLocalActors(): int {
 		$qb = $this->connection->getQueryBuilder();

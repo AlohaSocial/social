@@ -21,19 +21,15 @@ use OCA\Social\Model\Details;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The counters a post carries — replies, likes, boosts, dislikes — and the
- * schedule on which a remote post's own server is asked for its half of them.
- *
- * A trait used by `StreamRequest` for the reason `StreamTimelines` gives: it
- * separates the file, not the object.
+ * The counters a post carries (replies, likes, boosts, dislikes) and the
+ * schedule for asking a remote post's server for its half of them. A trait of
+ * `StreamRequest`, splitting the file, not the object (see `StreamTimelines`).
  */
 trait StreamCounters {
 	/**
-	 * Writes the named keys of a post's `details` as the object holds them —
-	 * a key the object does not hold is removed — and leaves every other key
-	 * as it is stored (`changeDetails()`). The object was read some time
-	 * before: putting its whole blob back would undo whatever another writer
-	 * stored since, the origin's counts or an edit's mentions.
+	 * Writes the named keys of a post's `details` as the object holds them (a
+	 * key the object lacks is removed), leaving every other stored key alone
+	 * (`changeDetails()`), so concurrent writers' keys are not undone.
 	 */
 	public function updateDetails(Stream $stream, string $key, string ...$keys): void {
 		$values = $stream->getDetailsAll();
@@ -51,11 +47,8 @@ trait StreamCounters {
 	}
 
 	/**
-	 * Stores a note's `mentions` into the `details` the row already has.
-	 *
-	 * Only that key: the rest of the blob is what this instance worked out
-	 * about the post — the origin's counts, a refused quote — and an edit
-	 * read from the wire knows none of it.
+	 * Stores a note's `mentions` into the stored `details`, leaving the keys this
+	 * instance worked out (origin counts, a refused quote) alone.
 	 */
 	public function updateMentions(Stream $stream): void {
 		if (!$stream instanceof Note) {
@@ -72,14 +65,8 @@ trait StreamCounters {
 
 	/**
 	 * Changes some keys of a post's `details` and leaves every other key as
-	 * it is stored.
-	 *
-	 * A read, a change and a write, so the write is made only if the blob is
-	 * still the one that was read (`replaceDetails()`); when another write
-	 * came in between, the blob is read again and `$change` applied to that,
-	 * once. Two writers that each put back the whole blob they read would
-	 * lose the other's change — a quote refused, a mention, the origin's
-	 * counts.
+	 * stored. The write is a compare-and-swap (`replaceDetails()`); if another
+	 * write came in between, the blob is read again and `$change` reapplied once.
 	 *
 	 * @param callable(array<array-key, mixed>): array<array-key, mixed> $change the details as stored => the details to store
 	 *
@@ -135,8 +122,7 @@ trait StreamCounters {
 
 	/**
 	 * Writes `$blob` as a post's `details` only if they are still `$expected`,
-	 * and says whether it did: a compare-and-swap in one statement, which
-	 * every database this app runs on answers atomically.
+	 * and says whether it did: an atomic compare-and-swap in one statement.
 	 */
 	protected function replaceDetails(string $prim, ?string $expected, string $blob): bool {
 		$update = $this->getStreamUpdateSql();
@@ -208,12 +194,9 @@ trait StreamCounters {
 	}
 
 	/**
-	 * Counts the replies to a post again and stores the total on it.
-	 *
-	 * A recount rather than a bump, because the two things that change it —
-	 * a reply arriving and a reply being deleted — do not both know which way.
-	 * `remote_replies` is what the post's own instance reported and is carried
-	 * across untouched: nothing here can see the replies that live over there.
+	 * Counts the replies to a post again and stores the total on it; a recount
+	 * because a deletion does not know the direction. `remote_replies`, the
+	 * origin's count, is carried across untouched.
 	 *
 	 * @param string $inReplyTo the id of the post that was replied to
 	 */
@@ -234,18 +217,9 @@ trait StreamCounters {
 	/**
 	 * Recounts some of a post's counters and stores them, each in its column.
 	 *
-	 * A counter is the origin's half — what the post's own server last said,
-	 * kept in `details` — plus what this instance holds of it, and the second
-	 * half is counted inside the UPDATE rather than before it. That is what
-	 * makes two of these on one post safe to run together: neither carries a
-	 * number it counted earlier, so whichever runs last writes a count that
-	 * includes everything committed before it. The counters used to be keys of
-	 * the `details` JSON, written back whole by every writer of any key, and
-	 * two likes — or a like and a boost — arriving together kept one of them.
-	 *
-	 * The stored values are read back onto `$post`, so a caller that goes on
-	 * to use it (a notification carries a copy of the post) has the numbers
-	 * the row has.
+	 * A counter is the origin's half (kept in `details`) plus what this instance
+	 * holds, counted inside the UPDATE so concurrent recounts on one post cannot
+	 * lose a change. The stored values are read back onto `$post`.
 	 *
 	 * @param string ...$counters keys of {@see self::COUNTERS}
 	 */
@@ -298,11 +272,8 @@ trait StreamCounters {
 
 	/**
 	 * What this instance holds of one counter of a post, as a scalar subquery.
-	 *
-	 * Replies are rows of the table being updated, which MySQL refuses to read
-	 * in the same statement unless the read is materialised first; an
-	 * aggregate inside a derived table is never merged into the outer query,
-	 * so it always is.
+	 * The aggregate sits in a derived table because MySQL refuses to read the
+	 * table being updated unless the read is materialised.
 	 *
 	 * @param string $type the action counted, '' for replies, `quote` for quotes
 	 */
@@ -324,17 +295,11 @@ trait StreamCounters {
 	}
 
 	/**
-	 * The remote posts published since `$since` whose counts were last heard
-	 * from their own server long enough ago to be worth asking again —
-	 * including every one never asked, which has no `counts_at` at all.
-	 *
-	 * Never asked first, then the one asked longest ago, so a pass that runs
-	 * out of budget leaves the posts that have waited longest at the front of
-	 * the next one, and every post of the window takes its turn. A boost is
-	 * left out: it has no counts of its own, the post it repeats does.
-	 *
-	 * The window is what bounds the read: MySQL and PostgreSQL find it through
-	 * the `published_time` index, and the order is a sort of its due rows.
+	 * The remote posts published since `$since` whose counts were last asked
+	 * before `$due` or never. Never asked first, then the longest waiting, so
+	 * every post gets its turn across passes. Boosts are left out: the post
+	 * they repeat has the counts. The window is found through the
+	 * `published_time` index.
 	 *
 	 * @param DateTime $due not asked since
 	 * @param ?DateTime $since published since; null is every post, for a
@@ -351,8 +316,8 @@ trait StreamCounters {
 		}
 		$qb->filterType(Announce::TYPE);
 		$qb->limitToDBFieldDateTime('counts_at', $due, true);
-		// NULL sorts first on some databases and last on others; selected,
-		// because a DISTINCT query may only be ordered by what it selects
+		// NULL sorts differently per database; selected because a DISTINCT query
+		// may only be ordered by what it selects.
 		$countsAt = $qb->getColumnName('counts_at', 's');
 		$qb->selectAlias($qb->createFunction('CASE WHEN ' . $countsAt . ' IS NULL THEN 0 ELSE 1 END'), 'counts_asked');
 		$qb->orderBy('counts_asked', 'asc');
@@ -366,10 +331,9 @@ trait StreamCounters {
 	}
 
 	/**
-	 * This instance's own posts that are records on Bluesky too, published
-	 * since `$since`, whose counts were last asked of the AppView before
-	 * `$due` or never: what the AppView counts of them that no notification
-	 * brought (`BlueskyPublishedCountSource`). Oldest first.
+	 * This instance's own posts that are also Bluesky records, published since
+	 * `$since`, whose AppView counts were last asked before `$due` or never
+	 * (`BlueskyPublishedCountSource`). Oldest first.
 	 *
 	 * @param int $limit 0 is every post that is due
 	 *
@@ -395,11 +359,9 @@ trait StreamCounters {
 	}
 
 	/**
-	 * Stamps a post as having been asked for its counts, leaving whatever
-	 * they are stored as alone. Written even when the answer did not come, so
-	 * that a host which is gone is asked once per interval rather than on
-	 * every pass; a post its server says is gone is stamped ahead, with the
-	 * time it is next worth asking about.
+	 * Stamps a post as having been asked for its counts, even when no answer
+	 * came, so a dead host is asked once per interval. A post its server says is
+	 * gone is stamped ahead, to the time it is next worth asking.
 	 */
 	public function markCountsRefreshed(string $id, DateTime $when): void {
 		$qb = $this->getStreamUpdateSql();

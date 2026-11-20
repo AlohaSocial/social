@@ -17,13 +17,10 @@ use Throwable;
 
 /**
  * Reads the starter packs the `starter_pack_sources` app value names once a
- * day — the fediverse's collections and Bluesky's suggestions — so the packs
- * offered here follow what their curators publish (`CollectionPackService`).
- * A collection changes rarely, and FEP-7aa9 asks a reader to fetch again
- * from time to time because an `Add` or `Remove` may never arrive.
- *
- * One run at a time, and each stops reading after `MAX_DURATION`: what it
- * did not get to keeps what was read last time, until the next day's run.
+ * day (the fediverse's collections and Bluesky's suggestions) via
+ * `CollectionPackService`; FEP-7aa9 asks readers to refetch, as an `Add` or
+ * `Remove` may never arrive. One run at a time, each stopping after
+ * `MAX_DURATION`; what it did not reach keeps last time's data.
  */
 class StarterPackSources extends TimedJob {
 	/** How long one run may read for, in seconds; as long as `Cron\Cache` gives a pass. */

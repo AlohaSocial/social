@@ -14,12 +14,10 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Security\ICrypto;
 
 /**
- * The server-issued DPoP nonce (RFC 9449 §8), which AT Protocol makes
- * mandatory: one value for everybody, derived from the instance secret and
- * the current two-minute window, so it needs no storage and rotates on its
- * own. The one before it is still taken, so a nonce lives at most four
- * minutes and a client with requests in flight across a rotation is not
- * refused.
+ * The server-issued DPoP nonce (RFC 9449 §8), mandatory in AT Protocol: one
+ * value for everybody, derived from the instance secret and the current
+ * two-minute window, so it needs no storage. The previous one is still
+ * accepted, so requests across a rotation are not refused.
  */
 class DpopNonce {
 	public const WINDOW = 120;

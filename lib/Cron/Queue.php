@@ -23,28 +23,17 @@ use Throwable;
 
 class Queue extends TimedJob {
 	/**
-	 * How long one cron run may spend on each queue, in seconds.
-	 *
-	 * QueueController gives its drain a budget because an HTTP request has to
-	 * return. This job had the same problem with a longer fuse and no budget at
-	 * all: it ran until the batch was done or something killed it, so a backlog
-	 * of slow or unreachable inboxes could hold a cron slot open indefinitely
-	 * and overlap the next run. Rows left behind stay in standby and are picked
-	 * up by the following run, which is what the queue is for.
-	 *
-	 * One budget per queue rather than one for the run: the deliveries go
-	 * first, and a backlog of them used to spend the whole of a shared deadline
-	 * so that the inbound side — the parents of replies, the posts a delivery
-	 * only named — got nothing, run after run. Together still well inside the
-	 * 12 minute interval below, so two runs cannot overlap.
+	 * How long one cron run may spend on each queue, in seconds; leftover rows
+	 * stay on standby for the next run. One budget per queue, so a delivery
+	 * backlog cannot starve the inbound side. Together well inside the 12 minute
+	 * interval, so runs cannot overlap.
 	 */
 	public const REQUEST_DURATION = 240;
 	public const STREAM_DURATION = 120;
 
 	/**
-	 * The most standby batches one run takes from each queue — a guard for a
-	 * run whose work all comes back at once; the deadline is what normally
-	 * ends it.
+	 * The most standby batches one run takes from each queue; the deadline
+	 * normally ends it first.
 	 */
 	public const MAX_BATCHES = 30;
 
@@ -78,22 +67,18 @@ class Queue extends TimedJob {
 	private function manageRequestQueue(int $deadline) {
 		// Re-queue anything a dead worker left stranded mid-delivery before draining.
 		$this->requestQueueService->reapStaleRunning();
-		// the delivered and abandoned rows past their retention; a cheap DELETE
-		// with a WHERE, so it runs every pass rather than on a schedule of its own
+		// A cheap DELETE, so it runs every pass.
 		$this->requestQueueService->purgeFinished();
 		// and the breaker rows of hosts that have not failed for an hour
 		$this->activityService->forgetRecoveredHosts();
 
-		// batch after batch while there is time: the rows of one batch go out
-		// twenty servers at a time (`ActivityService::manageRequests()`), so
-		// 200 of them take seconds rather than the whole budget, and stopping
-		// after one batch left the rest of the pass idle
+		// Batch after batch while there is time: a batch goes out twenty servers at
+		// a time (`ActivityService::manageRequests()`) and takes seconds.
 		$seen = [];
 		for ($batch = 0; $batch < self::MAX_BATCHES && $this->time->getTime() < $deadline; $batch++) {
 			$requests = [];
 			foreach ($this->requestQueueService->getRequestStandby() as $request) {
-				// a row this pass already handed out and could not end is not
-				// a reason to spend the rest of the budget on it
+				// A row this pass already handed out and could not end is skipped.
 				$key = ($request->getId() > 0) ? 'row' . $request->getId() : 'object' . spl_object_id($request);
 				if (isset($seen[$key])) {
 					continue;
@@ -106,8 +91,8 @@ class Queue extends TimedJob {
 				break;
 			}
 
-			// cron.php runs every job in one process, so what an earlier batch
-			// resolved — a sender's key among it — is forgotten between batches
+			// cron.php runs every job in one process, so drop memoised actors (and keys)
+			// between batches.
 			$this->cacheActorService?->forgetMemoised();
 			$this->activityService->manageInit();
 			$this->activityService->manageRequests(
@@ -125,19 +110,16 @@ class Queue extends TimedJob {
 	private function failed(RequestQueue $request, Throwable $e): void {
 		$token = AsyncRequestSigner::fingerprint($request->getToken());
 		if ($e instanceof SocialAppConfigException) {
-			// The app is misconfigured, so *every* delivery in this queue
-			// will fail the same way. That used to be swallowed silently:
-			// at warning, because federation is down until it is fixed.
+			// Misconfigured, so every delivery here will fail: warn, as federation is
+			// down until it is fixed.
 			$this->logger->warning(
 				'[Cron\\Queue] cannot deliver ' . $token
 				. ': the Social app is not configured (' . $e->getMessage() . ')',
 				['exception' => $e, 'token' => $token]
 			);
 		} else {
-			// One row must cost that row and no more. manageRequest() ends
-			// the failures it knows about, but a corrupt signing key or the
-			// database going away comes out of it unhandled — and used to
-			// take the rest of the batch with it.
+			// One row must cost only that row: manageRequest() does not handle a corrupt
+			// signing key or a lost database.
 			$this->logger->warning(
 				'[Cron\\Queue] delivery of ' . $token . ' failed: '
 				. get_class($e) . ' ' . $e->getMessage(),
@@ -149,12 +131,9 @@ class Queue extends TimedJob {
 	}
 
 	/**
-	 * Hand a row back to the queue after an attempt that ended outside
-	 * ActivityService's own error handling.
-	 *
-	 * It was marked `running` before the attempt, and left that way it is never
-	 * retried, never counted against MAX_TRIES, and only freed by the stale
-	 * reaper an hour later — for an activity nobody will ever see delivered.
+	 * Hands a row back to the queue after an attempt that ended outside
+	 * ActivityService's error handling; left `running`, it would never be
+	 * retried or counted against MAX_TRIES.
 	 */
 	private function releaseRequest(RequestQueue $request): void {
 		try {
@@ -170,15 +149,11 @@ class Queue extends TimedJob {
 	}
 
 	private function manageStreamQueue(int $deadline) {
-		// an item whose drain died mid-resolution stays `running`, and nothing
-		// but this ever looks at a running row again
+		// Only this ever looks at a `running` row again.
 		$this->streamQueueService->reapStaleRunning();
 
-		// batch after batch while there is time, as for the deliveries: one
-		// batch of 200 every twelve minutes could not keep up with a busy
-		// inbox. An item that failed is on standby again at once on its first
-		// tries, so what this pass has already handed out is not handed out
-		// twice.
+		// Batch after batch while there is time, as for the deliveries. A failed
+		// item is on standby again at once, so handed-out items are tracked.
 		$seen = [];
 		for ($batch = 0; $batch < self::MAX_BATCHES && $this->time->getTime() < $deadline; $batch++) {
 			$this->cacheActorService?->forgetMemoised();
@@ -198,8 +173,7 @@ class Queue extends TimedJob {
 				try {
 					$this->streamQueueService->manageStreamQueue($item);
 				} catch (Throwable $e) {
-					// as for the deliveries above: one item costs that item and no
-					// more. The row itself is ended by manageStreamQueue().
+					// One item costs only that item; manageStreamQueue() ends the row.
 					$this->logger->warning(
 						'[Cron\\Queue] could not resolve queued item ' . $item->getStreamId() . ': '
 						. get_class($e) . ' ' . $e->getMessage(),

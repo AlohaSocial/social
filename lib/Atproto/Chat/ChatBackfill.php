@@ -33,12 +33,11 @@ class ChatBackfill {
 	}
 
 	/**
-	 * Fetch a conversation's unread window into bounded durable pages, then
-	 * store those pages oldest-first. The state survives cron time limits and
-	 * process restarts without advancing the account log cursor. When the
-	 * history ends before the unread count is reached (messages deleted since
-	 * they were counted), what was found is imported and the conversation is
-	 * complete. A message whose sender Bluesky no longer knows is passed over.
+	 * Fetches a conversation's unread window into bounded durable pages, then
+	 * stores them oldest first; the state survives cron limits and restarts
+	 * without moving the account log cursor. If history ends before the unread
+	 * count is reached, what was found completes it. A message whose sender
+	 * Bluesky no longer knows is skipped.
 	 *
 	 * @param list<string> $members
 	 * @return array{handled: int, complete: bool}
@@ -71,8 +70,7 @@ class ChatBackfill {
 					}
 				}
 				if ($list === []) {
-					// history ended before the unread count was reached: what was
-					// found is all there is to import
+					// History ended before the unread count: import what was found.
 					$state['storing'] = true;
 					$state['storePage'] = (int)$state['pages'] - 1;
 					$this->durableCache->setShared(self::CACHE, $baseKey, $state, self::TTL);

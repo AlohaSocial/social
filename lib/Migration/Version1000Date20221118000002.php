@@ -18,46 +18,24 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * The whole schema, in one step.
+ * The whole schema, in one step, squashed from the earlier migrations;
+ * `tests/Migration/SquashedSchemaTest.php` checks it matches replaying them.
  *
- * This replaces the sixty-seven migrations that built it between November 2022
- * and September 2026. A fresh install ran all sixty-seven to reach a shape one
- * file can describe, and nobody could read that shape without replaying them
- * in their head.
- *
- * It was not written by hand. `tests/Migration/SquashedSchemaTest.php` replays
- * every migration this app has ever had against a recording schema, replays
- * this one against another, and fails if the two differ in any table, column,
- * type, option, index or key — so what is below is what the history produced,
- * and it goes on being that or CI says so.
- *
- * **Every step here is guarded**, and that is what makes it safe to run
- * anywhere. A table is created only if it is absent and a column added only if
- * it is missing, so the same file brings up an empty database, completes a
- * half-upgraded one, and does nothing at all on an instance that is already
- * current. A column that already exists is left as it is: where the history
- * changed a column after creating it, an instance that created it before the
- * change needs a step of its own (`Version1000Date20261009500100`,
- * `Version1000Date20261011500100`). Three of those changes cannot wait for a
- * later step and are made here, on a table that exists:
+ * Every step is guarded (a table created only if absent, a column added only
+ * if missing), so it brings up an empty database, completes a half-upgraded
+ * one and does nothing on a current one. Changes to an existing column need
+ * a later step (`Version1000Date20261009500100`,
+ * `Version1000Date20261011500100`); three cannot wait and are made here:
  *
  *  - `social_follow` is cleared of duplicate (object, actor) pairs before
- *    `social_f_oa_u` makes the pair unique (`preSchemaChange()`); an index
- *    added over rows that violate it fails the upgrade.
+ *    `social_f_oa_u` makes the pair unique (`preSchemaChange()`).
  *  - `social_client.app_client_secret` is widened to 127 characters before
  *    `Version1000Date20261008000100` writes 71-character digests into it.
  *  - `social_stream_dest.id` and `social_stream_tag.id` are added as their
- *    primary key; MySQL refuses an autoincrement column that is not
- *    a key.
+ *    primary key; MySQL refuses an autoincrement column that is not a key.
  *
- * **The name is a sort key, not a date.** Nextcloud runs migrations in version
- * order, and this one has to run before the six that remain — each of those
- * moves data and needs its tables to exist. `20221118000002` puts it first,
- * immediately after the original initial step it subsumes. It was written on
- * 21 September 2026.
- *
- * The six that remain are the ones that do more than shape a table: they read
- * and rewrite rows, which no schema can express and this cannot replace.
+ * The version is a sort key, not a date: it must run before the remaining
+ * data migrations, which need its tables.
  */
 class Version1000Date20221118000002 extends SimpleMigrationStep {
 	/** Duplicate follow pairs read per round trip. */
@@ -70,12 +48,9 @@ class Version1000Date20221118000002 extends SimpleMigrationStep {
 
 	/**
 	 * Removes duplicate (object, actor) pairs from `social_follow` on an
-	 * instance that does not have `social_f_oa_u` yet.
-	 *
-	 * The unique indexes the table was created with lead with `accepted`, so a
-	 * pair could exist once pending and once accepted. Of each pair the
-	 * accepted row is kept, since that is the follow both servers believe in,
-	 * then the lowest `id_prim`.
+	 * instance that does not have `social_f_oa_u` yet. The older unique indexes
+	 * lead with `accepted`, so a pair could exist pending and accepted; the
+	 * accepted row is kept, then the lowest `id_prim`.
 	 *
 	 * @param Closure(): ISchemaWrapper $schemaClosure
 	 */

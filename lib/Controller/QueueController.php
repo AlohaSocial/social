@@ -56,10 +56,8 @@ class QueueController extends Controller {
 	}
 
 	/**
-	 * The worker's time budget. Whatever is left over stays STANDBY and is
-	 * delivered by `Cron\Queue`, so a post with many recipient inboxes (or a
-	 * slow remote) holds a PHP-FPM worker and a database connection for
-	 * seconds rather than minutes: every local post starts one of these.
+	 * The worker's time budget; what is left stays STANDBY for `Cron\Queue`, so
+	 * a large fan-out holds a PHP-FPM worker for seconds, not minutes.
 	 */
 	public const MAX_DURATION = 20;
 
@@ -70,28 +68,21 @@ class QueueController extends Controller {
 	public const ASYNC_ROWS = 40;
 
 	/**
-	 * How many rounds one token's drain may run, each a request of its own
-	 * that the round before starts once it is done: up to
-	 * `ASYNC_ROWS * MAX_ROUNDS` (400) inboxes within a minute or two, each
-	 * worker held for one round only. What is left after the last round, and
-	 * every row a round tried and failed, is the cron's.
+	 * How many rounds one token's drain may run, each its own request started
+	 * by the previous one: up to `ASYNC_ROWS * MAX_ROUNDS` (400) inboxes, each
+	 * worker held for one round. The rest, and every failed row, is the cron's.
 	 */
 	public const MAX_ROUNDS = 10;
 
 	/**
 	 * Delivers what is on standby under a token, for this server alone.
 	 *
-	 * Public because the server calls itself here with no session, so it is
-	 * the signature `CurlService::asyncWithToken()` sends that decides: a
-	 * request without a valid one is refused before the queue is read, and
-	 * counted by Nextcloud's brute-force protection. Only failures are
-	 * counted, so the server's own calls — which never fail it — are never
-	 * slowed, where a rate limit on the address would have throttled its own
-	 * fan-out on a busy instance.
-	 *
-	 * A follow-up round names its number in `AsyncRequestSigner::ROUND_HEADER`;
-	 * the number is part of what is signed, and a round past MAX_ROUNDS is
-	 * refused like a bad signature.
+	 * Public because the server calls itself here without a session; the
+	 * signature from `CurlService::asyncWithToken()` decides, and a bad one is
+	 * refused before the queue is read and counted by brute-force protection
+	 * (which only counts failures, so the server's own calls are never slowed).
+	 * The round number in `AsyncRequestSigner::ROUND_HEADER` is signed too, and
+	 * a round past MAX_ROUNDS is refused.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -118,9 +109,8 @@ class QueueController extends Controller {
 		$this->drain($requests);
 		$this->nextRound($token, $round);
 
-		// exit(), not a Response: the connection is gone and headers are sent, so
-		// letting the framework render a response would only feed warnings into the
-		// log. Registered shutdown handlers still run.
+		// exit(), not a Response: the connection is closed and headers are sent.
+		// Shutdown handlers still run.
 		exit();
 	}
 
@@ -137,16 +127,10 @@ class QueueController extends Controller {
 	}
 
 	/**
-	 * What a round of the drain delivers.
-	 *
-	 * A row whose `last` is still ahead is held back on purpose — a video
-	 * post waiting for its conversion, or a host the breaker has put off —
-	 * and is the cron's to deliver once that time has come. After the first
-	 * round a row already tried is left out too: it failed in an earlier
-	 * round, and its retry follows the cron's backoff.
-	 *
-	 * Only the first `$limit` are read: a post's fan-out is a row per inbox,
-	 * each carrying the signed activity, and a round delivers ASYNC_ROWS.
+	 * What a round of the drain delivers: due rows only (a future `last` is a
+	 * conversion wait or the breaker, left to the cron), and after the first
+	 * round only rows never tried, as failures follow the cron's backoff.
+	 * Only `$limit` rows are read.
 	 *
 	 * @return list<RequestQueue>
 	 */
@@ -155,9 +139,9 @@ class QueueController extends Controller {
 	}
 
 	/**
-	 * Starts the next round when this one left deliveries that are due and
-	 * were never tried, and the token has rounds left. A new request rather
-	 * than a loop here, so no worker is held for more than MAX_DURATION.
+	 * Starts the next round when due, never-tried deliveries remain and the
+	 * token has rounds left; a new request rather than a loop, so no worker is
+	 * held longer than MAX_DURATION.
 	 */
 	protected function nextRound(string $token, int $round): void {
 		if ($round + 1 >= self::MAX_ROUNDS || $this->due($token, $round + 1, 1) === []) {
@@ -193,16 +177,10 @@ class QueueController extends Controller {
 	}
 
 	/**
-	 * A delivery that failed in a way `ActivityService` does not end itself,
-	 * which costs this row and nothing else.
-	 *
-	 * The row is `running` by then — marked before the attempt — and anything
-	 * a delivery does not handle itself (a corrupt signing key, the database
-	 * going away) used to come out of here unhandled, stranding it (never
-	 * retried, never counted against MAX_TRIES, freed by the stale reaper an
-	 * hour later) and abandoning every request left in the batch. There is no
-	 * one to report an error to either: the connection was closed by async()
-	 * before the drain started.
+	 * Handles a delivery failure `ActivityService` does not handle itself (a
+	 * corrupt key, the database going away), costing this row only: otherwise
+	 * the `running` row would be stranded and the rest of the batch abandoned.
+	 * There is nobody to report to, as async() closed the connection.
 	 */
 	protected function handBack(RequestQueue $request, Throwable $e): void {
 		$token = AsyncRequestSigner::fingerprint($request->getToken());

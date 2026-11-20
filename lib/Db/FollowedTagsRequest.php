@@ -13,11 +13,8 @@ use DateTime;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The hashtags an account follows.
- *
- * Reads and writes are keyed by the prim hash of the actor id, matching the
- * rest of the schema, and by the normalised tag — see normalise(), which is
- * the only place that decides what a tag *is* here.
+ * The hashtags an account follows, keyed by the actor's prim and the tag as
+ * normalise() makes it.
  */
 class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 	/**
@@ -27,35 +24,23 @@ class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 	public const MAX_LENGTH = 127;
 
 	/**
-	 * A tag as this app stores one, from whatever the client sent.
-	 *
-	 * `social_stream_tag` holds what `Note::fillHashtags()` produced: the tag
-	 * with its leading `#` removed and trimmed, at most
-	 * `social_stream_tag.hashtag`'s 127 characters. It does *not* hold a
-	 * lowercased tag — which is why `StreamRequest::getTimelineHashtag()`
-	 * compares `LOWER()` to `LOWER()` — so a followed tag is stored lowercased
-	 * and the stored side is lowered in the query. That also makes the unique
-	 * index mean what a reader expects: following `#NextCloud` and
-	 * `#nextcloud` is following one tag, as it is on Mastodon.
-	 *
-	 * Returns '' for anything that is not a tag; the caller answers 422 rather
-	 * than storing a row no post can match.
+	 * A tag as this app stores one: without `#`, trimmed, lowercased and at most
+	 * `social_stream_tag.hashtag`'s 127 characters. Stream tags are not
+	 * lowercased, so the query lowers that side; following `#NextCloud` and
+	 * `#nextcloud` is one tag, as on Mastodon. '' for anything that is not a tag.
 	 */
 	public static function normalise(string $hashtag): string {
 		$tag = trim($hashtag);
-		// a client may send the tag with or without its '#'; Mastodon accepts
-		// both on these routes
+		// Mastodon accepts the tag with or without its '#'.
 		$tag = trim(ltrim($tag, '#'));
 		$tag = mb_strtolower($tag, 'UTF-8');
 
-		// characters, not bytes: the column is VARCHAR(127), and cutting a
-		// multi-byte tag with substr() would store half a character
+		// Characters, not bytes: the column is VARCHAR(127).
 		return mb_substr($tag, 0, self::MAX_LENGTH, 'UTF-8');
 	}
 
 	/**
-	 * Idempotent: following a tag that is already followed changes nothing and
-	 * is not an error — the unique index on (actor, tag) is what says so.
+	 * Idempotent through the unique index on (actor, tag).
 	 */
 	public function save(string $actorId, string $hashtag): void {
 		$qb = $this->getFollowedTagsInsertSql();
@@ -103,12 +88,9 @@ class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 	}
 
 	/**
-	 * How many tags the account follows.
-	 *
-	 * The home timeline asks this before it builds its second query: it is
-	 * answered out of the `(actor_id_prim, hashtag)` index without reading the
-	 * table, and for the account that follows no tag — which is most of them —
-	 * it is the only thing the feature costs.
+	 * How many tags the account follows, answered from the
+	 * `(actor_id_prim, hashtag)` index; the home timeline asks before building
+	 * its second query.
 	 */
 	public function countByActor(string $actorId): int {
 		$qb = $this->getQueryBuilder();
@@ -124,10 +106,8 @@ class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 	}
 
 	/**
-	 * One page of the account's followed tags, newest follow first.
-	 *
-	 * Paged on the row id, which is what the `Link` header of
-	 * `/api/v1/followed_tags` hands back as its cursor.
+	 * One page of the account's followed tags, newest follow first, paged on the
+	 * row id (the `/api/v1/followed_tags` cursor).
 	 *
 	 * @return array<array{id: int, hashtag: string, creation: int}>
 	 */
@@ -157,13 +137,10 @@ class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 	}
 
 	/**
-	 * The hashtags somebody here follows, each once, the one whose posts were
-	 * read from beyond this server longest ago first — never read first of
-	 * all — for `Service\Discovery\FollowedTagsFill`.
-	 *
-	 * A tag followed by several accounts is several rows, stamped together by
-	 * markFilled(); a row added since carries 0, so the latest stamp is when
-	 * the tag was read.
+	 * The hashtags somebody here follows, each once, least recently read from
+	 * beyond this server first (never read first of all), for
+	 * `Service\Discovery\FollowedTagsFill`. A row added since the last
+	 * markFilled() carries 0, so the latest stamp per tag counts.
 	 *
 	 * @return list<array{hashtag: string, filled: int}>
 	 */

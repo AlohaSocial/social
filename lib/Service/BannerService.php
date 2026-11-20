@@ -17,14 +17,10 @@ use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
 /**
- * The banner across the top of a profile — `image` on the actor document.
- *
- * There are three ways one arrives: a file the user picked, a URL they typed,
- * and `header` on Mastodon's `update_credentials`. All three end with the same
- * work — store the bytes, point the cached actor at them, tell the followers —
- * and that work is here so the three cannot drift on the parts that matter:
- * the banner being public where an attachment is not, and the `Update{Person}`
- * that is the only reason anybody else ever sees it.
+ * The banner across the top of a profile (`image` on the actor document),
+ * set from a picked file, a typed URL or Mastodon's `update_credentials`
+ * `header`. One place so all three store it public and send the
+ * `Update{Person}`.
  */
 class BannerService {
 	public function __construct(
@@ -55,12 +51,9 @@ class BannerService {
 		$image->setAccount($actor->getPreferredUsername());
 		$image->setUrlCloud($this->configService->getCloudUrl());
 		$image->generateUniqueId('/documents/header');
-		// unlike an attachment, a banner is public by definition: it is part of
-		// the actor document, which every server that has heard of this account
-		// may read
+		// Public, unlike an attachment: it is part of the actor document.
 		$image->setPublic(true);
-		// hung off the account, so that deleting the account takes it along
-		// with the rest of what hangs off it (`ActorCascadeService`)
+		// Hung off the account, so deleting the account takes it (`ActorCascadeService`).
 		$image->setParentId($actor->getId());
 
 		$this->cacheDocumentService->saveFromTempToCache($image, $tmpPath);
@@ -82,17 +75,9 @@ class BannerService {
 	}
 
 	/**
-	 * Takes the banner away and tells the servers that have it.
-	 *
-	 * Mastodon's `DELETE /api/v1/profile/header`. The stored picture goes with
-	 * it. It used to be left where it was, on the grounds that "the document
-	 * sweep collects it" — there was no such sweep, so every banner anybody
-	 * ever replaced stayed on disk and stayed readable at its own URL by
-	 * anyone who had it, which for a picture somebody has just taken off their
-	 * profile is the wrong half of the promise to keep.
-	 *
-	 * Removing a banner nobody set is not an error — the profile ends up
-	 * without one either way.
+	 * Takes the banner away, deletes the stored image and tells the servers that
+	 * have it (Mastodon's `DELETE /api/v1/profile/header`). Removing a banner
+	 * nobody set is not an error.
 	 */
 	public function remove(string $userId): void {
 		$actor = $this->accountService->getActorFromUserId($userId);
@@ -108,8 +93,7 @@ class BannerService {
 
 		$this->forget($previous, $actor->getPreferredUsername());
 
-		// an actor whose header is gone here but not on the servers that follow
-		// it is a profile that still has a banner everywhere else
+		// Otherwise the banner stays on every other server.
 		$this->announce($actor, $cached);
 		$this->accountService->queueBlueskyProfile($actor);
 	}
@@ -124,11 +108,9 @@ class BannerService {
 	}
 
 	/**
-	 * The picture a banner used to be, once nothing points at it any more.
-	 *
-	 * Only this account's own: the url is the one handle there is on a banner,
-	 * and an actor whose header was set to somebody else's address must not be
-	 * able to have their file deleted by taking their own banner off.
+	 * Deletes the image a banner was, once nothing points at it. Only this
+	 * account's own, so pointing a header at somebody else's file cannot get it
+	 * deleted.
 	 */
 	private function forget(string $url, string $account): void {
 		try {
@@ -141,13 +123,9 @@ class BannerService {
 	}
 
 	/**
-	 * A banner nobody is told about is a banner only this instance can see, so
-	 * the failure is worth a line in the log — but not worth losing the banner
-	 * over: it is stored either way, and a remote server picks it up the next
-	 * time it refreshes the actor.
-	 *
-	 * Signed by the account's own row, which holds its key; the cached copy
-	 * that is sent holds none.
+	 * Sends the change to followers, signed with the account's row (the cached
+	 * copy holds no key). A failure is logged: the banner is stored, and peers
+	 * pick it up on their next refresh.
 	 */
 	private function announce(Person $actor, Person $cached): void {
 		try {

@@ -17,11 +17,8 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The app registrations in `social_client`.
- *
- * Only the registration: who authorized an app, with which scopes, and the
- * code and token that came of it belong to `social_client_auth` and are
- * written and read through `ClientAuthRequest`.
+ * The app registrations in `social_client`; authorizations are in
+ * `social_client_auth` (`ClientAuthRequest`).
  *
  * @package OCA\Social\Db
  */
@@ -69,15 +66,11 @@ class ClientRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Removes app registrations nobody ever authorized, older than `$before`.
-	 *
-	 * `POST /api/v1/apps` is public, and every call is a row: a client that
-	 * registers on each launch, or somebody calling it in a loop, leaves rows
-	 * no account will ever use. A registration counts as authorized once its
-	 * `last_update` has moved off its `creation` — `ClientAuthRequest::authorize()`
-	 * moves it — so an app whose authorizations later expired is kept, which
-	 * is the promise `ClientAuthRequest::deprecate()` makes to a client holding
-	 * its registration. Bounded per call; what is left is the next run's.
+	 * Removes app registrations nobody ever authorized, older than `$before`:
+	 * `POST /api/v1/apps` is public and every call is a row. An app counts as
+	 * authorized once `last_update` moved off `creation`
+	 * (`ClientAuthRequest::authorize()`), so expired authorizations keep their
+	 * app, as `ClientAuthRequest::deprecate()` promises. Bounded per call.
 	 *
 	 * @return int how many were removed
 	 */
@@ -112,12 +105,8 @@ class ClientRequest extends ClientRequestBuilder {
 	}
 
 	/**
-	 * Removes an app registration, and with it every authorization against it.
-	 *
-	 * Nothing in the app calls this on its own: a registration is a thing a
-	 * client made and may come back to. It exists so that an operator, and the
-	 * tests, can take one away without leaving authorizations pointing at a
-	 * row that is gone.
+	 * Removes an app registration and every authorization against it, for
+	 * operators and tests; the app never calls it itself.
 	 */
 	public function deleteApp(string $appClientId): void {
 		try {

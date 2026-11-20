@@ -11,14 +11,10 @@ namespace OCA\Social\Security;
 
 /**
  * OAuth client secrets, authorization codes and access tokens are stored as
- * `sha256:<hex>` digests, so a database read no longer hands out working
- * credentials. The values are high-entropy random tokens, so a fast unsalted
- * digest is the right tool — it also keeps the token lookup a plain indexed
- * equality query.
- *
- * Rows written before hashing existed held the bare value; migration
- * `Version1000Date20261008000100` hashed what was left of them, or took it
- * back, and nothing here accepts a bare stored value any more.
+ * `sha256:<hex>` digests, so a database read hands out no working
+ * credentials. They are high-entropy random tokens, so a fast unsalted
+ * digest suffices and lookups stay indexed equality queries. Bare stored
+ * values are not accepted.
  */
 class SecretHasher {
 	public const PREFIX = 'sha256:';
@@ -47,13 +43,9 @@ class SecretHasher {
 	}
 
 	/**
-	 * What a presented secret is stored under, for looking it up.
-	 *
-	 * A presented secret that already carries the hash prefix is refused
-	 * rather than hashed again: the prefixed shape is what the column holds,
-	 * and accepting it would make a database dump, a backup or a read-only SQL
-	 * flaw hand out working tokens — the one thing hashing them is for. Null
-	 * for that and for an empty one.
+	 * What a presented secret is stored under, for looking it up. A secret that
+	 * already carries the hash prefix is refused, or a database dump would hand
+	 * out working tokens; null for that and for an empty one.
 	 */
 	public function forLookup(string $secret): ?string {
 		if ($secret === '' || $this->isHashed($secret)) {

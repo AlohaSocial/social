@@ -32,31 +32,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The routes PeerTube's own clients ask for.
+ * The routes PeerTube's own clients ask for (the official app, Tubelab,
+ * Fedilab), translated to PeerTube's API; the shapes live in
+ * `PeerTubeApiService`.
  *
- * The same move as the Pixelfed routes and for the same reason: the official
- * PeerTube app, Tubelab and Fedilab all exist and are good, and a client
- * somebody already has is worth more than one nobody has written. PeerTube's
- * API is not Mastodon's — different names, different ids, a different idea of
- * what a video is — so this is a translation and not an alias. The shapes live
- * in `PeerTubeApiService`; what is here is which route answers what.
- *
- * **Two things a reader should know before judging this by what is missing.**
- *
- * It is **read-only**. PeerTube's upload is a resumable protocol with a
- * transcoding state machine behind it, and a half-built one that took somebody's
- * file and lost it would be worse than none. Comments are read and not posted,
- * because a client posting through this route would go round the review queue
- * the composer goes through — the same reason the Pixelfed routes do not post
- * either.
- *
- * And it is **gated on the domain root**. No PeerTube client will ask under
- * `/apps/social/`: they all build `https://<host>/api/v1/...` from the address
- * a person types. Every route here is correct and none of them is reachable by
- * a real client until this instance answers at its own root — which is item 1
- * of the Mastodon compatibility list and a decision for whoever runs the
- * server, not something this app can do to a Nextcloud. Until then these serve
- * `curl`, the interop harness, and anybody willing to configure a rewrite.
+ * Read-only: PeerTube's resumable upload is not implemented, and posting
+ * comments here would bypass the composer's review queue. The routes are
+ * only reachable by real clients when this instance answers at its domain
+ * root, since they build `https://<host>/api/v1/...` themselves.
  */
 class PeerTubeApiController extends ClientApiController {
 	/** What one page holds, and the most one request may ask for. */
@@ -78,11 +61,7 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * What the client reads once, on launch.
-	 *
-	 * Public and answered without a viewer, like Pixelfed's: the app asks for
-	 * it before anybody has signed in, to decide whether it can talk to this
-	 * server at all.
+	 * What the client reads once, on launch, before anybody signs in; public.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -93,15 +72,9 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * The client ids PeerTube hands out before a login.
-	 *
-	 * PeerTube mints one pair per instance and hands the same one to everybody
-	 * for ever. This app mints a pair per client and **hashes the secret**,
-	 * deliberately and as a fix to a real problem, so there is no stored
-	 * plaintext to hand back a second time. A fresh registration is answered
-	 * instead — which satisfies what the route is for, since a client fetches
-	 * a pair immediately before logging in and uses it at once, and is exactly
-	 * what a Mastodon client does through `/api/v1/apps`.
+	 * The client ids PeerTube hands out before a login. PeerTube reuses one pair
+	 * per instance, but this app stores only a hash of each secret, so a fresh
+	 * registration is answered, as through `/api/v1/apps`.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -125,11 +98,8 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * The videos this instance has, newest first.
-	 *
-	 * The public timeline narrowed to videos — the same `only_video` the app's
-	 * own Videos timeline uses, so the two cannot come to disagree about what
-	 * a video is.
+	 * The videos this instance has, newest first: the public timeline narrowed
+	 * with the same `only_video` as the Videos timeline.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -150,18 +120,10 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * One video, by the id this API gives it.
-	 *
-	 * **Not by its uuid**, which the listing does carry. That uuid is derived
-	 * from the post's address by a one-way hash — it is the same one this app
-	 * publishes over ActivityPub, which is the point of it — so there is
-	 * nothing to look it up by without a column to store it in. A uuid here is
-	 * a 404 saying which id to use; a client that lists and then fetches has
-	 * the id already.
-	 *
-	 * The `\d+` requirement is also what keeps this from swallowing
-	 * `/api/v1/videos/continue`, this app's own "continue watching" route,
-	 * which lives at the same depth.
+	 * One video, by the id this API gives it, not by its uuid: that is a one-way
+	 * hash of the post's address with nothing to look it up by, so a uuid is a
+	 * 404. The `\d+` requirement also keeps this from matching
+	 * `/api/v1/videos/continue`.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -185,12 +147,9 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * The replies to one video, as PeerTube's comment threads.
-	 *
-	 * Read-only: see the class comment. `totalReplies` on each is 0 rather
-	 * than a count — this app threads replies to replies and PeerTube draws a
-	 * tree from that number, and a wrong one is a tree with branches that lead
-	 * nowhere.
+	 * The replies to one video, as PeerTube's comment threads (read-only).
+	 * `totalReplies` is 0, since a wrong count makes PeerTube draw branches
+	 * leading nowhere.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -205,8 +164,7 @@ class PeerTubeApiController extends ClientApiController {
 				return new DataResponse(['error' => 'no such video'], Http::STATUS_NOT_FOUND);
 			}
 
-			// the same thread the app's own status context is drawn from, so a
-			// reply a client sees here is one the web page shows too
+			// The thread the web page's status context is drawn from.
 			$context = $this->streamService->getContextByNid($post->getNid());
 			$replies = array_slice(
 				$context['descendants'] ?? [], 0, min(self::MAX_LIMIT, max(1, $count))
@@ -280,11 +238,8 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * Videos matching a word, or one fetched by its address.
-	 *
-	 * The same `SearchService` the rest of this app searches with, narrowed to
-	 * videos afterwards — so a video that is findable on one route cannot be
-	 * missing from the other.
+	 * Videos matching a word, or one fetched by its address, through the same
+	 * `SearchService` as the rest of the app, narrowed to videos.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -317,12 +272,8 @@ class PeerTubeApiController extends ClientApiController {
 	}
 
 	/**
-	 * A viewer where there is one, and nobody where there is not.
-	 *
-	 * Every route here is public: a PeerTube client browses before it signs in,
-	 * and a 401 on the first screen is a client that decides this server does
-	 * not work. Where credentials *are* sent they are used, so a signed-in
-	 * reader sees what they are entitled to see.
+	 * A viewer where credentials are sent, and nobody otherwise: every route is
+	 * public, since a PeerTube client browses before signing in.
 	 */
 	private function softViewer(): void {
 		try {
@@ -346,10 +297,8 @@ class PeerTubeApiController extends ClientApiController {
 
 		$posts = $this->streamService->getTimeline($options);
 
-		// PeerTube pages by offset and this app pages by cursor. Rather than
-		// invent a cursor from an offset — which would drift as posts arrive —
-		// the offset is applied to the page that was read, and a client asking
-		// for a deep page gets fewer rows rather than wrong ones.
+		// PeerTube pages by offset: it is applied to the page read, so a deep page
+		// gets fewer rows rather than drifting ones.
 		return ($start > 0) ? array_slice($posts, $start) : $posts;
 	}
 

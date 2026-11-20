@@ -13,11 +13,9 @@ use JsonSerializable;
 
 /**
  * One import an account asked for: a file it uploaded, or a server it named,
- * worked through in the background and counted as it goes.
- *
- * What the Migration page shows while it runs and after: the kind, where it
- * got to, and what it came to. The file itself is kept in appdata under
- * `file` until the run has read it, and never after.
+ * run in the background with its progress, as the Migration section of
+ * Settings shows. The file stays in appdata under `file` until it has been
+ * read.
  */
 class ImportJob implements JsonSerializable {
 	public const STATUS_QUEUED = 'queued';
