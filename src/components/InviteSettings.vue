@@ -68,12 +68,9 @@ import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
 
 /**
- * The invitation links a person has sent, where the administrator lets
- * people invite others to register on this server.
- *
- * Each link admits one registration and works for a week; the server holds
- * those limits (`ExternalSignupService::createInvite()`), this only shows
- * them.
+ * The invitation links a person has sent, where the administrator lets people
+ * invite others to register. The server sets each link's limits
+ * (`ExternalSignupService::createInvite()`); this only shows them.
  */
 export default {
 	name: 'InviteSettings',

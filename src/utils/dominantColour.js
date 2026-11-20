@@ -4,13 +4,8 @@
  */
 
 /**
- * The prevailing colour of an image, so a profile can be tinted by its own
- * banner instead of every profile looking the same.
- *
- * The image is drawn once into a tiny offscreen canvas — a handful of pixels
- * is enough for an average — and never touched again. Anything that can fail
- * (a cross-origin banner, a canvas the browser refuses to read, no banner at
- * all) resolves to null, and the caller keeps the theme's own colour.
+ * The prevailing colour of an image, to tint a profile by its banner. The
+ * image is sampled once in a tiny canvas; anything that fails resolves to null.
  */
 
 /** how many pixels a side; small enough to be free, large enough to average */
@@ -80,9 +75,8 @@ export function dominantColour(url) {
 }
 
 /**
- * The same colour, pushed to a saturation and lightness that stays readable
- * as an accent on both a light and a dark surface. A banner that is mostly
- * grey stays grey rather than being forced into a hue it does not have.
+ * The same colour at a saturation and lightness that reads as an accent on
+ * light and dark surfaces; a grey banner stays grey.
  *
  * @param {{r: number, g: number, b: number}|null} rgb an averaged colour
  * @return {string} an hsl() colour, or '' when there was nothing to read

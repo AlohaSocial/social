@@ -4,12 +4,10 @@
  */
 
 /*
- * What the offline recovery tool computes, with nothing of the page in it:
- * the key a recovery phrase stands for (as `Mnemonic` derives it), the
- * did:key of it, the DAG-CBOR and CID of a PLC operation (as `DagCbor` and
- * `PlcOperation` write them), the operation that hands the DID to another
- * server (as `PlcOperation::fromCredentials()` builds it) and its signature
- * (ECDSA over SHA-256, low-S, as `PrivateKey::sign()` makes it).
+ * The offline recovery tool's computations, mirroring the PHP: the key a
+ * recovery phrase stands for (`Mnemonic`), its did:key, DAG-CBOR and CIDs
+ * (`DagCbor`), the PLC operation that moves the DID to another server
+ * (`PlcOperation`) and its low-S ECDSA signature (`PrivateKey::sign()`).
  */
 
 import { hmac } from '@noble/hashes/hmac.js'
@@ -436,10 +434,9 @@ export function newSigningKey() {
 }
 
 /**
- * Gives the DID a signing key of the person's own and puts their key
- * first, everything else as the latest operation has it: what the new
- * server's account is created with when the old server can no longer
- * sign for it.
+ * Gives the DID a signing key of the person's own and puts their key first,
+ * keeping the rest of the latest operation: for when the old server can no
+ * longer sign for the account.
  *
  * @param {object} options what the person gave
  * @param {Uint8Array} options.secret their key, which signs

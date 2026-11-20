@@ -7,10 +7,8 @@
 		class="photo"
 		:class="`photo--${fit}`"
 		:style="frameStyle">
-		<!-- video and audio carry their own controls where the media is the
-		     subject, and nesting those inside a button is invalid. Where it is
-		     not — a timeline, where the post is a link to itself — they carry
-		     none, so everything here is pressable -->
+		<!-- where the media is the subject, video and audio keep their own
+		     controls, which cannot sit inside a button; elsewhere it is all pressable -->
 		<button
 			v-if="pressable || !interactive"
 			type="button"
@@ -20,8 +18,7 @@
 			<MediaAttachment :attachment="attachment" :interactive="interactive" />
 		</button>
 		<MediaAttachment v-else :attachment="attachment" />
-		<!-- the description is what the picture actually is, and a reader who
-		     cannot see the picture is not the only one who wants it -->
+		<!-- the description is useful to sighted readers too -->
 		<AltBadge v-if="hasDescription" :description="attachment.description" />
 	</figure>
 </template>
@@ -46,9 +43,8 @@ export default {
 		},
 
 		/**
-		 * Whether the media is the thing the reader came to look at, which
-		 * decides whether a video plays here or opens the post. See
-		 * `MediaAttachment`, which the flag is for.
+		 * Whether the media is what the reader came to see: a video then plays
+		 * here instead of opening the post. Passed on to `MediaAttachment`.
 		 */
 		interactive: {
 			type: Boolean,
@@ -133,11 +129,8 @@ export default {
 	position: relative;
 	margin: 0;
 	width: 100%;
-	/* A frame is the shape its media is, so a 9:16 short in a 600px column
-	   wants to be over a thousand pixels tall and pushes everything under it
-	   off the screen. The height is capped instead of the shape: what will
-	   not fit is drawn smaller, inside a frame that keeps its own proportions
-	   -- the picture is never cut to make it shorter. */
+	/* A tall frame (a 9:16 short) would push everything off screen: the height
+	   is capped and the media drawn smaller in its own proportions, never cropped. */
 	max-height: 80vh;
 	overflow: hidden;
 	border-radius: var(--border-radius-large, 12px);

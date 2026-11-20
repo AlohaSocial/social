@@ -10,14 +10,9 @@ import logger from './logger.js'
 
 /**
  * How far the reader got through a video, for the red bar under a card and
- * the Continue watching shelf on the Videos page.
- *
- * The server keeps it, one row per video and reader (`WatchService`), moved
- * by `POST /api/v1/statuses/{id}/watched` and handed back with the videos
- * the reader is in the middle of (`GET /api/v1/videos/continue`, each status
- * with `watch_progress`). That list is read once per page view
- * (`loadUnfinished()`), and what it said is kept here by post, so a card for
- * the same video anywhere on the page draws the same bar.
+ * the Continue watching shelf. The server keeps it (`WatchService`); the
+ * unfinished list is read once per page (`loadUnfinished()`) and kept here by
+ * post, so every card for the same video draws the same bar.
  *
  * @typedef {object} VideoProgress
  * @property {number} position - where the reader stopped, in seconds

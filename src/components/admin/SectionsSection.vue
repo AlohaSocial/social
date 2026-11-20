@@ -78,11 +78,8 @@ import { showError, showSuccess } from '../../services/toast.js'
 
 /**
  * Which parts of the app this instance offers, and which Nextcloud groups
- * become Social lists.
- *
- * One save for the card rather than one per switch: the endpoint writes all of
- * it or none of it, and four switches that each saved on their own would let
- * an administrator leave the page half applied without being told.
+ * become Social lists. One save for the card: the endpoint writes all of it or
+ * none of it.
  */
 export default {
 	name: 'SectionsSection',
@@ -116,9 +113,8 @@ export default {
 				photos: this.settings?.section_photos !== false,
 				videos: this.settings?.section_videos !== false,
 				gifPack: this.settings?.gif_pack !== false,
-				// the picker works in whole options, so the stored ids are
-				// matched back to the groups they name; an id whose group has
-				// since been deleted stands for itself rather than vanishing
+				// the picker works in whole options; an id whose group was deleted
+				// stands for itself rather than vanishing
 				groupLists: (this.settings?.group_lists ?? []).map((id) => (
 					this.groups.find((group) => group.id === id) ?? { id, name: id }
 				)),

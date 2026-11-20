@@ -6,24 +6,16 @@
 import { generateUrl } from '@nextcloud/router'
 
 /**
- * What the server takes in one post.
- *
- * The composer, the inline editor and the Files action each carried their own
- * `500` and `10`, which were the server's numbers on the day they were typed
- * and nothing kept them so. The server publishes both in the instance entity
- * (`configuration.statuses.max_characters`, `max_media_attachments`), which
- * is where every other client reads them from; this reads them from the same
- * place and falls back to the old constants until it has.
- *
- * Framework-free on purpose: the Files action is loaded on every Files page
- * without Vue, Pinia or axios, and has to be able to ask too.
+ * What the server takes in one post, read from the instance entity
+ * (`configuration.statuses`), with defaults until it has answered.
+ * Framework-free: the Files action loads without Vue, Pinia or axios.
  */
 
-/** the server's numbers as they stood when they were hard-coded here */
+/** used until the server has answered */
 export const DEFAULT_LIMITS = Object.freeze({
 	maxCharacters: 500,
 	maxAttachments: 10,
-	// `max_size`'s own default, 10 MB: what a picture upload is held to
+	// `max_size`'s own default, 10 MB: what an image upload is held to
 	imageSizeLimit: 10 * 1048576,
 	// `max_video_size`'s own default, 2 GB: what a video upload is held to
 	videoSizeLimit: 2048 * 1048576,
@@ -79,11 +71,8 @@ export function knownLimits() {
 }
 
 /**
- * Asks the server once and remembers the answer for the page.
- *
- * A failure keeps the defaults: the server enforces its own limits either
- * way, and a composer that says 500 when the server takes 1000 is a smaller
- * wrong than one that never opens.
+ * Asks the server once and remembers the answer for the page. A failure keeps
+ * the defaults; the server enforces its own limits anyway.
  *
  * @return {Promise<{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, videoSizeLimit: number, translation: boolean}>}
  */

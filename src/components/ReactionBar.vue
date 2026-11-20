@@ -26,12 +26,9 @@
 			<span class="reaction__count" aria-hidden="true">{{ reaction.count }}</span>
 		</button>
 
-		<!-- The picker is not here. `@nextcloud/vue` must not be imported
-		     anywhere under TimelinePost — the app's entry and the dashboard's
-		     both pull that in, and a framework import beneath it moves the
-		     shared l10n chunk out of `social-framework` and copies half a
-		     megabyte into each. So this asks for the picker over the bus and
-		     keeps the request; see ReactionPicker. -->
+		<!-- The picker is asked for over the bus (see ReactionPicker): importing
+		     `@nextcloud/vue` anywhere under TimelinePost would copy half a
+		     megabyte of shared chunks into the app and dashboard bundles. -->
 		<button
 			v-if="canReact && offerAdd"
 			type="button"
@@ -57,22 +54,10 @@ import { feel } from '../services/senses.js'
 import { showError } from '../services/toast.js'
 
 /**
- * The emoji reactions under a post.
+ * The emoji reactions under a post, federated as `EmojiReact`.
  *
- * A like says "yes" and nothing else. A reaction says which kind of yes, which
- * on an internal feed is most of what people want to say about a colleague's
- * post — and it federates: Misskey, Pleroma, Akkoma, Iceshrimp and Sharkey all
- * send and understand `EmojiReact`.
- *
- * The bar is drawn from what the server sent with the post, and each press
- * answers with the post again, so the counts a reader sees are the ones the
- * next reader will be served rather than a local guess. The press is not
- * optimistic for that reason: a reaction is a federated write that can be
- * refused — an emoji the server will not take, a suspended account — and a
- * count that jumped and then jumped back is worse than one that waits a moment.
- *
- * The picker offers Unicode emoji. Bounded remote `:shortcode:` labels can
- * also appear, but their images are never fetched or drawn.
+ * Not optimistic: a reaction can be refused, so the bar shows the counts from
+ * the server's answer. Remote `:shortcode:` images are never fetched or drawn.
  */
 export default {
 	name: 'ReactionBar',
@@ -83,15 +68,8 @@ export default {
 
 	props: {
 		/**
-		 * Which post, as the API's `id` — a **string**.
-		 *
-		 * Not `nid`. The two carry the same number, but the entity sends `nid`
-		 * as a JSON number and a post id is a snowflake well past
-		 * `Number.MAX_SAFE_INTEGER`: parsing one loses its last digits, so
-		 * `…043682` arrives as `…043600` and the server answers 404 for a post
-		 * that is on the screen. `id` is the same value as a string and
-		 * survives the round trip, which is why every other action on a post
-		 * addresses it that way too.
+		 * The post's API `id`, a string: `nid` is a JSON number and loses digits
+		 * past `Number.MAX_SAFE_INTEGER`.
 		 */
 		statusId: {
 			type: String,
@@ -144,10 +122,8 @@ export default {
 		n,
 
 		/**
-		 * What a screen reader is told. The emoji itself is hidden from the
-		 * accessibility tree: read aloud it is a name that may mean nothing
-		 * here, and the useful part is how many people chose it and whether
-		 * pressing this takes the reader's own back.
+		 * What a screen reader is told: how many chose it and whether pressing
+		 * takes the reader's own back. The emoji itself is hidden.
 		 *
 		 * @param {{name: string, count: number, me: boolean, url?: string}} reaction one entry
 		 * @return {string} the label
@@ -161,10 +137,7 @@ export default {
 		},
 
 		/**
-		 * Asks for the shared picker, and hands it what to do with the answer.
-		 *
-		 * The callback keeps the request here rather than in the picker, so the
-		 * two need know nothing about each other beyond the one event.
+		 * Asks for the shared picker, handing it the callback for the answer.
 		 */
 		askForPicker() {
 			if (!this.canReact || this.busy !== '') {
@@ -247,8 +220,7 @@ export default {
 	}
 }
 
-/* the ones the reader chose themselves, so pressing again to undo is an
-   obvious thing to do rather than a discovery */
+/* the reader's own, so pressing again to undo is obvious */
 .reaction--mine {
 	border-color: var(--color-primary-element);
 	background: var(--color-primary-element-light);
@@ -265,8 +237,7 @@ export default {
 
 .reaction__emoji {
 	font-size: 14px;
-	/* an emoji is a picture: it must not pick up the italics or the weight of
-	   whatever it is sitting in */
+	/* an emoji must not inherit the italics or weight around it */
 	font-style: normal;
 	font-weight: normal;
 }

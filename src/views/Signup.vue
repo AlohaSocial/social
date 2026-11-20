@@ -360,10 +360,8 @@ export default {
 			/** whether the page is handing over to the login form */
 			signingIn: false,
 			/**
-			 * The login and password just typed into this page, kept only
-			 * until the account they make can be logged in to and never
-			 * stored: a page opened from the email link has none, so it never
-			 * logs anybody in.
+			 * The login and password just typed, kept in memory only to log in to
+			 * the new account; a page opened from the email link has none.
 			 *
 			 * @type {{user: string, password: string}|null}
 			 */

@@ -126,12 +126,8 @@ import { showError, showSuccess } from '../../services/toast.js'
 import { errorOf, errorSentence } from '../../utils/serverError.js'
 
 /**
- * What the outbound queue is doing.
- *
- * The summary arrives with the page: it is one pass over the queue. The one
- * thing it writes is the Retry deliveries button beside an instance given up
- * on, for an administrator, which does what `occ social:queue:retry
- * --instance` does.
+ * What the outbound queue is doing, as of page load. An administrator can
+ * retry an instance given up on, as `occ social:queue:retry --instance` does.
  */
 export default {
 	name: 'FederationSection',
@@ -167,12 +163,7 @@ export default {
 
 	computed: {
 		/**
-		 * How long the queue has been stuck, said the way somebody reads it.
-		 *
-		 * An hour is a peer rebooting; a week is a delivery that is never
-		 * going to happen, and the two want different reactions out of an
-		 * administrator. An exact timestamp answers neither question without
-		 * arithmetic, so this is a span and the table below keeps the dates.
+		 * How long the queue has been stuck, as a span; the table keeps the dates.
 		 *
 		 * @return {string} empty when nothing is failing yet
 		 */

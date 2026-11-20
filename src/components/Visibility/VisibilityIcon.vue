@@ -7,8 +7,7 @@
 	<AccountMultiple v-else-if="visibility === 'followers'" :size="size" />
 	<LockOpen v-else-if="visibility === 'unlisted'" :size="size" />
 	<At v-else-if="visibility === 'direct'" :size="size" />
-	<!-- a visibility this client does not know is still a visibility: showing
-	     nothing at all reads as "public", which may be exactly wrong -->
+	<!-- an unknown visibility gets a question mark: no icon would read as public -->
 	<HelpCircleOutline v-else :size="size" />
 </template>
 
@@ -35,11 +34,6 @@ export default {
 			required: true,
 		},
 
-		/**
-		 * The size was fixed at 22 and the prop did not exist, so
-		 * `VisibilitySelect` had been asking for 20 and silently getting 22
-		 * for as long as it has been asking.
-		 */
 		size: {
 			type: Number,
 			default: 22,

@@ -7,17 +7,10 @@ import { translate as t } from '@nextcloud/l10n'
 import { fullDateTime } from './relativeTime.js'
 
 /**
- * What a keyword filter is made of, in the words this app uses for the places
- * a filter applies.
- *
- * The five context names are the server's (`Model\Client\Filter::CONTEXTS`)
- * and are what `/api/v2/filters` stores; the labels are where the reader
- * actually finds those posts in this client, because "home" and "account" name
- * nothing on the screen in front of them.
- *
- * Everything is behind a function rather than a constant: `t()` needs the
- * translations to have been loaded, and a module read at import time is read
- * before they are.
+ * Keyword filter options. The context names are the server's
+ * (`Model\Client\Filter::CONTEXTS`); the labels name where the reader finds
+ * those posts in this client. Functions, not constants, because `t()` needs the
+ * translations loaded, which they are not at import time.
  */
 
 /** @type {string[]} the context names the server accepts, in its own order */
@@ -36,17 +29,14 @@ export function contextOptions() {
 		{
 			id: 'home',
 			label: t('social', 'My Feed'),
-			// a list timeline is ListController's and never reaches
-			// FilterService, so a reader who took "My Feed" to cover their
-			// lists would be wrong and have no way of finding out
+			// a list timeline never reaches FilterService
 			hint: t('social', 'The posts of the people and hashtags you follow. Not your lists: a list timeline is never filtered.'),
 		},
 		{
 			id: 'notifications',
 			label: t('social', 'Activities'),
-			// Stream::exportAsNotification() serialises the nested status
-			// without `filtered`, so a folded notification is not something
-			// this client could draw even though the server applies the filter
+			// Stream::exportAsNotification() drops `filtered`, so a folded
+			// notification cannot be drawn here
 			hint: t('social', 'Mentions, boosts, favorites and the rest of your activities. Here only taking the post out has any effect: an activity is never folded.'),
 		},
 		{
@@ -68,10 +58,8 @@ export function contextOptions() {
 }
 
 /**
- * The label of one context, for the summary of a filter.
- *
- * A name that is not one of the five is shown as it came: the list is the
- * server's, and a filter made by another client is still the reader's to see.
+ * The label of one context. An unknown name, e.g. from another client, is
+ * shown as it came.
  *
  * @param {string} id a context name as the API spells it
  * @return {string} what to call it on screen
@@ -81,11 +69,8 @@ export function contextLabel(id) {
 }
 
 /**
- * How long until a filter stops applying, as the form offers it.
- *
- * Mastodon's own six durations. `seconds: null` is "never", which the API is
- * told by sending an empty `expires_in` — not by leaving it out, which on an
- * update means "leave the expiry as it is".
+ * Mastodon's six filter durations. `seconds: null` is "never", sent as an
+ * empty `expires_in`: leaving it out on an update keeps the expiry as it is.
  *
  * @return {Array<{id: string, seconds: (number|null), label: string}>} the durations
  */
@@ -102,11 +87,8 @@ export function expiryOptions() {
 }
 
 /**
- * Whether the filter is still doing anything.
- *
- * `expires_at` is null for a filter that never expires; anything else is a
- * moment, and the server stops applying the filter the moment it passes
- * without deleting the row.
+ * Whether the filter still applies. `expires_at` is null for one that never
+ * expires; the server keeps an expired row but stops applying it.
  *
  * @param {import('../types/Mastodon.js').Filter} filter a v2 Filter entity, as the wire gave it
  * @param {number} [now] the moment to measure against, for tests
@@ -145,13 +127,9 @@ export function expiryLabel(filter, now = Date.now()) {
 }
 
 /**
- * The filters of the reader's own that a status matched.
- *
- * Mastodon's `FilterResult` entities, as `FilterService` builds them: one per
- * filter that matched, each naming the filter and `keyword_matches` — the
- * post's own text that matched it, not the reader's keyword. Only `warn` filters ever arrive — a status a
- * `hide` filter matched is not sent at all — so anything here is something to
- * cover rather than something to drop.
+ * The reader's filters a status matched, as `FilterResult` entities;
+ * `keyword_matches` is the post's text, not the reader's keyword. Only `warn`
+ * filters arrive (a `hide` match is not sent at all), so each is a cover.
  *
  * @param {import('../types/Mastodon.js').Status} status a status entity, as the wire gave it
  * @return {import('../types/Mastodon.js').FilterResult[]} one entry per filter that matched
@@ -166,9 +144,7 @@ export function matchedFilters(status) {
 
 /**
  * @param {import('../types/Mastodon.js').Status} status a status entity, as the wire gave it
- * @return {string[]} the names of the filters that matched, each once. Several
- * can match one post, and naming only the first would send a reader off to
- * change a filter that is not the whole reason the post is covered.
+ * @return {string[]} the names of all the filters that matched, each once
  */
 function matchedFilterTitles(status) {
 	const titles = matchedFilters(status)
@@ -179,11 +155,8 @@ function matchedFilterTitles(status) {
 }
 
 /**
- * What a cover over a filtered post says.
- *
- * The filter's name, never `keyword_matches`: that is the post's own wording,
- * and printing it on the cover would put exactly the words somebody filtered
- * back in front of them. The name is what they have to look for in Settings.
+ * What a cover over a filtered post says: the filter's name, never
+ * `keyword_matches`, which would show the filtered words again.
  *
  * @param {import('../types/Mastodon.js').Status} status a status entity, as the wire gave it
  * @return {string} a line for the cover

@@ -4,13 +4,9 @@
  */
 
 /**
- * Whether the post's own server says an interaction is allowed.
- *
- * GoToSocial defined `interactionPolicy` and Mastodon 4.5 reads it: an author
- * can say their post may not be replied to, boosted or liked. The server sends
- * what it understood as `interaction_policy`, and only for a remote post that
- * carries one — so an absent key is "the author said nothing", which is most
- * posts and means yes.
+ * Whether the post's own server says an interaction is allowed. The server
+ * sends GoToSocial's `interactionPolicy` as `interaction_policy` only for a
+ * remote post that has one; an absent key means yes.
  *
  * @param {import('../types/Mastodon.js').Status} item the post, as the client API sends one
  * @param {string} interaction one of reply, boost, like, quote
@@ -21,11 +17,8 @@ export function allowedByAuthor(item, interaction) {
 }
 
 /**
- * Whether a post may be passed on at all, before its author is asked.
- *
- * A boost and a quote both put the post in front of the booster's own
- * audience, so the server grants either one only for a post that was already
- * everybody's. Offering the action on anything narrower is offering a refusal.
+ * Whether a post may be boosted or quoted at all: the server grants either
+ * only for a post that is already everybody's.
  *
  * @param {import('../types/Mastodon.js').Status} item the post
  * @return {boolean} whether its audience allows it

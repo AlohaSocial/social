@@ -8,16 +8,11 @@ import logger from './logger.js'
 import { uuid } from '../utils/uuid.js'
 
 /**
- * How reading is measured for the For you feed.
- *
- * One module, so the home feed, a hashtag page and a thread all count a post
- * the same way. It reports qualified exposures, quick skips, and the few
- * things a reader does to a post that the server does not see happen — opening
- * a picture or following a link. Passive reading time stays in the browser for
- * exposure and skip qualification; it is not sent as an interest score.
- *
- * A factory with everything it touches passed in, so the rules can be tested
- * with a fake clock and a fake observer rather than a browser.
+ * How reading is measured for the For you feed, the same way on every page:
+ * qualified exposures, quick skips, and actions the server does not see
+ * (opening a photo, following a link). Reading time itself stays in the
+ * browser. Everything it touches is passed in, so it can be tested with a fake
+ * clock and observer.
  */
 
 /** Reading has stopped when nothing moved for this long. */
@@ -109,12 +104,8 @@ function hasTags(status) {
 }
 
 /**
- * Whether a post's body is on screen at all.
- *
- * A post behind a content warning shows the warning until it is lifted — the
- * body is the `.post-message--behind-warning` inside it — and one hidden by a
- * filter shows the reason and nothing else. Looking at either is not reading
- * the post.
+ * Whether a post's body is on screen: one behind a content warning
+ * (`.post-message--behind-warning`) or hidden by a filter is not readable.
  *
  * @param {Element} element the entry
  * @return {boolean}
@@ -168,8 +159,7 @@ function sideOf(entry, viewportHeight) {
 }
 
 /**
- * One post being watched on screen: the element, the post, and how long it has
- * been in view. The same shape the `watched` Map is declared with below.
+ * One post being watched on screen; the values of the `watched` Map below.
  *
  * @typedef {object} WatchedView
  * @property {Element} element the post's element
@@ -212,12 +202,10 @@ export function createInterestTracker({
 	let flushPromise = null
 
 	/**
-	 * Every post being watched, by its element.
-	 *
-	 * `visible` is the observer's answer; `since` is when the current stretch
-	 * of counted time began, null while it is not counting; `ms` what earlier
-	 * stretches added up to. `enteredAt` and `enteredFrom` describe the view as
-	 * it began, which helps distinguish a quick scrolling pass from reading.
+	 * Every post being watched, by its element. `since` is when the current
+	 * counted stretch began (null while not counting), `ms` the earlier
+	 * stretches' total; `enteredAt`/`enteredFrom` tell a scrolling pass from
+	 * reading.
 	 *
 	 * @type {Map<Element, {element: Element, status: object, visible: boolean, since: number|null, ms: number, enteredAt: number, enteredFrom: string}>}
 	 */
@@ -345,9 +333,8 @@ export function createInterestTracker({
 		}
 
 		view.ms = 0
-		// a view the page ended rather than the scroll stays open: the post is
-		// still on screen when the tab comes back, and the observer has
-		// nothing new to say about it
+		// a view the page ended (not the scroll) stays open: the post is
+		// still on screen when the tab comes back
 		if (leftTo !== null) {
 			view.visible = false
 		} else if (view.visible && canCount(view.status) && isReadable(view.element)) {
@@ -569,9 +556,8 @@ export function createInterestTracker({
 	win.addEventListener('pageshow', onPageShow)
 	armIdle()
 
-	// named rather than returned straight, so that `sync()` can call the two
-	// beside it: `this` inside an object literal is still being built, and
-	// TypeScript reads it as `{}`
+	// a named const so `sync()` can call its siblings; TypeScript reads
+	// `this` in an object literal as `{}`
 	const tracker = {
 		setLearningGeneration(value) {
 			const nextGeneration = Number.isInteger(value) && value >= 0 ? value : null
