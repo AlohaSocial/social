@@ -51,6 +51,7 @@ class RouteAuthMatrixTest extends TestCase {
 
 	/** @var array<string, string> public routes outside the API bases, and why */
 	private const PUBLIC_OUTSIDE_API = [
+		'AboutController::info' => 'the server\'s rules, contact and legal links, public like Mastodon\'s instance information',
 		'ActivityPubController::actor' => 'ActivityPub actor document, public by protocol',
 		'ActivityPubController::feed' => 'RSS of public posts',
 		'ActivityPubController::actorAlias' => 'ActivityPub actor document under its @-alias',
