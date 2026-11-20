@@ -25,11 +25,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A conversation on Bluesky, for a post that is there — read from there, or
- * written here and published: the thread as the AppView has it
- * (`getPostThread`), each post this server does not hold stored the way any
- * Bluesky post is (`PostStore`), parents first, so every reply's parent is
- * there before it.
+ * A conversation on Bluesky as the AppView has it (`getPostThread`), each post
+ * not held here stored like any Bluesky post (`PostStore`), parents first so
+ * every reply's parent is there before it.
  */
 class BlueskyThreadSource implements ThreadSource {
 	/** how deep the replies, and how high the parents, are asked for */

@@ -20,18 +20,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Converts the videos of one new post, then lets the post go out.
- *
- * Queued by `VideoDeliveryHold::hold()` when a post is written with a video
- * that may need converting, so — like `Cron\ActorCleanup` — it is not in
- * `info.xml`: it means nothing without the post. `Cron\Transcode` still sweeps
- * whatever this did not reach, one video a quarter-hour; this is the same
- * conversion, for the one video somebody is waiting on, on the next cron run.
- *
- * The post's deliveries are released **whatever happened**: converted, not
- * needed, failed, or the setting switched off in the meantime. The hold exists
- * so the post goes out with the best file there is, never so that it does not
- * go out. A hold whose job never runs at all runs out on its own deadline.
+ * Converts the videos of one new post, then lets the post go out. Queued by
+ * `VideoDeliveryHold::hold()`, so not in `info.xml`; `Cron\Transcode` sweeps
+ * whatever this did not reach. The deliveries are released whatever happened:
+ * the hold is for the best file, never for keeping the post back, and a hold
+ * whose job never runs expires on its own deadline.
  */
 class TranscodeBeforeDelivery extends QueuedJob {
 	public function __construct(

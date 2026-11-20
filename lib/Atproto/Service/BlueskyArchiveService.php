@@ -28,16 +28,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A person's Bluesky account as files, for keeping and for moving it
- * without this server: the repository as a CAR, every blob by its CID, the
- * DID's operation log and document, the offline recovery script with its
- * word list, the offline recovery tool as one HTML page, and a README
- * that says what each is.
- *
- * Every file goes through the destination as a stream, so neither the
- * repository nor the pictures are ever whole in memory; the same files go
- * into the account export (`SocialMigrator`) and into the download of the
- * Bluesky account alone.
+ * A person's Bluesky account as files, to keep it or move it without this
+ * server: the repository CAR, every blob, the DID's operation log and
+ * document, the offline recovery script and tool, and a README. Every file is
+ * streamed, so neither the repository nor the blobs are ever whole in memory.
  */
 class BlueskyArchiveService {
 	public const ROOT = 'bluesky/';
@@ -98,10 +92,8 @@ class BlueskyArchiveService {
 	}
 
 	/**
-	 * The account alone, as a zip file for the download in Settings,
-	 * handed to $sink while it is written: the first bytes go out before
-	 * the repository and the blobs have all been read, and none of it is
-	 * kept on disk.
+	 * The account alone, as a zip file for the download in Settings, streamed
+	 * to $sink as it is written and never kept on disk.
 	 *
 	 * @param Closure(string): void $sink
 	 * @throws UserMigrationException

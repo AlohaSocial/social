@@ -13,18 +13,9 @@ use JsonSerializable;
 
 /**
  * Mastodon's NotificationPolicy: what to do with a notification from somebody
- * the reader has no relationship with.
- *
- * Five questions, each answered with `accept` (as before), `filter` (held in
- * the requests inbox, where the reader can look at them together and decide
- * about the sender rather than about each notification) or `drop` (never
- * stored). Everything defaults to `accept`, which is what every account had
- * before this existed: a policy that starts by holding things back would
- * silently swallow notifications for accounts that never asked it to.
- *
- * The questions are about the *sender*, not about the notification, which is
- * why one decision about an account settles every notification it has sent and
- * will send.
+ * the reader has no relationship with. Five questions about the sender, each
+ * answered `accept`, `filter` (held in the requests inbox) or `drop` (never
+ * stored); every answer defaults to `accept`.
  */
 class NotificationPolicy implements JsonSerializable {
 	public const ACCEPT = 'accept';
@@ -55,12 +46,8 @@ class NotificationPolicy implements JsonSerializable {
 	/**
 	 * What an account created here starts with, unless an administrator chose
 	 * otherwise: strangers, new accounts, unsolicited private mentions and
-	 * limited accounts wait for review; people the reader follows, and anyone
-	 * merely not following them back, reach them as before.
-	 *
-	 * Not the constructor's defaults. Those are what an account *without* a
-	 * stored policy has, which is every account that existed before new ones
-	 * started calm, and those accounts keep receiving everything.
+	 * limited accounts wait for review. Not the constructor's defaults, which
+	 * apply to accounts without a stored policy and accept everything.
 	 */
 	public const CALM = [
 		self::NOT_FOLLOWING => self::FILTER,

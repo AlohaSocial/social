@@ -36,10 +36,8 @@ class AddInterface extends AbstractActivityPubInterface implements IActivityPubI
 		$story = $item->hasObject() ? $item->getObject() : null;
 		if ($story instanceof Story) {
 			// The author is whoever performed the Add, whatever the payload's
-			// `attributedTo` says — the rule NoteInterface applies to a Create,
-			// for the same reason: the origin check StoryInterface then makes
-			// is host-wide, and let one account of a server publish a story
-			// onto a neighbour's profile.
+			// `attributedTo` says, as NoteInterface does for a Create: the origin
+			// check StoryInterface makes is host-wide.
 			$story->setAttributedTo($item->getActorId());
 			// checked against the activity's own origin, which is what stops
 			// one server publishing a story onto another's account

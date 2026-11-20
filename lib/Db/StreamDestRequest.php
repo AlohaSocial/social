@@ -46,25 +46,11 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
-	 * Stores the recipient rows of one post, in one statement.
-	 *
-	 * A dest row is what puts a post in a timeline, so a failure here is a post
-	 * that exists and is in nobody's timeline — permanently, and until now
-	 * invisibly. Anything that is not the expected duplicate is raised, not
-	 * swallowed: the caller writes these inside the transaction that stores the
-	 * post, where throwing rolls the whole save back and the post can be saved
-	 * again.
-	 *
-	 * The duplicate is expected and must not reach the database as an error: a
-	 * post addressed again — an edit, a redelivery — names recipients it
-	 * already has rows for. Catching that violation and returning quietly is
-	 * enough on MySQL and SQLite but not on PostgreSQL, which aborts the whole
-	 * transaction on any failed statement: the commit fails, and the post is
-	 * lost. The database is asked to skip the row instead, so nothing fails in
-	 * the first place.
-	 *
-	 * One statement rather than one per recipient, because the locks the
-	 * post's transaction holds are held for every round trip.
+	 * Stores the recipient rows of one post, in one statement. A failure is a
+	 * post in nobody's timeline, so anything but the expected duplicate is
+	 * raised and rolls the post's transaction back. Duplicates (an edit, a
+	 * redelivery) are skipped by the database, as a failed statement aborts a
+	 * PostgreSQL transaction.
 	 *
 	 * @param array<string, array{string, string}> $recipients account => [type, subtype]
 	 */
@@ -79,11 +65,9 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 				'actor_id' => $qb->prim((string)$actorId),
 				'type' => $type,
 				'subtype' => $subType,
-				// the post's own sort key, copied here because this is the
-				// row a timeline pages over: without it the home page has
-				// to join every one of these rows to `social_stream` to
-				// find out when its post was published, and then sort the
-				// result. See `Version1000Date20260917000001`.
+				// the post's own sort key, copied so a timeline pages over this
+				// row without joining `social_stream`; see
+				// `Version1000Date20260917000001`
 				'nid' => $nid,
 			];
 		}
@@ -129,25 +113,10 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
-	 * Each recipient of a post, named once, in the order the post named them.
-	 *
-	 * A post routinely names the same account more than once: `getToAll()`
-	 * returns `to` alongside `toArray`, and an account addressed in both `to`
-	 * and `cc` appears in each. The unique index `sat` is on
-	 * (stream_id, actor_id, type) *without* the subtype, so all of those are
-	 * one row, and asking the database to store them one at a time meant most
-	 * of the inserts existed only to be refused.
-	 *
-	 * `insertIgnoreConflict()` makes a refused row harmless but not free:
-	 * InnoDB allocates the auto-increment value before it notices the
-	 * conflict, so every duplicate burned an id and dirtied the index it was
-	 * about to be rejected by. On the devel instance that had carried
-	 * `oc_social_stream_dest` to 882,837 ids for 4,976 live rows — 177 issued
-	 * per row kept, and an index of 20 MB over 1 MB of data.
-	 *
-	 * The first subtype to name an account wins, which is the row the database
-	 * kept when the duplicates were sent: `to` is offered before `cc`, and an
-	 * account addressed in both is a `to` recipient.
+	 * Each recipient of a post, named once, in the order the post named them:
+	 * `sat` is unique on (stream_id, actor_id, type) without the subtype, and
+	 * every refused duplicate would still use up an InnoDB auto-increment id.
+	 * The first subtype to name an account wins, and `to` comes before `cc`.
 	 *
 	 * @param array<string, string[]> $recipients subtype => the accounts it names
 	 *
@@ -170,9 +139,8 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 
 	/**
 	 * A public or unlisted post reaches its author's followers whatever it
-	 * names, as on Mastodon. PeerTube files a video under its channel and
-	 * addresses it to the followers of the account behind the channel, so a
-	 * follower of the channel was never one of the post's recipients.
+	 * names, as on Mastodon: PeerTube addresses a channel's video to the
+	 * followers of the account behind the channel, not of the channel.
 	 */
 	private function generateStreamHome(Stream $stream, ?Person $author): void {
 		$cc = array_merge($stream->getCcArray(), $stream->getBccArray());
@@ -197,12 +165,10 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
-	 * The author is read from the cache and never fetched: this runs inside
-	 * the transaction that stores the post, and an HTTP request there holds
-	 * the row locks for as long as the peer takes to answer. An author that is
-	 * not cached — every save path caches it first — leaves the post addressed
-	 * as a home-timeline post, which is what an unknown followers collection
-	 * amounted to before as well.
+	 * The author is read from the cache and never fetched, as an HTTP request
+	 * inside the post's transaction would hold its row locks. An uncached
+	 * author (every save path caches it first) leaves the post addressed as a
+	 * home-timeline post.
 	 */
 	private function cachedAuthor(Stream $stream): ?Person {
 		$authorId = $stream->getAttributedTo();
@@ -299,11 +265,8 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		);
 		$qb->where($orX);
 
-		// Keyset paging, not an offset. The caller rewrites and sometimes
-		// deletes the posts behind these rows as it walks them, so the set
-		// shrinks underneath an offset and every shift skips a row — which for
-		// this caller means a post left addressed to an account that is gone.
-		// An id the caller has already passed cannot come back.
+		// Keyset paging: the caller rewrites and deletes the posts behind
+		// these rows as it walks them, so an offset would skip rows.
 		if ($afterId > 0) {
 			$qb->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)));
 		}
@@ -343,14 +306,11 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
-	 * Readdresses every post addressed to `$actorId` to `$newId`.
-	 *
-	 * Copied, a page at a time, and then removed rather than updated in
-	 * place: a post addressed to both already has a row for the new one,
-	 * `sat` makes (stream_id, actor_id, type) unique, and an UPDATE onto such
-	 * a row is refused, and the whole Move with it. The copy skips those, and
-	 * nothing here is a statement the database refuses, so it can run inside
-	 * a transaction on PostgreSQL.
+	 * Readdresses every post addressed to `$actorId` to `$newId`, copying a
+	 * page at a time and then removing: an UPDATE onto an existing
+	 * (stream_id, actor_id, type) row of `sat` would be refused, and the whole
+	 * Move with it. Nothing here can be refused, so it can run inside a
+	 * transaction on PostgreSQL.
 	 */
 	public function moveActor(string $actorId, string $newId): void {
 		$newPrim = $this->getQueryBuilder()->prim($newId);

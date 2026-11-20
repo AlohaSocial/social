@@ -27,57 +27,31 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Posts a client asked to have published later, and the publishing of them.
- *
- * `POST /api/v1/statuses` with a `scheduled_at` is not a post: Mastodon answers
- * it with a ScheduledStatus entity, publishes nothing, and hands the request
- * back to a worker when the time comes. This app used to parse the field and
- * post immediately, so a client that scheduled something for next Tuesday
- * showed its user a success and had already published it.
- *
- * The whole request is kept, not a rendered post, because publishing has to
- * take the same path an immediate post takes — `PostService::createPost()`,
- * over a `Post` built exactly as `StatusApiController::statusNew()` builds one. A
- * rendered note stored now would be built by one code path and federated by
- * another, and the two would drift: the quote approval, the language fallback
- * and the source snapshot all happen inside `createPost()`.
+ * Posts a client asked to have published later, and the publishing of them:
+ * `POST /api/v1/statuses` with a `scheduled_at` answers a ScheduledStatus
+ * entity, as in Mastodon. The whole request is kept rather than a rendered
+ * post, so publishing goes through `PostService::createPost()` with a `Post`
+ * built as `StatusApiController::statusNew()` builds one.
  */
 class ScheduledStatusService {
 	/**
-	 * How far ahead a post has to be to count as scheduled at all.
-	 *
-	 * Mastodon's own bound, and clients are built to it: Tusky greys out its
-	 * "schedule" button until the picked time is five minutes out, and Elk
-	 * shows the 422 this refusal produces. The value is also what makes the
-	 * cron interval workable — a post may be published up to one cron period
-	 * late, so accepting a post due in thirty seconds would mean promising a
-	 * precision this app cannot keep.
+	 * How far ahead a post has to be to count as scheduled: Mastodon's bound,
+	 * which clients are built to, and longer than a cron period, as a post may
+	 * be published up to one period late.
 	 */
 	public const MIN_LEAD_TIME = 300;
 
 	/**
 	 * How many posts one account may have waiting, in total and on any one
-	 * day. Mastodon's numbers.
-	 *
-	 * A cap is needed because a scheduled post is the only thing in this app a
-	 * client can store, unpublished and unbounded, without anybody seeing it:
-	 * without one, a single authorised client could fill an instance's database
-	 * with text that never becomes a post and that no moderator can find,
-	 * because none of it is on any timeline. The daily cap is the one that
-	 * matters for the cron — 300 posts all due in the same minute is one run
-	 * that cannot finish, while 25 per account per day is a load the job can
-	 * drain.
+	 * day; Mastodon's numbers. Waiting posts are invisible to moderators, and
+	 * the daily cap keeps one cron run able to drain what is due.
 	 */
 	public const MAX_PENDING = 300;
 	public const MAX_PENDING_PER_DAY = 25;
 
 	/**
-	 * How many due posts one cron run publishes.
-	 *
-	 * Each one is a `createPost()`, which signs and queues a delivery per
-	 * recipient instance, so this is the slowest thing the job does. Bounded so
-	 * that an instance whose cron has been dead for a week publishes what it
-	 * can and comes back for the rest.
+	 * How many due posts one cron run publishes, as each `createPost()` signs
+	 * and queues deliveries; a backlog is published over several runs.
 	 */
 	public const PUBLISH_PER_RUN = 50;
 
@@ -98,17 +72,14 @@ class ScheduledStatusService {
 	}
 
 	/**
-	 * The instant a client asked a post to be published at, or 0 when it asked
-	 * for none — which is the whole of the difference between a scheduled post
-	 * and an immediate one, and so has to be answerable before anything is
-	 * created.
+	 * The instant a client asked a post to be published at, or 0 when it
+	 * asked for none.
 	 *
 	 * @param array<string, mixed> $params the decoded `POST /api/v1/statuses` body
 	 *
 	 * @throws InvalidActionException the field is there but is not a time; a
-	 *                                client that meant to schedule and was
-	 *                                misunderstood must not be told its post
-	 *                                went out now
+	 *                                post meant to be scheduled must not go out
+	 *                                now
 	 */
 	public function requestedTime(array $params): int {
 		$raw = $params['scheduled_at'] ?? null;
@@ -130,12 +101,9 @@ class ScheduledStatusService {
 
 	/**
 	 * Stores a post to be published later, and answers with the entity the
-	 * client gets in place of a Status.
-	 *
-	 * Everything `createPost()` would refuse is refused here instead, while
-	 * there is still a client on the other end to tell: the row is claimed and
-	 * deleted before the post is attempted, so a refusal discovered by the cron
-	 * is a post the author never learns was lost.
+	 * client gets in place of a Status. What `createPost()` would refuse is
+	 * refused here, while a client can still be told: the cron deletes the row
+	 * before posting, so a later refusal is lost.
 	 *
 	 * @param array<string, mixed> $request the decoded request body
 	 *
@@ -229,13 +197,9 @@ class ScheduledStatusService {
 	}
 
 	/**
-	 * Moves a waiting post to another time.
-	 *
-	 * The row is read before it is written even though the update is itself
-	 * scoped to the owner: an update that matches nothing is indistinguishable
-	 * from one that changed a row, and a client that asked to move somebody
-	 * else's post — or one that no longer exists — has to hear 404 rather than
-	 * a success carrying a time nothing was set to.
+	 * Moves a waiting post to another time. The row is read first, as an
+	 * update matching nothing looks like success, and another account's post
+	 * or a missing one must answer 404.
 	 *
 	 * @param array<string, mixed> $request the decoded request body
 	 *
@@ -278,13 +242,9 @@ class ScheduledStatusService {
 	}
 
 	/**
-	 * Publishes everything that is due, and says how many went out.
-	 *
-	 * The posts of an account whose Nextcloud user is disabled are held: left
-	 * waiting, not published and not dropped, and published once the user is
-	 * enabled again if they are still due. Their account is left out of the
-	 * next read, so a disabled user with many waiting posts does not take the
-	 * place of everybody else's.
+	 * Publishes everything that is due, and says how many went out. Posts of a
+	 * disabled Nextcloud user wait until the user is enabled again, and their
+	 * account is left out of the next read so it does not crowd out others.
 	 *
 	 * @return int the posts published, which is what the job logs
 	 */
@@ -337,13 +297,10 @@ class ScheduledStatusService {
 
 			return true;
 		} catch (Throwable $e) {
-			// The row is already gone, so this post is not published and
-			// will not be retried. That is the deliberate side of the
-			// trade: the alternative — publish, then delete — federates the
-			// post twice whenever a worker dies in between, and a duplicate
-			// post cannot be taken back, while a failed one is at least
-			// here. At warning, because Nextcloud's default loglevel is 2
-			// and an author has no other way to find out.
+			// The row is already gone, so this post is not retried: publishing
+			// first and deleting after would federate it twice whenever a worker
+			// dies in between. Logged at warning, as Nextcloud's default loglevel
+			// is 2 and the author has no other way to find out.
 			$this->logger->warning(
 				'[ScheduledStatusService] could not publish scheduled status '
 				. $scheduled->getId() . ' of ' . $scheduled->getActorId()
@@ -382,15 +339,9 @@ class ScheduledStatusService {
 	}
 
 	/**
-	 * The visibility the post will be published with, resolved now rather than
-	 * when it goes out.
-	 *
-	 * `StatusApiController::visibilityOf()` decides the same thing for an immediate
-	 * post, and this has to agree with it. Resolving an absent visibility at
-	 * publishing time instead would read the account's default as it is then:
-	 * an author who schedules a public post and later switches their default to
-	 * followers-only would find the waiting post had quietly changed audience —
-	 * in the direction they did not choose either way.
+	 * The visibility the post will be published with, resolved now as
+	 * `StatusApiController::visibilityOf()` resolves it for an immediate post,
+	 * so a later change of the account's default does not change the audience.
 	 *
 	 * @throws InvalidActionException the visibility is not one this app posts
 	 *                                with; refused rather than silently turned
@@ -452,11 +403,9 @@ class ScheduledStatusService {
 	}
 
 	/**
-	 * Refusals `PostService::createPost()` would raise, raised here instead.
-	 *
-	 * The poll check is the one that cannot wait: a poll `createPost()` would
-	 * refuse is, from the cron, not answered at all — it is a post silently
-	 * dropped weeks after the author was told it was accepted.
+	 * Refusals `PostService::createPost()` would raise, raised here instead,
+	 * the poll check above all: from the cron a refused poll is a post
+	 * silently dropped.
 	 *
 	 * @param ?array $poll ['options' => string[], …] as the client sent it
 	 *
@@ -497,12 +446,8 @@ class ScheduledStatusService {
 
 	/**
 	 * The day an instant falls in, as the half-open window the count is taken
-	 * over.
-	 *
-	 * The server's own day, not UTC's: `ScheduledStatusesRequest` writes these
-	 * columns in the server's timezone, so a window built in UTC would select
-	 * the wrong rows on every instance that is not on it — and "that day" means
-	 * the author's day, not Greenwich's.
+	 * over, in the server's timezone, in which `ScheduledStatusesRequest`
+	 * writes the columns.
 	 *
 	 * @return int[] [from, until)
 	 */

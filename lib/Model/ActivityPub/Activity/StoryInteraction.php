@@ -13,28 +13,16 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * An answer to a story on the wire: `Story:Reaction` or `Story:Reply`.
- *
- * Neither type is in the Activity Streams vocabulary; both are Pixelfed's own,
- * down to the colon in the name, and they are what its inbox switches on. A
- * server that does not know them ignores them, which is the right outcome — an
- * answer to something it never received is nothing it can place.
- *
- * The activity is flat: no nested object, the text in `content` and the story
- * named by `inReplyTo`. Pixelfed checks that the activity's id and its actor
- * are on the same host, that the story and the recipient are its own, and that
- * the sender follows the recipient, and drops the activity in silence
- * otherwise — so all four are met on the way out as well as checked on the way
- * in.
+ * An answer to a story on the wire: Pixelfed's own `Story:Reaction` or
+ * `Story:Reply`. Flat: the text in `content` and the story named by
+ * `inReplyTo`. Pixelfed drops it silently unless the id and actor share a
+ * host, the story and recipient are its own, and the sender follows the
+ * recipient, so all four are met on the way out and checked on the way in.
  */
 abstract class StoryInteraction extends ACore implements JsonSerializable {
 	/**
-	 * The wire type, which every subclass replaces.
-	 *
-	 * Declared here because the constructor reads `static::TYPE`: without it
-	 * the base class refers to a constant it does not have, which happens to
-	 * work at runtime — nothing constructs the abstract — and is a hole in the
-	 * type all the same.
+	 * The wire type, which every subclass replaces; declared here because the
+	 * constructor reads `static::TYPE`.
 	 */
 	public const TYPE = '';
 

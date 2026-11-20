@@ -16,23 +16,15 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * The two tables of For you.
+ * The two tables of For you. `social_interest` is one row per (reader,
+ * hashtag): the score reading earned and when, whether the reader added it,
+ * and the rank they pinned it to. `social_interest_hide` is the posts they
+ * said "less like this" about, kept out of their feed while it could show
+ * them.
  *
- * `social_interest` is one row per (reader, hashtag): the score reading earned
- * it and when, whether the reader added it themselves, and the rank they
- * pinned it to. `social_interest_hide` is the posts they said "less like this"
- * about, kept out of their feed for as long as the feed could show them.
- *
- * Numbered after master's latest step rather than by the day it was written:
- * `Version1000Date20260924000001` was minted on two branches at once — it
- * creates the subscription tables on master and these two here — and a
- * version identifier is what `oc_migrations` records. An instance that ran
- * either one would have silently skipped the other for good.
- *
- * A step of its own rather than a paragraph of the squash, because the squash
- * is already recorded as run on every instance that exists: a table added to
- * it would appear on fresh installs and nowhere else. Guarded like the squash,
- * so running it twice asks for nothing the second time.
+ * Its own version id, not `Version1000Date20260924000001`, which another
+ * step already uses, and not part of the squash, which existing instances
+ * have recorded as run. Guarded, so a second run asks for nothing.
  */
 class Version1000Date20260925000020 extends SimpleMigrationStep {
 	/**

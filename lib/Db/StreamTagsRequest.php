@@ -23,12 +23,10 @@ class StreamTagsRequest extends StreamTagsRequestBuilder {
 	use TStringTools;
 
 	/**
-	 * A post can carry the same hashtag twice, and the unique index refuses the
-	 * second row. That used to be caught and logged, which was enough while
-	 * these rows were written on their own. They are now written inside the
-	 * transaction that stores the post, and PostgreSQL aborts a transaction on
-	 * any failed statement -- so the swallowed duplicate took the commit, and
-	 * the post, with it. The database is asked to skip the row instead.
+	 * A post can carry the same hashtag twice and the unique index refuses the
+	 * second row. The database is asked to skip it, as these rows are written
+	 * inside the post's transaction, which a failed statement aborts on
+	 * PostgreSQL.
 	 */
 	public function generateStreamTags(Stream $stream): void {
 		// a poll is a `Question`, which extends `Note` and carries hashtags
@@ -71,13 +69,10 @@ class StreamTagsRequest extends StreamTagsRequestBuilder {
 	}
 
 	/**
-	 * Gives each hashtag of a public post a row in `social_hashtag`, which is
-	 * what a hashtag search reads, as soon as the post is stored.
-	 *
-	 * The trends cron fills the counts; a row it has not reached yet has zero
-	 * in every window, which keeps it out of the trends and lets it be found.
-	 * Public posts only, the rule the cron counts by: a tag used only in a
-	 * followers-only post or a direct message is not public knowledge.
+	 * Gives each hashtag of a public post a row in `social_hashtag`, which
+	 * hashtag search reads, as soon as the post is stored. The trends cron
+	 * fills the counts; a new row has zero in every window. Public posts only,
+	 * as the cron counts.
 	 *
 	 * @param string[] $hashtags normalised, as `social_stream_tag` holds them
 	 */
@@ -97,14 +92,9 @@ class StreamTagsRequest extends StreamTagsRequestBuilder {
 	}
 
 	/**
-	 * The tag rows of an edited post, rewritten to what it now says.
-	 *
-	 * An edit is not an insert: a hashtag taken out of the text has a row
-	 * that nothing else will ever remove, so the post stays in that tag's
-	 * timeline for good, and a hashtag written into the text has no row at
-	 * all. Both are one statement group with the update itself — see
-	 * `StreamRequest::update()` — so the rows and the `hashtags` column can
-	 * never disagree.
+	 * The tag rows of an edited post, rewritten to what it now says, in the
+	 * same statement group as the update (`StreamRequest::update()`) so the
+	 * rows and the `hashtags` column never disagree.
 	 */
 	public function replaceStreamTags(Stream $stream): void {
 		if (!$stream instanceof Note) {

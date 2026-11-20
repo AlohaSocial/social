@@ -74,10 +74,9 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 			// id of its own, which the lookup below finds
 		}
 
-		// An attachment without a wire id receives a fresh generated id on
-		// every import. Find its existing row by URL and parent before any
-		// download, otherwise a retry creates orphaned bytes and points the
-		// post at a media id that does not exist.
+		// An attachment without a wire id gets a fresh id on every import, so
+		// its row is found by URL and parent before any download; otherwise a
+		// retry orphans bytes and points the post at a media id that does not exist.
 		$addressed = ($item->getUrl() !== '' && $item->getParentId() !== '');
 		if ($addressed) {
 			try {
@@ -85,12 +84,9 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 				if ($this->mayRewrite($item, $known, true)) {
 					$item->setId($known->getId());
 					$this->keepWhatOnlyTheRowKnows($item, $known);
-					// and written, as the id path above writes it. The
-					// sender may have added a description, a blurhash or
-					// a corrected type since the row was made; without
-					// this the merge lived in the object this request
-					// happened to hold and the row kept what it first
-					// heard, for good.
+					// written back, as the id path above does: the sender
+					// may have added a description, a blurhash or a
+					// corrected type since the row was made
 					$this->cacheDocumentsRequest->update($item);
 
 					return;
@@ -121,22 +117,11 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 	}
 
 	/**
-	 * Fetches the file a remote document names, and writes the row either way.
-	 *
-	 * The download used to happen with nothing around it, so any of the five
-	 * ways it can fail -- the origin answering 403, the host being down, the
-	 * file being larger than this instance stores, a type it does not store,
-	 * bytes that will not decode -- came out of `save()` and out of
-	 * `Stream::import()` with it. The whole post was then dropped: four
-	 * pictures and one CDN object briefly answering 503 meant the post was
-	 * never stored, and because no row was written there was nothing for the
-	 * caching cron to retry either. So a post survives its attachments now,
-	 * and the row is written with an empty `local_copy`, which is exactly what
-	 * `getNotCachedDocuments()` looks for.
-	 *
-	 * A failure that will fail again the same way is marked so the cron stops
-	 * offering it: `DocumentService::cacheRemoteDocument()` decides the same
-	 * thing for the rows it handles, and the two agree on purpose.
+	 * Fetches the file a remote document names, and writes the row either
+	 * way. A failed download must not drop the post: the row is written with
+	 * an empty `local_copy`, which `getNotCachedDocuments()` retries. A
+	 * failure that would fail again the same way is marked so the cron stops
+	 * offering it, as `DocumentService::cacheRemoteDocument()` decides.
 	 */
 	private function fetch(Document $item): void {
 		$mime = '';
@@ -154,11 +139,9 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 			return;
 		}
 
-		// The type a peer declared describes bytes this instance has now read
-		// for itself, and `/media/{uuid}` serves them from this origin: what it
-		// states they are has to be what they are. A peer that declares
-		// `text/html` over a file whose bytes sniff as a GIF used to have that
-		// served back, as a page, from here.
+		// `/media/{uuid}` serves these bytes from this origin, so the declared
+		// type must be what the bytes are: `text/html` over a GIF must not be
+		// served back as a page.
 		if ($mime !== '') {
 			$item->setMimeType($mime);
 			$item->setMediaType($mime);
@@ -185,22 +168,15 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 
 	/**
 	 * Whether a document that came in from elsewhere may be written over a
-	 * row already stored.
+	 * row already stored. An attachment keeps the id it arrived with, which
+	 * `save()` updates by, so a peer naming somebody else's row would rewrite
+	 * it.
 	 *
-	 * An attachment keeps the id it arrived with (see `Document::import()`),
-	 * and that id is the key `save()` updates by -- so without this, a peer
-	 * naming the id of somebody else's row as its attachment's rewrote that
-	 * row's url, parent, type and `public` flag: a local user's upload, or a
-	 * picture that belongs to a third server's post.
-	 *
-	 * So a row may only be rewritten by the post it hangs off -- a redelivery,
-	 * an `Update` -- or by the server whose id it carries, re-using its own
-	 * media on another of its posts, and in either case only through a request
-	 * whose checked origin is the server of the post the row hangs off. A row
-	 * of this instance's own is never
-	 * rewritten from outside: one a local account owns, one hanging off a
-	 * local post, or, by id, anything named on this host, which no peer has a
-	 * reason to name.
+	 * A row may only be rewritten by the post it hangs off (a redelivery, an
+	 * `Update`) or by the server whose id it carries, and only through a
+	 * request whose checked origin is the server of that post. A row of this
+	 * instance's own (owned by a local account, hanging off a local post, or
+	 * named on this host) is never rewritten from outside.
 	 *
 	 * @param bool $byUrl the row was found by url and parent rather than by
 	 *                    the incoming id, so it hangs off the same post and
@@ -267,20 +243,10 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 	}
 
 	/**
-	 * Moves onto an incoming document the two things that exist only in the
-	 * stored row: its key, and where its bytes were put.
-	 *
-	 * A document arriving off the wire a second time -- a redelivery, an
-	 * `Update` of the post it hangs off -- describes a file on somebody else's
-	 * server and knows nothing about the copy this instance made of it. Written
-	 * as it arrived, it *cleared* `local_copy` and `resized_copy`: the cached
-	 * file was orphaned and every post showing that picture broke until the
-	 * caching cron happened to fetch it again. The row is the only thing that
-	 * knows, so the row is asked.
-	 *
-	 * The key has the same shape of problem. Without it a re-imported
-	 * attachment went back to a client with `id: 0`, and a streamed one would
-	 * name row zero to the media proxy -- some other video, or nothing at all.
+	 * Moves onto an incoming document what only the stored row knows: its key
+	 * and where its bytes were put. A redelivered document knows nothing of
+	 * this instance's copy and would clear `local_copy` and `resized_copy`, and
+	 * without the key a client would get `id: 0`.
 	 */
 	private function keepWhatOnlyTheRowKnows(Document $item, Document $known): void {
 		$item->setNid($known->getNid());

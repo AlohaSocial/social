@@ -20,19 +20,12 @@ use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
 /**
- * Takes out of the posts stored before it the copies nothing reads back:
- *
- *  - in `cache`, the cached post a second time, decoded (`object`) beside
- *    the `content` it is decoded from — about half of every boost's row;
- *  - in a notification's `details`, the whole post or actor it is about,
- *    with its raw document, its `@context` and a public key — nearly all of
- *    the row.
- *
- * Rows written since are written without them; see `CacheItem::jsonSerialize()`
- * and `TDetails::setDetailItem()`. Queued by `Version1000Date20261012000100`
- * rather than run there, for the reason `StreamAuthorHosts` gives: one walk
- * of `social_stream` by `nid`, a bounded amount per run, re-queued with the
- * `nid` it got to until a page comes back short.
+ * Removes from older rows the copies nothing reads back: the decoded `object`
+ * beside `content` in `cache`, and the whole post or actor in a notification's
+ * `details`. Newer rows are written without them (`CacheItem::jsonSerialize()`,
+ * `TDetails::setDetailItem()`). Queued by `Version1000Date20261012000100`, it
+ * walks `social_stream` by `nid` a bounded amount per run and re-queues itself
+ * until a page comes back short.
  */
 class CompactStoredCopies extends QueuedJob {
 	/** Rows read per page; the columns read are the two large ones. */

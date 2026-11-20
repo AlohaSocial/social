@@ -10,31 +10,17 @@ declare(strict_types=1);
 namespace OCA\Social\Model;
 
 /**
- * Every key a `details` blob may hold.
- *
- * `social_stream.details` and `social_cache_actors.details` are JSON columns
- * that anything may write anything into, and for a long time everything did:
- * the keys were spelled as string literals at some seventy call sites, with a
- * handful promoted to constants on whichever class happened to need one. A
- * misspelling was not an error but a new key, silently holding the value the
- * reader was looking for under a name it would never look up, and there was no
- * place to read to find out what a row might contain.
- *
- * So this is the vocabulary, and the only place a details key is spelled. The
- * strings are what is already in the database and must not be changed: they
- * are stored, not derived, and every row written since 2018 uses them.
+ * Every key a `details` blob may hold, and the only place one is spelled, so
+ * a misspelling cannot silently become a new key. The strings are stored in
+ * the database and must not change.
  *
  * @see \OCA\Social\Traits\TDetails for the accessors
  */
 final class Details {
 	/**
-	 * Counts on a post.
-	 *
-	 * Each pair is "what this server can see" and "what the origin claimed":
-	 * a post's own server counts the whole network's likes, this one counts
-	 * only the likes it stores, and the larger of the two is what a reader is
-	 * shown. Keeping both is what stops a remote total from being overwritten
-	 * by a local count of one.
+	 * Counts on a post, each pair "what this server can see" and "what the
+	 * origin claimed"; the larger is shown, so a remote total is not
+	 * overwritten by a local count of one.
 	 */
 	public const REPLIES = 'replies';
 	public const BOOSTS = 'boosts';
@@ -83,28 +69,17 @@ final class Details {
 	public const POLICY_GRANTEES = 'policy_grantees';
 
 	/**
-	 * Whether this post may be quoted, and whether a quote was let through.
-	 *
-	 * `quote` and `quoteAuthorization` are properties of the stored wire object
-	 * and come back with it, but a refusal leaves no trace there: the quoting
-	 * post is somebody else's document and this instance may not rewrite it.
-	 * A refusal is local, derived data — exactly what this column is for.
+	 * Whether this post may be quoted, and whether a quote was let through. A
+	 * refusal leaves no trace in the quoting post's wire object, which is
+	 * somebody else's document, so it is kept here.
 	 */
 	public const QUOTE_STATE = 'quote_state';
 
 	/**
 	 * Whether replies to this post have to be approved before anybody sees
-	 * them, and — on a reply of ours — whether this one has been.
-	 *
-	 * PeerTube ≥ 6.2 moderates comments (FEP-5624): a video whose
-	 * `commentsPolicy` is 3 takes a reply in and shows it to nobody until a
-	 * human approves it, and says so by sending an `ApproveReply` back to the
-	 * server the reply came from. Without reading any of that, a reply written
-	 * here looked posted, sat in a queue on the other side, and either appeared
-	 * a day later or never — with nothing anywhere to say which.
-	 *
-	 * Neither fact is a property of the wire object this instance holds, and
-	 * the second one is about somebody else's document entirely.
+	 * them and, on a reply of ours, whether it has been: PeerTube ≥ 6.2
+	 * (FEP-5624) holds replies to a video whose `commentsPolicy` is 3 and
+	 * sends an `ApproveReply` once a human approves.
 	 */
 	public const REPLY_POLICY = 'reply_policy';
 	/** who may reply to one of this instance's own posts (`Stream::normalizeReplyRule()`) */
@@ -118,13 +93,9 @@ final class Details {
 	public const REPLY_STATE = 'reply_state';
 
 	/**
-	 * Everything a `Video` says that a `Note` has nowhere to put: the category,
-	 * the licence, the language, the chapters, the captions, the counters and
-	 * the author's support line.
-	 *
-	 * One block rather than a dozen columns, because it is local derived data
-	 * about somebody else's document — which is what this column is for — and
-	 * because a watch page wants all of it or none of it.
+	 * Everything a `Video` says that a `Note` has nowhere to put: category,
+	 * licence, language, chapters, captions, counters and the author's support
+	 * line, in one block, as a watch page wants all or none of it.
 	 */
 	public const VIDEO = 'video';
 
@@ -135,11 +106,9 @@ final class Details {
 	public const ARTICLE_TITLE = 'article_title';
 
 	/**
-	 * How many levels up the climb to this post's ancestors already is.
-	 *
-	 * `NoteInterface::save()` stops queueing the next parent once it reaches
-	 * `StreamQueueService::MAX_ANCESTOR_DEPTH`, so a thread of a thousand
-	 * messages costs eight fetches rather than a thousand.
+	 * How many levels up the climb to this post's ancestors already is:
+	 * `NoteInterface::save()` stops queueing parents at
+	 * `StreamQueueService::MAX_ANCESTOR_DEPTH`.
 	 */
 	public const ANCESTOR_DEPTH = 'ancestor_depth';
 
@@ -164,12 +133,10 @@ final class Details {
 	public const ACTOR = 'actor';
 
 	/**
-	 * Who a notification is about.
-	 *
-	 * `ACCOUNTS` is a list, appended to as more people like or boost the same
-	 * post, so one notification says "and four others". `ACCOUNT` is written
-	 * both as a single handle (a follow) and as a one-element list (a mention),
-	 * which is a wart the readers work around rather than a distinction.
+	 * Who a notification is about. `ACCOUNTS` is a list, appended to as more
+	 * people like or boost the same post. `ACCOUNT` is written both as a
+	 * single handle (a follow) and as a one-element list (a mention), which
+	 * readers handle both ways.
 	 */
 	public const ACCOUNT = 'account';
 	public const ACCOUNTS = 'accounts';
@@ -177,7 +144,7 @@ final class Details {
 	/** Where a notification points. */
 	public const URL = 'url';
 
-	/** What a moderation or story notification says, and about what. */
+	/** What a moderation or short notification says, and about what. */
 	public const ACTION = 'action';
 	public const TEXT = 'text';
 	public const CONTENT = 'content';

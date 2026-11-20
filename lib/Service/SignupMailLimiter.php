@@ -12,24 +12,17 @@ namespace OCA\Social\Service;
 use OCP\IConfig;
 
 /**
- * How often the public registration form may write to one email address.
+ * How often the public registration form may write to one email address,
+ * counted by recipient, as the form's own limits count the sender's IP:
  *
- * The form mails whatever address is typed into it: a confirmation link, or
- * a notice that the address or the username is taken. The per-address limits
- * of the form count the sender's IP address, so somebody with many of them
- * could fill a stranger's inbox. This counts the recipient instead:
+ * - a notice ("You already have an account", "Choose another username") goes
+ *   to one address at most once per NOTICE_COOLDOWN, and a confirmation link
+ *   starts that cooldown too;
+ * - all form mails together reach one address at most DAILY_CAP times in 24
+ *   hours.
  *
- * - a notice ("You already have an account", "Choose another username")
- *   goes to one address at most once per NOTICE_COOLDOWN, and a confirmation
- *   link starts that cooldown too, so a second registration with the same
- *   address is treated alike whether or not the first one made a pending
- *   registration;
- * - all form mails together reach one address at most DAILY_CAP times in any
- *   24 hours.
- *
- * The recipient is a keyed hash of the normalised address. The claims live
- * in the table of `DurableCache` whatever memcache there is, so neither an
- * instance without memcache nor an evicted cache entry forgets them.
+ * The recipient is a keyed hash of the normalised address, kept in
+ * `DurableCache`'s table so no memcache setup forgets it.
  */
 class SignupMailLimiter {
 	public const CACHE_NAMESPACE = 'social.signup-mail';

@@ -18,34 +18,20 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Starter packs: a named handful of accounts worth following.
+ * Starter packs: a named handful of accounts worth following, for a new
+ * account with no follow graph for `SuggestionService` to use.
  *
- * What this exists for is the one question a new account has that no algorithm
- * here can answer. `SuggestionService` works off the follow graph, and on day
- * one there is none -- it falls back to whoever posted recently, which is a list
- * of strangers sorted by luck. A pack is a human answer to a human question.
- *
- * **The packs shipped below are an editorial choice, and a small one on
- * purpose.** They are the official accounts of the projects this app federates
- * with, which is the one set that is defensible without this file becoming a
- * directory nobody agreed to be in: they are organisations rather than people,
- * they are unambiguously the accounts they claim to be, and none of them was
- * added because somebody here liked them. Anything broader is a judgement an
- * instance should make for itself, which is what the config below is for.
- *
- * An administrator replaces or extends them with the `starter_packs` app value,
- * a JSON array of `{slug, name, description, handles}`. Three states, and they
- * are deliberately distinguishable:
+ * The shipped packs are the official accounts of the projects this app
+ * federates with: organisations, unambiguously who they claim to be. An
+ * administrator replaces or extends them with the `starter_packs` app value, a
+ * JSON array of `{slug, name, description, handles}`:
  *
  * - unset: the shipped packs;
- * - `[]`: no packs at all, which is the right answer for an instance that would
- *   rather suggest nobody;
- * - a list: the shipped packs, with any entry whose slug matches one of them
- *   replacing it, plus the rest added -- so a shipped pack can be edited rather
- *   than only added to.
+ * - `[]`: no packs at all;
+ * - a list: the shipped packs, each replaced by an entry with its slug, plus
+ *   the rest.
  *
- * Nothing here writes a row. The accounts are not this instance's to own and the
- * handles are the only durable reference to them.
+ * Nothing here writes a row; the handles are the only durable reference.
  */
 class StarterPackService {
 	/** The config key an administrator overrides the shipped packs with. */
@@ -94,12 +80,8 @@ class StarterPackService {
 	}
 
 	/**
-	 * Every pack, without resolving anybody.
-	 *
-	 * The index is drawn from names and counts alone. Resolving a handle means a
-	 * WebFinger lookup and an actor fetch against somebody else's server, and
-	 * doing that for every handle of every pack to draw a list of pack *names*
-	 * would make this page wait on the internet for nothing.
+	 * Every pack, without resolving anybody: the index needs only names and
+	 * counts, and resolving would mean a WebFinger lookup per handle.
 	 *
 	 * @return StarterPack[]
 	 */
@@ -127,10 +109,8 @@ class StarterPackService {
 	private function chosenPacks(): ?array {
 		$configured = $this->configured();
 
-		// An explicit empty list means "suggest nobody", which is a real answer
-		// for an instance that would rather not. `null` is "there is nothing
-		// usable here" -- unset, or malformed -- and falls back to what ships,
-		// because a typo must not be the reason a page is empty.
+		// An explicit empty list means "suggest nobody". `null` is unset or
+		// malformed and falls back to what ships, so a typo cannot empty the page.
 		if ($configured === []) {
 			return null;
 		}
@@ -235,14 +215,10 @@ class StarterPackService {
 	}
 
 	/**
-	 * One pack, with its handles resolved to the profiles held here.
-	 *
-	 * Nothing is fetched to draw it: a handle not held here yet is reported
-	 * in `unresolved` and queued to be fetched, so the next look finds it --
-	 * as is one that will not resolve at all, because the server is down or
-	 * the account moved or was deleted. A pack that quietly shrinks looks
-	 * like one somebody wrote badly. An account this instance's moderation
-	 * keeps out is not offered.
+	 * One pack, with its handles resolved to the profiles held here. Nothing
+	 * is fetched: a handle not held yet, or one that will not resolve, is
+	 * reported in `unresolved` and queued, so a pack never quietly shrinks.
+	 * Accounts this instance's moderation keeps out are not offered.
 	 *
 	 * @throws ItemNotFoundException when there is no such pack
 	 */
@@ -267,13 +243,9 @@ class StarterPackService {
 	}
 
 	/**
-	 * Follows everyone in a pack that can be reached.
-	 *
-	 * One that cannot be reached is skipped rather than failing the lot: the
-	 * point of the button is that somebody does not have to follow six accounts
-	 * by hand, and refusing all six because one host is down would defeat it.
-	 * A member not held here yet is fetched now, once, and followed as the
-	 * actor it is, on whichever network.
+	 * Follows everyone in a pack that can be reached; one that cannot is
+	 * skipped rather than failing the lot. A member not held here yet is
+	 * fetched now, once, and followed on whichever network.
 	 *
 	 * @return string[] the handles that were followed
 	 *
@@ -347,18 +319,10 @@ class StarterPackService {
 	}
 
 	/**
-	 * What the administrator configured, as three distinguishable answers.
-	 *
-	 * `null` is "nothing usable here" -- unset, or malformed. Malformed is a log
-	 * line and never an exception: this is read on a page somebody opened, and a
-	 * typo in a config value must not be the reason a screen is blank with no
-	 * explanation, so it falls back to what ships rather than to nothing.
-	 *
-	 * `[]` is an administrator saying "suggest nobody", which is a different
-	 * statement and is honoured.
-	 *
-	 * A JSON *object* decodes to an array too, so the caller checks each entry
-	 * as well -- `is_array()` here says nothing about what is inside.
+	 * What the administrator configured: `null` for unset or malformed
+	 * (malformed is logged, never thrown, and falls back to what ships), `[]`
+	 * for "suggest nobody". A JSON object decodes to an array too, so the
+	 * caller checks each entry.
 	 *
 	 * @return array<int, mixed>|null
 	 */
@@ -424,11 +388,8 @@ class StarterPackService {
 	}
 
 	/**
-	 * `user@host`, with any leading `@` taken off.
-	 *
-	 * Shaped rather than trusted: these strings reach a WebFinger lookup, and
-	 * one that is not a handle should be refused here rather than turned into a
-	 * request to whatever it happens to look like.
+	 * `user@host`, with any leading `@` taken off. Shaped rather than trusted,
+	 * as these strings reach a WebFinger lookup.
 	 */
 	private function handle(string $handle): string {
 		$handle = ltrim(trim($handle), '@');

@@ -14,13 +14,9 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
- * An account the people you follow follow, and how many of them do.
- *
- * Mastodon's Suggestion entity has a `source` and nothing else, which cannot
- * say "four of the people you follow follow this account" — and that sentence
- * is the entire reason to believe a graph suggestion. So this carries the
- * count and the handles behind it, and a reader can judge the suggestion
- * instead of trusting it.
+ * An account the people you follow follow, and how many of them do. Mastodon's
+ * Suggestion has only a `source`, so this carries the count and the handles
+ * behind it, for the reader to judge the suggestion.
  */
 class GraphSuggestion implements JsonSerializable {
 	/**

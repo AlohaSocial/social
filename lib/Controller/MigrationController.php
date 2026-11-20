@@ -43,28 +43,16 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Taking your account's data out, and putting it back.
+ * Taking an account's data out and putting it back: the buttons of the
+ * Migration section of Settings.
  *
- * These are the Migration page's buttons: the archive out and back in, the
- * lists of accounts another network exported as CSV — follows, blocks, mutes
- * and lists — and the same four written back out one file at a time.
- *
- * The exports, the imports and moving in are client-API routes, so a mobile
- * client reaches them with the token it signed in with. The whole archive
- * asks for the broad `read`: it is everything the account ever wrote, more
- * than any one granular scope covers. One list as CSV asks for the scope that
- * reads that list, and everything that writes into the account — an import,
- * a move in — asks for the broad `write`.
- *
- * The rest stay the web page's, behind the Nextcloud session: moving away and
- * undoing it (Nextcloud's password confirmation guards them, and a token has
- * no password to confirm), the move-in callback the browser lands on, the
- * aliases and the switch wizard's helpers.
- *
- * The work is `MigrationArchiveService`, which drives the same
- * `SocialMigrator` that Nextcloud's whole-account export uses — so what
- * travels, and what deliberately does not (the private key, above all), is
- * decided in one place for both.
+ * Exports, imports and moving in are client-API routes, so a mobile client can
+ * use them: the whole archive needs the broad `read`, one list as CSV the scope
+ * that reads it, and anything writing into the account the broad `write`.
+ * Moving away and undoing it, the move-in callback, the aliases and the switch
+ * wizard's helpers need the Nextcloud session, as moving away asks for the
+ * password. The work is `MigrationArchiveService`, which uses the same
+ * `SocialMigrator` as Nextcloud's account export.
  */
 class MigrationController extends ClientApiController {
 	/** A refused upload says which limit it hit rather than "failed". */
@@ -115,17 +103,11 @@ class MigrationController extends ClientApiController {
 				throw new \RuntimeException('the finished archive could not be read back');
 			}
 
-			// Read into memory and handed over rather than streamed from disk:
-			// the temp file is cleaned up at the end of the request, and a
-			// stream response outlives that.
-			//
-			// `DataDisplayResponse` with the disposition written out, rather
-			// than `DataDownloadResponse`, which builds that header through
-			// Symfony's HeaderUtils — a class the server has and this app does
-			// not depend on, so the download would work on a server and be
-			// unreachable from a test. The name is already reduced to
-			// `[A-Za-z0-9._-]` by `filename()`, so there is nothing in it that
-			// could break out of the quotes.
+			// Read into memory because the temp file is removed at the end of the
+			// request, which a stream response outlives. `DataDisplayResponse` instead
+			// of `DataDownloadResponse`, which needs Symfony's HeaderUtils that this
+			// app does not depend on; `filename()` reduces the name to
+			// `[A-Za-z0-9._-]`, so it cannot break out of the quotes.
 			$response = new DataDisplayResponse($contents, Http::STATUS_OK, [
 				'Content-Type' => 'application/zip',
 			]);
@@ -143,11 +125,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * Reads an archive from the export button back into this account.
-	 *
-	 * Additive: it restores the profile, the follows, the blocks, the mutes
-	 * and the marks, and reports what the outbox holds rather than re-posting
-	 * it — see `SocialMigrator::import()`. Nothing here deletes anything.
+	 * Reads an archive from the export button back into this account. Additive:
+	 * nothing is deleted and the outbox is reported, not re-posted (see
+	 * `SocialMigrator::import()`).
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -184,19 +164,11 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * Follows from another server's export.
-	 *
-	 * Mastodon, Pixelfed, GoToSocial and Akkoma all export the people you
-	 * follow as `following_accounts.csv`, and this reads that file — which is
-	 * also the one in the archive the export button produces. The follows are
-	 * the only part of an account that cannot be carried in a file: a follow
-	 * is a relationship two servers have to agree on, so each one is requested
-	 * again from here.
-	 *
-	 * Queued, like every import below: each row is a WebFinger lookup and a
-	 * delivery, and a few hundred of them outlive a web request. The answer
-	 * is the import as queued; `GET /api/v1/migration/imports` is where it
-	 * gets to.
+	 * Follows from another server's `following_accounts.csv` (Mastodon,
+	 * Pixelfed, GoToSocial, Akkoma, or this app's own archive); each follow is
+	 * requested again from here. Queued, like every import below, as each row
+	 * is a WebFinger lookup and a delivery; `GET /api/v1/migration/imports`
+	 * reports the progress.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -208,10 +180,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * The old account, by handle, and what its server lets this one read off
-	 * it — so the person sees who they are about to copy before anything
-	 * happens, and is told when the follows or the posts are hidden and the
-	 * file is the way instead.
+	 * The old account, by handle, and what its server lets this one read, so
+	 * the person sees who they are copying and whether the follows or posts
+	 * are hidden and the file is the way instead.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -233,10 +204,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * Moving here from the old account, from nothing but its handle: the
-	 * alias is set now, and following who it follows and bringing its public
-	 * posts over is queued. The followers themselves are the old server's
-	 * `Move`, which the page points at once this has run.
+	 * Moving here from the old account by its handle: the alias is set now,
+	 * and following its follows and bringing its public posts over is queued.
+	 * The followers come with the old server's `Move`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -309,7 +279,7 @@ class MigrationController extends ClientApiController {
 
 	/**
 	 * Where the old server sends the person back with the code. The outcome
-	 * is kept for the Migration page, which this lands on either way; the
+	 * is kept for the Migration settings, which this lands on either way; the
 	 * code is spent here and never shown.
 	 */
 	#[NoAdminRequired]
@@ -349,14 +319,11 @@ class MigrationController extends ClientApiController {
 	 * Moves this account away: every follower's server is told to follow the
 	 * new account instead, and this one is marked as moved.
 	 *
-	 * The half that cannot be taken back, so three things stand in front of
-	 * it: Nextcloud's own password confirmation (the attribute), the handle
-	 * typed back as `confirm`, and the new account already naming this one in
-	 * its `alsoKnownAs`, which `MigrationService::move()` checks. Thirty days
-	 * between moves, as Mastodon keeps. `bluesky` says what becomes of the
-	 * account's Bluesky identity (BlueskyAfterMoveOut), switched off unless
-	 * the person says otherwise. Until now this was
-	 * `occ social:account:move`, and on a hosted Nextcloud a support ticket.
+	 * Irreversible, so it needs the password confirmation, the handle typed
+	 * back as `confirm`, and the new account naming this one in its
+	 * `alsoKnownAs` (`MigrationService::move()`); thirty days between moves, as
+	 * in Mastodon. `bluesky` says what becomes of the Bluesky identity
+	 * (BlueskyAfterMoveOut), switched off by default.
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
@@ -418,7 +385,7 @@ class MigrationController extends ClientApiController {
 
 	/**
 	 * The imports this account asked for, newest first, with where each one
-	 * got to: the list the Migration page polls while one runs.
+	 * got to: the list the Migration settings poll while one runs.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -450,21 +417,13 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * The accounts an export blocks — Mastodon's `blocked_accounts.csv`.
-	 *
-	 * A separate route from the follows one rather than a `kind` on it: the
-	 * two do different things (one asks another server for a relationship, one
-	 * records a decision of this account's own), they carry different rate
-	 * limits, and a client that got the kind wrong would otherwise follow the
-	 * people it meant to block.
+	 * The accounts an export blocks, Mastodon's `blocked_accounts.csv`. A route
+	 * of its own, so a client that got the kind wrong cannot follow the people
+	 * it meant to block.
 	 */
 	/**
-	 * The accounts an Instagram archive says you followed, as handles to try.
-	 *
-	 * Instagram exports no fediverse names — it has none — but Threads
-	 * federates and a Threads handle is the Instagram one at `threads.net`, so
-	 * the list is worth a lookup each. Nothing is followed here and nothing is
-	 * stored: this answers who might be there.
+	 * The accounts an Instagram archive says you followed, as Threads handles
+	 * to try (`threads.net`). Nothing is followed or stored.
 	 */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 10, period: 3600)]
@@ -478,13 +437,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * Which of those accounts exist, one batch at a time.
-	 *
-	 * Each name is a webfinger against another server, so the batch is bounded
-	 * by `SwitchService::PROBE_BATCH` and the answer says how many were
-	 * *checked* — the client's cursor moves on that rather than on how many
-	 * were found, or a list where nobody is there would be asked about for
-	 * ever.
+	 * Which of those accounts exist, one batch (`SwitchService::PROBE_BATCH`)
+	 * at a time. The answer counts the names checked, which the client's cursor
+	 * moves on, so a list where nobody is found still ends.
 	 *
 	 * @param string[] $handles the names to look up
 	 */
@@ -505,10 +460,8 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * The handle and address to leave behind on the network being left.
-	 *
-	 * Built from the actor rather than from the Nextcloud user id, which is
-	 * not the same thing for any account whose fediverse name differs from it.
+	 * The handle and address to leave behind on the network being left, from
+	 * the actor, whose name can differ from the Nextcloud user id.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/announcement')]
@@ -567,11 +520,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * The lists an export names — Mastodon's `lists.csv`.
-	 *
-	 * Run after the follows: a list here holds accounts this one follows, as
-	 * Mastodon's do, and an account not followed yet is counted as skipped
-	 * rather than followed on the quiet by a button that says "lists".
+	 * The lists an export names, Mastodon's `lists.csv`. Run after the follows:
+	 * a list holds followed accounts only, and an account not followed yet is
+	 * counted as skipped, not followed.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -583,13 +534,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * One of this account's lists of accounts as a CSV, to carry on elsewhere.
-	 *
-	 * `{kind}` is `following`, `followers`, `blocks`, `mutes`, `lists`,
-	 * `bookmarks` or `domain_blocks`, and
-	 * each is written in the shape the network it is named after writes it —
-	 * the archive from the Export button holds the same files, and this is for
-	 * the person who wants one of them without the whole thing.
+	 * One of this account's lists as a CSV, in the shape the network it is
+	 * named after writes it. `{kind}` is `following`, `followers`, `blocks`,
+	 * `mutes`, `lists`, `bookmarks` or `domain_blocks`.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -615,10 +562,8 @@ class MigrationController extends ClientApiController {
 		try {
 			[$name, $csv] = $this->migrationService->exportCsv($userId, $kind);
 
-			// `text/csv` with the name spelled out, the way export() hands the
-			// archive over. The name is one of the seven the service chooses
-			// from and never anything the caller sent, so there is nothing in
-			// it that could break out of the quotes.
+			// The name is one the service chooses, never the caller's, so it cannot
+			// break out of the quotes.
 			$response = new DataDisplayResponse($csv, Http::STATUS_OK, [
 				'Content-Type' => 'text/csv; charset=utf-8',
 			]);
@@ -631,10 +576,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * Keeps the uploaded file and queues the import of it, answering the
-	 * import as queued (**202**). One import of a kind at a time per account:
-	 * a second press while the first runs is a **409**, not a second run of
-	 * the same file.
+	 * Keeps the uploaded file and queues its import, answering **202**. One
+	 * import of a kind at a time per account: a second while the first runs
+	 * is a **409**.
 	 *
 	 * @param array<string, mixed> $options what the run should know
 	 */
@@ -673,11 +617,10 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * The one upload still read inside the request — the Instagram archive
-	 * the switch wizard mines for names — differs by the one call it makes:
-	 * an uploaded file, read, handed to the service, and whatever it counted
-	 * answered back. A file that could not be read is the client's problem and says so;
-	 * anything the service throws is logged and answered `server-error`.
+	 * Reads an upload inside the request (the Instagram archive the switch
+	 * wizard mines for names) and answers what the service counted. An
+	 * unreadable file is the client's error; anything the service throws is
+	 * logged and answered `server-error`.
 	 *
 	 * @param callable(string, string): array $import
 	 */
@@ -705,18 +648,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * Brings one video over, by its address.
-	 *
-	 * The single-video half of the same job the archive import does: PeerTube
-	 * has this and people use it, because an export is a heavy tool for one
-	 * video and somebody who has lost their account on the old server cannot
-	 * take one at all while the video is still there to be fetched.
-	 *
-	 * Ten an hour. One call fetches a document and a video file from another
-	 * server, and a limit sized for an API call would make this a way to have
-	 * this instance pull gigabytes from anywhere. See
-	 * `PostImportService::importVideo()` for what it refuses and what it
-	 * cannot check.
+	 * Brings one video over by its address, as PeerTube does. Ten an hour, as
+	 * each call has this instance fetch a video file from anywhere; see
+	 * `PostImportService::importVideo()` for what it refuses.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -746,11 +680,8 @@ class MigrationController extends ClientApiController {
 
 	/**
 	 * Brings an account's own posts over from the server it wrote them on.
-	 *
-	 * Queued: the run reads an archive, writes every post in it and may fetch
-	 * a picture for each, which is hours for a long history and no business
-	 * of a web request. Nothing it writes is federated; see
-	 * `PostImportService`.
+	 * Queued, as it may fetch a photo per post; nothing it writes is federated
+	 * (see `PostImportService`).
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -758,10 +689,8 @@ class MigrationController extends ClientApiController {
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/posts')]
 	public function importPosts(): DataResponse {
-		// the pictures are fetched from the old server unless the person says
-		// not to: it is their own archive and their own old account, but it is
-		// a request that server can see, so it is a decision rather than a
-		// default nobody was told about
+		// the photos are fetched from the old server unless the person says not
+		// to, as that server can see the requests
 		$fetchMedia = !in_array(
 			strtolower(trim((string)$this->request->getParam('fetch_media', '1'))),
 			['0', 'false', 'no'],
@@ -772,18 +701,9 @@ class MigrationController extends ClientApiController {
 	}
 
 	/**
-	 * The accounts this one also answers to — its `alsoKnownAs`.
-	 *
-	 * Setting an alias on your **own** account is the half of moving here that
-	 * federates nothing: it is a statement this server makes about an account
-	 * it owns, and it is what the *old* server demands before it will accept a
-	 * `Move` pointing at this one. Until now it was `occ social:account:alias`,
-	 * so arriving from Pixelfed needed an administrator for a field the person
-	 * could have filled in themselves.
-	 *
-	 * The dangerous direction is still not a button. Moving your followers
-	 * *away* sends a `Move` to every server that knows you and cannot be taken
-	 * back; that stays `occ social:account:move`.
+	 * The accounts this one also answers to, its `alsoKnownAs`: what the old
+	 * server demands before it accepts a `Move` to this one. Setting it
+	 * federates nothing.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/aliases')]
@@ -845,16 +765,15 @@ class MigrationController extends ClientApiController {
 		return null;
 	}
 
-	/** A refusal this controller knows by itself, as the Migration page reads it. */
+	/** A refusal this controller knows by itself, as the Migration settings read it. */
 	private static function refusal(string $error, string $code, int $status): DataResponse {
 		return new DataResponse(['error' => $error, 'code' => $code], $status);
 	}
 
 	/**
-	 * What a route answers when the work threw: a refusal of the app's own
-	 * with its code and `$status`, and anything else logged and answered
-	 * `server-error` with a fixed sentence — its message is the server's, not
-	 * the person's, and may name what only the logs should.
+	 * What a route answers when the work threw: the app's own refusal with its
+	 * code and `$status`, anything else logged and answered `server-error`, as
+	 * its message may name what only the logs should.
 	 *
 	 * @param array<string, mixed> $context for the log
 	 */

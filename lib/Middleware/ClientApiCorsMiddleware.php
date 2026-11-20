@@ -21,27 +21,15 @@ use OCP\IRequest;
 use Throwable;
 
 /**
- * Lets a browser client on another origin read the client API.
+ * Lets a browser client on another origin (Elk, Phanpy) read the client API:
+ * `Access-Control-Allow-Origin: *`, as Mastodon answers, on the `/api/` routes
+ * of the three API bases, the OAuth app registration, token, revocation and
+ * userinfo, and NodeInfo, errors included.
  *
- * Elk, Phanpy and the like run in a page of their own origin and call
- * `/api/*` with a bearer token, which a browser only lets them read when the
- * answer says `Access-Control-Allow-Origin`. Mastodon answers `*` there and on
- * the OAuth token endpoints, and so does this, for the routes that take a
- * bearer token: the `/api/` routes of the three API bases, the OAuth app
- * registration, token, revocation and userinfo, and NodeInfo. Errors are
- * answered with it too, so a client can read why it was refused.
- *
- * Never with credentials: a browser does not expose a response that carried
- * cookies to an origin answered `*`, and does not send a non-simple
- * cross-origin request with cookies after a preflight that did not allow
- * them. A request that does arrive with the session cookie is held to the
- * CSRF check the API bases already apply, which another origin cannot pass.
- * The web app's own session routes outside the API bases get no header.
- *
- * Nextcloud's `#[CORS]` does not fit: it reflects the request's origin, adds
- * no preflight answer and no exposed headers, and logs a signed-in session out
- * when a request carries no CSRF token, which a user opening an API address
- * in a tab would do.
+ * Never with credentials; a request that does carry the session cookie is held
+ * to the CSRF check, which another origin cannot pass. Nextcloud's `#[CORS]`
+ * does not fit: it reflects the origin, answers no preflight, and logs a
+ * session out on a request without a CSRF token.
  */
 class ClientApiCorsMiddleware extends Middleware {
 	public const ALLOW_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';

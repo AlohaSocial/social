@@ -13,13 +13,9 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCP\EventDispatcher\Event;
 
 /**
- * A post written on this instance was edited by its author.
- *
- * The third of `PostPublishedEvent` and `PostDeletedEvent`: anything that
- * copied a post somewhere else has to show the new text, not the old one.
- *
- * Dispatched after the edit is stored and its revision recorded, before the
- * `Update` is delivered.
+ * A post written on this instance was edited by its author, so anything that
+ * copied it elsewhere can show the new text. Dispatched after the edit and its
+ * revision are stored, before the `Update` is delivered.
  */
 class PostEditedEvent extends Event {
 	public function __construct(

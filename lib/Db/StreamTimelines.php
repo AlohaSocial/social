@@ -30,20 +30,11 @@ use OCA\Social\Tools\Nid;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * Every timeline `StreamRequest` can be asked for, and nothing else.
- *
- * A timeline is answered in two steps — choose the nids a page is made of,
- * then read those posts — because the choosing is where the filters and the
- * indexes are and the reading is the same query every time. Each `getTimeline*`
- * pairs with a `*TimelineNids`, and the private helpers between them are the
- * filters those share.
- *
- * It is a trait rather than a class of its own: every one of these reaches
- * into `StreamRequest` for the query builders, the viewer and half its
- * injected requests, so a separate object would be one holding a reference
- * back to the object it came from. What this separates is the file, which is
- * the thing that was actually too big to read — a third of `StreamRequest` was
- * this one subject.
+ * Every timeline `StreamRequest` can be asked for. A timeline is answered in
+ * two steps, choosing the nids of a page and then reading those posts: each
+ * `getTimeline*` pairs with a `*TimelineNids`, and the private helpers are
+ * the filters they share. A trait, as all of it reaches into
+ * `StreamRequest`'s query builders, viewer and requests.
  */
 trait StreamTimelines {
 	/**
@@ -96,19 +87,10 @@ trait StreamTimelines {
 	 *  * Followed accounts,
 	 *  * Public posts carrying a hashtag the viewer follows
 	 *
-	 * Two pages of ids, not one query. A post belongs here because of its
-	 * author *or* because of its tags, and written as one query that is an OR
-	 * across two different joins: no index can serve both sides of it, so the
-	 * database falls back to reading the stream table. Each half on its own is
-	 * a query over one indexed column, which is the shape the rest of this
-	 * method depends on.
-	 *
-	 * Merging them here is exact rather than approximate. Both halves are
-	 * ordered and cut to the same limit, so anything that belongs in the top
-	 * `limit` of the union is in the top `limit` of the half it came from —
-	 * there can be at most `limit - 1` ids above it in the union, hence at
-	 * most that many in its own half. Sorting the two and cutting is therefore
-	 * the same page one query would have produced.
+	 * Two pages of ids merged, not one query: an OR across the two joins can
+	 * use no index. The merge is exact, as both halves are ordered and cut to
+	 * the same limit, so the top `limit` of the union is within the top
+	 * `limit` of each half.
 	 *
 	 * @param ProbeOptions $options
 	 *
@@ -143,25 +125,11 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Fetches further windows when filtering emptied the one that was read.
-	 *
-	 * The fast page query reads three times the limit and the per-viewer
-	 * filters are applied to the rows afterwards, which covers a page that
-	 * loses a few posts to a block. It does not cover a page that loses *all*
-	 * of them: a muted account that has just posted sixty times, or a blocked
-	 * instance that dominates the window, and the page comes back empty while
-	 * older posts the reader can see sit further down. Empty is how both
-	 * clients read "there is nothing more" — the web app sets `allLoaded` on a
-	 * page of zero and the `Link: rel="next"` header is not sent — so the
-	 * timeline ended, in the middle.
-	 *
-	 * So a short page reads on, from below the oldest id this page has already
-	 * *considered* rather than from the oldest it kept: everything between the
-	 * two was looked at and dropped. Bounded, because a reader who has muted
-	 * everything they follow must not turn one request into a walk of the
-	 * table; four more windows is twelve times the limit, and a page still
-	 * short after that is one where the join path would be reading the same
-	 * rows to no better end.
+	 * Fetches further windows when filtering emptied the one that was read: a
+	 * muted account that posted sixty times would otherwise give an empty
+	 * page, which clients read as the end of the timeline. Reads on from below
+	 * the oldest id considered, not the oldest kept, for at most four more
+	 * windows (twelve times the limit).
 	 *
 	 * @param Stream[] $posts what the first window came back with
 	 * @param string[] $window the ids that window was chosen from
@@ -225,11 +193,8 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Narrows a timeline to one kind of post, when the caller asked for one.
-	 *
-	 * The one seam every timeline query goes through, so that a question a
-	 * client may put to any of them is answered the same way by all of them.
-	 * Each filter below does nothing unless it was asked for.
+	 * Narrows a timeline to one kind of post when the caller asked for one:
+	 * the seam every timeline query goes through, so all of them answer alike.
 	 */
 	private function filterKind(SocialQueryBuilder $qb, ProbeOptions $options): void {
 		$this->filterMedia($qb, $options);
@@ -237,12 +202,8 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Applies `only_news` when the caller asked for it.
-	 *
-	 * Independent of the media filters rather than a narrowing of them: an
-	 * article with no picture is news, and a holiday photograph with a link in
-	 * the caption is both. A client that sends `only_media` and `only_news`
-	 * gets the posts that are both, which is what the two words together say.
+	 * Applies `only_news` when asked, independently of the media filters: a
+	 * client sending `only_media` and `only_news` gets the posts that are both.
 	 */
 	private function filterNews(SocialQueryBuilder $qb, ProbeOptions $options): void {
 		if ($options->isOnlyNews()) {
@@ -251,25 +212,11 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Applies `only_media`, `only_video` and `only_short` when the caller
-	 * asked for them.
-	 *
-	 * The first has been parsed off the request since the hashtag timeline
-	 * gained it and was never applied to a query, so `only_media=true` quietly
-	 * returned everything. Every timeline that can carry media runs it through
-	 * here, so the dedicated photo timeline and a client asking Mastodon's
-	 * question of any other list get the same answer.
-	 *
-	 * `only_video` is this app's own and narrower; the video timeline sends
-	 * it. Both may be sent at once -- the narrower one then decides, since
-	 * every video is media.
-	 *
-	 * `media_type` is narrower still and names the kind, which is what a
-	 * profile's Photos and Videos tabs ask; `media_type=video` is the same
-	 * question `only_video` asks and is answered by the same predicate.
-	 *
-	 * `only_short` is the narrowest, a stored column the write fills in
-	 * (`Stream::shortKindOf()`), and decides whatever else was sent.
+	 * Applies `only_media`, `only_video`, `media_type` and `only_short` when
+	 * asked; each is narrower than the one before and decides when sent
+	 * together. `only_video` is this app's own; `media_type` names the kind,
+	 * as a profile's Photos and Videos tabs ask (`video` is `only_video`);
+	 * `only_short` is a stored column the write fills (`Stream::shortKindOf()`).
 	 */
 	private function filterMedia(SocialQueryBuilder $qb, ProbeOptions $options): void {
 		// the narrowest: every short is a video, and every video is media
@@ -294,11 +241,8 @@ trait StreamTimelines {
 			return;
 		}
 
-		// any other kind narrows `only_media` to attachments of that type,
-		// which is what a profile's Photos tab asks. It implies `only_media`:
-		// a post with no attachments cannot be one carrying a picture, and
-		// saying so here means a caller that sends only `media_type` gets what
-		// they asked for rather than everything.
+		// any other kind narrows to attachments of that type, as a profile's
+		// Photos tab asks, and implies `only_media`
 		if ($options->getMediaType() !== '') {
 			$qb->limitToMedia();
 			$qb->limitToMediaType($options->getMediaType());
@@ -342,11 +286,9 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The old page query: correct everywhere, slow at scale.
-	 *
-	 * Kept as the fallback for an instance whose backfill has not finished and
-	 * for a viewer the fast path cannot serve. See
-	 * `homeTimelineNidsFromRecipients()` for what is wrong with it.
+	 * The join page query: correct everywhere, slow at scale. The fallback for
+	 * an instance whose backfill has not finished and for a viewer the fast
+	 * path cannot serve (see `homeTimelineNidsFromRecipients()`).
 	 *
 	 * @param string[]|null $within the posts to choose among, or null for all
 	 *
@@ -391,41 +333,19 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The home page, read off the recipient rows' own sort key.
+	 * The home page, read off the recipient rows' own sort key: the `nid` on
+	 * `social_stream_dest` lets `(actor_id, type, nid)` answer the page from
+	 * the index, where the join query sorts every post of everyone followed.
 	 *
-	 * This is the query the home timeline is supposed to be, and the one the
-	 * `nid` column on `social_stream_dest` exists for. The old shape — kept
-	 * below as the fallback — drives from the viewer's follows, fetches
-	 * **every recipient row every followed account ever produced**, joins each
-	 * to `social_stream` to find out when it was published, and sorts the lot
-	 * in a temporary table to keep twenty. `EXPLAIN` named it exactly:
-	 * `Using temporary; Using filesort`. One page load therefore costs
-	 * Σ(all posts of everyone you follow), and a client asks for one every
-	 * thirty seconds.
+	 * The read is bounded by the collections, at most five hundred named
+	 * (`FollowsRequest::limitToHomeCollections()`), and by a window of
+	 * publication time, the last day before the cursor, widened when short
+	 * (`homeRecipientNids()`). The per-viewer filters (blocks, mutes, hidden
+	 * boosts) are applied to the page afterwards in `streamsByNids()`, so the
+	 * page is read slightly wider than the limit.
 	 *
-	 * Here the sort key is *on the row being filtered*, so
-	 * `(actor_id, type, nid)` answers the page from the index, without a row
-	 * lookup. It is not a merge that stops at the limit: across several
-	 * collections the database reads every entry the predicate admits and
-	 * sorts them, so the predicate is what bounds the read. Two things bound
-	 * it. The collections come from `FollowsRequest::limitToHomeCollections()`,
-	 * which names up to five hundred of them and leaves a longer list to the
-	 * database. And the page is read within a window of publication time —
-	 * the nid is the publication time with a random suffix — first the last
-	 * day before the cursor, widened only when that comes back short; see
-	 * `homeRecipientNids()`.
-	 *
-	 * The filters that used to ride along in that query — blocks, mutes,
-	 * hidden boosts, the media narrowing — are **not** applied here. They are
-	 * per-viewer predicates over joined tables, and putting them back would
-	 * put the join back. They are applied to the twenty rows instead, in
-	 * `streamsByNids()`, where they cost twenty lookups rather than three
-	 * million. `withoutHidden()` reads a page slightly larger than the limit
-	 * so that a page which loses rows to a block still fills.
-	 *
-	 * Returns **null** where this path cannot be used — no viewer, nothing
-	 * followed, or an instance whose backfill has not finished — and the
-	 * caller falls back to the old query, which is slower and always correct.
+	 * Returns **null** where this path cannot be used (no viewer, nothing
+	 * followed, backfill unfinished) and the caller uses the join query.
 	 *
 	 * @return string[]|null
 	 */
@@ -434,17 +354,10 @@ trait StreamTimelines {
 			return null;
 		}
 
-		// A media or news narrowing is a question about the **post**, and this
-		// query reads only the recipient rows — which carry no such column.
-		// Asking it anyway would read the newest rows and then throw most of
-		// them away: on an instance where a small fraction of posts carry a
-		// picture, a Photos or Videos timeline would come back empty while the
-		// pictures sat a few thousand rows further down. News is the same
-		// shape of question and the same trap, and a rarer kind of post than a
-		// photograph at that. So the narrowed timelines take the join path,
-		// which has the predicate *in* the query and finds them wherever they
-		// are. They are also read far less often than the home timeline, which
-		// is what makes that the right trade rather than a concession.
+		// A media or news narrowing asks about the post, which the recipient
+		// rows cannot answer: reading the newest rows and discarding most would
+		// leave a Photos or Videos timeline empty. The narrowed timelines take
+		// the join path, and are read far less often than the home timeline.
 		if ($this->narrowedToAKind($options)) {
 			return null;
 		}
@@ -460,9 +373,9 @@ trait StreamTimelines {
 			$options->setInverted(true);
 		}
 		$ascending = $options->isInverted();
-		// read wider than the page: the filters this query no longer carries
-		// are applied to the rows afterwards, and a page that lost three posts
-		// to a block should still come back with twenty
+		// read wider than the page: the filters are applied to the rows
+		// afterwards, and a page that lost three posts to a block should still
+		// come back full
 		$wanted = min(self::HOME_OVERREAD_MAX, $options->getLimit() * self::HOME_OVERREAD);
 
 		$nids = [];
@@ -479,13 +392,10 @@ trait StreamTimelines {
 			$nids = $this->homeRecipientNids($qb, $wanted, $ascending, $anchor, $options->getSince());
 		}
 
-		// An account's own posts reach its own timeline through the recipient
-		// row addressed to its own follower collection, which it is not a
-		// follower of. A query of its own rather than one more name in the
-		// list: past the cap the list is a sub-select, and `OR` beside it keeps
-		// MariaDB from turning it into a semi-join — it scanned every recipient
-		// row instead. One collection is one index range, read in order and
-		// stopping at the limit, so it needs no window either.
+		// An account's own posts reach its timeline through its own follower
+		// collection, which it does not follow. A query of its own, as an `OR`
+		// beside the sub-select past the cap keeps MariaDB from a semi-join;
+		// one collection is one index range in order, so it needs no window.
 		if ($own !== '') {
 			$mine = $this->getQueryBuilder();
 			$this->selectHomeRecipients(
@@ -511,21 +421,15 @@ trait StreamTimelines {
 		SocialQueryBuilder $qb, string $collections, ProbeOptions $options, int $wanted,
 	): void {
 		$expr = $qb->expr();
-		// Not `DISTINCT`. A post reaches this set through its author's
-		// follower collection and no other, so a duplicate needs a post
-		// addressed to two collections the viewer follows — which this app's
-		// writer never produces and a remote one could. It would cost nothing
-		// if it did: the hydration below selects `WHERE nid IN (…)`, which
-		// returns one row per nid however many times the id was listed. The
-		// `DISTINCT` bought that guarantee a second time and paid for it with
-		// a temporary table over every index entry the page scanned — 27.7 ms
-		// against 20.8 on the seeded instance.
+		// Not `DISTINCT`: a duplicate needs a post addressed to two followed
+		// collections, the hydration's `WHERE nid IN (…)` returns one row per
+		// nid anyway, and `DISTINCT` costs a temporary table.
 		$qb->select('sd.nid')
 			->from(self::TABLE_STREAM_DEST, 'sd')
 			->where($collections)
 			->andWhere($expr->eq('sd.type', $qb->createNamedParameter('recipient')))
-			// a row written before the column existed carries 0 and would sort
-			// to the bottom for ever; it is excluded rather than shown last
+			// a row the backfill has not reached carries 0 and would sort to the
+			// bottom for ever; it is excluded rather than shown last
 			->andWhere($expr->gt('sd.nid', $qb->createNamedParameter('0')));
 
 		$this->boundNidPage($qb, 'sd', $options, $wanted);
@@ -588,16 +492,10 @@ trait StreamTimelines {
 
 	/**
 	 * Which of `$nids` are on the viewer's home timeline: the question an
-	 * edited post asks of each streaming subscriber.
-	 *
-	 * Driven from the posts rather than from the follows: each id is a
-	 * primary-key lookup and its recipient rows are a prefix of the
-	 * `(stream_id, actor_id, type)` unique index, kept to the collections the
-	 * page reads (the followed ones and the viewer's own follower
-	 * collection). The page's per-viewer filters, as `streamsByNids()`
-	 * applies them, are in the same query, and the followed tags are asked
-	 * about the same ids. Before the recipient nids are filled the join query
-	 * is asked instead.
+	 * edited post asks of each streaming subscriber. Driven from the posts,
+	 * each a primary-key lookup with its recipient rows a prefix of the unique
+	 * index, with the page's per-viewer filters and the followed tags in the
+	 * same query. Before the recipient nids are filled the join query is asked.
 	 *
 	 * @param string[] $nids
 	 *
@@ -641,17 +539,10 @@ trait StreamTimelines {
 
 	/**
 	 * Runs a home recipient query within a window of publication time, widened
-	 * until the page is full.
-	 *
-	 * A nid is `published_time * NID_LIMIT + random`, so "published within
-	 * the last day before the cursor" is a range on the column the query is
-	 * ordered by, and it turns the sort over everything the viewer follows
-	 * into a sort over that day. The answer is exact rather than approximate:
-	 * every row outside a window is further from the cursor than every row
-	 * inside it, so a window that yields `$wanted` rows yields the same rows
-	 * the unbounded query would. Only a short page is read again, wider, and
-	 * the last attempt has no bound at all. The query is built once and each
-	 * attempt rebinds the one parameter.
+	 * until the page is full. A nid is `published_time * NID_LIMIT + random`,
+	 * so the window is a range on the order column, and exact: every row
+	 * outside it is further from the cursor than every row inside. The last
+	 * attempt has no bound; each attempt rebinds the one parameter.
 	 *
 	 * @param SocialQueryBuilder $qb ordered on `sd.nid` and limited to `$wanted`
 	 * @param bool $ascending whether the page reads forward from its cursor
@@ -711,15 +602,10 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Pages a timeline on the recipient row's nid rather than the post's.
-	 *
-	 * For a query whose recipient join, aliased `sd`, fixes the collection and
-	 * the type; see `SocialLimitsQueryBuilder::paginate()`. The two nids are
-	 * the same number — the row is written with its post's — except on an
-	 * instance whose backfill has not finished, where a row may still carry 0
-	 * and would sort to the bottom for ever, so until the flag says so the
-	 * page stays on the post's. A zero is excluded rather than shown last, as
-	 * on the home timeline.
+	 * Pages a timeline on the recipient row's nid rather than the post's, for
+	 * a query whose recipient join `sd` fixes the collection and the type (see
+	 * `SocialLimitsQueryBuilder::paginate()`). Until the backfill flag is set a
+	 * row may carry 0, so the page stays on the post's nid.
 	 */
 	private function paginateOnRecipient(SocialQueryBuilder $qb, ProbeOptions $options): void {
 		if (!$this->recipientNidsAreFilled()) {
@@ -733,14 +619,9 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Whether the recipient rows carry their post's sort key yet.
-	 *
-	 * A flag written by the migration when its backfill finishes, not a
-	 * question asked of the table. The obvious check — "is there a row with a
-	 * zero nid" — has no index that can answer it, so it is a full scan of the
-	 * largest table this app has: **427 ms on 800,000 rows**, on every request.
-	 * A guard that costs more than the query it guards is worse than no guard,
-	 * and this one was measured rather than assumed.
+	 * Whether the recipient rows carry their post's sort key yet: a flag the
+	 * migration writes when its backfill finishes, as asking the table for a
+	 * zero nid is a full scan of the largest table.
 	 */
 	private function recipientNidsAreFilled(): bool {
 		$this->recipientNidsFilled ??= $this->configService->getAppValueBool(
@@ -752,16 +633,9 @@ trait StreamTimelines {
 
 	/**
 	 * The page of the home timeline that the viewer's followed hashtags put
-	 * there: public posts carrying one of them.
-	 *
-	 * Public only — a followed hashtag is not a relationship with the author,
-	 * so it may not reach past what any stranger can read, and not even every
-	 * post a stranger can read: an unlisted post is kept off the tag timelines,
-	 * as on Mastodon. Every other filter
-	 * the follows half applies holds here too: notifications are not posts,
-	 * the viewer's own boosts are not shown back to them, blocked and muted
-	 * accounts stay hidden, and a silenced account is out of the public square
-	 * this half reads from, exactly as it is out of the hashtag timeline.
+	 * there: public posts carrying one of them, not unlisted ones, as on
+	 * Mastodon. The follows half's other filters hold too, and a silenced
+	 * account is left out as on the hashtag timeline.
 	 *
 	 * @param string[]|null $within the posts to choose among, or null for all
 	 *
@@ -791,11 +665,9 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Whether the second half is worth asking for at all.
-	 *
-	 * One count answered out of the `(actor_id_prim, hashtag)` index without
-	 * reading a row, and it is the whole cost of this feature to the accounts
-	 * that follow no tag — which is all of them until they say otherwise.
+	 * Whether the second half is worth asking for: one count answered from
+	 * the `(actor_id_prim, hashtag)` index, the whole cost for accounts that
+	 * follow no tag.
 	 */
 	private function followsAnyTag(): bool {
 		return $this->viewer !== null
@@ -849,11 +721,8 @@ trait StreamTimelines {
 		$qb->leftJoinObjectStatus();
 
 		if ($homeFilters) {
-			// what the fast page query deliberately left out. Every one of
-			// these is a per-viewer predicate over a joined table, and in the
-			// page query it forced the join that made the page cost
-			// Σ(everything the viewer follows). Here the driving set is the
-			// page itself.
+			// the per-viewer filters the fast page query leaves out, applied to
+			// the page itself rather than joined across everything followed
 			$qb->filterType(SocialAppNotification::TYPE);
 			$this->filterKind($qb, $options);
 			$qb->filterHiddenBoosts();
@@ -912,13 +781,9 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The direct timeline's page, each message reduced to its place in a
-	 * conversation: its id, its nid, the post it answers and its author,
-	 * newest first as `getTimeline()` answers them.
-	 *
-	 * The same page, chosen by the same query, without reading the posts
-	 * themselves: what a count over the page needs, and nothing a page that
-	 * is drawn needs.
+	 * The direct timeline's page, each message reduced to its id, nid, the
+	 * post it answers and its author, newest first as `getTimeline()` answers;
+	 * for counting without reading the posts.
 	 *
 	 * @return list<array{id: string, nid: string, inReplyTo: string, attributedTo: string}>
 	 */
@@ -997,27 +862,16 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The page of one account's posts the viewer may read.
+	 * The page of one account's posts the viewer may read: everything for the
+	 * account itself; for anybody else, what `getStreamById()` would hand them
+	 * (public, unlisted, followers-only once the follow is accepted, and what
+	 * was addressed to them).
 	 *
-	 * For the account reading its own profile, everything it wrote. For anybody
-	 * else, exactly what `getStreamById()` would hand them post by post: the
-	 * public and unlisted ones, the followers-only ones once the follow is
-	 * accepted, and what was addressed to them. Forcing the public collection
-	 * here instead meant a follower read a followers-only post in their home
-	 * timeline while the author's profile denied it existed.
-	 *
-	 * A post names several recipients — the public collection, its author, the
-	 * author's followers collection — and each is a row, so any page with a
-	 * reader behind it can match one post more than once and has to be
-	 * `DISTINCT`. The anonymous page matches only the public row and does not.
-	 *
-	 * With `withBoosts` the account's boosts are on the page too, by when they
-	 * were made, under the same rule: a boost is addressed like a post. Whether
-	 * the reader may see the post a boost repeats is decided where the rows
-	 * are read, which joins it only when they may.
-	 *
-	 * `excludeReplies` and `tagged` narrow the page itself, as Mastodon does:
-	 * no replies to other accounts, and only the posts carrying the hashtag.
+	 * A post has a recipient row per recipient, so a page with a reader is
+	 * `DISTINCT`; the anonymous one matches only the public row. With
+	 * `withBoosts` the account's boosts are on the page by when they were
+	 * made, under the same rule. `excludeReplies` and `tagged` narrow the
+	 * page as in Mastodon.
 	 *
 	 * @return string[]
 	 */
@@ -1064,27 +918,15 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The viewer's own marks — liked or bookmarked — newest first.
-	 *
-	 * Two queries, as the home timeline does it, and for the same reason. Asked
-	 * as one, the database drives from the action rows, joins the whole post and
-	 * its author to each, and only then sorts the result by post id to take a
-	 * page of fifteen: EXPLAIN says "Using temporary; Using filesort" over the
-	 * joined rows. Somebody with ten thousand likes therefore pays for ten
-	 * thousand wide rows to see the newest fifteen. Deciding the page over one
-	 * indexed column first leaves the wide read with exactly the rows it returns.
+	 * The viewer's own marks, liked or bookmarked, newest first. Two queries,
+	 * as for the home timeline: deciding the page over one indexed column
+	 * first spares the wide read of every marked post.
 	 *
 	 * A mark does not make a post readable: the page is limited to what the
-	 * viewer may read now, as `getStreamById()` would answer it, so a
-	 * followers-only post marked while following its author is not served
-	 * once the follow has ended. That join can match a post once per
-	 * recipient row, hence `DISTINCT`.
-	 *
-	 * Ordered and cut on the mark's own id (`liked_nid`, `bookmarked_nid`:
-	 * when it was set), not the post's, as Mastodon orders its favourites: a
-	 * post from last month marked today is first, and `max_id`/`min_id` name
-	 * a mark. `social_sa_aln`/`social_sa_abn` serve the filter and the order
-	 * as one descending range.
+	 * viewer may read now (hence `DISTINCT`). Ordered and cut on the mark's id
+	 * (`liked_nid`, `bookmarked_nid`), as Mastodon orders favourites, so
+	 * `max_id`/`min_id` name a mark; `social_sa_aln`/`social_sa_abn` serve the
+	 * filter and the order as one descending range.
 	 *
 	 * @param string $mark the action column that has to be set
 	 *
@@ -1161,22 +1003,15 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The hashtag page in two steps, as the public page is decided: the tag's
-	 * newest posts first, read off the tag's index and the stream's key alone
-	 * (`hashtagWindowNids()`), then the visibility filters applied to those
-	 * few ids by their key (`hashtagTimelineNids()` with `$among`), with
-	 * further windows when the filters empty one.
+	 * The hashtag page in two steps: the tag's newest posts off the tag's
+	 * index (`hashtagWindowNids()`), then the visibility filters applied to
+	 * those ids (`hashtagTimelineNids()` with `$among`), reading further
+	 * windows when filtering empties one. As one join, MySQL could start from
+	 * every recipient row of the instance instead of the tag.
 	 *
-	 * Asked as one join, the plan was the optimizer's to pick, and with the
-	 * viewer's recipient condition an `OR` no index answers, MySQL 8.4 could
-	 * start from `social_stream_dest` — every recipient row of the instance —
-	 * rather than from the tag: 770 ms against 20 for the same page on
-	 * 100,000 posts. Neither step here leaves it that choice.
-	 *
-	 * Returns **null** for the join query where the windows ran out before
-	 * the page filled while more of the tag's posts remained, as
-	 * `narrowedNidsByKind()` does: a tag whose posts the viewer mostly may
-	 * not read is one an empty page would wrongly call finished.
+	 * Returns **null** for the join query when the windows run out before the
+	 * page is full while more of the tag's posts remain, as
+	 * `narrowedNidsByKind()` does.
 	 *
 	 * @return string[]|null
 	 */
@@ -1234,22 +1069,17 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The page of posts carrying a hashtag that the viewer may read.
-	 *
-	 * The tag join and the viewer's recipient join can each match a post more
-	 * than once, so the page is `DISTINCT` -- over one decimal identifier, which
-	 * is what this is for: it used to be over the whole post.
+	 * The page of posts carrying a hashtag that the viewer may read, `DISTINCT`
+	 * over the nid, as the tag and recipient joins can each match a post twice.
 	 *
 	 * @param string[]|null $among the window to choose from, by key; null for the whole tag
 	 *
 	 * @return string[]
 	 */
 	protected function hashtagTimelineNids(ProbeOptions $options, ?array $among = null): array {
-		// the archived filter in the form that admits a row the backfill has
-		// not reached, filled or not: with the bare `archived = 0` MySQL walks
-		// `social_stream` in nid order looking for the tag, which on a large
-		// table and a rare tag is a read of the whole table, where with the
-		// `OR` it starts from the tag's index. `QueryPlanTest` pins the plan.
+		// the archived filter in the form that admits a row the backfill has not
+		// reached: with a bare `archived = 0` MySQL walks `social_stream` in nid
+		// order instead of starting from the tag's index. `QueryPlanTest` pins it.
 		$page = $this->getStreamNidsSelectSql(true, true);
 		$this->hideArchived($page, false, true);
 		$page->limitToStatusTypes();
@@ -1289,13 +1119,9 @@ trait StreamTimelines {
 			return [];
 		}
 
-		// two queries, as the home and public timelines do it and for the same
-		// reason. Asked as one, the database carries two full stream column
-		// sets, two cached-actor sets and two cached-document sets — several
-		// kilobytes a row, `source` and `details` among them — through the
-		// `SELECT DISTINCT` the recipient join forces, to choose twenty rows.
-		// Every client polls this on a timer, so it is the read where that
-		// costs the most.
+		// two queries, as for the home and public timelines: as one, the wide
+		// stream, actor and document columns (`source`, `details`) go through the
+		// `SELECT DISTINCT` the recipient join forces, on a read every client polls.
 		// the recipient join fixes the viewer and the type, so it is one row
 		$page = $this->getStreamNidsSelectSql(false);
 		$actor = $page->getViewer();
@@ -1320,16 +1146,11 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The page `getTimelineNotifications()` chooses for the same options, as
-	 * what the notification policy asks of each row and nothing else: who sent
-	 * it, when that account was made, and whether it is a mention in a direct
-	 * message. Newest first.
-	 *
-	 * For the count of held senders the sidebar draws on every push and poll,
-	 * which looks back over hundreds of notifications: read whole, each one
-	 * is a post, its author and its object, dressed for a client, to draw one
-	 * number. The sender is the joined cached actor, as `parseStreamSelectSql()`
-	 * reads it, so a row the full read gives no actor has none here either.
+	 * The page `getTimelineNotifications()` chooses for the same options,
+	 * reduced to what the notification policy asks of each row: the sender,
+	 * when that account was made, and whether it is a private mention. Newest
+	 * first. For the count of held senders, read on every push and poll; the
+	 * sender is the joined cached actor, as `parseStreamSelectSql()` reads it.
 	 *
 	 * @return list<array{nid: string, subType: string, sender: string, creation: int, privateMention: bool}>
 	 */
@@ -1388,11 +1209,8 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * What makes a row one of this viewer's notifications.
-	 *
-	 * Shared by the page-selection query and nothing else — but kept apart
-	 * from the hydration so that the two cannot drift into disagreeing about
-	 * which notifications exist.
+	 * What makes a row one of this viewer's notifications, kept apart from the
+	 * hydration so the two cannot disagree about which notifications exist.
 	 *
 	 * @param string[] $wanted the notification subtypes asked for
 	 * @param bool $select whether the joined author's columns are wanted
@@ -1423,18 +1241,10 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Drops the notifications a muted thread would produce.
-	 *
-	 * Mastodon's conversation mute is about being *told*: the thread's posts
-	 * stay on every timeline and only the notifications stop, which is what
-	 * somebody muting a thread they are in has asked for.
-	 *
-	 * The mute is stored against the thread's root, so what is excluded here
-	 * is every post of those threads — resolved on the way in rather than
-	 * joined, because "the thread this post belongs to" is a walk up
-	 * `in_reply_to` and there is no portable way to ask a database for it. An
-	 * account mutes few threads and a thread is bounded, so this is a small
-	 * `NOT IN` and it is skipped entirely by everyone who has muted nothing.
+	 * Drops the notifications a muted thread would produce; its posts stay on
+	 * every timeline, as with Mastodon's conversation mute. The threads' posts
+	 * are resolved beforehand, as walking `in_reply_to` has no portable SQL,
+	 * and the `NOT IN` is skipped for an account that muted nothing.
 	 */
 	private function filterMutedConversations(SocialQueryBuilder $qb, string $actorId): void {
 		$roots = $this->conversationsRequest->getMutedRoots($actorId);
@@ -1480,12 +1290,8 @@ trait StreamTimelines {
 	 * @deprecated
 	 */
 	/**
-	 * How many notifications the viewer has that they have not seen yet.
-	 *
-	 * Counted rather than fetched: the badge needs a number, and a viewer who
-	 * has been away for a week should not cost a page of hydrated streams to
-	 * find that out. The cap keeps the answer cheap — past it the badge says
-	 * "lots", which is all anyone reads from a two-digit number anyway.
+	 * How many notifications the viewer has not seen yet, counted rather than
+	 * fetched, and capped: past the cap the badge says "lots".
 	 */
 	/**
 	 * The newest post or notification stored anywhere, as a nid, or 0: one
@@ -1508,17 +1314,9 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The newest thing this account has been sent, as a nid, or 0.
-	 *
-	 * An entity tag for a timeline. A client polls the home page and the unread
-	 * count every thirty seconds, and the answer is usually the same one it
-	 * already has; the newest id a viewer can see changes exactly when that
-	 * stops being true, so it is what an `ETag` should be built from.
-	 *
-	 * One index-only probe: the recipient rows are ordered by `nid` within a
-	 * collection, so the newest is the first row of a descending range. The
-	 * whole point is that it must cost far less than the page it stands in for
-	 * — a validator that cost the same as the answer would save nothing.
+	 * The newest thing this account has been sent, as a nid, or 0: the entity
+	 * tag of a timeline clients poll every thirty seconds. One index-only
+	 * probe, the first row of a descending range per collection.
 	 *
 	 * @param string[] $collections the prims to look in
 	 */
@@ -1547,7 +1345,7 @@ trait StreamTimelines {
 	}
 
 	public function countNotificationsSince(Person $actor, int|string $sinceNid, int $cap = 99): int {
-		// the rows that make up the badge, as the notifications page chooses
+		// the rows that make up the badge, as the Activities page chooses
 		// them, projected to one column and cut at the cap
 		$page = $this->getStreamNidsSelectSql();
 		$page->setViewer($actor);
@@ -1610,22 +1408,12 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * Keeps a silenced instance out of the timeline this query is building.
-	 *
-	 * The middle tier of a domain block: an account there stays readable by
-	 * whoever follows it and stops appearing in the public and global
-	 * timelines, which is the whole difference between a nuisance and a menace.
-	 *
-	 * Matched on `author_host`, the host of the author's id: the instance
-	 * itself by `NOT IN`, and everything under it by a suffix — a block reads
-	 * subdomains the same way, and anything less would last as long as it
-	 * takes to point a wildcard record at the same host. A suffix is not
-	 * indexed either, but it is a comparison against a short column rather
-	 * than a scan of the id's text, and the list is an admin-written handful.
-	 *
-	 * A row `Cron\StreamAuthorHosts` has not reached yet has no host, and is
-	 * matched by its id instead, as a prefix — `https://evil.test/` and
-	 * `%.evil.test/` — until the job says every row has one.
+	 * Keeps a silenced instance out of the timeline this query is building:
+	 * its accounts stay readable by their followers but leave the public and
+	 * global timelines. Matched on `author_host`, the instance by `NOT IN` and
+	 * its subdomains by suffix; a row `Cron\StreamAuthorHosts` has not reached
+	 * yet is matched by its id as a prefix (`https://evil.test/`,
+	 * `%.evil.test/`).
 	 */
 	private function filterSilencedInstances(SocialQueryBuilder $qb): void {
 		$hosts = DomainBlocksRequestBuilder::hostsToMatch(
@@ -1709,25 +1497,13 @@ trait StreamTimelines {
 
 	/**
 	 * A page of a Photos, Videos, Shorts or News timeline, chosen off the
-	 * post's own kind index and filtered to the timeline by `$filter`.
+	 * post's `(kind, nid)` index (`kindWindowNids()`) and filtered to the
+	 * timeline by `$filter`, reading on as the home timeline does when
+	 * filtering empties a window.
 	 *
-	 * The recipient rows cannot answer a question about the post, and the
-	 * join query that could was read in full by MySQL at a hundred thousand
-	 * rows: the public Photos page scanned `social_stream` and sorted it, and
-	 * the home one drove from every recipient row of everything the viewer
-	 * follows into a temporary table. Each kind has an index of
-	 * `(kind, nid)`, so the newest posts of one kind are one index range in
-	 * nid order (`kindWindowNids()`); which of them belong on this timeline
-	 * is then asked of those few dozen rows, and the page reads on, as the
-	 * home timeline does, when that empties it.
-	 *
-	 * Returns **null** for the join query where this cannot answer: the
-	 * index cannot be trusted yet, or the windows ran out before the page
-	 * filled while there were still posts of the kind further down — a
-	 * narrowing whose posts are mostly not on this timeline (photographs on
-	 * the home page of somebody who follows two accounts) is one the join
-	 * query reads as fast as it reads anything, and one an empty page would
-	 * wrongly call finished.
+	 * Returns **null** for the join query when the index cannot be trusted
+	 * yet, or the windows ran out while posts of the kind remain further
+	 * down, which an empty page would wrongly call finished.
 	 *
 	 * @param callable(string[], ProbeOptions): string[] $filter the ids of a
 	 *                                                           window that belong on the timeline, in order
@@ -1816,13 +1592,8 @@ trait StreamTimelines {
 
 	/**
 	 * The ids of `$window` that belong on the public timeline, in its order:
-	 * the filters the page query left out, applied as one projection of one
-	 * column over a few dozen rows read by their key.
-	 *
-	 * Apart from the read of the rows because the read is wide — eighty
-	 * columns, the author's beside them — and the window is three times the
-	 * page: filtering first reads that width for the twenty rows that are
-	 * shown rather than the sixty that were considered.
+	 * the filters the page query left out, as one projection over a few dozen
+	 * rows read by key, before the wide read of the twenty that are shown.
 	 *
 	 * @param string[] $window
 	 * @param bool $byKind whether the window came off a kind index, so that
@@ -1894,38 +1665,16 @@ trait StreamTimelines {
 	}
 
 	/**
-	 * The ids of a page of the public timeline, off the recipient rows alone.
+	 * The ids of a page of the public timeline, off the recipient rows alone:
+	 * the public collection, type `recipient`, subtype `to`, newest first, one
+	 * range of `social_sd_atn` with no join or `OR` for the planner to get
+	 * wrong (as a join, MySQL may read `social_stream` in full and sort). The
+	 * subtype is sifted per entry. The join's filters are applied in
+	 * `publicNidsOf()`, reading wider and on, as the home timeline does.
 	 *
-	 * The joined query has no selective predicate: on a public instance the
-	 * public collection's recipient rows are nearly every post, and the
-	 * type, archived and silenced filters each keep nearly every row. What
-	 * made it cheap was one plan — walk `social_sd_atn` newest first, look
-	 * each post up by its key, stop at the limit — and nothing in the query
-	 * obliged the planner to choose it: the other plan reads `social_stream`
-	 * in full, probes the recipient rows and sorts, and which one the
-	 * optimizer picks follows its row estimates for the table in front of it.
-	 * On a copy of an instance it picked the second, at a hundred times the
-	 * cost, for the same SQL.
-	 *
-	 * So the page is read from one table with one possible plan: the public
-	 * collection, type `recipient`, subtype `to`, newest nid first, which
-	 * `social_sd_atn` answers as one index range in that order, with no join
-	 * to reorder and no `OR` to estimate; the subtype is sifted per entry
-	 * (an index carrying it as well was tried and made MySQL read the home
-	 * page as a skip scan). The filters the join carried are applied to the
-	 * rows it chose, in `publicNidsOf()`, where each is a lookup against a
-	 * few dozen ids; the page is read wider than asked and read on when
-	 * filtering empties it, as the home timeline is.
-	 *
-	 * Returns **null** where the page cannot be decided here and the join
-	 * query answers: an instance whose backfill has not finished, and
-	 * `local=` / `remote=`, a question about the post's origin the recipient
-	 * rows cannot answer. A `local` flag on the recipient row would answer
-	 * it, at the price of a column on the largest table this app has and a
-	 * backfill over every row of it, for the two narrowings of the public
-	 * timeline a client asks for least. A media or news narrowing is a
-	 * question about the post too, and is answered off the post's own index
-	 * instead: see `narrowedNidsByKind()`.
+	 * Returns **null** for the join query where the backfill has not
+	 * finished, and for `local=` / `remote=`, which the recipient rows cannot
+	 * answer. Media and news narrowings use `narrowedNidsByKind()`.
 	 *
 	 * @return string[]|null
 	 */

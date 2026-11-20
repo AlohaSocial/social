@@ -14,12 +14,8 @@ use DateTimeZone;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * Where a reader stopped watching.
- *
- * Two reads: where this person got to in this video, asked once when a page
- * opens, and what they were in the middle of, which is the "continue watching"
- * row. One row per (post, viewer), so it is a bookmark rather than a history of
- * every play.
+ * Where a reader stopped watching: one row per (post, viewer), read for the
+ * position in one video and for the "continue watching" row.
  *
  * @package OCA\Social\Db
  */
@@ -74,11 +70,8 @@ class WatchRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * What this person was in the middle of, newest first.
-	 *
-	 * Neither the ones they barely started nor the ones they finished: a
-	 * "continue watching" row that offers back a video somebody watched to the
-	 * end is a row nobody presses twice.
+	 * What this person was in the middle of, newest first: neither the videos
+	 * they barely started nor the ones they finished.
 	 *
 	 * @return string[] the prims of the posts
 	 */
