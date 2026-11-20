@@ -3,12 +3,8 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!--
-		The things a post's own page can say that a card in a timeline should
-		not: when exactly, to whom, in what language, whether it has been
-		changed since, and where it came from. Quiet on purpose — this is the
-		fine print under something somebody came to read, not part of it.
-	-->
+	<!-- the fine print a post's own page shows and a timeline card does not:
+	     when, to whom, in what language, edits and where it came from -->
 	<p class="post-details">
 		<time class="post-details__item" :datetime="status.created_at">{{ published }}</time>
 		<span class="post-details__item">{{ visibilityText }}</span>
@@ -16,9 +12,7 @@
 			{{ n('social', '%n account here opened this post', '%n accounts here opened this post', viewCount) }}
 		</span>
 		<span v-if="languageName" class="post-details__item">{{ languageName }}</span>
-		<!-- "Edited" told a reader the words are not the words somebody replied
-		     to, and nothing about what changed. The versions have been served
-		     since editing landed; this is the button that opens them. -->
+		<!-- opens the post's earlier versions -->
 		<button
 			v-if="edited"
 			type="button"
@@ -91,9 +85,8 @@ export default {
 		},
 
 		/**
-		 * The language the author declared, named rather than coded: `de` is
-		 * not something a reader should have to know. A code no browser knows
-		 * is shown as it stands, which is better than dropping it.
+		 * The language the author declared, by name; a code no browser knows is
+		 * shown as it is.
 		 *
 		 * @return {string}
 		 */
@@ -118,9 +111,7 @@ export default {
 		},
 
 		/**
-		 * Where the post lives, for a post that lives somewhere else. A local
-		 * post is already at its own address — this page — so a link to it
-		 * would go round in a circle.
+		 * Where a remote post lives; a local post is already on this page.
 		 *
 		 * @return {string}
 		 */

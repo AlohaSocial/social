@@ -29,9 +29,8 @@ describe('pageRank', () => {
 	})
 
 	/**
-	 * A post, a tag or somebody's profile is somewhere you go *from* the
-	 * sidebar rather than a rung on it, so everything unlisted sits past the
-	 * end and moving to one reads as going forward.
+	 * A post, a tag or a profile is somewhere you go from the sidebar, so it sits
+	 * past the end and moving to one reads as going forward.
 	 */
 	it('puts what the sidebar does not list past the end', () => {
 		expect(pageRank(at('single-post'))).toBeGreaterThan(pageRank(at('settings')))
@@ -52,10 +51,7 @@ describe('pageDirection', () => {
 		expect(pageDirection(at('timeline', 'photos'), at('timeline', 'photos'))).toBe('')
 	})
 
-	/**
-	 * Two pages the sidebar does not list share a rank, and sliding between
-	 * them would be inventing a geography that is not there.
-	 */
+	/** Two pages the sidebar does not list share a rank, so there is no direction between them. */
 	it('gives no direction between two pages the sidebar does not list', () => {
 		expect(pageDirection(at('single-post'), at('tags'))).toBe('')
 	})

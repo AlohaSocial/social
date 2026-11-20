@@ -13,9 +13,7 @@
 					<IconArchiveOutline :size="16" decorative title="" />
 					<time :datetime="post.created_at">{{ fullDateTime(post.created_at) }}</time>
 				</div>
-				<!-- the words, not the rendered post: this is a list to find
-				     something in, and a post drawn in full would make it a
-				     timeline of the things deliberately not in the timeline -->
+				<!-- the words, not the rendered post: this is a list to find something in -->
 				<p class="archived-posts__text">
 					{{ textOf(post) }}
 				</p>
@@ -51,13 +49,7 @@ import { fullDateTime } from '../utils/relativeTime.js'
 /** How many to ask for at a time; the route's own ceiling. */
 const PAGE_SIZE = 50
 
-/**
- * The posts the reader has put away, and the way back.
- *
- * An archive nobody can open is a delete with extra steps, so this is the
- * other half of the Archive action: everything that is out of the profile,
- * with a button that puts one back.
- */
+/** The reader's archived posts, each with a button that puts it back. */
 export default {
 	name: 'ArchivedPosts',
 
@@ -88,8 +80,7 @@ export default {
 
 		/** @param {object} post a Status */
 		textOf(post) {
-			// the rendered content with its markup taken out: this is a list,
-			// not a timeline, and nothing here is anybody else's HTML
+			// the rendered content with its markup taken out
 			return (post.content ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 		},
 

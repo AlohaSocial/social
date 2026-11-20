@@ -9,11 +9,8 @@
 				<AlohaScene v-if="scene" :scene="scene" class="timeline-empty__scene" />
 				<component :is="illustration" v-else class="timeline-empty__illustration" />
 			</template>
-			<!-- An empty page that only says it is empty leaves the reader to
-			     work out what to do about it. Where there is an obvious next
-			     step it is offered here; where there is not — a tag with no
-			     posts, a search that found nothing — there is no button, and
-			     one invented for the sake of having one would be worse. -->
+			<!-- an obvious next step is offered here; where there is none, there is
+			     no button -->
 			<template v-if="item.action" #action>
 				<NcButton variant="primary" :to="item.action.to" @click="item.action.to ? undefined : $emit('action')">
 					{{ item.action.label }}
@@ -93,10 +90,8 @@ export default {
 <style scoped>
 /*
  * `timeline-empty` rather than `empty-content`: NcEmptyContent's own root
- * carries that class, and a child component's root inherits the parent's scope
- * id — so a scoped rule on `.empty-content` here landed on both this wrapper
- * and the component inside it. Two elements were 60vh tall, one nested in the
- * other, and turning the outer one off left the inner one holding the page open.
+ * carries that class and inherits this scope id, so a scoped rule on
+ * `.empty-content` would land on both elements.
  */
 .timeline-empty {
 	min-height: 60vh;
@@ -106,21 +101,15 @@ export default {
 }
 
 /*
- * Most of the 60vh is room for the full-size scene. A state without one
- * is a small drawing over a line of text, and holding 60% of the window open
- * under it — which is what "No replies found" did under every post with no
- * replies — says the page is still loading something.
+ * Most of the 60vh is room for the full-size scene; a state without one
+ * holding the window open would look as if something were still loading.
  */
 .timeline-empty--bare {
 	min-height: 0;
 	padding: 20px 0 28px;
 }
 
-/*
- * And its words are an aside, not a heading: this sits under a post somebody
- * came to read, and at the h2 size NcEmptyContent gives it, "No replies yet"
- * was the loudest thing on the page it is the smallest part of.
- */
+/* and its words are an aside under a post, not a heading */
 .timeline-empty--bare :deep(.empty-content__name) {
 	font-size: 1rem;
 	font-weight: normal;

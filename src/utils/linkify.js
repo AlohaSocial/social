@@ -6,32 +6,19 @@
 /**
  * What the server will make a link of, found in the browser.
  *
- * This is a mirror of `lib/Service/LinkifyService.php`, which is what actually
- * publishes a post: it finds the URLs, mentions and hashtags in the typed text
- * and builds the outbound HTML around them. The composer cannot ask the server
- * what a half-typed post will look like on every keystroke, so the same rules
- * are applied here to show the writer what is about to become a link.
- *
- * Because it is a mirror, it must not drift: the two are pinned together by
- * `tests/js/utils/linkify.test.js`, which runs the same cases the PHP unit
- * test runs. If the server's rules change, this changes with them — a preview
- * that promises a mention the server will not send is worse than no preview.
- *
- * What this does **not** do is decide whether a mention resolves to somebody.
- * The server only links an entity the `tag` array vouches for, and it can only
- * build that array by looking accounts up. A mention shown here is therefore
- * "this is a mention", not "this account exists".
+ * A mirror of `lib/Service/LinkifyService.php`, so the composer can show what
+ * is about to become a link; `tests/js/utils/linkify.test.js` runs the same
+ * cases as the PHP test to keep the two in step. Whether a mention resolves to
+ * an account is not decided here: the server only links what it can look up.
  */
 
 /**
  * The one pass over the text, the same alternation the server uses.
  *
- * URLs come first so that everything inside one belongs to it: a `#section`
- * fragment is part of the link and not a hashtag, and `/@bob` in a path names
- * no account. A mention is not preceded by a word character or `@`, which
- * keeps `frank@example.org` an email address; a hashtag is not preceded by a
- * word character (`issue#42`) nor by `&`, which would make an HTML entity into
- * one.
+ * URLs come first so that everything inside one belongs to it (`#section`,
+ * `/@bob`). A mention is not preceded by a word character or `@`, so
+ * `frank@example.org` stays an email address; a hashtag is not preceded by a
+ * word character (`issue#42`) or `&` (an HTML entity).
  */
 const PATTERN = new RegExp(
 	'(?<url>\\bhttps?://[^\\s<>"]+)'
@@ -96,10 +83,9 @@ function withoutTrailingPunctuation(url) {
 /**
  * Every URL, mention and hashtag in the text, in the order they appear.
  *
- * `text` is the matched substring as it was typed, `name` is it without its
- * leading sigil, and `offset` is an index into the string — a JS index, in
- * UTF-16 code units, where the PHP side counts bytes. Nothing here compares
- * the two, and the callers slice the same string the offsets came from.
+ * `text` is the matched substring as typed, `name` is it without its sigil,
+ * and `offset` is a JS index in UTF-16 code units (the PHP side counts bytes;
+ * callers only slice the string the offsets came from).
  *
  * @param {string} text what was typed
  * @return {Array<{type: 'url'|'mention'|'hashtag', text: string, name: string, offset: number}>} the entities
@@ -154,9 +140,7 @@ export function countableLength(text) {
 
 /**
  * The text broken into the runs it is drawn as: plain stretches and entities.
- *
- * One list rather than two, so a preview can lay the post out in order without
- * having to interleave anything itself.
+ * One list, so a preview can lay the post out in order.
  *
  * @param {string} text what was typed
  * @return {Array<{type: 'text'|'url'|'mention'|'hashtag', text: string, name?: string}>} the runs

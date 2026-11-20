@@ -3,10 +3,8 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- two roots on purpose: the badge and the text it opens are both
-	     positioned against the frame the picture is in, and a wrapper of its
-	     own between them and that frame would have to be given its size to
-	     stay out of the way -->
+	<!-- two roots on purpose: the badge and its text are both positioned
+	     against the photo's frame, which a wrapper would get in the way of -->
 	<button
 		type="button"
 		class="alt-badge"
@@ -27,23 +25,15 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 
-/** ids have to be unique per document, and one post may show eight pictures */
+/** ids have to be unique per document, and one post may show several photos */
 let sequence = 0
 
 /**
- * The ALT badge: what a picture is, for anybody who wants to know.
+ * The ALT badge: reveals the description of a photo to sighted readers.
  *
- * A description is written for the reader who cannot see the picture, but it
- * is worth reading either way — what is in a photograph is often the point of
- * posting it. Mastodon marks described media with a badge for that reason, and
- * this app marked only the media-first mosaic: the same picture in a two-up
- * timeline card carried its description in the `alt` attribute and nowhere a
- * sighted reader could reach it. One component, so the badge is in the same
- * corner, in the same words, wherever a thumbnail carries a description.
- *
- * It positions itself against whatever frame it is put in, which therefore has
- * to be `position: relative` -- `.photo` in GalleryMedia, `.attachment-frame`
- * in PostAttachment.
+ * It positions itself against the frame it is put in, which therefore has to
+ * be `position: relative` -- `.photo` in GalleryMedia, `.attachment-frame` in
+ * PostAttachment.
  */
 export default {
 	name: 'AltBadge',
@@ -64,8 +54,7 @@ export default {
 	},
 
 	watch: {
-		// a different picture in the same frame is a different description,
-		// and it should not arrive already open
+		// a different photo in the same frame should not arrive with its description open
 		description() {
 			this.shown = false
 		},

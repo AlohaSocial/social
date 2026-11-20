@@ -12,14 +12,9 @@ import { useTimelineStore } from '../store/timeline.js'
 /**
  * "Less like this", from a post's menu.
  *
- * Here rather than in TimelinePost, which is shared by two bundles and carries
- * as little as it can: the post only says it was asked.
- *
- * On For you the post leaves the feed at once, because that is the feed
- * the reader just said it does not belong in; the toast's Undo puts it back
- * where it was. Anywhere else the post stays — it is in that timeline for a
- * reason that has nothing to do with interests — and the reader is only told
- * the feed will take note.
+ * On For you the post leaves the feed at once, and the toast's Undo puts it
+ * back; anywhere else it stays and the reader is only told the feed will
+ * take note.
  *
  * @param {import('../types/Mastodon.js').Status} status the post the reader sees
  * @param {string} type the timeline it is shown in

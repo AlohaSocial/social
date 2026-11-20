@@ -25,9 +25,8 @@
 		</PageHeader>
 
 		<div class="settings__body">
-			<!-- The groups, with the sections of the open one under it. On a
-			     narrow screen the groups are a row of tabs above the page and
-			     the sections are left to the page itself. -->
+			<!-- the groups, with the sections of the open one under them; on a
+			     narrow screen the groups are tabs above the page -->
 			<nav class="settings__nav" :aria-label="t('social', 'Settings groups')">
 				<ul class="settings__groups">
 					<li v-for="group in groups" :key="group.id" class="settings__group">
@@ -87,9 +86,8 @@
 					</div>
 				</header>
 
-				<!-- Each section keeps the id other pages link to: the follow
-				     requests page sends the reader to #account, a profile to
-				     #featured-tags. The link opens the group the section is in. -->
+				<!-- each section keeps the id other pages link to (#interests, #blocked,
+				     #migration); such a link opens the group the section is in -->
 				<section
 					v-for="(section, index) in shownSections"
 					:id="section.id"
@@ -152,9 +150,7 @@ import { useServerData } from '../composables/useServerData.js'
 import { currentSection, scrollToSection, watchSections } from '../services/sectionRail.js'
 import { matchesQuery } from '../services/settingsSearch.js'
 
-// The forms, switches and lists below are only ever drawn on this page, so
-// they travel in a chunk of their own rather than in the entry every reader
-// loads.
+// only ever drawn on this page, so these load in a chunk of their own
 const ProfileLayoutSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ProfileLayoutSettings.vue'))
 const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/AccountSettings.vue'))
 const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
@@ -190,17 +186,11 @@ const INNER_ANCHORS = {
 }
 
 /**
- * Settings: what this app holds about how the reader uses it.
+ * Settings: what this app holds about how the reader uses it, in groups
+ * shown one at a time, with a search across all of them.
  *
- * Seventeen sections in one scroll were more than anybody could find their
- * way through, and they were of different kinds: switches about privacy next
- * to lists of scheduled posts next to a page of keyboard shortcuts. They are
- * in six groups now and one group is shown at a time, with a search across
- * all of them for the reader who knows what they want but not where it is.
- *
- * The sections are described rather than written out one by one: the rail,
- * the search and the page all need the same title and id, and the copies
- * drifted apart the first time one was renamed in only one of the places.
+ * The sections are described as data, so the rail, the search and the page
+ * share one title and id for each.
  */
 export default {
 	name: 'Settings',
@@ -553,9 +543,9 @@ export default {
 
 		/**
 		 * Puts the section named in the address in view, opening its group
-		 * first. Vue Router leaves the hash alone on a page that is already
-		 * mounted, and the section a link points at may not have been drawn
-		 * when the page first was.
+		 * Puts the section named in the address in view, opening its group first.
+		 * Vue Router leaves the hash alone on a mounted page, and the section may
+		 * not have been drawn yet.
 		 */
 		scrollToSection() {
 			const id = (this.$route?.hash ?? '').replace(/^#/, '')
@@ -578,12 +568,12 @@ export default {
 			}
 			this.scrolledTo = id
 			this.current = sectionId
-			// the first section of a group is where the group starts: the
-			// group's own heading stays in view above it
+			// the first section of a group scrolls to the page top, keeping the group's
+			// heading in view
 			const target = id === group.sections[0].id ? this.$el : section
 			target.scrollIntoView?.({ block: 'start' })
-			// the sections above it can still be arriving with their chunk, and
-			// push it down the page after it was scrolled to; once is enough
+			// the sections above it may still be arriving and push it down; scroll
+			// again once
 			const landed = section.getBoundingClientRect().top
 			window.setTimeout(() => {
 				if (this.scrolledTo === id && Math.abs(section.getBoundingClientRect().top - landed) > 24) {
@@ -632,8 +622,8 @@ export default {
 		/**
 		 * Watches for a section coming into or out of view.
 		 *
-		 * Rebuilt on `updated` because the sections that arrive with their
-		 * chunk, or with another group, were not there to be watched before.
+		 * Rebuilt on `updated`, as sections arrive with their chunk or another
+		 * group.
 		 */
 		watchSections() {
 			this.observer?.disconnect()
@@ -642,9 +632,8 @@ export default {
 		},
 
 		/**
-		 * Marks the section the reader is looking at. Before any heading has
-		 * passed the top, that is the first one: keeping whatever was marked
-		 * before left a section far down the page marked at the very top.
+		 * Marks the section the reader is looking at: the first one until any
+		 * heading has passed the top.
 		 */
 		markCurrent() {
 			const ids = this.shownSections.map((section) => section.id)
@@ -658,9 +647,8 @@ export default {
 @use '../styles/layout.scss' as layout;
 
 /**
- * The sections arrive one after another rather than all at once, when the
- * page opens and when another group is opened. The delay is capped, and the
- * whole thing is off for a reader who asked for less movement.
+ * The sections arrive one after another when the page or another group
+ * opens; the delay is capped, and off for reduced motion.
  */
 @keyframes section-arrive {
 	from { opacity: 0; transform: translateY(10px); }
@@ -745,8 +733,7 @@ $gutter: calc(var(--default-grid-baseline) * 4);
 		scroll-margin-top: calc(var(--default-grid-baseline) * 4);
 	}
 
-	// the one section whose button cannot be taken back: it is marked so a
-	// reader knows before they read the words
+	// the one section whose button cannot be undone is marked as such
 	&__section--danger {
 		border-color: var(--color-error);
 

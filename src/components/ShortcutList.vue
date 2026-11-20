@@ -34,12 +34,8 @@ import { translate as t } from '@nextcloud/l10n'
 import { PLAYER_SHORTCUTS, SHORTCUTS } from '../services/shortcuts.js'
 
 /**
- * The keys and what they do, as one list.
- *
- * Two things show it — the `?` dialog and the Settings page — and a shortcut
- * is a promise about a keystroke, so the two must never be able to disagree
- * about what that promise is. They read the same `SHORTCUTS` and draw it with
- * the same markup; what differs is only the frame around it.
+ * The keys and what they do, as one list: the `?` dialog and the Settings
+ * page both draw this, so the two cannot disagree.
  */
 export default {
 	name: 'ShortcutList',

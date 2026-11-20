@@ -69,9 +69,8 @@ export default {
 		},
 
 		/**
-		 * The rows to draw, each one a kind of reaction that happened at least
-		 * once and whose accounts have arrived. A count with no faces under it
-		 * yet draws nothing rather than an empty row that fills a moment later.
+		 * The rows to draw: each kind of reaction that happened at least once and
+		 * whose accounts have arrived, so no empty row fills in a moment later.
 		 *
 		 * @return {object[]}
 		 */
@@ -180,16 +179,10 @@ export default {
 		},
 
 		/**
-		 * The accounts behind one of the two counts.
-		 *
-		 * Nothing is asked for when the count is zero — which is most posts —
-		 * so the page a reader opens costs the two requests only when there is
-		 * something to answer with. A refusal is not worth a message: the
-		 * counts are still on the post, and this row is the elaboration.
-		 *
-		 * Who reacted where the post lives is read by the server in the
-		 * background; when it says so, the row is filled in again a little
-		 * later, once.
+		 * The accounts behind one of the counts. Nothing is asked for at a count of
+		 * zero, and a refusal is not reported: the counts are still on the post.
+		 * When the server says it is still reading remote reactions, the row is
+		 * read again once, a little later.
 		 *
 		 * @param {string} path the endpoint under the status, Mastodon's name for it
 		 * @param {number} count how many the post says there are; ignored while the numbers are hidden

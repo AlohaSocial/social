@@ -6,17 +6,13 @@
 import { nameMorph, uniqueTransitionName } from '../utils/viewTransition.js'
 
 /**
- * The thing a page change was started from, carried into the page it opens.
+ * The thing a page change was started from, carried into the page it opens:
+ * a pressed post card becomes the head of its thread, a pressed face the top
+ * of the profile. `pageTransition.js` does the moving; this only pairs the
+ * elements.
  *
- * A post card pressed in a feed becomes the post at the head of its thread,
- * and a face pressed beside a post becomes the face at the top of the
- * profile. The page transition (see `pageTransition.js`) does the moving; this
- * only says which element on the old page and which on the new one are the
- * same thing.
- *
- * Which element was pressed is remembered from the click itself, because the
- * router is only told where to go, not what was pressed to get there — and a
- * post can be on screen twice, as itself and as a boost.
+ * The pressed element is remembered from the click, since the router is not
+ * told what was pressed and a post can be on screen twice (as a boost).
  */
 
 /** How long a press is taken to be the cause of the navigation that follows. */
@@ -101,8 +97,7 @@ export function departFor(to) {
 		return null
 	}
 
-	// the page being left, which may still be in the document while the new
-	// one is drawn: nothing on it is where the navigation lands
+	// the page being left may still be in the document while the new one is drawn
 	const leaving = from.closest('.social__pages > *') ?? from
 	const name = uniqueTransitionName()
 	/** @type {HTMLElement|null} */

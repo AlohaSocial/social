@@ -30,13 +30,9 @@ import { translatePlural as n, translate as t } from '@nextcloud/l10n'
 const BLUESKY_DID = 'did:plc:z72i7hdynmk6r22z27h6tvur'
 
 /**
- * The check beside the name of a verified account.
- *
- * One mark for every way an account is verified: by this instance
- * (`verification`, naming who it verified in the name of) and by the
- * verifiers Bluesky trusts (`bluesky.verified`). The label says who; an
- * issuer that is this instance's own verifying account is named once.
- * Nothing is drawn for an account nobody verified.
+ * The check beside the name of a verified account: verified by this instance
+ * (`verification`) or by the verifiers Bluesky trusts (`bluesky.verified`).
+ * The label says who.
  */
 export default {
 	name: 'VerifiedBadge',
