@@ -46,18 +46,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Outbound HTTP for federation.
- *
- * The transport is the server's own client (`OCP\Http\Client\IClientService`),
- * so the CA bundle, the proxy configuration and the local-address checks come
- * from the server. What lives here is federation-specific: the WebFinger
- * protocol fallback, the ActivityPub content negotiation, the signed fetch and
- * its unsigned retry, the download ceiling, and the mapping onto this app's
- * request exceptions.
- *
- * A caller says what it wants sent — a method, a URL, and at most four options
- * — and gets the body back. Nothing between here and the client describes an
- * HTTP request a second time.
+ * Outbound HTTP for federation, over the server's own client
+ * (`OCP\Http\Client\IClientService`) with its CA bundle, proxy and
+ * local-address checks. What is here is federation-specific: the WebFinger
+ * protocol fallback, ActivityPub content negotiation, the signed fetch and
+ * its unsigned retry, the download ceiling, and this app's request
+ * exceptions.
  */
 class CurlService {
 	use TArrayTools;
@@ -106,11 +100,6 @@ class CurlService {
 		$this->logger->debug('[CurlService] webfinger', ['account' => $account]);
 		$account = $this->withoutBeginAt($account);
 
-		// we consider an account is like an email
-		// if (!filter_var($account, FILTER_VALIDATE_EMAIL)) {
-		// 	throw new InvalidResourceException('account format is not valid');
-		// }
-
 		$exploded = explode('@', $account);
 
 		if (count($exploded) < 2) {
@@ -133,12 +122,9 @@ class CurlService {
 
 		$this->logger->notice('webfingerAccount, request result', ['urls' => $urls]);
 
-		// A JRD is entitled to have no subject, or one that is not an acct: URI.
-		// The subject names the canonical spelling of the handle — the casing
-		// the account uses, an alias resolved to the account it belongs to —
-		// and it may only ever name a handle on the host that was asked.
-		// Without that, `bob@evil.example` answers `acct:Gargron@mastodon.social`
-		// and is stored as the account behind that handle.
+		// The JRD subject, when it is an acct: URI, names the handle's canonical
+		// spelling, and may only name a handle on the host that was asked, or
+		// `bob@evil.example` could claim to be `Gargron@mastodon.social`.
 		$subject = $this->get('subject', $result, '');
 		if (str_starts_with($subject, 'acct:')) {
 			$claimed = substr($subject, strlen('acct:'));
@@ -195,8 +181,7 @@ class CurlService {
 			throw new HostMetaException('Template is not an http(s) URL');
 		}
 
-		// parse_url() answers false or null for the parts it cannot find, and
-		// all three of these were handed straight to callers typed for strings
+		// parse_url() answers false or null for the parts it cannot find
 		$host = parse_url($url, PHP_URL_HOST) ?: '';
 		$protocols = [$scheme];
 
@@ -251,11 +236,8 @@ class CurlService {
 	}
 
 	/**
-	 * Fetches an ActivityPub document by its id.
-	 *
-	 * The id is requested as it is written, rather than taken apart and put
-	 * back together: it is the peer's own URL, and it is also what the
-	 * signature covers.
+	 * Fetches an ActivityPub document by its id, requested exactly as written,
+	 * since it is the peer's own URL and what the signature covers.
 	 *
 	 * @throws MalformedArrayException
 	 * @throws RequestContentException
@@ -274,10 +256,8 @@ class CurlService {
 
 		$headers = $acceptActivityJson ? ['Accept' => 'application/activity+json'] : [];
 
-		// An ActivityPub fetch is signed: a peer running Mastodon's
-		// AUTHORIZED_FETCH or GoToSocial's secure mode answers 401 to an
-		// unsigned one, which is why resolving an account there failed with
-		// "user not found" and threads stopped at the first remote reply.
+		// An ActivityPub fetch is signed: peers with Mastodon's AUTHORIZED_FETCH
+		// or GoToSocial's secure mode answer 401 to an unsigned one.
 		$signature = $acceptActivityJson ? $this->httpSignatureService->signFetch($id) : [];
 
 		$status = 0;
@@ -293,11 +273,8 @@ class CurlService {
 				throw $e;
 			}
 
-			// A signature is an addition to a request that used to go out
-			// without one, and a peer is entitled not to expect it — an
-			// unresolvable keyId, a stricter reverse proxy. One unsigned retry
-			// keeps those reachable; it costs an extra request only where the
-			// first one had already failed.
+			// Some peers reject the signature (an unresolvable keyId, a strict
+			// reverse proxy), so one unsigned retry follows a refused signed fetch.
 			$this->logger->debug('a signed fetch was refused, retrying unsigned', [
 				'id' => $id, 'status' => $e->getCode(),
 			]);
@@ -317,18 +294,10 @@ class CurlService {
 	}
 
 	/**
-	 * Whether a document was served as ActivityPub.
-	 *
-	 * An actor is only an actor when the host says so with the media type:
-	 * without the check, any URL answering JSON — a public share on a
-	 * Nextcloud, a paste, an upload — is a document that can claim to be any
-	 * actor of its host.
-	 *
-	 * `application/ld+json` counts only with the ActivityStreams profile on
-	 * it, which is what the AP specification requires of it.
-	 *
-	 * Static because it is a statement about a string and nothing else: a
-	 * caller holding a mocked CurlService still gets the real answer.
+	 * Whether a document was served as ActivityPub. Without the media type check
+	 * any JSON URL on a host (a public share, a paste) could claim to be one of
+	 * its actors. `application/ld+json` counts only with the ActivityStreams
+	 * profile. Static, so a mocked CurlService still answers it.
 	 */
 	public static function isActivityPubMediaType(string $contentType): bool {
 		$type = strtolower(trim(explode(';', $contentType, 2)[0]));
@@ -373,13 +342,10 @@ class CurlService {
 		}
 
 		try {
-			// This instance's own address, which behind a reverse proxy or in a
-			// container resolves to a private or loopback address like any other
-			// internal service. Refusing it left every fan-out after the first
-			// inline delivery waiting for the cron -- up to twelve minutes -- so
-			// the local-address guard is lifted for this one call. It is the
-			// configured cloud host and nothing a request can influence; every
-			// genuinely remote address is still refused.
+			// This instance's own address may resolve to a private or loopback address
+			// behind a proxy or in a container, so the local-address guard is lifted
+			// for this one call; it is the configured cloud host, not anything a
+			// request can influence.
 			$this->retrieveJson('post', $url, [
 				'allow_local_address' => true,
 				'headers' => $headers,
@@ -414,12 +380,9 @@ class CurlService {
 	}
 
 	/**
-	 * Several ActivityPub documents at once, each signed for its own URL.
-	 *
-	 * `retrieveObject()` for a list — the same `Accept`, the same signature, the
-	 * same unsigned retry not attempted, because a batch is a best-effort read
-	 * and a peer that refuses an unsigned fetch is one this instance signs for
-	 * anyway.
+	 * Several ActivityPub documents at once, each signed for its own URL, as
+	 * `retrieveObject()` but without the unsigned retry: a batch is a
+	 * best-effort read.
 	 *
 	 * @param string[] $ids
 	 * @param array{timeout?: int} $options
@@ -449,29 +412,15 @@ class CurlService {
 	}
 
 	/**
-	 * Several documents at once, from several servers.
+	 * Several documents at once, from several servers, in parallel, so the
+	 * slowest peer does not set the pace for all.
 	 *
-	 * The follow-graph walk asks twenty servers who the people you follow
-	 * follow, and asked them one after another: twenty round trips end to end,
-	 * on a page somebody is waiting in front of, where the slowest peer sets
-	 * the pace for all of them. They have nothing to do with each other, so
-	 * they go together.
-	 *
-	 * Every check a single fetch makes still applies. The federation check and
-	 * the local-address check run **before** anything is sent, because a
-	 * request to a blocked host is one this instance must not make at all, and
-	 * the size ceiling applies to each answer as it is read. A redirect is the
-	 * one thing this cannot do in flight — each hop has to be checked before
-	 * it is followed — so a response that names one is finished by the
-	 * ordinary single-URL path, which is rare enough to pay for.
-	 *
-	 * Nothing here throws for one bad answer: a peer that is down, blocked or
-	 * talking nonsense is `null` in its place, which is what a caller asking
-	 * twenty servers a question has to cope with anyway. A caller that has
-	 * to tell "no such document" from "no answer" passes `$failed`: the URLs
-	 * whose server did not answer, timed out, asked to be left alone (429)
-	 * or failed (5xx). A host the federation policy refuses is not among
-	 * them; that is an answer.
+	 * The federation and local-address checks run before anything is sent, and
+	 * the size ceiling applies to each answer. A redirect is finished by the
+	 * single-URL path, since each hop must be checked before it is followed.
+	 * One bad answer is `null` in its place; `$failed` lists the URLs that got no
+	 * answer, timed out, or answered 429 or 5xx (not those the federation policy
+	 * refused).
 	 *
 	 * @param string[] $urls
 	 * @param array{headers?: array<string, string>, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
@@ -555,16 +504,10 @@ class CurlService {
 	}
 
 	/**
-	 * A client whose `…Async()` requests are in flight together.
-	 *
-	 * The server's client runs on Guzzle's `CurlHandler` unless handed
-	 * another, and that handler performs each request the moment it is made:
-	 * the promises came back already settled, one after the other, and a
-	 * peer waiting out its timeout held up every request made after it. The
-	 * multi handler is what lets them overlap; where the server's HTTP stack
-	 * has none (a test without one), the default client is used. Nextcloud
-	 * 34's `newClient()` takes no handler and ignores this one, so there the
-	 * requests still go out one after another.
+	 * A client whose `…Async()` requests are in flight together: Guzzle's
+	 * `CurlHandler` would run each as it is made, so the multi handler is used
+	 * where the server's HTTP stack has one. Nextcloud 34's `newClient()` takes
+	 * no handler, so there the requests still run one after another.
 	 */
 	private function parallelClient(): IClient {
 		$multi = 'GuzzleHttp\\Handler\\CurlMultiHandler';
@@ -579,14 +522,9 @@ class CurlService {
 	}
 
 	/**
-	 * What `IPromise::wait()` settles with, in the shape everything below
-	 * reads.
-	 *
-	 * A promise's `wait()` gives the response as Guzzle produced it, which is
-	 * not the `IResponse` its `then()` wraps for its handlers — so the check
-	 * every batch made failed on real traffic and threw each answer away. A
-	 * test double, with no Guzzle behind it, gives an `IResponse` directly;
-	 * both arrive here.
+	 * What `IPromise::wait()` settles with, as an `IResponse`: `wait()` gives
+	 * Guzzle's own response, not the wrapper `then()` hands its handlers, while a
+	 * test double gives an `IResponse` directly.
 	 *
 	 * @see \OCA\Social\Tools\Http\FetchedResponse
 	 */
@@ -599,17 +537,11 @@ class CurlService {
 	}
 
 	/**
-	 * Several requests at once, each settled the way `retrieveJson()` settles
-	 * one: what it would have thrown, or null where it would have returned.
-	 *
-	 * For the delivery queue, whose rows go to different servers and have
-	 * nothing to do with each other: one after another, the slowest peer — a
-	 * dead one waiting out its timeout — set the pace for every other. The
-	 * checks a single request makes run before anything is sent (the
-	 * federation policy, the local-address guard); the size ceiling applies to
-	 * each answer as it is read. A redirect is finished by the single-request
-	 * path, because each hop is checked before it is followed. An answer that
-	 * is not JSON is not a failure: a delivery wants the status, not a body.
+	 * Several requests at once, each settled as `retrieveJson()` settles one:
+	 * what it would have thrown, or null. For the delivery queue, whose rows go
+	 * to unrelated servers. The checks run before sending, the size ceiling per
+	 * answer, and redirects go through the single-request path. A body that is
+	 * not JSON is no failure: a delivery wants the status.
 	 *
 	 * @param array<array-key, array{method: string, url: string, options: array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool}}> $requests
 	 *
@@ -686,16 +618,11 @@ class CurlService {
 	}
 
 	/**
-	 * Several files at once, each written to its own path as it arrives.
-	 *
-	 * `sendMany()` for media: the same parallel client and the same checks
-	 * before anything is sent (the federation policy, asked on behalf of the
-	 * instance that named the file, and the local-address guard with its
-	 * pin). The body goes straight to the file through a sink that refuses
-	 * the byte past `max + 1`, which ends that transfer, so an answer larger
-	 * than allowed costs that much disk and no more, and nothing is held in
-	 * memory. A redirect is finished by `openStream()`, which checks every
-	 * hop before following it.
+	 * Several files at once, each written to its own path as it arrives, with
+	 * `sendMany()`'s client and checks (the federation policy on behalf of the
+	 * naming instance, the pinned local-address guard). A sink refuses the byte
+	 * past `max + 1`, so an oversized answer costs no more disk than that and
+	 * nothing is held in memory. Redirects are finished by `openStream()`.
 	 *
 	 * @param array<array-key, array{url: string, path: string, max: int, on_behalf_of?: string}> $downloads
 	 *
@@ -841,8 +768,7 @@ class CurlService {
 	 */
 	private function decodeOrFollow(string $url, IResponse $response, array $options): ?array {
 		if ($this->redirectTarget($response, $url) !== '') {
-			// each hop is checked before it is followed, which is a thing to
-			// do one request at a time
+			// each hop is checked before it is followed, one request at a time
 			try {
 				return $this->retrieveJson('get', $url, $options);
 			} catch (Throwable $e) {
@@ -898,37 +824,14 @@ class CurlService {
 	}
 
 	/**
-	 * Sends the request and returns the body.
+	 * Opens a remote file, such as a federated video, for reading without reading
+	 * it, handing back the open stream, status and headers.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
-	 *
-	 * @throws RequestContentException
-	 * @throws RequestNetworkException
-	 * @throws RequestResultSizeException
-	 * @throws RequestServerException
-	 * @throws SocialAppConfigException
-	 * @throws UnauthorizedFediverseException
-	 */
-	/**
-	 * Opens a remote file for reading without reading it.
-	 *
-	 * Every other call here wants the body: a JSON document, an actor, a
-	 * picture small enough to hold. This one is for a file whose whole point
-	 * is that it is too big to hold -- a federated video -- and hands back the
-	 * open stream, the status and the headers so the caller can pass the bytes
-	 * on as they arrive.
-	 *
-	 * The client's own `Range` is forwarded verbatim and the origin's answer,
-	 * `206` and all, is handed back as it came: that is what makes seeking in
-	 * a two-hour video cost a two-hour video's worth of nothing.
-	 *
-	 * Everything that guards an outbound request still guards this one -- the
-	 * domain has to be one this instance federates with and local addresses are
-	 * refused, on the URL asked for and again on every redirect it names.
-	 *
-	 * The server's client is curl, which receives the whole answer before the
-	 * request returns, so the answer is held to `$max` bytes: a larger one
-	 * ends the transfer and is a `RequestResultSizeException`.
+	 * The client's `Range` is forwarded and the origin's `206` passed back, so
+	 * seeking costs nothing extra. The federation and local-address checks apply
+	 * to the URL and every redirect. Curl receives the whole answer before
+	 * returning, so it is held to `$max` bytes, beyond which this throws
+	 * `RequestResultSizeException`.
 	 *
 	 * @param array<string, string> $headers
 	 * @param string $onBehalfOf the instance that named this url, where that is
@@ -1009,6 +912,18 @@ class CurlService {
 		return ['stream' => $stream, 'status' => $status, 'headers' => $response->getHeaders()];
 	}
 
+	/**
+	 * Sends the request and returns the body.
+	 *
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, same_host?: bool} $options
+	 *
+	 * @throws RequestContentException
+	 * @throws RequestNetworkException
+	 * @throws RequestResultSizeException
+	 * @throws RequestServerException
+	 * @throws SocialAppConfigException
+	 * @throws UnauthorizedFediverseException
+	 */
 	public function doRequest(
 		string $method,
 		string $url,
@@ -1020,12 +935,9 @@ class CurlService {
 	}
 
 	/**
-	 * Sends the request to the first of $urls that answers.
-	 *
-	 * The list is tried in order: a connection or TLS failure falls through to
-	 * the next one (an instance reachable over http only), while an answer with
-	 * an error status ends the attempt right there. The URLs are expected to
-	 * differ only in their scheme.
+	 * Sends the request to the first of $urls that answers: a connection or TLS
+	 * failure falls through to the next (an instance reachable over http only),
+	 * an error status ends the attempt. The URLs differ only in their scheme.
 	 *
 	 * @param string[] $urls
 	 * @param array{headers?: array<string, string>, body?: string|resource, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, verify?: bool, max_redirects?: int, federation?: bool, same_host?: bool} $options
@@ -1065,24 +977,15 @@ class CurlService {
 	}
 
 	/**
-	 * The options the server's HTTP client is handed.
+	 * The options the server's HTTP client is handed. The answer goes to a
+	 * `BoundedSink` (`sunk()`), cut at `max_size`; `allow_local_address` is the
+	 * instance's setting, except for this app's request to itself
+	 * (`asyncWithToken()`).
 	 *
-	 * The guarantees that matter for a url somebody else wrote:
-	 *
-	 * - the answer is written to a `BoundedSink` (see `sunk()`), so an endless
-	 *   body is cut off at `max_size` rather than filling memory or disk.
-	 * - `allow_local_address` says whether a host resolving to this network may
-	 *   be reached at all. It is the instance's setting, except for the one
-	 *   request this app makes to itself (see `asyncWithToken()`).
-	 *
-	 * Redirects are followed by `send()` rather than by the client, so that the
-	 * federation checks run on every hop -- see `redirectTarget()` -- and each
-	 * hop is pinned to the addresses it was checked against. `max_redirects`
-	 * caps how many are followed, 0 for none; `federation` false skips the
-	 * instance access list for a URL this app ships rather than one somebody
-	 * wrote, the address guard still applies. `same_host` refuses a redirect
-	 * to another host, for a document that is stored under the URL it was
-	 * asked for.
+	 * Redirects are followed by `send()`, so every hop is checked
+	 * (`redirectTarget()`) and pinned. `max_redirects` caps them, 0 for none;
+	 * `federation` false skips the instance access list for a URL this app ships;
+	 * `same_host` refuses a redirect to another host.
 	 *
 	 * @param array{headers?: array<string, string>, body?: string|resource, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool, verify?: bool, max_redirects?: int, federation?: bool, same_host?: bool} $options
 	 *
@@ -1131,9 +1034,8 @@ class CurlService {
 	}
 
 	/**
-	 * Adds $extra to $headers, appending to a header that is already there
-	 * rather than replacing it — a request that asks for two media types asks
-	 * for both of them.
+	 * Adds $extra to $headers, appending to a header already there rather than
+	 * replacing it.
 	 *
 	 * @param array<string, string> $headers
 	 * @param array<string, string> $extra
@@ -1271,13 +1173,9 @@ class CurlService {
 	}
 
 	/**
-	 * Where a response says to go next, or `''` when it does not.
-	 *
-	 * Redirects are followed here rather than left to the HTTP client because
-	 * the client knows nothing about which instances this one federates with:
-	 * a host on the allow list that answers `302` to a blocked one would
-	 * otherwise be a way around the block list, and the hop is checked exactly
-	 * as the first request was.
+	 * Where a response says to go next, or `''` when it does not. Followed here
+	 * rather than by the client so every hop gets the federation checks: an
+	 * allowed host could otherwise redirect to a blocked one.
 	 *
 	 * @throws RequestServerException
 	 * @throws UnauthorizedFediverseException
@@ -1358,21 +1256,12 @@ class CurlService {
 	}
 
 	/**
-	 * Refuses a URL before it is requested — one that is not http(s), an
-	 * instance this one does not federate with, or a host that resolves to
-	 * this network — and pins the request to the addresses that passed.
-	 *
-	 * The guard resolves the host itself; without the pin the client would
-	 * resolve it a second time and could be answered differently. So the
-	 * options handed back carry a `CURLOPT_RESOLVE` entry for the host and
-	 * port of this one URL, built from the very set the guard checked, and
-	 * every redirect hop is pinned afresh. A literal address needs no pin.
-	 * The entry replaces the client's own `curl` defaults wholesale, which
-	 * is why the HTTP/2 preference is restated.
-	 *
-	 * Where the options allow a local address nothing is checked or pinned:
-	 * that is the one request this app makes to itself, and the server's
-	 * client has been told the same.
+	 * Refuses a URL that is not http(s), names an instance this one does not
+	 * federate with, or resolves to this network, and pins the request to the
+	 * addresses that passed (`CURLOPT_RESOLVE`), so the client cannot resolve the
+	 * host differently. Each redirect hop is pinned afresh; a literal address
+	 * needs no pin. The entry replaces curl's defaults, so the HTTP/2 preference
+	 * is restated. Nothing is checked when the options allow a local address.
 	 *
 	 * @param array<string, mixed> $clientOptions
 	 *
@@ -1470,13 +1359,10 @@ class CurlService {
 	}
 
 	/**
-	 * At most `$max + 1` bytes of a response body — one more than allowed, so
-	 * the caller can tell a body that fits from one that does not — without
-	 * ever holding more than that.
-	 *
-	 * The request has to have been made with `'stream' => true`, so the body
-	 * is handed over as a resource rather than a string, and with a
-	 * `BoundedSink`, which is what keeps curl from receiving more than that.
+	 * At most `$max + 1` bytes of a response body, so the caller can tell a body
+	 * that fits from one that does not. The request must be made with
+	 * `'stream' => true` and a `BoundedSink`, which keeps curl from receiving
+	 * more.
 	 */
 	public static function readAtMost(IResponse $response, int $max): string {
 		$stream = $response->getBody();

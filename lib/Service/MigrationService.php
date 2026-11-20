@@ -39,16 +39,11 @@ use Throwable;
 /**
  * Moving a local account away, and bringing one here.
  *
- * Outbound: the account declares where it went (`movedTo`), tells every
- * follower with a `Move`, and the followers' servers re-follow the new
- * account. The new account has to list this one in its `alsoKnownAs` first —
- * that back-reference is the only thing that stops a Move from re-pointing
- * somebody else's followers at an account the sender controls, and
- * MoveInterface refuses an incoming Move without it just the same.
- *
- * Inbound: the alias is set here (`alsoKnownAs`), the Move is started on the
- * old server, and the follows the old server exported as CSV are re-created
- * from here through the ordinary follow path.
+ * Outbound: the account records `movedTo` and sends followers a `Move`, and
+ * their servers re-follow the new account, which must list this one in its
+ * `alsoKnownAs` first (MoveInterface requires the same of incoming Moves).
+ * Inbound: the alias is set here, the Move is started on the old server, and
+ * the exported follows are re-created through the ordinary follow path.
  */
 class MigrationService {
 	/** The header Mastodon writes over its `following_accounts.csv`. */
@@ -67,39 +62,28 @@ class MigrationService {
 	private const EXPORT_PAGE = 200;
 
 	/**
-	 * How long after a move the account may move again: Mastodon's thirty
-	 * days. A move tells every server that knows the account to re-point its
-	 * followers; two of them in an afternoon is a mistake being made twice.
+	 * How long after a move the account may move again: Mastodon's thirty days.
 	 */
 	public const COOLDOWN_SECONDS = 30 * 24 * 3600;
 	/** The user setting that records when the account last moved. */
 	private const MOVED_AT = 'moved_at';
 
 	/**
-	 * The most rows one CSV export carries.
-	 *
-	 * A cap rather than a promise of everything: the whole file is built in
-	 * memory and handed to a browser, and it is also what makes the paging
-	 * terminate when a query ignores its offset.
+	 * The most rows one CSV export carries: the file is built in memory, and the
+	 * cap ends the paging even if a query ignores its offset.
 	 */
 	private const EXPORT_MAX = 5000;
 
 	/**
-	 * The most followers one Move will re-follow.
-	 *
-	 * Also what makes the paging terminate no matter what the query does: a
-	 * source that ignored the offset would hand back a full page forever, and
-	 * the loop below cannot tell that from a very popular account.
+	 * The most followers one Move will re-follow; also ends the paging if a
+	 * source ignores the offset.
 	 */
 	private const REFOLLOW_MAX = 20000;
 
 	/**
-	 * The most entries one import of a list of accounts or posts works
-	 * through, as many as a move-in follows. Each entry can be a WebFinger
-	 * lookup, an actor fetch and a delivery to a server the file names, so
-	 * an uploaded file of a few hundred thousand lines would otherwise be
-	 * as many requests sent on the uploader's say-so. What is past the cap
-	 * is counted as skipped.
+	 * The most entries one import of accounts or posts works through, since each
+	 * may mean a WebFinger lookup, an actor fetch and a delivery to a server the
+	 * file names. The rest is counted as skipped.
 	 */
 	public const MAX_IMPORT_ENTRIES = MoveInService::MAX_FOLLOWS;
 
@@ -172,15 +156,10 @@ class MigrationService {
 	}
 
 	/**
-	 * Moves this user's actor to `$targetId`.
-	 *
-	 * The target is fetched fresh — the `alsoKnownAs` that counts is the one
-	 * its server publishes right now — and has to list our actor. Then a
-	 * `Move{object: ours, target: theirs}` is queued for every follower's
-	 * inbox and the new home, `movedTo` is recorded (which puts it on the actor
-	 * document and as `moved` on the account entity), and the followers on
-	 * this instance, who never receive the Move, are re-followed on their
-	 * behalf.
+	 * Moves this user's actor to `$targetId`. The target is fetched fresh and
+	 * must list our actor in `alsoKnownAs`; then a `Move` is queued for every
+	 * follower and the new home, `movedTo` is recorded, and local followers, who
+	 * never receive the Move, are re-followed on their behalf.
 	 *
 	 * @param bool $enforceCooldown whether a move within COOLDOWN_SECONDS of the
 	 *                              last is refused; the person's own button says
@@ -234,9 +213,8 @@ class MigrationService {
 		$move->setActorId($actor->getId());
 		$move->setObjectId($actor->getId());
 		$move->setTarget($target->getId());
-		// A Move is addressed to the account's followers in ActivityPub itself,
-		// as well as being routed to their inboxes below. Some servers validate
-		// the audience before they apply the follow migration.
+		// A Move is also addressed to the followers in ActivityPub terms: some
+		// servers validate the audience before applying it.
 		$move->setTo($actor->getFollowers());
 
 		$move->addInstancePath(
@@ -267,13 +245,9 @@ class MigrationService {
 	}
 
 	/**
-	 * Takes the redirect off the account: `movedTo` is cleared, so the actor
-	 * document and the account entity stop saying it moved and it may post
-	 * and follow again.
-	 *
-	 * The followers do not come back by themselves: their servers acted on
-	 * the Move when it arrived, and nothing in ActivityPub takes a Move back.
-	 * The cooldown stays, because the move did happen.
+	 * Takes the redirect off the account: `movedTo` is cleared and it may post
+	 * and follow again. Followers do not come back, since a Move cannot be taken
+	 * back, and the cooldown stays.
 	 */
 	public function undoMove(string $userId): void {
 		$this->accountService->setMovedTo($userId, '');
@@ -351,14 +325,9 @@ class MigrationService {
 	}
 
 	/**
-	 * Re-creates the blocks of an export — Mastodon's `blocked_accounts.csv`,
-	 * which is a bare list of handles.
-	 *
-	 * A block is not a relationship two servers agree on the way a follow is:
-	 * it is this account's own decision, so it is applied here directly. One
-	 * that cannot be applied — an account that does not resolve — is reported
-	 * rather than dropped, because a block that silently did not happen is the
-	 * failure that matters in this file.
+	 * Re-creates the blocks of a Mastodon `blocked_accounts.csv` (bare handles),
+	 * applied here directly as the account's own decision. A block that cannot be
+	 * applied is reported, never dropped silently.
 	 *
 	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{blocked: int, skipped: int, failed: array<string, string>}
@@ -373,18 +342,10 @@ class MigrationService {
 	}
 
 	/**
-	 * Marks again the posts a `bookmarks.csv` lists — Mastodon's, one post
-	 * address a line — fetching the ones this server has never seen.
-	 *
-	 * Fetching is the point here, where the account export's restore
-	 * deliberately skips what is not here: a person's bookmarks are mostly
-	 * other people's posts on other servers, and a mark on a post this
-	 * server does not hold is no mark at all. A bookmark is a local flag;
-	 * nothing is sent to anybody. A line that is not an address is skipped.
-	 *
-	 * Each address is resolved as the importing account, so only a post it may
-	 * read is marked; one it may not is reported as failed, in the same words
-	 * as one that is not there at all.
+	 * Marks again the posts a Mastodon `bookmarks.csv` lists, one address a line,
+	 * fetching the ones this server has never seen, since bookmarks are mostly
+	 * remote posts. Nothing is sent to anybody. Each address is resolved as the
+	 * importing account, so a post it may not read fails like a missing one.
 	 *
 	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{bookmarked: int, skipped: int, failed: array<string, string>}
@@ -429,11 +390,9 @@ class MigrationService {
 	}
 
 	/**
-	 * Blocks the servers a `blocked_domains.csv` lists — Mastodon's, one
-	 * domain a line. A domain block is this account's own decision and
-	 * federates nothing, so each one applies the moment it is read; the
-	 * instance itself cannot be blocked and is reported as failed, as the
-	 * API would.
+	 * Blocks the servers a Mastodon `blocked_domains.csv` lists, one domain a
+	 * line, each applied as read; this instance itself is reported as failed, as
+	 * the API would.
 	 *
 	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{blocked: int, skipped: int, failed: array<string, string>}
@@ -535,9 +494,8 @@ class MigrationService {
 	}
 
 	/**
-	 * The addresses of the posts this account bookmarked, newest first — the
-	 * shape Mastodon's `bookmarks.csv` has, and the only one that means
-	 * anything off this server.
+	 * The addresses of the posts this account bookmarked, newest first, as
+	 * Mastodon's `bookmarks.csv` has them.
 	 *
 	 * @return string[]
 	 */
@@ -574,9 +532,8 @@ class MigrationService {
 	}
 
 	/**
-	 * Re-creates the mutes of an export — Mastodon's `muted_accounts.csv`,
-	 * which carries `Hide notifications` beside each handle and is the one
-	 * thing a mute stores besides its target.
+	 * Re-creates the mutes of a Mastodon `muted_accounts.csv`, with its
+	 * `Hide notifications` column.
 	 *
 	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{muted: int, skipped: int, failed: array<string, string>}
@@ -595,19 +552,13 @@ class MigrationService {
 	}
 
 	/**
-	 * Re-creates the lists of an export — Mastodon's `lists.csv`, one
+	 * Re-creates the lists of a Mastodon `lists.csv`, one
 	 * `list name,account address` per row.
 	 *
-	 * A list here can only hold accounts this one follows, which is Mastodon's
-	 * rule as well, so an account that is not followed yet is **skipped** and
-	 * not followed on the quiet: this button says it imports lists. Import the
-	 * follows first and run this after — the order the Migration page asks for
-	 * them in, and what the skipped count is telling you when it is not zero.
-	 *
-	 * A list whose title is already there is filled rather than duplicated, so
-	 * importing the same file twice changes nothing the second time. A list
-	 * that follows a Nextcloud group is left alone: its members are the
-	 * group's.
+	 * A list holds only followed accounts, as on Mastodon, so others are skipped,
+	 * not followed: the Migration page imports follows first. A list with the
+	 * same title is filled rather than duplicated; a list following a Nextcloud
+	 * group is left alone.
 	 *
 	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{lists: int, added: int, skipped: int, failed: array<string, string>}
@@ -679,12 +630,8 @@ class MigrationService {
 	}
 
 	/**
-	 * One of this account's lists of accounts, as the CSV the network it came
-	 * from would have written — so it can be carried on to the next one.
-	 *
-	 * The names are Mastodon's, because a file called `following_accounts.csv`
-	 * is one every other implementation's importer already recognises, and the
-	 * point of writing it is that it is read somewhere else.
+	 * One of this account's lists of accounts as a CSV under Mastodon's file
+	 * names, which other implementations' importers recognise.
 	 *
 	 * @return array{0: string, 1: string} the file name and its contents
 	 * @throws MoveErrorException list-unknown when `$kind` is not one of CSV_KINDS
@@ -721,12 +668,8 @@ class MigrationService {
 	}
 
 	/**
-	 * The handles in a bare or Mastodon-shaped CSV, applied one at a time.
-	 *
-	 * Shared by the block and mute imports, which differ only in what they do
-	 * with each account. One that fails does not stop the rest — an export is
-	 * a file whose author cannot fix it, and half of a block list is better
-	 * than none of it.
+	 * The handles in a bare or Mastodon-shaped CSV, applied one at a time, for
+	 * the block and mute imports. One failure does not stop the rest.
 	 *
 	 * @param callable(Person, Person, string): void $apply
 	 *
@@ -768,11 +711,8 @@ class MigrationService {
 	}
 
 	/**
-	 * The account an export entry names, by handle or by actor URL.
-	 *
-	 * Resolving may fetch the actor — a plain signed GET, which tells that
-	 * server nothing a follow would not have told it — because without an
-	 * actor id there is no row to write.
+	 * The account an export entry names, by handle or actor URL; resolving may
+	 * fetch the actor with a plain signed GET.
 	 */
 	private function resolveEntry(string $entry): Person {
 		if (self::isActorUrl($entry)) {
@@ -868,15 +808,10 @@ class MigrationService {
 	}
 
 	/**
-	 * The handles of a paged follow query, in order, without the ones whose
-	 * account this server never cached: a bare actor URL is not a handle, and
-	 * writing one into the address column produces a row every reader of the
-	 * format skips anyway.
-	 *
-	 * The account's own handle is left out too. Every local actor holds a
-	 * loopback follow of itself (`FollowsRequest::generateLoopbackAccount()`),
-	 * so both lists name the exporter — and a `following_accounts.csv` naming
-	 * you is a row Mastodon's importer tries to follow you with.
+	 * The handles of a paged follow query, in order, leaving out accounts never
+	 * cached (a bare URL is no handle) and the account's own loopback follow
+	 * (`FollowsRequest::generateLoopbackAccount()`), which Mastodon's importer
+	 * would try to follow.
 	 *
 	 * @param callable(string): Follow[] $page the page after a cursor, '' for the first
 	 *
@@ -906,10 +841,8 @@ class MigrationService {
 	}
 
 	/**
-	 * The handles this actor blocks or mutes.
-	 *
-	 * Read in one query — `getByActor()` takes no offset — so it is capped,
-	 * the same cap the account export uses.
+	 * The handles this actor blocks or mutes, read in one query
+	 * (`getByActor()` takes no offset) and capped like the account export.
 	 *
 	 * @return string[]
 	 */
@@ -976,14 +909,9 @@ class MigrationService {
 	}
 
 	/**
-	 * The accounts a follows export names, whichever network wrote it.
-	 *
-	 * Mastodon, GoToSocial and Akkoma hand out `following_accounts.csv`;
-	 * Pixelfed hands out `pixelfed-following.json`, a JSON array of actor
-	 * URLs — and the Migration page told Pixelfed users to fetch a CSV that
-	 * Pixelfed does not offer, then read their JSON as a one-line CSV with no
-	 * handle in it, so the import quietly followed nobody. A file is read as
-	 * JSON when it parses as JSON, and as CSV otherwise.
+	 * The accounts a follows export names: Mastodon's, GoToSocial's and
+	 * Akkoma's `following_accounts.csv`, or Pixelfed's `pixelfed-following.json`
+	 * of actor URLs. A file that parses as JSON is read as JSON, else as CSV.
 	 *
 	 * @return string[] `name@host` handles and actor URLs, deduplicated, in file order
 	 */
@@ -1007,13 +935,10 @@ class MigrationService {
 	}
 
 	/**
-	 * The entries of a JSON follows export.
-	 *
-	 * Pixelfed writes a bare array of actor URLs. Read generously beyond that,
-	 * because an export is the one file its author cannot fix: an entry may be
-	 * a handle instead of a URL, an object naming the account under `url`,
-	 * `acct`, `account` or `id`, and the array may sit under `following` or
-	 * `orderedItems` rather than at the root.
+	 * The entries of a JSON follows export. Pixelfed writes a bare array of actor
+	 * URLs; read generously beyond that: handles, objects naming the account
+	 * under `url`, `acct`, `account` or `id`, and arrays under `following` or
+	 * `orderedItems`.
 	 *
 	 * @param array<mixed> $decoded
 	 * @return string[]
@@ -1056,21 +981,14 @@ class MigrationService {
 	}
 
 	/**
-	 * The handles as a Mastodon `following_accounts.csv`: the header Mastodon
-	 * writes, then one row per handle.
-	 *
-	 * The column values are what a fresh Mastodon follow carries — boosts
-	 * shown, no notification, no language filter — because neither this app nor
-	 * the file format it is borrowing stores them per follow. What matters is
-	 * the shape: the file an export produces has to be one that Mastodon's own
-	 * "Import follows" accepts, and one that parseFollowsCsv() reads back.
+	 * The handles as a Mastodon `following_accounts.csv`, header and one row per
+	 * handle, with a fresh follow's default columns, so Mastodon's "Import
+	 * follows" and parseFollowsCsv() both read it.
 	 *
 	 * @param string[] $handles
 	 */
 	public static function exportFollowsCsv(array $handles): string {
-		// written by hand rather than with fputcsv(), which quotes a field
-		// containing a space and would put the header out in a shape no other
-		// implementation writes
+		// written by hand: fputcsv() would quote the header's spaced fields
 		$lines = ['Account address,Show boosts,Notify on new posts,Languages'];
 		foreach ($handles as $handle) {
 			$lines[] = Csv::cell($handle) . ',true,false,';
@@ -1080,12 +998,10 @@ class MigrationService {
 	}
 
 	/**
-	 * The handles in a Mastodon `following_accounts.csv`.
-	 *
-	 * Current exports carry the header `Account address,Show boosts,Notify on
-	 * new posts,Languages`; older ones are a bare list of handles. Either way
-	 * a leading `@` is dropped, and a handle that is not `user@host` or that
-	 * repeats (case-insensitively) is left out.
+	 * The handles in a Mastodon `following_accounts.csv`, with the header
+	 * `Account address,Show boosts,Notify on new posts,Languages` or as a bare
+	 * list. A leading `@` is dropped; anything not `user@host`, or repeated
+	 * case-insensitively, is left out.
 	 *
 	 * @return string[]
 	 */
@@ -1109,12 +1025,8 @@ class MigrationService {
 
 			$cells = str_getcsv($line, ',', '"', '');
 			$handle = ltrim(Csv::restore(trim((string)($cells[$column] ?? ''))), '@');
-			// `name@host`, with the host allowed to be a single label: a
-			// fediverse host is usually dotted, but an instance reached as
-			// `cloud` or `devel` on a private network is not, and insisting on
-			// a dot silently dropped every handle on such a server — including
-			// the ones in this app's own export. A handle that resolves to
-			// nothing is reported as failed, which says more than skipping it.
+			// `name@host`, where the host may be a single label (`cloud` on a private
+			// network); a handle that resolves to nothing is reported as failed
 			if (preg_match('/^[^@\s]+@[^@\s]+$/', $handle) !== 1) {
 				continue;
 			}
@@ -1132,13 +1044,10 @@ class MigrationService {
 	}
 
 	/**
-	 * The actor id an alias names: the one a handle resolves to, or the one
-	 * served at a URL. A handle is what every other server's form asks for,
-	 * so it is what people type; the id is what the wire carries, and it is
-	 * not always the URL a person copies — Mastodon 4.5 answers
-	 * `/users/<name>` with an actor whose id is `/ap/users/<number>`, and
-	 * that is the id its Move check looks for. A URL nobody answers is kept
-	 * as typed.
+	 * The actor id an alias names: what a handle resolves to, or the id served
+	 * at a URL, which may differ from it (Mastodon 4.5 serves `/users/<name>`
+	 * with the id `/ap/users/<number>`, which its Move check looks for). A URL
+	 * nobody answers is kept as typed.
 	 *
 	 * @throws MoveErrorException
 	 */
@@ -1197,14 +1106,10 @@ class MigrationService {
 	}
 
 	/**
-	 * What to tell the person when a handle or an address resolved to nobody.
-	 *
-	 * A 401 or 403 from the actor fetch is not "nobody there": that server
-	 * answers only requests it can verify — Mastodon's AUTHORIZED_FETCH,
-	 * GoToSocial always — and could not verify this one, which is what
-	 * happens when this Nextcloud cannot be reached from the internet over
-	 * https. Said as such, because "no account answers" sends the person off
-	 * to check a handle that was right.
+	 * What to tell the person when a handle or address resolved to nobody. A 401
+	 * or 403 means the server could not verify this one's signed fetch (usually
+	 * this Nextcloud is not reachable over https), and is said as such rather
+	 * than as a wrong handle.
 	 */
 	private static function nobodyAnswered(string $name, string $host, Throwable $e): MoveErrorException {
 		for ($cause = $e; $cause !== null; $cause = $cause->getPrevious()) {
@@ -1224,17 +1129,10 @@ class MigrationService {
 	}
 
 	/**
-	 * Follows the new account on behalf of everyone on this instance who
-	 * followed the old one. They never receive the Move — a delivery to
-	 * ourselves is dropped — so nothing else would do it for them.
-	 *
-	 * Paged. getFollowersByActorId() takes a limit and this used to call it
-	 * without one, so a popular account's entire follower set was loaded into
-	 * memory before the first re-follow, and each row then costs a lookup and an
-	 * outbound follow. The page size bounds the memory; the work itself is still
-	 * one account's followers, which is what a Move is. Each page starts after
-	 * the last one's final follow rather than at an offset, so the walk reads
-	 * every follower once however far it gets.
+	 * Follows the new account on behalf of everyone here who followed the old
+	 * one, since a delivery to ourselves is dropped and they never receive the
+	 * Move. Paged after the last follow of each page, so memory stays bounded
+	 * and every follower is read once.
 	 */
 	private function refollowLocalFollowers(Person $actor, Person $target): void {
 		$done = 0;

@@ -11,10 +11,5 @@ namespace OCA\Social\Tools\Exceptions;
 
 use Exception;
 
-/**
- * Class RowNotFoundException
- *
- * @package OCA\Social\Tools\Exceptions
- */
 class RowNotFoundException extends Exception {
 }

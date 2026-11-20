@@ -20,10 +20,9 @@ use Throwable;
 
 /**
  * A conversation on the fediverse: the post's `replies` collection, page by
- * page, each reply this server does not hold fetched from its own server
- * (`StreamQueueService::fetchNow()`), and the replies of those in turn, a
- * few levels deep. What a server does not list is not found, as on any
- * fediverse server reading the same post.
+ * page, each reply not held here fetched from its own server
+ * (`StreamQueueService::fetchNow()`), and their replies a few levels deep.
+ * What a server does not list is not found.
  */
 class ActivityPubThreadSource implements ThreadSource {
 	private const DEPTH = 3;

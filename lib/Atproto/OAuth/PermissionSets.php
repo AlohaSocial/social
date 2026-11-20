@@ -19,13 +19,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The permission sets an `include:` scope names, by Lexicon resolution: the
- * NSID's authority, reversed, is a DNS name whose `_lexicon` TXT record
- * names a DID; that DID's repository holds the set as a
- * `com.atproto.lexicon.schema` record keyed by the NSID. Only `repo` and
- * `rpc` permissions are taken from a set, and only for collections and
- * methods in the set's own namespace or below it. A set is kept a day at
- * most, a failure five minutes.
+ * The permission sets an `include:` scope names, by Lexicon resolution (the
+ * NSID authority's `_lexicon` TXT record names the DID whose repository holds
+ * the set). Only `repo` and `rpc` permissions within the set's own namespace
+ * are taken. A set is cached a day, a failure five minutes.
  */
 class PermissionSets {
 	public const KEPT = 86400;

@@ -22,18 +22,14 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * Reads the feeds of the Bluesky authors somebody here follows (D12): the
- * watches due, each asked the public AppView for its next page, every
- * post newer than the last read stored, and the next read set by backoff —
- * soon after a page with posts, doubling up to six hours after empty ones,
- * reset by the next post. One pass is bounded twice: by how many watches
- * it visits and by the instance-wide ceiling on AppView requests. A walk
- * to older posts goes back at most BACKFILL_AGE and WALK_PAGES pages, and
- * while it is unfinished the newest page is read too. An account the
- * AppView refuses as deactivated, suspended, taken down or gone, three
- * times with no successful read between (network errors do not count),
- * is hidden here, or purged when its repository is gone (`AccountStatus`);
- * one it serves again is restored.
+ * Reads the feeds of the Bluesky authors somebody here follows (D12): each
+ * due watch asks the public AppView for its next page, stores the posts newer
+ * than the last read, and backs off up to six hours after empty pages. A pass
+ * is bounded by watches visited and by the instance-wide AppView ceiling; a
+ * walk to older posts reads at most BACKFILL_AGE and WALK_PAGES. An account
+ * refused as deactivated, suspended, taken down or gone three times in a row
+ * is hidden, or purged when its repository is gone (`AccountStatus`), and
+ * restored when it is served again.
  */
 class FeedPoller {
 	private ?string $acceptLabelers = null;
@@ -158,9 +154,8 @@ class FeedPoller {
 
 				return 0;
 			}
-			// the AppView names the status: acted on once it has said so a
-			// few times with no successful read between, with the ordinary
-			// backoff between them; other failures in between do not count
+			// acted on only after the AppView names the status a few times with no
+			// successful read between; other failures do not count
 			$answers = self::statusAnswers($watch) + 1;
 			$this->watches->failed($watch->did, self::withStatusAnswers($answers, $e->getMessage()), $now + $this->failureBackoff($watch));
 			if ($answers >= self::STATUS_AFTER) {

@@ -12,14 +12,10 @@ namespace OCA\Social\Model;
 use JsonSerializable;
 
 /**
- * One rung of a video's ladder: the same video, smaller.
- *
- * A rendition is one file — a fragmented MP4 written by ffmpeg with
- * `-hls_flags single_file` — and one playlist that addresses the segments
- * inside it as byte ranges. The playlist is kept as text with the media file's
- * name replaced by `{uri}`, because the URI it has to carry is a route on this
- * server: it is not known when the file is encoded, and it changes if the
- * instance moves.
+ * One rung of a video's ladder: the same video, smaller. A fragmented MP4
+ * (ffmpeg `-hls_flags single_file`) and a playlist addressing its segments
+ * as byte ranges, stored with the file name as `{uri}`, since the route
+ * serving it is not known at encode time.
  */
 class VideoRendition implements JsonSerializable {
 	/** What the media filename becomes in the stored playlist. */
@@ -104,22 +100,17 @@ class VideoRendition implements JsonSerializable {
 	}
 
 	/**
-	 * The stored playlist with the media URI put back in.
-	 *
-	 * The one place the placeholder is resolved, so a playlist is never
-	 * written to a client with a filename from the encoder in it.
+	 * The stored playlist with the media URI put back in; the one place the
+	 * placeholder is resolved.
 	 */
 	public function playlistFor(string $uri): string {
 		return str_replace(self::URI_PLACEHOLDER, $uri, $this->playlist);
 	}
 
 	/**
-	 * What the master playlist says about this rung.
-	 *
-	 * `RESOLUTION` is not given: the width is not stored (scale=-2 derives it
-	 * from the source's aspect ratio) and an attribute that has to be right is
-	 * better absent than guessed. `BANDWIDTH` is the one a player actually
-	 * chooses on.
+	 * What the master playlist says about this rung. No `RESOLUTION`: the width
+	 * is not stored (scale=-2 derives it), and a wrong value is worse than none.
+	 * `BANDWIDTH` is what players choose on.
 	 */
 	public function masterEntry(string $uri): string {
 		return '#EXT-X-STREAM-INF:BANDWIDTH=' . $this->bandwidth

@@ -24,23 +24,11 @@ use OCP\DB\QueryBuilder\IQueryFunction;
 use OCP\IDBConnection;
 
 /**
- * The app's query-builder helpers, wrapped around a query builder the server
- * handed us rather than extending one we built ourselves.
- *
- * This class used to extend `OC\DB\QueryBuilder\QueryBuilder`, which lives in
- * the server's `lib/private/` and carries no stability promise. Every one of
- * the 68 classes in `lib/Db/` descends from this one, so that edge put the
- * whole persistence layer on a private constructor signature: when core added
- * sharding parameters to it, the app got a fatal on `occ upgrade` with no
- * deprecation first, and when Nextcloud 35 added `forUpdate()` to the public
- * interface, the private class no longer satisfied the interface this class
- * claims to implement.
- *
- * Composition removes both failure modes. The inner builder comes from
- * `IDBConnection::getQueryBuilder()`, so the server constructs its own object
- * with whatever arguments it currently takes, and everything below is
- * delegation to the public `IQueryBuilder` contract. The fluent methods return
- * `$this` rather than the inner builder, so chains stay on the helper class.
+ * The app's query-builder helpers, wrapped around the query builder
+ * `IDBConnection::getQueryBuilder()` hands out rather than extending the
+ * server's private `OC\DB\QueryBuilder\QueryBuilder`, whose constructor and
+ * interface may change without notice. Everything delegates to the public
+ * `IQueryBuilder` contract; fluent methods return `$this`.
  */
 class ExtendedQueryBuilder implements IExtendedQueryBuilder {
 	public string $defaultSelectAlias = '';
@@ -51,10 +39,8 @@ class ExtendedQueryBuilder implements IExtendedQueryBuilder {
 	}
 
 	/**
-	 * The query builder this one delegates to.
-	 *
-	 * Exposed for the rare caller that needs to hand the server its own object
-	 * back; everything inside the app should use the delegating methods.
+	 * The query builder this one delegates to, for the rare caller that has to
+	 * hand the server its own object.
 	 */
 	public function getQueryBuilder(): IQueryBuilder {
 		return $this->queryBuilder;
@@ -329,14 +315,10 @@ class ExtendedQueryBuilder implements IExtendedQueryBuilder {
 
 	#[\Override]
 	/**
-	 * Untyped on purpose, and it has to stay that way. The `nextcloud/ocp`
-	 * stub this app is analysed against declares
-	 * `orderBy(string|ILiteral|IParameter|IQueryFunction $sort, …)`, but the
-	 * interface a real server ships is still `orderBy($sort, $order = null)`.
-	 * PHP lets an override widen a parameter type and not narrow one, so the
-	 * stub's signature here is a fatal error the moment this class is loaded
-	 * on any Nextcloud this app supports — and the unit suite cannot see it,
-	 * because it loads the stub.
+	 * Untyped on purpose: the `nextcloud/ocp` stub declares
+	 * `orderBy(string|ILiteral|IParameter|IQueryFunction $sort, …)`, but real
+	 * servers ship `orderBy($sort, $order = null)`, and an override cannot narrow
+	 * a parameter type. The unit suite loads the stub and cannot see the fatal.
 	 */
 	public function orderBy($sort, $order = null): static {
 		$this->queryBuilder->orderBy($sort, $order);
@@ -346,14 +328,7 @@ class ExtendedQueryBuilder implements IExtendedQueryBuilder {
 
 	#[\Override]
 	/**
-	 * Untyped on purpose, and it has to stay that way. The `nextcloud/ocp`
-	 * stub this app is analysed against declares
-	 * `orderBy(string|ILiteral|IParameter|IQueryFunction $sort, …)`, but the
-	 * interface a real server ships is still `orderBy($sort, $order = null)`.
-	 * PHP lets an override widen a parameter type and not narrow one, so the
-	 * stub's signature here is a fatal error the moment this class is loaded
-	 * on any Nextcloud this app supports — and the unit suite cannot see it,
-	 * because it loads the stub.
+	 * Untyped on purpose, as orderBy().
 	 */
 	public function addOrderBy($sort, $order = null): static {
 		$this->queryBuilder->addOrderBy($sort, $order);
@@ -745,10 +720,8 @@ class ExtendedQueryBuilder implements IExtendedQueryBuilder {
 		$cursor = $this->executeQuery();
 		while ($data = $cursor->fetch()) {
 			try {
-				// a row the model cannot be built from is left out rather than
-				// taking the whole page with it; the parsers already absorb a
-				// missing joined actor themselves, so what reaches here is a
-				// row this instance has no reading of
+				// a row the model cannot be built from is left out rather than taking the
+				// whole page with it
 				$rows[] = $method($data, $this);
 			} catch (Exception $e) {
 			}

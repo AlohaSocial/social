@@ -21,18 +21,12 @@ use Throwable;
 
 /**
  * Repairs missing timeline and hashtag side-index rows in a resumable walk.
+ * Posts maintain these on write; this bounded pass fills any gaps, never
+ * empties a table, and marks itself done once a page comes back short.
  *
- * New and edited posts maintain these tables during their normal write path.
- * This bounded pass is for legacy rows and any gaps left by an older version;
- * unlike the administrator's explicit full rebuild, it never empties either
- * table. It is a one-shot repair: once a page comes back short the walk has
- * reached the newest post, every post after that was indexed by its own save,
- * and the pass marks itself done and costs one config read from then on.
- *
- * The cursor advances only past streams whose indexes were written, so a
- * partial failure is safe to retry: both writers ignore duplicate keys. A
- * stream that keeps failing is skipped after MAX_FAILURES passes rather than
- * holding the cursor, and every stream after it, for good.
+ * The cursor advances only past streams whose indexes were written, and both
+ * writers ignore duplicates, so a retry is safe. A stream failing
+ * MAX_FAILURES times is skipped rather than holding the cursor for good.
  */
 class IndexService {
 	public const CHUNK_SIZE = 500;
@@ -122,11 +116,9 @@ class IndexService {
 	}
 
 	/**
-	 * Counts a failure of one stream across passes, and says whether it has
-	 * failed often enough to be skipped. Until then the cursor stays before it
-	 * and the next pass retries it. A skipped stream is named with its
-	 * primary key and type, which is what says why it cannot be read, and
-	 * counted under SKIPPED_KEY for the setup check.
+	 * Counts a failure of one stream across passes and says whether to skip it;
+	 * until then the cursor stays before it. A skipped stream is logged with its
+	 * primary key and type and counted under SKIPPED_KEY for the setup check.
 	 *
 	 * @param array{nid: string, id_prim: string, type: string} $row
 	 */

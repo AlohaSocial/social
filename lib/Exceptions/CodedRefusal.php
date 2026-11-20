@@ -12,11 +12,10 @@ namespace OCA\Social\Exceptions;
 use Throwable;
 
 /**
- * A refusal with a stable code beside the English sentence, and the numbers
- * or names the advice needs (a limit, the field refused): the page says it in
- * the person's language from the code and those, the sentence is for logs
- * and API clients. The codes are listed in API.md and Atproto-Compatibility
- * §13.5.
+ * A refusal with a stable code and the values the advice needs (a limit, the
+ * field refused), so the page can say it in the person's language; the
+ * English sentence is for logs and API clients. The codes are listed in
+ * API.md and Atproto-Compatibility §13.5.
  */
 trait CodedRefusal {
 	public readonly string $errorCode;

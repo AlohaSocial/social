@@ -13,10 +13,8 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * Invitation links for external users.
- *
- * The token is stored as it is sent, like a share link's: the person who made
- * the invitation can copy the link again. `max_uses` 0 is any number of uses,
+ * Invitation links for external users. The token is stored as sent, like a
+ * share link's, so the link can be copied again. `max_uses` 0 is unlimited,
  * `expires` 0 is never.
  *
  * @psalm-type ExternalInviteRow = array{id: int, token: string, creator: string, note: string, maxUses: int, uses: int, expires: int, creation: int}
@@ -88,10 +86,8 @@ class ExternalInvitesRequest {
 	}
 
 	/**
-	 * Counts one use, unless the invitation has none left.
-	 *
-	 * One statement, so two registrations racing for the last use of an
-	 * invitation cannot both have it.
+	 * Counts one use, unless the invitation has none left, in one statement so
+	 * two registrations cannot both take the last use.
 	 */
 	public function consume(int $id): bool {
 		$qb = $this->connection->getQueryBuilder();

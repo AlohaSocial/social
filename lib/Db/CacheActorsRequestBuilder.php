@@ -44,7 +44,7 @@ class CacheActorsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */
@@ -58,11 +58,8 @@ class CacheActorsRequestBuilder extends CoreRequestBuilder {
 			'ca.shared_inbox', 'ca.outbox', 'ca.featured', 'ca.url', 'ca.type', 'ca.preferred_username',
 			'ca.name', 'ca.summary', 'ca.description', 'ca.sanitized', 'ca.public_key', 'ca.local', 'ca.details', 'ca.source', 'ca.creation',
 			'ca.details_update',
-			// the three counters, which `Person::importFromDatabase()` lays over
-			// what `details` says. Without them in the row the overlay has
-			// nothing to lay on, and every profile showed the JSON until the
-			// cron's next recount rewrote it: a post count that did not move
-			// when you posted.
+			// the three counters, which `Person::importFromDatabase()` lays over what
+			// `details` says
 			'ca.count_followers', 'ca.count_following', 'ca.count_posts'
 		)
 			->from(self::TABLE_CACHE_ACTORS, 'ca');
@@ -132,9 +129,8 @@ class CacheActorsRequestBuilder extends CoreRequestBuilder {
 
 	/**
 	 * Hands an actor that moved the cached copy of the account it moved to, so
-	 * the client entity's `moved` is a real account rather than a stub derived
-	 * from the id. An actor that did not move costs nothing here; a target
-	 * that is not cached leaves the model to derive the stub.
+	 * the client entity's `moved` is a real account; an uncached target leaves
+	 * the model to derive a stub from the id.
 	 */
 	public function attachMovedTarget(Person $actor): void {
 		if ($actor->getMovedTo() === '') {
@@ -149,9 +145,8 @@ class CacheActorsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The cached row behind a `movedTo` id, parsed one hop deep: the target's
-	 * own target is deliberately not resolved, so two accounts pointing at
-	 * each other cannot send this round in circles.
+	 * The cached row behind a `movedTo` id, parsed one hop deep so that two
+	 * accounts pointing at each other cannot loop.
 	 *
 	 * @throws RowNotFoundException
 	 */

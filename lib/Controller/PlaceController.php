@@ -29,13 +29,9 @@ use Throwable;
 /**
  * Places: where a post was taken.
  *
- * The search is over the places this instance has already seen, not over a
- * gazetteer — nothing here calls a geocoder, deliberately. See
- * `PlaceService` and the migration for why.
- *
- * A viewer is required. The set of places an instance knows is the set of
- * places its users have posted from, so answering it to anybody would publish a
- * rough map of where this instance's people go, to callers who are not on it.
+ * Searched over the places this instance has already seen, never a geocoder
+ * (see `PlaceService`). A viewer is required, since the known places would
+ * map where this instance's people go.
  */
 class PlaceController extends ClientApiController {
 	public function __construct(
@@ -80,11 +76,8 @@ class PlaceController extends ClientApiController {
 		}
 	}
 	/**
-	 * The public posts taken at a place, for its page.
-	 *
-	 * Public only whoever asks, so the route needs no viewer; it takes one
-	 * so that a signed-in reader's own bookmarks and favourites are marked on
-	 * the posts, as they are everywhere else.
+	 * The public posts taken at a place, for its page. A viewer is optional and
+	 * only marks their own bookmarks and favourites.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

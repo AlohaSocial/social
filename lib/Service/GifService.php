@@ -20,45 +20,26 @@ use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
 /**
- * The instance's own library of animated pictures.
+ * The instance's own library of animated pictures, shared in everybody's
+ * composer picker under searchable names.
  *
- * **Why this rather than Giphy or Tenor.** Those are the obvious way to get a
- * GIF picker, and both mean every composer on the instance talking to a third
- * party: the search terms people type are sent there, and every thumbnail is a
- * request from the reader's browser to a host the instance does not control.
- * That is a decision about a company's internal feed that this app is not
- * entitled to make on an administrator's behalf, and a setting to turn it on
- * would still be a setting that quietly sends what people are looking for to
- * somebody else's server.
- *
- * **Why not just Files.** The composer can already attach any file, this one
- * included. What this adds is a *shared* set: a picture an administrator put
- * here is in everybody's picker, under a name they can search for, without
- * anybody having to be given a folder or remember a path. That is what makes
- * it the same joke in the same team rather than one person's collection.
- *
- * Stored the way custom emoji are — a row and a file in appdata — because it
- * is the same shape of thing: a small curated set, served to everybody, which
- * must not break because a file moved in somebody's Files.
+ * Not Giphy or Tenor, which would send every search and thumbnail request to
+ * a third party; not just Files, since this is a shared set nobody has to be
+ * given a folder for. Stored like custom emoji, a row and a file in appdata.
  */
 class GifService {
 	/** The appdata folder the pictures live in. */
 	private const FOLDER = 'gif';
 
 	/**
-	 * What may be in the library.
-	 *
-	 * Animated formats and nothing else: this is a GIF picker, and a library
-	 * of stills is what the Files picker next to it is already for.
+	 * What may be in the library: animated formats only; stills are for the
+	 * Files picker.
 	 */
 	private const ALLOWED_TYPES = ['image/gif', 'image/webp', 'video/mp4'];
 
 	/**
-	 * How large one may be, in bytes.
-	 *
-	 * Generous next to an emoji's 256 KiB, because a second of animation is
-	 * not a 32-pixel square, and far below an upload's ceiling, because
-	 * everybody on the instance loads these in a grid.
+	 * How large one may be, in bytes: more than an emoji's 256 KiB, far less than
+	 * an upload's ceiling, since everybody loads these in a grid.
 	 */
 	public const MAX_SIZE = 8 * 1024 * 1024;
 
@@ -85,11 +66,8 @@ class GifService {
 	}
 
 	/**
-	 * The library as the picker is offered it: what this instance added, and
-	 * then the animated emoji every instance has.
-	 *
-	 * The instance's own come first whatever the order asks: somebody put them
-	 * there on purpose, and they are the ones nowhere else has.
+	 * The library as the picker is offered it: what this instance added, always
+	 * first, then the animated emoji every instance has.
 	 *
 	 * @return Gif[]
 	 */
@@ -98,13 +76,9 @@ class GifService {
 	}
 
 	/**
-	 * The library, narrowed to what somebody typed.
-	 *
-	 * Matched on the title and the slug, case-insensitively, in PHP rather
-	 * than in SQL: the set is tens of rows, one query returns all of them
-	 * anyway, and `LIKE` with a leading wildcard is a scan on every database
-	 * this app supports. What it buys is that the same search works the same
-	 * on all three.
+	 * The library, narrowed to what somebody typed: title and slug,
+	 * case-insensitively, in PHP, since the set is tens of rows and a leading
+	 * wildcard `LIKE` would scan anyway.
 	 *
 	 * @return Gif[]
 	 */
@@ -175,8 +149,8 @@ class GifService {
 			);
 		}
 
-		// the bytes decide, not the extension: this is served to everybody on
-		// the instance and ends up attached to posts that federate
+		// the bytes decide, not the extension: these end up in posts that
+		// federate
 		$mediaType = (string)@mime_content_type($path);
 		if (!in_array($mediaType, self::ALLOWED_TYPES, true)) {
 			throw new InvalidActionException('a library picture has to be a GIF, an animated WebP or an MP4');
@@ -187,13 +161,11 @@ class GifService {
 			throw new InvalidActionException('the picture could not be read');
 		}
 
-		// the same stripping every other upload gets; these are attached to
-		// posts that leave this instance, so a guarantee that holds for a
-		// photograph and not for this is not a guarantee
+		// the metadata stripping every other upload gets, since these are
+		// attached to posts that leave this instance
 		$content = $this->imageMetadataService->strip($content, $mediaType);
 
-		// named after the slug: one picture per slug, and replacing it
-		// overwrites rather than leaving the old bytes behind
+		// named after the slug, so replacing overwrites the old bytes
 		$filename = $slug . '.' . $this->extensionOf($mediaType);
 		$this->folder()->newFile($filename, $content);
 
@@ -204,10 +176,7 @@ class GifService {
 	}
 
 	/**
-	 * Removes one, picture and all.
-	 *
-	 * Posts that used it are untouched: an attachment is a copy taken when the
-	 * post was written, so a post keeps the picture it was published with.
+	 * Removes one, picture and all. Posts that used it keep their copy.
 	 *
 	 * @return bool whether there was one to remove
 	 */
@@ -220,8 +189,8 @@ class GifService {
 		try {
 			$this->folder()->getFile($filename)->delete();
 		} catch (\Exception $e) {
-			// the row is gone, which is what decides whether it is in the
-			// library; a file left behind is a file, not a broken entry
+			// the row decides what is in the library; a file left behind is no
+			// broken entry
 			$this->logger->notice('could not delete the bytes of a library picture', [
 				'slug' => $slug, 'exception' => $e,
 			]);

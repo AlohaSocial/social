@@ -15,17 +15,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_stream` indexed on (attributed_to_prim, nid).
- *
- * A profile timeline, the account's statuses through the API and the
- * author-narrowed search all filter on one author and page newest-first by
- * nid. With an index on the author alone the database reads every post that
- * author ever wrote and sorts them before it can hand over twenty — on
- * PostgreSQL visibly so for any account with a long history. With the nid
- * second in the same index the page is a range read that stops at the limit.
- *
- * The single-column `attributed_to_prim` index stays: dropping it is a
- * rebuild of the largest table in the app for a saving on writes only.
+ * `social_stream` indexed on (attributed_to_prim, nid), so one author's posts
+ * newest first (profiles, statuses, author-narrowed search) are a range read
+ * that stops at the limit. The single-column index stays: dropping it would
+ * rebuild the largest table for a small write saving.
  */
 class Version1000Date20261008000400 extends SimpleMigrationStep {
 	/**

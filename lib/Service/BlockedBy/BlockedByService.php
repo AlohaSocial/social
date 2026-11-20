@@ -22,16 +22,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who has blocked a local account, wherever they are. Every block is the
- * same `blocked_by` relation, which the timelines, notifications,
- * suggestions and relationship flags already read: one arriving from
- * another server is recorded by `BlockInterface`, one between two accounts
- * here by `RelationshipService`, and one a network keeps where it can only
- * be asked about (`BlockedBySource`) is recorded whenever it is asked —
- * before a reply, a quote or a follow reaches the account, and wherever a
- * read as the local account says so. A reply to, quote of or follow of an
- * account that has blocked the local one is refused with the reason, since
- * it would reach nobody.
+ * Who has blocked a local account, wherever they are, as the `blocked_by`
+ * relation the timelines, notifications, suggestions and relationship flags
+ * read. Recorded by `BlockInterface` for remote blocks, `RelationshipService`
+ * for local ones, and from networks that can only be asked
+ * (`BlockedBySource`) whenever they are asked. A reply, quote or follow that
+ * would reach a blocker is refused with the reason.
  */
 class BlockedByService {
 	public const REFUSAL = 'This account has blocked you';

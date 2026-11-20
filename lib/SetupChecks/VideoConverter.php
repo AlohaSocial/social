@@ -16,18 +16,11 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether the videos posted here will play anywhere else.
- *
- * An iPhone records `.mov`, and Android phones — and iPhones exporting through
- * some apps — write HEVC inside an `.mp4`. **Pixelfed accepts `video/mp4` and
- * nothing else**, and drops the rest on arrival; Chrome and Firefox do not play
- * HEVC. Converting them to H.264 is what `video_transcode` does, it is on by
- * default, and it needs ffmpeg — which is a package the administrator installs
- * and this app cannot. Without it nothing says so: the upload works, the video
- * plays in Safari here, and it simply never arrives anywhere that matters.
- *
- * Switched off with ffmpeg present is a decision, so it is said as
- * information rather than as a warning.
+ * Whether the videos posted here will play elsewhere. iPhones record `.mov`
+ * and many phones write HEVC in `.mp4`; Pixelfed accepts only `video/mp4` and
+ * Chrome and Firefox do not play HEVC. `video_transcode`, on by default,
+ * converts them to H.264 but needs ffmpeg, which the administrator installs.
+ * Switched off with ffmpeg present is a choice, so only information.
  */
 class VideoConverter implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#videos-do-not-play-elsewhere';

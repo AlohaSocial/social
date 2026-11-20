@@ -21,9 +21,8 @@ class Flag extends ACore implements JsonSerializable {
 	public const TYPE = 'Flag';
 
 	/**
-	 * How many ids an incoming report may name. Mastodon's carry the account
-	 * and a handful of its statuses; the rest of a longer list is dropped
-	 * rather than stored against the report.
+	 * How many ids an incoming report may name: Mastodon's carry the account and
+	 * a handful of statuses, and the rest of a longer list is dropped.
 	 */
 	public const MAX_OBJECT_IDS = 50;
 

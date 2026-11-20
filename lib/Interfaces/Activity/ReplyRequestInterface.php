@@ -51,9 +51,8 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 
 		if ($reply === []) {
 			// A URI-only instrument cannot be checked against its author and
-			// inReplyTo fields. Resolve no arbitrary remote URL here: if this is
-			// a request for one of our posts, explicitly reject it so the sender
-			// does not wait forever for a decision that will never arrive.
+			// inReplyTo, and no arbitrary remote URL is resolved here: reject one for
+			// our posts so the sender does not wait for ever.
 			$item->checkOrigin($replyId);
 			$item->checkOrigin($actor);
 			try {
@@ -95,9 +94,8 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 		if (!$target->isLocal() || !in_array($target->getAttributedTo(), $recipients, true)) {
 			return;
 		}
-		// The authorization URL is intentionally public and serves no post
-		// content. Do not issue a grant for a private target that its later
-		// anonymous verifier must refuse to disclose.
+		// The authorization URL is public and its verifier anonymous, so no grant
+		// is issued for a private target it would refuse to disclose.
 		if (!$target->isPublic()
 			&& !in_array($target->getVisibility(), [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true)) {
 			$this->answer($item, $target, false, '');

@@ -12,11 +12,9 @@ namespace OCA\Social\Traits;
 use OCA\Social\Model\ActivityPub\Item;
 
 /**
- * The `details` JSON blob carried by streams, actors and notifications.
- *
- * Keys are not free-form: every one of them is named in
- * {@see \OCA\Social\Model\Details}, because a misspelled key here is not an
- * error but a new key, holding the value under a name nothing will read.
+ * The `details` JSON blob carried by streams, actors and notifications. Every
+ * key is named in {@see \OCA\Social\Model\Details}: a misspelled key is no
+ * error, just a value nothing reads.
  */
 trait TDetails {
 	/** @var array */
@@ -72,11 +70,9 @@ trait TDetails {
 	}
 
 	/**
-	 * A whole object handed along with this one for the rest of the request:
-	 * the post a notification is about, for the push and the mail sent in
-	 * the same request. Not a detail: `getDetailsAll()` leaves it out, so it
-	 * is neither written to `details` nor exported. A notification read from
-	 * the database has no item and finds the post by its object id.
+	 * A whole object handed along with this one for the rest of the request,
+	 * such as the post a notification is about, for the push and mail. Not a
+	 * detail: `getDetailsAll()` leaves it out, so it is never stored or exported.
 	 *
 	 * @param string $detail
 	 * @param Item $value
@@ -103,10 +99,8 @@ trait TDetails {
 	}
 
 	/**
-	 * A details blob is JSON somebody else may have written — an older version
-	 * of this app, or a row hand-edited during an upgrade — so a count that
-	 * comes back as a string is cast rather than allowed to fatal on the way
-	 * out of a declared `int` return.
+	 * A details blob may have been written by anybody, so a count that comes
+	 * back as a string is cast rather than allowed to fatal on the `int` return.
 	 *
 	 * @param string $detail one of the keys in {@see \OCA\Social\Model\Details}
 	 */

@@ -25,17 +25,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The counts of one of this instance's own posts that is also a record on
- * Bluesky, as the AppView has them now: `getPosts`, 25 records a call.
+ * The AppView's counts of a local post that is also a record on Bluesky
+ * (`getPosts`, 25 records a call).
  *
- * A like, repost, reply or quote on Bluesky is a record in somebody else's
- * repository, and this instance only hears of it through the author's
- * notifications (`NotificationPoller`); one the poll missed is never
- * counted. The AppView's totals take in what did arrive, and the likes and
- * boosts of local accounts that are on Bluesky too, so only what they state
- * beyond that is kept (`CountWriter::writeBeyond()`,
- * `AtprotoRepoRequest::countHeldOnBluesky()`). An author whose presence on
- * Bluesky is switched off is not asked about; the post keeps what it has.
+ * Interactions on Bluesky reach this instance only through the author's
+ * notifications (`NotificationPoller`), and a missed one is never counted, so
+ * only what the AppView states beyond what arrived is kept
+ * (`CountWriter::writeBeyond()`, `AtprotoRepoRequest::countHeldOnBluesky()`).
+ * Authors whose Bluesky presence is off are not asked about.
  */
 class BlueskyPublishedCountSource implements CountSource {
 	public function __construct(

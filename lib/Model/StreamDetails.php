@@ -14,11 +14,6 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class StreamDetails
- *
- * @package OCA\Social\Model
- */
 class StreamDetails implements JsonSerializable {
 	use TArrayTools;
 

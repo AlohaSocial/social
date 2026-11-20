@@ -17,24 +17,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Finding the next video to convert, converting it, and putting it back.
+ * Finds the next video to convert, converts it, and puts it back; running
+ * ffmpeg is `VideoTranscodeService`'s, so each can be tested alone.
  *
- * Separate from `VideoTranscodeService`, which knows only how to run ffmpeg
- * over a path: this one knows about stored documents, and that separation is
- * what lets the ffmpeg command be tested without a file store and the
- * bookkeeping be tested without ffmpeg.
- *
- * The order of operations is the whole of the care here. The converted file is
- * written to the store **first**, the row is pointed at it **second**, and the
- * original is deleted **last** — so a failure at any point leaves a document
- * pointing at a file that exists. The other order leaves a post with a video
- * that 404s, which is worse than a video in a format some servers will not
- * take.
- *
- * The posts carrying the video are pointed at the new file too, before the
- * original goes. Their attachment copies name the file by its stored uuid and
- * its type, both of which a conversion changes, and a copy left alone was a
- * post whose video 404'd here the moment the original was deleted.
+ * The converted file is written first, the row pointed at it second, and the
+ * original deleted last, so a failure always leaves the document on a file
+ * that exists. The posts carrying the video are re-pointed before the
+ * original goes, since their attachment copies name its uuid and type.
  */
 class VideoTranscodingWorker {
 	/** The four states `social_cache_doc.transcoded` holds. */
@@ -47,17 +36,14 @@ class VideoTranscodingWorker {
 	private const PAGE = 20;
 
 	/**
-	 * How many pages one call will walk past before giving the run back.
-	 * A thousand rows of bookkeeping is a second; the point of the ceiling is
-	 * that a cron worker always returns.
+	 * How many pages one call walks before giving the run back, so a cron
+	 * worker always returns.
 	 */
 	private const MAX_PAGES = 50;
 
 	/**
-	 * How many MP4s one call will read to ask what codec they are before
-	 * giving the run back. Each one is copied out of storage for ffprobe,
-	 * which is seconds for a large file rather than the nothing it costs to
-	 * pass over a row by its type.
+	 * How many MP4s one call probes for their codec before giving the run back:
+	 * each is copied out of storage for ffprobe.
 	 */
 	private const MAX_PROBES = 5;
 
@@ -74,22 +60,10 @@ class VideoTranscodingWorker {
 	/**
 	 * Converts the next video that wants it.
 	 *
-	 * Anything that cannot need it is marked as not needing it as it is passed
-	 * over, which is what stops the same page being read on every run for
-	 * ever. An MP4 has to be read to know — it may be HEVC inside — so a few
-	 * of those are probed per call, and an H.264 one is marked the same way.
-	 *
-	 * It **pages** rather than looking at one page and giving up. An instance
-	 * whose first twenty videos are all MP4s already — which is the ordinary
-	 * case, because MP4 is what most things upload — would otherwise report
-	 * that there was nothing to do while a `.mov` sat behind them. Found on
-	 * devel: the run said "nothing was waiting" with a `video/quicktime`
-	 * plainly in the table.
-	 *
-	 * Bounded all the same: each page either converts something and returns,
-	 * or marks every row on it, so the walk moves forward and a library of
-	 * MP4s is passed over once in the life of the instance rather than on
-	 * every run.
+	 * Rows that do not need it are marked as passed over, an MP4 after probing
+	 * (it may be HEVC inside), so the walk moves forward and pages past
+	 * already-fine MP4s once in the instance's life. Each page converts
+	 * something or marks every row.
 	 *
 	 * @return bool whether a video was actually converted
 	 */
@@ -131,9 +105,8 @@ class VideoTranscodingWorker {
 	}
 
 	/**
-	 * One video: out of the store, through ffmpeg, back into the store —
-	 * when it needs it. An MP4 whose video is H.264 already is marked as not
-	 * needing it and left exactly as it is.
+	 * One video: out of the store, through ffmpeg, back into the store, unless
+	 * it is an MP4 with H.264 video already, which is only marked.
 	 *
 	 * @return bool whether a video was actually converted
 	 */
@@ -143,9 +116,7 @@ class VideoTranscodingWorker {
 		try {
 			$source = $this->toTempFile($document);
 			if ($source === null) {
-				// the bytes are not there to convert. Not a failure of the
-				// conversion — marked as tried so the job moves on rather than
-				// reading the same missing file for ever.
+				// the bytes are missing: marked as tried so the job moves on
 				$this->cacheDocumentsRequest->setTranscoded($document->getNid(), self::FAILED);
 
 				return false;
@@ -207,11 +178,8 @@ class VideoTranscodingWorker {
 	}
 
 	/**
-	 * The posts that carry this video, pointed at the converted file.
-	 *
-	 * A failure here is logged and not thrown: the document already names
-	 * the new file, and undoing a finished conversion over it would lose
-	 * more than it saves.
+	 * The posts that carry this video, pointed at the converted file. A failure
+	 * is only logged: the document already names the new file.
 	 */
 	private function repointPosts(Document $document, string $stored): void {
 		$converted = clone $document;

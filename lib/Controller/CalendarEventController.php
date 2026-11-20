@@ -120,9 +120,8 @@ class CalendarEventController extends MastodonApiController {
 			try {
 				$calendar->createFromString($filename, $ics);
 			} catch (Throwable $e) {
-				// Two clicks can both pass the first UID lookup before either write
-				// finishes. Treat the resulting duplicate-name conflict as success
-				// once the winning request's UID is visible in the user's calendars.
+				// Two clicks can both pass the UID lookup: treat the duplicate-name
+				// conflict as success once the winner's UID is in the user's calendars.
 				if (self::calendarContainsUid($calendars, $uid)) {
 					return new DataResponse(['imported' => true, 'already_imported' => true]);
 				}
