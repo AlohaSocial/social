@@ -60,8 +60,8 @@ class BoostService {
 	 * @throws Exception
 	 */
 	public function create(Person $actor, string $postId, string &$token = ''): ACore {
-		// a suspended account may not act: the check lives here rather than in
-		// StreamService, which ModerationService itself now depends on
+		// a suspended account may not act: checked here rather than in
+		// StreamService, which ModerationService depends on
 		$this->moderationService->assertNotSuspended($actor->getId());
 
 		/** @var Announce $announce */
@@ -228,14 +228,10 @@ class BoostService {
 	}
 
 	/**
-	 * The Announce an Undo takes back, embedded the way every other Undo
-	 * here embeds its object.
-	 *
-	 * PeerTube reads `object.type` to decide what is being undone and ignores
-	 * an Undo whose object is a bare id, so the share was never removed there.
-	 * Built from the stored row rather than exported from it: the row carries
-	 * the boosted post and this app's bookkeeping, and a peer needs the id,
-	 * the actor, the object and the audience.
+	 * The Announce an Undo takes back, embedded as every other Undo here
+	 * embeds its object, since PeerTube ignores an Undo whose object is a bare
+	 * id. Built from the stored row with only the id, actor, object and
+	 * audience a peer needs.
 	 */
 	private function undoneAnnounce(Person $actor, Stream $announce, string $postId): Announce {
 		$embedded = new Announce();

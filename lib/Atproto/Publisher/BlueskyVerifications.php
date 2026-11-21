@@ -18,10 +18,9 @@ use Throwable;
 /**
  * The instance's verifications as `app.bsky.graph.verification` records in
  * the repository of its verifying account (`VerificationService`), one per
- * verified DID. A record names the handle and display name the account had
- * when it was written; the AppView judges it invalid once either changes,
- * so a change means a new record, the old one withdrawn first — the AppView
- * keeps one verification per issuer and subject.
+ * verified DID. The AppView invalidates a record once the handle or display
+ * name it names changes, and keeps one per issuer and subject, so a change
+ * withdraws the old record before writing a new one.
  */
 class BlueskyVerifications {
 	public const COLLECTION = 'app.bsky.graph.verification';

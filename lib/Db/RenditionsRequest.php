@@ -14,22 +14,13 @@ use OCA\Social\Model\VideoRendition;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The rungs of a video's ladder.
- *
- * One read, asked for every video that is played: the rungs of this video,
- * smallest first, which is the order the master playlist wants them in — a
- * player that starts on the first entry should start on the one that is
- * quickest to arrive.
- *
- * @package OCA\Social\Db
+ * The rungs of a video's ladder, read smallest first, the order the master
+ * playlist wants so a player starts on the quickest.
  */
 class RenditionsRequest extends CoreRequestBuilder {
 	/**
-	 * Writes one rung, or replaces the one that is there.
-	 *
-	 * Replacing rather than refusing, because a video re-laddered at a
-	 * different quality setting should end up with the new file and not with
-	 * a unique-key violation. The caller deletes the file the old row named.
+	 * Writes one rung, or replaces the one that is there, so re-laddering at a
+	 * different quality replaces it. The caller deletes the old file.
 	 */
 	public function save(VideoRendition $rendition): void {
 		$qb = $this->getQueryBuilder();
@@ -93,12 +84,8 @@ class RenditionsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Forgets every rung of one video, and says which files are now unowned.
-	 *
-	 * The rows go and the paths come back rather than the files being deleted
-	 * here: this class does not know about the file store, and a delete that
-	 * half-happened is better as "a file nobody points at" than as "a row
-	 * pointing at nothing".
+	 * Forgets every rung of one video and returns the paths they named, for
+	 * the caller to delete; this class does not know the file store.
 	 *
 	 * @return string[] the store paths the deleted rows named
 	 */

@@ -81,19 +81,16 @@ use Throwable;
  * their token allows, how a failure is answered, and how a page of results is
  * linked to the next one.
  *
- * A token's scope is looked up by the route's method name in one table, so the
- * scopes of every client API route are read in one place whichever controller
- * the route lives on; method names are therefore unique across the
- * controllers that extend this class.
+ * Token scopes are looked up by route method name in one table, so method
+ * names must be unique across the controllers that extend this class.
  */
 abstract class MastodonApiController extends Controller {
 	use OwnAccount;
 	use ListParameter;
 
 	/**
-	 * The entity tag of the poll being answered, held between the check and
-	 * the answer so that a route that got past `notModified()` still carries
-	 * the tag the next request will send back.
+	 * The entity tag of the poll being answered, held between `notModified()`
+	 * and the answer so the answer carries it.
 	 */
 	protected string $pollTag = '';
 
@@ -151,15 +148,10 @@ abstract class MastodonApiController extends Controller {
 
 			$this->logger->debug('[' . static::class . '] initViewer: ' . $userId);
 
-			// Read, never create. Creating the actor here made the identity --
-			// the handle every other server will know this person by -- a side
-			// effect of the page being opened, before the setup screen had
-			// asked them anything; the answer they then gave came back as
-			// "that handle is taken", by themselves. An account is made where
-			// somebody asks for one: LocalController::accountCreate() and
-			// `occ social:account:create`.
-			// a token is only issued to an account, so a caller without one
-			// came with their Nextcloud session and has not set up here yet
+			// Read, never create: the handle is chosen on the setup screen
+			// (LocalController::accountCreate(), `occ social:account:create`). A token
+			// is only issued to an account, so a session caller without one has not set
+			// up yet.
 			$account = ($this->bearer === '')
 				? $this->ownAccountOf($userId)
 				: $this->accountService->getActorFromUserId($userId);
@@ -185,11 +177,8 @@ abstract class MastodonApiController extends Controller {
 			}
 
 			$this->viewer->setExportFormat(ACore::FORMAT_LOCAL);
-			// The cached copy of a local actor carries no user id — that column
-			// belongs to the account, not to the cache — and a bearer request
-			// has no session to fall back on. Anything reading a per-user
-			// setting from the viewer (the notification policy, for one) needs
-			// it named here or it reads nobody's.
+			// The cached local actor carries no user id and a bearer request has no
+			// session, so per-user settings (the notification policy) need it set here.
 			if ($this->viewer->getUserId() === '') {
 				$this->viewer->setUserId($userId);
 			}
@@ -209,24 +198,18 @@ abstract class MastodonApiController extends Controller {
 				throw $e;
 			}
 		} catch (AccountSuspendedException $e) {
-			// signed in and refused: a route anybody may read answers them as
-			// it answers anybody
+			// A public route answers them as it answers anybody.
 			if ($exception && !$publicRoute) {
 				throw $e;
 			}
 		} catch (AccountNotSetUpException $e) {
-			// somebody to tell how to go on, not a credential to refuse; a
-			// route anybody may read answers them as it answers anybody
+			// Not set up yet: a public route answers them as it answers anybody.
 			if ($exception && !$publicRoute) {
 				throw $e;
 			}
 		} catch (Exception $e) {
-			// A request with a missing, stale or made-up token is ordinary
-			// internet noise — every scanner that finds the API produces some —
-			// and it is answered with a 401, not a server-side failure. Logging
-			// each one at error with a stack trace filled the admin's log with
-			// entries nobody can act on. Anything else failing here is a real
-			// fault and still says so.
+			// A missing, stale or made-up token is ordinary scanner noise answered with
+			// a 401, not logged as an error; any other failure here is.
 			$credentials = ($e instanceof ClientNotFoundException
 				|| $e instanceof AccountDoesNotExistException
 				|| $e instanceof ActorDoesNotExistException);
@@ -253,12 +236,10 @@ abstract class MastodonApiController extends Controller {
 	 * @throws ClientNotFoundException
 	 */
 	/**
-	 * A bearer token wins over the session cookie: an OAuth client stays inside
-	 * the scopes it was granted even when the browser also carries a session.
-	 * The cookie is only accepted together with a valid CSRF token — these
-	 * routes carry #[NoCSRFRequired] so that external clients (which cannot obtain
-	 * one) work, and without this check a cross-site form POST would act as the
-	 * logged-in user.
+	 * A bearer token wins over the session cookie, so an OAuth client stays
+	 * inside its granted scopes. The cookie is only accepted with a valid CSRF
+	 * token: these routes are #[NoCSRFRequired] for external clients, and a
+	 * cross-site form POST must not act as the logged-in user.
 	 */
 	protected function currentSession(): string {
 		if ($this->bearer !== '') {
@@ -266,8 +247,7 @@ abstract class MastodonApiController extends Controller {
 			$this->checkTokenScope();
 
 			if ($this->client->getAuthUserId() === '') {
-				// an app token (the `client_credentials` grant): good for
-				// what anybody may read, and for nothing that is somebody's
+				// An app token (`client_credentials`): good for public reads only.
 				throw new AccountDoesNotExistException(self::APP_TOKEN_NAMES_NOBODY);
 			}
 
@@ -300,15 +280,10 @@ abstract class MastodonApiController extends Controller {
 	 * The scope every route of this controller asks a bearer token for, as the
 	 * Mastodon API documents it.
 	 *
-	 * Enumerating the *reads* and defaulting everything else to `write` is the
-	 * way round that fails safe: the table used to enumerate the writes and
-	 * default to `read`, so every state-changing route anybody added later —
-	 * deleting an avatar, reacting to a post, rewriting preferences, generating
-	 * an annual report — was open to a read-only token until somebody
-	 * remembered to list it. A route missing from this table now resolves by
-	 * its HTTP verb, and only `GET` resolves to a read scope.
-	 *
-	 * An empty list means the route needs no scope beyond a valid token.
+	 * Reads are enumerated and a missing route resolves by its HTTP verb, only
+	 * `GET` to a read scope, so a new state-changing route (such as generating
+	 * an annual report) fails safe. An empty list means the route needs no
+	 * scope beyond a valid token.
 	 */
 	private const ROUTE_SCOPES = [
 		// -- reads ------------------------------------------------------------
@@ -361,11 +336,9 @@ abstract class MastodonApiController extends Controller {
 		'mediaLadder' => ['read:statuses'],
 		'mediaLadderRung' => ['read:statuses'],
 		'mediaLadderFile' => ['read:statuses'],
-		// Mastodon puts the pending-upload read behind the media *write* scope:
-		// it answers about something only the uploader has
+		// Mastodon puts the pending-upload read behind the media write scope.
 		'mediaGet' => ['write:media'],
-		// the instance's own public documents, and the emoji and GIF pictures
-		// they refer to: any token may read them
+		// The instance's public documents and the emoji and GIF images they use.
 		'instance' => ['read'],
 		'instanceV2' => ['read'],
 		'instanceRules' => ['read'],
@@ -382,9 +355,8 @@ abstract class MastodonApiController extends Controller {
 		'gifOpen' => ['read'],
 		'trendTags' => ['read'],
 		'oembed' => ['read'],
-		// a POST, and a read scope on purpose: Mastodon documents
-		// `read:statuses` for it, and what it answers with is the post the
-		// caller may already read, in another language
+		// A POST, but Mastodon documents `read:statuses`: it answers a post the
+		// caller may already read, translated.
 		'statusTranslate' => ['read:statuses'],
 
 		// -- writes -----------------------------------------------------------
@@ -416,8 +388,7 @@ abstract class MastodonApiController extends Controller {
 		'mediaUpdate' => ['write:media'],
 		'mediaFromGif' => ['write:media'],
 		'reportNew' => ['write:reports'],
-		// `follow` is Mastodon's broad scope over the relationship routes, and
-		// a client that asked for it is not also asking for `write`
+		// `follow` is Mastodon's broad scope over the relationship routes.
 		'accountFollow' => ['write:follows', 'follow'],
 		'accountUnfollow' => ['write:follows', 'follow'],
 		'followRequestAuthorize' => ['write:follows', 'follow'],
@@ -429,9 +400,8 @@ abstract class MastodonApiController extends Controller {
 	];
 
 	/**
-	 * What each `act` of the one catch-all status route really does, because
-	 * they are not the same permission: favouriting is not pinning to a
-	 * profile, and neither is muting a conversation.
+	 * The scope of each `act` of the catch-all status route; favouriting,
+	 * pinning and muting are different permissions.
 	 */
 	private const STATUS_ACTION_SCOPES = [
 		'favourite' => ['write:favourites'],
@@ -462,10 +432,7 @@ abstract class MastodonApiController extends Controller {
 		);
 
 		foreach ($accepted as $scope) {
-			// a granular scope is satisfied by itself or by the broad scope
-			// that contains it, and by nothing else: `write:favourites` is not
-			// permission to post, and `read:lists` is not permission to read
-			// somebody's notifications
+			// A granular scope is satisfied by itself or the broad scope containing it.
 			$broad = strstr($scope, ':', true);
 			$broad = ($broad === false) ? $scope : $broad;
 
@@ -484,9 +451,9 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * A parameter as the router took it from the path. `getParam()` merges a
-	 * JSON or form body over the route's own values, so a body could name a
-	 * `_route` or an `act` the request was not dispatched to.
+	 * A parameter as the router took it from the path. `getParam()` merges the
+	 * body over route values, so a body could name a `_route` or `act` the
+	 * request was not dispatched to.
 	 */
 	protected function routeParam(string $key): string {
 		/** @psalm-suppress NoInterfaceProperties IRequest documents urlParams as a magic property */
@@ -494,8 +461,8 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * The `act` of the catch-all status route: the path's, which is the one
-	 * the scope is checked for, else what the dispatcher passed.
+	 * The `act` of the catch-all status route: the path's, which the scope is
+	 * checked for, else what the dispatcher passed.
 	 */
 	protected function statusAct(string $passed): string {
 		$act = $this->routeParam('act');
@@ -510,8 +477,7 @@ abstract class MastodonApiController extends Controller {
 	 */
 	private function scopesForRoute(string $name, string $verb, string $act = ''): array {
 		if ($name === 'statusAction') {
-			// an unknown act is refused by the route itself; until then it is
-			// treated as the write it would be
+			// An unknown act is refused by the route; until then it counts as a write.
 			return self::STATUS_ACTION_SCOPES[$act] ?? ['write'];
 		}
 
@@ -523,12 +489,10 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * The HTTP status each failure maps to, in the order the classes are
-	 * tested. Everything used to answer 401, which a client reads as "this
-	 * token is gone": a deleted status, a mistyped timeline name, a database
-	 * hiccup and a slow remote all logged the reader out of their client and
-	 * left nothing to diagnose. `InsufficientScopeException` is handled ahead
-	 * of this list because it extends `ClientException`.
+	 * The HTTP status each failure maps to, tested in order; a client reads 401
+	 * as "token gone", so only real credential failures get it.
+	 * `InsufficientScopeException` is handled before this list because it
+	 * extends `ClientException`.
 	 */
 	private const ERROR_STATUS = [
 		// gone, or never existed
@@ -542,8 +506,8 @@ abstract class MastodonApiController extends Controller {
 		[FollowNotFoundException::class, Http::STATUS_NOT_FOUND],
 		[InstanceDoesNotExistException::class, Http::STATUS_NOT_FOUND],
 		[NotFoundException::class, Http::STATUS_NOT_FOUND],
-		// the account it reaches has blocked this one, as Mastodon answers a
-		// follow of it. Ahead of InvalidActionException, which it extends
+		// Blocked by the target, as Mastodon answers. Ahead of
+		// InvalidActionException, which it extends.
 		[BlockedByException::class, Http::STATUS_FORBIDDEN],
 		// the request was understood and refused: retrying it unchanged cannot help
 		[InvalidActionException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
@@ -553,9 +517,7 @@ abstract class MastodonApiController extends Controller {
 		[InvalidHandleException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		[ItemUnknownException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		[CacheContentMimeTypeException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
-		// the account moved away; its followers were sent elsewhere, and a post
-		// or a follow from it would reach nobody. Ahead of ClientException,
-		// which it extends and which answers 422
+		// The account moved away. Ahead of ClientException (422), which it extends.
 		[AccountMovedException::class, Http::STATUS_FORBIDDEN],
 		[ClientException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		// the credentials, not the request
@@ -566,12 +528,10 @@ abstract class MastodonApiController extends Controller {
 		[AccountSuspendedException::class, Http::STATUS_FORBIDDEN],
 		[TooManyRequestsException::class, Http::STATUS_TOO_MANY_REQUESTS],
 		[FollowLimitException::class, Http::STATUS_TOO_MANY_REQUESTS],
-		// this server could do it, and cannot right now: Mastodon answers a
-		// translation it has no provider for with exactly this, and a client
-		// reads it as "later", not as "never"
+		// No translation provider right now: Mastodon answers 503, read as "later".
 		[TranslationUnavailableException::class, Http::STATUS_SERVICE_UNAVAILABLE],
-		// the edit is committed locally but its Update could not be queued; the
-		// client should show the saved text and may try the delivery again later
+		// The edit is committed locally but its Update could not be queued; the
+		// client may retry the delivery later.
 		[FederationDeliveryException::class, Http::STATUS_SERVICE_UNAVAILABLE],
 		// an upload this server failed to receive; the file itself was fine
 		[UploadFailedException::class, Http::STATUS_INTERNAL_SERVER_ERROR],
@@ -585,13 +545,9 @@ abstract class MastodonApiController extends Controller {
 
 	/**
 	 * A failure as a Mastodon client can act on it: `{"error": "..."}` with a
-	 * status that says what to do about it.
-	 *
-	 * An unrecognised failure is a bug on this side, so it answers 500 and is
-	 * logged here with its stack trace — and its message is *not* sent on.
-	 * Every route in this controller is a `#[PublicPage]`, so echoing
-	 * `getMessage()` published whatever the failure happened to name: a table,
-	 * a file path, an internal host.
+	 * status that says what to do about it. An unrecognised failure answers 500,
+	 * logged with its stack trace; its message is not sent, since every route
+	 * here is a `#[PublicPage]` and it may name internals.
 	 */
 	protected function error(Throwable $e): DataResponse {
 		if ($e instanceof RefusalException) {
@@ -599,14 +555,13 @@ abstract class MastodonApiController extends Controller {
 		}
 
 		if ($e instanceof InsufficientScopeException) {
-			// no WWW-Authenticate: PHP turns any response carrying it into a 401,
-			// and a 401 tells a client its token is dead and to sign in again
+			// No WWW-Authenticate: PHP turns any response carrying it into a 401, which
+			// a client reads as its token being dead.
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 
 		if ($e instanceof AccountNotSetUpException) {
-			// as Mastodon answers a sign-in that is not usable yet: a 403,
-			// which no client reads as its token having ended
+			// A 403, as Mastodon answers a sign-in not usable yet.
 			return self::notSetUp($e);
 		}
 
@@ -697,9 +652,8 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * What to put in `error`. Several of these failures are raised with no
-	 * message at all — an unknown token is one — and `{"error": ""}` tells a
-	 * client nothing about what to do next.
+	 * What to put in `error`; several failures carry no message, and an empty
+	 * one tells a client nothing.
 	 */
 	private function errorMessage(Throwable $e, int $status): string {
 		$message = trim($e->getMessage());
@@ -716,13 +670,8 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * The parameters of a request that carries its body itself.
-	 *
-	 * A body that says it is JSON and is not one is refused: `json_decode()`
-	 * answers `null` for an empty, truncated or scalar body, which under
-	 * strict_types raised a TypeError out of a method declared `: array` — a
-	 * Nextcloud HTML error page, stack trace and all, for every client that
-	 * lost a byte on the way.
+	 * The parameters of a request that carries its body itself. A body declared
+	 * JSON that does not decode to an array is refused.
 	 *
 	 * @throws InvalidActionException
 	 */
@@ -755,21 +704,9 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * A page of entities, with the `Link` header Mastodon pages with.
-	 *
-	 * masto.js — which Elk and Phanpy are both built on — takes the next page
-	 * from this header and nowhere else, so without it those clients show the
-	 * first twenty posts of a timeline and stop. Mastodon sends `next` only
-	 * while a further page may exist (a short page is the last one) and `prev`
-	 * whenever the page is not empty.
-	 *
-	 * @param array|null $page the rows the query returned, where `$items` is a
-	 *                         filtered subset of them
-	 */
-	/**
-	 * The filter context a timeline is read in. Favourites, bookmarks and the
-	 * direct timeline are not contexts Mastodon filters in: their statuses
-	 * still carry `filtered`, empty, because its absence is read as an answer.
+	 * The filter context a timeline is read in. Favourites, bookmarks and direct
+	 * are not Mastodon filter contexts, but their statuses still carry an empty
+	 * `filtered`, since its absence is read as an answer.
 	 */
 	protected function filterContext(string $timeline): string {
 		return match (strtolower($timeline)) {
@@ -782,20 +719,10 @@ abstract class MastodonApiController extends Controller {
 	/**
 	 * Answers `304` when the caller already has this version of a poll.
 	 *
-	 * A client asks for the home timeline and the unread count every thirty
-	 * seconds, and the answer is almost always the one it already holds. Fifty
-	 * thousand open tabs is about seventeen hundred requests a second, each of
-	 * which is a Nextcloud boot and — measured on devel — twenty to thirty
-	 * queries, to send back bytes the browser already has.
-	 *
-	 * The tag is the newest id the viewer can see, which changes exactly when
-	 * the answer does and costs one index-only probe: far less than the page it
-	 * stands in for, which is the only thing that makes this worth doing.
-	 *
-	 * `private` because the answer is one account's, and no shared cache may
-	 * hold it; `no-cache` because the browser must revalidate rather than serve
-	 * it blind — which is precisely what turns the poll into a conditional
-	 * request.
+	 * Clients poll the home timeline and unread count every thirty seconds, and
+	 * the tag (the newest id the viewer can see) costs one index-only probe
+	 * instead of the page. `private` because the answer is one account's;
+	 * `no-cache` so the browser revalidates.
 	 *
 	 * @return JSONResponse|null the 304 to return, or null to carry on
 	 */
@@ -817,26 +744,10 @@ abstract class MastodonApiController extends Controller {
 	/**
 	 * Puts the tag on the answer that earned it.
 	 *
-	 * It hands back a `JSONResponse` rather than the `DataResponse` it was
-	 * given, and that is the whole of why the conditional request works. A
-	 * controller that returns a `DataResponse` has it rebuilt by Nextcloud's
-	 * default json responder, which does
-	 *
-	 *     $response->setHeaders(array_merge($dataHeaders, $headers));
-	 *
-	 * where `$headers` are the *fresh* response's — and every response's
-	 * defaults include `Cache-Control: no-cache, no-store, must-revalidate`.
-	 * The controller's header is therefore overwritten by the default on its
-	 * way out, and `no-store` forbids the browser to keep the body at all: it
-	 * never sends `If-None-Match`, so the `304` below is never asked for and
-	 * the whole design is inert against a real client. Measured on devel: the
-	 * response carried our `ETag` and Nextcloud's `no-store`, side by side.
-	 *
-	 * A `JSONResponse` is what the responder would have built, so returning one
-	 * skips it and the header reaches the wire. Only the headers the caller set
-	 * are carried over — the framework's own are recomputed identically by the
-	 * new response, and copying them would pin today's values into a response
-	 * that knows how to work them out.
+	 * Returns a `JSONResponse` because Nextcloud's json responder rebuilds a
+	 * `DataResponse` with the default `Cache-Control: no-store`, which
+	 * overwrites ours and stops the browser from ever sending `If-None-Match`.
+	 * Only the headers the caller set are copied; the framework's are recomputed.
 	 */
 	protected function tagged(DataResponse $response): JSONResponse {
 		$json = Revalidation::asJson($response);
@@ -850,14 +761,20 @@ abstract class MastodonApiController extends Controller {
 		return $json;
 	}
 
+	/**
+	 * A page of entities, with the `Link` header Mastodon pages with, which
+	 * masto.js (Elk, Phanpy) needs to page at all: `next` while a further page
+	 * may exist, `prev` whenever the page is not empty.
+	 *
+	 * @param array|null $page the rows the query returned, where `$items` is a
+	 *                         filtered subset of them
+	 */
 	protected function paged(array $items, int $limit, ?array $page = null, ?int $rows = null): DataResponse {
 		$response = new DataResponse($items, Http::STATUS_OK);
 
-		// what the query returned, which is what says whether there is more —
-		// $items may have been filtered since
+		// What the query returned says whether there is more; $items may be filtered.
 		$page ??= $items;
-		// and $page itself may be shorter than the rows the query read, where
-		// the page dropped a boost of a post already in it
+		// $page may be shorter than the rows read, where a duplicate boost was dropped.
 		$rows ??= count($page);
 
 		$ids = $this->pageIds($page);
@@ -903,11 +820,8 @@ abstract class MastodonApiController extends Controller {
 	}
 
 	/**
-	 * This request's own URL with the cursor replaced, so every other filter
-	 * the client sent (`limit`, `types`, `only_media`, …) survives into the
-	 * next page. Built with http_build_query rather than string concatenation:
-	 * a route that already carries a query string must not end up with two
-	 * `?`s in it.
+	 * This request's own URL with the cursor replaced, so the client's other
+	 * filters (`limit`, `types`, `only_media`, …) survive into the next page.
 	 */
 	protected function pageUrl(array $cursor): string {
 		$uri = $this->request->getRequestUri();

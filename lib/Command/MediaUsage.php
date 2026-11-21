@@ -16,28 +16,14 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * What the app's media is costing, and how much of it is somebody else's.
+ * What the app's media is costing, and how much of it is somebody else's:
+ * uploads here are the only copy, cached copies of other servers' media can
+ * be fetched again (see `cache_actor_days` and `CacheActorSweepService`).
  *
- * An administrator looking at a Social instance that has grown to fifty
- * gigabytes has no way to find out what is in there. The two halves are very
- * different things: what the people here uploaded is theirs and is the only
- * copy, and what was cached off other servers is a copy that can be thrown
- * away and fetched again. Nothing told them apart, so nothing could be decided
- * about either — which is also why `cache_actor_days` (the sweep in
- * `CacheActorSweepService`) had no number an operator could put next to it.
- *
- * Both sides of the count are real: the rows come from `social_cache_doc` and
- * the size of every copy is read from appdata, the file at a time, rather than
- * from anything the row claims. A row whose file is gone is reported as such
- * instead of being counted as zero bytes.
- *
- * What it does not do is walk appdata looking for files no row names. The path
- * of a copy is derived from its own name (`aa/bb/cc/dd/<uuid>`), so finding an
- * orphan means listing a four-level tree with a directory per file, and the
- * number would not be actionable anyway — there is no safe way to delete a
- * file this app cannot name.
- *
- * No quota accounting: this is what is on disk, not what anybody is allowed.
+ * Rows come from `social_cache_doc` and sizes from the files in appdata; a
+ * row whose file is gone is reported as such. Appdata is not walked for
+ * files no row names, since nothing could safely delete them. No quota
+ * accounting: this is what is on disk.
  */
 class MediaUsage extends SocialCommand {
 	/** Rows read per query; the work is a file lookup per row, not the read. */
@@ -146,8 +132,8 @@ class MediaUsage extends SocialCommand {
 	}
 
 	/**
-	 * Bytes as an administrator reads them. Powers of two, because that is
-	 * what `du` and the Files app report.
+	 * Bytes as an administrator reads them, in powers of two like `du` and
+	 * the Files app.
 	 */
 	public static function human(int $bytes): string {
 		$units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];

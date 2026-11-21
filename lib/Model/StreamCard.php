@@ -12,11 +12,9 @@ namespace OCA\Social\Model;
 use JsonSerializable;
 
 /**
- * The link preview of a post: what the linked page says about itself. Exported
- * as Mastodon's PreviewCard entity in the `card` field of a status.
- *
- * Cards are never federated — every instance reads the page itself — so this
- * is purely a local cache of a remote page, keyed by the post that links it.
+ * The link preview of a post, exported as Mastodon's PreviewCard in a
+ * status's `card`. Never federated: every instance reads the page itself, so
+ * this is a local cache keyed by the post that links it.
  */
 class StreamCard implements JsonSerializable {
 	public const MAX_TITLE = 255;

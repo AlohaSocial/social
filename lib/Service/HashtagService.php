@@ -59,9 +59,8 @@ class HashtagService {
 	 * @throws SocialAppConfigException
 	 */
 	public function manageHashtags(): int {
-		// only the rows that claim a trend: those are the only ones this can
-		// have anything to clear, and the alternative was reading every hashtag
-		// the instance has ever seen on every cron run
+		// only the rows that claim a trend, the only ones there can be
+		// anything to clear on
 		$current = $this->hashtagsRequest->getWithAnyTrend();
 
 		// all five windows at once, off the hourly buckets (StreamTrendBuckets)
@@ -77,9 +76,7 @@ class HashtagService {
 		$count = 0;
 		$formatted = $this->formatTrend($hashtags);
 
-		// the rows that claim a trend, by hashtag: the loops below ask about
-		// one hashtag at a time and there are as many of them as there are
-		// hashtags on the instance
+		// the rows that claim a trend, keyed by hashtag for the lookups below
 		$known = [];
 		foreach ($current as $item) {
 			$hashtag = $this->get('hashtag', $item, '');
@@ -99,10 +96,8 @@ class HashtagService {
 
 		foreach ($formatted as $hashtag => $trend) {
 			if (mb_strlen((string)$hashtag) > HashtagsRequest::HASHTAG_MAX_LENGTH) {
-				// longer than the column holds. Truncating it would merge it
-				// with whatever shares its first characters and make both
-				// counts wrong, and storing it as it is fails the whole pass
-				// on PostgreSQL and on MySQL in strict mode.
+				// longer than the column: truncating would merge it with other
+				// tags, and storing it fails on PostgreSQL and strict MySQL
 				continue;
 			}
 
@@ -110,21 +105,14 @@ class HashtagService {
 			if ($stored !== []
 				&& $this->getArray('trend', $stored, []) === $trend
 				&& $this->getArray('counters', $stored, []) === $trend) {
-				// nothing moved for this hashtag since the last pass, and
-				// the sortable columns agree with the JSON. The second half
-				// matters on an instance upgraded from a version that had
-				// no columns: its JSON is right and its columns are zero,
-				// and on a quiet instance the counts never move again — so
-				// without this the row would stay out of the trends for
-				// good, because getTrending() reads the columns.
+				// nothing moved since the last pass and the sortable columns
+				// agree with the JSON; the second check catches rows whose
+				// columns were never filled, which getTrending() reads
 				continue;
 			}
 
-			// an upsert rather than a choice between INSERT and UPDATE: what
-			// this loop knows is the rows that currently claim a trend, which
-			// is not the same set as the rows that exist. A hashtag that
-			// trended, fell to zero and trends again is absent from that list
-			// and has a row all the same.
+			// an upsert: a hashtag that trended, fell to zero and trends again
+			// has a row without being among those that claim a trend
 			$this->hashtagsRequest->upsert((string)$hashtag, $trend);
 			$count++;
 		}
@@ -139,27 +127,19 @@ class HashtagService {
 	 * @throws HashtagDoesNotExistException
 	 */
 	public function getHashtag(string $hashtag): array {
-		// stored without it: the tags come from social_stream_tag, and
-		// Note::fillHashtags() strips the '#' before either table sees one.
-		// Adding it back here meant this lookup could never match, so the
-		// exact-match half of a hashtag search always came up empty.
+		// stored without it: Note::fillHashtags() strips the '#' before
+		// either table sees one
 		return $this->hashtagsRequest->getHashtag(ltrim(trim($hashtag), '#'));
 	}
 
 	/**
 	 * One hashtag as Mastodon's `Tag` entity: `name`, `url`, `history`, and
-	 * `following` when there is somebody to answer that for.
+	 * `following` when there is a viewer. The one place this shape is built,
+	 * so all routes agree.
 	 *
-	 * The single place this shape is built, so that the trends list, the tag
-	 * lookup and the follow/unfollow answers cannot drift apart — a client
-	 * that gets a `Tag` without `history` from one route and with it from
-	 * another has to special-case this server.
-	 *
-	 * `history` carries one bucket, for the window that was asked for, and its
-	 * `accounts` is always `0`: this instance counts uses, not distinct
-	 * accounts. A hashtag nobody has posted has no bucket at all rather than a
-	 * zero, because a zero is a claim about a day and this is the absence of
-	 * one.
+	 * `history` has one bucket, for the window asked for, with `accounts`
+	 * always `0` (uses are counted, not accounts); an unused hashtag has no
+	 * bucket.
 	 *
 	 * @param string $hashtag with no leading '#', as the tables store it
 	 * @param bool|null $following null leaves the key out, for a route with no
@@ -241,9 +221,8 @@ class HashtagService {
 	 * @return array[] [['hashtag' => string, 'trend' => array], …]
 	 */
 	/**
-	 * How many extra rows are read so that removing the rejected ones does not
-	 * leave a short page. A moderator keeps a handful of things out, not a
-	 * hundred, so this is the whole allowance rather than a loop.
+	 * How many extra rows are read so removing rejected tags does not leave a
+	 * short page; moderators reject a handful, not hundreds.
 	 */
 	private const REJECTION_HEADROOM = 20;
 
@@ -252,22 +231,15 @@ class HashtagService {
 			$period = self::PERIOD_DEFAULT;
 		}
 
-		// asked for a few more than wanted, because what a moderator has kept
-		// out is taken off the page afterwards and a page short by one
-		// rejected tag would be a page with a gap in it
+		// a few more than wanted, as rejected tags are removed afterwards
 		$rows = $this->hashtagsRequest->getTrending($period, $limit + self::REJECTION_HEADROOM);
 
 		return array_slice($this->trendReviewService->filterTags($rows), 0, $limit);
 	}
 
 	/**
-	 * The per-window counts, turned inside out: one entry per hashtag, holding
-	 * its count in every window.
-	 *
-	 * The widest window carries every hashtag any narrower one can, so its keys
-	 * are the whole set. Each count is read out of its window by key — the
-	 * windows arrive keyed by hashtag, and looking one up by walking the list
-	 * cost a pass over every hashtag on the instance, five times per hashtag.
+	 * The per-window counts turned inside out: hashtag => window => count. The
+	 * widest window holds every hashtag, so its keys are the whole set.
 	 *
 	 * @param array<string, array<string, int>> $hashtags window => hashtag => count
 	 *

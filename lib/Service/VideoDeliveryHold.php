@@ -18,24 +18,13 @@ use Throwable;
 /**
  * Whether a new post waits for its video to be converted before it goes out.
  *
- * A post is delivered once. **Pixelfed checks an attachment's type at the
- * moment the `Create` arrives and drops a `video/quicktime` there and then**,
- * and nothing re-sends it after the conversion: converting the file on the
- * quarter-hourly sweep made it play here and changed nothing for the servers
- * that had already been told about it. So a post carrying a local video that
- * may need converting has its deliveries queued but held back, the conversion
- * of exactly that video is queued at once rather than left to the sweep, and
- * the job releases the deliveries — rebuilt from the post, so they name the
- * converted file — when it has finished or given up.
- *
- * The hold has a deadline. A post whose conversion has not finished after
- * `HOLD_SECONDS` goes out as it is, because a post that plays in fewer places
- * is better than one that has not arrived anywhere: the queue delivers a held
- * row by itself once that time has passed, whether or not the job ever ran.
- *
- * Nothing is held on a server that cannot convert, or that was told not to,
- * or for a post whose video is already an H.264 MP4 — which the upload
- * records while the file is still on disk.
+ * Pixelfed drops a `video/quicktime` when the `Create` arrives, and nothing
+ * is re-sent later. So a post with a local video that may need converting has
+ * its deliveries queued but held, the conversion is queued at once, and the
+ * job releases the deliveries, rebuilt to name the converted file, when it
+ * finishes or gives up. After `HOLD_SECONDS` the queue delivers a held row
+ * anyway. Nothing is held where conversion is off or unavailable, or for a
+ * video the upload recorded as H.264 MP4.
  */
 class VideoDeliveryHold {
 	/** The longest a post waits for its video, in seconds. */
@@ -50,11 +39,8 @@ class VideoDeliveryHold {
 	}
 
 	/**
-	 * Whether a post's deliveries are still waiting for its video.
-	 *
-	 * The attachments are looked at first, so a post without a video — nearly
-	 * every post — costs nothing; the queue is asked only when something is
-	 * still awaited, and then once.
+	 * Whether a post's deliveries are still waiting for its video. The
+	 * attachments are checked first, so a post without a video costs nothing.
 	 */
 	public function isHeld(Stream $post): bool {
 		return $this->awaited($post) !== [] && $this->requestQueueService->getHeld($post->getId()) !== [];
@@ -72,12 +58,9 @@ class VideoDeliveryHold {
 	}
 
 	/**
-	 * Queues the conversion a held post is waiting for.
-	 *
-	 * Called once the post and its held deliveries are stored, which is what
-	 * the job reads. The argument is the post alone, so a second call for the
-	 * same post — an edit made while the first is still waiting — finds the
-	 * job already queued rather than adding another.
+	 * Queues the conversion a held post is waiting for, once the post and its
+	 * held deliveries are stored. Keyed by the post, so a second call (an edit
+	 * while waiting) finds the job already queued.
 	 */
 	public function convertSoon(Stream $post): void {
 		$this->jobList->add(TranscodeBeforeDelivery::class, ['post' => $post->getId()]);
@@ -97,8 +80,7 @@ class VideoDeliveryHold {
 			}
 		}
 
-		// asked only now: most posts carry no video, and none of them should
-		// cost a look for ffmpeg
+		// checked only now, so posts without video never look for ffmpeg
 		if ($nids === [] || !$this->videoTranscodeService->isEnabled()) {
 			return [];
 		}

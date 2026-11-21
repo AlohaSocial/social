@@ -15,21 +15,13 @@ use OCA\Social\Model\Client\FilterStatus;
 use OCA\Social\Tools\DbTime;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class FiltersRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class FiltersRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
 	/**
-	 * The two table names live here rather than beside the others in
-	 * `CoreRequestBuilder` because a `TABLE_*` constant there is a claim three
-	 * other places have to honour at once — `CoreRequestBuilder::$tables`, the
-	 * schema table of `docs/Architecture.md` and `occ social:reset` — and this
-	 * change may not edit those files. Moving them up is one commit; until it
-	 * happens, a reset leaves these two tables behind.
+	 * The filter tables are not `TABLE_*` constants of `CoreRequestBuilder`,
+	 * so `CoreRequestBuilder::$tables` and `occ social:reset` do not know
+	 * them, and a reset leaves them behind.
 	 */
 
 	protected function getFiltersInsertSql(): SocialQueryBuilder {
@@ -149,8 +141,7 @@ class FiltersRequestBuilder extends CoreRequestBuilder {
 
 	/**
 	 * A keyword is owned by whoever owns its filter, so the ownership check is
-	 * this join rather than a second query: a request that names somebody
-	 * else's keyword has to come back empty, not come back and be checked.
+	 * this join: somebody else's keyword comes back empty.
 	 */
 	protected function getOwnedKeywordSelectSql(string $actorId): SocialQueryBuilder {
 		$qb = $this->getKeywordsSelectSql();

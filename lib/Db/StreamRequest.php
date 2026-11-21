@@ -67,31 +67,18 @@ class StreamRequest extends StreamRequestBuilder {
 	private ?array $forcedSensitive = null;
 
 	/**
-	 * The width of the random half of a nid.
-	 *
-	 * A nid is `published_time * NID_LIMIT + random`, which keeps it sortable by
-	 * publication time -- cursor pagination relies on that -- while staying
-	 * opaque within a second. It is also the primary key of social_stream, so a
-	 * collision is a rejected insert, and save() used to swallow exactly that
-	 * error: the post was silently lost.
-	 *
-	 * At the previous width of 1e6 the birthday bound put an even chance of a
-	 * collision at about 1,200 posts sharing a second. 1e9 moves that to roughly
-	 * 37,000, and published_time * 1e9 still fits a BIGINT for any date this app
-	 * will see. Widening does not disturb the ordering of ids issued under the
-	 * old width: every new nid is larger than every old one, and both halves
-	 * stay monotonic in time.
+	 * The width of the random half of a nid: `published_time * NID_LIMIT +
+	 * random`, sortable by time (cursor pagination relies on it) and opaque
+	 * within a second. The nid is the primary key, so a collision rejects the
+	 * insert; 1e9 puts an even chance of one at about 37,000 posts in one
+	 * second, and `published_time * 1e9` still fits a BIGINT.
 	 */
 	public const NID_LIMIT = 1000000000;
 
 	/**
-	 * How much wider than the page the fast home query reads.
-	 *
-	 * The filters it no longer carries — blocks, mutes, hidden boosts — are
-	 * applied to the rows afterwards, so a page of twenty that loses three to
-	 * a block would come back short. Three times the page is enough for any
-	 * ordinary amount of blocking, and where it is not the page is simply
-	 * shorter, which is what an infinite scroll already handles.
+	 * How much wider than the page the fast home query reads: blocks, mutes
+	 * and hidden boosts are filtered afterwards, and a page that still comes
+	 * back short is fine for an infinite scroll.
 	 */
 	private const HOME_OVERREAD = 3;
 
@@ -179,38 +166,30 @@ class StreamRequest extends StreamRequestBuilder {
 
 		for ($attempt = 1; ; $attempt++) {
 			$qb = $this->saveStream($stream);
-			// every status kind, not only the plain `Note`: a poll is a
-			// `Question`, which *is* a Note and carries hashtags, attachments
-			// and a media kind like any other post. Comparing the type name
-			// stored the poll with all four fields at their defaults, so a
-			// poll never reached a hashtag timeline
+			// every status kind, not only `Note`: a poll is a `Question`, which
+			// carries hashtags, attachments and a media kind like any post
 			if ($stream instanceof Note) {
 				$encoded = self::attachmentsColumn($stream->getAttachments());
 				$qb->setValue('hashtags', $qb->createNamedParameter(json_encode($stream->getHashtags())))
 					->setValue('attachments', $qb->createNamedParameter($encoded))
-					// what kind of media this is, decided once here rather than
-					// by searching the JSON above with `LIKE` on every read of
-					// a Photos or Videos timeline
+					// the media kind, decided once here rather than by a `LIKE`
+					// on the JSON on every Photos or Videos timeline read
 					->setValue('media_kind', $qb->createNamedParameter(
 						Stream::mediaKindOf($encoded, $stream->getSubType())
 					))
 					// and whether it is a short, from the same copies
 					->setValue('short_kind', $qb->createNamedParameter(Stream::shortKindOf($encoded)))
-					// and whether it is news, decided here for the same reason:
-					// the question is one no database can be asked of stored
-					// markup on the way past
+					// and whether it is news, decided here as no database can
+					// answer that from stored markup
 					->setValue('news_kind', $qb->createNamedParameter(
 						Stream::newsKindOf($stream->getContent(), $stream->getSubType())
 					));
 			}
 
 			try {
-				// One transaction, because the three writes are one fact. The
-				// recipient rows are what put a post in a timeline: a post
-				// stored without them exists, is in nobody's timeline, and
-				// nothing ever notices — `StreamDestRequest::create()` logs a
-				// failure and carries on, so the partial state was silent as
-				// well as permanent.
+				// One transaction: the recipient rows are what put a post in a
+				// timeline, and `StreamDestRequest::create()` only logs a
+				// failure, so a post stored without them would vanish silently.
 				$this->dbConnection->beginTransaction();
 
 				try {
@@ -240,14 +219,11 @@ class StreamRequest extends StreamRequestBuilder {
 					return false;
 				}
 
-				// Two different constraints reach here and they want opposite
-				// things. A second save of the same status trips the unique
-				// index on id_prim, and dropping it is right -- that is what
-				// makes an inbox delivery idempotent. A nid collision trips the
-				// primary key, and dropping that loses a post that was never
-				// stored. The databases do not agree on how to tell the two
-				// apart from the exception, so ask instead whether the status is
-				// already there; if it is not, the clash was on the nid.
+				// A repeated save trips the unique index on id_prim and is
+				// dropped (inbox delivery is idempotent); a nid collision trips
+				// the primary key and must not be. The databases cannot tell
+				// the two apart from the exception, so check whether the status
+				// is stored; if not, the clash was on the nid.
 				if ($attempt >= self::NID_ATTEMPTS || $this->has($stream->getId())) {
 					if ($attempt >= self::NID_ATTEMPTS) {
 						$this->logger->error(
@@ -323,9 +299,8 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->set('summary', $qb->createNamedParameter($stream->getSummary()));
 		$qb->set('sensitive', $qb->createNamedParameter($stream->isSensitive() ? 1 : 0));
 		$qb->set('source', $qb->createNamedParameter($stream->getSource()));
-		// Only a local edit rebuilds the outbound paths. An incoming Update does
-		// not carry our local transport metadata, so leave that column alone for
-		// ordinary rewrites instead of erasing it with an empty array.
+		// Only a local edit rebuilds the outbound paths; an incoming Update
+		// does not carry our transport metadata, so leave that column alone.
 		if ($generateDest) {
 			$qb->set('in_reply_to', $qb->createNamedParameter($stream->getInReplyTo()));
 			$qb->set('in_reply_to_prim', $qb->createNamedParameter($qb->prim($stream->getInReplyTo())));
@@ -333,12 +308,8 @@ class StreamRequest extends StreamRequestBuilder {
 				json_encode($stream->getInstancePaths(), JSON_UNESCAPED_SLASHES)
 			));
 		}
-		// the five fields an Update rewrites, in their own columns since
-		// Version1000Date20260912000007. They are still inside the wire object
-		// this same statement stores, and still read from there for a row
-		// written before that step — but an edit that changed the language or
-		// took an approval back has to change the column too, or the column and
-		// the object it was copied from disagree from the next read on.
+		// the five fields an Update rewrites have their own columns as well as
+		// the wire object; both must change together or they disagree
 		$this->setPostFields($qb, $stream, false);
 		// an `Update{Question}` can move the end of a poll, and the sweep
 		// that announces it reads only this column
@@ -355,9 +326,8 @@ class StreamRequest extends StreamRequestBuilder {
 				Stream::mediaKindOf($encoded, $stream->getSubType())
 			));
 			$qb->set('short_kind', $qb->createNamedParameter(Stream::shortKindOf($encoded)));
-			// an edit that took the link out takes the post out of the News
-			// timeline, and one that added a link puts it in: the column is
-			// derived from the content this same statement is rewriting
+			// the News column is derived from the content being rewritten, so
+			// an edit adding or removing a link moves the post in or out
 			$qb->set('news_kind', $qb->createNamedParameter(
 				Stream::newsKindOf($stream->getContent(), $stream->getSubType())
 			));
@@ -370,11 +340,9 @@ class StreamRequest extends StreamRequestBuilder {
 		}
 		$qb->limitToIdPrim($qb->prim($stream->getId()));
 
-		// One transaction, for the reason save() gives: the row, its recipients
-		// and its tag rows are one fact. The tag rows are what put a post in a
-		// hashtag timeline, and an edit rewrites the `hashtags` column without
-		// them, so a tag added by an edit rendered as dead text and a tag taken
-		// out left the post in that timeline for good.
+		// One transaction, as in save(): the row, its recipients and its tag
+		// rows are one fact, and the tag rows are what put a post in a
+		// hashtag timeline.
 		$this->dbConnection->beginTransaction();
 		try {
 			$qb->executeStatement();
@@ -383,8 +351,7 @@ class StreamRequest extends StreamRequestBuilder {
 				$this->streamDestRequest->generateStreamDest($stream);
 			}
 			$this->streamTagsRequest->replaceStreamTags($stream);
-			// and its words, for the same reason: an edit that took a word
-			// out left the post answering a search for it
+			// and its words, so search matches the edited text
 			$this->searchTermsRequest->reindex($stream);
 			// and the accounts it names, which a client reads from `mentions`
 			$this->updateMentions($stream);
@@ -531,17 +498,10 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The posts this instance holds that quote one post, newest first.
-	 *
-	 * What `GET /api/v1/statuses/{id}/quotes` answers. It is the posts this
-	 * server *has*: a local quote, and a remote one that reached somebody here.
-	 * A quote written on a server nobody here follows was approved and is real
-	 * and is not in this list, because there is no status entity to put in it —
-	 * Mastodon's own answer has the same edge.
-	 *
-	 * Read as the viewer, so a quote in a followers-only post of somebody the
-	 * reader does not follow is not handed to them by a list about their own
-	 * post.
+	 * The posts this instance holds that quote one post, newest first, for
+	 * `GET /api/v1/statuses/{id}/quotes`. Quotes on servers nobody here
+	 * follows are missing, as on Mastodon. Read as the viewer, so quotes they
+	 * may not see are not handed over.
 	 *
 	 * @return Stream[]
 	 */
@@ -722,11 +682,8 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * One account's Announce of one post.
-	 *
-	 * A boost is a row per (post, booster): the lookup by object and type
-	 * alone answers with whichever booster's row comes first, which is the
-	 * wrong row for everybody but one of them.
+	 * One account's Announce of one post. Each booster has their own row, so
+	 * the lookup must include the account.
 	 *
 	 * @throws StreamNotFoundException when this account has not boosted the post
 	 */
@@ -744,17 +701,9 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * A moderator's decision that every post by an account is sensitive.
-	 *
-	 * Applied here, at the one place a post is written, rather than at each of
-	 * the paths that reach it: a local post, a post that arrived in the inbox
-	 * and a post restored by the importer are the same row, and a rule that
-	 * held for one of them and not the others would be a rule nobody could
-	 * explain.
-	 *
-	 * The set is read once per request and is empty on nearly every instance,
-	 * so the common case is one query that returns nothing and a comparison
-	 * against an empty array.
+	 * A moderator's decision that every post by an account is sensitive,
+	 * applied here where every post is written, whether local, inbound or
+	 * imported. The set is read once per request and nearly always empty.
 	 */
 	private function applyForcedSensitive(Stream $stream): void {
 		if ($stream->isSensitive() || $stream->getAttributedTo() === '') {
@@ -768,16 +717,9 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * Puts one of the author's own posts away, or brings it back.
-	 *
-	 * The author is in the statement rather than checked beforehand: a request
-	 * naming somebody else's post changes no row, which is the same guarantee
-	 * every other per-account write here makes and one that cannot be
-	 * forgotten by a caller.
-	 *
-	 * Local posts only. Archiving is about what this account shows on its own
-	 * profile; a post somebody else wrote is theirs, and the answer to not
-	 * wanting to see it is a mute or a block.
+	 * Archives one of the author's own local posts, or restores it. The author
+	 * is in the statement, so a request naming somebody else's post changes
+	 * no row.
 	 *
 	 * @return bool whether a row changed
 	 */
@@ -794,10 +736,8 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The posts this account has put away, newest first.
-	 *
-	 * The one read that asks for archived posts, and the only one: everything
-	 * else is fail-closed (`hideArchived()`).
+	 * The posts this account has archived, newest first: the only read that
+	 * includes archived posts (`hideArchived()`).
 	 *
 	 * @return Stream[]
 	 */
@@ -830,18 +770,11 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * How many posts this account has published here to anybody but one person.
-	 *
-	 * The twin of `countNotesFromActorId()`, which counts only the public ones
-	 * because that is what a profile reports. This one is asked a different
-	 * question — has this account posted here before at all — so a first post
-	 * that went to followers is still not a first post.
-	 *
-	 * Direct messages are left out, and that is the point rather than a
-	 * detail. `PostReviewService` never holds a direct message, so counting
-	 * them here would mean an account could send one message to itself and be
-	 * past first-post review a second later — the rule would hold nobody who
-	 * had read the rule.
+	 * How many posts this account has published here to anybody but one
+	 * person: unlike `countNotesFromActorId()` it counts followers-only posts.
+	 * Direct messages are excluded because `PostReviewService` never holds
+	 * one, so a message to oneself must not get an account past first-post
+	 * review.
 	 */
 	public function countPostsBy(string $actorId): int {
 		$qb = $this->countNotesSelectSql();
@@ -896,10 +829,8 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
 		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
 
-		// qualified, and by the time rather than the id: `id` is a column on the
-		// joined dest table too, so the unqualified name was ambiguous and the
-		// database refused the query outright — and the id it meant to sort on
-		// is the post's URL, which says nothing about when it was written
+		// qualified, as `id` is also a dest column, and by time, as the id is
+		// a URL that says nothing about when the post was written
 		$qb->orderBy('s.published_time', 'desc');
 		$qb->setMaxResults(1);
 
@@ -907,14 +838,10 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The public posts of one author, oldest last, in fixed-size windows.
-	 *
-	 * Newest first, on the nid. The collection's `first` is still numbered and
-	 * a numbered page is still answered, by offset, because those are the
-	 * addresses peers already hold; every `next` link is a cursor (`$before`,
-	 * the nid of the previous page's last post), which the author's
-	 * `attributed_to_prim` index answers in nid order without reading the
-	 * pages before it.
+	 * The public posts of one author, newest first by nid. Numbered pages are
+	 * still answered by offset, as peers hold those addresses; every `next`
+	 * link is a cursor (`$before`) the `attributed_to_prim` index answers
+	 * without reading earlier pages.
 	 *
 	 * @param string $before the nid the page starts below, '' for none
 	 *
@@ -992,9 +919,8 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * Rows a Bluesky account wrote. The indexed `author_host` narrows them
-	 * once every row carries it; until then only the pattern on the
-	 * unindexed `attributed_to` can.
+	 * Rows a Bluesky account wrote, narrowed by the indexed `author_host`
+	 * when every row carries it, otherwise by a pattern on `attributed_to`.
 	 */
 	private function byBlueskyAuthor(IQueryBuilder $qb): string|ICompositeExpression {
 		$pattern = $qb->expr()->like('attributed_to', $qb->createNamedParameter('https://bsky.app/profile/%'));
@@ -1051,13 +977,9 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * An author's own posts published inside a window of time.
-	 *
-	 * Used to look the reader up their own past: unlike the profile charts
-	 * above, this is only ever called for the caller's own account, so it is
-	 * not held to public posts — somebody looking back at their own year
-	 * should see what they actually wrote, followers-only posts included.
-	 * Every caller must therefore check that the actor is the viewer.
+	 * An author's own posts published inside a window of time, for looking
+	 * back at one's own past. Not limited to public posts, so every caller
+	 * must check that the actor is the viewer.
 	 *
 	 * @param string $actorId the author
 	 * @param int $from unix time, inclusive
@@ -1106,13 +1028,8 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The polls whose end time has passed since a moment, the earliest to
-	 * close first.
-	 *
-	 * Read on `poll_ends_at`, the end time `save()` and `update()` copy out
-	 * of the wire object, which is indexed: every poll that closed in the
-	 * window is found however long ago it was published and however many
-	 * other polls there are, and only those rows are read.
+	 * The polls that closed since a moment, earliest first, read on the
+	 * indexed `poll_ends_at` column.
 	 *
 	 * @param int|null $now the end of the window; the wall clock when not given
 	 *
@@ -1139,11 +1056,8 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The public posts taken at one place, newest first.
-	 *
-	 * Public only, whoever asks: a place page is a public page, and a
-	 * followers-only post's location is as private as the post. Keyset by
-	 * `nid`, like every other list here.
+	 * The public posts taken at one place, newest first, whoever asks: a
+	 * place page is public. Keyset by `nid`.
 	 *
 	 * @return Stream[]
 	 */
@@ -1173,13 +1087,9 @@ class StreamRequest extends StreamRequestBuilder {
 
 	/**
 	 * The direct messages between the viewer and one other account, as one
-	 * thread.
-	 *
-	 * A direct message writes a `dm` destination row for every party to it,
-	 * its author included (`StreamDestRequest::generateStreamDirect()`), so
-	 * the thread is every direct post that has a row for both of them —
-	 * whichever of the two wrote it. Keyset-paged on `nid` like every other
-	 * timeline here.
+	 * thread: every direct post with a `dm` row for both of them
+	 * (`StreamDestRequest::generateStreamDirect()` writes one for the author
+	 * too). Keyset-paged on `nid`.
 	 *
 	 * @return Stream[] newest first, or oldest first when paging forward with `minId`
 	 */
@@ -1219,13 +1129,8 @@ class StreamRequest extends StreamRequestBuilder {
 
 	/**
 	 * How many unread notifications of each sub-type a local account received
-	 * in a window: the rows the notifications page would list (less the ones
-	 * from muted threads; the policy's holds are the caller's), with a nid past
-	 * the account's read marker and a creation inside `($since, $until]`.
-	 *
-	 * The page is chosen exactly as the badge's query chooses it, projected to
-	 * the nid and the sub-type, and grouped by the database: what comes back
-	 * is a handful of numbers, however busy the account was.
+	 * in `($since, $until]`, chosen as the badge query chooses them (less
+	 * muted threads) and grouped in the database.
 	 *
 	 * @param int|string $afterNid the notifications read marker; `0` for none
 	 *
@@ -1270,17 +1175,11 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The fields that used to live only inside the stored wire object,
-	 * written to the columns Version1000Date20260912000007 added.
+	 * The fields copied out of the wire object into their own columns, in one
+	 * helper for insert and edit so both agree.
 	 *
-	 * One helper for both write paths on purpose: an insert and an edit have to
-	 * agree about what the columns hold, and `sensitive` is the reminder of
-	 * what happens when only one of the two writes a field.
-	 *
-	 * `updated` is bound as a date in UTC. Doctrine renders a DateTime in
-	 * whatever zone the object carries, so a remote `updated` of
-	 * `2026-09-12T10:00:00+02:00` would otherwise be stored as 10:00 and read
-	 * back as 10:00 UTC — the right text for the wrong instant.
+	 * `updated` is bound as a UTC date: Doctrine renders a DateTime in its own
+	 * zone, so `10:00+02:00` would be stored and read back as 10:00 UTC.
 	 */
 	private function setPostFields(SocialQueryBuilder $qb, Stream $stream, bool $insert): void {
 		$values = [
@@ -1319,11 +1218,10 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The second a post's nid is composed from: when it says it was
-	 * published, but never later than now. Every timeline is ordered by nid,
-	 * so a post dated in the future would otherwise sit above everything
-	 * stored until that date; and a date past 2262 would not fit the BIGINT.
-	 * The `published` it states is kept as it is.
+	 * The second a post's nid is composed from: its published time, but never
+	 * later than now, so a future-dated post does not sit atop every timeline
+	 * (and a date past 2262 would overflow the BIGINT). `published` itself is
+	 * kept.
 	 */
 	public static function nidTime(int $publishedTime, ?int $now = null): int {
 		return max(0, min($publishedTime, $now ?? time()));

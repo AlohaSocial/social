@@ -32,12 +32,9 @@ class SocialCoreQueryBuilder extends ExtendedQueryBuilder {
 	private ?Person $viewer = null;
 
 	/**
-	 * The instances the viewer has blocked, as domains.
-	 *
-	 * Carried on the query rather than joined to it: see
-	 * `DomainBlocksRequestBuilder::filterDomainBlocked()`, which compares them
-	 * as constants. Set by `CoreRequestBuilder::getQueryBuilder()` alongside
-	 * the viewer, so every query a request builds already knows them.
+	 * The instances the viewer has blocked, as domains, compared as constants by
+	 * `DomainBlocksRequestBuilder::filterDomainBlocked()`. Set by
+	 * `CoreRequestBuilder::getQueryBuilder()` with the viewer.
 	 *
 	 * @var string[]
 	 */
@@ -63,11 +60,7 @@ class SocialCoreQueryBuilder extends ExtendedQueryBuilder {
 	}
 
 	/**
-	 * The actor the rows are being read for.
-	 *
-	 * Guard with `hasViewer()`: this used to declare `Person` while returning
-	 * the nullable property, so an unguarded call died on a TypeError inside
-	 * the getter rather than saying what was missing.
+	 * The actor the rows are being read for; guard with `hasViewer()`.
 	 */
 	public function getViewer(): Person {
 		if ($this->viewer === null) {

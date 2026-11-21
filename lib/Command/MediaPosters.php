@@ -21,22 +21,10 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
 
 /**
- * Poster frames for the videos that were stored before there were any.
- *
- * A video uploaded here is given a still on its way in, and a client shows it
- * instead of a black rectangle until somebody presses play. Videos stored
- * before that existed — or on a server that had no ffmpeg when they arrived —
- * have none, and nothing was ever going to give them one: the still is made
- * from the bytes as they are written, and those bytes are only written once.
- *
- * So this reads them back and makes the still now. It is the same frame, the
- * same JPEG and the same `resized_copy` an upload gets, and it changes nothing
- * about the video itself.
- *
- * `Cron\VideoPosters` does the same a few videos a run, each video once. This
- * is for doing all of them now, and for trying again the ones the job could
- * not make a frame of: it reads every video that still has no poster, however
- * far the job has got.
+ * Makes poster frames for stored videos that have none (stored before ffmpeg
+ * was available), the same still an upload gets, leaving the video as is.
+ * `Cron\VideoPosters` does a few per run; this does all of them at once and
+ * retries those the job failed on.
  */
 class MediaPosters extends SocialCommand {
 	/** How many are read per query. The work is per video, not per page. */
@@ -145,17 +133,9 @@ class MediaPosters extends SocialCommand {
 	}
 
 	/**
-	 * Hands the new posters to the posts that show the videos.
-	 *
-	 * A post keeps its own copy of its attachments, written when it was saved,
-	 * and that copy is what a client is served. Making the poster therefore
-	 * changes nothing anybody can see until the copies are rewritten from the
-	 * documents they were taken from, which is what this does.
-	 *
-	 * Every attachment of every post with one is rebuilt, not only the videos:
-	 * the copy is derived from the document either way, so rebuilding it all
-	 * is both simpler and self-correcting. A post is only written when the
-	 * rebuild actually differs from what was stored.
+	 * Rewrites the attachment copies posts keep, so they show the new
+	 * posters. Every attachment is rebuilt from its document; a post is only
+	 * written when the result differs.
 	 *
 	 * @return int how many posts were rewritten
 	 */
@@ -196,12 +176,9 @@ class MediaPosters extends SocialCommand {
 	}
 
 	/**
-	 * One stored attachment copy, taken again from the document it came from.
-	 *
-	 * What is stored is returned unchanged whenever the document behind it
-	 * cannot be found: an attachment whose row is gone is still the only
-	 * record of what the post showed, and dropping it would take the picture
-	 * out of the post.
+	 * One stored attachment copy, rebuilt from its document. Returned
+	 * unchanged when the document is gone, as it is then the only record of
+	 * what the post showed.
 	 *
 	 * @param mixed $attachment the stored copy
 	 *

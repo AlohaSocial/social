@@ -20,27 +20,16 @@ use Throwable;
 
 /**
  * The 881 animated emoji every instance has in its picker from the day the app
- * is installed.
+ * is installed: Google's Noto Animated Emoji.
  *
- * **Why they are not in the app.** They are Google's Noto Animated Emoji, and
- * all of them together are over half a gigabyte: 746 KiB apiece at the only
- * size Google publishes. Even re-encoded small enough to be ugly they are
- * 42 MiB, against an app that is 66 MiB in total. So what ships is the *list*
- * — `data/noto-animated-emoji.json`, 70 KiB — and the pictures arrive one at a
- * time, the first time anybody on the instance asks for one, and are kept in
- * appdata for ever after.
+ * They are too large to ship, so only the list ships
+ * (`data/noto-animated-emoji.json`) and each picture is fetched by the
+ * server the first time anybody asks for it, by codepoint from a fixed URL,
+ * and kept in appdata. The browser only talks to this instance's `/gif/{slug}`,
+ * so no search term or viewer reaches a third party, as `GifService` requires.
  *
- * **What that means for the reader.** Nothing leaves their browser. The grid
- * points at this instance's own `/gif/{slug}`, the same route an administrator's
- * own pictures are served from, and it is the *server* that fetches the file it
- * does not have yet — by codepoint, from a fixed URL, once in the life of the
- * instance. No search term is sent anywhere, and no third party learns who
- * looked at what. That is the property `GifService` was written to protect and
- * the reason a Giphy or Tenor picker was refused; this keeps it.
- *
- * An administrator who wants nothing fetched at all turns the pack off, on the
- * Sections card or with `occ config:app:set social gif_pack --value=0`, and is
- * left with whatever they added themselves. A server whose `config.php` says
+ * The pack can be turned off on the Sections card or with
+ * `occ config:app:set social gif_pack --value=0`; a server with
  * `has_internet_connection => false` offers no pack and fetches nothing.
  */
 class GifPackService {
@@ -51,11 +40,8 @@ class GifPackService {
 	private const MANIFEST = '/data/noto-animated-emoji.json';
 
 	/**
-	 * Where one is fetched from, by codepoint.
-	 *
-	 * WebP rather than GIF because Google serves both at 512 px and the WebP
-	 * is about a third smaller for the same picture, and `GifService` already
-	 * accepts an animated WebP as a library picture.
+	 * Where one is fetched from, by codepoint. WebP, about a third smaller than
+	 * the GIF at 512 px, and accepted by `GifService` as an animated picture.
 	 */
 	private const SOURCE = 'https://fonts.gstatic.com/s/e/notoemoji/latest/%s/512.webp';
 
@@ -67,12 +53,9 @@ class GifPackService {
 	private const TIMEOUT = 10;
 
 	/**
-	 * The largest one of these may be.
-	 *
-	 * The biggest in the set is a little over 4 MiB at 512 px. This is a
-	 * ceiling on what a fetch will store, not a claim about the set: the point
-	 * is that a URL that starts answering with something else cannot fill the
-	 * instance's appdata.
+	 * The largest one of these may be: a ceiling well above the biggest in the
+	 * set (a little over 4 MiB), so a URL answering with something else cannot
+	 * fill appdata.
 	 */
 	private const MAX_SIZE = 8 * 1024 * 1024;
 
@@ -93,8 +76,7 @@ class GifPackService {
 
 	/**
 	 * Whether the instance offers the pack at all: switched on, and on a
-	 * server allowed to fetch the pictures. Offline, a picker of pictures
-	 * that can never arrive would be worse than none.
+	 * server allowed to fetch the pictures.
 	 */
 	public function enabled(): bool {
 		return $this->configService->getAppValueBool(ConfigService::SOCIAL_GIF_PACK)
@@ -123,12 +105,8 @@ class GifPackService {
 	}
 
 	/**
-	 * The pack, narrowed to what somebody typed.
-	 *
-	 * Matched on the name and on the keywords the manifest carries — every
-	 * other name Google gives it, and the category — so "sad", "food" or
-	 * "flag" find what a person means rather than only what a picture is
-	 * called.
+	 * The pack, narrowed to what somebody typed, matched on the name and the
+	 * manifest's keywords (other names and the category).
 	 *
 	 * @return Gif[]
 	 */
@@ -169,13 +147,8 @@ class GifPackService {
 	}
 
 	/**
-	 * The bytes behind a slug, fetching them if this instance has not got them
-	 * yet.
-	 *
-	 * The fetch is the slow path exactly once per emoji per instance; every
-	 * request after it is a read from appdata. A failure is not cached — the
-	 * next reader tries again — because the alternative is one bad minute
-	 * leaving a picture permanently missing.
+	 * The bytes behind a slug, fetched once per emoji per instance if missing.
+	 * A failure is not cached, so the next reader tries again.
 	 *
 	 * @throws NotFoundException when there is no such emoji, or it cannot be had
 	 */
@@ -211,9 +184,8 @@ class GifPackService {
 	}
 
 	/**
-	 * Whether this instance already holds the bytes for a slug.
-	 *
-	 * What the warm-up job asks, so it fetches only what is missing.
+	 * Whether this instance already holds the bytes for a slug, for the
+	 * warm-up job.
 	 */
 	public function isCached(string $slug): bool {
 		$gif = $this->bySlug($slug);
@@ -231,10 +203,8 @@ class GifPackService {
 	}
 
 	/**
-	 * What the licence requires to be said, wherever the pack is shown.
-	 *
-	 * Read from the manifest rather than written here twice, so regenerating
-	 * the list cannot leave the credit behind.
+	 * What the licence requires to be said, wherever the pack is shown; read
+	 * from the manifest so the credit travels with the list.
 	 */
 	public function attribution(): string {
 		$this->load();
@@ -277,9 +247,8 @@ class GifPackService {
 			return '';
 		}
 
-		// the bytes decide, as they do for a picture an administrator adds:
-		// this is served to everybody here and ends up attached to posts that
-		// federate
+		// the bytes decide, as for an administrator's own picture, since this
+		// is served to everybody and federates attached to posts
 		if (!str_starts_with($content, 'RIFF') || substr($content, 8, 4) !== 'WEBP') {
 			$this->logger->notice('the emoji pack source answered with something that is not a WebP', [
 				'url' => $url,
@@ -342,10 +311,8 @@ class GifPackService {
 		$this->attribution = (string)($data['attribution'] ?? '');
 		foreach ($data['emoji'] as $entry) {
 			$codepoint = (string)($entry['c'] ?? '');
-			// the codepoint is half of a URL this server will fetch and half of
-			// a filename it will write, so nothing but a codepoint will do.
-			// Two digits, not four: (C) is `a9_fe0f` and (R) is `ae_fe0f`, and
-			// a stricter rule silently dropped both
+			// the codepoint becomes part of a URL and a filename, so only a
+			// codepoint will do; two digits minimum for (C) `a9_fe0f` and (R) `ae_fe0f`
 			if ($codepoint === '' || preg_match('/^[0-9a-f]{2,6}(_[0-9a-f]{2,6})*$/', $codepoint) !== 1) {
 				continue;
 			}

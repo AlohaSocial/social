@@ -72,9 +72,8 @@ final class RecommendationStoryFingerprint {
 			$keys[] = hash_hmac('sha256', $owner . "\0story-exact-v1\0" . 0 . "\0" . $canonical, $secret);
 		}
 
-		// MinHash estimates Jaccard similarity directly. Longer stories use
-		// sixteen four-value bands; short headlines use individual samples
-		// below, where requiring several matches gives better recall.
+		// MinHash estimates Jaccard similarity. Longer stories use sixteen
+		// four-value bands; short headlines use single samples below.
 		$firstTerm = array_shift($terms);
 		if ($firstTerm === null) {
 			return [];
@@ -94,9 +93,8 @@ final class RecommendationStoryFingerprint {
 			}
 		}
 		if ($shortStory) {
-			// A one-row MinHash key collides with probability equal to Jaccard
-			// similarity. Short headlines need more independent samples than
-			// four-row bands can provide at the same storage cost.
+			// A one-row MinHash key collides with probability equal to the Jaccard
+			// similarity, so short headlines get more independent samples.
 			for ($seed = 0; $seed < self::MINHASH_BAND_COUNT; $seed++) {
 				$keys[] = hash_hmac(
 					'sha256',

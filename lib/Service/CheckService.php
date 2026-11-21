@@ -52,16 +52,9 @@ class CheckService {
 	public const REPAIR_PAGE = 200;
 
 	/**
-	 * What each client-API probe saw, in the order the bases were tried.
-	 *
-	 * A failed probe is the only thing an administrator has to work from, and
-	 * "nothing answers" is the one thing it should not say: the rules being
-	 * absent and the rules pointing somewhere that is not this Nextcloud look
-	 * identical from the outside and are fixed differently.
-	 *
-	 * The bases are tried in order of how much they mean -- the address Social
-	 * is configured for, then the host this request came in on, then the
-	 * server's base URL -- so the first recorded attempt is the one to show.
+	 * What each client-API probe saw, in the order the bases were tried
+	 * (configured address, request host, server base URL), so an
+	 * administrator can tell "rules missing" from "rules pointing elsewhere".
 	 *
 	 * @var list<array{base: string, status: int, reason: string}>
 	 */
@@ -86,11 +79,8 @@ class CheckService {
 		private ConfigService $configService,
 		private MiscService $miscService,
 	) {
-		// not the plain ICache the server hands out: that is the *user's* file
-		// cache, and it throws when nobody is logged in. A setup check runs
-		// with no session, and what is remembered here — whether this
-		// instance answers its own WebFinger — belongs to the instance, not
-		// to whoever happened to ask first.
+		// not the server's plain ICache, which is the user's file cache and
+		// throws without a session; setup checks run without one
 		$this->cache = $cacheFactory->createDistributed(Application::APP_ID . '/check');
 		$this->userId = $userId;
 	}
@@ -129,19 +119,11 @@ class CheckService {
 	 * Whether the address the app builds its ids from still matches the one the
 	 * server says it is reachable at.
 	 *
-	 * The address is derived from `overwrite.cli.url` once, when an administrator
-	 * confirms it on the setup screen, and never read again — every actor id, every note id and the WebFinger answer are built
-	 * from that stored copy. Change the server's URL afterwards and the two
-	 * drift apart silently: WebFinger starts answering for a host nobody asks
-	 * about, and the app reports that .well-known is misconfigured when in fact
-	 * .well-known is fine and the app is looking in the wrong place.
-	 *
-	 * This is only ever reported, never corrected. The stored address is baked
-	 * into every id already written, so changing it is `occ social:reset`
-	 * territory and not something to do behind an administrator's back.
-	 *
-	 * An address with and without `/index.php` is the same address: pretty
-	 * URLs turned on later serve the old ids as before.
+	 * The address is taken from `overwrite.cli.url` once, at setup, and every
+	 * id and the WebFinger answer are built from it, so a later URL change
+	 * makes them drift apart. Only reported, never corrected: changing it is
+	 * `occ social:reset` territory. With or without `/index.php` counts as the
+	 * same address.
 	 */
 	public function checkCloudAddress(): bool {
 		$expected = $this->derivedCloudAddress();
@@ -192,13 +174,9 @@ class CheckService {
 
 	/**
 	 * Whether `social_url`, which every id is minted from, is on the scheme,
-	 * host and port of `cloud_url`.
-	 *
-	 * They can disagree on an instance set up before `social_url` was derived
-	 * from `cloud_url`: it was then taken from the first request that opened
-	 * the app, and an internal hostname or a proxy that does not pass the
-	 * scheme on is inside every id since. Reported, never corrected, for the
-	 * same reason as the cloud address.
+	 * host and port of `cloud_url`. Older instances took it from the first
+	 * request that opened the app, which may have used an internal hostname or
+	 * lost the scheme behind a proxy. Reported, never corrected.
 	 */
 	public function checkSocialUrl(): bool {
 		$configured = $this->configuredCloudAddress();
@@ -236,16 +214,9 @@ class CheckService {
 	}
 
 	/**
-	 * The account the WebFinger probe asks about: any one that exists.
-	 *
-	 * It used to ask about the reader's Nextcloud user id, which is wrong
-	 * twice over. A handle is chosen when the account is set up and need not
-	 * match the user id, and somebody who has not answered the setup screen
-	 * has no account at all — so the probe asked about an account nobody has,
-	 * got the 404 it deserved, and the app told an administrator that
-	 * .well-known was misconfigured when it was fine. This is the same account
-	 * the WebFinger setup check asks about, so the app and
-	 * Administration → Overview now agree.
+	 * The account the WebFinger probe asks about: any one that exists, as the
+	 * WebFinger setup check does, since the reader may have no account and a
+	 * handle need not match the user id.
 	 */
 	private function probeAccount(): ?string {
 		try {
@@ -258,11 +229,9 @@ class CheckService {
 	}
 
 	/**
-	 * Whether `/.well-known/webfinger` answers for a local account.
-	 *
-	 * Probed at the address the app is set up for first, then at the address
-	 * this request came in on, then at the server's base URL. A success is
-	 * remembered for an hour.
+	 * Whether `/.well-known/webfinger` answers for a local account, probed at
+	 * the configured address, then the request's host, then the server's base
+	 * URL. A success is remembered for an hour.
 	 *
 	 * @param string|null $username the local account to ask about; the
 	 *                              current user's when not given. A setup
@@ -300,10 +269,6 @@ class CheckService {
 	 * The address other servers ask about this instance's accounts at, as a
 	 * base URL: `social_address` when the admin set one, otherwise the host
 	 * of the cloud URL.
-	 *
-	 * This used to read an app value named `address`, which nothing ever
-	 * wrote, so the branch was dead and the probe always started from the
-	 * request's own Host header — which is not where a remote server looks.
 	 */
 	private function configuredSocialBase(): string {
 		try {
@@ -464,12 +429,9 @@ class CheckService {
 	}
 
 	/**
-	 * Whether a base address is the one the admin configured for this instance.
-	 *
-	 * Only that address earns the right to be fetched even when it resolves
-	 * locally; one of the candidates below is built from the `Host` header the
-	 * caller sent, and letting that reach a local address turns the check into
-	 * a way to probe the server's own network from outside.
+	 * Whether a base address is the one the admin configured. Only that one
+	 * may be fetched when it resolves locally; the others come from the
+	 * caller's `Host` header and would let outsiders probe the local network.
 	 */
 	private function isConfiguredBase(string $base): bool {
 		$configured = rtrim((string)$this->config->getSystemValue('overwrite.cli.url', ''), '/');
@@ -483,15 +445,10 @@ class CheckService {
 
 	/**
 	 * Whether the Mastodon client API answers at the root of this instance.
-	 *
-	 * A client is given a domain and builds `https://<domain>/api/v1/...`
-	 * itself; none of them can be told the `/index.php/apps/social` prefix the
-	 * routes actually live under. So unless the web server maps the root paths
-	 * onto the app, every client fails at its first request and the account
-	 * cannot be added at all.
-	 *
-	 * `/api/v1/instance` is the probe because it is the first thing a client
-	 * asks for and the only one that needs no token.
+	 * Clients build `https://<domain>/api/v1/...` and cannot be told the
+	 * `/index.php/apps/social` prefix, so without a web-server rewrite no
+	 * account can be added. `/api/v1/instance` is probed as the first, token-free
+	 * request a client makes.
 	 */
 	public function checkClientApiRoot(): bool {
 		$known = (string)$this->cache->get(self::CACHE_PREFIX . 'clientapi');
@@ -521,23 +478,16 @@ class CheckService {
 		);
 		$this->configService->setAppValue(ConfigService::CLIENT_API_ROOT, '0');
 
-		// A failure is remembered as well, and for a much shorter time than a
-		// success: this runs on every page load of the app for an
-		// administrator, and without it every one of those would pay for three
-		// HTTP requests that are all going to fail. Short, because the next
-		// thing an administrator does after reading the warning is edit the
-		// web server, and they should not have to wait an hour to see it go.
+		// Failures are cached too, but briefly: this runs on every app page
+		// load for an administrator, who should see a fixed web server soon.
 		$this->cache->set(self::CACHE_PREFIX . 'clientapi', 'false', 300);
 
 		return false;
 	}
 
 	/**
-	 * One probe of `<base>/api/v1/instance`.
-	 *
-	 * The body is checked, not only the status: a server that answers the root
-	 * with the Nextcloud login page, or with a catch-all index, would otherwise
-	 * read as a working client API.
+	 * One probe of `<base>/api/v1/instance`. The body is checked too, so a
+	 * login page or catch-all index at the root does not pass.
 	 */
 	private function requestClientApi(string $base): bool {
 		try {
@@ -556,9 +506,8 @@ class CheckService {
 				'accept_errors' => true,
 			], $contentType, $status);
 			if ($status !== Http::STATUS_OK) {
-				// 404 is the interesting one, and the reason this is recorded
-				// at all: it is what both a missing rule and a rule pointing at
-				// the wrong document root produce.
+				// 404 is what both a missing rule and a rule pointing at the
+				// wrong document root produce
 				$this->noted($base, $status, 'status');
 
 				return false;
@@ -591,19 +540,10 @@ class CheckService {
 	}
 
 	/**
-	 * Whether the answer's own addresses use the scheme it was asked over.
-	 *
-	 * A proxy that does not pass the scheme on leaves Nextcloud believing the
-	 * request arrived over plain HTTP, and every absolute URL it builds says
-	 * so -- on a site that is HTTPS. `mod_proxy` sends `X-Forwarded-For` and
-	 * `X-Forwarded-Host` by itself and not the scheme, so an Apache set up
-	 * from a recipe that omits `RequestHeader set X-Forwarded-Proto` is in
-	 * exactly this state.
-	 *
-	 * Nothing about it is visible from inside: the app answers, the routes
-	 * work, and the addresses in the answers are wrong. An iOS client refuses
-	 * them outright and its sign-in stops with nothing to see, which is how
-	 * this was found -- in a web server's access log, not in the app.
+	 * Whether the answer's own addresses use the scheme it was asked over. A
+	 * proxy that does not pass the scheme (Apache's `mod_proxy` without
+	 * `RequestHeader set X-Forwarded-Proto`) makes Nextcloud build http URLs
+	 * on an https site, which iOS clients refuse without explanation.
 	 */
 	private function answeredInScheme(string $scheme, string $body): bool {
 		if ($scheme !== 'https') {
@@ -629,20 +569,10 @@ class CheckService {
 	}
 
 	/**
-	 * Whether the root rewrite is known to work, without going and finding out.
-	 *
-	 * `checkClientApiRoot()` will make up to three outbound requests on a cold
-	 * cache, which is fine behind an administrator opening a settings page and
-	 * not fine on a route any client may call: it would make an unauthenticated
-	 * endpoint into a way to have this server fetch things.
-	 *
-	 * So the probe's conclusion is *written down* rather than only cached. The
-	 * cache it otherwise uses is `createDistributed()`, which on an instance
-	 * with no distributed cache configured falls back to the local one -- APCu,
-	 * which the web server and `occ` do not share. The answer then depended on
-	 * which process happened to have run the check, and a client asking for the
-	 * discovery document got whichever it was. An app value is read the same by
-	 * every process and survives a restart.
+	 * Whether the root rewrite is known to work, without probing: the probe
+	 * makes outbound requests, which an unauthenticated route must not trigger.
+	 * The conclusion is stored as an app value, since a local APCu fallback
+	 * cache is not shared between the web server and `occ`.
 	 */
 	public function clientApiRootIsKnownGood(): bool {
 		return $this->configService->getAppValue(ConfigService::CLIENT_API_ROOT) === '1';

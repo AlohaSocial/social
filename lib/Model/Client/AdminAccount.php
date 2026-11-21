@@ -15,41 +15,20 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Moderation;
 
 /**
- * Mastodon's `Admin::Account`: what a moderator is shown about an account,
- * which is the ordinary `Account` entity plus what the instance has decided
- * about it.
+ * Mastodon's `Admin::Account`: the ordinary `Account` entity plus what the
+ * instance decided about it.
  *
- * Every key Mastodon documents is emitted, including the ones this app has
- * nothing behind — a client that declares a field non-optional cannot decode
- * the entity when a key is missing, and Ivory, Mona and everything else built
- * on Swift's Codable declare most of them that way. Each such key carries the
- * empty value of its type rather than an invented one:
+ * Every documented key is emitted, since Codable-based clients (Ivory, Mona)
+ * cannot decode a missing one; keys with nothing behind them carry their
+ * type's empty value: `email`, `ip`, `ips`, `locale`, `invite_request` (the
+ * Nextcloud user's email is not republished), `role` (`null`, no roles here),
+ * `disabled`, `sensitized` (never true), and `created_by_application_id`,
+ * `invited_by_account_id`. `confirmed` and `approved` are true for local
+ * accounts and false for remote ones, as on Mastodon.
  *
- *  - `email`, `ip`, `ips`, `locale`, `invite_request`: this instance holds no
- *    address, no address history and no application text *for the fediverse
- *    account*. A local account belongs to a Nextcloud user whose email the
- *    admin can read where Nextcloud keeps it; republishing it through the
- *    fediverse API would put it in the cache of every client that asks.
- *  - `role`: `null`, which is also what Mastodon sends for an account it does
- *    not hold the user of. This app has no roles — being a Nextcloud
- *    administrator is a property of the Nextcloud account, not of the actor —
- *    so there is no role to report for anybody.
- *  - `disabled`, `sensitized`: no state in this app corresponds to either.
- *    Neither can ever be true, and the routes that would set them say so.
- *  - `created_by_application_id`, `invited_by_account_id`: accounts are not
- *    created through the client API here and there are no invites.
- *
- * `confirmed` and `approved` are `true` for a local account and `false` for a
- * remote one, which is Mastodon's own rule: both describe a *user* of this
- * instance, and a cached remote actor has none. A local actor exists because a
- * Nextcloud user exists, so there is nothing left to confirm or approve.
- *
- * `id` is the numeric id every other entity of this API emits — except for an
- * account whose cached actor a suspension purged, where it is the actor's
- * ActivityPub id: the numeric id is a column of the cached copy that is gone,
- * and an id that cannot be sent back to `/unsuspend` would leave the
- * suspension impossible to lift over the API. Both forms are accepted
- * wherever a route takes an account.
+ * `id` is the numeric id, except for an account whose cached actor a
+ * suspension purged, where it is the ActivityPub id so `/unsuspend` can
+ * still name it; routes accept both.
  */
 class AdminAccount implements JsonSerializable {
 	private string $id = '';
@@ -84,13 +63,10 @@ class AdminAccount implements JsonSerializable {
 	}
 
 	/**
-	 * An account known only by the decision standing against it.
-	 *
-	 * A suspension deletes the cached actor, so this is what a suspended
-	 * account looks like once that has happened: the actor's id, what can be
-	 * read off it, and nothing else. The `account` entity is built from the
-	 * same facts rather than sent as null — Mastodon declares it non-optional,
-	 * and every field this instance no longer holds comes out of it empty.
+	 * An account known only by the decision against it, as a suspended account
+	 * is once its cached actor is deleted. The `account` entity is built from
+	 * what can be read off the id rather than sent as null, which Mastodon does
+	 * not allow.
 	 */
 	public static function fromDecision(Moderation $decision, bool $local = false): self {
 		$actorId = $decision->getActorId();

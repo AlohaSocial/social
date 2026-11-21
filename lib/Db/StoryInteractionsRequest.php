@@ -15,14 +15,9 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The reactions and replies a story has been answered with.
- *
- * Every one of these rows belongs to a story, and a story lives a day — so
- * there is no sweep of its own here. What deletes a story deletes what was
- * said about it, in the same call, which is why `deleteByStory()` and
- * `deleteByStories()` exist rather than an expiry column.
- *
- * @package OCA\Social\Db
+ * The reactions and replies a story has been answered with. No sweep of its
+ * own: whatever deletes a story deletes these in the same call
+ * (`deleteByStory()`, `deleteByStories()`).
  */
 class StoryInteractionsRequest extends CoreRequestBuilder {
 	use TArrayTools;
@@ -59,13 +54,9 @@ class StoryInteractionsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Writes one, or does nothing if that exact activity is already here.
-	 *
-	 * An inbox is retried, so the same reaction arrives more than once; a
-	 * unique index on the activity's own id is what makes the second delivery
-	 * nothing rather than a second reaction. The violation is caught rather
-	 * than avoided with a read first, because between the read and the write
-	 * is exactly where the second delivery lands.
+	 * Writes one, or does nothing if that exact activity is already here: the
+	 * unique index on the activity id makes a redelivery a no-op, caught
+	 * rather than pre-checked, since the race is exactly between read and write.
 	 *
 	 * @return bool whether this was the first time it was seen
 	 */

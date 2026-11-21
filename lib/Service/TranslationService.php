@@ -22,37 +22,19 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Translating a status, through whatever translation provider this Nextcloud
- * has.
+ * Translating a status through this Nextcloud's translation provider; with
+ * none, `translation.enabled` is false and the route answers 503, never the
+ * original text.
  *
- * There is no translation engine in this app and there should not be one: a
- * Nextcloud that can translate already says so — a provider is installed and
- * configured server-wide, and the same one answers Talk, Mail and the
- * assistant. This asks that provider, which is why an instance with none
- * announces `translation.enabled: false` and answers the route with a 503
- * rather than handing back the original text.
- *
- * That is the bug this replaces: `translate` used to return the post
- * unchanged. A client cannot tell that from a translation into a language the
- * reader happens to write in, so the button appeared to work and quietly did
- * nothing. An absent capability a client is told about is a button that is
- * never drawn; a capability that lies is one that is drawn and is wrong.
- *
- * What gets translated: the body and the content warning always, then the poll
- * options and the pictures' descriptions while the budget lasts. Each text is
- * a task of its own — that is the shape of the provider API — so a post with
- * ten pictures and a poll would be twenty provider round-trips inside one HTTP
- * request. `MAX_TEXTS` bounds it, and anything past the bound is *left out of
- * the entity* rather than returned untranslated: Mastodon's Translation
- * entity lists only what was translated, and a client shows the original for
- * whatever is not in the list.
+ * The body and content warning are always translated, then poll options and
+ * alt texts up to `MAX_TEXTS` (each text is a provider task). Texts past the
+ * bound are left out of the entity, as Mastodon's Translation lists only what
+ * was translated.
  */
 class TranslationService {
 	/**
-	 * How many texts one translation request may send to the provider.
-	 *
-	 * Two are always spent on the body and the warning. The rest is what the
-	 * poll options and the alt texts share.
+	 * How many texts one translation request may send to the provider; two go
+	 * to the body and the warning.
 	 */
 	public const MAX_TEXTS = 12;
 
@@ -69,11 +51,8 @@ class TranslationService {
 	}
 
 	/**
-	 * Whether anything on this server can translate.
-	 *
-	 * Asked of the task type rather than of `hasProviders()`: a Nextcloud with
-	 * a speech-to-text provider and nothing else has providers and still
-	 * cannot translate a word.
+	 * Whether anything on this server can translate, asked of the task type
+	 * since other providers (speech-to-text) do not count.
 	 */
 	public function isAvailable(): bool {
 		try {
@@ -87,13 +66,9 @@ class TranslationService {
 	}
 
 	/**
-	 * Mastodon's `/api/v1/instance/translation_languages`: for each language
-	 * that can be translated *from*, the languages it can be translated *to*.
-	 *
-	 * Built from the provider's own enum values, so it is the truth about this
-	 * server rather than a list copied from somebody's documentation. A
-	 * provider that only auto-detects offers no source languages, and the
-	 * answer is then an empty object — which is what a client needs to know.
+	 * Mastodon's `/api/v1/instance/translation_languages`: for each source
+	 * language, the target languages, from the provider's enum values. A provider
+	 * that only auto-detects yields an empty object.
 	 *
 	 * @return array<string, list<string>>
 	 */
@@ -152,9 +127,8 @@ class TranslationService {
 			}
 
 			if ($options !== []) {
-				// the poll's id is the status's, as `Question::jsonSerialize()`
-				// serves it: a client matches the translated options onto the
-				// poll it already holds by that id
+				// The poll's id is the status's, as `Question::jsonSerialize()` serves it,
+				// so a client can match the options.
 				$translation->setPoll((string)$post->getNid(), $options);
 			}
 		}
@@ -178,12 +152,8 @@ class TranslationService {
 	}
 
 	/**
-	 * One text through the provider.
-	 *
-	 * A provider that fails on one part of a post fails the whole request: a
-	 * Translation entity with a translated body and an untranslated warning
-	 * reads as a post whose warning was written in the reader's language, and
-	 * nobody could tell.
+	 * One text through the provider. A failure fails the whole request, so a
+	 * partly translated post cannot pass for a translated one.
 	 *
 	 * @throws TranslationUnavailableException
 	 */
@@ -228,13 +198,9 @@ class TranslationService {
 	}
 
 	/**
-	 * What to tell the provider the post is written in.
-	 *
-	 * The post's own declaration first — this app stores it from `contentMap`,
-	 * so it is what the author said rather than a guess — but only when the
-	 * provider offers it; otherwise auto-detection, and failing that whatever
-	 * the post claims, so that a provider with an open enum still gets a
-	 * language rather than an empty string.
+	 * What to tell the provider the post is written in: the post's declared
+	 * language if offered, else auto-detection, else the declared language
+	 * anyway for a provider with an open enum.
 	 */
 	private function sourceFor(string $language): string {
 		$offered = $this->values('origin_language');

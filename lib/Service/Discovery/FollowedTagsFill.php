@@ -16,23 +16,16 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Brings the new posts with every hashtag somebody here follows to this
- * server, wherever they were written (`PostDiscoveryService::fillTag()`,
- * every network), so a followed hashtag fills the home timeline with more
- * than what happened to arrive. Run by `Cron\FillFollowedTags`.
+ * Brings new posts with every hashtag somebody here follows to this server,
+ * from every network (`PostDiscoveryService::fillTag()`), for
+ * `Cron\FillFollowedTags`. The home timeline finds them through their stored
+ * tags (`StreamRequest::followedTagNids()`), with the usual blocks, mutes and
+ * filters.
  *
- * Nothing is written for the home timeline: a post with a followed tag is
- * there because its stored tags meet the follow when the timeline is read
- * (`StreamRequest::followedTagNids()`), with the blocks, mutes and filters
- * every home post goes through — so a stored post is in it like any other.
- *
- * Bounded so a followed tag cannot flood a timeline or the server: `TAGS`
- * tags a run, the ones read longest ago first; `LIMIT` posts a tag from each
- * network; only posts written since the tag was last read, and none older
- * than `WINDOW`, which is also all a first read goes back. A tag a page has
+ * Bounded: `TAGS` tags a run, longest unread first; `LIMIT` posts a tag from
+ * each network; nothing older than the last read or `WINDOW`. A tag a page
  * just had read (`RemoteFetchQueue::claimPostsFill()`) waits for the next
- * run. What an administrator turned off — Bluesky for the instance, the
- * servers the directory asks — each source leaves out itself.
+ * run.
  */
 class FollowedTagsFill {
 	/** how many tags one run reads */

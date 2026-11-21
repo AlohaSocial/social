@@ -21,28 +21,12 @@ use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
 
 /**
- * Fills in the five post columns `Version1000Date20260912000007` added, for the
- * rows that predate them.
- *
- * The columns are empty on every existing row, and `tags`, `language`,
- * `updated`, `quote` and `quote_authorization` are all still inside the `source`
- * column of each — which is where they used to be read from, and still are as a
- * fallback. Until this has run, a language filter would report those posts as
- * having no language and an index scan would agree with it; that is the whole
- * reason the columns were added.
- *
- * The extraction is `Stream::importFromDatabase()` itself rather than a second
- * copy of the parsing. Handed a row whose columns are empty it takes exactly the
- * fallback path a read takes today, so what is written here is what a read would
- * have derived — there is one parser, not two that can drift.
- *
- * Bounded and marked, like BackfillRemoteVisibility. Pages on the primary key
- * rather than by offset, because an offset scan re-reads everything it has
- * already walked and `social_stream` is the largest table in the app. A row that
- * already agrees with its wire object is not written. The marker is what makes
- * it affordable: "everything already agrees" is not free to establish, it is a
- * full scan of the table with the instance in maintenance mode, so once a run
- * completes it is not repeated on every later `occ upgrade`.
+ * Fills in the five post columns `Version1000Date20260912000007` added
+ * (`tags`, `language`, `updated`, `quote`, `quote_authorization`) for older
+ * rows, from their `source`, using `Stream::importFromDatabase()` so there is
+ * one parser. Bounded and marked like BackfillRemoteVisibility: pages on the
+ * primary key, skips rows that already agree, and is not repeated once a run
+ * completes, as checking the whole table is a full scan in maintenance mode.
  */
 class BackfillStreamPostFields implements IRepairStep {
 	/** Rows read per round trip. */

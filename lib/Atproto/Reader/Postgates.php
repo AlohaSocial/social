@@ -20,13 +20,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Whether a Bluesky post may be quoted (`app.bsky.feed.postgate`): the gate
- * its author keeps beside it, under the post's own key, in their repository.
- * A quote of a post whose author turned quoting off is shown detached by
- * every AppView, so it is refused here, with the reason, rather than made.
- * The gate is read from the author's own PDS — the AppView says it only to
- * a signed-in viewer — and a post read as such a viewer that says so is
- * marked when it is stored (`PostMapper`), so the quote is not even offered.
+ * Whether a Bluesky post may be quoted (`app.bsky.feed.postgate`). Every
+ * AppView shows a quote of a gated post detached, so it is refused here with
+ * the reason. The gate is read from the author's own PDS, as the AppView tells
+ * only a signed-in viewer; a post read as such a viewer is marked when stored
+ * (`PostMapper`), so the quote is not even offered.
  */
 class Postgates {
 	public const GATE = 'app.bsky.feed.postgate';

@@ -22,25 +22,18 @@ use Throwable;
 
 /**
  * Fetches the files of remote attachments in the background, before anybody
- * asks for them.
+ * asks for them: one post's attachments, queued when it was stored
+ * (`StreamQueue::TYPE_MEDIA`), and a newest-first sweep of every waiting
+ * document, which `Cron\Cache` runs. Files are downloaded several at a time
+ * (`CurlService::downloadMany()`) and stored through
+ * `DocumentService::storeRemoteDocument()`, so every limit and check of a
+ * reader's fetch applies.
  *
- * Two ways in: the attachments of one post, queued when the post was stored
- * (`StreamQueue::TYPE_MEDIA`), and a sweep over every document still waiting,
- * newest first, which `Cron\Cache` runs as the backstop. Either way the files
- * are downloaded several at a time (`CurlService::downloadMany()`) and stored
- * one by one through `DocumentService::storeRemoteDocument()`, the same path
- * a reader's request takes, so the size and type limits, the pixel ceiling,
- * the moderator's refused files and the outbound address checks are those of
- * every other fetch.
- *
- * Everything runs under a deadline: a wave is started only while there is
- * time for it, and its downloads may not outlast what is left. A host behind
- * the shared circuit breaker is not asked, and a host whose downloads failed
- * at the network level is not asked again in the same run. A failed media
- * download does not trip the shared breaker itself: a large file running out
- * of time is not the host being down, and the breaker also holds back the
- * deliveries to that host. A `429` or `503`, which asks the host to be left
- * alone, does.
+ * Everything runs under a deadline. Hosts behind the shared circuit breaker
+ * are skipped, as are hosts that failed at the network level earlier in the
+ * run. A failed download trips the breaker only on a `429` or `503`: a large
+ * file running out of time is not the host being down, and the breaker also
+ * holds back deliveries.
  */
 class RemoteMediaPrefetcher {
 	/** How many files one wave downloads at once. */

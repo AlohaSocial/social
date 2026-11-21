@@ -20,33 +20,16 @@ use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Passing a local report on to the instance the reported account is on.
+ * Passes a local report on to the instance the reported account is on, when
+ * the reporter ticks `forward`.
  *
- * `POST /api/v1/reports` takes `forward`, and a user who ticks it is asking
- * for the one thing this instance cannot do for them: act on an account it
- * does not host. Without this, ticking the box did nothing at all and the
- * report stopped at our own moderators — the remote instance, the only one
- * that can suspend the account, was never told.
- *
- * **Who signs it.** The instance, never the reporter. The `Flag` names this
- * server's own actor and is signed with its key, so the receiving moderators
- * see "cloud.example reported this" and not the account that filed it. That is
- * Mastodon's behaviour and the reason for it is the whole point: the person
- * is reporting an account on that very instance, whose admins may be hostile
- * to them, and a report that carried their handle would hand those admins a
- * name to retaliate against. The comment is passed on as written — the user is
- * told the report is being forwarded, and can keep it to our moderators by not
- * ticking the box.
- *
- * **Delivery.** Sent inline rather than through `social_request_queue`, and
- * this is the one thing here that is a compromise: a queued delivery is signed
- * by `HttpSignatureService::signDelivery()`, which resolves the signing key
- * from `oc_social_actor` by the queue row's author — and the instance actor is
- * deliberately not a row there (see `InstanceActorService`). So the one
- * activity that must be signed as the server is the one the queue cannot sign,
- * and it goes out inline with `HttpSignatureService::signAsInstance()`. One
- * report is one POST with a short timeout, it never blocks storing the report,
- * and a failure costs the forward and nothing else.
+ * Signed by this instance's actor, never the reporter, as Mastodon does, so
+ * the remote admins see the server, not a name to retaliate against; the
+ * comment is passed on as written. Sent inline with
+ * `HttpSignatureService::signAsInstance()` rather than through
+ * `social_request_queue`, whose signing looks the key up in `oc_social_actor`,
+ * where the instance actor is not (see `InstanceActorService`). A failure
+ * costs the forward and nothing else.
  */
 class ReportForwardService {
 	/**
@@ -67,12 +50,9 @@ class ReportForwardService {
 	}
 
 	/**
-	 * Whether the report can be forwarded at all: it has to be one of ours,
-	 * about an account somewhere else, that publishes an inbox.
-	 *
-	 * A report that arrived as a `Flag` is not ours to pass on — forwarding it
-	 * again would put this instance's name on somebody else's complaint, and
-	 * two instances doing that to each other is a loop.
+	 * Whether the report can be forwarded at all: one of ours, about an account
+	 * somewhere else that publishes an inbox. A report that arrived as a `Flag`
+	 * is not ours to pass on, and forwarding it could loop.
 	 */
 	public function canForward(Report $report, Person $target): bool {
 		if ($this->bluesky !== null && BlueskyIds::isActorId($target->getId())) {
@@ -138,10 +118,7 @@ class ReportForwardService {
 	/**
 	 * The activity: this instance's actor flagging the reported account and
 	 * the reported statuses, with the reporter's comment and nothing that
-	 * identifies them.
-	 *
-	 * Addressed `to` the reported account, the way Mastodon addresses one, so
-	 * an instance that routes by audience delivers it to the right moderators.
+	 * identifies them, addressed `to` the reported account as Mastodon does.
 	 */
 	private function flag(Report $report, Person $target, InstanceActor $actor): Flag {
 		$flag = new Flag();
@@ -155,21 +132,9 @@ class ReportForwardService {
 	}
 
 	/**
-	 * The reported posts, by the addresses the receiving server knows them by.
-	 *
-	 * A client reports a post by the id **this** API gave it — a snowflake nid
-	 * — and those ids were being put into the `Flag` as they arrived. No other
-	 * server has ever seen them, so every forwarded report named one account
-	 * the receiving moderators could find and a list of numbers they could not:
-	 * a report about an account read as a complaint with no evidence attached,
-	 * and a report about a **video**, where the video is the entire complaint,
-	 * carried nothing at all. PeerTube resolves an abuse by the video's own
-	 * address and would have found nothing every time.
-	 *
-	 * A local post is left out rather than translated. The statuses in a report
-	 * about a remote account are that account's posts; one of ours in the list
-	 * is a reply somebody picked up by mistake, and naming it would be telling
-	 * another instance's moderators about a post of our own.
+	 * The reported posts by their ActivityPub ids, as the receiving server
+	 * knows them, not this API's nids. A local post is left out: it is not
+	 * evidence about the remote account and not another instance's business.
 	 *
 	 * @return string[]
 	 */

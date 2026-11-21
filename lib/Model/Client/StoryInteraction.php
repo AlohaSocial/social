@@ -16,16 +16,10 @@ use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Something said back to a story: an emoji, or a sentence.
- *
- * One model for both because they are the same fact with a different word on
- * it — who, about which story, what they said — which is how Pixelfed keeps
- * them too. What differs is only where a client draws it: a reaction floats
- * over the picture, a reply is a message.
- *
- * Neither is a post. There is no `social_stream` row behind one, so a reply
- * cannot appear in a timeline, on a profile or in an outbox by a query nobody
- * has written yet, and it goes when the story goes.
+ * Something said back to a short (a Pixelfed story): an emoji or a sentence,
+ * one model for both as in Pixelfed. Neither is a post: there is no
+ * `social_stream` row, so it never appears in a timeline, profile or outbox,
+ * and it goes when the story goes.
  */
 class StoryInteraction implements IQueryRow, JsonSerializable {
 	use TArrayTools;
@@ -34,11 +28,8 @@ class StoryInteraction implements IQueryRow, JsonSerializable {
 	public const TYPE_REPLY = 'reply';
 
 	/**
-	 * How many times one account may answer one story.
-	 *
-	 * Pixelfed's own number. Without a cap, what a story gives somebody is a
-	 * private channel to the poster that the poster cannot close, and their
-	 * only remedy would be to delete the story.
+	 * How many times one account may answer one story: Pixelfed's own number,
+	 * so a story is not an unclosable private channel to its poster.
 	 */
 	public const MAX_PER_ACTOR = 5;
 

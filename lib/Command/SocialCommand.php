@@ -22,35 +22,20 @@ use Symfony\Component\Console\Question\ConfirmationQuestion;
 /**
  * The base class every `occ social:*` command extends.
  *
- * It stands in for `OC\Core\Command\Base`, which lives in the server's private
- * `core/` and carries no stability promise: a signature change there is a fatal
- * on somebody's `occ`, with no deprecation first. What the commands actually
- * took from it is small — the `--output` option, the three format constants and
- * the writers that honour them — so it is reimplemented here, against Symfony's
- * `Command`, which is a public dependency of the server.
+ * It stands in for `OC\Core\Command\Base`, which is private to the server and
+ * carries no stability promise, by reimplementing the parts the commands use
+ * (the `--output` option, the three format constants and their writers) on
+ * Symfony's public `Command`. Output is byte-for-byte what core's `Base`
+ * produces, since `--output=json` is a published interface. Differences, none
+ * observable from a `social:` command:
  *
- * The output of the writers is byte-for-byte what core's `Base` produced:
- * `occ social:* --output=json` is a published interface and is not being
- * redesigned by a refactor. Three deliberate differences from core, none of
- * them observable from a `social:` command:
+ * - core's special case for `user:list` in the plain array writer is dropped.
+ * - `valueToString()` casts explicitly, as `strict_types` requires; the string
+ *   is the same for every scalar and `Stringable`.
+ * - a pure enum is fatal here as in core, just with a different error.
  *
- * - core's plain-format array writer prints an integer-keyed entry as
- *   `<prefix><key>: <value>` instead of `<prefix><value>` for exactly one class,
- *   its own `user:list`; that special case is dropped rather than reproduced.
- * - `valueToString()` casts to string explicitly. Core returns the value and
- *   lets PHP's weak mode coerce it against the `?string` return type, which
- *   this file, running under `strict_types`, cannot do. The result is the same
- *   string for every scalar and every `Stringable`.
- * - a backed enum is written as its value, as in core. A pure enum has no
- *   value: core reads `->value` off it anyway and dies with "undefined
- *   property", this dies casting an object to a string. Both are fatal, so
- *   there is nothing to preserve.
- *
- * Not reimplemented, because nothing in the app calls it: the pcntl signal
- * handling (`abortIfInterrupted()`, `cancelOperation()`), the streaming table
- * and JSON writers with `chunkIterator()`, and `CompletionAwareInterface`, whose
- * only effect is that a bash completion of `--output` no longer offers the three
- * format names.
+ * Not reimplemented, since nothing calls it: pcntl signal handling, the
+ * streaming writers with `chunkIterator()`, and `CompletionAwareInterface`.
  */
 abstract class SocialCommand extends Command {
 	public const OUTPUT_FORMAT_PLAIN = 'plain';
@@ -72,13 +57,8 @@ abstract class SocialCommand extends Command {
 
 	/**
 	 * The help line core's `Base` set on every command, kept word for word.
-	 *
-	 * Core sets it in `configure()`, which would mean asking the server
-	 * container for the documentation address while the command is being
-	 * constructed — and a command is constructed by anything that lists the
-	 * commands, including a test suite with no server under it. It is answered
-	 * here instead, when somebody actually asks for `--help`, and a command that
-	 * sets its own help text still wins.
+	 * Answered here on `--help` rather than in `configure()`, so constructing a
+	 * command needs no server container; a command's own help text still wins.
 	 */
 	#[\Override]
 	public function getHelp(): string {
@@ -97,12 +77,8 @@ abstract class SocialCommand extends Command {
 	}
 
 	/**
-	 * The helper behind every confirmation prompt in this app.
-	 *
-	 * `getHelper()` is typed as "some helper", so every caller that wanted to
-	 * ask a question had to assume which one came back. Asked for here once,
-	 * where the assumption can be checked: a command line with no question
-	 * helper registered is a broken `occ`, not a prompt to answer itself.
+	 * The helper behind every confirmation prompt in this app, checked once:
+	 * `getHelper()` is typed as any helper.
 	 */
 	protected function questionHelper(): QuestionHelper {
 		$helper = $this->getHelper('question');
@@ -115,10 +91,8 @@ abstract class SocialCommand extends Command {
 
 	/**
 	 * Asks before something that cannot be undone, unless `--force` was given.
-	 *
-	 * Under `occ --no-interaction` a ConfirmationQuestion answers itself with
-	 * its default, so without `--force` that is refused rather than taken as
-	 * a no that a script could not tell from success.
+	 * Under `--no-interaction` a question answers itself, so without `--force`
+	 * this is refused rather than taken as a silent no.
 	 *
 	 * @return bool|null true to go ahead, false when the answer was no, null
 	 *                   when there is nobody to ask and no `--force`

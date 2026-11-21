@@ -88,9 +88,8 @@ import { showError, showSuccess } from '../../services/toast.js'
 const DiscoveryHealth = defineAsyncComponent(() => import('./DiscoveryHealth.vue'))
 
 /**
- * The four tuning numbers, with the ranges the server holds them to. Checked
- * here as well so a value the server would refuse is said to be wrong next to
- * the field, before anything is sent.
+ * The four tuning numbers and the ranges the server holds them to, checked
+ * here too so a bad value is flagged before anything is sent.
  */
 const FIELDS = [
 	{
@@ -167,11 +166,8 @@ function formOf(settings) {
 }
 
 /**
- * Administration → Social → For you.
- *
- * One save for the card, like the Sections card: the endpoint takes all six
- * values or refuses them all, and six fields that each saved on their own
- * would leave the card half applied when one of them is out of range.
+ * Administration → Social → For you. One save for the card: the endpoint takes
+ * all the values or refuses them all.
  */
 export default {
 	name: 'InterestsSection',

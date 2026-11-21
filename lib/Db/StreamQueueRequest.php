@@ -116,12 +116,9 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	}
 
 	/**
-	 * Moves a standby item out of the due window until `$until`.
-	 *
-	 * `last` is what the backoff is measured from, so a time in the future
-	 * holds the row back without spending one of its tries on an attempt
-	 * that was never made — the same hold `RequestQueueRequest::postpone()`
-	 * puts on a delivery whose host is behind the breaker.
+	 * Moves a standby item out of the due window until `$until`: `last` is what
+	 * the backoff is measured from, so a future time holds the row back without
+	 * spending a try, as `RequestQueueRequest::postpone()` does.
 	 *
 	 * @throws QueueStatusException when the item was not on standby any more
 	 */
@@ -139,10 +136,9 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	}
 
 	/**
-	 * A cached item has nothing left to record, so the row goes rather than
-	 * staying as a STATUS_SUCCESS row nothing ever reads or removes — which is
-	 * what made this table grow without bound. The in-memory status is still
-	 * set, so a caller that inspects the model afterwards sees the outcome.
+	 * A cached item has nothing left to record, so its row is deleted rather
+	 * than kept as STATUS_SUCCESS; the in-memory status is still set for the
+	 * caller.
 	 *
 	 * @throws QueueStatusException
 	 */
@@ -187,17 +183,10 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	}
 
 	/**
-	 * Return every item stuck `running` since before $before to standby.
-	 *
-	 * A drain that died mid-item — or one whose item threw where nothing
-	 * caught it — left the row `running`, and `getStandby()` only ever looks
-	 * at standby rows: the item was never retried, never counted against
-	 * MAX_TRIES and never removed, so the parent it was fetching never
-	 * arrived. The outbound queue has had this since it had the same problem.
-	 *
-	 * The attempt that died counts as a try: an item whose processing takes
-	 * the process down with it never reaches `setAsFailure()`, and would
-	 * otherwise come back for ever.
+	 * Return every item stuck `running` since before $before to standby: a
+	 * drain that died mid-item leaves it `running`, where `getStandby()` never
+	 * sees it. The attempt that died counts as a try, or an item that takes
+	 * the process down would come back for ever.
 	 *
 	 * @return int the number of items re-queued
 	 */
@@ -232,9 +221,7 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	}
 
 	/**
-	 * Drops the items a previous version of the app left behind as
-	 * STATUS_SUCCESS rows: they are done, nothing reads them, and nothing
-	 * removed them. A cached item no longer becomes one of these.
+	 * Drops leftover STATUS_SUCCESS rows: they are done and nothing reads them.
 	 *
 	 * @return int rows removed
 	 */

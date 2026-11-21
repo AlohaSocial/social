@@ -19,26 +19,13 @@ use OCA\Social\Model\Details;
 use OCA\Social\Tools\DbTime;
 
 /**
- * The year an account had, as Mastodon's `#Wrapstodon` reports it.
+ * The year an account had, as Mastodon's `#Wrapstodon` reports it: twelve
+ * months of posts and new followers, the top hashtags, the three posts that
+ * travelled furthest, and a one-word archetype.
  *
- * Five routes and one entity, and a client that has the feature — the official
- * apps do — shows a card in December that says nothing at all on an instance
- * that does not serve them. What it holds is a year in twelve rows (what was
- * posted, who arrived), the hashtags that were used most, the three posts that
- * travelled furthest, and a one-word description of how the account is used.
- *
- * **Computed on demand and never stored.** Mastodon generates these with a
- * background job and keeps the result, which is why its API has a `generating`
- * state and a `generate` route. Here the same answer comes out of the posts
- * that are already in the database, in one read of the year, so there is
- * nothing to generate and nothing to keep in step: `generate` is a no-op that
- * answers 200 because a client will call it, and the state is `available` or
- * `ineligible` and never `generating`. A report that is a query cannot go
- * stale, and an instance that never runs its cron still has one.
- *
- * **`share_url` is null.** Mastodon's points at a public page of its own; this
- * app has none, and inventing an address would be a link that 404s in
- * somebody's post.
+ * Computed on demand from the stored posts and never kept, so `generate` is a
+ * no-op answering 200 and the state is never `generating`. `share_url` is
+ * null: this app has no public page for it.
  */
 class AnnualReportService {
 	/** The shape of `data`, as Mastodon 4.3 defined it. */
@@ -48,11 +35,8 @@ class AnnualReportService {
 	private const PAGE = 100;
 
 	/**
-	 * The most posts one report walks.
-	 *
-	 * A ceiling rather than a promise: the walk is one account's own year, and
-	 * an account that wrote more than this in a year gets a report over its
-	 * most recent ten thousand posts rather than a request that never returns.
+	 * The most posts one report walks: an account that wrote more in a year gets
+	 * a report over its latest ten thousand.
 	 */
 	private const MAX_POSTS = 10000;
 
@@ -65,11 +49,8 @@ class AnnualReportService {
 	private const READ_KEY = 'annual_reports_read';
 
 	/**
-	 * How the account is used, in one word — Mastodon's five.
-	 *
-	 * The thresholds are this app's own and are deliberately plain: what a
-	 * reader wants from the word is to recognise themselves, not to be able to
-	 * reproduce the arithmetic.
+	 * How the account is used, in one word, Mastodon's five, with this app's own
+	 * plain thresholds.
 	 */
 	public const ARCHETYPE_LURKER = 'lurker';
 	public const ARCHETYPE_BOOSTER = 'booster';
@@ -139,9 +120,8 @@ class AnnualReportService {
 			$written++;
 
 			if ($post->getType() === 'Announce' || $post->getSubType() === 'Announce') {
-				// a boost is something the account did rather than something it
-				// wrote: counted, and then left out of everything below,
-				// because its hashtags and its likes belong to whoever wrote it
+				// a boost is counted, then left out of everything below: its hashtags
+				// and likes belong to whoever wrote it
 				$boosts++;
 				continue;
 			}
@@ -201,12 +181,8 @@ class AnnualReportService {
 	}
 
 	/**
-	 * Whether a year has a report, in the four words Mastodon uses.
-	 *
-	 * `generating` never comes back: the report is a query rather than a job,
-	 * so there is nothing to wait for. A year the account wrote nothing in is
-	 * `ineligible` — a report of twelve empty months is worse than the client
-	 * showing nothing.
+	 * Whether a year has a report, in Mastodon's words, never `generating`. A
+	 * year the account wrote nothing in is `ineligible`.
 	 */
 	public function state(Person $actor, int $year): string {
 		if ($year > (int)gmdate('Y')) {
@@ -217,10 +193,8 @@ class AnnualReportService {
 	}
 
 	/**
-	 * Marks a year read, so a client stops offering it.
-	 *
-	 * A per-account preference rather than a column, because that is all it
-	 * is: a note this account keeps about a report that is not stored either.
+	 * Marks a year read, so a client stops offering it; a per-account
+	 * preference.
 	 */
 	public function markRead(string $userId, int $year): void {
 		$years = $this->readYears($userId);
@@ -248,13 +222,9 @@ class AnnualReportService {
 	}
 
 	/**
-	 * How the account is used, in one word.
-	 *
-	 * Order matters: the first rule that fits wins, and they are arranged from
-	 * the most specific to the most general. Somebody who wrote almost nothing
-	 * is a lurker whatever the little they wrote was; after that it is whether
-	 * most of what they did was boosting, asking, or answering; and what is
-	 * left — somebody who mostly writes their own posts — is the oracle.
+	 * How the account is used, in one word. The first rule that fits wins, most
+	 * specific first: a lurker, then mostly boosting, asking or answering, and
+	 * otherwise the oracle.
 	 */
 	private function archetype(int $written, int $boosts, int $replies, int $polls): string {
 		if ($written < 10) {
@@ -277,12 +247,8 @@ class AnnualReportService {
 	}
 
 	/**
-	 * How many followers arrived in each month of the year.
-	 *
-	 * Read from the follow rows' own dates. Capped, like every other read that
-	 * cannot be paged by date: an account with more followers than the cap
-	 * gets the most recent ones, which for a report about one year is the ones
-	 * the year is about.
+	 * How many followers arrived in each month of the year, from the follow rows'
+	 * dates; capped, so an account with very many followers gets the newest.
 	 *
 	 * @return array<int, int> month (1-12) to the number who arrived
 	 */
@@ -302,11 +268,8 @@ class AnnualReportService {
 	}
 
 	/**
-	 * The account's own posts, newest first.
-	 *
-	 * The same paged walk the statistics page uses, and for the same reason: a
-	 * generator so the caller stops where its year does, rather than a query
-	 * that returns everything to be filtered afterwards.
+	 * The account's own posts, newest first, as a generator so the caller stops
+	 * where its year does (the statistics page's walk).
 	 *
 	 * @return iterable<Stream>
 	 */
@@ -348,11 +311,8 @@ class AnnualReportService {
 	}
 
 	/**
-	 * The year in seconds since the epoch, in UTC.
-	 *
-	 * UTC and not the reader's zone, because the months a report draws have to
-	 * be the same months whoever opens it and wherever from — and because
-	 * every timestamp it is comparing against is stored in UTC.
+	 * The year in seconds since the epoch, in UTC, so a report has the same
+	 * months for everybody, as the stored timestamps are UTC.
 	 *
 	 * @return array{0: int, 1: int}
 	 */

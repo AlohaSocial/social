@@ -9,12 +9,9 @@ import { translate as t } from '@nextcloud/l10n'
  * The three little games a post can play: `/dice`, `/flip` and `/pick`.
  *
  * Each is replaced by its result before the post is sent, so what travels is
- * plain text -- "🎲 4", "🪙 heads", "🎯 pizza" -- and a Mastodon reader sees
- * exactly what a reader here sees. Nothing is rolled on the server and nothing
- * can be re-rolled afterwards: the result is part of what was posted.
- *
- * A command is only a command at the start of a line or after a space, so a
- * link that happens to contain `/dice` is left alone.
+ * plain text ("🎲 4", "🪙 heads", "🎯 pizza") that every reader sees alike.
+ * A command only starts at the start of a line or after a space, so a link
+ * containing `/dice` is left alone.
  */
 
 /** the most sides a die may have: enough for any game, too few to be a lottery */
@@ -24,12 +21,8 @@ export const MAX_SIDES = 1000
 export const MAX_OPTIONS = 20
 
 /**
- * Where each command may start and what it takes.
- *
- * A die takes an optional number of sides; a coin takes nothing. Only `/pick`
- * runs to the end of its line, since its options are the rest of it -- so
- * `/flip then /dice` is two games, and neither swallows the other.
- *
+ * Where each command may start and what it takes. Only `/pick` runs to the
+ * end of its line, so `/flip then /dice` is two games.
  * Groups: 1 what came before, 2 dice|roll, 3 its sides, 4 flip, 5 pick, 6 its options.
  */
 const COMMAND = /(^|\s)\/(?:(dice|roll)(\s+d?\d{1,4}\b)?|(flip)|(pick)([^\n]*))(?![\w/])/gi

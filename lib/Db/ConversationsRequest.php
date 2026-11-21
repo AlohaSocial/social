@@ -14,29 +14,20 @@ use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The storage a conversation needs, which is less than a conversation.
+ * Storage for conversations. A thread is not stored: it is read by bounded
+ * walks of `in_reply_to` over `social_stream`, up to find a message's root
+ * and down to find a thread's messages, a statement per level (or per
+ * `ANCESTOR_LEVELS` levels upwards).
  *
- * A thread is not stored: it is the transitive closure of `in_reply_to` over
- * `social_stream`, and the two walks below are how it is read — up, to find
- * the root a message belongs to, and down, to find the messages of a thread
- * one account may see. Both are bounded in depth, both select four columns,
- * and neither does a statement per message: the walk down does one per
- * level, the walk up one per `ANCESTOR_LEVELS` levels.
- *
- * What is stored is what an account has *done* with a thread, in
- * `social_convo_state`: how far it has read it, and how far it has dismissed
- * it. Both are kept as the nid of the newest message the action covered, not
- * as a flag, so that a message arriving afterwards undoes neither — which is
- * Mastodon's behaviour on both counts: a new message makes a conversation
- * unread again, and brings a deleted one back.
+ * `social_convo_state` stores how far an account has read and dismissed a
+ * thread, as the nid of the newest message covered, so a later message makes
+ * the conversation unread and brings a dismissed one back, as on Mastodon.
  */
 class ConversationsRequest extends ConversationsRequestBuilder {
 	/**
 	 * How many levels of `in_reply_to` a thread walk follows, in either
-	 * direction. `StreamRequest::MAX_DESCENDANT_DEPTH` bounds the same walk at
-	 * the same number, and Mastodon bounds its own thread walk too: without a
-	 * bound, a cycle in `in_reply_to` — which a remote server can create — is
-	 * an endless loop holding a database connection.
+	 * direction, as `StreamThreads::MAX_DESCENDANT_DEPTH` does: a remote
+	 * server can create a cycle, which unbounded would loop for ever.
 	 */
 	public const MAX_THREAD_DEPTH = 20;
 
@@ -50,12 +41,9 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	public const MAX_THREAD_WIDTH = 200;
 
 	/**
-	 * The posts the given ids name, as their place in a thread.
-	 *
-	 * Keyed by ActivityPub id, so a caller that asked for ids it could not
-	 * find gets fewer rows back and can tell which are missing — a parent this
-	 * instance does not store is the end of the walk upwards, and is how a
-	 * thread that started elsewhere gets a root here at all.
+	 * The posts the given ids name, as their place in a thread, keyed by
+	 * ActivityPub id so a caller can tell which are missing: a parent not
+	 * stored here ends the walk upwards.
 	 *
 	 * @param string[] $ids
 	 *
@@ -80,11 +68,9 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
-	 * The posts the given ids name and up to `$levels - 1` of their ancestors
-	 * each, in one statement: the post joined to its parent, the parent to its
-	 * own, `$levels` deep. What `getThreadLinks()` answers, `$levels` levels of
-	 * a walk up at a time, and with each the root its thread has stored
-	 * (`rootPrim`, '' where none is), past which a walk need not go.
+	 * The posts the given ids name and up to `$levels - 1` ancestors each, in
+	 * one self-joining statement, each with its stored thread root
+	 * (`rootPrim`, '' where none) past which a walk need not go.
 	 *
 	 * @param string[] $ids
 	 *
@@ -217,12 +203,8 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	/**
 	 * Stores the root of the thread a direct message belongs to: its parent's
 	 * stored root, else the topmost post the walk up reaches, else itself.
-	 * The replies that arrived before it were their own roots, and they and
-	 * the replies under them are moved under this one, so a thread keeps one
-	 * root whatever order its messages came in.
-	 *
-	 * Bounded like `rootOf()`: a chain deeper than its walk that was stored
-	 * before the roots were is rooted where the walk stopped.
+	 * Replies that arrived earlier and became their own roots are moved under
+	 * it, so a thread keeps one root whatever the arrival order.
 	 */
 	public function storeRoot(string $id, string $inReplyTo, int $maxDepth = 40): void {
 		$prim = $this->prims([$id])[0] ?? '';
@@ -334,13 +316,8 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 
 	/**
 	 * Every post of the thread under `$rootId` that is a direct message of
-	 * `$actorId`, the root itself included.
-	 *
-	 * An empty answer is the whole of the access check on a conversation: an
-	 * account that is not a `dm` dest of any post of the thread has no
-	 * conversation there, and the routes that take a conversation id answer
-	 * 404 on it — a conversation that is not there and one that is somebody
-	 * else's are the same answer, as they are on Mastodon.
+	 * `$actorId`, the root included. Empty means no access: the conversation
+	 * routes answer 404, the same as for a missing conversation.
 	 *
 	 * @return array<string, array{id: string, idPrim: string, nid: int, inReplyTo: string}>
 	 */
@@ -354,13 +331,10 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
-	 * The thread under `$rootId`, root included, as its posts' places in it.
-	 *
-	 * Structure only, and for nobody in particular: the ids and nids of the
-	 * posts, which the caller then intersects with what one account may see.
-	 * Filtering each level for the reader instead would end the walk at the
-	 * first post they are not a recipient of, and an account that joined a
-	 * thread halfway down is a recipient of nothing above where it joined.
+	 * The thread under `$rootId`, root included, as structure only; the caller
+	 * intersects it with what the reader may see. Filtering per level would
+	 * stop at the first post the reader did not receive, hiding everything
+	 * below where they joined.
 	 *
 	 * @return array<string, array{id: string, idPrim: string, nid: int, inReplyTo: string}>
 	 */
@@ -417,12 +391,9 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
-	 * How far each of the given threads has been read and dismissed by one
-	 * account, keyed by the thread root's id.
-	 *
-	 * A thread with no row has never been read or dismissed, and is left out
-	 * rather than returned as zeroes: the caller defaults, and there is then
-	 * one place that decides what "never read" means.
+	 * How far each given thread has been read and dismissed by one account,
+	 * keyed by root id. Threads without a row are left out; the caller
+	 * applies the default.
 	 *
 	 * @param string[] $rootIds
 	 *
@@ -466,11 +437,9 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
-	 * Whether this account wants to hear about this thread.
-	 *
-	 * Mastodon's conversation mute, which stops the **notifications** a thread
-	 * produces and leaves its posts on the timelines — muting a conversation
-	 * is saying "stop telling me", not "hide this".
+	 * Whether this account wants to hear about this thread: Mastodon's
+	 * conversation mute, which stops notifications but leaves the posts on
+	 * timelines.
 	 */
 	public function setMuted(string $actorId, string $rootId, bool $muted): void {
 		// the status entity's `muted` is read through a memo of these rows;
@@ -535,13 +504,9 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
-	 * The root of the thread a post belongs to, walking `in_reply_to` up.
-	 *
-	 * A post that replies to nothing is its own root, and so is one whose
-	 * parent this instance does not hold — which is the ordinary case for a
-	 * reply that arrived before the post it answers. Bounded, because a
-	 * malformed chain must not walk for ever. A direct message's thread
-	 * answers with the root stored with it (`storeRoot()`).
+	 * The root of the thread a post belongs to, walking `in_reply_to` up
+	 * (bounded). A post whose parent is not here is its own root; a direct
+	 * message's thread answers with its stored root (`storeRoot()`).
 	 */
 	public function rootOf(string $statusId, int $maxDepth = 40): string {
 		$current = $statusId;
@@ -581,12 +546,8 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	}
 
 	/**
-	 * Moves one marker forward, and only forward.
-	 *
-	 * `WHERE … < :nid` is what keeps it monotonic: two clients marking the
-	 * same conversation read at the same time, or a retry of a request that
-	 * was already applied, cannot move a marker back over a message the user
-	 * has seen.
+	 * Moves one marker forward only (`WHERE … < :nid`), so concurrent marks or
+	 * retries never move it back over a seen message.
 	 */
 	private function raiseMarker(string $column, string $actorId, string $rootId, int|string $nid): void {
 		if ($this->getMarkers($actorId, [$rootId]) !== []) {

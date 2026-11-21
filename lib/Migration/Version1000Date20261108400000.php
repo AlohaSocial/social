@@ -17,15 +17,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Hashtag-interest learning becomes opt-in on instances that already stored
- * the old default.
- *
- * The For you card writes every one of its values on save, so an instance
- * whose administrator saved it for any reason holds `interests_default = 1`
- * although nobody chose it. That stored value is removed once, and the
- * default (`0`) applies. Readers who chose for themselves keep their choice,
- * and learned interests are not touched. A stored `0` is left alone, so
- * running this again changes nothing.
+ * Makes hashtag-interest learning opt-in on instances that stored
+ * `interests_default = 1` only because the For you card writes every value on
+ * save. The stored value is removed once and the default (`0`) applies;
+ * readers' own choices, learned interests and a stored `0` are left alone.
  */
 class Version1000Date20261108400000 extends SimpleMigrationStep {
 	public function __construct(

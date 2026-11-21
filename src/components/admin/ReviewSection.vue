@@ -36,8 +36,7 @@
 
 		<div v-else class="review__scroll">
 			<table class="review__table">
-				<!-- fixed layout takes its widths from the first row, so they
-				     live here rather than on the cells, where they are ignored -->
+				<!-- fixed layout takes its widths from the first row, so they live here, not on the cells -->
 				<colgroup>
 					<col class="review__col-account">
 					<col class="review__col-text">
@@ -122,15 +121,9 @@ import { moderationUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
 
 /**
- * The review queue.
- *
- * The text of every held post is in the table, because that is what there is
- * to decide about: a row that only said "a post by @alice was held" would send
- * a moderator looking for a post that is deliberately nowhere to be found.
- *
- * Refusing asks first. Publishing does not: a post that should not have gone
- * out can still be taken down afterwards, while a refusal cannot be undone —
- * the request is gone and only its author still has the words.
+ * The review queue. Each row shows the held post's text, since the post is
+ * nowhere else to be seen. Refusing asks first because it cannot be undone;
+ * publishing does not, since a published post can still be taken down.
  */
 export default {
 	name: 'ReviewSection',
@@ -206,11 +199,8 @@ export default {
 		n,
 
 		/**
-		 * Why it is waiting, in the moderator's language.
-		 *
-		 * The set is closed, so the strings are here rather than sent by the
-		 * server: they are interface text and belong in the translations with
-		 * the rest of it.
+		 * Why it is waiting, in the moderator's language. The set of reasons is
+		 * closed, so the strings live here to be translated.
 		 *
 		 * @param {string} reason the rule that held it
 		 * @return {string} what the table shows
@@ -312,9 +302,7 @@ export default {
 		async saveSettings(first, spam, videos) {
 			this.savingSettings = true
 			try {
-				// all three together, never one: the endpoint writes what it is
-				// sent and a card that sent only the switch that moved would
-				// turn the other two off
+				// always all three: the endpoint turns off any switch it is not sent
 				const { data } = await axios.post(moderationUrl('/review/settings'), {
 					reviewFirstPost: first,
 					autospam: spam,
@@ -339,16 +327,13 @@ export default {
 }
 
 .review__scroll {
-	// a table is the one thing on this page allowed to be wider than the page:
-	// four columns of prose do not stack
+	// the table may be wider than the page: its columns do not stack
 	overflow-x: auto;
 }
 
 .review__table {
 	width: 100%;
-	// auto layout sizes a column to its widest unbreakable word, and an actor
-	// id is one long word; the columns below are what keeps the text column
-	// readable rather than one word per line
+	// auto layout would size a column to its longest word, such as an actor id
 	table-layout: fixed;
 	min-width: 720px;
 	border-collapse: collapse;
@@ -358,10 +343,8 @@ export default {
 		padding: 8px 12px 8px 0;
 		text-align: start;
 		vertical-align: top;
-		// every column holds something somebody else wrote; none of it may
-		// spill over the column beside it. `white-space` is stated because the
-		// settings page sets `nowrap` on table cells above this, and a cell
-		// that cannot wrap ignores the width the colgroup gives it
+		// the settings page sets `nowrap` on table cells, and a cell that
+		// cannot wrap ignores the width the colgroup gives it
 		white-space: normal;
 		overflow-wrap: break-word;
 		border-block-end: 1px solid var(--color-border);
@@ -385,8 +368,7 @@ export default {
 }
 
 .review__col-actions {
-	// wide enough for the two buttons side by side; they wrap below
-	// each other on a narrow screen rather than being cut short
+	// two buttons side by side; they wrap on a narrow screen
 	width: 24%;
 }
 
@@ -417,7 +399,7 @@ export default {
 	flex-wrap: wrap;
 	justify-content: flex-end;
 
-	// the labels are two short words; truncating them to "Publ…" helps nobody
+	// the labels are short; never truncate them
 	:deep(.button-vue__text) {
 		white-space: nowrap;
 	}

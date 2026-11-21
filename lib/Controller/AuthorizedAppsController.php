@@ -23,25 +23,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The apps this account has signed in to, and taking one of them back.
+ * The apps this account has signed in to, and taking one of them back, as
+ * Mastodon's Account → Authorized apps.
  *
- * Mastodon keeps this under Account → Authorized apps, and it is the first
- * place somebody looks after losing a phone. Every authorization has been
- * recorded in `social_client_auth` since the table was split out.
- *
- * Client-API routes, so the settings page reaches them with its session and a
- * mobile client with the token it signed in with — but the two are not equal
- * here. This is the one place that manages *other* apps' tokens, and Mastodon
- * has no API for it at all, so nothing a client was granted can be read as
- * consent to sign the person's other apps out:
- *
- *  - listing asks for the broad `read`, not one granular part of it;
- *  - a bearer token may revoke only its own authorization, with `write`.
- *    Any other id is a **403** whether it exists or not. Signing another app
- *    out takes the Nextcloud session, the web page or an app password.
- *
- * What comes back never carries the token itself — it is stored hashed, and
- * there is nothing a client needs it for here.
+ * Client-API routes, but nothing a client was granted is consent to sign the
+ * person's other apps out: listing needs the broad `read`, and a bearer token
+ * may revoke only its own authorization, with `write` (any other id is a 403
+ * whether it exists or not). Signing another app out takes the Nextcloud
+ * session or an app password. Tokens are stored hashed and never returned.
  */
 class AuthorizedAppsController extends ClientApiController {
 	public function __construct(
@@ -67,22 +56,19 @@ class AuthorizedAppsController extends ClientApiController {
 				$apps[] = [
 					'id' => $client->getAuthId(),
 					'name' => $client->getAppName(),
-					// an app registered before the website was validated may
-					// carry anything there, and this is shown as a link
+					// a stored website is not trusted to be a safe link, so it is checked
+					// again before it is shown as one
 					'website' => ClientService::websiteLink($client->getAppWebsite()),
 					'scopes' => $client->getAuthScopes(),
-					// when *this account* granted it, not when the app registered
-					// itself on the instance — the second is the same date for
-					// everybody and says nothing about whose phone this is
+					// when this account granted it, not when the app registered itself on
+					// the instance
 					'created_at' => $client->getAuthCreation(),
 					'last_used_at' => $client->getLastUpdate(),
 					// 0 when the instance lets a token in use live for ever, or
 					// the app keeps itself signed in by refreshing
 					'expires_at' => $this->clientService->signsOutAt($client),
-					// an authorization whose code was never exchanged: the browser
-					// came back and the app never asked for its token. Worth
-					// showing, because taking it back is still the right thing to
-					// do with it, and worth marking, because it is not a sign-in
+					// an authorization whose code was never exchanged: shown so it can be
+					// taken back, and marked because it is not a sign-in
 					'signed_in' => $client->getToken() !== '',
 				];
 			}
@@ -94,13 +80,10 @@ class AuthorizedAppsController extends ClientApiController {
 	}
 
 	/**
-	 * Takes one of them back. The app is signed out at once: the token is the
-	 * row, and the row is gone.
-	 *
-	 * Through the session, an id that is not one of this account's own is a
-	 * **404** and never a 403 — the two answers together would say which ids
-	 * exist. Through a bearer token every id but its own is the same 403, so
-	 * that answer says nothing either.
+	 * Takes one of them back; the token is the row, so the app is signed out at
+	 * once. Through the session, an id that is not this account's is a 404, never
+	 * a 403, so the answers do not reveal which ids exist; through a bearer token
+	 * every id but its own is the same 403.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

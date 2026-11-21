@@ -28,13 +28,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 	use TArrayTools;
 
 	/**
-	 * Inserts a follow, unless a row with its id or its (actor, object) pair
-	 * is already there.
-	 *
-	 * The inbox looks a follow up before it writes it, and a redelivery that
-	 * overlaps the first copy passes that lookup too; the database skips the
-	 * second insert rather than failing it — a failed statement would abort
-	 * the surrounding transaction on PostgreSQL.
+	 * Inserts a follow unless a row with its id or (actor, object) pair is
+	 * already there: a redelivery can race the inbox's lookup, and a failed
+	 * insert would abort the transaction on PostgreSQL.
 	 *
 	 * @return bool whether the row was written: false when it was already there
 	 */
@@ -259,16 +255,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * Where an account's followers are, and when each of them arrived.
-	 *
-	 * Two columns rather than a hydrated `Follow` with its cached actor and
-	 * that actor's details: the statistics page wants a host and a date per
-	 * follower, and building the other two hundred bytes of each one only to
-	 * throw them away is the whole cost of the query.
-	 *
-	 * The host is parsed out of `actor_id` in PHP rather than in SQL because
-	 * the three databases this app supports have three different ways of
-	 * cutting a string up, and none of them knows what a URL is.
+	 * Where an account's followers are and when each arrived, for its
+	 * statistics: two columns, not hydrated `Follow`s. The host is parsed in
+	 * PHP, as the three databases cut strings differently.
 	 *
 	 * @param int $limit a ceiling on the rows read; newest first, so the cap
 	 *                   drops the oldest followers rather than a random slice
@@ -340,12 +329,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * How many follows this actor has sent since a moment.
-	 *
-	 * Counted from the rows rather than from a cache counter: this is the
-	 * number a limit is enforced against, and an instance with no memcache —
-	 * which is most of them — would otherwise have no limit at all. Pending
-	 * and accepted alike, because what is being limited is the sending.
+	 * How many follows this actor has sent since a moment, pending or accepted,
+	 * counted from the rows: the limit is enforced against this, and most
+	 * instances have no memcache for a counter.
 	 */
 	public function countFollowsSince(string $actorId, int $since): int {
 		$qb = $this->countFollowsSelectSql();
@@ -399,14 +385,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * The accepted followers of an actor, newest first.
-	 *
-	 * Each row is hydrated into a Follow with a Person and its details, so
-	 * $limit/$offset are what keep this bounded — it serves the paged
-	 * `followers` collection and the re-follow after a Move, both of which want
-	 * the follows themselves. Federated delivery used to fan out over it and
-	 * loaded a popular actor's whole follower list into memory for every post;
-	 * it asks getFollowerInboxes() for the distinct inboxes instead.
+	 * The accepted followers of an actor, newest first, hydrated into Follows,
+	 * for the paged `followers` collection and the re-follow after a Move.
+	 * Delivery uses getFollowerInboxes() instead.
 	 *
 	 * @return Follow[]
 	 */
@@ -414,19 +395,15 @@ class FollowsRequest extends FollowsRequestBuilder {
 		$qb = $this->getFollowsSelectSql();
 		$this->limitToPrim($qb, 'object_id_prim', $actorId);
 		$qb->limitToAccepted(true);
-		// the accepted Loopback row an actor has on itself is how its own
-		// posts reach its home timeline, not a follower: listed, it made
-		// every actor a follower of itself and the page one longer than
-		// the collection's totalItems
+		// the accepted Loopback row an actor has on itself is how its own posts
+		// reach its home timeline; it is not a follower
 		$qb->limitToType(Follow::TYPE);
 		$this->limitBeforeCursor($qb, $before);
 		$this->leftJoinCacheActors($qb, 'actor_id');
 		$this->leftJoinDetails($qb, 'id', 'ca');
 		$qb->orderBy('f.creation', 'desc');
-		// `creation` is a DATETIME, so the follows made within one second of
-		// each other have no order of their own: with an offset page, one of
-		// them can come back on two consecutive pages while another is never
-		// returned at all. The primary key breaks the tie.
+		// `creation` is stored to the second; the primary key breaks ties so an
+		// offset page neither repeats nor skips a row
 		$qb->addOrderBy('f.id_prim', 'desc');
 
 		if ($limit > 0) {
@@ -451,13 +428,10 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * Limit a follower or following list to the rows after a cursor.
-	 *
-	 * A keyset rather than an offset: an offset page reads and discards every
-	 * row before it, so page 2,500 of a large follower list read 100,000 rows
-	 * to return forty, on every fetch a crawling peer made. The first
+	 * Limit a follower or following list to the rows after a cursor: a keyset,
+	 * as an offset page reads and discards every row before it. The first
 	 * predicate is the range `social_f_ocr` (object_id_prim, creation) serves;
-	 * the second breaks the tie within one second the way the order does.
+	 * the second breaks ties within one second as the order does.
 	 *
 	 * @param string $cursor '' for the first page; see cursorAfter()
 	 */
@@ -484,13 +458,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * The accounts that follow `$targetId` and are also followed by
-	 * `$viewerId` — Mastodon's "familiar followers".
-	 *
-	 * One query with a self-join rather than two follower lists intersected in
-	 * PHP: the viewer's following list and the target's follower list can each
-	 * be tens of thousands of rows, and what is wanted is the overlap, which
-	 * the database can find without either of them leaving it.
+	 * The accounts that follow `$targetId` and are followed by `$viewerId`,
+	 * Mastodon's "familiar followers", as one self-join, so neither list,
+	 * possibly tens of thousands of rows, leaves the database.
 	 *
 	 * @return string[] actor ids
 	 */
@@ -528,17 +498,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 
 	/**
 	 * Where a post has to be delivered for the followers of an actor to see
-	 * it: one row per distinct inbox, resolved in the database.
-	 *
-	 * The fan-out only ever needed the inboxes, and there are as many of those
-	 * as there are instances involved — not as many as there are followers.
-	 * Each follower's delivery inbox — the shared one where there is one, the
-	 * personal one otherwise — is worked out and grouped in the query, so a
-	 * hundred thousand followers on a few hundred Mastodon servers are a few
-	 * hundred rows. Grouped as distinct (shared, personal) pairs they were a
-	 * row per follower, since every personal inbox is different. A follower
-	 * without a shared inbox still brings one row each; they are told apart
-	 * by key, which costs the same however many there are.
+	 * it: one row per distinct inbox, the shared one where there is one,
+	 * resolved and grouped in the database, so a hundred thousand followers on
+	 * a few hundred servers are a few hundred rows.
 	 *
 	 * @return string[] the shared inbox where there is one, the personal inbox otherwise
 	 */
@@ -573,22 +535,11 @@ class FollowsRequest extends FollowsRequestBuilder {
 
 	/**
 	 * The follows towards this actor that still wait for approval, newest
-	 * first.
-	 *
-	 * Paged on the pair the list is ordered by, `(creation, id_prim)`, which is
-	 * what pendingCursor() spells out for a row. `creation` alone is stored to
-	 * the second, and a cursor on it would skip or repeat the requests that
-	 * arrived within the same one; `id_prim` is the table's key and settles
-	 * every tie. The cursor carries the date itself rather than naming a row
-	 * to look it up from: the row a page ended on is as likely as not to have
-	 * been answered — rejected, and so deleted — by the time the next page is
-	 * asked for.
-	 *
-	 * `$maxId` asks for what is older than the cursor, `$minId` for what is
-	 * newer; the second is read oldest first so that the rows next to the
-	 * cursor are the ones the limit keeps, and turned round again. A cursor
-	 * that is not one of ours pages nothing, rather than starting the list
-	 * again for a client that would follow it round forever.
+	 * first, paged on `(creation, id_prim)` (see pendingCursor()): `creation`
+	 * is stored to the second, and the cursor carries the values rather than
+	 * a row id, as that row may be rejected and deleted by the next page.
+	 * `$maxId` asks for older rows, `$minId` for newer ones (read oldest first
+	 * and turned round); a cursor that is not ours pages nothing.
 	 *
 	 * @param int $limit 0 for every pending request
 	 *
@@ -677,31 +628,15 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * The recipient rows a home timeline is read from, as prims.
+	 * The recipient rows a home timeline is read from, as prims: a recipient
+	 * row names the author's followers collection, so this is the set
+	 * `social_stream_dest.actor_id` is matched against.
 	 *
-	 * What the home timeline is actually built on: a recipient row names the
-	 * author's **followers collection**, never the author, so this is the set
-	 * the page query matches `social_stream_dest.actor_id` against. One
-	 * projected column and no hydration — the page needs the hashes and
-	 * nothing else, and an account following two thousand people would
-	 * otherwise build two thousand `Follow` objects to read one string off
-	 * each.
-	 *
-	 * Every accepted row of the account's counts, whatever its type, because
-	 * that is exactly what the join this replaced matched:
-	 * `f.actor_id_prim = viewer AND f.accepted = 1 AND f.follow_id_prim =
-	 * sd.actor_id`, with no condition on the type. The row that makes the
-	 * difference is the **Loopback**, the self-follow every local actor is
-	 * given, whose `follow_id_prim` is the account's own prim: it is how a
-	 * post addressed to the reader *by name* — a mention, a reply from someone
-	 * they do not follow — reaches their home timeline at all. Narrowing this
-	 * to `type = 'Follow'` dropped every one of them: the notification arrived,
-	 * the post was readable at its own URL, and the timeline paged straight
-	 * past it.
-	 *
-	 * A query that matches these as a list of bound parameters must not ask for
-	 * the list unbounded — see limitToHomeCollections(), which is what a query
-	 * should use.
+	 * Every accepted row counts, whatever its type: the Loopback self-follow of
+	 * a local actor names the account's own prim, which is how a post
+	 * addressed to the reader by name (a mention, a reply from somebody they do
+	 * not follow) reaches their home timeline. Queries should use
+	 * limitToHomeCollections(), which bounds the list.
 	 *
 	 * @param int $limit 0 for every collection
 	 *
@@ -752,27 +687,17 @@ class FollowsRequest extends FollowsRequestBuilder {
 	}
 
 	/**
-	 * How many followed collections a query will name one by one.
-	 *
-	 * Each is one bound parameter, and every statement has a ceiling on those:
-	 * a SQLite built with the historical default refuses a statement with more
-	 * than 999, and MySQL and PostgreSQL accept a list of ten thousand but plan
-	 * it worse the longer it gets. Below this the list is the faster query by
-	 * far; above it the account is one of the few that follow more accounts
-	 * than a page can name, and the database is asked to find them itself.
+	 * How many followed collections a query names one by one: each is a bound
+	 * parameter, SQLite may refuse more than 999, and MySQL and PostgreSQL plan
+	 * long lists worse. Past this the database finds them itself.
 	 */
 	public const HOME_COLLECTIONS_IN_A_QUERY = 500;
 
 	/**
 	 * The predicate matching the collections one account's home timeline is
-	 * read from — for `social_stream_dest.actor_id`, or any other column
-	 * holding a collection prim.
-	 *
-	 * Two shapes behind one call. Up to the cap, the collections are read and
-	 * named in an `IN (…)`, which is what makes the home timeline a range scan
-	 * over an index. Past it, the same set is left to an `EXISTS` over
-	 * `social_follow`, correlated on the column: one bound parameter instead of
-	 * ten thousand, at the cost of a lookup per candidate row.
+	 * read from, for `social_stream_dest.actor_id` or any column holding a
+	 * collection prim: up to the cap an `IN (…)`, a range scan over an index;
+	 * past it a correlated `EXISTS` over `social_follow`.
 	 *
 	 * @param string $field the column to match, qualified with its alias
 	 * @param string[] $also collections to match besides the followed ones —
@@ -881,13 +806,9 @@ class FollowsRequest extends FollowsRequestBuilder {
 	 * @param string $actorId
 	 */
 	/**
-	 * The accounts of one instance that a follow row still names, in either
-	 * direction — the ones following somebody here and the ones followed from
-	 * here.
-	 *
-	 * Both halves matter to a purge: leaving the follows of a blocked instance
-	 * behind keeps it in the delivery fan-out of every local post, and keeps
-	 * its accounts in the follower counts and lists shown here.
+	 * The accounts of one instance a follow row still names, in either
+	 * direction: a purge removes both, or a blocked instance stays in the
+	 * delivery fan-out and the follower counts.
 	 *
 	 * @return string[] actor ids
 	 *
@@ -981,17 +902,13 @@ class FollowsRequest extends FollowsRequestBuilder {
 
 	/**
 	 * Drops the old account's rows that repointing one end of its follows
-	 * would turn into a duplicate: `social_f_oa_u` makes (object, actor)
-	 * unique, and an UPDATE onto a pair that exists is refused, and the whole
-	 * Move with it. That is the usual case, not a corner: a migration starts
-	 * by creating the new account and importing the old one's follow list
-	 * into it.
-	 *
-	 * Dropped are a follow between the two accounts, which would become the
-	 * new account following itself, and every row whose other end already
-	 * has a row with the new account; that row stays, being the one the
-	 * other server knows by its id. Every statement here is one the database
-	 * cannot refuse, so the move can run inside a transaction on PostgreSQL.
+	 * would turn into a duplicate of the unique (object, actor) index
+	 * `social_f_oa_u`, which would refuse the whole Move; usual, as a
+	 * migration starts by importing the old follow list into the new account.
+	 * Dropped are a follow between the two accounts and every row whose other
+	 * end already has one with the new account, which stays as the one the
+	 * other server knows. No statement here can be refused, so the move can
+	 * run inside a transaction on PostgreSQL.
 	 *
 	 * @param string $end the column naming the account that moved
 	 * @param string $other the column naming the account at the other end

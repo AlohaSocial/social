@@ -268,15 +268,8 @@ import { originOf } from '../utils/instanceIdentity.js'
 import { embedCode } from '../utils/embedCode.js'
 
 /**
- * Everything a post can be told to do that is not one of the four buttons
- * beside it.
- *
- * The menu decides for itself which of its items to offer, because every one
- * of those decisions is about the post rather than about the page it is on:
- * whether the reader wrote it, whether it lives here, whether its author said
- * it may be quoted. What it does not decide is what happens next — each item
- * says what was asked for and TimelinePost carries it out, which is where the
- * dialogs and the store already are.
+ * The post's overflow menu. It decides which items to offer from the post
+ * itself; each item emits what was asked for and TimelinePost carries it out.
  */
 export default {
 	name: 'PostMenu',
@@ -438,9 +431,8 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether the post is this server's own. `local` is
-		 * absent on a post from before the column existed, and those are local
-		 * — only `false` says otherwise.
+		 * @return {boolean} whether the post is this server's own; older posts
+		 * lack `local` and are local, so only `false` says otherwise
 		 */
 		isLocal() {
 			return this.item.local !== false
@@ -452,54 +444,45 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether this post may be quoted at all. A quote
-		 * carries the audience of the quoter, so the server grants one only for
-		 * a public or unlisted post — the same set a boost is allowed for — and
-		 * offering the action on anything narrower would be offering a refusal.
+		 * @return {boolean} whether this post may be quoted: the server allows
+		 * it only for public or unlisted posts that the author lets be quoted
 		 */
 		canQuote() {
 			return isShareable(this.item) && allowedByAuthor(this.item, 'quote')
 		},
 
-		/** @return {boolean} whether there is a picture to name anybody in */
+		/** @return {boolean} whether there is a photo to tag anybody in */
 		hasPhotos() {
 			return (this.item.media_attachments ?? []).length > 0
 		},
 
 		/**
 		 * @return {boolean} whether this post can go into one of the reader's
-		 * collections: their own, written here, and with a picture or a video
-		 * in it — a collection holds only its owner's own media posts, so
-		 * offering the action on anything else would be offering a refusal
+		 * collections, which hold only their owner's local media posts
 		 */
 		canCollect() {
 			return this.isMine && this.isLocal && this.hasPhotos
 		},
 
 		/**
-		 * @return {boolean} own local posts can be pinned to the profile, and
-		 * only the ones anyone may see: a pinned followers-only post was
-		 * served in full to the anonymous internet through the featured
-		 * collection, so the server now refuses anything that is not public
-		 * or unlisted — the same set a boost is allowed for.
+		 * @return {boolean} own local posts can be pinned if public or unlisted:
+		 * the featured collection is served to anyone
 		 */
 		canPin() {
 			return this.isMine && this.isLocal && isShareable(this.item)
 		},
 
 		/**
-		 * @return {boolean} whether this post's author is somebody the reader
-		 * can act on: not themselves, and not on the public pages, where there
-		 * is nobody signed in to do the blocking
+		 * @return {boolean} whether the reader can mute or block this post's
+		 * author: signed in, and not their own post
 		 */
 		canModerateAuthor() {
 			return !this.isPublic && !!this.currentAccount && !this.isMine
 		},
 
 		/**
-		 * @return {boolean} whether "Less like this" can teach For you
-		 * anything: the feed is on, somebody else wrote the post, and it
-		 * carries a hashtag to be lowered
+		 * @return {boolean} whether "Less like this" applies: For you is on,
+		 * somebody else wrote the post, and it has a hashtag to lower
 		 */
 		canLessLikeThis() {
 			return !this.isPublic
@@ -510,8 +493,7 @@ export default {
 		},
 
 		/**
-		 * Where the author lives. Only asked whether there *is* an original
-		 * instance to open.
+		 * Where the author lives, to offer opening the original instance.
 		 *
 		 * @return {{instance: string, colour: string, local: boolean}}
 		 */

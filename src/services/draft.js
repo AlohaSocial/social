@@ -5,23 +5,14 @@
 
 /**
  * What is in the composer, kept where a failed post, a reload or a navigation
- * cannot take it away.
+ * cannot take it away: the composer is unmounted with its page or dialog, so
+ * the draft lives outside it.
  *
- * The composer is part of the page it sits on — a timeline, a profile, a
- * post's own page, the search results — or of the New post dialog, and it is
- * unmounted when the reader goes to a page without one, closes the dialog or
- * reloads. The draft therefore lives outside the component: a post the server
- * refused leaves the box as it was, and this copy is what puts the box back
- * after any of those.
- *
- * Everything the box holds is kept: the words, the warning, the audience, the
- * language, who it is written as and who may reply, the poll, the time it is
- * scheduled for, the place, a video's title and the card. Attachments are kept
- * by the id of their upload, with what was written about them, where their
- * subject is and the filter chosen for them; the composer asks the server
- * about each id again when the draft comes back, since an upload nobody posted
- * may have been cleared away in the meantime. An upload that has not come
- * back yet has no id to keep, which is what the composer's leave guard is for.
+ * Everything the box holds is kept. Attachments are kept by upload id with
+ * their description, focal point and filter, and the composer asks the server
+ * about each id again on restore, since an unposted upload may have been
+ * cleared. An upload still in flight has no id; the composer's leave guard
+ * covers that.
  */
 
 import { forgetUnscoped, userKey } from '../utils/browserStore.js'
@@ -30,26 +21,19 @@ import { isFocalPoint } from '../utils/focalPoint.js'
 const NAME = 'social.composer.draft'
 
 /**
- * The key a draft was kept under before drafts were scoped to an account.
- * `localStorage` outlives a logout, so one account's unsent words were offered
- * to the next account to sign in on the same computer. It is removed rather
- * than adopted: there is no way to tell whose it was.
+ * The key drafts had before they were scoped to an account. `localStorage`
+ * outlives a logout, so a draft under it is removed rather than adopted:
+ * there is no way to tell whose it was.
  */
 const UNSCOPED_KEY = NAME
 
 /**
  * What the draft is kept under, for whoever is signed in and for what is
- * being written.
+ * being written. Read at each call, as the session can change after the page
+ * loads.
  *
- * Read at each call rather than once: the module is evaluated when the page
- * loads, and the same page is not necessarily the same session by the time
- * somebody is typing in it.
- *
- * A reply and a top-level post are two drafts, not one slot: with one, a
- * half-written reply opened over a half-written post took its place, and
- * sending either threw the other away. The context is what the composer is
- * answering or quoting; '' is a post of its own, under the key drafts have
- * always had.
+ * Each reply or quote has its own draft, apart from a top-level post: the
+ * context is what the composer answers or quotes, and '' is a post of its own.
  *
  * @param {string} context what the draft belongs to, '' for a post of its own
  * @return {string} the key
@@ -126,9 +110,8 @@ export function isOnlyMentions(text) {
  * Remembers a draft, replacing any previous one in the same context.
  *
  * Kept while it holds anything that would be missed: words, a warning, an
- * attachment or a poll option. The audience or the language alone is a
- * setting, not a draft, and so are the handles the composer addressed a
- * reply to by itself.
+ * attachment or a poll option. The audience or language alone is not a
+ * draft, nor are the handles the composer addressed a reply to by itself.
  *
  * @param {Partial<ComposerDraft>} draft the draft to keep; `text` is required
  * @param {string} [context] what it belongs to — see `key()`
@@ -165,10 +148,7 @@ export function saveDraft({
 			text,
 			spoilerText,
 			visibility,
-			// the composer has always sent this and this function has always
-			// dropped it, so the line it has that reads it back — "a reload
-			// does not quietly turn a team post back into a personal one" —
-			// could never be true
+			// so a reload does not turn a team post back into a personal one
 			postAs,
 			media,
 			poll,
@@ -185,8 +165,7 @@ export function saveDraft({
 		}))
 		return true
 	} catch {
-		// a private window, or storage that is full: losing the draft is bad,
-		// but not being able to write a post at all would be worse
+		// a private window, or storage that is full
 		return false
 	}
 }
@@ -198,9 +177,8 @@ export function saveDraft({
 export function loadDraft(context = '') {
 	let raw
 	try {
-		// signed out there is nothing to separate, and the old key is the
-		// one a post of its own is kept under — forgetting it there would
-		// delete that draft, whichever context is being read
+		// signed out the scoped and the unscoped key are the same, and forgetting
+		// it would delete that draft
 		if (key('') !== UNSCOPED_KEY) {
 			forgetUnscoped(UNSCOPED_KEY)
 		}
@@ -233,8 +211,7 @@ export function loadDraft(context = '') {
 	}
 
 	// each field is checked on its own: a draft written by another version
-	// of the composer may lack one or hold it in another shape, and that is
-	// no reason to throw away the words that came with it
+	// of the composer may lack one, which is no reason to lose the words
 	return {
 		text: draft.text,
 		spoilerText: stringOr(draft.spoilerText),
@@ -331,8 +308,8 @@ function pollOf(poll) {
 }
 
 /**
- * Lists this reader's existing composer slots. Snapshot keys first because
- * loadDraft can prune expired/corrupt entries while validating them.
+ * Lists this reader's existing composer slots. The keys are read first, as
+ * loadDraft can prune expired or corrupt entries while validating them.
  *
  * @return {Array<{context: string, draft: ComposerDraft}>} newest first
  */

@@ -44,12 +44,8 @@ class CheckInstall extends SocialCommand {
 	use TArrayTools;
 
 	/**
-	 * How many stream rows the index rebuild holds at once.
-	 *
-	 * It used to load every row in the instance, after having truncated both
-	 * index tables — so on a large instance the rebuild ran out of memory and
-	 * left every timeline empty, with no way back but running it again on a
-	 * bigger memory_limit.
+	 * How many stream rows the index rebuild holds at once, so it cannot run
+	 * out of memory on a large instance.
 	 */
 	private const INDEX_CHUNK = 500;
 
@@ -157,14 +153,8 @@ class CheckInstall extends SocialCommand {
 	}
 
 	/**
-	 * Runs the same checks Administration → Overview shows, and prints each
-	 * with its severity.
-	 *
-	 * The same classes rather than a second copy of the logic, so that what
-	 * the console says and what the settings page says cannot drift apart —
-	 * the address check used to have its own wording here and the WebFinger
-	 * probe was not run at all, on the grounds that the console has no
-	 * request; it has one, and it has the account it needs to ask about.
+	 * Runs the same checks Administration → Overview shows, using the same
+	 * classes so the two cannot drift, and prints each with its severity.
 	 *
 	 * @param bool $offline leave out the WebFinger probe, which is the one
 	 *                      check that goes out on the network
@@ -190,8 +180,7 @@ class CheckInstall extends SocialCommand {
 			}
 		}
 
-		// the verdict in one line, because the exit code is what a deployment
-		// script reads and this is what the exit code was decided from
+		// One-line verdict, matching the exit code a deployment script reads.
 		$output->writeln($errors === 0
 			? sprintf(self::VERDICT_OK, count($checks))
 			: sprintf(self::VERDICT_ERRORS, $errors, count($checks)));
@@ -240,9 +229,7 @@ class CheckInstall extends SocialCommand {
 
 		if (!$input->getOption('force')) {
 			if (!$input->isInteractive()) {
-				// A ConfirmationQuestion answers itself with its default —
-				// false — when nobody is there, so this used to exit 0 having
-				// rebuilt nothing.
+				// A ConfirmationQuestion answers its default (false) when nobody is there.
 				$output->writeln(
 					'<error>Refusing to rebuild the index non-interactively without --force.</error>'
 				);
@@ -269,12 +256,9 @@ class CheckInstall extends SocialCommand {
 	}
 
 	/**
-	 * Rebuilds social_stream_dest and social_stream_tag from social_stream, a
-	 * bounded number of rows at a time.
-	 *
-	 * Paged on `nid` rather than an OFFSET so the walk stays cheap on a table
-	 * with millions of rows, and one row at a time from there, so peak memory
-	 * is a chunk and not the instance.
+	 * Rebuilds social_stream_dest and social_stream_tag from social_stream,
+	 * paged on `nid` (not OFFSET) and one row at a time, so peak memory is one
+	 * chunk.
 	 */
 	private function regenerateIndex(OutputInterface $output): int {
 		$progressBar = new ProgressBar($output, $this->countStreams());
@@ -341,10 +325,8 @@ class CheckInstall extends SocialCommand {
 	}
 
 	/**
-	 * The next $limit stream rows after $afterNid, as (nid, id_prim) pairs.
-	 *
-	 * Only the two columns the rebuild needs: the full row is read back one at
-	 * a time through StreamRequest, which is what knows how to parse it.
+	 * The next $limit stream rows after $afterNid, as (nid, id_prim) pairs; each
+	 * full row is read back through StreamRequest, which parses it.
 	 *
 	 * @return list<array<string, mixed>>
 	 */

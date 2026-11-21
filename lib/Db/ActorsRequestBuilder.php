@@ -59,7 +59,7 @@ class ActorsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */
@@ -107,16 +107,9 @@ class ActorsRequestBuilder extends CoreRequestBuilder {
 		$actor->setPrivateKey($this->keyCipher->open($actor->getPrivateKey()));
 		$actor->setStoredIdPrim((string)($data['id_prim'] ?? ''));
 		$actor->setId($root . '@' . $actor->getPreferredUsername());
-		// The type follows the `bot` flag rather than being fixed here: an
-		// account marked automated is served as a `Service`, and that is the
-		// only thing on the wire which says so. Setting it to Person on every
-		// read left the flag true on the client entity and the actor document
-		// saying Person — the two of them disagreeing about the same fact.
-		//
-		// Unless the row says otherwise. A channel is a `Group`, which is the
-		// one type PeerTube will accept as the owner of a video, and this line
-		// used to overwrite that on every read — the column was written, and
-		// nothing that read it ever saw it.
+		// the type follows the `bot` flag (a `Service` is the only wire signal
+		// for it), unless the row stores its own type, such as a channel's
+		// `Group`, which PeerTube requires as a video's owner
 		if ($actor->storedActorType() === '') {
 			$actor->setType($actor->isBot() ? Service::TYPE : Person::TYPE);
 		}

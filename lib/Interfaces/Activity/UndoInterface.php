@@ -32,9 +32,8 @@ class UndoInterface extends AbstractActivityPubInterface implements IActivityPub
 	 */
 	#[\Override]
 	public function processIncomingRequest(ACore $item): void {
-		// `object` may be a link rather than an embedded object: Mastodon embeds,
-		// most others do not, and returning here meant an Undo from those peers
-		// undid nothing.
+		// `object` may be a link rather than an embedded object (Mastodon embeds,
+		// most others do not).
 		try {
 			$object = $this->objectResolver->resolve($item);
 		} catch (ItemNotFoundException $e) {
@@ -57,10 +56,8 @@ class UndoInterface extends AbstractActivityPubInterface implements IActivityPub
 			return;
 		}
 
-		// Only what an actor did is theirs to undo. The interfaces below check
-		// the host the Undo came from, which on a shared server says nothing
-		// about which of its accounts sent it: without this, one account undid
-		// a neighbour's like, boost or follow.
+		// Only what an actor did is theirs to undo: the interfaces below check only
+		// the host, which on a shared server covers every account.
 		$item->checkActor($item->getActorId(), $object->getActorId());
 
 		try {

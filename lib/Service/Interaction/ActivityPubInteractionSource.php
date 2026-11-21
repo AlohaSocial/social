@@ -68,10 +68,8 @@ class ActivityPubInteractionSource implements InteractionSource {
 		$requests = 0;
 		$deadline = $timeout === null ? null : hrtime(true) + ($timeout * 1_000_000_000);
 		for ($page = 0; (is_string($collection) || is_array($collection)) && $page < self::PAGES && count($ids) < $limit;) {
-			// ActivityPub servers may encode `first` and `next` as link
-			// objects (`{"id":"https://…"}`), not only as strings. A
-			// page-shaped object is already the page; a link-shaped one has to
-			// be dereferenced before its actors can be read.
+			// `first` and `next` may be link objects (`{"id":"https://…"}`); a
+			// page-shaped object is already the page, a link must be dereferenced.
 			if (is_array($collection) && !array_key_exists('orderedItems', $collection) && !array_key_exists('items', $collection)) {
 				$reference = $collection['first'] ?? $collection['next'] ?? $collection['id'] ?? $collection['@id'] ?? $collection['href'] ?? null;
 				$collection = self::collectionReference($reference);
@@ -134,8 +132,8 @@ class ActivityPubInteractionSource implements InteractionSource {
 			}
 		}
 		if (count($ids) < $limit && (is_string($collection) || is_array($collection))) {
-			// Four full pages cover the normal 80-account response. A server may
-			// return shorter pages, though; keep its next link for the next fill.
+			// Four full pages cover the normal 80 accounts; with shorter pages, keep the
+			// next link for the next fill.
 			$this->incompleteRead = $readKey;
 		}
 		$ids = array_slice(array_values(array_unique($ids)), 0, $limit);

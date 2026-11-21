@@ -27,18 +27,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * An author's control over who quotes their posts.
- *
- * This app has answered a `QuoteRequest` since quotes landed, but the answer
- * was derived from one thing — whether the post was public — and there was no
- * way to change it, to see who had taken you up on it, or to change your mind.
- * Mastodon 4.5 has all three, and they are the half of quoting that makes it
- * bearable: the reason to be able to quote somebody is also the reason to be
- * able to stop them.
- *
- * Three things, then: the policy (written on the post, see
- * `Stream::QUOTE_POLICIES`), the list of who has quoted it, and taking one
- * back.
+ * An author's control over who quotes their posts, as in Mastodon 4.5: the
+ * policy (written on the post, see `Stream::QUOTE_POLICIES`), the list of who
+ * has quoted it, and taking a quote back.
  */
 class QuoteService {
 	public function __construct(
@@ -52,16 +43,10 @@ class QuoteService {
 	}
 
 	/**
-	 * Sets who may quote one of the author's own posts.
-	 *
-	 * What Mastodon's `PUT /api/v1/statuses/{id}/interaction_policy` writes,
-	 * and what a `quote_approval_policy` on a create or an edit writes too.
-	 *
-	 * **Only forward.** Changing the policy decides what happens to requests
-	 * that arrive from now on; it does not reach back and withdraw the
-	 * permissions already given, because a quote that has been published and
-	 * read is not undone by a switch being flipped. Taking one back is
-	 * `revoke()`, which says so out loud and tells the other server.
+	 * Sets who may quote one of the author's own posts, as Mastodon's
+	 * `PUT /api/v1/statuses/{id}/interaction_policy` and a
+	 * `quote_approval_policy` on create or edit do. It applies to future
+	 * requests only; withdrawing given permissions is `revoke()`.
 	 *
 	 * @throws InvalidResourceException the post is not this account's own
 	 */
@@ -69,17 +54,13 @@ class QuoteService {
 		$post = $this->ownPost($nid, $actor);
 		$post->setQuotePolicy($policy);
 
-		// the wire object carries `interactionPolicy`, so the stored source is
-		// re-snapshotted with it — the same path the quote's approval stamp
-		// takes, and what makes every later delivery of the post say the same
-		// thing this server says
+		// the stored source is re-snapshotted with the new `interactionPolicy`,
+		// so later deliveries of the post carry it
 		$post->setSource($post->wireSource());
 		$this->streamRequest->update($post);
 
-		// nothing is federated by the change on its own: `interactionPolicy`
-		// is read off the post, and the post is re-sent when it is edited. A
-		// peer that has an old copy asks before it quotes anyway, and the
-		// answer is given here, now, by the policy as it now stands.
+		// nothing is federated by the change itself: peers ask before they
+		// quote, and are answered by the policy as it stands
 
 		return $post;
 	}
@@ -96,18 +77,11 @@ class QuoteService {
 	/**
 	 * Takes one quote of one of the author's own posts back.
 	 *
-	 * FEP-044f revokes with a `Reject` naming the `QuoteRequest` that was
-	 * accepted — which is why the grant was written down when it was given.
-	 * The quoting server then shows the quote as revoked, which is what this
-	 * app does with an incoming one (`QuoteRequestInterface::activity()`).
-	 *
-	 * A **local** quoting post is revoked here directly: there is nobody to
-	 * tell, and the stamp on it is one this instance issued to itself.
-	 *
-	 * A **Bluesky** quote has no request to refuse: Bluesky asks nobody's
-	 * permission. It is detached the way Bluesky detaches one, by the post's
-	 * postgate listing it (`detachedEmbeddingUris`), which every AppView
-	 * honours; here it is withdrawn at once.
+	 * A remote quote is revoked with a FEP-044f `Reject` of the accepted
+	 * `QuoteRequest` (handled on our side by
+	 * `QuoteRequestInterface::activity()`). A local one is revoked directly.
+	 * A Bluesky quote is detached via the post's postgate
+	 * (`detachedEmbeddingUris`) and withdrawn here at once.
 	 *
 	 * @return bool whether there was a quote to take back
 	 * @throws InvalidResourceException the quoted post is not this account's own
@@ -136,11 +110,9 @@ class QuoteService {
 		} elseif ($grant !== null) {
 			$this->tell($post, $quoting, $grant->getRequestId(), $grant->getActorId());
 		} else {
-			// a remote quote this instance never granted: the approval came
-			// from somewhere else, or from before the grant was recorded.
-			// There is no request to name, so the quote is refused with one
-			// built from what the post itself says — the only two ids that
-			// matter to the receiver are the same either way
+			// a remote quote without a recorded grant: the Reject names a
+			// request rebuilt from the two post ids, which is what receivers
+			// match on
 			$this->tell($post, $quoting, '', $quoting->getAttributedTo());
 		}
 
@@ -184,13 +156,9 @@ class QuoteService {
 	}
 
 	/**
-	 * The `Reject` that takes a remote quote back.
-	 *
-	 * The request is rebuilt rather than stored whole: what the receiver
-	 * matches on is the pair of ids it names — the post being quoted and the
-	 * post doing the quoting — and this app's own inbound handler matches on
-	 * exactly those. The request's own id is used where it is known, so a
-	 * receiver that keys on it finds what it is looking for.
+	 * The `Reject` that takes a remote quote back. The request is rebuilt from
+	 * the quoted and quoting post ids, which receivers match on, with its own
+	 * id where known.
 	 */
 	private function tell(Stream $post, Stream $quoting, string $requestId, string $askerId): void {
 		$request = new QuoteRequest();

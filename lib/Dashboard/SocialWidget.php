@@ -43,7 +43,7 @@ class SocialWidget implements IWidget {
 
 	#[\Override]
 	public function getUrl(): ?string {
-		// the notifications page, not the JSON endpoint that feeds it
+		// the Activities page, not the JSON endpoint that feeds it
 		return $this->urlGenerator->linkToRoute(
 			'social.Navigation.timeline',
 			['path' => 'notifications']

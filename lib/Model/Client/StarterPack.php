@@ -14,27 +14,16 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
- * A named handful of accounts worth following, as Mastodon's starter packs are.
+ * A named handful of accounts worth following, as Mastodon's starter packs
+ * are, for new accounts that `SuggestionService` has no friends of friends
+ * for yet.
  *
- * The problem it answers is the one every new account has and no algorithm here
- * can: a timeline is empty until you follow somebody, and "who?" is unanswerable
- * from a graph you are not yet part of. `SuggestionService` needs a friend of a
- * friend to work with; on day one there are none, so it falls back to whoever
- * posted recently, which is a list of strangers sorted by luck.
- *
- * A pack is just a list of `user@host` handles. That is the whole data model,
- * and it is deliberately not a table of its own: the accounts are not this
- * instance's to own, the handles are the only durable reference to them, and
- * keeping rows would mean keeping rows about accounts that may never be fetched.
- * The exception is a pack read in from another server, a fediverse
- * collection or a starter pack Bluesky suggests (`CollectionPackService`),
- * which is named by actor ids, carries who curated it and where it lives,
- * and is kept in `social_starter_pack` between reads.
- *
- * The handles resolve to real profiles when a pack is opened -- never in the
- * index, because resolving an unknown remote handle means a WebFinger lookup and
- * an actor fetch, and doing six of those to draw a list of pack *names* would
- * make the page wait on other people's servers for nothing.
+ * A pack is a list of `user@host` handles, not rows of its own, since the
+ * accounts are not this instance's. Packs read in from another server (a
+ * fediverse collection or a Bluesky starter pack, `CollectionPackService`)
+ * are named by actor ids, carry curator and source, and are kept in
+ * `social_starter_pack`. Handles are resolved only when a pack is opened,
+ * never for the index, which would wait on remote servers.
  */
 class StarterPack implements JsonSerializable {
 	/** Shipped with the app. */
@@ -157,12 +146,8 @@ class StarterPack implements JsonSerializable {
 	}
 
 	/**
-	 * The handles this instance could not reach.
-	 *
-	 * Reported rather than hidden: a pack that silently shrinks looks like a
-	 * pack somebody wrote badly, when what actually happened is that a server
-	 * was down or an account moved. An administrator curating packs needs to be
-	 * able to tell those apart.
+	 * The handles this instance could not reach, reported so a curator can tell
+	 * an unreachable server or moved account from a badly written pack.
 	 *
 	 * @param string[] $unresolved
 	 */
@@ -174,12 +159,9 @@ class StarterPack implements JsonSerializable {
 
 	#[\Override]
 	public function jsonSerialize(): array {
-		// A `Person` serialises as an ActivityPub actor unless it is told
-		// otherwise, and what asks for a pack is a client reading Mastodon
-		// `Account` entities -- `acct`, `display_name`, `avatar`. Handing it
-		// `preferredUsername` and an `@context` is not a thinner answer but a
-		// different one: every field it reads is absent, so an opened pack drew
-		// a row per account with no name, no handle and no picture in it.
+		// A `Person` serialises as an ActivityPub actor unless told otherwise, and
+		// clients read packs as Mastodon `Account` entities (`acct`,
+		// `display_name`, `avatar`).
 		foreach ($this->accounts as $account) {
 			$account->setExportFormat(ACore::FORMAT_LOCAL);
 		}

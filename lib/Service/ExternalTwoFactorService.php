@@ -13,15 +13,10 @@ use OCA\Social\External\ExternalGroupBackend;
 use OCP\IConfig;
 
 /**
- * Whether two-factor authentication is required of external users.
- *
- * Nothing of its own: core's mandatory two-factor setting, read and written
- * for the externals' group, so the switch on the Social page and the one in
- * Administration → Security always show the same thing. Core's rule is that
- * a list of enforced groups limits enforcement to those groups, and without
- * one enforcement covers everybody but the excluded groups. Both shapes are
- * kept: turning the switch off never turns enforcement on for everybody,
- * which is what emptying the list of enforced groups would do.
+ * Whether two-factor authentication is required of external users: core's
+ * mandatory two-factor setting for the externals' group, so this switch and
+ * Administration → Security agree. Turning it off never empties the enforced
+ * groups list, which would enforce it for everybody.
  */
 class ExternalTwoFactorService {
 	private const ENFORCED = 'twofactor_enforced';

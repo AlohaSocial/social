@@ -15,13 +15,10 @@ use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
- * Whether a server that faces the public says who runs it and on what terms.
- *
- * A contact, rules, a privacy policy and a legal notice are what people
- * signing up, and peers receiving its posts, look for — and what a moderator
- * points at. A warning when people without a Nextcloud account may sign up,
- * information when the server only federates, and nothing on a server that
- * does neither.
+ * Whether a public-facing server says who runs it and on what terms: a
+ * contact, rules, a privacy policy and a legal notice. A warning when people
+ * without a Nextcloud account may sign up, information when it only
+ * federates, nothing otherwise.
  */
 class PublicReady implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#ready-to-be-public';

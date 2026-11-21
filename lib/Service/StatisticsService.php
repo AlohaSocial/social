@@ -27,31 +27,16 @@ use Psr\Container\ContainerInterface;
 /**
  * What an account has done here, and what came back.
  *
- * Every number is counted from this instance's own rows at the moment it is
- * asked for; nothing is stored, and nothing is precomputed by a cron. That
- * keeps the page honest — it cannot show a total that a deletion has already
- * made false — and it is what bounds the work: the walk stops at
- * `MAX_POSTS`, and the answer says how many posts it actually looked at so the
- * page can say so too.
- *
- * The engagement figures are per *post*, taken from the `details` each post
- * carries. That column is a JSON blob, which is why this is a walk in PHP
- * rather than a `SUM()`: the three databases this app supports do not agree on
- * how to reach inside one, and a portable aggregate would mean a column that
- * has to be kept in step with the blob.
- *
- * A remote like is included, because `details.likes` is the local count plus
- * whatever the origin reported. What no instance can know is the part of the
- * network that never told anybody, so these are a floor rather than a total —
- * which is true of every Fediverse statistic and is worth the page saying.
+ * Everything is counted from this instance's rows when asked, nothing stored
+ * or precomputed, bounded by `MAX_POSTS` with the number of posts looked at
+ * reported. Engagement is read from each post's JSON `details`, hence a walk
+ * in PHP rather than a portable `SUM()`. Remote likes are included as the
+ * origin reported them, so figures are a floor, not a total.
  */
 class StatisticsService {
 	/**
-	 * How far back the walk goes.
-	 *
-	 * An account with more posts than this gets the most recent ones, and the
-	 * page says which. The alternative is a page whose cost grows without
-	 * limit for the accounts that use the app most.
+	 * How far back the walk goes: an account with more posts gets the most
+	 * recent ones, and the page says so.
 	 */
 	public const MAX_POSTS = 2000;
 
@@ -68,19 +53,14 @@ class StatisticsService {
 	private const MONTHS = 12;
 
 	/**
-	 * How many followers are read for the audience figures.
-	 *
-	 * Newest first, so an account past this ceiling gets its most recent
-	 * followers rather than a random slice, and the page says so.
+	 * How many followers are read for the audience figures, newest first; the
+	 * page says when the ceiling is reached.
 	 */
 	private const MAX_FOLLOWERS = 5000;
 
 	/**
-	 * How long the two windows the page compares are.
-	 *
-	 * Thirty days beside the thirty before them: long enough that a quiet week
-	 * does not decide the answer, short enough that both halves are the same
-	 * account doing the same thing.
+	 * How long the two compared windows are: thirty days beside the thirty
+	 * before them.
 	 */
 	public const PERIOD_DAYS = 30;
 
@@ -94,26 +74,16 @@ class StatisticsService {
 	private const DAY = 86400;
 
 	/**
-	 * How many times a hashtag has to have been used before its average is
-	 * reported. One post that did well is a post that did well, not a tag that
-	 * works.
+	 * How many times a hashtag must have been used before its average is
+	 * reported, so one good post does not make a tag look effective.
 	 */
 	private const HASHTAG_MIN_USES = 2;
 
 	/**
-	 * How long a computed page is kept.
-	 *
-	 * The walk below reads up to two thousand posts and then looks up the
-	 * audience of everyone who boosted any of them, which is why the route
-	 * carries a ceiling of thirty an hour: the page was expensive enough that
-	 * reloading it twice cost a fifteenth of somebody's allowance. Fifteen
-	 * minutes is long enough that reading the page, scrolling it and coming
-	 * back is free, and short enough that a post from this morning shows up
-	 * on it.
-	 *
-	 * Kept in `DurableCache`, so that it is kept at all on an instance with no
-	 * memcache: in the distributed cache alone the page was counted again on
-	 * every load there, `fresh` or not.
+	 * How long a computed page is kept: fifteen minutes, as computing it reads
+	 * up to two thousand posts and their boosters' audiences (the route is
+	 * limited to thirty an hour). Kept in `DurableCache`, so it is cached even
+	 * without a memcache.
 	 */
 	private const CACHE_SECONDS = 900;
 
@@ -163,12 +133,8 @@ class StatisticsService {
 	 * @return array<string, mixed> the whole page, in one answer
 	 */
 	/**
-	 * The windows a reader may ask for, in days. 0 is everything there is.
-	 *
-	 * A number rather than a free parameter: each one is a walk of up to
-	 * `MAX_POSTS` posts and a cache entry of its own, and four choices is
-	 * enough to answer "is this month unusual" without turning the page into
-	 * a query builder.
+	 * The windows a reader may ask for, in days; 0 is everything. A fixed set,
+	 * as each is a walk of up to `MAX_POSTS` and a cache entry of its own.
 	 */
 	public const WINDOWS = [0, 30, 90, 365];
 
@@ -250,10 +216,8 @@ class StatisticsService {
 			}
 
 			if ($post->getType() === 'Announce' || $post->getSubType() === 'Announce') {
-				// a boost is something the account did, not something it wrote,
-				// so it is counted and then left out of everything below: its
-				// likes belong to whoever wrote it. It is still *activity*,
-				// which is the one place a boost belongs on this page.
+				// a boost is activity but not authorship, so it is counted and
+				// then left out of everything below; its likes are the author's
 				$posts['boosts']++;
 				if ($month !== '' && array_key_exists($month, $activity['boosts'])) {
 					$activity['boosts'][$month]++;
@@ -287,10 +251,8 @@ class StatisticsService {
 				$posts['with_media']++;
 			}
 
-			// A picture nobody can see is a picture with no description. The
-			// only number on this page somebody can act on the same afternoon,
-			// so it is counted per *picture* rather than per post: one post
-			// with four pictures and one alt text is not three-quarters done.
+			// counted per image rather than per post: one post with four
+			// images and one alt text is not three-quarters done
 			foreach ($attachments as $attachment) {
 				if (!in_array($attachment->getType(), ['image', 'gifv'], true)) {
 					continue;
@@ -341,10 +303,8 @@ class StatisticsService {
 			$engagement['replies'] += $replies;
 			$engagement['quotes'] += $quotes;
 
-			// one post's engagement: what an agency means by the word, and
-			// what every rate below is built out of. A quote is somebody
-			// passing the post on with words of their own, which is a boost
-			// and a reply at once, and counts once like either
+			// one post's engagement, which every rate below is built from; a
+			// quote counts once, like a boost or a reply
 			$score = $likes + $boosts + $replies + $quotes;
 			$scores[] = $score;
 			if ($score === 0) {
@@ -426,9 +386,8 @@ class StatisticsService {
 			],
 			'posts' => $posts,
 			'engagement' => array_merge($engagement, [
-				// per post the account wrote, which is what the reader is
-				// asking about — dividing by the boosts as well would make an
-				// account that boosts a lot look like one nobody answers
+				// per post the account wrote; dividing by boosts too would make
+				// an account that boosts a lot look ignored
 				'likes_per_post' => $this->ratio($engagement['likes'], $written),
 				'boosts_per_post' => $this->ratio($engagement['boosts'], $written),
 				'replies_per_post' => $this->ratio($engagement['replies'], $written),
@@ -437,18 +396,15 @@ class StatisticsService {
 			'engagement_sources' => $this->engagementSources($actor, $writtenIds),
 			'visibility' => $visibility,
 			'rates' => [
-				// the four an agency reports on, under the names they report
-				// them under. Each is per post the account *wrote*: a boost is
-				// not a post of yours and its numbers are not yours either
+				// the four figures agencies report, under their names, per post
+				// the account wrote
 				'total' => $total,
 				'per_post' => $this->ratio($total, $written),
 				'applause' => $this->ratio($engagement['likes'], $written),
 				'amplification' => $this->ratio($engagement['boosts'], $written),
 				'conversation' => $this->ratio($engagement['replies'], $written),
-				// the industry's engagement rate: engagement per post against
-				// the audience it was published to, as a percentage. This app
-				// has no impressions to divide by, so followers are the
-				// denominator and the page says which
+				// the industry's engagement rate, as a percentage of the audience;
+				// without impressions, followers are the denominator
 				'per_follower' => ($followers < 1) ? 0.0
 					: round((float)$total / (float)max(1, $written) / (float)$followers * 100.0, 2),
 				// a mean is one viral post away from meaningless, which is why
@@ -475,10 +431,9 @@ class StatisticsService {
 				'known_boosters' => $reach['known'],
 				'unknown_boosters' => $reach['unknown'],
 				'listed' => self::TIMELINE_POSTS,
-				// measured rather than modelled: the servers this account's
-				// posts were actually addressed to. Beside the estimate rather
-				// than instead of it, because a post written before the
-				// instance paths were stored has none and would read as zero
+				// the servers this account's posts were actually addressed to,
+				// beside the estimate, as posts without stored instance paths
+				// would read as zero
 				'instances' => count($deliveredTo),
 				// the networks a post goes out on without an instance to
 				// deliver it to, which an instance path cannot record
@@ -518,13 +473,9 @@ class StatisticsService {
 	private const TOP_PARTNERS = 10;
 
 	/**
-	 * Who the account talks with, and whether it follows them.
-	 *
-	 * The follow graph says who an account *asked* to hear from; the replies
-	 * say who it actually talks to, and the two are rarely the same list. The
-	 * `not_followed` share is the interesting half: a high one means the
-	 * conversations are coming from outside the timeline the account built for
-	 * itself.
+	 * Who the account talks with, from the replies, and whether it follows
+	 * them; a high `not_followed` share means conversations come from outside
+	 * its own timeline.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -570,11 +521,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * The account's own posts, newest first, up to the cap.
-	 *
-	 * Keyset by nid rather than an offset, which is how every other paged read
-	 * in this app walks a timeline: an offset would skip a post whenever one
-	 * was deleted while the walk was running.
+	 * The account's own posts, newest first, up to the cap, keyset by nid so a
+	 * deletion during the walk does not skip a post.
 	 *
 	 * @return iterable<Stream>
 	 */
@@ -623,11 +571,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * The two windows the page compares, in seconds since the epoch.
-	 *
-	 * Anchored to the start of today rather than to the minute the page was
-	 * opened: otherwise opening it twice in an afternoon moves every bucket
-	 * and the same thirty days draw a different shape each time.
+	 * The two windows the page compares, in seconds since the epoch, anchored
+	 * to the start of today so reloads draw the same buckets.
 	 *
 	 * @return array{until: int, current: int, previous: int}
 	 */
@@ -643,32 +588,17 @@ class StatisticsService {
 	}
 
 	/**
-	 * How many people each of these posts could have reached.
-	 *
-	 * The account's own followers plus the followers of everybody who boosted
-	 * it, which is the only reach a Fediverse post has that any one server can
-	 * put a number on. It is an estimate twice over, and the page has to say
-	 * so: two audiences that overlap are counted twice, and a booster whose
-	 * instance has never told this one how big it is counts as nothing at all.
-	 * How many of those there were comes back with the figures, so that the
-	 * page can name the gap rather than quietly absorb it.
-	 *
-	 * The followers are today's followers, not the followers the post had on
-	 * the day it went out — nothing here records that.
-	 *
-	 * A direct message has no follower audience at all, so its base is nobody.
+	 * How many people each post could have reached: the account's followers
+	 * plus those of everybody who boosted it. An estimate: overlaps count
+	 * twice, boosters whose follower count is unknown count as nothing (and
+	 * are reported), and today's followers are used. Direct messages reach
+	 * nobody.
 	 *
 	 * @param list<array<string, mixed>> $recent
 	 * @return array{posts: list<array<string, mixed>>, known: int, unknown: int}
 	 */
 	/**
-	 * How regularly the account posts, out of the days it posted on.
-	 *
-	 * Every other figure on this page is about what came back. This is the
-	 * one about what the account did, which is what moves all the others: an
-	 * account that posts twice a week for a year and one that posted four
-	 * hundred times in a fortnight can have the same totals and nothing else
-	 * in common.
+	 * How regularly the account posts, from the days it posted on.
 	 *
 	 * @param array<string, bool> $days the days something was posted, as Y-m-d
 	 * @param int $first when the earliest post counted was published
@@ -755,9 +685,6 @@ class StatisticsService {
 	/**
 	 * The last thirty days beside the thirty before them.
 	 *
-	 * Two windows of the same length, which is what makes the pair worth
-	 * printing: "up 40%" against a fortnight is not a sentence.
-	 *
 	 * @param list<array<string, mixed>> $recent
 	 * @param array{until: int, current: int, previous: int} $bounds
 	 * @return array<string, mixed>
@@ -780,13 +707,9 @@ class StatisticsService {
 	}
 
 	/**
-	 * One window: what it came to, and what each of its days came to.
-	 *
-	 * The daily series is what the page draws the two lines from, so both
-	 * windows are counted into the same thirty buckets, day one first. A post
-	 * is counted on the day it was published, and everything it has collected
-	 * since is counted there with it — there is no record of *when* a like
-	 * arrived, only that it did.
+	 * One window: its totals and a daily series in thirty buckets. A post and
+	 * all it has collected are counted on its publication day, as arrival
+	 * times of likes are not recorded.
 	 *
 	 * @param list<array<string, mixed>> $recent
 	 * @return array<string, mixed>
@@ -832,10 +755,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * How much bigger than last time, as a percentage.
-	 *
-	 * Null where the window before it was empty: everything is infinitely more
-	 * than nothing, and a page that prints "+∞%" has stopped saying anything.
+	 * The change from the previous window, as a percentage; null when that
+	 * window was empty.
 	 */
 	private function change(int $now, int $before): ?float {
 		if ($before < 1) {
@@ -846,11 +767,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * Every post of the current window, one by one, newest first.
-	 *
-	 * The averages above answer "how is the account doing"; this answers "and
-	 * which post was that", which is the question anybody who has just read a
-	 * spike in a chart actually has.
+	 * Every post of the current window, newest first, so a spike in the chart
+	 * can be traced to its post.
 	 *
 	 * @param list<array<string, mixed>> $recent
 	 * @return list<array<string, mixed>>
@@ -886,11 +804,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * What each kind of post averages, so the page can say what works.
-	 *
-	 * A kind with no posts is left out rather than reported as zero: "posts
-	 * with a picture average 0" is a false statement about an account that has
-	 * never posted one.
+	 * What each kind of post averages; kinds without posts are left out
+	 * rather than reported as zero.
 	 *
 	 * @param array<string, array{posts: int, engagement: int}> $kinds
 	 * @return array<int, array{key: string, posts: int, engagement: int, average: float}>
@@ -913,11 +828,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * The seven days, Sunday first, as PHP numbers them.
-	 *
-	 * The average is what the page sorts on: an account that posts twice as
-	 * often on a Monday collects twice as much on a Monday without Monday
-	 * being a better day to post.
+	 * The seven days, Sunday first, as PHP numbers them, sorted by average so
+	 * posting more on a day does not make it look better.
 	 *
 	 * @param array<int, array{posts: int, engagement: int}> $byWeekday
 	 * @return array<int, array{day: int, posts: int, engagement: int, average: float}>
@@ -937,11 +849,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * The hour whose posts did best, and how sure of it to be.
-	 *
-	 * An hour with one lucky post in it is not a time of day that works, so an
-	 * hour is only named once it holds at least three posts; below that the
-	 * answer is that there is not enough to say.
+	 * The hour whose posts did best; only named once it holds at least three
+	 * posts.
 	 *
 	 * @param array<int, int> $engagementByHour
 	 * @param array<int, int> $byHour
@@ -963,12 +872,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * The hashtags that are worth using, which is not the same list as the
-	 * hashtags that are used.
-	 *
-	 * Sorted by what a post carrying one averages, and only for tags used
-	 * `HASHTAG_MIN_USES` times or more: one post that did well is a post that
-	 * did well.
+	 * The hashtags worth using: sorted by what a post carrying one averages,
+	 * for tags used at least `HASHTAG_MIN_USES` times.
 	 *
 	 * @param array<string, int> $uses
 	 * @param array<string, int> $engagement
@@ -993,11 +898,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * Who is listening, and where they are.
-	 *
-	 * Two questions an agency asks that the profile cannot answer: which
-	 * instances the audience is on — which is what a Fediverse account has
-	 * instead of a geography — and when it arrived.
+	 * Who is listening: the instances the followers are on and when they
+	 * arrived.
 	 *
 	 * @return array{by_month: array<string, int>, instances: array<int, array{host: string, count: int}>, local_share: float, counted: int, capped: bool}
 	 */
@@ -1059,10 +961,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * The last twelve months, in order, each at zero.
-	 *
-	 * Built rather than derived from the posts so that a month nothing was
-	 * posted in is a gap in the chart instead of a missing column.
+	 * The last twelve months, in order, each at zero, so a month without posts
+	 * is a gap in the chart rather than a missing column.
 	 *
 	 * @return array<string, int>
 	 */
@@ -1103,10 +1003,8 @@ class StatisticsService {
 	}
 
 	/**
-	 * Enough of a post to recognise it by.
-	 *
-	 * Tags are stripped rather than rendered: this goes into a list of links,
-	 * and a post's own markup has no business laying that list out.
+	 * Enough of a post to recognise it by, with tags stripped, as it goes
+	 * into a list of links.
 	 */
 	private function excerpt(Stream $post): string {
 		$text = trim(html_entity_decode(strip_tags($post->getContent()), ENT_QUOTES | ENT_HTML5, 'UTF-8'));

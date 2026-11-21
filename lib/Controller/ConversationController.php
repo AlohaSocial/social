@@ -24,21 +24,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Mastodon's conversations: the direct timeline as one row per exchange
- * instead of one row per message.
+ * Mastodon's conversations: the direct timeline as one row per exchange, which
+ * is what Tusky, Ivory, Ice Cubes and Phanpy show direct messages from (see
+ * ConversationService for what a conversation is here).
  *
- * This is the screen Tusky, Ivory, Ice Cubes and Phanpy read direct messages
- * from — none of them draws `/api/v1/timelines/direct`, which serves the same
- * messages ungrouped. What a conversation *is* here, and why its id is the
- * nid of the thread root, is in ConversationService.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController` and
- * `ListController`, and for the same reason: a Mastodon client authenticates
- * with a bearer token and has no Nextcloud session or CSRF token to present,
- * so `#[NoAdminRequired]` would refuse every real caller before the handler
- * ran. Every route here requires a viewer itself — no token, no session, 401 —
- * so nothing is public in fact, and a conversation is somebody's private
- * correspondence.
+ * `#[PublicPage]` with `#[NoCSRFRequired]` because a Mastodon client has a
+ * bearer token, not a session; every route requires a viewer itself.
  */
 class ConversationController extends ClientApiController {
 
@@ -54,12 +45,10 @@ class ConversationController extends ClientApiController {
 	}
 
 	/**
-	 * A page of the viewer's conversations, the one with the newest message
-	 * first, with the `Link` header masto.js reads its cursor from.
-	 *
-	 * The cursor is a message nid, not a conversation id: conversations are
-	 * ordered by their newest message, and a conversation id — the thread root
-	 * — does not move when a message arrives, so it cannot page.
+	 * A page of the viewer's conversations, newest message first, with the
+	 * `Link` header masto.js reads its cursor from. The cursor is a message
+	 * nid: a conversation id (the thread root) does not move when a message
+	 * arrives, so it cannot page.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -84,18 +73,10 @@ class ConversationController extends ClientApiController {
 	}
 
 	/**
-	 * Marks every conversation read, up to its newest message.
-	 *
-	 * The Direct messages page is one list with the messages themselves on it,
-	 * not a list of exchanges to open one at a time -- so having looked at the
-	 * page is having read them, which is the rule the Activities page already
-	 * follows. Without this the badge this app draws would never come down:
-	 * nothing else in the web interface calls `markRead`, because nothing else
-	 * shows a conversation as a thing of its own.
-	 *
-	 * This app's own route. Mastodon has no equivalent because its clients
-	 * mark each conversation as the reader opens it. It writes, so it needs
-	 * the scope `read` and `delete` on one conversation need.
+	 * Marks every conversation read, up to its newest message: the Direct
+	 * messages page shows the messages themselves, so viewing it is reading
+	 * them. This app's own route; it needs the scope `read` and `delete` on
+	 * one conversation need.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -114,18 +95,9 @@ class ConversationController extends ClientApiController {
 	}
 
 	/**
-	 * How many conversations have something unread in them.
-	 *
-	 * The sidebar badge asks for this. A conversation rather than a message:
-	 * five messages in one exchange are one thing to go and read, and a badge
-	 * saying five would send somebody looking for four conversations that are
-	 * not there.
-	 *
-	 * Mastodon has no route for this -- its clients count the `unread` flags
-	 * on a page of `/api/v1/conversations` -- so it is this app's own, and
-	 * cheap enough to poll: the alternative was fetching a page of
-	 * conversations, with their participants and their newest message each,
-	 * to draw one number.
+	 * How many conversations have something unread, for the Direct messages
+	 * badge: five unread messages in one exchange are one thing to read. This
+	 * app's own route, cheap enough to poll.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

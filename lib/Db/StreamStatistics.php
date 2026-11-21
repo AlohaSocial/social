@@ -23,20 +23,14 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * Reads that answer with a number or a tally rather than a page of posts:
  * the admin page's activity, profile highlights, hashtag trends and the
- * statistics page.
- *
- * A trait used by `StreamRequest` for the reason `StreamTimelines` gives: it
- * separates the file, not the object.
+ * Statistics tab of one's own profile. A trait of `StreamRequest`, splitting
+ * the file, not the object (see `StreamTimelines`).
  */
 trait StreamStatistics {
 	/**
-	 * What this instance's own people have been writing, for the two numbers
-	 * an administrator asks for first: how busy is it, and how many of the
-	 * accounts are actually used.
-	 *
-	 * Local posts only. A count that included the fediverse's would say how
-	 * much this server has *received*, which is a number about everybody
-	 * else's activity and about this instance's retention settings.
+	 * What this instance's own people have been writing: how busy it is and how
+	 * many accounts are used. Local posts only, since received posts measure
+	 * other servers and retention.
 	 *
 	 * @param int $since unix time to count from
 	 * @return array{posts: int, authors: int}
@@ -71,17 +65,9 @@ trait StreamStatistics {
 
 	/**
 	 * When each of an author's public posts was published, since a point in
-	 * time.
-	 *
-	 * Only the timestamps: what the profile's little activity chart needs is
-	 * how many posts fell in each week, and hydrating the posts to count them
-	 * would read every column of every note to throw all of it away. Public
-	 * posts only — a chart drawn from what the viewer happens to be allowed to
-	 * see would be a different chart per viewer, and a chart that counted
-	 * posts the viewer cannot see would leak that they exist.
-	 *
-	 * Boosts are left out by `limitToStatusTypes()`: a boost is something the
-	 * account did, not something it wrote.
+	 * time, for the profile's activity chart. Only timestamps, and only public
+	 * posts so the chart is the same for every viewer; boosts are left out by
+	 * `limitToStatusTypes()`.
 	 *
 	 * @param string $actorId the author
 	 * @param int $since unix time to start at
@@ -111,8 +97,7 @@ trait StreamStatistics {
 		$qb->limitToAttributedTo($actorId, true);
 		$qb->limitToStatusTypes();
 
-		// the recipients are where "public" is recorded, the same join the
-		// author's public timeline uses
+		// "Public" is recorded on the recipients, as for the author's public timeline.
 		$qb->selectDestFollowing('sd', '');
 		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
 		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
@@ -132,11 +117,7 @@ trait StreamStatistics {
 
 	/**
 	 * The hashtags an author uses most, over their public posts since a point
-	 * in time.
-	 *
-	 * Grouped in SQL rather than walked in PHP: unlike the per-post details
-	 * blob, a hashtag is a row of its own in `social_stream_tag`, so the three
-	 * databases can all count them the same way.
+	 * in time, grouped in SQL over `social_stream_tag`.
 	 *
 	 * @param string $actorId the author
 	 * @param int $since unix time to start at
@@ -169,9 +150,8 @@ trait StreamStatistics {
 		$qb->setDefaultSelectAlias('s');
 		$qb->limitToStatusTypes();
 
-		// public posts only, through the same recipient join as the chart
-		// above: the profile is read by strangers, and a tag used only in
-		// followers-only posts is a fact about those posts
+		// Public posts only: a tag used only in followers-only posts must not show
+		// on a profile strangers read.
 		$qb->selectDestFollowing('sd', '');
 		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
 		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
@@ -191,9 +171,8 @@ trait StreamStatistics {
 	}
 
 	/**
-	 * How often each hashtag was used since a point in time.
-	 *
-	 * One window of `countHashtagsInWindows()`, for a caller that wants one.
+	 * How often each hashtag was used since a point in time; one window of
+	 * `countHashtagsInWindows()`.
 	 *
 	 * @return array<string, int> hashtag => how many posts used it
 	 */
@@ -205,14 +184,9 @@ trait StreamStatistics {
 	 * How often each hashtag was used in each of several windows: how many
 	 * public statuses published at or after each window's start carry it.
 	 *
-	 * This is what the trends cron needs, and all it needs. It is counted off
-	 * the hourly buckets (`StreamTrendBuckets`), settled first, so a pass reads
-	 * the buckets of the widest window and the posts of the hours that changed
-	 * rather than every tag row of ten days. A window reaching further back
-	 * than the buckets are kept is counted from the posts.
-	 *
-	 * A hashtag used in none of a window's posts is absent from that window
-	 * rather than zero.
+	 * For the trends cron, counted off the hourly buckets (`StreamTrendBuckets`),
+	 * settled first; a window older than the kept buckets is counted from the
+	 * posts. A hashtag a window did not use is absent rather than zero.
 	 *
 	 * @param array<string, int> $windows name => since, as a timestamp
 	 *
@@ -284,15 +258,10 @@ trait StreamStatistics {
 	/**
 	 * Who an account actually talks with, and how often.
 	 *
-	 * Both directions are the same self-join on the stream, read from either
-	 * end: `PARTNERS_INBOUND` counts the replies other people wrote to this
-	 * account's posts, `PARTNERS_OUTBOUND` the replies this account wrote to
-	 * theirs. The window applies to the reply in both cases — it is the reply
-	 * that happened in the window, whatever the age of the post it answers.
-	 *
-	 * The account itself is excluded: a thread somebody continues on their own
-	 * is not a conversation with anybody, and left in it would outrank every
-	 * real partner.
+	 * One self-join on the stream read from either end: `PARTNERS_INBOUND`
+	 * counts others' replies to this account's posts, `PARTNERS_OUTBOUND` this
+	 * account's replies to theirs. The window applies to the reply. The account
+	 * itself is excluded.
 	 *
 	 * @param string $actorId the account whose conversations
 	 * @param int $direction self::PARTNERS_INBOUND or self::PARTNERS_OUTBOUND
@@ -314,9 +283,7 @@ trait StreamStatistics {
 		$expr = $qb->expr();
 		$prim = $qb->prim($actorId);
 
-		// 'r' is always the reply, 'p' always the post it answers; which of the
-		// two belongs to this account is the whole difference between the
-		// directions
+		// 'r' is always the reply, 'p' the post it answers.
 		$partner = ($direction === self::PARTNERS_INBOUND) ? 'r' : 'p';
 		$mine = ($direction === self::PARTNERS_INBOUND) ? 'p' : 'r';
 
@@ -361,12 +328,8 @@ trait StreamStatistics {
 	}
 
 	/**
-	 * The handle an actor URI belongs to, for a name to put on a number.
-	 *
-	 * The cache is the only place a remote actor's handle is written down, and
-	 * an actor this account has held a conversation with is in it by
-	 * definition. If it is not, the URI's own last segment and host say who it
-	 * was well enough for a list of names.
+	 * The handle an actor URI belongs to, from the actor cache, else from the
+	 * URI's last segment and host.
 	 */
 	private function handleFromActorId(string $id): string {
 		$qb = $this->getQueryBuilder();
@@ -390,14 +353,8 @@ trait StreamStatistics {
 	}
 
 	/**
-	 * Who boosted each of these posts.
-	 *
-	 * One query for the whole set rather than one per post: the statistics
-	 * page asks about a month of posts at once, and a round trip per post to
-	 * fill in one column is a page that gets slower the more an account posts.
-	 *
-	 * The same account boosting the same post twice is one audience, so the
-	 * actors come back deduplicated per post.
+	 * Who boosted each of these posts, in one query for the set, deduplicated
+	 * per post.
 	 *
 	 * @param string[] $ids the posts, by id
 	 * @param int $limit how many Announce rows to read at most
@@ -448,11 +405,9 @@ trait StreamStatistics {
 	}
 
 	/**
-	 * How many accounts raised one kind of notification for an account since
-	 * a moment: each account once, however often it did.
-	 *
-	 * Read through the recipients table, as the notifications timeline is, so
-	 * it is the account's own notifications and nobody else's.
+	 * How many accounts raised one kind of notification for an account since a
+	 * moment, each counted once; read through the recipients table as the
+	 * notifications timeline is.
 	 */
 	public function countNotifiersOf(string $recipientId, string $subType, int $since = 0): int {
 		$qb = $this->getQueryBuilder();
@@ -478,9 +433,7 @@ trait StreamStatistics {
 
 	/**
 	 * Who reacted to these posts and how often: each like, boost and reply
-	 * counted once for the account that made it, whatever network it came
-	 * from. A reaction is a row here whether it was delivered or taken in
-	 * from Bluesky's notifications.
+	 * counted once for the account that made it, from any network.
 	 *
 	 * @param list<string> $ids the posts' ids
 	 * @param int $limit the most rows read for each kind of reaction

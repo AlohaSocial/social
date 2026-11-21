@@ -13,11 +13,6 @@ use JsonSerializable;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class SimpleDataStore
- *
- * @package OCA\Social\Tools\Model
- */
 class SimpleDataStore implements JsonSerializable {
 	use TArrayTools;
 

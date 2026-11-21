@@ -24,57 +24,27 @@ use Psr\Container\ContainerInterface;
 use Throwable;
 
 /**
- * Mastodon's conversations, out of a direct timeline that has none.
+ * Mastodon's conversations, derived from the direct timeline.
  *
- * Mastodon stores a conversation: a row per thread, a row per participant, and
- * an id that exists before anybody asks for it. This app stores messages, and
- * the only thing the messages of one exchange have in common is the chain of
- * `in_reply_to` they hang off. A conversation here is therefore *derived*: the
- * thread root — the message with no parent, or the topmost parent this
- * instance stores — is the conversation, and its nid is the conversation's id.
+ * A conversation is the thread root (the message with no parent, or the
+ * topmost parent stored here) and its id is the root's nid, which stays
+ * stable for `POST /api/v1/conversations/{id}/read` as messages arrive.
  *
- * That choice is what makes `POST /api/v1/conversations/{id}/read` possible at
- * all. The id has to survive the round trip: a client reads the list, the user
- * taps a row minutes later, and the id they send back has to name the same
- * thread. The root's nid does — it is a stored, immutable, already-unique id,
- * and every message of the thread walks up to the same one. An id derived from
- * the page instead (a position, a hash of the participants, the newest
- * message) would name something else as soon as a message arrived.
+ * - Direct messages store their root (`social_stream.root_prim`,
+ *   `ConversationsRequest::storeRoot()`); older ones not yet reached by
+ *   `Cron\ThreadRoots` are walked up to `MAX_THREAD_DEPTH`.
+ * - A thread whose root is not stored here groups under the topmost message
+ *   it does store, and its id changes if the parent arrives later.
+ * - Paging is by message, so two pages can show the same conversation; a
+ *   client keys on `id` and updates the row.
  *
- * What it costs:
- *
- *  - Grouping is work at read time, but little of it: a direct message
- *    stores its thread's root when it is stored (`social_stream.root_prim`,
- *    `ConversationsRequest::storeRoot()`), so a page of conversations is one
- *    direct timeline query and one for the roots. A chat is a chain of
- *    replies, each to the one before, and walking it up was a query a level.
- *    Only messages stored before the roots were — until `Cron\ThreadRoots`
- *    has reached them — are still walked, a few levels a query up to
- *    `MAX_THREAD_DEPTH`.
- *  - A thread whose root is not stored here (the exchange started on another
- *    server and this instance was brought in later) groups under the topmost
- *    message it *does* store. If the missing parent arrives afterwards, the
- *    conversation's id changes. Mastodon has the same hole in a different
- *    place: it threads on the `conversation`/`context` the sender sent, and an
- *    exchange whose sender omits it splits there too.
- *  - Two pages of one list can show the same conversation twice: paging is by
- *    message, so a thread with messages on both sides of the cursor is built
- *    twice, once with an older last message. A client keys on `id`, so it
- *    updates the row rather than growing a second one. Storing conversations
- *    would fix it, and would mean a table written on every incoming direct
- *    message and a backfill of every message already here.
- *
- * Read and dismissed state does have a row — see ConversationsRequest — since
- * neither can be derived from the messages.
+ * Read and dismissed state is stored (see ConversationsRequest), since it
+ * cannot be derived from the messages.
  */
 class ConversationService {
 	/**
-	 * How many messages one page of conversations is built from.
-	 *
-	 * `ProbeOptions::MAX_LIMIT`, because that is the most one timeline query
-	 * may ask for: a page of 20 conversations is not 20 messages, and reading
-	 * the widest window the timeline allows is what keeps a busy thread from
-	 * filling the page on its own.
+	 * How many messages one page of conversations is built from: the most one
+	 * timeline query allows, so a busy thread does not fill the page alone.
 	 */
 	public const WINDOW = ProbeOptions::MAX_LIMIT;
 
@@ -86,9 +56,8 @@ class ConversationService {
 	public const UNREAD_CAP = 99;
 
 	/**
-	 * How many participants one conversation reports. A direct message can be
-	 * addressed to a crowd, and `accounts` is a header line in every client
-	 * that draws it.
+	 * How many participants one conversation reports; a direct message can be
+	 * addressed to a crowd.
 	 */
 	private const MAX_ACCOUNTS = 20;
 
@@ -103,15 +72,10 @@ class ConversationService {
 	}
 
 	/**
-	 * The `ETag` of the unread count: what `countUnread()` changes with. A
-	 * direct message arriving or sent moves the newest one and the
-	 * conversations' revision (`TimelineRevisionService::CONVERSATIONS`) —
-	 * the revision too, as a second message in the same second can sort
-	 * below the first — marking read or dismissing moves the revision,
-	 * blocking or muting somebody or deciding about a request moves the
-	 * timeline revision, and changing who may reach the account moves the
-	 * notification policy's state. One index-only probe and a few user
-	 * settings, in place of the count.
+	 * The `ETag` of the unread count: the newest direct message, the
+	 * conversations' and timeline revisions (`TimelineRevisionService`), and the
+	 * notification policy's state. One index-only probe and a few user settings
+	 * instead of the count.
 	 */
 	public function unreadTag(Person $viewer): string {
 		$policy = $this->notificationPolicy();
@@ -126,27 +90,18 @@ class ConversationService {
 	 * One page of the viewer's conversations, newest message first, with the
 	 * cursors the `Link` header is built from.
 	 *
-	 * `next` is the nid below which nothing in this page has been considered:
-	 * the last conversation's newest message when the page filled up — every
-	 * conversation left out of it is older than that one — and otherwise the
-	 * oldest message the window reached. Both are messages, not conversations,
-	 * which is what `max_id` means everywhere else in this API.
-	 *
-	 * There is no `next` once the window came back short: that is the end of
-	 * the direct timeline, and a page of no conversations at that point is the
-	 * end of the list rather than a gap to page past.
-	 *
-	 * `min_id` answers the page next to the cursor, as Mastodon does: the
-	 * oldest conversations above it, still newest first, with `prev` at the
-	 * newest message on the page so that nothing between is skipped.
+	 * `next` is a message nid, as `max_id` is everywhere in this API: the last
+	 * conversation's newest message when the page filled up, otherwise the
+	 * oldest message the window reached, and none once the window came back
+	 * short. `min_id` answers the oldest conversations above the cursor, still
+	 * newest first, with `prev` at the newest message on the page.
 	 *
 	 * @return array{conversations: Conversation[], next: int|string, prev: int|string}
 	 */
 	public function getPage(Person $viewer, int $limit, int|string $maxId = '0', int|string $minId = 0, int|string $sinceId = '0', bool $pollChats = true): array {
 		$limit = max(1, min(self::MAX_LIMIT, $limit));
-		// somebody reading their messages: the ones on Bluesky are read next
-		// run, not when the backoff says; resolved here, as the Bluesky side
-		// needs services that need this one
+		// The reader is looking, so Bluesky chats are polled next run regardless of
+		// backoff; resolved lazily because of a service cycle.
 		if ($pollChats) {
 			try {
 				$this->container?->get(ChatPoller::class)->wakeActor($viewer);
@@ -161,8 +116,7 @@ class ConversationService {
 		$listed = $this->listed($viewer, $this->group($messages));
 
 		$filled = (count($listed) > $limit);
-		// a `min_id` window is the oldest messages above the cursor, and its
-		// page is the conversations next to the cursor: the oldest of them
+		// A `min_id` page is the conversations next to the cursor: the oldest above it.
 		$adjacent = ((string)$minId !== '0' && (string)$minId !== '');
 		$conversations = $this->entities($viewer, array_slice($listed, $adjacent ? -$limit : 0, $limit));
 
@@ -175,8 +129,7 @@ class ConversationService {
 		if ($filled && $last !== false) {
 			$next = $last->getLastStatusNid();
 		} else {
-			// a window that came back full may have older messages behind it,
-			// including ones belonging to conversations nothing here has seen
+			// A full window may have older messages behind it.
 			$next = (count($messages) < self::WINDOW) ? 0 : $this->oldestOf($nids);
 		}
 
@@ -222,19 +175,13 @@ class ConversationService {
 	}
 
 	/**
-	 * How many conversations have something in them the account has not read.
+	 * How many conversations have something in them the account has not read,
+	 * for the badge.
 	 *
-	 * What the sidebar badge shows, asked on every poll and every push. It
-	 * walks the same window, the same grouping and the same rules the list
-	 * itself uses — dismissed and held left out, unread past the read marker,
-	 * never for a message the account sent — rather than counting messages with a
-	 * query of its own: a badge saying two beside a list showing one is worse
-	 * than no badge. But it reads only what those rules look at, the
-	 * messages' places in their threads (`StreamService::getDirectTimelineLinks()`),
-	 * not the posts the list draws.
-	 *
-	 * Capped, because the number is drawn in a circle a few millimetres wide:
-	 * past the cap the reader is told "lots", which is all a badge can say.
+	 * Applies the list's own window, grouping and rules (dismissed and held left
+	 * out, never for the account's own message) so badge and list agree, but
+	 * reads only thread links (`StreamService::getDirectTimelineLinks()`), not
+	 * the posts. Capped at `$cap`.
 	 *
 	 * @param int $cap the most it will count to
 	 */
@@ -285,12 +232,8 @@ class ConversationService {
 	}
 
 	/**
-	 * Marks every unread conversation read, and says how many that was.
-	 *
-	 * Walks the same window the list draws from, so "every conversation" means
-	 * the same set in both places. Only the unread ones are written: moving a
-	 * marker that is already where it belongs is a write for nothing, and this
-	 * runs every time somebody looks at the page.
+	 * Marks every unread conversation in the list's window read, and says how
+	 * many that was; only the unread ones are written.
 	 */
 	public function markAllRead(Person $viewer): int {
 		$messages = $this->directMessages($viewer, 0, 0, 0);
@@ -361,13 +304,8 @@ class ConversationService {
 	}
 
 	/**
-	 * Dismisses the conversation.
-	 *
-	 * Nothing is deleted: Mastodon drops the conversation row and leaves the
-	 * statuses, and a later message in the same thread brings the conversation
-	 * back. Here the dismissal is recorded as the newest message it covered,
-	 * so a later message — which has a higher nid — is outside it and the
-	 * conversation returns on its own.
+	 * Dismisses the conversation, recorded as the newest message it covered, so
+	 * a later message brings it back as in Mastodon. Nothing is deleted.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -388,8 +326,8 @@ class ConversationService {
 	}
 
 	/**
-	 * Where a conversation's state goes to Bluesky; resolved when needed, as
-	 * the Bluesky side needs services that need this one.
+	 * Where a conversation's state goes to Bluesky; resolved lazily because of a
+	 * service cycle.
 	 */
 	private function chatState(): ?ChatState {
 		try {
@@ -439,27 +377,17 @@ class ConversationService {
 	}
 
 	/**
-	 * Says who is reading before anything is read.
-	 *
-	 * Every lookup this service makes goes through `StreamService`, and a
-	 * stream read with no viewer set is read as an anonymous caller: only
-	 * posts addressed to the public collection come back. A direct message
-	 * names no such collection, so a conversation could never be looked up at
-	 * all — `markRead()` and `remove()` answered 404 for every real
-	 * conversation while `getPage()`, which happened to say who was reading,
-	 * listed them.
+	 * Sets the viewer on `StreamService`: an anonymous read returns only public
+	 * posts, so no direct message would be found.
 	 */
 	private function readAs(Person $viewer): void {
 		$this->streamService->setViewer($viewer);
 	}
 
 	/**
-	 * The window's messages grouped under the thread root each belongs to, in
-	 * the order the roots were first seen — which, the window being ordered
-	 * newest first, is the order of their newest message.
-	 *
-	 * Along with what the walk up read of their threads, which names the nid
-	 * of a root the window does not hold.
+	 * The window's messages grouped by thread root, in order of their newest
+	 * message, with the thread links read on the way (which name the nid of a
+	 * root outside the window).
 	 *
 	 * @param Stream[] $messages
 	 *
@@ -485,16 +413,11 @@ class ConversationService {
 	}
 
 	/**
-	 * The same map with what names the root of each of its posts added to it.
+	 * The same map with what names the root of each of its posts added.
 	 *
-	 * A direct message stored its thread's root (`ConversationsRequest::storeRoot()`),
-	 * and that is read for the whole map in one statement. Only the posts
-	 * stored before the roots were walk up, a few levels a statement: every
-	 * parent still missing is asked for at once with
-	 * `ConversationsRequest::ANCESTOR_LEVELS` of its own ancestors, an
-	 * ancestor that has a stored root ends its walk there, and the walk ends
-	 * when a round adds nothing — which is what a thread that starts here,
-	 * or a parent this instance never stored, both look like.
+	 * Stored roots (`ConversationsRequest::storeRoot()`) are read in one
+	 * statement. Posts without one walk up `ConversationsRequest::ANCESTOR_LEVELS`
+	 * levels per statement until a stored root is reached or a round adds nothing.
 	 *
 	 * @param array<string, array{nid: int|string, inReplyTo: string, root?: string}> $links
 	 *
@@ -560,9 +483,8 @@ class ConversationService {
 	}
 
 	/**
-	 * The root of the thread `$id` is in, out of what is known about it: the
-	 * root its post stored, or the topmost post the walk reached — the first
-	 * with no parent, or whose parent is not stored here.
+	 * The root of the thread `$id` is in: the root its post stored, or the
+	 * topmost post the walk reached.
 	 *
 	 * @param array<string, array{nid: int|string, inReplyTo: string, root?: string}> $links
 	 */
@@ -587,11 +509,9 @@ class ConversationService {
 	}
 
 	/**
-	 * The grouped messages that are listed, newest first: dismissed ones left
-	 * out, those the notification policy holds (`heldRoots()`), and those
-	 * whose root is not a post this instance can name. Decided
-	 * before anything is built, so that a page is cut before its accounts are
-	 * looked up.
+	 * The grouped messages that are listed, newest first, leaving out dismissed
+	 * ones, held ones (`heldRoots()`) and those whose root this instance cannot
+	 * name. Decided before any accounts are looked up.
 	 *
 	 * @param array{groups: array<string, Stream[]>, links: array<string, array{nid: int|string, inReplyTo: string}>} $grouped
 	 *
@@ -612,8 +532,7 @@ class ConversationService {
 			// the root is in the window, or the walk up read it
 			$rootNid = (string)($grouped['links'][$rootId]['nid'] ?? '0');
 			if (Nid::compare($rootNid, '0') < 1) {
-				// the root is not a post this instance can name, so the
-				// conversation has no id a client could send back
+				// No id a client could send back.
 				continue;
 			}
 
@@ -671,13 +590,10 @@ class ConversationService {
 	}
 
 	/**
-	 * The conversations held back from a reader who takes direct messages
-	 * from nobody, out of the given ones: started by somebody else, not
-	 * written in by the reader, and started by somebody a direct message from
-	 * is held (`NotificationPolicyService::heldDirectSenders()`, the rule the
-	 * bell and the requests go by). Such a conversation is not listed: its
-	 * first message waits among the requests as the mention it raised, and
-	 * the conversation is listed once the reader accepts its starter there.
+	 * The conversations held back from a reader who takes direct messages from
+	 * nobody: started by somebody whose direct messages are held
+	 * (`NotificationPolicyService::heldDirectSenders()`) and not written in by
+	 * the reader. The first message waits among the requests until accepted.
 	 *
 	 * @param array<string, array{written: bool, author: string}> $threads by root id; `author` is '' where the root was not read
 	 *
@@ -763,10 +679,8 @@ class ConversationService {
 	}
 
 	/**
-	 * A conversation is unread while its newest message is newer than the
-	 * point the account read it to — and never for a message the account sent
-	 * itself, which is Mastodon's rule too: writing a message is having read
-	 * the conversation.
+	 * A conversation is unread while its newest message is past the read marker,
+	 * never when the account wrote it (Mastodon's rule too).
 	 *
 	 * @param string $author who wrote the newest message
 	 */
@@ -790,13 +704,9 @@ class ConversationService {
 	 * The other participants of the exchange, the newest message's own
 	 * correspondents first.
 	 *
-	 * Taken from the author and the recipients of the messages rather than
-	 * from their mentions: `to`, `cc` and `bcc` are what
-	 * `StreamDestRequest::generateStreamDirect()` wrote the `dm` rows from, so
-	 * they name exactly the accounts this exchange was delivered to. An id
-	 * that is not a cached actor — the public collection, a followers
-	 * collection, an account this instance has never seen — is dropped by the
-	 * cache lookup rather than filtered here.
+	 * Taken from author, `to`, `cc` and `bcc`, which are what the `dm` rows were
+	 * written from (`StreamDestRequest::generateStreamDirect()`); ids that are
+	 * not cached actors are dropped by the cache lookup.
 	 *
 	 * @param Stream[] $messages
 	 *
@@ -851,12 +761,7 @@ class ConversationService {
 
 	/**
 	 * The conversation a client named, as its root and the messages of it the
-	 * viewer may see.
-	 *
-	 * The id is canonicalised on the way in: a client that sends the nid of a
-	 * reply — an id this API never handed out, but one a client could have
-	 * kept from an older page whose root was not stored yet — is answered
-	 * about the thread that reply is in, not refused.
+	 * viewer may see. The nid of a reply is answered with that reply's thread.
 	 *
 	 * @return array{0: array{id: string, idPrim: string, nid: int|string, inReplyTo: string}, 1: array<string, array{id: string, idPrim: string, nid: int|string, inReplyTo: string}>}
 	 *
@@ -946,9 +851,7 @@ class ConversationService {
 			$conversation->setLastStatus($last)
 				->setAccounts($this->accountsOf($participants, $this->cachedActors($participants)));
 		} catch (Throwable $e) {
-			// `last_status` is nullable on Mastodon's entity, and a client has
-			// to cope with it; refusing the whole answer would leave the
-			// conversation unread instead
+			// `last_status` is nullable in Mastodon's entity.
 		}
 
 		return $conversation;

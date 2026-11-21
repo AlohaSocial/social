@@ -13,25 +13,13 @@ use InvalidArgumentException;
 use OCA\Social\Db\TrendReviewRequest;
 
 /**
- * Keeping something out of what is trending.
+ * Keeping something out of what is trending, for Mastodon's trend admin
+ * routes.
  *
- * Trending here is counted and shown with nobody in the loop, so the first
- * ugly hashtag to catch on does so on the Explore page of every account, and
- * until this the only thing an administrator could do was wait for it to fall
- * off. Mastodon has nine admin routes for it; this is what they act on.
- *
- * **What is rejected is hidden, and everything else trends.** Mastodon also
- * offers the other arrangement — nothing trends until it is approved — and it
- * is the wrong default here: it would empty the Explore page of every instance
- * on upgrade and leave it empty until somebody found the new panel. Approval
- * is still recorded, because a moderator wants to see what they have already
- * looked at, but it grants nothing that was not already the case.
- *
- * The filter is applied where a trend list is *read*, not where the counters
- * are written. A rejected tag keeps being counted, so lifting the rejection
- * puts it back with the number it would have had — and a decision that had to
- * be undone by waiting for the counters to refill would be a decision nobody
- * would risk making.
+ * Rejected items are hidden and everything else trends; approval is recorded
+ * but grants nothing, so Explore is not emptied until somebody approves. The
+ * filter applies when trends are read, not counted, so a lifted rejection
+ * returns with its full count.
  */
 class TrendReviewService {
 	public function __construct(
@@ -70,13 +58,8 @@ class TrendReviewService {
 	}
 
 	/**
-	 * One hashtag in Mastodon's `Admin::Tag` shape.
-	 *
-	 * `usable` and `listable` are always true: they describe a tag row that
-	 * can be disabled for *posting* and for *search*, and this app has no
-	 * equivalent — a hashtag here is written by whoever types it and exists
-	 * because a post carries it. Saying `true` is the honest answer to "may
-	 * this be used", not a placeholder.
+	 * One hashtag in Mastodon's `Admin::Tag` shape. `usable` and `listable`
+	 * are always true: hashtags here cannot be disabled for posting or search.
 	 *
 	 * @return array{id: string, name: string, trendable: bool, usable: bool, listable: bool}
 	 */
@@ -165,12 +148,8 @@ class TrendReviewService {
 	}
 
 	/**
-	 * A hashtag is the same hashtag however it was typed, and so is a host.
-	 *
-	 * The leading `#` goes because a moderator will paste one and the counters
-	 * store the bare word; a status id is a URL and is left exactly as it is,
-	 * since the only thing that will ever be compared against it is another
-	 * copy of the same id.
+	 * Normalises a reference: a hashtag loses its leading `#` (the counters
+	 * store the bare word); a status id is a URL and is left as it is.
 	 */
 	private function normalise(string $kind, string $ref): string {
 		$ref = trim($ref);

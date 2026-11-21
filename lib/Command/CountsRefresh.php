@@ -15,13 +15,9 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * What a remote post's likes, boosts and replies are right now, asked of the
- * servers that hold them rather than waited for.
- *
- * The cron asks on its own schedule, two hours between posts and a batch per
- * pass. This is for the other moments: counts that look wrong and should be
- * corrected now, a backfill after a version that never refreshed them at all,
- * or a check on what the asking is actually getting back.
+ * Asks the servers that hold remote posts for their current likes, boosts and
+ * replies, instead of waiting for the cron's two-hourly batches: for counts
+ * that look wrong, a backfill, or checking what the servers answer.
  */
 class CountsRefresh extends SocialCommand {
 	public function __construct(

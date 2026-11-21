@@ -17,26 +17,13 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 
 /**
- * The reader looking back at their own posting: what they wrote on this day in
- * years gone by, and how the last week went.
+ * The reader looking back at their own posting: `onThisDay()`, their posts
+ * from this calendar day in earlier years, and `recap()`, the week just gone
+ * (off until the reader asks for it).
  *
- * An internal social feed is a company's memory, and almost all of it is
- * unreachable the moment it scrolls off the timeline: a post is found again
- * only by somebody who remembers enough of it to search for it. `onThisDay()`
- * is the one view that surfaces old posts without being asked — the same day,
- * a year or more ago. `recap()` is the other direction, the week just gone,
- * and it is off until the reader asks for it.
- *
- * **Only ever the caller's own posts.** Not a privacy convenience but the
- * whole design: because it is the reader's own, it can include their
- * followers-only and direct posts without asking who is allowed to see what.
- * The controller must pass the viewer's own actor and nothing else, and the
- * query it uses does not filter by audience.
- *
- * **Anniversaries, not a window.** A post from "about a year ago" is not a
- * memory, it is a random old post. Each year back is looked up as its own
- * calendar day in the reader's own timezone, so the 4th of March finds the 4th
- * of March and a post written at 23:50 does not belong to the next day.
+ * Only ever the caller's own posts, so followers-only and direct posts are
+ * included without an audience filter; the controller must pass the viewer's
+ * own actor. Each year back is its own calendar day in the reader's timezone.
  */
 class MemoriesService {
 	/** How many years back to look. */
@@ -55,11 +42,8 @@ class MemoriesService {
 	private const TOTAL = 6;
 
 	/**
-	 * The user config key the weekly recap is switched on with.
-	 *
-	 * Off unless it says `'1'`: a card that appears in somebody's feed
-	 * commenting on how much they have posted is something to ask for, not
-	 * something to be given.
+	 * The user config key the weekly recap is switched on with; off unless it
+	 * is `'1'`.
 	 */
 	public const RECAP_KEY = 'weekly_recap';
 
@@ -81,16 +65,9 @@ class MemoriesService {
 	}
 
 	/**
-	 * How the reader's week went, and the one before it for comparison.
-	 *
-	 * Read off the same twelve-week chart the profile draws, rather than
-	 * counted again: one place decides what a week is and what counts as a
-	 * post, and the number here cannot disagree with the number on the
-	 * reader's own profile.
-	 *
-	 * No streak, deliberately. A count of consecutive weeks turns posting into
-	 * something that can be lost, and a feed that tells somebody they have
-	 * broken a run is asking for posts rather than offering anything.
+	 * How the reader's week went, and the one before for comparison, read off
+	 * the profile's twelve-week chart so the two agree. Deliberately no
+	 * streak, which would pressure people to post.
 	 *
 	 * @return array{enabled: bool, this_week: int, last_week: int}
 	 */
@@ -144,9 +121,8 @@ class MemoriesService {
 		for ($years = 1; $years <= self::YEARS; $years++) {
 			$from = $today->modify(sprintf('-%d years', $years))->setTime(0, 0, 0);
 
-			// modify() on the 29th of February lands on the 1st of March in a
-			// year that has no 29th, which is a different day's posts. A leap
-			// day is remembered on leap years only.
+			// modify() on 29 February lands on 1 March in other years, so a
+			// leap day is remembered on leap years only
 			if ($from->format('m-d') !== $today->format('m-d')) {
 				continue;
 			}

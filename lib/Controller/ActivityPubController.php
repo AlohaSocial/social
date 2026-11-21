@@ -147,14 +147,10 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * A responder answering in the media type the peer asked for.
-	 *
-	 * It builds on the framework's own `json` responder so that a returned
-	 * `DataResponse` keeps its status and headers: a 404, 410 or 401 must
-	 * reach the peer as such, not as a 200 with an error in the body. The
-	 * header has to be a type the peer recognises as ActivityStreams —
-	 * GoToSocial asks for the profiled `application/ld+json` first and
-	 * refuses any other answer.
+	 * A responder answering in the media type the peer asked for. It builds on
+	 * the framework's `json` responder so a `DataResponse` keeps its status and
+	 * headers, and sets a type the peer recognises as ActivityStreams
+	 * (GoToSocial refuses anything but the profiled `application/ld+json`).
 	 */
 	private function activityStreamsResponder(string $contentType): \Closure {
 		return function ($response) use ($contentType): Response {
@@ -166,13 +162,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * returns information about an Actor, based on the username.
-	 *
-	 * This method should be called when a remote ActivityPub server require information
-	 * about a local Social account
-	 *
-	 * The format is pure Json
-	 *
+	 * A local actor, for a remote ActivityPub server.
 	 *
 	 * @param string $username
 	 *
@@ -202,28 +192,19 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * An account's public posts as an RSS feed.
+	 * An account's public posts as an RSS feed, as PeerTube and Mastodon offer;
+	 * a video carries an `enclosure` for podcast clients.
 	 *
-	 * PeerTube publishes one per channel and Mastodon one per account, and
-	 * PeerTube's users in particular live in feed readers and podcast apps: a
-	 * channel with no feed is one they cannot subscribe to from outside,
-	 * whatever else it offers. A video carries an `enclosure`, which is what
-	 * makes such a feed usable in a podcast client at all.
-	 *
-	 * Built from an **anonymous** read — the same one a stranger visiting the
-	 * profile gets — because the feed is readable signed out. That is not a
-	 * convenience: a feed is the easiest possible way to leak a followers-only
-	 * post, since one wrong predicate puts it in somebody's reader and out of
-	 * reach for ever. `FeedService` refuses a non-public post a second time.
+	 * Built from an anonymous read, the one a signed-out visitor gets, so a
+	 * followers-only post cannot leak into a feed reader; `FeedService` refuses
+	 * non-public posts a second time.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/@{username}.rss')]
 	public function feed(string $username): Response {
-		// No secure-mode check, unlike every ActivityPub route: this is RSS,
-		// read by feed readers and podcast clients that sign nothing, and an
-		// instance in secure mode is refusing *ActivityPub* to strangers rather
-		// than withdrawing its public feeds.
+		// No secure-mode check: feed readers sign nothing, and secure mode refuses
+		// ActivityPub to strangers, not the public feeds.
 		try {
 			$actor = $this->cacheActorService->getFromLocalAccount($username);
 
@@ -233,9 +214,8 @@ class ActivityPubController extends Controller {
 				->setAccountId($actor->getId())
 				->setLimit(FeedService::LIMIT);
 
-			// no viewer at all: the account query answers an anonymous reader
-			// with public posts and nothing else, which is the rule that keeps
-			// this safe rather than a switch somebody can get wrong once
+			// no viewer: the account query answers an anonymous reader with public
+			// posts only
 			$this->streamRequest->resetViewer();
 			$posts = $this->streamRequest->getTimeline($options);
 
@@ -253,12 +233,8 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * The remote account behind a signed GET, resolved once a request.
-	 *
-	 * Signature verification ran on inbox POSTs only, so this instance could
-	 * not tell one remote reader from another: every ActivityPub GET served
-	 * what an anonymous reader gets. That failed closed, which is safe, and is
-	 * also why a follower on another server saw a profile with nothing on it.
+	 * The remote account behind a signed GET, resolved once a request, so a
+	 * follower on another server is served what they may read.
 	 */
 	private function reader(): ?Person {
 		if ($this->readerResolved) {
@@ -282,11 +258,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * Alias to the actor() method.
-	 *
-	 * Normal path is /apps/social/users/username
-	 * This alias is /apps/social/@username
-	 *
+	 * Alias of actor() at /apps/social/@username.
 	 *
 	 * @param string $username
 	 *
@@ -302,20 +274,12 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * Shared inbox — receives incoming ActivityPub activities from remote servers.
+	 * The shared inbox, the entry point for activities to every local actor.
 	 *
-	 * This is the primary entry point for federation (sharedInbox receives for all
-	 * local actors). Flow:
-	 *  1. Read raw JSON body
-	 *  2. Verify HTTP Signature: ensures the request came from the claimed origin
-	 *  3. Check Fediverse authorization (blocklist/allowlist) and the per-origin
-	 *     rate ceiling, now that the origin is proven
-	 *  4. Parse JSON into an ActivityPub model object
-	 *  5. Verify LinkedDataSignature (if present), else trust HTTP signature origin
-	 *  6. Process the incoming activity (varies by type: Follow→auto-accept,
-	 *     Create→cache post, Accept→mark follow as accepted)
-	 *  7. Send HTTP 200, then async-process the stream cache queue
-	 *
+	 * Verifies the HTTP signature, then checks the origin against the federation
+	 * rules and its rate ceiling, parses the activity, checks a Linked Data
+	 * signature or that the signer is the actor, handles the activity, answers
+	 * 200 and then processes the stream cache queue.
 	 *
 	 * @return Response
 	 */
@@ -340,18 +304,15 @@ class ActivityPubController extends Controller {
 				return $this->success();
 			}
 
-			// the per-origin ceiling is spent here rather than on the way in:
-			// before this line the origin is only what the sender wrote, and
-			// counting against a name anyone can write is a way to throttle the
-			// instance that owns it
+			// the per-origin ceiling is spent only once the origin is proven, so
+			// nobody can throttle an instance by writing its name
 			$this->inboxLimiter->assertOriginAllowed($origin);
 
 			$activity = $this->importService->importFromJson($body);
 			$this->signatureService->assertRemoteActor($activity);
 			if (!$this->signatureService->checkObject($activity)) {
-				// no Linked Data signature to vouch for the object, so the only
-				// thing standing behind this activity is the key that signed the
-				// request — and it has to be the actor's own
+				// without a Linked Data signature only the request's key vouches for the
+				// activity, so it has to be the actor's own
 				try {
 					$this->signatureService->assertSignerSpeaksFor($signer, $activity);
 				} catch (InvalidOriginException $e) {
@@ -363,12 +324,9 @@ class ActivityPubController extends Controller {
 				);
 			}
 
-			// A Linked Data signature moves the origin off the host that
-			// delivered the request and onto the object's own actor, and that
-			// host has not been asked about. A relay is entitled to forward for
-			// anyone; whom this instance federates with is its own decision, so
-			// it is the origin the activity is finally stored under that has to
-			// pass.
+			// A Linked Data signature moves the origin to the object's own actor, whose
+			// host has not been checked yet: the origin the activity is stored under is
+			// the one that has to pass.
 			$this->fediverseService->authorized($activity->getOrigin());
 
 			try {
@@ -398,10 +356,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * User-specific inbox — receives incoming ActivityPub activities for a specific user.
-	 *
-	 * Same logic as sharedInbox but also verifies the local actor exists.
-	 *
+	 * A local actor's inbox: as sharedInbox(), for an actor that has to exist.
 	 *
 	 * @param string $username
 	 *
@@ -428,10 +383,8 @@ class ActivityPubController extends Controller {
 				return $this->success();
 			}
 
-			// the per-origin ceiling is spent here rather than on the way in:
-			// before this line the origin is only what the sender wrote, and
-			// counting against a name anyone can write is a way to throttle the
-			// instance that owns it
+			// the per-origin ceiling is spent only once the origin is proven, so
+			// nobody can throttle an instance by writing its name
 			$this->inboxLimiter->assertOriginAllowed($origin);
 
 			// throws for an inbox of an account this server does not have
@@ -440,9 +393,8 @@ class ActivityPubController extends Controller {
 			$activity = $this->importService->importFromJson($body);
 			$this->signatureService->assertRemoteActor($activity);
 			if (!$this->signatureService->checkObject($activity)) {
-				// no Linked Data signature to vouch for the object, so the only
-				// thing standing behind this activity is the key that signed the
-				// request — and it has to be the actor's own
+				// without a Linked Data signature only the request's key vouches for the
+				// activity, so it has to be the actor's own
 				try {
 					$this->signatureService->assertSignerSpeaksFor($signer, $activity);
 				} catch (InvalidOriginException $e) {
@@ -454,12 +406,9 @@ class ActivityPubController extends Controller {
 				);
 			}
 
-			// A Linked Data signature moves the origin off the host that
-			// delivered the request and onto the object's own actor, and that
-			// host has not been asked about. A relay is entitled to forward for
-			// anyone; whom this instance federates with is its own decision, so
-			// it is the origin the activity is finally stored under that has to
-			// pass.
+			// A Linked Data signature moves the origin to the object's own actor, whose
+			// host has not been checked yet: the origin the activity is stored under is
+			// the one that has to pass.
 			$this->fediverseService->authorized($activity->getOrigin());
 
 			try {
@@ -489,20 +438,15 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * An activity signed by somebody other than its actor, with nothing on it
-	 * to prove the actor wrote it.
+	 * An activity signed by somebody other than its actor, with nothing to prove
+	 * the actor wrote it: ActivityPub's inbox forwarding (§7.1.2), as Mastodon
+	 * forwards replies to a post's followers.
 	 *
-	 * That is ActivityPub's inbox forwarding (§7.1.2): Mastodon passes a reply
-	 * on to the followers of the post it answers, signed with its own user's
-	 * key, and a reply from a server that makes no Linked Data signatures
-	 * arrives exactly like this. Refusing it was final for the forwarder, so the
-	 * reply never reached this copy of the thread. The body is still not
-	 * believed: a `Create` or `Update` of an object on its actor's own host is
-	 * answered by queueing a fetch of that object from there, and only what
-	 * that server serves is taken in (`StreamQueueService::fetchFromOrigin()`).
-	 * A forwarded `Delete` or `Announce` is acknowledged and dropped, as
-	 * Mastodon drops what it cannot verify. Any other activity is still
-	 * refused: nothing forwards a Follow or a Like.
+	 * The body is not believed: a `Create` or `Update` of an object on its
+	 * actor's own host queues a fetch from there
+	 * (`StreamQueueService::fetchFromOrigin()`); a forwarded `Delete` or
+	 * `Announce` is acknowledged and dropped, as Mastodon does; anything else is
+	 * refused, since nothing forwards a Follow or a Like.
 	 *
 	 * @throws InvalidOriginException for an activity no forwarder sends
 	 */
@@ -554,34 +498,25 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * A delivery this instance will not take, answered with what the refusal
-	 * actually is.
-	 *
-	 * The status is the only thing a peer reads to decide what to do next, and
-	 * Mastodon re-queues a 5xx with backoff for about two days. Answering every
-	 * rejection 500 — which a catch-all `fail()` did — therefore turned one
-	 * refused delivery into a dozen, and made blocking an instance *multiply*
-	 * its traffic instead of ending it. A 4xx is final: the peer drops the
-	 * activity and stops.
+	 * A delivery this instance will not take, answered with the status of the
+	 * actual refusal. Mastodon retries a 5xx for about two days, so a refusal
+	 * answered 500 is redelivered over and over; a 4xx is final.
 	 */
 	private function rejectDelivery(Exception $e): Response {
 		return $this->fail($e, [], $this->statusForRejection($e));
 	}
 
 	/**
-	 * 500 is reserved for a fault of this instance's own — anything else the
-	 * inbox refuses has a status that says which part of the request was
-	 * unacceptable.
+	 * 500 is reserved for a fault of this instance; any other refusal has a
+	 * status that says which part of the request was unacceptable.
 	 */
 	private function statusForRejection(Exception $e): int {
 		return match (true) {
 			// a decision about who may talk to this instance, not a failure
 			$e instanceof UnauthorizedFediverseException => Http::STATUS_FORBIDDEN,
 
-			// the sender is fine, the verification is not finishable right now:
-			// the host holding the signing key could not be reached, or its
-			// last fetch failed recently enough to still be in backoff. This is
-			// the one rejection that *should* be redelivered.
+			// the sender is fine, but the signing key's host could not be reached or
+			// is in backoff: the one refusal that should be redelivered
 			$e instanceof RequestNetworkException,
 			$e instanceof RequestServerException,
 			$e instanceof SignatureException
@@ -609,13 +544,9 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * An activity that was understood well enough to be modelled, but for which
-	 * there is no handler.
-	 *
-	 * The delivery itself succeeded, so the answer stays a success — what was
-	 * missing was any record of what arrived. Without this line the only symptom
-	 * of a whole class of activity being ignored is that nothing happens, which
-	 * is indistinguishable from the peer never having sent it.
+	 * An activity that was modelled but has no handler. The delivery succeeded,
+	 * so the answer stays a success; the log line is the only trace of a type
+	 * being ignored.
 	 */
 	private function logUnhandled(ItemUnknownException $e, string $origin, ACore $activity): void {
 		$this->logger->notice('an incoming activity was not handled', [
@@ -630,11 +561,9 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * An activity whose own `type` this app has no model for: it never became an
-	 * item, so there is nothing to name it but the raw document.
-	 *
-	 * This used to answer 500, which makes a peer redeliver something we will
-	 * never understand — for as long as its own queue allows.
+	 * An activity whose `type` this app has no model for, logged from the raw
+	 * document. Answered as a success, since a 5xx would make the peer redeliver
+	 * something that will never be understood.
 	 */
 	private function acceptUnhandledType(ItemUnknownException $e, string $origin, string $body): Response {
 		$data = json_decode($body, true);
@@ -651,9 +580,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * Method is called when a remote ActivityPub server wants to GET in the INBOX of a USER
-	 * Checking that the user exists, and that the header is properly signed.
-	 *
+	 * A local actor's inbox, as an empty collection, for a remote server's GET.
 	 *
 	 * @param string $username
 	 *
@@ -683,8 +610,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * Outbox. does nothing.
-	 *
+	 * An actor's outbox collection, or one page of it.
 	 *
 	 * @param string $username
 	 *
@@ -693,15 +619,10 @@ class ActivityPubController extends Controller {
 	#[NoCSRFRequired]
 	#[PublicPage]
 	// Two verbs on one method need two route names: a route is keyed by
-	// controller, method and postfix, so without one the POST registration
-	// replaced the GET and remote servers fetching an outbox got nothing.
+	// controller, method and postfix, so the POST would replace the GET.
 	#[FrontpageRoute(verb: 'GET', url: '/@{username}/outbox')]
 	#[FrontpageRoute(verb: 'POST', url: '/@{username}/outbox', postfix: 'post')]
 	public function outbox(string $username, string $page = '', string $max_id = ''): Response {
-		//		if (!$this->checkSourceActivityStreams()) {
-		//			return $this->socialPubController->outbox($username);
-		//		}
-
 		try {
 			$this->assertReadable();
 		} catch (SignatureException $e) {
@@ -724,11 +645,8 @@ class ActivityPubController extends Controller {
 
 	/**
 	 * One page of an actor's outbox: the `Create` activities of their public
-	 * posts, newest first, as Mastodon serialises them.
-	 *
-	 * The activity is rebuilt around the stored post rather than replayed from
-	 * what was sent: the post is the durable record, and a consumer reading an
-	 * outbox wants the object, not our original delivery envelope.
+	 * posts, newest first, as Mastodon serialises them. Each activity is rebuilt
+	 * around the stored post, the durable record, not replayed from the delivery.
 	 */
 	private function outboxPage(Person $actor, int $page, string $before = ''): OrderedCollectionPage {
 		$items = [];
@@ -775,10 +693,8 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * The actor's featured collection: the posts pinned to their profile.
-	 * Remote servers read pinned posts from here — a pin is never federated
-	 * as an activity of its own.
-	 *
+	 * The actor's featured collection: the posts pinned to their profile, which
+	 * remote servers read from here since a pin is not federated as an activity.
 	 *
 	 * @param string $username
 	 *
@@ -820,8 +736,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * followers. does nothing.
-	 *
+	 * An actor's followers collection, or one page of it.
 	 *
 	 * @param string $username
 	 *
@@ -846,10 +761,8 @@ class ActivityPubController extends Controller {
 		try {
 			$actor = $this->cacheActorService->getFromLocalAccount($username);
 
-			// The collection has always advertised `first` as `?page=1` while
-			// nothing read the parameter, so `?page=1` answered with the
-			// collection again and its `first` pointed at itself: a consumer
-			// following it looped or gave up.
+			// the collection's `first` is `?page=1`, so a page number has to answer
+			// with a page, not the collection again
 			$requested = OrderedCollectionPage::requestedPage($page);
 			if ($requested > 0 || $max_id !== '') {
 				if ($this->listsHidden($actor)) {
@@ -868,8 +781,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * following. does nothing.
-	 *
+	 * An actor's following collection, or one page of it.
 	 *
 	 * @param string $username
 	 *
@@ -929,26 +841,12 @@ class ActivityPubController extends Controller {
 	/**
 	 * FEP-044f: the approval a quote of one of our posts rests on.
 	 *
-	 * A peer that received an `Accept` from us holds only the URI of the
-	 * approval; Mastodon fetches it and will not render the quote inline unless
-	 * what comes back names the same two posts and is attributed to the quoted
-	 * author. The stamp carries the quoting post's id, and the question the
-	 * document answers — may this be quoted? — is answered the way
-	 * `QuoteRequestInterface` answered the request: a post whose policy lets
-	 * anybody quote it approves every quote, and a post whose policy is
-	 * narrower approves exactly the quotes its author's server accepted,
-	 * which `QuoteRequestInterface::accept()` wrote down as a grant.
-	 *
-	 * The stamp alone is not an approval. Anyone can mint one, since it is
-	 * only the quoting post's id encoded, so answering from the stamp and the
-	 * post being quotable at all served a followers-only approval to a quote
-	 * nobody had asked about.
-	 *
-	 * Asking now rather than remembering the old answer is deliberate. A post
-	 * that has since been narrowed stops approving strangers' quotes, and a
-	 * grant that was taken back is gone from the table; this endpoint stops
-	 * answering, and a peer that re-checks sees the approval withdrawn — which
-	 * is the behaviour the author asked for.
+	 * Mastodon fetches the approval URI from our `Accept` and renders the quote
+	 * only when it names the same two posts and the quoted author. The stamp is
+	 * just the quoting post's id encoded, so it is no approval by itself: the
+	 * quote is approved by the post's policy when anybody may quote it, else by
+	 * the grant `QuoteRequestInterface::accept()` recorded. Asked fresh each
+	 * time, so a narrowed policy or revoked grant withdraws the approval.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -964,9 +862,8 @@ class ActivityPubController extends Controller {
 
 		$quoting = QuoteRequestInterface::instrumentOfStamp($stamp);
 
-		// no viewer is set, so this is the anonymous view of the post: an
-		// approval is a public statement, and one for a post the asker cannot
-		// even read would be a way of confirming it exists
+		// no viewer is set, so this is the anonymous view: an approval is public,
+		// and must not confirm that a post the asker cannot read exists
 		if ($quoting === '' || !$quoted->isLocal() || !$this->quoteIsApproved($quoted, $quoting)) {
 			return $this->fail(
 				new ItemUnknownException('no such quote authorization'),
@@ -1050,12 +947,9 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * The instance's own `Application` actor.
-	 *
-	 * Every outbound signed fetch names `<this url>#main-key` as its `keyId`,
-	 * and a peer running authorized-fetch dereferences exactly this URL before
-	 * it will answer. Without the route the signature names a key nobody can
-	 * find, which is worse than sending none.
+	 * The instance's own `Application` actor. Every outbound signed fetch names
+	 * `<this url>#main-key` as its `keyId`, and a peer with authorized fetch
+	 * dereferences it before it answers.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1069,15 +963,12 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * The `replies` collection of a post, and its pages.
+	 * The `replies` collection of a post, and its pages, so a reader on a third
+	 * instance sees the replies.
 	 *
-	 * A reply reaches the instances that hold the post it answers and nowhere
-	 * else, so without this a reader on a third instance sees a post with no
-	 * replies. The note points here with `replies`.
-	 *
-	 * No viewer is set: this is the anonymous view, and `StreamService` selects
-	 * only public replies for it — a followers-only reply is not served here
-	 * even as an id, because an id is enough to go and fetch the reply itself.
+	 * No viewer is set: `StreamService` selects only public replies for the
+	 * anonymous view, since even the id of a followers-only reply lets anybody
+	 * fetch it.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1127,12 +1018,9 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * The post a collection of it is asked for, or the answer that refuses it.
-	 *
-	 * A post this instance does not hold has its collections somewhere else,
-	 * under an id this instance does not own; and a post addressed to its
-	 * followers or to named people is not confirmed to exist to anybody else,
-	 * which is what displayPost() answers them too.
+	 * The post a collection of it is asked for, or the answer that refuses it:
+	 * a post held elsewhere has its collections there, and a followers-only or
+	 * direct post is not confirmed to exist, as displayPost() answers too.
 	 */
 	private function openLocalPost(string $username, string $token): Stream|Response {
 		$postId = $this->configService->getSocialUrl() . '@' . $username . '/' . $token;
@@ -1161,17 +1049,10 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * One story, for a peer that would rather fetch it than trust the copy it
-	 * was handed.
-	 *
-	 * A story is published to followers, so it is served to them: the author,
-	 * or whoever signed the fetch and follows the author — the same rule the
-	 * API keeps and the same follow rows the local timelines are built from.
-	 * Anybody else gets the **404** a story that is not theirs to see has
-	 * always been, here as in the client API: whether an account even has one
-	 * up is told to its followers and to nobody else.
-	 *
-	 * Only while it is alive. An expired story is gone, and gone is a 404.
+	 * One live story, for a peer that would rather fetch it than trust its copy.
+	 * Served to the author and to signed fetches by their followers; anybody
+	 * else, and any expired story, gets a 404, so whether an account has one is
+	 * told to nobody else.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -1194,11 +1075,9 @@ class ActivityPubController extends Controller {
 			$storyId = $this->storyService->idOf($author, $id);
 			$story = $this->storyService->bySourceId($storyId);
 
-			// The capability the `Add` carried, presented as a bearer token —
-			// which is how Pixelfed fetches a story: `StoryFetch` follows the
-			// bearcap rather than signing a request, so there is no reader to
-			// check against the followers. The token names this one story and
-			// nothing else, and stops working when the story does.
+			// The capability the `Add` carried, presented as a bearer token, which is
+			// how Pixelfed fetches a story: the token names this one story and stops
+			// working when the story does.
 			if (!$this->storyService->bearcapMatches($storyId, $this->bearerToken())) {
 				$reader = $this->reader();
 				if ($reader === null || !$this->storyService->mayRead($story, $reader)) {
@@ -1221,26 +1100,17 @@ class ActivityPubController extends Controller {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	// `{token}` is one segment, so this url also matches `/@{username}/inbox`,
-	// `/outbox`, `/followers` and `/following`. Attributes of one class are read
-	// in method-declaration order, which is why this method is declared after
-	// all four: moving it up the file would swallow them.
 	/**
 	 * A post: as ActivityPub for a client that asks for it, as a page for a
 	 * browser.
 	 *
+	 * Routed in `appinfo/routes.php`: `{token}` matches any single segment
+	 * (`inbox`, `outbox`, `collections`, …), so this route has to be offered
+	 * last, which attribute routes cannot guarantee.
+	 *
 	 * @throws SocialAppConfigException
 	 * @throws UrlCloudException
 	 */
-	// The route is in `appinfo/routes.php`, not here. `{token}` matches any
-	// single segment, so it also matches `/@{username}/collections` — which
-	// belongs to `SocialPubController` — and the first route offered to the
-	// matcher wins. Attribute routes of two *different* controllers are
-	// contributed in whatever order the filesystem hands the directory back,
-	// so on some installs this one was offered first and swallowed it:
-	// `resolvePost()` found no post called `collections`, and the reader got
-	// "Post not found". See the file for why being last is something only
-	// `appinfo/routes.php` can guarantee.
 	public function displayPost(string $username, string $token): Response {
 		try {
 			return $this->fixToken($username, $token);
@@ -1258,11 +1128,8 @@ class ActivityPubController extends Controller {
 				$viewer = $this->accountService->getCurrentViewer();
 				$this->streamService->setViewer($viewer);
 			} catch (AccountDoesNotExistException $e) {
-				// nobody local is asking. Whoever signed the fetch is the
-				// reader instead, which is what lets a followers-only post
-				// reach the people who follow it from another server — the
-				// follow rows this instance holds are the same ones the local
-				// timelines are built from
+				// nobody local is asking: whoever signed the fetch is the reader, so a
+				// followers-only post reaches its followers on other servers
 				$reader = $this->reader();
 				if ($reader !== null) {
 					$this->streamService->setViewer($reader);
@@ -1313,9 +1180,7 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
-	 * Check that the request comes from an ActivityPub server, based on the header.
-	 *
-	 * If not, should forward to a readable webpage that displays content for navigation.
+	 * Whether the request asks for ActivityPub rather than a page to browse.
 	 *
 	 * @return bool
 	 */

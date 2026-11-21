@@ -89,22 +89,13 @@ import { fullDateTime } from '../utils/relativeTime.js'
 import { isTooSoon } from '../utils/schedule.js'
 import { isNewerId } from '../utils/snowflake.js'
 
-/**
- * How many to ask for at a time. An account may hold up to 300 waiting posts
- * — 25 a day, spread over as many days as it likes — so a page is a page and
- * not the whole list, and there is a button under it.
- */
+/** How many to ask for at a time; an account may hold up to 300 waiting posts. */
 const PAGE_SIZE = 50
 
 /**
- * The posts waiting to go out, and a way to take one back.
- *
- * A section of Settings rather than a page of its own: the list is short —
- * an account may not hold more than 300 — and what is done with an entry is
- * one of two things: moving it to another time, or cancelling it. What it
- * says is not changed here; the API only ever moves a waiting post
- * (`PUT /api/v1/scheduled_statuses/{id}`). The time is picked with the
- * composer's own picker, so both are held to the same rules.
+ * The posts waiting to go out, in a section of Settings: each can be moved to
+ * another time (`PUT /api/v1/scheduled_statuses/{id}`, with the composer's own
+ * picker) or cancelled. What a post says is not changed here.
  */
 export default {
 	name: 'ScheduledPosts',
@@ -178,15 +169,10 @@ export default {
 		},
 
 		/**
-		 * A page of the waiting posts, soonest first.
-		 *
-		 * The cursor is `min_id` rather than `max_id`: this list is drawn in
-		 * the order the posts will go out, so the page after the one on screen
-		 * is the one scheduled *later*, and `max_id` asks for the other
-		 * direction. Ids are compared against the row they name — see
-		 * `ScheduledStatusesRequest::beyond()` — because an id is creation
-		 * order and `scheduled_at` is publication order, and a post can be
-		 * moved from one to the other at any time.
+		 * A page of the waiting posts, soonest first. The cursor is `min_id`, as
+		 * the next page is the one scheduled later; the server compares ids
+		 * against the row they name (`ScheduledStatusesRequest::beyond()`), since
+		 * ids are creation order and the list is publication order.
 		 *
 		 * @param {boolean} more whether this is the reader asking for the page
 		 *                       after the one they have
@@ -225,11 +211,8 @@ export default {
 		},
 
 		/**
-		 * One entry per id, in the order they arrived.
-		 *
-		 * Defensive: a post moved to another time between two requests can sit
-		 * on both sides of the cursor, and the same entry twice in this list
-		 * is two Cancel buttons for one post.
+		 * One entry per id, in the order they arrived: a post moved between two
+		 * requests can sit on both sides of the cursor.
 		 *
 		 * @param {object[]} held what is already on screen
 		 * @param {object[]} page what just arrived
@@ -273,11 +256,9 @@ export default {
 		},
 
 		/**
-		 * Moves a post to the time picked, and it to its place in the list.
-		 *
-		 * The server has the last word — the daily cap is only known there —
-		 * so the entry is changed from its answer, and a refusal leaves it
-		 * as it was and the picker open to try another time.
+		 * Moves a post to the time picked, and to its place in the list. The
+		 * server has the last word (the daily cap is only known there); a refusal
+		 * leaves the entry as it was and the picker open.
 		 *
 		 * @param {object} post a ScheduledStatus
 		 */
@@ -308,13 +289,10 @@ export default {
 		},
 
 		/**
-		 * The list in publication order again, after one entry moved.
-		 *
-		 * Ties go by id, as the server orders them. An entry moved past the
-		 * end of a list that has more behind it is taken off: its place is on
-		 * a page not loaded yet, and left last here it would be the cursor for
-		 * that page, which would then skip everything between its old time
-		 * and its new one.
+		 * The list in publication order again after one entry moved, ties by id
+		 * as the server orders them. An entry moved past the end of a list with
+		 * more behind it is dropped, or it would become the cursor and the next
+		 * page would skip what lies between its old and new time.
 		 *
 		 * @param {object[]} posts the list, with the moved entry in it
 		 * @param {object} moved the entry that moved

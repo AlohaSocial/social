@@ -29,15 +29,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Pictures as blobs.
- *
- * A picture a record refers to is one of the app's stored documents with a
- * `social_atproto_blob` row naming its CID. The stored copy is used as it
- * is when it fits Bluesky's 2,000,000 bytes and is a type Bluesky shows;
- * otherwise it is re-encoded as JPEG — descending quality, then smaller —
- * and the result stored as a document of its own beside the original. A
- * local account's avatar is read from Nextcloud and stored the same way. A
- * picture whose bytes are a blob already is that blob.
+ * Images as blobs, each a stored document with a `social_atproto_blob` row
+ * naming its CID. An image over Bluesky's 2,000,000 bytes or of a type it does
+ * not show is re-encoded as JPEG (lower quality, then smaller) and stored as
+ * a document of its own beside the original.
  */
 class PictureService {
 	/** Bluesky's limit per picture */
@@ -90,12 +85,10 @@ class PictureService {
 	}
 
 	/**
-	 * The blob for a local account's own avatar, the picture it chose in
-	 * Nextcloud: none for a generated one, or where the account keeps its
-	 * avatar from other servers. It is read from the avatar itself — the
-	 * actor's icon document names the avatar's address, not its bytes — and
-	 * stored as a document of its own, so `getBlob` serves the bytes the CID
-	 * names after the avatar changes.
+	 * The blob for a local account's own Nextcloud avatar; none for a
+	 * generated one or when the account uses its avatar from other servers.
+	 * It is stored as a document of its own so `getBlob` still serves the
+	 * bytes the CID names after the avatar changes.
 	 *
 	 * @param string[] $types what it may be; anything else is re-encoded as JPEG
 	 * @return array{blob: BlobRef, width: int, height: int}|null

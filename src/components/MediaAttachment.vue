@@ -3,21 +3,15 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- not focusable on purpose: an image here is already inside the parent's
-	     button, and video and audio carry their own controls. The click is a
-	     convenience for a pointer, never the only way to reach anything -->
+	<!-- not focusable on purpose: an image is already inside the parent's
+	     button, and video and audio carry their own controls -->
 	<div
 		class="attachment"
 		role="presentation"
 		@click="$emit('click')">
-		<!-- `playsinline`, or iOS takes every video full screen the moment it
-		     starts: the reader is thrown out of the timeline into a player,
-		     and comes back to wherever the page has scrolled to meanwhile.
-		     `controls` only where the media is the thing on screen. In a
-		     timeline a post is a link to itself, so a player here would put a
-		     play button in the way of it — and swallow the click that was
-		     meant to open the post. The poster still shows, which is what the
-		     reader is choosing from. -->
+		<!-- `playsinline`, or iOS takes every video full screen as it starts.
+		     `controls` only where the media is the thing on screen: in a timeline
+		     the post is a link to itself, and a player would swallow that click. -->
 		<video
 			v-if="hasSource && attachment.type === 'video'"
 			ref="video"
@@ -30,8 +24,7 @@
 			playsinline
 			@click="onMediaClick"
 			@loadedmetadata="previewLoaded = true">
-			<!-- the subtitle tracks the video published, which PeerTube hangs
-			     off its `url` list and nothing here used to read -->
+			<!-- the subtitle tracks the video published (PeerTube's `url` list) -->
 			<track
 				v-for="caption in captions"
 				:key="caption.url"
@@ -49,8 +42,7 @@
 			preload="metadata"
 			@click="onMediaClick"
 			@loadedmetadata="previewLoaded = true" />
-		<!-- a file: nothing to draw, so it is named. The whole card is the
-		     link, since there is nothing else on it to press -->
+		<!-- a file has nothing to draw, so it is named; the whole card is the link -->
 		<a
 			v-else-if="hasSource && attachment.type === 'unknown'"
 			class="attachment__file"
@@ -70,10 +62,8 @@
 				ref="canvas"
 				class="attachment__blurhash"
 				:class="{ 'attachment__blurhash--hidden': previewLoaded }" />
-			<!-- fetched as it comes into view and decoded off the main thread:
-			     a timeline is a long column of these, and the blurhash above
-			     holds the frame until each arrives. A dense screen that needs
-			     more pixels than the preview has picks the original instead -->
+			<!-- fetched as it comes into view and decoded off the main thread, with the
+			     blurhash holding the frame; a dense screen picks the original -->
 			<img
 				v-if="hasPreview && !previewFailed"
 				class="attachment__preview attachment__preview--fading"
@@ -86,9 +76,7 @@
 				decoding="async"
 				@load="previewLoaded = true"
 				@error="onPreviewError">
-			<!-- federated media that has gone away used to spin forever: no
-			     @error meant previewLoaded stayed false and the spinner stayed.
-			     So did media the server says outright it has no preview for -->
+			<!-- for media that has gone away, and media with no preview -->
 			<span
 				v-if="showsPlaceholder"
 				class="attachment__failed"
@@ -190,12 +178,9 @@ export default {
 		},
 
 		/**
-		 * Whether this is the copy the reader came to look at.
-		 *
-		 * On by default, because every caller but a timeline is showing the
-		 * media for its own sake: the viewer, the composer's previews, a
-		 * single post. Off in a timeline, where the whole post is a link to
-		 * itself and a player would intercept the click.
+		 * Whether this is the copy the reader came to look at: on everywhere but a
+		 * timeline, where the post is a link to itself and a player would
+		 * intercept the click.
 		 */
 		interactive: {
 			type: Boolean,
@@ -204,9 +189,7 @@ export default {
 
 		/**
 		 * What the post said about the video beyond the file: its captions and
-		 * whether it is live. Passed in rather than read off the attachment,
-		 * because it is a fact about the *post* — one `Video` object, one set
-		 * of subtitles — and the attachment is only its file.
+		 * whether it is live. These are facts about the post, not the attachment.
 		 */
 		video: {
 			type: /** @type {import('vue').PropType<object|null>} */ (Object),
@@ -256,12 +239,9 @@ export default {
 		},
 
 		/**
-		 * The `src` the element itself carries — empty for a playlist, which is
-		 * handed to the element by hls.js instead.
-		 *
-		 * A laddered video keeps its plain `src`: it is what plays while the
-		 * library is being fetched, what plays if the ladder cannot be loaded,
-		 * and what plays in a browser with no HLS at all.
+		 * The `src` the element itself carries: empty for a playlist, which hls.js
+		 * hands to the element. A laddered video keeps its plain `src` for before
+		 * the library loads, if the ladder fails, and for browsers without HLS.
 		 *
 		 * @return {string|undefined}
 		 */
@@ -279,13 +259,9 @@ export default {
 		},
 
 		/**
-		 * Whether there are bytes to point at.
-		 *
-		 * An attachment this instance holds no copy of — refused by the cache
-		 * limits, or not fetched yet — now arrives with `url: null` rather than
-		 * a link to a copy that is not here. Without this the video element
-		 * was given no `src` and sat blank, and the file card was a link with
-		 * no `href`; the placeholder below says what happened instead.
+		 * Whether there are bytes to point at. An attachment this instance holds no
+		 * copy of (refused by the cache limits, or not fetched yet) has `url: null`,
+		 * and the placeholder says so.
 		 *
 		 * @return {boolean}
 		 */
@@ -315,15 +291,14 @@ export default {
 			try {
 				name = decodeURIComponent(tail)
 			} catch {
-				// A malformed escape is not a reason to break the attachment card.
+				// a malformed escape is not a reason to break the attachment card
 			}
 			if (name !== '' && !isOpaqueFileName(name)) {
 				return name
 			}
 
-			// Older remote posts may have stored only a local numeric media id
-			// where newer imports keep the source filename. The MIME type still
-			// lets the card say what the download contains.
+			// remote posts may have stored only a numeric media id rather than the
+			// filename; the MIME type still says what the download contains
 			const mediaType = String(this.attachment?.media_type || '').toLowerCase()
 			const [major] = mediaType.split('/', 2)
 			const category = ({
@@ -340,8 +315,8 @@ export default {
 
 		/** @return {string} a useful file kind, from its extension or media type */
 		fileKind() {
-			// Streamed Bluesky files use opaque routes without an extension. Their
-			// validated name is carried in `description`, so check it first.
+			// streamed Bluesky files use opaque routes without an extension; their
+			// validated name is in `description`
 			const description = String(this.attachment?.description || '').trim()
 			const path = (this.attachment?.url || this.attachment?.remote_url || '').split('?')[0]
 			const match = /\.([a-z0-9]{1,8})$/i.exec(description) || /\.([a-z0-9]{1,8})$/i.exec(path)
@@ -391,9 +366,8 @@ export default {
 		},
 
 		/**
-		 * The still to show before anything is played. A federated video has
-		 * one -- PeerTube publishes it and this instance mirrors it -- and an
-		 * upload here has its poster frame; see `posterOf()`.
+		 * The still to show before anything is played: a federated video's
+		 * mirrored one, or an upload's poster frame; see `posterOf()`.
 		 *
 		 * @return {string|undefined} undefined leaves the attribute off
 		 */
@@ -402,13 +376,9 @@ export default {
 		},
 
 		/**
-		 * How much of the video to fetch before anybody has asked to watch it.
-		 *
-		 * With a poster, nothing: the frame is already on screen, and on a page
-		 * of twenty federated videos `metadata` alone would open twenty
-		 * connections to other servers through this one. Without a poster there
-		 * is nothing to draw until the first frame arrives, so it is worth the
-		 * headers.
+		 * How much of the video to fetch before anybody has asked to watch it: with
+		 * a poster nothing, so a page of federated videos opens no connections;
+		 * without one the headers, to have a first frame.
 		 *
 		 * @return {string}
 		 */
@@ -417,10 +387,8 @@ export default {
 		},
 
 		/**
-		 * Whether there is a preview to wait for at all. The server sends
-		 * `preview_url: null` when it has none, and Vue drops a null `src`:
-		 * neither @load nor @error is then guaranteed to fire — on Firefox
-		 * neither does — so the spinner stayed up for good.
+		 * Whether there is a preview to wait for at all. Vue drops a null
+		 * `preview_url`, and then neither @load nor @error is guaranteed to fire.
 		 *
 		 * @return {boolean}
 		 */
@@ -432,8 +400,8 @@ export default {
 
 		/**
 		 * The preview and the original as width candidates, where both are
-		 * known, the original is wider and not too large to be worth it. An
-		 * animated GIF is left to its still preview, as it is now.
+		 * known and the original is wider and not too large. An animated GIF
+		 * keeps its still preview.
 		 *
 		 * @return {string|undefined} undefined leaves the attribute off
 		 */
@@ -502,10 +470,9 @@ export default {
 
 	watch: {
 		/**
-		 * A status refreshed from the server replaces its attachment objects
-		 * without changing what they point at. The element keeps its `src` and
-		 * fires no second `load`, so starting over here left every picture in
-		 * the feed hidden behind its blurhash with the spinner on top.
+		 * A status refreshed from the server replaces its attachment objects without
+		 * changing what they point at; the element keeps its `src` and fires no
+		 * second `load`, so the loaded state must not be reset then.
 		 *
 		 * @param {object|null} now the attachment as it is
 		 * @param {object|null} before the attachment it replaced
@@ -537,9 +504,8 @@ export default {
 
 		/**
 		 * Points the element at an HLS playlist or a ladder, through hls.js
-		 * where the browser cannot open one itself (`attachHls()`). Only where
-		 * the media is the thing on screen: a thumbnail in a timeline must not
-		 * start fetching an adaptive stream.
+		 * where the browser cannot open one itself (`attachHls()`). Only where the
+		 * media is the thing on screen, not for a timeline thumbnail.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -552,9 +518,7 @@ export default {
 
 			const element = /** @type {HTMLVideoElement} */ (this.$refs.video)
 			this.hls = await attachHls(element, this.attachment, {
-				// the component may have been torn down while the library was
-				// being fetched; attaching then would leak a player nobody can
-				// reach
+				// the component may have been torn down while the library was fetched
 				isCurrent: () => this.$refs.video === element,
 				onFallback: () => {
 					this.hls = null
@@ -571,12 +535,9 @@ export default {
 		},
 
 		/**
-		 * A press on the player itself.
-		 *
-		 * Where the media is interactive the player handles it and nothing
-		 * above needs to know — a press on `play` is not a press on the post.
-		 * Where it is not, the press belongs to whatever wraps this, which in
-		 * a timeline is the link to the post.
+		 * A press on the player itself: where the media is interactive the player
+		 * handles it; otherwise it belongs to whatever wraps this, in a timeline the
+		 * link to the post.
 		 *
 		 * @param {Event} event the press
 		 */
@@ -607,9 +568,8 @@ export default {
 				return
 			}
 
-			// CacheDocumentService sets the copy sizes before it knows GD could
-			// read the image, so an unreadable upload arrives with dimensions
-			// and an empty blurhash — and decode('') throws
+			// an image GD could not read arrives with sizes and an empty blurhash,
+			// and decode('') throws
 			const blurhash = this.attachment.blurhash
 			if (typeof blurhash !== 'string' || blurhash.length < 6) {
 				return
@@ -621,10 +581,8 @@ export default {
 
 			try {
 				const canvas = /** @type {HTMLCanvasElement} */ (this.$refs.canvas)
-				// a hash holds a few colour components, not a picture: decoding
-				// it at the preview's size was work spent on pixels the frame
-				// then scaled, and a bitmap left at the element's default
-				// 300×150 showed a corner of them stretched over the frame
+				// a hash holds a few colour components, so it is decoded at a small size
+				// and scaled
 				const { width, height } = blurhashSize(this.attachment.meta.small)
 				canvas.width = width
 				canvas.height = height
@@ -643,8 +601,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-/* the card a file is shown as: its name, what kind it is, and the whole of
-   it a link to the download */
+/* the card a file is shown as: its name, its kind, and all of it a link */
 .attachment__file {
 	display: flex;
 	align-items: center;
@@ -696,12 +653,8 @@ export default {
 
 	&__blurhash {
 		position: absolute;
-		/* Both edges, not just the top. An absolutely positioned box with no
-		   inline offset keeps its *static* position, and the static position
-		   here comes from a `<button>` — which centres its content by UA rule.
-		   The picture was drawn half its own width to the right of its frame,
-		   the empty half showing the frame's grey and the other half clipped
-		   off the card. */
+		/* both edges: with no inline offset the box keeps its static position,
+		   which the wrapping `<button>` centres */
 		inset-inline-start: 0;
 		top: 0;
 		height: 100%;

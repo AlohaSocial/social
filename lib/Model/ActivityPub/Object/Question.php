@@ -15,13 +15,10 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Server;
 
 /**
- * An ActivityPub poll, the way Mastodon federates it: a Note-like object
- * whose options live in `oneOf` (single choice) or `anyOf` (multiple), each
- * option carrying its vote count in `replies.totalItems`.
- *
- * Everything a poll needs survives the database through the stored wire
- * source, like emoji and remote counters do; a remote `Update{Question}`
- * refreshes the source and with it the counts.
+ * An ActivityPub poll, the way Mastodon federates it: options in `oneOf`
+ * (single choice) or `anyOf` (multiple), each with its count in
+ * `replies.totalItems`. Stored through the wire source; a remote
+ * `Update{Question}` refreshes it and the counts.
  */
 class Question extends Note implements JsonSerializable {
 	public const TYPE = 'Question';
@@ -84,13 +81,9 @@ class Question extends Note implements JsonSerializable {
 	}
 
 	/**
-	 * Whether the poll is over at a moment: the server's clock when none is
-	 * given.
-	 *
-	 * Over *on* its end time, not a second after it: the sweep that tells the
-	 * voters reads every poll whose end time is at or before the moment it
-	 * runs, so a vote still taken on that second would change results that
-	 * have just been announced as final.
+	 * Whether the poll is over at a moment (the server's clock when none is
+	 * given). Over on its end time, as the closing sweep reads polls ending at
+	 * or before now.
 	 */
 	public function isExpired(?int $now = null): bool {
 		if ($this->closed !== '') {
@@ -197,8 +190,7 @@ class Question extends Note implements JsonSerializable {
 	#[\Override]
 	public function jsonSerialize(): array {
 		$result = parent::jsonSerialize();
-		// the client format carries the poll as `poll` (exportAsLocal), and
-		// these are the ActivityPub spellings of the same thing
+		// The client format carries the poll as `poll` (exportAsLocal).
 		if ($this->options === [] || $this->getExportFormat() === self::FORMAT_LOCAL) {
 			return $result;
 		}

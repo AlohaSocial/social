@@ -15,17 +15,14 @@ use OCP\Security\ISecureRandom;
 
 /**
  * The proof of work the registration form carries: a hashcash puzzle that
- * makes each registration cost the sender some computation, without asking
- * any third party.
+ * costs each registration some computation, without any third party.
  *
- * A challenge is `<expires>.<bits>.<id>.<mac>`: when it stops being accepted,
- * how many leading zero bits the answer has to reach, a random id, and an
- * HMAC over the rest and the form it belongs to, keyed with the instance
- * secret. Nothing is stored when one is issued. The browser looks for a
- * nonce (up to NONCE_MAX_LENGTH letters and digits) for which
- * SHA-256(challenge ‖ nonce) starts with that many zero bits; checking it
- * here is one HMAC and one hash. A challenge is good once: the id of an
- * accepted one is claimed in the `DurableCache` table until it expires.
+ * A challenge is `<expires>.<bits>.<id>.<mac>`, the MAC keyed with the
+ * instance secret and bound to the form; nothing is stored on issue. The
+ * browser finds a nonce (up to NONCE_MAX_LENGTH letters and digits) for which
+ * SHA-256(challenge ‖ nonce) starts with that many zero bits. An accepted id
+ * is claimed in the `DurableCache` table until it expires, so each is good
+ * once.
  */
 class SignupChallengeService {
 	public const CACHE_NAMESPACE = 'social.signup-pow';

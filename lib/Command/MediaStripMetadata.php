@@ -18,9 +18,9 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Takes the container metadata off the video and sound files uploaded
- * before an upload lost it on the way in, or while the server had no
- * ffmpeg. Each file is remuxed, not re-encoded.
+ * Takes the container metadata off local video and sound files that still
+ * carry it (stored before uploads were stripped, or without ffmpeg). Each
+ * file is remuxed, not re-encoded.
  */
 class MediaStripMetadata extends SocialCommand {
 	/** How many are read per query. The work is per file, not per page. */

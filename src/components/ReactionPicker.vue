@@ -3,8 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- a dialog, not a bare overlay: Escape closes it, the backdrop is
-	     labelled and reachable, and focus starts inside it -->
+	<!-- a dialog: Escape closes it and focus starts inside it -->
 	<div
 		v-if="open"
 		ref="backdrop"
@@ -16,15 +15,11 @@
 		@click.self="close"
 		@keydown.esc.stop="close">
 		<div class="reaction-picker__panel">
-			<!-- NcEmojiPicker is a popover: it opens from its own trigger and
-			     there is no prop to open it from here, so the trigger is
-			     pressed for the reader as soon as the dialog appears. It is a
-			     real, labelled button rather than a hidden anchor — if that
-			     press ever fails to land, what is left is something to press
-			     rather than an empty box. -->
-			<!-- Keep the popper out of this flex panel: rendering it as a panel
-			     child lets flex sizing squeeze the fixed-size picker into the
-			     row, and the panel's stacking context can put it under the backdrop. -->
+			<!-- NcEmojiPicker has no prop to open it, so its trigger is pressed
+			     for the reader when the dialog appears; it is a real button in
+			     case that press does not land. The popper is rendered outside
+			     this flex panel, which would squeeze it or stack it under the
+			     backdrop. -->
 			<NcEmojiPicker :closeOnSelect="true" container="#content" @select="pick">
 				<button ref="anchor" type="button" class="reaction-picker__anchor">
 					{{ t('social', 'Choose an emoji') }}
@@ -51,16 +46,10 @@ import NcEmojiPicker from '@nextcloud/vue/components/NcEmojiPicker'
 import eventBus, { REACTION_PICK } from '../services/eventBus.js'
 
 /**
- * The emoji picker the reaction bars share.
- *
- * One for the page, mounted by `App` only once somebody asks for it, with
- * that first request as `firstAsk`; later ones arrive over the bus. The cards do not own it: `@nextcloud/vue` may not be imported anywhere
- * under `TimelinePost`, which the app's entry and the dashboard's both pull
- * in — a framework import beneath it moves the shared l10n chunk out of
- * `social-framework` and copies half a megabyte into each entry.
- *
- * So the card asks, over the bus, and hands a callback with it; this opens,
- * takes the answer, and gives it back. The request stays with the card.
+ * The emoji picker the reaction bars share, one per page, mounted by `App` on
+ * the first request (`firstAsk`); later requests arrive over the bus with a
+ * callback. Cards cannot own it: `@nextcloud/vue` must not be imported under
+ * `TimelinePost`, which the dashboard bundle also pulls in.
  */
 export default {
 	name: 'ReactionPicker',
@@ -110,8 +99,7 @@ export default {
 
 			if (this.open) {
 				await this.$nextTick()
-				// or Escape would go to whatever the reader last pressed,
-				// which is a card behind the backdrop
+				// or Escape would go to a card behind the backdrop
 				const backdrop = /** @type {HTMLElement|undefined} */ (this.$refs.backdrop)
 				backdrop?.focus()
 				const anchor = /** @type {HTMLElement|undefined} */ (this.$refs.anchor)
@@ -120,8 +108,7 @@ export default {
 		},
 
 		/**
-		 * @param {object|string} chosen what the picker handed over — `select`
-		 *        passes the emoji as a string; older versions passed an object
+		 * @param {object|string} chosen the emoji as a string, or an object
 		 *        carrying it as `native`
 		 */
 		pick(chosen) {
@@ -167,9 +154,7 @@ export default {
 	box-shadow: var(--social-elevation-raised);
 }
 
-/* the trigger the picker positions against. Pressed for the reader on open,
-   so it is normally seen for an instant; it stays a real button so that a
-   press which does not land leaves something to press. */
+/* the trigger the picker positions against, pressed for the reader on open */
 .reaction-picker__anchor {
 	padding: 4px 10px;
 	border: 1px solid var(--color-border);

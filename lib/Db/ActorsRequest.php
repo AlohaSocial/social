@@ -175,12 +175,9 @@ class ActorsRequest extends ActorsRequestBuilder {
 	}
 
 	/**
-	 * The Nextcloud users of these local usernames, one query per 500 of them:
-	 * the usernames that are held by an account not deleted, each with its
-	 * user. The cached copy of an account, which is what the client is handed,
-	 * does not carry the user, and the username need not be it. A cached copy
-	 * carries the username exactly as this table does, so they are compared
-	 * as they are.
+	 * The Nextcloud users of these local usernames, for accounts not deleted,
+	 * one query per 500. The cached copy handed to clients does not carry the
+	 * user, and the username need not be the user id.
 	 *
 	 * @param string[] $usernames
 	 * @return array<string, string> user id by username
@@ -224,17 +221,9 @@ class ActorsRequest extends ActorsRequestBuilder {
 	}
 
 	/**
-	 * The **live** local account a Nextcloud user owns.
-	 *
-	 * Deleted rows are skipped, which is what makes deleting an account
-	 * something a person can do and then carry on: a deleted actor is kept for
-	 * at least an hour, and while its deliveries are still queued, before
-	 * `manageDeletedActors()` purges it, so that the handle
-	 * cannot be taken by somebody else straight away — and while it sat there,
-	 * this method went on answering with it. The person who had just deleted
-	 * their account was shown the account they had deleted, and `createActor()`
-	 * refused to make them a new one because "account for this user already
-	 * exist". The retention is about the *handle*, not about the person.
+	 * The live local account a Nextcloud user owns. Deleted rows are skipped:
+	 * a deleted actor is kept for a while to reserve its handle, but the
+	 * person must be able to make a new account straight away.
 	 *
 	 * @param string $userId
 	 *
@@ -280,20 +269,9 @@ class ActorsRequest extends ActorsRequestBuilder {
 	}
 
 	/**
-	 * One page of local accounts, oldest first.
-	 *
-	 * `getAll()` below reads every one of them into a PHP array, which is the
-	 * right thing for a command somebody typed and the wrong thing for a cron
-	 * job: `Cron\Cache` refreshed the cached copy of **every** local account on
-	 * every pass, twelve minutes apart. At a million accounts that array does
-	 * not fit in memory, and if it did the work behind it — a dozen queries
-	 * and an avatar read each — is hours inside a job that fires every twelve
-	 * minutes. The failure is silent, too: the cron just gets slower.
-	 *
-	 * So the job walks instead, a page at a time, remembering where it got to.
-	 * The ordering is by `creation` and then `id_prim` so the walk is total and
-	 * stable — a new account arriving mid-walk lands at the end rather than
-	 * shifting the page boundary under it.
+	 * One page of local accounts, oldest first, for cron jobs that must not
+	 * read every account at once as `getAll()` does. Ordered by `creation`,
+	 * then `id_prim`, so the walk is stable when accounts arrive mid-walk.
 	 *
 	 * @return Person[]
 	 * @throws SocialAppConfigException
@@ -304,9 +282,8 @@ class ActorsRequest extends ActorsRequestBuilder {
 			$qb->andWhere($qb->expr()->gt('a.id_prim', $qb->createNamedParameter($afterPrim)));
 		}
 		if ($withLinksOnly) {
-			// a coarse filter for the profile-link walk, so the accounts with
-			// nothing to verify are skipped in the database rather than built
-			// into a Person each; ProfileLinkVerifier::linkOf() decides the rest
+			// a coarse filter for the profile-link walk; ProfileLinkVerifier::linkOf()
+			// decides the rest
 			$qb->andWhere($qb->expr()->like('a.fields', $qb->createNamedParameter('%http%')));
 		}
 		$qb->orderBy('a.id_prim', 'asc');
@@ -324,10 +301,8 @@ class ActorsRequest extends ActorsRequestBuilder {
 
 	/**
 	 * Local accounts marked deleted before `$before`, oldest first, at most
-	 * `$limit` of them — what the cron removes once the grace period is over.
-	 *
-	 * The zero date some MySQL installations hold for "not deleted" is not a
-	 * deletion; the lower bound keeps it out.
+	 * `$limit`, for the cron to remove. The lower bound keeps out the zero
+	 * date some MySQL installations hold for "not deleted".
 	 *
 	 * @return Person[]
 	 * @throws SocialAppConfigException
@@ -354,16 +329,11 @@ class ActorsRequest extends ActorsRequestBuilder {
 	public const WALK_PAGE = 100;
 
 	/**
-	 * Every local account, read a page at a time and handed over one by one.
-	 *
-	 * For the walks that have to visit every account and keep nothing — a
-	 * key rotation, an upgrade step — where `getAll()` would hold every
-	 * account as a model at once: a few kilobytes each, so hundreds of
-	 * megabytes on a large instance, inside `occ upgrade`. The page is read
-	 * and its cursor closed before the first account is handed over, so the
-	 * caller may write to the table as it goes. The walk is keyed on the
-	 * stored `id_prim`, not on a hash of the id the model is given, so it
-	 * advances even where the social URL changed since an account was made.
+	 * Every local account, read a page at a time and handed over one by one,
+	 * for walks (key rotation, upgrade steps) that must not hold every model
+	 * at once. Each page's cursor is closed before handing over, so the
+	 * caller may write. Keyed on the stored `id_prim`, so it advances even if
+	 * the social URL changed.
 	 *
 	 * @return iterable<int, Person>
 	 * @throws SocialAppConfigException
@@ -418,10 +388,8 @@ class ActorsRequest extends ActorsRequestBuilder {
 	}
 
 	/**
-	 * Any one live local account, or null when nobody has opened the app yet.
-	 *
-	 * For a probe that needs a real account to ask about — a WebFinger check
-	 * run by an administrator who may not have a Social account themselves.
+	 * Any one live local account, or null when nobody has opened the app yet,
+	 * for a probe such as an administrator's WebFinger check.
 	 *
 	 * @throws SocialAppConfigException
 	 */

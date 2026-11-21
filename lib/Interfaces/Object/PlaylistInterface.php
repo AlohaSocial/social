@@ -19,16 +19,8 @@ use OCA\Social\Model\ActivityPub\Object\Playlist;
 use OCA\Social\Service\PlaylistService;
 
 /**
- * A channel's playlists, arriving.
- *
- * PeerTube users organise everything this way — a series, a course, "watch
- * later" — and a channel's playlists are half of what its page shows, so an
- * instance that ingested the videos and none of the playlists showed a
- * channel's work as an undifferentiated pile.
- *
- * Stored as a collection, because that is the same thing this app already has.
- * **Read-only**: it is somebody else's document, rebuilt from the wire whenever
- * it changes there, and nothing here adds to it or takes from it.
+ * A channel's playlists, arriving, stored as collections. Read-only: somebody
+ * else's document, rebuilt from the wire whenever it changes there.
  */
 class PlaylistInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(
@@ -52,11 +44,8 @@ class PlaylistInterface extends AbstractActivityPubInterface implements IActivit
 	}
 
 	/**
-	 * A playlist inside a `Create` or an `Update`.
-	 *
-	 * Both do the same thing, because the document is the whole truth about
-	 * the playlist either way: what arrives replaces what was there, which is
-	 * the only way a video *removed* from a playlist can leave this copy of it.
+	 * A playlist inside a `Create` or an `Update`; both replace what was there,
+	 * since the document is the whole truth.
 	 */
 	#[\Override]
 	public function activity(ACore $activity, ACore $item): void {

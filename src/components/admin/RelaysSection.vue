@@ -66,17 +66,9 @@ import { showError, showSuccess } from '../../services/toast.js'
 import { errorOf } from '../../utils/serverError.js'
 
 /**
- * The relays this instance subscribes to.
- *
- * A decision about the server rather than about a report, which is why it sits
- * with the Server card and is not something a moderation delegate reaches: a
- * relay changes what everybody's federated timeline holds and where every
- * public post written here is sent.
- *
- * A fresh subscription reads `pending` — the Follow has gone out and the relay
- * answers in its own time, which for some relays means when a human has looked
- * at it — so the list is what says whether it worked, and the page does not
- * pretend otherwise.
+ * The relays this instance subscribes to. Administrators only, not moderation
+ * delegates: a relay changes every federated timeline here. A new subscription
+ * stays `pending` until the relay accepts the Follow.
  */
 export default {
 	name: 'RelaysSection',
@@ -143,10 +135,7 @@ export default {
 			try {
 				await axios.post(relaysUrl(), { address })
 				this.address = ''
-				// re-read rather than push the answer: a relay that accepted
-				// while the request was in flight is already `accepted` here,
-				// and a row showing `pending` for ever is the one thing this
-				// list must not do
+				// re-read: the relay may have accepted while the request was in flight
 				await this.load()
 				showSuccess(t('social', 'The relay has been asked'))
 			} catch (error) {

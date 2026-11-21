@@ -50,12 +50,9 @@ const REFRESHING_HEIGHT = 48
 const PETALS = [0, 72, 144, 216, 288]
 
 /**
- * Pull to refresh, for a feed read on a touch screen.
- *
- * It listens to the content column, which is what scrolls (see
- * utils/scroller.js), and only ever passively: it never cancels a touch, so
- * scrolling is the browser's as it always was. A pull only starts from the
- * very top of the column, and a finger that moves up first is scrolling.
+ * Pull to refresh on a touch screen. It listens passively to the content
+ * column (see utils/scroller.js), so scrolling stays the browser's; a pull
+ * only starts at the very top, and a finger that moves up first is scrolling.
  */
 export default {
 	name: 'PullToRefresh',

@@ -27,26 +27,16 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Answering a story: watching it, reacting to it, replying to it.
+ * Answering a short (Pixelfed's story): watching it, reacting to it, replying
+ * to it, with Pixelfed's `View`, `Story:Reaction` and `Story:Reply`.
  *
- * A story used to be a thing that could only be watched. Pixelfed has three
- * ways of answering one and a verb for each — `View`, `Story:Reaction`,
- * `Story:Reply` — and this app sent and understood none of them, so a story
- * posted to Pixelfed followers came back silent.
+ * Every rule applies both outbound and inbound, because Pixelfed silently
+ * drops what fails it: the answer goes only to the author; only a follower
+ * of the author may answer (the same condition as seeing it); only the author
+ * is told; an expired story takes no answers.
  *
- * Every rule here is the same rule twice, once outbound and once inbound,
- * because Pixelfed drops what fails it without a word and so a payload that
- * would be dropped must never be built:
- *
- *  - the answer goes only to the author, never to a collection;
- *  - only somebody who **follows** the author may answer at all, which is the
- *    same condition as being able to see the story;
- *  - the author is the one person told, as with the view count;
- *  - a story that has expired takes no answers, because there is nothing left
- *    to answer.
- *
- * A reply is deliberately not a post: no `social_stream` row, no timeline, no
- * outbox, and it is deleted with the story rather than outliving it.
+ * A reply is not a post: no `social_stream` row, no timeline, no outbox, and
+ * it is deleted with the story.
  */
 class StoryInteractionService {
 	use TStringTools;
@@ -120,11 +110,8 @@ class StoryInteractionService {
 	}
 
 	/**
-	 * What has been said about one of the owner's own stories.
-	 *
-	 * Owner only, and somebody else's story is the same 404 as one that does
-	 * not exist — who answered is the poster's business, the way the view
-	 * count and the viewer list are.
+	 * What has been said about one of the owner's own stories. Somebody else's
+	 * story is the same 404 as one that does not exist.
 	 *
 	 * @return StoryInteraction[]
 	 * @throws ItemNotFoundException
@@ -145,11 +132,8 @@ class StoryInteractionService {
 
 	/**
 	 * A receipt for a story of ours that somebody elsewhere has watched.
-	 *
-	 * Silently ignored unless every one of Pixelfed's own conditions holds:
-	 * the story is this instance's, it is still live, and the watcher follows
-	 * its author. A `View` for somebody else's story, or from an account that
-	 * does not follow, is a claim rather than a receipt.
+	 * Ignored unless the story is ours and live and the watcher follows its
+	 * author, as Pixelfed requires.
 	 */
 	public function receiveView(View $activity): bool {
 		$story = $this->localStory($activity->getStoryId());
@@ -170,11 +154,9 @@ class StoryInteractionService {
 	}
 
 	/**
-	 * A reaction or a reply that arrived for a story of ours.
-	 *
-	 * The same conditions as a view, plus the two that make the text worth
-	 * keeping: there is some, and it is not longer than this app would have
-	 * let one of its own accounts send.
+	 * A reaction or a reply that arrived for a story of ours: the same
+	 * conditions as a view, plus non-empty text no longer than a local
+	 * account could send.
 	 */
 	public function receiveInteraction(ApInteraction $activity): void {
 		$story = $this->localStory($activity->getStoryId());
@@ -221,11 +203,8 @@ class StoryInteractionService {
 	}
 
 	/**
-	 * Tells the author of a remote story that somebody here has watched it.
-	 *
-	 * A failure is not a failure of the watching: the story is marked seen
-	 * here either way, and a receipt that could not be sent is a receipt that
-	 * did not arrive rather than a view that did not happen.
+	 * Tells the author of a remote story that somebody here has watched it. A
+	 * failure does not undo the local "seen".
 	 */
 	public function sendView(Person $viewer, Story $story): void {
 		if ($story->isLocal() || $story->getSourceId() === '' || $story->getOwnerId() === $viewer->getId()) {
@@ -298,11 +277,8 @@ class StoryInteractionService {
 	}
 
 	/**
-	 * A live local story by the address an activity named, or null.
-	 *
-	 * Null rather than an exception: every caller of this is an inbox handler,
-	 * and an activity about a story this instance does not hold is nothing to
-	 * do rather than a delivery to refuse.
+	 * A live local story by the address an activity named, or null; the
+	 * callers are inbox handlers, for which an unknown story is nothing to do.
 	 */
 	private function localStory(string $sourceId): ?Story {
 		if ($sourceId === '' || !str_starts_with($sourceId, $this->configService->getSocialUrl())) {

@@ -13,11 +13,6 @@ use OCA\Social\AppInfo\Application;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
 
-/**
- * Class MiscService
- *
- * @package OCA\Social\Service
- */
 class MiscService {
 	private LoggerInterface $logger;
 

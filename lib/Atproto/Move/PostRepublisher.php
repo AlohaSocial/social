@@ -26,11 +26,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The posts written here that a move here takes off Bluesky: the identity
- * this server had made for the account is retired with its repository, so
- * they disappear there. How many is said before the move; afterwards the
- * person can have them published again, into the moved repository, a page
- * at a time through the Publisher, as any post is (§13.1).
+ * The posts written here that a move here takes off Bluesky, as the identity
+ * this server made for the account is retired with its repository. The count
+ * is shown before the move; afterwards the person can have them republished
+ * into the moved repository, a page at a time through the Publisher (§13.1).
  */
 class PostRepublisher {
 	/** how many of the account's posts one run of the job looks at */

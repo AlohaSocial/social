@@ -6,11 +6,8 @@
 import DOMPurify from 'dompurify'
 
 /**
- * URL schemes a link in remote content may use.
- *
- * Kept in step with `HtmlSanitizer::ALLOWED_SCHEMES` on the server: the server
- * is the authority, this is the belt to its braces for anything that reaches
- * the DOM through a path the server did not clean.
+ * URL schemes a link in remote content may use, kept in step with
+ * `HtmlSanitizer::ALLOWED_SCHEMES` for anything the server did not clean.
  */
 export const ALLOWED_SCHEMES = ['http', 'https', 'dat', 'dweb', 'ipfs', 'ipns', 'ssb', 'gopher', 'xmpp', 'magnet', 'gemini']
 
@@ -46,9 +43,8 @@ export const ALLOWED_TAGS = [
 
 /**
  * Class names a remote element may carry, the same list as
- * `HtmlSanitizer::ALLOWED_CLASSES`: Mastodon's markers for mentions, hashtags
- * and shortened links. Anything else could dress remote markup up as this
- * app's or Nextcloud's own interface.
+ * `HtmlSanitizer::ALLOWED_CLASSES`. Anything else could dress remote markup up
+ * as this app's or Nextcloud's own interface.
  */
 export const ALLOWED_CLASSES = [
 	'mention',

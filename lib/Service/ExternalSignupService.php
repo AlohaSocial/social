@@ -62,9 +62,8 @@ class ExternalSignupService {
 
 	/**
 	 * Unconfirmed registrations kept at most. Past it the oldest are
-	 * forgotten to make room rather than the form closing: they cost nothing
-	 * but a row, and closing on their count let anybody with a few hundred
-	 * addresses keep the form shut by never confirming.
+	 * forgotten rather than the form closing, so nobody can keep it shut by
+	 * never confirming.
 	 */
 	public const MAX_UNVERIFIED = 5000;
 
@@ -195,29 +194,19 @@ class ExternalSignupService {
 	/**
 	 * A registration, as submitted by the form.
 	 *
-	 * A filled-in honeypot is answered as if the registration had worked and
-	 * nothing is stored: a bot learns nothing from the answer.
+	 * A filled-in honeypot is answered as a success and stores nothing.
+	 * Without a valid invitation, and unless switched off, the registration
+	 * answers a `SignupChallengeService` challenge, used up either way.
 	 *
-	 * Without a valid invitation, and unless the administrator switched it
-	 * off, the registration carries the answer to a challenge of
-	 * `SignupChallengeService`, which it uses up whatever comes of it.
+	 * The form does not reveal whether an email address or username is taken:
+	 * both are answered "check your email", and the mail explains. With email
+	 * confirmation off the two can be told apart. `SignupMailLimiter` limits
+	 * mails per address; a held-back mail is answered as sent, and a held-back
+	 * confirmation stores nothing.
 	 *
-	 * The form is public, so it does not say whether an email address is
-	 * somebody's here, or whether a username is a Nextcloud login that has no
-	 * account of its own: either is answered as a new registration is, with
-	 * "check your email", and the mail goes to the address instead, saying
-	 * why nothing was made. With email confirmation off a new registration is
-	 * answered differently, and the two can be told apart.
-	 *
-	 * How often the form mails one address is limited by `SignupMailLimiter`.
-	 * A mail held back by it is answered the same as a mail sent; a held back
-	 * confirmation link stores nothing, so the address is not kept from its
-	 * owner for a day by a registration that cannot be confirmed.
-	 *
-	 * A registration that waits for its email to be confirmed also gets a
-	 * code, sent with the link, that the page it was made on can confirm it
-	 * with; `pending` is its id, for the caller to bind that page to it and
-	 * never to hand out.
+	 * A registration awaiting confirmation also gets a code, sent with the
+	 * link; `pending` is its id, for the caller to bind the page to and never
+	 * to hand out.
 	 *
 	 * @param string $returnTo where an app that started the registration wants the person back, see `SignupReturn`
 	 * @return array{state: string, handle: string, pending?: int, loginUrl?: string}
@@ -371,13 +360,9 @@ class ExternalSignupService {
 
 	/**
 	 * The code from the confirmation email, typed into the page the
-	 * registration was made on.
-	 *
-	 * `$pendingId` is the registration that page made, as its session
-	 * remembers it, so a code is only ever tried against one registration;
-	 * 0, where the page made none that waits for a code, is answered as a
-	 * wrong code is. A registration takes `CODE_ATTEMPTS` wrong codes, then
-	 * only its link confirms it.
+	 * registration was made on. `$pendingId` is that page's registration from
+	 * its session; 0 is answered as a wrong code. After `CODE_ATTEMPTS` wrong
+	 * codes only the link confirms it.
 	 *
 	 * @return array{state: string, handle: string, loginUrl?: string}
 	 * @throws ExternalUserException with the field `code`, or `code-locked` once no code is taken any more

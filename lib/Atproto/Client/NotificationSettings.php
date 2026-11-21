@@ -19,16 +19,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A Bluesky app's notification settings and this person's here, one
- * setting where they mean the same thing: whether anybody, or only the
- * people they follow, may notify them. Here that is the policy for people
- * they do not follow (`NotificationPolicy::NOT_FOLLOWING`); in a Bluesky app
- * it is `include` on each kind of notification that has one. The app reads
- * it from the policy here; what the app saves goes to the AppView, which
- * sends the app's push notifications by it, and becomes the policy here;
- * and a policy changed here is told to the AppView. Bluesky's per-kind
- * `list` and `push` switches have nothing here to be, and are kept by the
- * AppView alone.
+ * The one notification setting a Bluesky app and this app share: whether
+ * anybody or only the people followed may notify (`NotificationPolicy::NOT_FOLLOWING`
+ * here, `include` on each kind in Bluesky). Bluesky's per-kind `list` and
+ * `push` switches are kept by the AppView alone.
  */
 class NotificationSettings {
 	public const GET = 'app.bsky.notification.getPreferences';

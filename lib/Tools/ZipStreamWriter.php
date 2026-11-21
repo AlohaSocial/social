@@ -14,22 +14,15 @@ use DateTimeInterface;
 use LogicException;
 
 /**
- * A zip file written front to back as its files arrive, to a sink rather
- * than to a file: nothing is seeked back to, so it can go out to the
- * browser while it is being made, and what is held at any moment is one
- * piece of one file.
+ * A zip file written front to back to a sink as its files arrive, never
+ * seeking back, so it can stream to the browser holding one piece at a time.
  *
- * Files are stored, not compressed — what goes in is mostly pictures and
- * videos, compressed already. Each one's CRC and sizes follow its bytes
- * in a data descriptor (they are known only once it is read), and are
- * repeated in the central directory at the end, which is where readers
- * look. Past 4 GB of archive or 65535 files, the offsets and the end
- * records are ZIP64.
- *
- * Only a file said beforehand to be 4 GB or more gets ZIP64 sizes, with
- * the eight-byte data descriptor they need: macOS's Archive Utility reads
- * a stored file up to its descriptor and cannot read one of those. A file
- * of unknown size has to stay under 4 GB.
+ * Files are stored, not compressed (mostly media already). Each one's CRC and
+ * sizes follow its bytes in a data descriptor and are repeated in the central
+ * directory. Past 4 GB or 65535 files, offsets and end records are ZIP64.
+ * Only a file declared as 4 GB or more gets ZIP64 sizes, since macOS's Archive
+ * Utility cannot read those descriptors; a file of unknown size must stay
+ * under 4 GB.
  */
 class ZipStreamWriter {
 	/** what is collected before the sink is called, so headers do not go out one by one */

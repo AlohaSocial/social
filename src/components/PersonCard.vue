@@ -8,14 +8,7 @@
 			:is="link ? 'router-link' : 'a'"
 			class="person__link"
 			v-bind="target">
-			<!--
-				A directory result carries an absolute URL to the account's own
-				server; an account this instance knows carries one pointing at
-				this server's document cache. Both are pictures and both load,
-				so both are used directly — asking the avatar component to
-				resolve one instead drew `NcAvatar`'s question mark for every
-				account whose picture this server has not cached.
-			-->
+			<!-- a directory result's own picture, used directly -->
 			<img
 				v-if="picture && !pictureFailed"
 				class="person__avatar"
@@ -23,12 +16,9 @@
 				alt=""
 				loading="lazy"
 				@error="pictureFailed = true">
-			<!-- an account *on* this Nextcloud with no picture of its own:
-			     Nextcloud generates one, and the avatar component knows how to
-			     ask for it. A remote account with no picture gets a letter
-			     instead, because the only thing there was to resolve is an
-			     address that answers 404 — which `NcAvatar` draws as a
-			     question mark, and a list full of those says nothing -->
+			<!-- an account on this Nextcloud without a picture gets the generated
+			     one; anybody else gets a letter, since NcAvatar draws a 404 as a
+			     question mark -->
 			<ActorAvatar
 				v-else-if="!picture && onThisServer"
 				class="person__avatar"
@@ -48,18 +38,15 @@
 					<span v-if="account.bot" class="person__bot">{{ t('social', 'bot') }}</span>
 				</span>
 				<span class="person__handle">@{{ account.acct }}</span>
-				<!-- why this person is on this page at all: which directory
-				     answered, who of your follows follows them, or that they
-				     are on this Nextcloud. A list of strangers with no reason
-				     beside each is a list nobody can act on -->
+				<!-- why this person is listed: which directory answered, who of
+				     your follows follows them, or that they are on this Nextcloud -->
 				<span v-if="reason" class="person__reason">{{ reason }}</span>
 				<span v-if="summary" class="person__note">{{ summary }}</span>
 			</span>
 		</component>
 
-		<!-- `FollowButton` waits for a relationship the account store has
-		     never fetched for a stranger, so in a list like this it renders
-		     nothing; this follows by handle, which is all these rows carry -->
+		<!-- not `FollowButton`, which waits for a relationship the store never
+		     fetches for a stranger; this follows by handle -->
 		<NcButton
 			class="person__follow"
 			:variant="followed ? 'success' : 'primary'"
@@ -83,19 +70,8 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 
 /**
- * One person, in a list of people.
- *
- * Three lists on the Discover page showed a person — the search results, the
- * follow-graph suggestions and the accounts this server knows — and each drew
- * them differently: different avatar sizes, different spacing, the handle in
- * three weights, and a Follow button in two of them. A reader comparing three
- * lists of strangers should not also have to work out that they are the same
- * kind of thing.
- *
- * The row carries a **reason**. Whose directory answered, which of the people
- * you follow follows them, or that they are on this Nextcloud: a list of
- * strangers with no reason beside each is a list nobody can act on, and it is
- * the one thing that differs between the three lists.
+ * One person in a list of people on the Discover page, drawn the same way in
+ * every list, with the reason they are shown.
  */
 export default {
 	name: 'PersonCard',
@@ -149,12 +125,9 @@ export default {
 
 	computed: {
 		/**
-		 * The picture the row was handed, where it was handed one.
-		 *
-		 * A directory result carries an absolute URL to the account's own
-		 * server. An account this instance knows carries one pointing at this
-		 * server's document cache, and `ActorAvatar` builds a better one — so
-		 * only a picture that is plainly somewhere else is used directly.
+		 * The picture of an account this instance does not know, as the
+		 * directory gave it; '' otherwise, where `ActorAvatar` or a letter is
+		 * drawn instead.
 		 *
 		 * @return {string}
 		 */
@@ -167,9 +140,8 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether this account lives on this Nextcloud, which
-		 * is the only case where there is a picture to generate rather than to
-		 * fetch
+		 * @return {boolean} whether this account lives on this Nextcloud, where
+		 * a missing picture is generated rather than fetched
 		 */
 		onThisServer() {
 			return isLocalAccount(this.account)
@@ -188,9 +160,8 @@ export default {
 		},
 
 		/**
-		 * Where the name goes: this instance's own profile page where it knows
-		 * the account, and their own server where it does not — following a
-		 * profile link here for somebody nobody has heard of is a 404.
+		 * Where the name goes: this instance's profile page where it knows the
+		 * account, otherwise their own server, as a local profile would be a 404.
 		 *
 		 * @return {object} the attributes to bind
 		 */
@@ -207,12 +178,8 @@ export default {
 		},
 
 		/**
-		 * The bio, as one line of text.
-		 *
-		 * `note` is HTML written on somebody else's server. Rendering it would
-		 * put a stranger's markup in a list; printing it raw put `<p>` in
-		 * front of every bio on the page. One line of its text is what a row
-		 * this size can show anyway.
+		 * The bio, as one line of plain text: `note` is HTML from another
+		 * server and is not rendered here.
 		 *
 		 * @return {string}
 		 */

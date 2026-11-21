@@ -21,20 +21,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Two flags that let the lists of posts drop an `OR` a planner estimates
- * badly.
- *
- * Every list admits `archived IS NULL` beside `archived = 0` for the rows
- * written before the column existed; here those rows are given a 0, batched
- * by nid, and `stream_archived_filled` says so. The media filters admit a
- * row with no `media_kind` by its attachments; `Version1000Date20260917000003`
- * filled the column, and once no row is found without one
- * `stream_media_kind_filled` says that too. On MySQL the `OR` on either
- * column is what turned a public or Photos page into a read of the whole
- * table (`Using temporary; Using filesort`), as the same SQL on the same rows
- * read twenty index entries the day before.
- *
- * Run again, it finds nothing to fill and sets both flags again.
+ * Fills `archived` with 0 where it is NULL and sets `stream_archived_filled`,
+ * and sets `stream_media_kind_filled` once no row lacks a `media_kind`. With
+ * the flags set, timeline queries can drop the `OR … IS NULL` that made MySQL
+ * read whole tables (`Using temporary; Using filesort`). Re-running only sets
+ * the flags again.
  */
 class Version1000Date20261013100500 extends SimpleMigrationStep {
 	/** How many rows one page reads. */
@@ -60,15 +51,13 @@ class Version1000Date20261013100500 extends SimpleMigrationStep {
 
 	/**
 	 * The backfill and the two flags, apart from the migration: a fresh
-	 * install runs migrations schema-only, so `InstallBackfills`
-	 * calls this on install, where the tables are empty and both flags go
-	 * up at once.
+	 * install runs migrations schema-only, so `InstallBackfills` calls this,
+	 * with empty tables.
 	 */
 	public function fill(IOutput $output): void {
 		// paged on the primary key from where the last page ended: `archived`
-		// has no index, and asking for the first NULL rows again each time
-		// walked past every row already filled, so the whole backfill was
-		// quadratic in the size of the table
+		// has no index, and re-querying the first NULL rows would make the
+		// backfill quadratic
 		$filled = 0;
 		$after = '0';
 		while (true) {

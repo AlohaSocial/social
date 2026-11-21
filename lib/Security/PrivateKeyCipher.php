@@ -14,12 +14,10 @@ use OCP\Security\ICrypto;
 use Psr\Log\LoggerInterface;
 
 /**
- * Encrypts actor private keys at rest with the instance secret (ICrypto), so a
- * database dump alone is no longer enough to impersonate every local actor.
- *
- * Rows written before encryption existed hold the bare PEM; those are
- * recognised by their '-----BEGIN' prefix and still readable, and the
- * EncryptPrivateKeys repair step rewrites them once.
+ * Encrypts actor private keys at rest with the instance secret (ICrypto), so
+ * a database dump alone cannot impersonate local actors. Legacy rows hold the
+ * bare PEM, recognised by '-----BEGIN', until the EncryptPrivateKeys repair
+ * step rewrites them.
  */
 class PrivateKeyCipher {
 	private const PEM_PREFIX = '-----BEGIN';
@@ -80,11 +78,9 @@ class PrivateKeyCipher {
 	}
 
 	/**
-	 * The stored value sealed with the secret in use, for one sealed with
-	 * $oldSecret before the secret changed. A value that opens as it is
-	 * (sealed with the current secret, or legacy plaintext) is sealed
-	 * afresh under the current secret; one that neither secret opens
-	 * yields ''.
+	 * The stored value sealed with the current secret, for one sealed with
+	 * $oldSecret. A value that already opens is sealed afresh; one neither
+	 * secret opens yields ''.
 	 */
 	public function reseal(string $stored, #[\SensitiveParameter] string $oldSecret): string {
 		if ($stored === '') {

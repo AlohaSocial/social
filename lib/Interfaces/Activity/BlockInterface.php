@@ -21,12 +21,10 @@ use OCA\Social\Model\ActorRelation;
 use Psr\Log\LoggerInterface;
 
 /**
- * A remote actor blocked (or un-blocked) one of the local users.
- *
- * The block is remembered as a `blocked_by` relation — it feeds the relationship
- * flags and hides the blocker from the local user's timelines — and the follow
- * relationship is severed in both directions, matching how Mastodon treats an
- * incoming Block.
+ * A remote actor blocked (or un-blocked) one of the local users. The block
+ * is kept as a `blocked_by` relation, which feeds the relationship flags and
+ * hides the blocker from the user's timelines, and follows are severed both
+ * ways, as Mastodon does.
  */
 class BlockInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(

@@ -20,14 +20,11 @@ use OCA\Social\Model\Details;
 use OCP\AppFramework\Utility\ITimeFactory;
 
 /**
- * Stores the totals a post's own network states for it, whichever network
- * that is.
+ * Stores the totals a post's own network states for it.
  *
- * The origin's total and this instance's own interactions are kept apart the
- * way `LikeInterface` and `AnnounceInterface` keep them: what the origin said
- * minus what is counted here, so that adding this instance's likes back lands
- * on the origin's number and an unlike moves it down rather than leaving it
- * where it was. Nothing else is touched: no notification, no action.
+ * The origin's half is kept apart, as `LikeInterface` and `AnnounceInterface`
+ * do: what the origin said minus what is counted here, so adding local likes
+ * back lands on the origin's number. No notification or action is made.
  */
 class CountWriter {
 	/** each counter a network states, and the `details` key holding its half */
@@ -39,10 +36,9 @@ class CountWriter {
 	];
 
 	/**
-	 * How long a post its own server says is not there is left alone, in
-	 * seconds: past the window the cron's pass asks in
-	 * (`RemoteCountService::PUBLISHED_WINDOW`), so the pass never asks
-	 * again, and a reader who opens it asks once a month at most.
+	 * How long a post its own server says is gone is left alone, in seconds:
+	 * past the cron's window (`RemoteCountService::PUBLISHED_WINDOW`), so only a
+	 * reader opening it asks, at most once a month.
 	 */
 	public const GONE_FOR = 30 * 86400;
 
@@ -63,8 +59,8 @@ class CountWriter {
 	 */
 	public function write(string $postId, ?int $likes, ?int $boosts, ?int $replies, array $merge = [], ?int $quotes = null): bool {
 		try {
-			// read again rather than trusted from the caller: a like that
-			// arrived while the network was being asked is not this to lose
+			// read again rather than trusted from the caller, so a like that arrived
+			// meanwhile is kept
 			$post = $this->streams->getStreamById($postId);
 		} catch (StreamNotFoundException) {
 			return false;
@@ -95,15 +91,10 @@ class CountWriter {
 	}
 
 	/**
-	 * Stores the totals another network states for one of this instance's
-	 * own posts.
-	 *
-	 * Its totals take in part of what is held here — what came from that
-	 * network, and what local accounts also wrote there — and none of the
-	 * rest. So the half kept is only what it states beyond that part, and
-	 * the totals add everything held here to it: a post whose every
-	 * interaction arrived here shows what it showed before. A count the
-	 * network does not state keeps the half already stored.
+	 * Stores the totals another network states for one of this instance's own
+	 * posts. They include part of what is held here (what came from that
+	 * network, and what local accounts also wrote there), so only what they
+	 * state beyond that part is kept. A count not stated keeps its stored half.
 	 *
 	 * @param array<string, ?int> $stated counter => the network's total, null where it stated none
 	 * @param array<string, int> $alsoThere counter => how much of what is held here the network counts too
@@ -132,9 +123,9 @@ class CountWriter {
 	}
 
 	/**
-	 * After the origin's halves were written: the post is stamped as asked,
-	 * and its totals recounted from the halves as stored — the columns add
-	 * what is counted here to them, in the statement that writes them.
+	 * After the origin's halves were written: stamps the post as asked and
+	 * recounts its totals from the halves as stored, in the statement that
+	 * writes them.
 	 *
 	 * @param ?array<array-key, mixed> $details what `changeDetails()` stored, null for nothing
 	 */
@@ -168,13 +159,9 @@ class CountWriter {
 	}
 
 	/**
-	 * One of the counts, written as its two halves into `details` as stored.
-	 *
-	 * Where the origin states no total, the half already stored is kept — the
-	 * number is only as old as the last answer that did say something — and
-	 * for a post that has never had one, the total on the row less what is
-	 * held here, which is how a reply count written before the origin's half
-	 * was stored survives being read again.
+	 * One of the counts, written as its two halves into `details`. Where the
+	 * origin states no total, the stored half is kept, or for a post that never
+	 * had one, the row's total less what is held here.
 	 *
 	 * @param array<array-key, mixed> $details
 	 * @return array<array-key, mixed>

@@ -15,11 +15,9 @@ use OCP\AppFramework\Http\IOutput;
 use OCP\AppFramework\Http\Response;
 
 /**
- * A body made in pieces as it goes out: each piece is produced — read from
- * the database, encoded — only when the one before it has been written,
- * so what is held at any moment is one piece, never the whole. What
- * `com.atproto.sync.getRepo` answers with: a repository's CAR, which can be
- * larger than the memory a request has.
+ * A body produced piece by piece as it is written, so only one piece is held
+ * at a time: for `com.atproto.sync.getRepo`, whose CAR can exceed a
+ * request's memory.
  *
  * @template-extends Response<Http::STATUS_*, array<string, mixed>>
  */

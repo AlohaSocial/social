@@ -149,10 +149,8 @@ class Reset extends SocialCommand {
 	}
 
 	/**
-	 * The two confirmations, and the reason this command has a --force at all:
-	 * under `occ --no-interaction` a ConfirmationQuestion returns its default,
-	 * which is false, so the command used to print its warning and then exit 0
-	 * having done nothing — indistinguishable, to a script, from success.
+	 * The two confirmations. Under `occ --no-interaction` a ConfirmationQuestion
+	 * answers its default, false, so --force is the only way a script can reset.
 	 */
 	private function confirm(InputInterface $input, OutputInterface $output): bool {
 		if ($input->getOption('force')) {

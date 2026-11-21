@@ -66,8 +66,8 @@ class Provider implements IProvider {
 	}
 
 	/**
-	 * One line per subject the bell knows (`NotificationService::SUBJECTS`,
-	 * plus the two the bell is being taught), worded for the person told.
+	 * One line per subject the bell knows (`NotificationService::SUBJECTS`
+	 * and a few more), worded for the person told.
 	 *
 	 * @return array<string, string>
 	 */

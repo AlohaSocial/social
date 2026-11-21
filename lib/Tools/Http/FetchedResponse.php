@@ -13,27 +13,12 @@ use OCP\Http\Client\IResponse;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * The response an asynchronous request settles with, in the shape the rest of
- * `CurlService` reads.
- *
- * `IClient::getAsync()` returns an `IPromise`, and what its `wait()` hands
- * back is the response Guzzle itself produced — a bare PSR-7
- * `ResponseInterface`, whose `getHeader()` is the list of values a header
- * has — rather than the `IResponse` that the same promise's `then()` wraps
- * for its handlers, whose `getHeader()` is one value. So every asynchronous
- * answer failed the `instanceof IResponse` check and was thrown away: the
- * delivery queue recorded "no response" for each server it wrote to, the
- * follow graph asked twenty and read nothing back, and a batch of counts got
- * nothing at all.
- *
- * The four methods `IResponse` has are all the difference needs, so it is
- * made here rather than by reaching for the server's own wrapper —
- * `OC\Http\Client\Response`, which lives in `OC\`, the private half of the
- * server that no code in this app is written against.
- *
- * The body is handed over as the stream it is, the way the server's wrapper
- * does for a streamed request, so a reader that stops at a byte limit never
- * holds the rest of it first.
+ * The response an asynchronous request settles with, as an `IResponse`.
+ * `IPromise::wait()` hands back Guzzle's PSR-7 response, whose `getHeader()`
+ * is a list, not the `IResponse` that `then()` wraps; the four `IResponse`
+ * methods are made here rather than using the server's private
+ * `OC\Http\Client\Response`. The body stays a stream, so a reader stopping at
+ * a byte limit never holds the rest.
  */
 final class FetchedResponse implements IResponse {
 	public function __construct(

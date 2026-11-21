@@ -60,12 +60,10 @@ class BridgyTwin {
 	}
 
 	/**
-	 * The account's twin, when Bridgy Fed bridges it to Bluesky: by the
-	 * handle Bridgy gives it, through the AppView or the DNS record Bridgy
-	 * keeps for it even once the person chose a domain of their own as the
-	 * handle. Asked to search, Bluesky's search is given the account's
-	 * Fediverse address, and a result is taken only when its DID document
-	 * names this account — Bridgy lists the Fediverse actor there.
+	 * The account's twin, when Bridgy Fed bridges it to Bluesky: by Bridgy's
+	 * handle, through the AppView or the DNS record Bridgy keeps even after a
+	 * custom handle. With `$search`, Bluesky's search is given the Fediverse
+	 * address and a result counts only if its DID document names this account.
 	 *
 	 * @return array{handle: string, did: string}|null the twin, under the handle it has now
 	 */

@@ -15,18 +15,11 @@ use OCP\UserMigration\UserMigrationException;
 use ZipArchive;
 
 /**
- * A zip file that `SocialMigrator` can import from.
- *
- * The counterpart of `ZipExportDestination`, and deliberately forgiving about
- * where the archive came from: the file names are the migrator's own, so an
- * archive written by `occ user:export` holds the Social data at the same paths
- * as one downloaded from the Migration page, and both are read here.
- *
- * The versions are read from the manifest this app writes. An archive that has
- * Social data but no manifest — Nextcloud's own export, whose versions live in
- * a file this class does not pretend to know — is read as version 1, which is
- * what such an archive was written by. Refusing it instead would mean telling
- * somebody that the file the server itself produced is not importable.
+ * A zip file that `SocialMigrator` can import from, the counterpart of
+ * `ZipExportDestination`. Archives from `occ user:export` and from the
+ * Migration section of Settings hold the Social data at the same paths.
+ * An archive without this app's manifest (Nextcloud's own export) is read
+ * as version 1.
  */
 class ZipImportSource implements IImportSource {
 	public const MANIFEST = 'social/export.json';
@@ -154,9 +147,8 @@ class ZipImportSource implements IImportSource {
 			return $versions[$migrator];
 		}
 
-		// an archive that holds the data but names no version was written by
-		// something that did not write this manifest — the server's own
-		// exporter — and that is version 1 of this migrator
+		// data without this app's manifest comes from the server's own
+		// exporter, which wrote version 1
 		return $this->pathExists(SocialMigrator::PATH_ACTOR_PUBLIC) ? 1 : null;
 	}
 

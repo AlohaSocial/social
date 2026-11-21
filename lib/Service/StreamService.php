@@ -70,12 +70,9 @@ class StreamService {
 	private const ANCESTOR_LIMIT = 40;
 
 	/**
-	 * How many entries of a remote outbox page a single sync walks.
-	 *
-	 * The page comes from a server the caller names and is bounded only by the
-	 * body size cap, so a page of minimal Notes carries tens of thousands of
-	 * entries — each one a lookup and an INSERT. `ActivityPubFollowListSource`
-	 * bounds its own walk over a remote collection the same way.
+	 * How many entries of a remote outbox page a single sync walks: the page is
+	 * bounded only by the body size cap, and each entry is a lookup and an
+	 * INSERT. `ActivityPubFollowListSource` bounds its walk the same way.
 	 */
 	private const SYNC_ITEM_LIMIT = 20;
 
@@ -193,12 +190,10 @@ class StreamService {
 				break;
 
 			default:
-				// Fail closed. `public` is spelled out above, so anything
-				// arriving here is a visibility this app does not know, and
-				// addressing it to the public collection — which is what used
-				// to happen — publishes a post its author never meant to make
-				// public. Mastodon's `private` is translated to `followers`
-				// long before this point; see `Stream::visibilityFromClient()`.
+				// Fail closed: `public` is handled above, so anything here is a
+				// visibility this app does not know and must not reach the public
+				// collection. Mastodon's `private` is already `followers` by now; see
+				// `Stream::visibilityFromClient()`.
 				$this->logger->warning(
 					'refusing to address a stream with an unknown visibility; kept private',
 					['visibility' => $type, 'stream' => $stream->getId()]
@@ -218,13 +213,9 @@ class StreamService {
 	}
 
 	/**
-	 * Who can see a post, read off what it addresses.
-	 *
-	 * Public and unlisted are decided by the collection the post names.
-	 * Telling followers-only from direct needs the author's followers
-	 * collection, so an author this instance has never cached cannot be
-	 * judged — that is the empty answer, and a caller that has to have one
-	 * treats it as direct, which is the narrower audience.
+	 * Who can see a post, read off what it addresses. Telling followers-only
+	 * from direct needs the author's followers collection, so an uncached
+	 * author gives the empty answer, which a caller treats as direct.
 	 *
 	 * @return string one of Stream::TYPE_PUBLIC, TYPE_UNLISTED,
 	 *                TYPE_FOLLOWERS or TYPE_DIRECT, or '' when the author is unknown
@@ -253,14 +244,9 @@ class StreamService {
 	}
 
 	/**
-	 * Addresses an activity about a video post to the followers of the
-	 * channel it is filed under, as well as to the author's.
-	 *
-	 * A PeerTube follows a channel, not the person behind it, so a video
-	 * delivered to the author's followers alone never reached it. Only a
-	 * public or unlisted post, and only one published as a `Video`: somebody
-	 * who follows a channel has not asked for the author's followers-only
-	 * posts, nor for posts that are not videos.
+	 * Addresses an activity about a video post to the followers of its
+	 * channel as well as the author's, as PeerTube follows the channel. Only
+	 * for a public or unlisted post published as a `Video`.
 	 */
 	public function addChannelFollowers(Stream $stream): void {
 		$visibility = $stream->getVisibility();
@@ -296,13 +282,9 @@ class StreamService {
 
 	/**
 	 * Whether an activity about this post may be delivered to the author's
-	 * followers.
-	 *
-	 * The followers instance path expands to the shared inbox of every
-	 * instance that has one, so adding it to an activity about a direct
-	 * message posts that activity to servers the post was never addressed to.
-	 * A row written before the `visibility` column existed has none, and is
-	 * judged by what it addresses — which is where the column came from.
+	 * followers: that path expands to every shared inbox with a follower, so
+	 * not for a direct message. A row without `visibility` is judged by what
+	 * it addresses.
 	 */
 	public function reachesFollowers(Stream $stream): bool {
 		$visibility = $stream->getVisibility();
@@ -337,14 +319,10 @@ class StreamService {
 			return;
 		}
 
-		// A mention is addressed the way Mastodon addresses one
-		// (`Account#preferred_inbox_url`): the instance's shared inbox where it
-		// publishes one, the personal inbox otherwise. Who the activity is for
-		// is carried by `to`/`cc`, not by which inbox it was posted to, so
-		// three people mentioned on one server are one delivery instead of
-		// three — and a mention of somebody who also follows the author is the
-		// same inbox the follower fan-out already uses, which is what lets the
-		// queue recognise it as one.
+		// A mention goes to the instance's shared inbox where it publishes one,
+		// the personal inbox otherwise, as Mastodon does
+		// (`Account#preferred_inbox_url`): `to`/`cc` say who it is for, so one
+		// server is one delivery, the same one the follower fan-out uses.
 		$inbox = $actor->getSharedInbox() !== '' ? $actor->getSharedInbox() : $actor->getInbox();
 
 		$priority = InstancePath::PRIORITY_MEDIUM;
@@ -379,23 +357,14 @@ class StreamService {
 	}
 
 	/**
-	 * The `Emoji` tags a post needs for the shortcodes written in it.
-	 *
-	 * The shortcode stays in the content as text; the tag beside it says where
-	 * the picture is. That is how every fediverse server does it, and it is
-	 * why an instance that has never heard of `:blobcat:` still renders the
-	 * post — it dereferences the icon out of the tag rather than looking the
-	 * name up anywhere. A shortcode this instance has no picture for is left
-	 * as the text it already was, here and everywhere it is delivered.
-	 *
-	 * The spoiler text is scanned too: it is written by the same person in the
-	 * same composer, and a content warning whose emoji did not render was the
-	 * one place the shortcode showed through.
+	 * The `Emoji` tags a post needs for the shortcodes written in it, content
+	 * and spoiler text alike. The shortcode stays in the text and the tag
+	 * says where its image is, as on every fediverse server; a shortcode
+	 * without an image stays text.
 	 */
 	public function addCustomEmojis(Stream $stream, string ...$texts): void {
-		// rebuilt rather than appended to: an edit that takes a shortcode out
-		// would otherwise leave the tag behind, and one that puts a new
-		// shortcode in has to gain a tag or the emoji renders nowhere
+		// rebuilt rather than appended to, so an edit drops tags for removed
+		// shortcodes and gains them for new ones
 		$stream->setTags(array_values(array_filter(
 			$stream->getTags(),
 			static fn (array $tag): bool => ($tag['type'] ?? '') !== 'Emoji'
@@ -407,10 +376,8 @@ class StreamService {
 	}
 
 	/**
-	 * The href is the hashtag timeline this instance actually serves — the URL
-	 * `UnifiedSearchProvider` hands out for a hashtag. It used to be
-	 * `<social url>tag/<tag>`, a path no route answers, so following a tag on a
-	 * post from here led every reader, local or remote, to a 404.
+	 * The href is the hashtag timeline this instance serves, the URL
+	 * `UnifiedSearchProvider` hands out for a hashtag.
 	 */
 	public function addHashtag(Note $note, string $hashtag) {
 		$note->addTag(
@@ -471,10 +438,8 @@ class StreamService {
 
 		$parent ??= $this->streamRequest->getStreamById($replyTo, true);
 
-		// what the author said may be done with their post. Sending a reply
-		// their server states it will not take means telling the person who
-		// wrote it that it went out — and it did, and nothing will ever show
-		// it. Refused here, before anything is written or addressed.
+		// what the author said may be done with their post: a reply their server
+		// will not take is refused here, before anything is written or addressed
 		if (!$parent->allowsInteraction(Stream::INTERACTION_REPLY, $note->getAttributedTo())) {
 			throw new InvalidActionException(
 				'the author of this post does not allow replies to it'
@@ -484,10 +449,9 @@ class StreamService {
 		$author = $this->cacheActorService->getFromId($parent->getAttributedTo());
 		$note->setInReplyTo($replyTo);
 
-		// Named in the reply as well as sent to: a server that hands what its
-		// shared inbox receives to the accounts the activity addresses (Loops)
-		// has nobody to give a reply that names only the public and our
-		// followers. Mastodon addresses the author of the parent the same way.
+		// Named in the reply as well as sent to, as Mastodon does: a server that
+		// routes its shared inbox by the addressed accounts (Loops) would
+		// otherwise have nobody to give it to.
 		if ($author->getId() !== $note->getAttributedTo()) {
 			if ($note->getVisibility() === Stream::TYPE_DIRECT) {
 				$note->addToArray($author->getId());
@@ -500,19 +464,14 @@ class StreamService {
 			}
 		}
 
-		// A PeerTube video whose comments need approving takes a reply in and
-		// shows it to nobody until a human has looked. Saying so here is what
-		// stops the reply looking posted when it is waiting: the state moves to
-		// `approved` when the `ApproveReply` arrives (FEP-5624). Read off the
-		// parent that was just fetched, rather than fetching it again.
+		// A PeerTube video whose comments need approving shows a reply to nobody
+		// until a human approves it; the state moves to `approved` when the
+		// `ApproveReply` arrives (FEP-5624). Read off the parent just fetched.
 		if ($parent->repliesNeedApproval()) {
 			$note->setReplyState(Stream::REPLY_PENDING);
 		}
 
-		// The author of the post being replied to is the one recipient that
-		// matters most, and `endpoints.sharedInbox` is optional — without the
-		// fallback, a reply to anyone on an instance that publishes only a
-		// personal inbox was addressed to host '' and never arrived.
+		// `endpoints.sharedInbox` is optional, so the personal inbox stands in
 		$inbox = $author->getSharedInbox() !== '' ? $author->getSharedInbox() : $author->getInbox();
 		if ($inbox === '') {
 			$this->logger->notice(
@@ -523,9 +482,8 @@ class StreamService {
 			return;
 		}
 
-		// Addressed whatever the reply's audience is, and first: the person
-		// being answered is the one recipient every reply has, and the audience
-		// decides who else it reaches rather than whether it reaches them.
+		// the person being answered is addressed whatever the reply's audience,
+		// which decides only who else it reaches
 		$note->addInstancePath(
 			new InstancePath($inbox, InstancePath::TYPE_INBOX, InstancePath::PRIORITY_HIGH)
 		);
@@ -562,10 +520,9 @@ class StreamService {
 		$item->setActorId($item->getAttributedTo());
 		try {
 			$actor = $this->cacheActorService->getFromId($item->getAttributedTo());
-			// only where the post itself reached them: a Delete addressed to
-			// the followers path is posted to the shared inbox of every
-			// instance with a follower, and for a direct message that tells
-			// servers that were never recipients the post existed
+			// only where the post itself reached them: the followers path reaches
+			// every shared inbox with a follower, which for a direct message would
+			// tell servers that were never recipients that the post existed
 			if ($this->reachesFollowers($item)) {
 				$item->addInstancePath(
 					new InstancePath(
@@ -580,18 +537,15 @@ class StreamService {
 		$this->addressBoostersAndRepliers($item);
 		$this->activityService->deleteActivity($item);
 		$this->streamRequest->deleteById($item->getId(), $type);
-		// their profile has one post fewer. Nothing moved this counter down at
-		// all, so an account that wrote and deleted a post all day climbed
-		// until the cron's recount put it back; the condition is the recount's
-		// own — a public status, which is what it counts.
+		// their profile has one post fewer, under the recount's own condition:
+		// a public status
 		if ($item->addressesPublic()
 			&& in_array($item->getType(), [Note::TYPE, Question::TYPE], true)) {
 			$this->accountService->bumpActorCount($item->getAttributedTo(), 'count_posts', -1);
 		}
-		// the post it answered counts one reply fewer now. Deleting your own
-		// reply comes through here rather than through `NoteInterface`, so
-		// without this the parent went on claiming a reply that no page could
-		// show — and the recount has to happen after the row has gone.
+		// the post it answered counts one reply fewer now; deleting your own
+		// reply comes through here rather than `NoteInterface`, and the recount
+		// has to run after the row has gone
 		$this->streamRequest->recountReplies($item->getInReplyTo());
 		$this->streamRequest->recountQuotes($item->getQuote());
 
@@ -603,11 +557,9 @@ class StreamService {
 
 	/**
 	 * A post travels further than the author's followers and the instances it
-	 * was addressed to: every boost carried it to the booster's followers, and
-	 * every reply to the replier's. Mastodon sends the Delete to the inboxes of
-	 * everyone who boosted or replied as well; without that, the post lingers on
-	 * every instance that only ever saw it through a boost. The shared inbox is
-	 * used where the actor has one — a server with ten boosters is one delivery.
+	 * was addressed to, through boosts and replies, so the Delete also goes to
+	 * everyone who boosted or replied, as Mastodon sends it; by shared inbox
+	 * where there is one.
 	 */
 	private function addressBoostersAndRepliers(Stream $item): void {
 		$inboxes = [];
@@ -684,10 +636,8 @@ class StreamService {
 		$blueskyResult = $this->threadService?->fillBluesky($root, $this->viewer);
 		$blueskyRead = $blueskyResult === true;
 		$blueskyPending = $this->threadService !== null && $blueskyResult === null;
-		// A cached successful visible read may still have a deeper reply fill
-		// running. Keep telling the client to poll until that job writes its
-		// replies; ThreadService's short freshness cache no longer carries its
-		// per-request deep-reply flag.
+		// A cached visible read may still have a deeper reply fill running, so
+		// keep telling the client to poll until that job writes its replies.
 		$blueskyFillPending = $blueskyRead && !$root->isLocal()
 			? ($this->remoteFetchQueue?->isThreadFillPending($root->getId()) ?? false)
 			: false;
@@ -700,9 +650,8 @@ class StreamService {
 				|| ($this->remoteFetchQueue?->fillThread($root) ?? false)
 				|| ($this->remoteFetchQueue?->isThreadFillPending($root->getId()) ?? false);
 		}
-		// An inline read already in progress will save the replies, but this
-		// request queried the database before those writes finish. Tell the
-		// client to ask for the context again rather than treating it as complete.
+		// An inline read in progress will save the replies after this request
+		// read the database, so the client asks for the context again.
 		if (!$blueskyPending && $root !== $post && (!$blueskyRead || $post->isLocal())) {
 			$filling = ($this->remoteFetchQueue?->fillThread($post) ?? false)
 				|| ($this->remoteFetchQueue?->isThreadFillPending($post->getId()) ?? false)
@@ -859,20 +808,10 @@ class StreamService {
 	}
 
 	/**
-	 * A page shows a post once.
-	 *
-	 * A boost is a row of its own that points at the post it repeats, so
-	 * following both an author and somebody who boosts them put the same post
-	 * in the timeline twice: once on its own and once again under "X boosted",
-	 * with the same text, the same picture and the same actions. The boost is
-	 * the one that goes, because the post is already there in the place its own
-	 * time gives it — which is what Mastodon does with a reblog of something
-	 * already in the feed. Two boosts of the same post by different people
-	 * collapse to the first as well.
-	 *
-	 * Notifications are left alone: a favourite and a boost of the same post
-	 * are two different things that happened to you, and a page of them is not
-	 * a page of posts.
+	 * A page shows a post once: a boost of a post already on the page is
+	 * dropped, as Mastodon does, and several boosts of one post collapse to
+	 * the first. Notifications are left alone, as a like and a boost of the
+	 * same post are two different things that happened.
 	 *
 	 * @param Stream[] $posts
 	 *
@@ -912,14 +851,9 @@ class StreamService {
 	}
 
 	/**
-	 * How many rows the last `getTimeline()` read, before the page lost any
-	 * boost of a post already in it.
-	 *
-	 * Whether a further page exists is a question about what the query
-	 * answered, not about what survived deduplication: a page of twenty that
-	 * dropped one boost is still a full page, and a `rel="next"` decided from
-	 * the nineteen left is no `rel="next"` at all — every client that pages on
-	 * the Link header stops at that page.
+	 * How many rows the last `getTimeline()` read, before deduplication:
+	 * whether a further page exists depends on what the query returned, or a
+	 * page that lost a boost would end the client's paging.
 	 */
 	public function lastTimelineRowCount(): int {
 		return $this->lastTimelineRows;
@@ -975,9 +909,7 @@ class StreamService {
 	 * @return OrderedCollection
 	 */
 	public function getOutboxCollection(Person $actor): OrderedCollection {
-		// `last` used to be advertised as `?page=1&min_id=0`, which is not a
-		// page the controller serves; `paged()` derives both links from the
-		// page size the outbox actually pages at.
+		// `paged()` derives both links from the page size the outbox pages at
 		return OrderedCollection::paged(
 			$actor->getOutbox(),
 			$this->getInt('post', $actor->getDetails(Details::COUNT)),
@@ -986,13 +918,10 @@ class StreamService {
 	}
 
 	/**
-	 * The `replies` collection of a post: what a peer dereferences after
-	 * reading `replies` on the note itself.
-	 *
-	 * A reply reaches the instances that hold the post it answers and nowhere
-	 * else, so without this a reader on a third instance sees a post with no
-	 * replies. Mastodon publishes one on every note and walks one on every note
-	 * it fetches.
+	 * The `replies` collection of a post, which a peer dereferences after
+	 * reading `replies` on the note: a reply reaches only the instances
+	 * holding its parent, so other readers find replies through this, as
+	 * Mastodon publishes on every note.
 	 */
 	/**
 	 * How many likes, or dislikes, a post has had, as the collection a peer
@@ -1020,13 +949,8 @@ class StreamService {
 	}
 
 	/**
-	 * One page of it: the ids of the public replies, oldest first.
-	 *
-	 * Ids and not the replies themselves. A reply is its author's document,
-	 * held and served by their instance, and handing out a copy of it from here
-	 * would publish this instance's idea of a post somebody else may since have
-	 * edited or deleted. It is also what keeps the page small: a thread of
-	 * forty replies is forty URIs.
+	 * One page of it: the ids of the public replies, oldest first. Ids only:
+	 * a reply is its author's document, served by their instance.
 	 */
 	public function getRepliesPage(Stream $post, int $page, string $after = ''): OrderedCollectionPage {
 		$id = $post->getId() . Stream::REPLIES_PATH;
@@ -1125,11 +1049,9 @@ class StreamService {
 						continue;
 					}
 					if ($itemType === 'Delete') {
-						// A fetched outbox is not an inbox delivery, but its Delete
-						// still has to go through the normal ActivityPub handler: that
-						// handler checks the actor against the stored author and cleans
-						// up every row related to the post. Only accept deletes the
-						// outbox owner itself authored.
+						// A fetched outbox Delete still goes through the ActivityPub handler,
+						// which checks the stored author and cleans up every related row; only
+						// deletes the outbox owner authored are accepted.
 						$delete = AP::instance()->getItemFromData($itemData);
 						if ($delete->getType() !== 'Delete' || $delete->getActorId() !== $actor->getId()) {
 							continue;
@@ -1156,10 +1078,8 @@ class StreamService {
 						continue;
 					}
 
-					// This path stores what a remote server said about itself, so it may
-					// only yield notes that live on that server and belong to the actor
-					// whose outbox is being read. Anything else is that server speaking
-					// for someone it does not host.
+					// This path stores what a remote server said about itself, so it only
+					// yields notes on that server by the actor whose outbox is read.
 					$attributedTo = $noteData['attributedTo'] ?? $actor->getId();
 					if (is_array($attributedTo)) {
 						$values = array_is_list($attributedTo) ? $attributedTo : [$attributedTo];
@@ -1197,10 +1117,10 @@ class StreamService {
 					} catch (StreamNotFoundException) {
 					}
 
-					// Reuse the inbox's object parser: it understands polls, article
-					// titles, Lemmy links, PeerTube videos, event facts, quotes and
-					// media. Store media metadata now, then let the media worker
-					// download the files; one slow CDN must not hold this whole page.
+					// The inbox's object parser, which knows polls, article titles, Lemmy
+					// links, PeerTube videos, event facts, quotes and media. Media metadata
+					// is stored now and the files left to the media worker, so one slow CDN
+					// cannot hold up the page.
 					$source = $noteData;
 					$noteData['attributedTo'] ??= $actor->getId();
 					if ($objectType !== 'Video') {
@@ -1216,20 +1136,14 @@ class StreamService {
 					$note->setSummary($note->validate(ACore::AS_STRING, 'summary', $noteData, ''));
 					$note->setLocal(false);
 
-					// what a peer's `to`/`cc` say the audience is. Stored
-					// blank, the row exported as public to every client — so a
-					// followers-only post fetched this way offered a Boost
-					// button — while the timelines that compare the column
-					// left it out.
+					// the audience the peer's `to`/`cc` give: the row must not export
+					// as public while the timelines leave it out
 					$note->setVisibility($this->visibilityOf($note) ?: Stream::TYPE_DIRECT);
 
 					// Save without generating a new inbox delivery or forwarding it.
 					$this->streamRequest->save($note);
-					// and so without NoteInterface::updateDetails(), which is the
-					// only thing that tells the post this one answered that it has
-					// one more reply. Saved here, a reply to a post already stored
-					// left the parent's count where it was — which, when the origin
-					// publishes no `replies.totalItems`, was "no replies at all"
+					// and so without NoteInterface::updateDetails(), which tells the
+					// parent it has one more reply
 					$this->streamRequest->recountReplies($note->getInReplyTo());
 					$this->streamRequest->recountQuotes($note->getQuote());
 					$synced++;

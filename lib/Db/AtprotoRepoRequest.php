@@ -23,12 +23,10 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * A repository as stored: its head, its records and its blocks.
- *
- * Records keep their DAG-CBOR bytes here and nowhere else; the block table
- * holds the tree nodes and the commits. `getRepo` and the firehose read
- * both. Every write of a commit happens inside one transaction that
- * RepositoryService opens, which is why nothing here opens its own.
+ * A repository as stored: its head, its records and its blocks. Records keep
+ * their DAG-CBOR bytes only here; the block table holds tree nodes and
+ * commits. Commits are written inside RepositoryService's transaction, so
+ * nothing here opens its own.
  */
 class AtprotoRepoRequest extends CoreRequestBuilder {
 	public const BLOCK_MST = 'mst';
@@ -49,12 +47,10 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The head, read with a row lock that lasts until the transaction ends:
-	 * a second commit of the same repository waits here and then reads the
-	 * head this one leaves. There is no row to lock before the first commit;
-	 * two first commits race to the unique index on `did`, and one fails.
-	 * SQLite has no row locks and refuses the clause; its one writer at a
-	 * time serialises the commits by itself.
+	 * The head, read with a row lock held until the transaction ends, so a
+	 * second commit waits and reads the head this one leaves. Two first commits
+	 * race to the unique index on `did` instead. SQLite refuses the clause and
+	 * serialises writers by itself.
 	 */
 	public function lockHead(string $did): ?RepoHead {
 		$qb = $this->getQueryBuilder();
@@ -120,12 +116,9 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Moves the head, creating the row the first time. Last thing a commit
-	 * does: until it runs the previous commit is the repository.
-	 *
-	 * The row made by the first commit starts with the bytes of the blobs
-	 * registered before it: `addBlobBytes()` has no row to add them to until
-	 * then.
+	 * Moves the head, creating the row the first time; the last thing a commit
+	 * does. The first row starts with the bytes of the blobs registered before
+	 * it, which `addBlobBytes()` had no row for.
 	 */
 	public function setHead(string $did, Cid $commitCid, string $rev, int $recordCount): void {
 		$qb = $this->getQueryBuilder();
@@ -281,11 +274,9 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 
 	/**
 	 * A collection's records written here since a moment, across every
-	 * repository, newest first and below a record id when one is given:
-	 * what the reconcile pass checks against the posts, a page at a time.
-	 * Records a moving repository brought stand for no object here and are
-	 * left out. The window is cut on the id, as countRecordsWrittenSince()
-	 * explains.
+	 * repository, newest first and below a record id when one is given: the
+	 * reconcile pass's pages. Records a moving repository brought are left out.
+	 * The window is cut on the id, as countRecordsWrittenSince() explains.
 	 *
 	 * @return array<int, StoredRecord> by record id
 	 */
@@ -316,12 +307,10 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * How much of what is held here of a post Bluesky counts too, by
-	 * counter: what came from Bluesky — a like or repost by a bsky.app
-	 * account, a reply or quote that is a bsky.app post — and what a local
-	 * account wrote there as well, a like, boost, reply or quote that has a
-	 * record in its repository here. The rest — from the Fediverse, or by a
-	 * local account that is not on Bluesky — the AppView never saw.
+	 * How much of what is held here of a post Bluesky counts too, by counter:
+	 * likes, reposts, replies and quotes from Bluesky accounts, and those by
+	 * local accounts with a record in their repository here. The rest the
+	 * AppView never saw.
 	 *
 	 * @return array{likes: int, boosts: int, replies: int, quotes: int}
 	 */
@@ -368,9 +357,8 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Every record's bytes, for `getRepo`; read a page at a time and handed
-	 * out one by one, so a large repository is never whole in memory — not
-	 * even in the driver's result buffer.
+	 * Every record's bytes, for `getRepo`, read a page at a time so a large
+	 * repository is never whole in memory, not even in the driver's buffer.
 	 *
 	 * @return Generator<int, array{0: Cid, 1: string, 2: string}> the CID, the bytes and the record's path
 	 */
@@ -466,14 +454,10 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * How many records of a collection that were written here, rather than
-	 * brought by a moving repository, are younger than `$since`.
-	 *
-	 * The table has no index on `creation`, so the count is not filtered by
-	 * it: every record is inserted with the time of its insert, which makes
-	 * the ids rise with `creation`, and the first id of the window is found
-	 * by a binary search over the primary key. The count then reads only the
-	 * rows of the window, by primary key.
+	 * How many records of a collection written here (not brought by a moving
+	 * repository) are younger than `$since`. `creation` has no index, but ids
+	 * rise with it, so the window's first id is found by binary search over the
+	 * primary key and only the window's rows are read.
 	 */
 	public function countRecordsWrittenSince(string $collection, int $since): int {
 		$from = $this->firstRecordIdSince($since);

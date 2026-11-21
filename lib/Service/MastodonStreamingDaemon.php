@@ -803,14 +803,10 @@ class MastodonStreamingDaemon {
 
 	/**
 	 * Sends edits without replaying existing revisions: `status.update` to the
-	 * public, hashtag, home and list streams whose timeline holds the post,
-	 * and the current `conversation` to the direct stream.
-	 *
-	 * The edited posts are read once per pass for every subscriber, and only
-	 * for what decides which streams could hold them; whether this viewer's
-	 * home timeline, or the public timeline as this viewer sees it, holds
-	 * them is one batched membership query each. The post is then read as
-	 * this viewer for each stream it is sent to.
+	 * public, hashtag, home and list streams whose timeline holds the post, and
+	 * the current `conversation` to the direct stream. The edited posts are read
+	 * once per pass; membership is one batched query per stream type, and the
+	 * post is then read as the viewer for each stream.
 	 */
 	private function sendEditedPublicStatuses(WebSocketServer $server, Subscriber $subscriber, Person $viewer): void {
 		$subscriptions = $subscriber->context['subscriptions'] ?? [];

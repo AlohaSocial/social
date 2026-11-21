@@ -20,13 +20,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Finding Bluesky accounts by name: the public AppView's typeahead, asked
- * for text that looks like the start of a handle — a dot in it and no `@`
- * — so a Fediverse address or a plain username never leaves the instance.
- * What comes back is the cached actor for an account already here and the
- * account as the AppView described it for the rest, stored by nothing: a
- * typeahead is asked once per keystroke, and an account becomes a cached
- * row when somebody opens, follows or mentions it, or through `keep()`.
+ * Finding Bluesky accounts by name with the public AppView's typeahead, only
+ * for text that looks like the start of a handle (a dot, no `@`), so a
+ * Fediverse address or plain username never leaves the instance. Returns the
+ * cached actor where one exists and the unstored AppView account otherwise;
+ * an account becomes a cached row when opened, followed, mentioned or `keep()`.
  */
 class BlueskySearch {
 	public const LIMIT = 8;
@@ -90,10 +88,9 @@ class BlueskySearch {
 	}
 
 	/**
-	 * The accounts as cached rows, each one the typeahead found and nobody
-	 * stored yet stored now: an account without a row has no id a client
-	 * can open or follow it by. For an answer that hands out ids — a
-	 * client's search that asked for `resolve` — and nothing else.
+	 * The accounts as cached rows, storing any the typeahead found that are
+	 * not stored yet, so they have ids; only for an answer that hands out ids
+	 * (a client search with `resolve`).
 	 *
 	 * @param Person[] $people what `typeahead()` answered
 	 * @return Person[]
@@ -121,9 +118,8 @@ class BlueskySearch {
 	}
 
 	/**
-	 * The AppView's `actors` for a query, reused for ANSWER_TTL seconds: the
-	 * same prefix is asked again by the next keystroke's correction, by a
-	 * second tab and by the composer and the search at once.
+	 * The AppView's `actors` for a query, reused for ANSWER_TTL seconds, since
+	 * the same prefix is asked again by corrections, other tabs and the composer.
 	 *
 	 * @return array<mixed>
 	 */

@@ -7,24 +7,10 @@ import { signalNow } from './interestTracker.js'
 import { accumulateVideoPlayback } from './videoPlayback.js'
 
 /**
- * What watching the Shorts stack teaches For you.
- *
- * The stack shows one video at a time and the reader moves on with a swipe,
- * so the measure is the player's, not the screen's: how far into the video
- * they got, whether they watched it through, and whether they swiped it away
- * at once. Each slide the reader leaves says one of two things, under the
- * context `shorts`:
- *
- *  - a **skip**, when it was left within `SKIP_WITHIN` of arriving and had not
- *    played through;
- *  - otherwise a measured **video_watch_ratio**, based on the player's
- *    played ranges rather than the furthest position reached by seeking.
- *
- * When a post contains several video slides, their played and total durations
- * are combined into one duration-weighted ratio before the post is reported.
- *
- * Kept apart from the view, which only tells it where the reader is and what
- * the player says: the stack's player can change without the rules changing.
+ * What watching the shorts stack teaches For you. Each post the reader leaves
+ * is reported as a `skip` (left within `SKIP_WITHIN` without playing through)
+ * or as a `video_watch_ratio` from the player's played ranges, weighted by
+ * duration across a post's video slides.
  */
 
 /** Left sooner than this, and the reader swiped the video away. */
@@ -173,10 +159,8 @@ export function createShortSignals({
 		},
 
 		/**
-		 * What the player says as it plays (`timeupdate`). Its played ranges
-		 * measure distinct content; currentTime deltas are a fallback until
-		 * played ranges are available. A position far behind the
-		 * last one, after that one was near the end, is a loop without `ended`.
+		 * What the player says as it plays (`timeupdate`). A jump back from
+		 * near the end counts as a loop, which fires no `ended`.
 		 *
 		 * @param {object} status the post the player is showing
 		 * @param {HTMLVideoElement} video the player

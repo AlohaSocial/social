@@ -16,29 +16,20 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Brings tables created by a release before 0.23 to the shape a fresh install
- * has, where the squashed schema cannot.
+ * Brings tables created before 0.23 to the shape a fresh install has, where
+ * the squashed schema (`Version1000Date20221118000002`, which only adds) cannot:
  *
- * `Version1000Date20221118000002` adds what is missing to a table that exists
- * and leaves what is there alone. The steps it replaced also changed and
- * dropped things, and an instance that created its tables before them still
- * carries the old shape:
+ *  - drops redundant indexes: `afoa`, `aoa` and `social_f_oa` on
+ *    `social_follow`; `ipoha` on `social_stream`; `ts` on
+ *    `social_stream_dest`; and the unique index duplicating the primary key
+ *    on `social_stream.nid`.
+ *  - widens `social_client.app_client_secret` from 63 characters for the
+ *    hashed secret.
+ *  - adds the default of `social_cache_doc.account`.
+ *  - makes `id` the primary key of `social_stream_dest` and
+ *    `social_stream_tag` on PostgreSQL.
  *
- *  - indexes the history dropped: `afoa` and `aoa` on `social_follow`, which
- *    `social_f_oa_u` and `social_f_foa` replaced, and `social_f_oa`, which
- *    `social_f_oa_u` covers; `ipoha` on `social_stream`, whose uniqueness its
- *    first column already has; `ts` on `social_stream_dest`, which no query
- *    uses; and the unique index on `social_stream.nid` that duplicates the
- *    primary key. Each costs a write on every insert and answers nothing.
- *  - `social_client.app_client_secret` at 63 characters, too narrow for the
- *    digest stored in it. The squash widens it before the secrets are hashed;
- *    this covers an instance that ran the squash before it did.
- *  - `social_cache_doc.account` without its default.
- *  - `social_stream_dest` and `social_stream_tag` with an `id` that is not
- *    the primary key, which the squash left on PostgreSQL before it set one.
- *
- * Every change is guarded, so this is a no-op on a fresh install and on an
- * instance that is already current.
+ * Every change is guarded, so this is a no-op on a current instance.
  */
 class Version1000Date20261011500100 extends SimpleMigrationStep {
 	/** Indexes the history dropped, by table. */

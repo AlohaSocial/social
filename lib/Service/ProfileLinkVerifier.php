@@ -19,22 +19,15 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The tick next to a profile link.
+ * The tick next to a profile link, verified as Mastodon does: the linked page
+ * must link back to the profile with `rel="me"`. Stored on the cached actor's
+ * details are when the page was last seen linking back (`fields_verified`,
+ * keyed by field value; the Account entity's `verified_at`) and when the
+ * fields were last checked (`fields_checked`).
  *
- * A profile field that names a web page is verified the way Mastodon does it:
- * the page is fetched and has to link back to the profile with `rel="me"`.
- * That is the whole check -- somebody who controls the page put the link
- * there, so the page is theirs. What is stored is when the page was last seen
- * linking back (`fields_verified`, keyed by the field's value, in the cached
- * actor's details) and when the fields were last looked at (`fields_checked`),
- * and the Account entity carries the first as `verified_at`.
- *
- * Fetching is bounded the way every other fetch a user can point this
- * instance at is: http(s) only, no local host unless the administrator opted
- * in, through the app's HTTP client (which re-checks the target on every
- * redirect and applies the size ceiling), and only the first part of the
- * page is read. A page that cannot be reached leaves the field unverified;
- * it is asked again on the next pass.
+ * Fetches go through the app's HTTP client: http(s) only, no local host
+ * unless allowed, re-checked on every redirect, size-capped, and only the
+ * start of the page is read. An unreachable page is retried next pass.
  */
 class ProfileLinkVerifier {
 	/** how much of a page is worth scanning for a link back */
@@ -60,13 +53,8 @@ class ProfileLinkVerifier {
 	/**
 	 * The web address a field value names, or '' when it names none. A remote
 	 * field arrives as HTML (`<a href="…">…</a>`); a local one is what the
-	 * account typed.
-	 *
-	 * What comes back is the address to fetch rather than the one to display:
-	 * an internationalised host is spelled the way DNS does, since
-	 * `FILTER_VALIDATE_URL` reads ASCII only, and a host with no path is
-	 * given the root — the request refuses an address without a path, and the
-	 * root is that same page.
+	 * account typed. The address is the one to fetch: an internationalised
+	 * host in punycode, and the root path added where none is given.
 	 */
 	public static function linkOf(string $value): string {
 		if (preg_match('/href=["\']([^"\']+)["\']/i', $value, $match) === 1) {
@@ -197,15 +185,10 @@ class ProfileLinkVerifier {
 	}
 
 	/**
-	 * The cron pass for this instance's own accounts: their fields are checked
-	 * against the web like anybody else's, and the verdict written to their
-	 * cached copy, which is what the Account entity is exported from.
-	 *
-	 * A walk, a page at a time, carried on by the next pass from where this
-	 * one stopped (`SOCIAL_PROFILE_LINK_CURSOR`), and only over accounts whose
-	 * fields name a web address at all. It used to read every local account,
-	 * key pair included, until twenty had been checked — on an instance where
-	 * few accounts carry a link, the whole table, every twelve minutes.
+	 * The cron pass for this instance's own accounts, written to their cached
+	 * copy. Walks a page at a time from where the last pass stopped
+	 * (`SOCIAL_PROFILE_LINK_CURSOR`), only over accounts whose fields name a
+	 * web address.
 	 *
 	 * @param int $deadline when the pass must stop, or 0 for no limit
 	 *

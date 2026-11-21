@@ -26,11 +26,8 @@ use OCP\IRequest;
 /**
  * Administration → Aloha Directory: whether this server takes part, its
  * listing profile, the conversation with the curators, and the signed lists.
- *
- * No route relaxes the server's checks, so they are dispatched for an
- * administrator with a session and a CSRF token only, not for a group the
- * Aloha Social section was delegated to: enrolling the server, holding its key
- * and withdrawing it are decisions about the whole server.
+ * For administrators only, not a delegated group: enrolling the server and
+ * holding its key are decisions about the whole server.
  */
 class AlohaDirectoryController extends Controller {
 	public function __construct(

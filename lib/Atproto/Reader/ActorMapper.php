@@ -15,12 +15,11 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Details;
 
 /**
- * A Bluesky profile, as the AppView describes it, as the cached actor this
- * app keeps for any remote account. The profile is first shaped as the
- * actor document a Fediverse server would serve, so the one import path
- * reads it — icon, banner, bio, name — and then given what no actor
- * document carries: the bare handle as its account, the counts the
- * AppView already knows, and the DID, PDS and labels in `details.atproto`.
+ * A Bluesky profile from the AppView as the cached actor kept for any remote
+ * account. It is shaped as an actor document so the one import path reads
+ * it, then given what no actor document carries: the bare handle as its
+ * account, the AppView's counts, and the DID, PDS and labels in
+ * `details.atproto`.
  */
 class ActorMapper {
 	public const DETAIL = Details::ATPROTO;

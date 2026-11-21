@@ -15,43 +15,24 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Published block lists this instance follows.
+ * Published block lists this instance follows, applied once a day when an
+ * admin turns one on (all are off by default).
  *
- * An admin turns one on, and from then on what that list says is applied here
- * too, once a day. Three are offered to begin with — two servers that publish
- * their own moderation, and one shared list — and an admin can point a source
- * at any other server that publishes one.
- *
- * **Off until somebody says otherwise.** A server's moderation is its own, and
- * adopting another server's is a decision an admin makes rather than one they
- * inherit by installing this app. Turning one on is also not reversible by
- * turning it off: a block purges what this instance holds of that server, so
- * the source can stop saying so and the content does not come back.
- *
- * What the list says is applied as the list says it — see
- * `BlocklistImportService`. Nothing here removes an entry the source dropped,
- * either: an admin who looked at an instance and disagreed should not have
- * their decision undone by somebody else's list changing.
+ * Turning one off does not undo it: a block purges what was held of that
+ * server. Entries a source drops are not removed here either, so an admin's
+ * own decision is never undone by somebody else's list. Rows are applied as
+ * `BlocklistImportService` reads them.
  */
 class BlocklistSubscriptionService {
 	/** How long one fetch may take. A published list is a static file. */
 	private const TIMEOUT = 30;
 
 	/**
-	 * The sources an admin is offered.
-	 *
-	 * `mastodon.social` publishes its own moderated-servers list through
-	 * Mastodon's API — an endpoint a server answers only when its admins have
-	 * turned publishing on. Most have not, which is why there is one such
-	 * server here and not a row of them: a source that can only ever say "that
-	 * server did not hand over a list" is a switch that does nothing, and
-	 * offering it invites somebody to turn it on and wonder why nothing
-	 * happened. `url` re-points a source at any server that does publish.
-	 *
-	 * The Bad Space is a shared list rather than one server's, and publishes
-	 * CSV exports by how many of its participating servers agree: `/80` is
-	 * what eighty per cent of them block. The higher the number, the less the
-	 * list says and the more agreement there is behind it.
+	 * The sources an admin is offered. `mastodon.social` publishes its
+	 * moderated servers through Mastodon's API (few servers enable this; `url`
+	 * re-points a source at any that does). The Bad Space is a shared list,
+	 * exported by agreement level: `/80` is what 80% of its participants
+	 * block.
 	 */
 	private const DEFAULTS = [
 		[
@@ -268,10 +249,7 @@ class BlocklistSubscriptionService {
 	}
 
 	/**
-	 * Writes down what a run did, and hands it back.
-	 *
-	 * A dry run is not written down: it is a question, and the answer to it is
-	 * not what this source last did.
+	 * Records what a run did, and returns it; dry runs are not recorded.
 	 *
 	 * @param array<string, mixed> $result
 	 *
@@ -300,11 +278,8 @@ class BlocklistSubscriptionService {
 	}
 
 	/**
-	 * An address a list may be read from.
-	 *
-	 * HTTPS and a host with a dot in it: a source is a published file on the
-	 * internet, and an admin typing a private address into this field would
-	 * have the server fetch it on a timer for them.
+	 * An address a list may be read from: HTTPS and a dotted host, so the
+	 * server is not made to fetch private addresses on a timer.
 	 */
 	private function isFetchable(string $url): bool {
 		$parts = parse_url($url);

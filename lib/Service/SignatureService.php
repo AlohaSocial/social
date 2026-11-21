@@ -57,10 +57,9 @@ class SignatureService {
 
 	/**
 	 * How old a signed request's `Date` (or RFC 9421 `created`) may be, and
-	 * how far ahead of this server's clock. Mastodon's own bounds: a peer
-	 * whose clock is six minutes off, or whose queue delivers a request it
-	 * signed a while ago, used to lose every delivery here with a final 401.
-	 * A request inside the window is taken in once — see `isReplayed()`.
+	 * how far ahead of this server's clock: Mastodon's bounds, which tolerate
+	 * a skewed clock or a queued delivery. A request inside the window is
+	 * taken in once (see `isReplayed()`).
 	 */
 	public const DATE_PAST = 43200; // 12h
 	public const DATE_FUTURE = 3600; // 1h
@@ -88,25 +87,13 @@ class SignatureService {
 	public const REQUEST_SEEN_NAMESPACE = 'social.httpsig';
 
 	/**
-	 * How long a request is allowed to take when it is fetching the signing key
-	 * of a keyId this instance has never seen.
-	 *
-	 * Everything checked before that fetch is attacker-controlled and free to
-	 * satisfy, so an unauthenticated POST to the inbox can name any URL and hold
-	 * a PHP worker for as long as that URL takes to answer. At the default
-	 * federation timeout a few dozen concurrent requests exhaust the worker pool
-	 * and the whole Nextcloud instance stops answering — so pre-authentication
-	 * work gets a fraction of it. A key this instance already knows is read from
-	 * the database and needs no fetch at all.
-	 *
-	 * Three seconds was not that fraction, it was less than the work takes: DNS,
-	 * TCP, TLS and the peer rendering its actor JSON all have to fit inside it
-	 * on first contact, which a small self-hosted instance does not manage —
-	 * and the failure then poisoned the negative cache below, so a follow to a
-	 * slow-but-honest peer never completed at all. These match what Mastodon
-	 * allows a peer of its own. Note `CurlService::retrieveObject()` retries
-	 * unsigned after a 401/403, so a worker can be held for roughly twice the
-	 * read budget.
+	 * How long a request may take fetching the signing key of a keyId this
+	 * instance has never seen. Everything before that fetch is free for an
+	 * attacker to satisfy, so this bounds how long an unauthenticated inbox
+	 * POST can hold a PHP worker; known keys need no fetch. The values match
+	 * what Mastodon allows, as a slow first contact must still fit. Note that
+	 * `CurlService::retrieveObject()` retries unsigned after a 401/403, so a
+	 * worker can be held for about twice the read budget.
 	 */
 	public const UNKNOWN_KEY_TIMEOUT = 10;
 
@@ -120,14 +107,9 @@ class SignatureService {
 	public const KEY_FAILURE_TTL = 300;
 
 	/**
-	 * How long a key retrieval that never got an answer — the host was
-	 * unreachable, or slower than the budget above — is remembered.
-	 *
-	 * Much shorter, because it is not a fact about the keyId: it says the peer
-	 * was having a bad minute, and holding that against it for five would keep
-	 * an instance that is merely slow permanently unable to federate here. Long
-	 * enough that repeating the same unreachable keyId still costs far fewer
-	 * fetches than requests.
+	 * How long a key retrieval that got no answer (unreachable, or slower than
+	 * the budget above) is remembered: briefly, as it says the peer had a bad
+	 * minute, not something about the keyId.
 	 */
 	public const KEY_UNREACHABLE_TTL = 30;
 
@@ -281,8 +263,7 @@ class SignatureService {
 				throw new SignatureIsGoneException();
 			}
 
-			// The signing key could not be retrieved. Failing here, rather than
-			// returning an empty origin for a later check to reject, keeps this method
+			// The signing key could not be retrieved: failing here keeps this method
 			// the single place that decides whether a request is authenticated.
 			throw new SignatureException(
 				'signing key could not be retrieved: ' . get_class($e) . ' ' . $e->getMessage(),
@@ -293,16 +274,12 @@ class SignatureService {
 	}
 
 	/**
-	 * Whether this exact signed request was already taken in.
-	 *
-	 * A signature is only as fresh as its `Date`, and the window above is
-	 * twelve hours wide: without this, a captured delivery could be sent
-	 * again for that long — a Follow after its Undo, say. A peer's own retry
-	 * signs again with a new `Date`, so it is never mistaken for a repeat.
-	 * The request is remembered only once it has been taken in
-	 * (`rememberRequest()`), so identical bytes resent after a failure are
-	 * still processed. Kept in `DurableCache`, so the guard holds on an
-	 * instance with no memory cache too.
+	 * Whether this exact signed request was already taken in: the window
+	 * above is twelve hours wide, and a captured delivery (a Follow after its
+	 * Undo) must not be replayed. A peer's retry signs a new `Date`. The
+	 * request is remembered only once taken in (`rememberRequest()`), so bytes
+	 * resent after a failure are still processed; kept in `DurableCache`, so
+	 * it works without a memory cache.
 	 */
 	public function isReplayed(IRequest $request): bool {
 		return $this->durableCache->get(self::REQUEST_SEEN_NAMESPACE, $this->requestKey($request)) !== null;
@@ -361,13 +338,9 @@ class SignatureService {
 
 	/**
 	 * The timestamp an HTTP `Date` header names, or null when it is not one.
-	 *
-	 * Only RFC 7231's IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`) is read,
-	 * which is what Mastodon, Pixelfed, PeerTube, Misskey, GoToSocial and
-	 * this app send, with `UTC` taken for `GMT` and a day without its leading
-	 * zero. A free-form parse such as `new DateTime()` accepts `now` or
-	 * `+1 hour`, and a request signed over a relative date never ages out of
-	 * the replay window.
+	 * Only RFC 7231's IMF-fixdate is read (with `UTC` for `GMT` and a day
+	 * without its leading zero): a free-form parse accepts `now` or `+1 hour`,
+	 * which would never age out of the replay window.
 	 */
 	public static function parseHttpDate(string $header): ?int {
 		if (preg_match('/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2}) (?:GMT|UTC)$/', trim($header), $m) !== 1) {
@@ -384,10 +357,7 @@ class SignatureService {
 
 	/**
 	 * The timestamp of a Linked Data signature's `created`, or null when it is
-	 * not an RFC 3339 date-time.
-	 *
-	 * Held to the same standard as the `Date` header, for the same reason: a
-	 * relative `created` would keep a signature inside its window for good.
+	 * not an RFC 3339 date-time; a relative one would never age out.
 	 */
 	public static function parseObjectDate(string $created): ?int {
 		if (preg_match('/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/', trim($created), $m) !== 1) {
@@ -417,10 +387,9 @@ class SignatureService {
 	}
 
 	/**
-	 * A value the sender wrote, made fit for an exception message: control
-	 * characters and bytes outside printable ASCII escaped, and cut at `$max`
-	 * bytes with the length that was left out. These messages reach the log,
-	 * and what goes into them is chosen by whoever sent the request.
+	 * A value the sender wrote, made fit for an exception message that reaches
+	 * the log: non-printable bytes escaped, and cut at `$max` bytes with the
+	 * length left out.
 	 */
 	private static function excerpt(string $value, int $max = self::EXCERPT): string {
 		$escaped = addcslashes($value, "\0..\37\177..\377");
@@ -433,13 +402,10 @@ class SignatureService {
 
 	/**
 	 * The RFC 9421 signature this request is verified against, or null when
-	 * the request carries no Signature-Input and is a draft-cavage one.
-	 *
-	 * A sender may sign under several labels. One is enough: the first whose
-	 * signature value is present, whose keyid names a key, and whose algorithm
-	 * this instance implements is the one verified — so a peer that also signs
-	 * with an Ed25519 key is not refused for it. Nothing here touches the
-	 * network; the key is fetched once, later, for the label chosen.
+	 * the request carries no Signature-Input and is a draft-cavage one. Of
+	 * several labels, the first with a signature value, a keyid and an
+	 * algorithm implemented here is verified, so an extra Ed25519 signature is
+	 * no reason to refuse. Nothing here touches the network.
 	 *
 	 * @return array{label: string, components: list<array{name: string, params: array<string, mixed>}>, params: array<string, mixed>, serialized: string, signature: string}|null
 	 * @throws SignatureException
@@ -495,11 +461,10 @@ class SignatureService {
 	}
 
 	/**
-	 * The replay window of the draft-cavage path, applied to what RFC 9421
-	 * carries: a `created` parameter inside the signed set, an optional
-	 * `expires`, and a Date header that a 9421 sender may or may not send.
-	 * Whatever is there has to hold; that one of `date` and `created` is there
-	 * at all is the coverage check's business.
+	 * The draft-cavage replay window applied to RFC 9421: a signed `created`,
+	 * an optional `expires`, and the Date header when sent. Whatever is there
+	 * has to hold; that `date` or `created` is covered at all is the coverage
+	 * check's business.
 	 *
 	 * @param array{params: array<string, mixed>, ...} $signature
 	 * @return int the request time: `created` when present, else the Date header
@@ -543,12 +508,10 @@ class SignatureService {
 	}
 
 	/**
-	 * Verifies the RFC 9421 signature chosen by selectMessageSignature().
-	 *
-	 * Same steps as the draft-cavage path, in the same order: the key's
-	 * origin, the mandatory covered set, the signature base, then the key —
-	 * fetched through the same bounded retrieval and refreshed once when the
-	 * signature does not verify against it.
+	 * Verifies the RFC 9421 signature chosen by selectMessageSignature(), in
+	 * the draft-cavage path's order: the key's origin, the mandatory covered
+	 * set, the signature base, then the key, refreshed once when it does not
+	 * verify.
 	 *
 	 * @param array{label: string, components: list<array{name: string, params: array<string, mixed>}>, params: array<string, mixed>, serialized: string, signature: string} $signature
 	 * @return string the key's origin host
@@ -629,14 +592,10 @@ class SignatureService {
 
 	/**
 	 * The host a signature is verified against: always the configured one,
-	 * with its port when the cloud URL names a non-default one.
-	 *
-	 * The signed host is what the sender addressed; substituting the
-	 * configured one is what stops a captured request being replayed
-	 * against another instance. But on a deployment whose configured host is
-	 * not the one peers reach (a second domain, a non-default port, a proxy
-	 * that rewrites Host), that substitution makes *every* inbound delivery
-	 * fail verification — with nothing in the log to say why.
+	 * with its port when the cloud URL names a non-default one, so a captured
+	 * request cannot be replayed against another instance. A deployment whose
+	 * peers reach another host or port (a second domain, a proxy rewriting
+	 * Host) fails every inbound verification.
 	 */
 	private function signedHost(string $sent): string {
 		$configured = $this->configService->getCloudAuthority();
@@ -652,12 +611,8 @@ class SignatureService {
 
 	/**
 	 * Runs `$verify` with the key `$keyId` names, and once more with a freshly
-	 * fetched copy if the first does not verify.
-	 *
-	 * A retrieval failure is not a reason to retrieve again: only a key that
-	 * was fetched and did not verify is worth refreshing, because only then
-	 * might the peer have rotated it. Retrying on any failure meant a keyId
-	 * that cannot be resolved cost two fetches per request instead of none.
+	 * fetched copy if it does not verify, as the peer may have rotated it. A
+	 * retrieval failure is not retried.
 	 *
 	 * @param callable(string): void $verify throws SignatureException when the key does not verify
 	 * @throws SignatureException
@@ -673,11 +628,8 @@ class SignatureService {
 	}
 
 	/**
-	 * A declared body length has to match the body.
-	 *
-	 * The header is optional, though: a sender using chunked transfer encoding
-	 * sends no Content-Length at all, and comparing the body against an absent
-	 * header's `(int)''` rejected every one of them.
+	 * A declared body length has to match the body. The header is optional, as
+	 * chunked transfer encoding sends none.
 	 *
 	 * @throws SignatureException
 	 */
@@ -696,24 +648,13 @@ class SignatureService {
 	}
 
 	/**
-	 * The body has to match a digest the sender computed over it.
+	 * The body has to match a digest the sender computed over it: RFC 3230's
+	 * `Digest` (`algorithm=base64`, case-insensitive, possibly a list) or
+	 * RFC 9530's `Content-Digest` (`sha-256=:base64:`).
 	 *
-	 * What is on the wire is wider than one fixed string. RFC 3230's `Digest`
-	 * carries `algorithm=base64`, with an algorithm name that is
-	 * case-insensitive and a list that may hold several entries; RFC 9530's
-	 * `Content-Digest` carries `sha-256=:base64:` and is what newer
-	 * implementations are moving to. Comparing bytes against exactly
-	 * `SHA-256=…` refused `sha-256=…`, refused
-	 * `Digest: SHA-256=…,SHA-512=…`, and refused a sender that offers only
-	 * `Content-Digest` — in every case reading as a forged body.
-	 *
-	 * At least one digest this server knows how to compute has to be present
-	 * and has to match: an unrecognised algorithm on its own is not a pass,
-	 * because then nothing binds the body to the signature.
-	 *
-	 * Every entry of both headers is checked, not one per algorithm: the
-	 * signature has to cover only one of the two headers, so an entry of the
-	 * other one must never stand in for an entry of the signed one.
+	 * At least one digest this server can compute has to be present and match;
+	 * an unknown algorithm alone binds nothing. Every entry of both headers is
+	 * checked, as the signature may cover only one of them.
 	 *
 	 * @throws SignatureException
 	 */
@@ -902,25 +843,13 @@ class SignatureService {
 	 * @throws SignatureException
 	 */
 	/**
-	 * Who signed a **GET**, or '' for a request that carried no signature.
+	 * Who signed a GET, or '' for a request that carried no signature: the
+	 * inbound half of authorized fetch, so followers-only objects can be
+	 * served to a remote follower.
 	 *
-	 * Authorized fetch, the inbound half. Signature verification ran on inbox
-	 * POSTs only, so this instance could not tell one remote reader from
-	 * another and had nothing to serve a followers-only object to — it failed
-	 * closed, which is safe and is also why a follower on another server saw
-	 * an empty profile.
-	 *
-	 * A GET has no body, so the two checks that bind one — the digest and the
-	 * content length — have nothing to bind and are not asked for. Everything
-	 * else is the POST path's: the signature has to cover `(request-target)`,
-	 * `host` and `date`, the date has to be inside the replay window, and the
-	 * key is fetched from the actor the `keyId` names.
-	 *
-	 * An unsigned request is not an error here. It is the ordinary case —
-	 * every crawler, every link preview, every fediverse server not running
-	 * authorized fetch — and what it gets is what an anonymous reader gets.
-	 * A signature that is *present and wrong* is an error, because the sender
-	 * is claiming to be somebody.
+	 * The POST path's checks except the digest and content length, as a GET
+	 * has no body. An unsigned request is the ordinary case and gets what an
+	 * anonymous reader gets; a signature that is present and wrong is an error.
 	 *
 	 * @param string $signer set to the actor whose key signed, when one did
 	 *
@@ -1122,20 +1051,11 @@ class SignatureService {
 	 * @throws UnauthorizedFediverseException
 	 */
 	/**
-	 * The public key a keyId names, fetching it only when there is no other way
-	 * and never for free.
-	 *
-	 * This runs before the request is authenticated, on a route anyone on the
-	 * internet can POST to, with a keyId the sender wrote. Three things bound
-	 * what that can cost:
-	 *
-	 *  - a key already in the actor cache is read from the database, untouched
-	 *    by any of the limits below;
-	 *  - a keyId that has never resolved is not retried for a while, so
-	 *    repeating the same unresolvable id costs one fetch, not one per
-	 *    request;
-	 *  - the fetch itself, and a forced refresh, are bounded — in time and in
-	 *    how often the same keyId may ask for one.
+	 * The public key a keyId names, fetched only when there is no other way:
+	 * this runs before authentication, with a keyId anyone may write. A cached
+	 * key is read from the database; a keyId that never resolved is not tried
+	 * again for a while; a fetch or forced refresh is bounded in time and in
+	 * how often the same keyId may ask.
 	 *
 	 * @param bool $isActorId `$keyId` is the actor's own id, as an LD signature's check passes it
 	 * @throws SignatureException
@@ -1202,9 +1122,8 @@ class SignatureService {
 		}
 
 		if (!$refresh) {
-			// resolved and stored, so the read above will answer from now on;
-			// drop the entry rather than hold off a genuine peer whose first
-			// delivery merely raced a slow answer
+			// resolved and stored, so the read above answers from now on; drop the
+			// entry so a peer whose first delivery raced a slow answer is not held off
 			$this->keyAttempts->remove($attemptKey);
 		}
 
@@ -1269,14 +1188,10 @@ class SignatureService {
 	}
 
 	/**
-	 * An activity may only speak for the actor whose key signed it.
-	 *
-	 * Checking the host alone lets anyone with an account on a server act as
-	 * anybody else on that server: same origin, different person. The one
-	 * legitimate case for a mismatch is a relayed or forwarded activity, and
-	 * that is what the Linked Data signature on the object is for — the caller
-	 * checks it first and only asks this when there was none. Mastodon draws
-	 * the line in the same place.
+	 * An activity may only speak for the actor whose key signed it, as in
+	 * Mastodon: a host check alone lets anyone on a server act as anybody else
+	 * there. A relayed or forwarded activity is covered by its Linked Data
+	 * signature, which the caller checks first.
 	 *
 	 * @throws InvalidOriginException
 	 */
@@ -1355,14 +1270,9 @@ class SignatureService {
 	 * @return string
 	 */
 	/**
-	 * The hash a signature says it was computed with.
-	 *
-	 * `hs2019` deliberately names no hash: the key type decides, and for the
-	 * RSA keys ActivityPub actors publish that is SHA-256 — so it maps there,
-	 * and so does an absent parameter (the draft's own default). Anything else
-	 * is refused rather than silently treated as SHA-256: an Ed25519 or ECDSA
-	 * signature verified as `rsa-sha256` fails with "signature cannot be
-	 * checked", which says nothing about what actually happened.
+	 * The hash a signature says it was computed with. `hs2019` and an absent
+	 * parameter mean SHA-256 for the RSA keys ActivityPub actors publish;
+	 * anything else is refused by name rather than failing as `rsa-sha256`.
 	 *
 	 * @throws SignatureException
 	 */
@@ -1390,15 +1300,10 @@ class SignatureService {
 	];
 
 	/**
-	 * Serves the JSON-LD contexts used during signature normalisation, exclusively
-	 * from the copies shipped with the app.
-	 *
-	 * A document's `@context` is remote input. Resolving it over the network would
-	 * hand every signing instance a URL this server then opens — with
-	 * `file_get_contents()`, that means any PHP stream wrapper — and a substituted
-	 * context would change the bytes a signature is computed over. An unknown context
-	 * therefore fails normalisation, which callers treat as an unverifiable
-	 * signature rather than an error.
+	 * Serves the JSON-LD contexts used during signature normalisation only from
+	 * the copies shipped with the app: a remote `@context` would make this
+	 * server open URLs a sender chose and could change the signed bytes. An
+	 * unknown context fails normalisation, treated as an unverifiable signature.
 	 *
 	 * @throws JsonLdException
 	 */

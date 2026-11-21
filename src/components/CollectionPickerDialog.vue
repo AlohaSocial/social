@@ -68,13 +68,9 @@ import { showError, showSuccess } from '../services/toast.js'
 import { errorOf } from '../utils/serverError.js'
 
 /**
- * Puts one of the reader's own posts into one of their collections.
- *
- * Opened from the post's menu, so the post is already chosen and the only
- * question is which album. The server does not say which albums a post is
- * already in — adding one twice is a no-op there — so the dialog remembers
- * only what it added itself, and a second click on the same row is a
- * button that no longer does anything.
+ * Puts one of the reader's own posts into one of their collections, from the
+ * post's menu. The server does not say which albums hold the post (adding twice
+ * is a no-op), so the dialog only remembers what it added itself.
  */
 export default {
 	name: 'CollectionPickerDialog',

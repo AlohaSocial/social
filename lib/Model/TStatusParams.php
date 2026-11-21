@@ -12,13 +12,10 @@ namespace OCA\Social\Model;
 use OCA\Social\Tools\ActivityPubEvent;
 
 /**
- * Reading a stored post request, for the two models that keep one.
- *
- * Every accessor is defensive about what it finds. `params` is JSON that was
- * written by an earlier version of this app from a body a client sent, and the
- * code reading it back runs without the client there to be told anything: a
- * poll that is a string, or a `media_ids` holding an object, has to become
- * "no poll" and "no media" rather than a type error inside a cron run.
+ * Reading a stored post request, for the two models that keep one. Every
+ * accessor is defensive: `params` holds a client's body and is read back in
+ * a cron run, so a malformed poll or `media_ids` becomes "none" rather than
+ * a type error.
  */
 trait TStatusParams {
 	/** @var array<string, mixed> */
@@ -76,9 +73,8 @@ trait TStatusParams {
 	}
 
 	/**
-	 * The attachments the post will carry, as the numeric media ids this app
-	 * uses. Held as strings in `params`, because that is how Mastodon holds
-	 * every id a client sees, and because the entity is echoed verbatim.
+	 * The attachments the post will carry, as numeric media ids; `params` holds
+	 * them as strings, as Mastodon does, since the entity is echoed verbatim.
 	 *
 	 * @return int[]
 	 */

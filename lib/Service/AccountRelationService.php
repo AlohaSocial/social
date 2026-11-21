@@ -24,49 +24,34 @@ use Psr\Container\ContainerInterface;
 
 /**
  * The three things one account keeps about another beside a follow, a block or
- * a mute: a private note, an endorsement, and the moment a mute runs out.
- *
- * None of them is federated and none of them is visible to the account they are
- * about — an endorsement is published on the viewer's own profile, but the row
- * here is only ever read for the account that wrote it.
+ * a mute: a private note, an endorsement, and the moment a mute runs out. None
+ * is federated, and the rows are only read for the account that wrote them.
  */
 class AccountRelationService {
 	/**
-	 * An endorsement is a row in `social_actor_relation`, the table that
-	 * already holds blocks and mutes, because it is exactly that shape: one
-	 * actor, one other actor, one word, no payload. It gets that table's unique
-	 * index — endorsing twice is endorsing once — and its account-deletion
-	 * cleanup for nothing. The timelines ignore it: they hide the types they
-	 * name, and this is not one of them.
+	 * An endorsement is a row in `social_actor_relation`, beside blocks and
+	 * mutes, for its unique index and account-deletion cleanup. The timelines
+	 * ignore it.
 	 */
 	public const TYPE_ENDORSE = 'endorse';
 
 	/**
-	 * The bell on a profile: "tell me when this account posts".
-	 *
-	 * The same shape as an endorsement, and in the same table for the same
-	 * reasons. Separate from the follow, because Mastodon's is: somebody may
-	 * follow an account without wanting to be told every time it writes, and
-	 * `POST /accounts/{id}/follow` carries `notify` for exactly that.
+	 * The bell on a profile: "tell me when this account posts". Separate from
+	 * the follow, as in Mastodon, where `POST /accounts/{id}/follow` carries
+	 * `notify`.
 	 */
 	public const TYPE_NOTIFY = 'notify';
 
 	/**
-	 * A suggestion the viewer said no to.
-	 *
-	 * Mastodon's `DELETE /api/v1/suggestions/{id}`, and the reason it exists:
-	 * a "who to follow" panel that offers the same account again after it was
-	 * dismissed is a panel people stop reading. Kept as a relation rather than
-	 * a decision with a lifetime — an account dismissed once stays dismissed,
-	 * because the next suggestion run would otherwise rank it back to the top
-	 * for the same reasons it ranked it there before.
+	 * A suggestion the viewer dismissed (Mastodon's
+	 * `DELETE /api/v1/suggestions/{id}`). Permanent, since the next suggestion
+	 * run would rank it back up for the same reasons.
 	 */
 	public const TYPE_SUGGESTION_DISMISSED = 'suggest_no';
 
 	/**
-	 * "Show me this account's notifications after all" — the answer to a
-	 * notification request, stored against the sender so that it settles
-	 * everything they have sent and will send.
+	 * "Show me this account's notifications after all": the answer to a
+	 * notification request, settling everything the sender has sent and will send.
 	 */
 	public const TYPE_NOTIFICATIONS_ACCEPTED = 'notif_ok';
 
@@ -77,10 +62,8 @@ class AccountRelationService {
 	public const MAX_NOTE = 2000;
 
 	/**
-	 * The longest mute this stores. Nothing refuses a longer one — it is
-	 * written as this, and a mute that ends in ten years is a permanent mute in
-	 * every way a user can tell, while an unbounded `time() + duration`
-	 * overflows the column it is written to.
+	 * The longest mute this stores; a longer one is written as this, since an
+	 * unbounded `time() + duration` overflows the column.
 	 */
 	public const MAX_DURATION = 315360000;
 
@@ -97,10 +80,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * The note as it is stored: what was typed, without the space around it and
-	 * no longer than Mastodon keeps one. An empty note is not a row — clearing
-	 * a note and never having written one are the same state, and Mastodon
-	 * clears one by sending an empty string.
+	 * The note as it is stored: trimmed and no longer than Mastodon keeps one.
+	 * An empty note is no row; Mastodon clears a note with an empty string.
 	 */
 	public static function normaliseNote(string $note): string {
 		$note = trim($note);
@@ -110,12 +91,9 @@ class AccountRelationService {
 	}
 
 	/**
-	 * When a mute asked for now with `$duration` seconds runs out; 0 for a mute
-	 * that does not.
-	 *
-	 * A duration of 0 is Mastodon's "until I say otherwise". A negative one is
-	 * a mute that has already expired, which is not a mute at all: it is read
-	 * as permanent, because a client that sent it meant to mute.
+	 * When a mute asked for now with `$duration` seconds runs out; 0 for a
+	 * mute that does not. 0 is Mastodon's "until I say otherwise", and a
+	 * negative duration is read as permanent too.
 	 */
 	public static function expiryOf(int $duration, ?int $now = null): int {
 		if ($duration <= 0) {
@@ -144,10 +122,8 @@ class AccountRelationService {
 
 	/**
 	 * @throws InvalidResourceException endorsing yourself, or endorsing an
-	 *                                  account you do not follow — Mastodon's
-	 *                                  "Account must be followed", because an
-	 *                                  endorsement is published as part of
-	 *                                  saying who you follow
+	 *                                  account you do not follow (Mastodon's
+	 *                                  "Account must be followed")
 	 */
 	public function endorse(Person $viewer, Person $target): void {
 		if ($viewer->getId() === $target->getId()) {
@@ -161,23 +137,16 @@ class AccountRelationService {
 		}
 
 		if (!$follow->isAccepted()) {
-			// a follow the other side has not answered is not a follow yet, and
-			// featuring somebody who may still refuse would publish a claim the
-			// viewer has not earned
+			// a follow request not yet accepted is not a follow
 			throw new InvalidResourceException('Account must be followed');
 		}
 
 		$this->actorRelationRequest->save($viewer->getId(), $target->getId(), self::TYPE_ENDORSE);
 	}
 
-	/** Unfeaturing an account that was not featured is not an error. */
 	/**
-	 * Turns the bell on a profile on or off.
-	 *
-	 * Writing it needs no follow: Mastodon sends `notify` *with* the follow, so
-	 * demanding an accepted follow first would refuse the one call that ever
-	 * sets it. What it subscribes to is the account posting, which is public
-	 * of anybody whose posts the subscriber can already see.
+	 * Turns the bell on a profile on or off. Needs no follow, since Mastodon
+	 * sends `notify` with the follow request.
 	 */
 	public function setNotify(Person $viewer, Person $target, bool $notify): void {
 		if ($viewer->getId() === $target->getId()) {
@@ -196,11 +165,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * Stops suggesting an account to this viewer.
-	 *
-	 * Dismissing the same account twice is not an error — the table's unique
-	 * index makes the second write the first one again, and a client that
-	 * retries a dropped request must not be told it was wrong.
+	 * Stops suggesting an account to this viewer. Dismissing twice is not an
+	 * error, so a retried request succeeds.
 	 */
 	public function dismissSuggestion(Person $viewer, Person $target): void {
 		if ($viewer->getId() === $target->getId()) {
@@ -213,9 +179,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * Answers a notification request with yes. Any previous "no" about the
-	 * same account goes: the two are one decision with two values, and a row
-	 * of each would leave which one applies to the reading of the table.
+	 * Answers a notification request with yes, replacing any "no" about the
+	 * same account.
 	 */
 	public function acceptNotifications(Person $viewer, Person $sender): void {
 		if ($viewer->getId() === $sender->getId()) {
@@ -255,9 +220,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * Takes back a "yes" to a notification request: the sender is judged by
-	 * the policy again, as if nobody had decided about them. A "no" is left
-	 * where it is; this undoes acceptance only.
+	 * Takes back a "yes" to a notification request, so the policy judges the
+	 * sender again. A "no" is left as it is.
 	 */
 	public function forgetAcceptedSender(Person $viewer, Person $sender): void {
 		$this->actorRelationRequest->delete(
@@ -266,11 +230,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * What this reader has already decided about a set of senders.
-	 *
-	 * One query for the whole set: a page of notifications comes from a
-	 * handful of accounts, and asking per account would be a query per row for
-	 * an answer that does not change inside one page.
+	 * What this reader has already decided about a set of senders, in one
+	 * query for a page of notifications.
 	 *
 	 * @param string[] $senders actor ids
 	 *
@@ -303,20 +264,16 @@ class AccountRelationService {
 	}
 
 	/**
-	 * Whether this viewer wants to see the account's boosts. Nothing stored
-	 * means yes, which is what an account that never touched the setting
-	 * expects.
+	 * Whether this viewer wants to see the account's boosts; yes unless
+	 * turned off.
 	 */
 	public function isShowingReblogs(string $viewerId, string $targetId): bool {
 		return !$this->actorRelationRequest->exists($viewerId, $targetId, ActorRelation::TYPE_HIDE_REBLOGS);
 	}
 
 	/**
-	 * Turns this account's boosts on or off in the viewer's timelines.
-	 *
-	 * Like the bell, it needs no follow first: Mastodon sends `reblogs` *with*
-	 * the follow, and demanding an accepted follow would refuse the one call
-	 * that ever sets it.
+	 * Turns this account's boosts on or off in the viewer's timelines. Like
+	 * the bell, it needs no follow first.
 	 */
 	public function setShowReblogs(Person $viewer, Person $target, bool $show): void {
 		if ($viewer->getId() === $target->getId()) {
@@ -362,6 +319,7 @@ class AccountRelationService {
 		return $this->actorRelationRequest->getLocalByObject($targetId, self::TYPE_NOTIFY);
 	}
 
+	/** Unfeaturing an account that was not featured is not an error. */
 	public function unendorse(Person $viewer, Person $target): void {
 		$this->actorRelationRequest->delete($viewer->getId(), $target->getId(), self::TYPE_ENDORSE);
 	}
@@ -381,8 +339,7 @@ class AccountRelationService {
 
 	/**
 	 * Records when a mute taken now runs out. A duration of 0 removes the
-	 * expiry rather than writing one, so re-muting an account permanently ends
-	 * a mute that used to be timed.
+	 * expiry, so re-muting permanently ends a timed mute.
 	 */
 	public function setMuteExpiry(Person $viewer, Person $target, int $duration, ?int $now = null): int {
 		$expiresAt = self::expiryOf($duration, $now ?? $this->now());
@@ -398,14 +355,9 @@ class AccountRelationService {
 	}
 
 	/**
-	 * Records an expiry that was decided elsewhere, as the moment itself.
-	 *
-	 * `setMuteExpiry()` takes a duration, which is what a client sends and
-	 * what a mute taken now is made of; an account export carries the moment
-	 * the mute runs out, and turning it back into a duration would move every
-	 * expiry forward by however long the archive sat in a download folder. A
-	 * moment already past is stored as it is: it says the mute has ended, and
-	 * every read of it already knows what that means.
+	 * Records an expiry decided elsewhere, as the moment itself: an account
+	 * export carries the moment, and turning it into a duration would shift
+	 * it. A moment already past is stored as is.
 	 *
 	 * @param int $expiresAt unix time; 0 clears the expiry, as elsewhere here
 	 */
@@ -437,11 +389,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * Whether the mute the viewer holds over this account has run out.
-	 *
-	 * Asked of the read rather than of a cron job: a mute stops applying the
-	 * second it expires, on an instance whose background jobs never run as much
-	 * as on one where they do.
+	 * Whether the mute the viewer holds over this account has run out. Asked
+	 * on the read, so an expiry works without background jobs.
 	 */
 	public function isMuteExpired(string $viewerId, string $actorId, ?int $now = null): bool {
 		$expiresAt = $this->muteExpiryRequest->getExpiry($viewerId, $actorId);
@@ -450,10 +399,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * The accounts of a mutes listing, without the ones whose mute has run out.
-	 *
-	 * One query for the whole page — the listing is a page of accounts, not one
-	 * account asked about repeatedly.
+	 * The accounts of a mutes listing, without the ones whose mute has run
+	 * out, in one query for the page.
 	 *
 	 * @param Person[] $accounts
 	 *
@@ -479,25 +426,8 @@ class AccountRelationService {
 	}
 
 	/**
-	 * The three fields of a Relationship that no other lookup fills in, and the
-	 * one it fills in too generously.
-	 *
-	 * `domain_blocking`, `note` and `endorsed` are each a fact about the pair
-	 * the relationship is being built for, and `muting` is read off a row that
-	 * may have run out — the mute is left in place and stops being reported,
-	 * which is what makes an expiry work without anything deleting it.
-	 *
-	 * `endorsed` is not read here: the relation row it comes from is already in
-	 * hand where this is called, and asking for it again would be a query for
-	 * something the caller just read.
-	 */
-	/**
 	 * `decorate()` for a whole page, in two queries instead of two per account.
-	 *
-	 * The single-account version is a lookup of the note and a lookup of the
-	 * mute's expiry; asked about forty accounts it was eighty round trips.
-	 * `domain_blocking` is not among them: it reads a per-viewer list that is
-	 * already memoised, so the first account pays for it and the rest do not.
+	 * `domain_blocking` reads a per-viewer list that is already memoised.
 	 *
 	 * @param array<string, Relationship> $relationships keyed by actor id
 	 */
@@ -524,6 +454,11 @@ class AccountRelationService {
 		}
 	}
 
+	/**
+	 * Fills in the Relationship fields no other lookup does (`domain_blocking`,
+	 * `note`) and clears `muting` for a mute that has run out, which is how an
+	 * expiry works without deleting the row. `endorsed` is set by the caller.
+	 */
 	public function decorate(
 		Relationship $relationship, string $viewerId, string $actorId, ?int $now = null,
 	): Relationship {

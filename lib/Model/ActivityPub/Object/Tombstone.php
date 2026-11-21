@@ -12,11 +12,6 @@ namespace OCA\Social\Model\ActivityPub\Object;
 use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
-/**
- * Class Tombstone
- *
- * @package OCA\Social\Model\ActivityPub\Activity
- */
 class Tombstone extends ACore implements JsonSerializable {
 	public const TYPE = 'Tombstone';
 

@@ -74,16 +74,10 @@ class ActionService {
 	}
 
 	/**
-	 * The accounts that favourited or boosted a post, newest first.
-	 *
-	 * Mastodon's `favourited_by` and `reblogged_by`, and the reason a tap on a
-	 * favourite or boost count is not a dead end. The caller has already
-	 * resolved the post through the visibility filter, so whoever may read the
-	 * post may see who reacted to it — which is Mastodon's rule too.
-	 *
-	 * An action whose actor this instance never cached is left out rather than
-	 * sent half-filled: a page of accounts with no handle and no avatar is one
-	 * a client can do nothing with.
+	 * The accounts that favourited or boosted a post, newest first: Mastodon's
+	 * `favourited_by` and `reblogged_by`. The caller resolved the post through
+	 * the visibility filter, so whoever may read it may see who reacted, as on
+	 * Mastodon. Actors never cached are left out.
 	 *
 	 * @return Person[]
 	 */
@@ -103,23 +97,9 @@ class ActionService {
 	}
 
 	/**
-	 * should return null
-	 * will return Stream only with translate action
-	 *
-	 * @param int|string $nid
-	 * @param string $action
-	 *
-	 * @return Stream|null
-	 * @throws InvalidActionException
-	 */
-	/**
-	 * Stops, or restarts, the notifications a thread produces for one account.
-	 *
-	 * Mastodon's conversation mute is about being *told*, not about seeing:
-	 * the posts stay on the timelines and the notifications stop. The mute is
-	 * recorded against the thread's root, so a reply that arrives tomorrow is
-	 * covered by a mute taken today — which is the whole point of muting a
-	 * conversation rather than a post.
+	 * Stops, or restarts, the notifications a thread produces for one account;
+	 * the posts stay on the timelines. Recorded against the thread's root, so it
+	 * covers replies that arrive later.
 	 */
 	private function muteConversation(Person $actor, Stream $post, bool $muted): void {
 		$rootId = $this->conversationsRequest->rootOf($post->getId());
@@ -135,19 +115,10 @@ class ActionService {
 	}
 
 	/**
-	 * Refuses an interaction the post's own author has said no to.
-	 *
-	 * GoToSocial defined `interactionPolicy`, Mastodon 4.5 reads it and Loops
-	 * publishes it: an author can state that their post may not be replied to,
-	 * boosted or liked. This app read only the quote clause, so the other
-	 * three were offered here and refused by the author's server afterwards —
-	 * the reader was told their boost went out, and it did, and nothing ever
-	 * showed it.
-	 *
-	 * Only what a peer stated about their own post is refused. A post from
-	 * here is this instance's to decide about when the interaction arrives,
-	 * and a post whose server publishes no policy — which is most of them — is
-	 * untouched.
+	 * Refuses an interaction the post's author has said no to in its
+	 * `interactionPolicy` (GoToSocial, Mastodon 4.5, Loops): no reply, boost or
+	 * like. Only a peer's statement about its own post counts; local posts and
+	 * posts without a policy are untouched.
 	 *
 	 * @throws InvalidActionException
 	 */
@@ -170,6 +141,15 @@ class ActionService {
 		);
 	}
 
+	/**
+	 * Applies a status action to a post as $actor.
+	 *
+	 * @param int|string $nid
+	 * @param string $action
+	 *
+	 * @return Stream|null the post for a pin or unpin, null otherwise
+	 * @throws InvalidActionException
+	 */
 	public function action(Person $actor, int|string $nid, string $action): ?Stream {
 		if (!in_array($action, self::$availableStatusAction, true)) {
 			throw new InvalidActionException();
@@ -260,13 +240,8 @@ class ActionService {
 	}
 
 	/**
-	 * `translate` is not here.
-	 *
-	 * It used to be, and it returned the post unchanged — which a client
-	 * cannot tell from a translation, so the button worked and did nothing.
-	 * It is `StatusApiController::statusTranslate()` now, because what it answers
-	 * with is a Translation entity rather than a Status, and because it needs
-	 * a translation provider that this service has no business holding.
+	 * `translate` is `StatusApiController::statusTranslate()`, which answers with
+	 * a Translation entity and needs a translation provider.
 	 */
 
 	private function favourite(Person $actor, string $postId, bool $enabled = true): void {

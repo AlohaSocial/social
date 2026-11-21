@@ -20,11 +20,8 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 /**
  * What a reader's notification list holds once the policy has had its say:
  * the page, the senders waiting in the requests inbox, what is unread, and
- * what accepting a sender releases.
- *
- * Kept apart from `NotificationService`, which raises the Nextcloud
- * notification when a row is stored, because the digest needs these answers
- * too and the digest is a dependency of that service.
+ * what accepting a sender releases. Separate from `NotificationService`
+ * because the digest, a dependency of that service, needs it too.
  */
 class NotificationInboxService {
 	/** The marker the unread count and the digest read. */
@@ -41,18 +38,10 @@ class NotificationInboxService {
 	}
 
 	/**
-	 * A page of the viewer's notifications, newest first, as
-	 * `/api/v1/notifications` serves them before the policy and the keyword
-	 * filters are applied.
-	 *
-	 * The grouped list, the requests inbox, the unread count and the digest
-	 * all read this one query, so they agree about what the account's
-	 * notifications are.
-	 *
-	 * Notifications whose sub-type Mastodon has no name for are dropped here
-	 * rather than by each caller: they serialise as `"type": ""`, which a
-	 * client with a closed enum cannot decode, and one undecodable entry
-	 * loses the whole page.
+	 * A page of the viewer's notifications, newest first, before the policy and
+	 * keyword filters, read by the grouped list, requests inbox, unread count
+	 * and digest alike. Sub-types with no Mastodon name are dropped here: one
+	 * `"type": ""` entry makes a client with a closed enum lose the whole page.
 	 *
 	 * @param string[] $types
 	 * @param string[] $excludeTypes
@@ -99,12 +88,9 @@ class NotificationInboxService {
 	}
 
 	/**
-	 * The notifications the policy is holding back, newest first, over the
-	 * last `NotificationPolicyService::LOOKBACK` the viewer received — or
-	 * over those newer than `$sinceId`.
-	 *
-	 * Nothing is read for an account whose policy holds nothing, which is
-	 * every account that never stored one.
+	 * The notifications the policy is holding back, newest first, over the last
+	 * `NotificationPolicyService::LOOKBACK` received or those newer than
+	 * `$sinceId`. Nothing is read when the policy holds nothing.
 	 *
 	 * @return Stream[]
 	 */
@@ -144,13 +130,10 @@ class NotificationInboxService {
 
 	/**
 	 * What the policy's `summary` says: how many senders the requests inbox
-	 * lists and how many notifications they sent between them.
-	 *
-	 * The sidebar asks for this on every push and poll, so the notifications
-	 * are not read whole: only what the policy asks of each
-	 * (`StreamService::getNotificationSenders()`), over the same lookback, with
-	 * the same senders left out as dismissed — `requests()` lists exactly
-	 * what this counts.
+	 * lists and how many notifications they sent. Asked on every push and poll,
+	 * so only what the policy needs of each notification is read
+	 * (`StreamService::getNotificationSenders()`), with the same exclusions as
+	 * `requests()`.
 	 *
 	 * @return array{requests: int, notifications: int}
 	 */
@@ -189,12 +172,10 @@ class NotificationInboxService {
 
 	/**
 	 * The `ETag` of the policy and its summary: a new notification, a decision
-	 * about a sender (the revision), the policy and the muted threads
-	 * (`unreadState()`), and what else the five questions read
-	 * (`NotificationPolicyService::stateOf()`).
-	 *
-	 * An account the reader does not follow that stops following the reader
-	 * moves none of them; what that changes shows with the next notification.
+	 * about a sender (the revision), the policy and muted threads
+	 * (`unreadState()`), and what `NotificationPolicyService::stateOf()` reads.
+	 * A stranger unfollowing the reader moves none of them until the next
+	 * notification.
 	 */
 	public function pendingTag(Person $viewer, string $userId): string {
 		return $this->newNotifications($viewer, $userId) . '-' . $this->timelineRevisionService->of($userId)
@@ -222,10 +203,9 @@ class NotificationInboxService {
 	}
 
 	/**
-	 * What moves when a notification is stored for the viewer: the newest
-	 * one, as a nid — one index-only probe — and the number moved with each
-	 * one stored (`TimelineRevisionService::NOTIFICATIONS`), as a second in
-	 * the same second can sort below the first and move no newest id.
+	 * What moves when a notification is stored for the viewer: the newest nid
+	 * (an index-only probe) and `TimelineRevisionService::NOTIFICATIONS`, since
+	 * a second notification in the same second may not move the newest id.
 	 */
 	private function newNotifications(Person $viewer, string $userId): string {
 		return $this->streamRequest->newestNidFor([md5($viewer->getId())], 'notif')
@@ -234,12 +214,8 @@ class NotificationInboxService {
 
 	/**
 	 * "Show me this account's notifications after all": the sender is always
-	 * allowed from now on, and what they sent while held joins the list.
-	 *
-	 * Nothing is raised for what is released. It is old news, and a bell for
-	 * each of a stranger's ten replies the moment the reader says yes would be
-	 * the interruption the policy kept away. It counts as unread instead, even
-	 * where the reader's marker moved past it while it was hidden.
+	 * allowed from now on, and what they sent while held joins the list as
+	 * unread, without raising anything.
 	 */
 	public function release(Person $viewer, Person $sender): void {
 		$released = [];
@@ -254,14 +230,10 @@ class NotificationInboxService {
 	}
 
 	/**
-	 * How many notifications the viewer has not seen: those past the marker
-	 * that are listed — neither held by the policy nor from a muted thread —
-	 * and those released behind the marker since the reader last looked.
-	 *
-	 * Counted by the database when the policy holds nothing; otherwise the
-	 * page past the marker is read and the policy applied to it, up to the
-	 * cap. Past the cap the badge says "lots", which is all anyone reads from
-	 * a two-digit number anyway.
+	 * How many notifications the viewer has not seen: those past the marker that
+	 * are listed (not held, not from a muted thread), plus those released behind
+	 * it since the reader last looked. Counted in the database when the policy
+	 * holds nothing, otherwise by reading the page up to the cap.
 	 *
 	 * @param string $userId the Nextcloud user behind the viewer, whose marker and policy these are
 	 */
@@ -283,10 +255,8 @@ class NotificationInboxService {
 	}
 
 	/**
-	 * What, besides a new notification and the marker, changes the unread
-	 * count: the policy, what was released behind the marker and the muted
-	 * threads. For the count's `ETag`; a decision about a sender moves the
-	 * timeline revision.
+	 * What else changes the unread count, for its `ETag`: the policy, what was
+	 * released behind the marker, and the muted threads.
 	 */
 	public function unreadState(Person $viewer, string $userId): string {
 		return md5(

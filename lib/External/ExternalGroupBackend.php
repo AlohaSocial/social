@@ -17,11 +17,9 @@ use OCP\Group\Backend\IHideFromCollaborationBackend;
 use OCP\Group\Backend\INamedBackend;
 
 /**
- * One read-only group holding every self-registered external user.
- *
- * Core's mandatory two-factor setting is group-based, and an administrator
- * restricting the Social app to groups has to be able to name the externals.
- * Nobody can add or remove members: membership is having a row in
+ * One read-only group holding every self-registered external user, so
+ * administrators can name them for group-based settings such as mandatory
+ * two-factor or app restrictions. Membership is having a row in
  * `social_ext_user`. Hidden from the share dialog.
  */
 class ExternalGroupBackend extends ABackend implements

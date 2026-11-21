@@ -16,20 +16,13 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_video_views` and `social_video_seen`: how many times a video posted
- * here was watched, and the little needed to count each viewer once a day.
+ * `social_video_views` and `social_video_seen`: view counts of videos posted
+ * here, counting each viewer once a day.
  *
- * `social_video_views` is the number, one row per video, unique on the post:
- * a counter moved in SQL rather than a row per view, so it costs the same
- * whether a video was watched ten times or a million.
- *
- * `social_video_seen` is today's dedupe and nothing else: one row per (video,
- * viewer) for the current day, the viewer named only by a keyed hash of the
- * day, the video and the account or session, so a row cannot be matched to a
- * person or to the same person's row of another day or video. Unique on
- * (post, hash), which is what makes a second view the same day a no-op;
- * indexed on `day` for the cron that drops the rows of the days before
- * (`Cron\Cache`).
+ * `social_video_views` is one counter row per video. `social_video_seen` is
+ * the day's dedupe only, unique on (post, hash), where the hash is keyed on
+ * day, video and account or session, so rows cannot be linked to a person
+ * or across days; `Cron\Cache` drops past days by `day`.
  */
 class Version1000Date20261016103300 extends SimpleMigrationStep {
 	/**

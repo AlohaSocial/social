@@ -7,22 +7,14 @@ import logger from './logger.js'
 import { videoAttachmentOf } from '../utils/videoCard.js'
 
 /**
- * Where a video attachment plays from, for every player in the app: the
- * attachments in a post and the watch page's own player.
- *
- * Three cases. A plain file a browser opens itself. A remote video that is
- * nothing but an HLS playlist — a PeerTube transcoding to HLS, its default,
- * or a Bluesky video — which Safari plays natively and every other browser
- * only through hls.js. And a local video with a ladder beside its file
- * (`hls_url`), where the file plays first and the ladder is an addition.
- *
- * Every address here is this server's: a remote video and its playlist are
- * proxied, never mirrored and never fetched from the origin by the reader.
+ * Where a video attachment plays from, for every player in the app: a plain
+ * file, a remote HLS-only playlist (PeerTube, Bluesky), or a local file with
+ * an HLS ladder beside it (`hls_url`). Remote videos are proxied by this server.
  */
 
 /**
  * The attachment a video post is watched as: its first video, else the first
- * file served as one. The same rule the server's `video_card` follows.
+ * file served as one, as the server's `video_card` does.
  *
  * @param {object|null|undefined} post the video post
  * @return {object|null}
@@ -44,10 +36,8 @@ export function isPlaylist(attachment) {
 }
 
 /**
- * The master playlist of a *local* video's ladder, where there is one.
- *
- * Different from a playlist in the one way that matters: there is a plain
- * file beside it, so failing to load it is not failing to play the video.
+ * The master playlist of a local video's ladder, where there is one. A plain
+ * file is beside it to fall back to.
  *
  * @param {object|null|undefined} attachment the attachment
  * @return {string} '' when there is none
@@ -59,12 +49,9 @@ export function ladderSourceOf(attachment) {
 }
 
 /**
- * The still to show before anything is played.
- *
- * `preview_url` is the file itself for a video uploaded here before posters
- * existed, which is no use as one: a browser handed a video for a poster
- * downloads it to find a frame. So only a preview that differs from the
- * source counts.
+ * The still to show before anything is played. Some local videos have the
+ * file itself as `preview_url`, which would make the browser download it, so
+ * only a preview that differs from the source counts.
  *
  * @param {object|null|undefined} attachment the attachment
  * @return {string|undefined} undefined leaves the attribute off
@@ -79,20 +66,10 @@ export function posterOf(attachment) {
 }
 
 /**
- * Points a video element at an HLS playlist, through hls.js where the
- * browser cannot open one itself.
- *
- * Safari plays a `.m3u8` natively and nothing else does, so everywhere else
- * the library is fetched — **lazily**, the first time somebody actually opens
- * such a video, because it is a few hundred kilobytes and almost every post is
- * not a video at all. Safari is left with the plain file of a laddered video:
- * pointing it at the master would throw away the fallback for an adaptive
- * stream of the same video.
- *
- * A ladder that cannot be loaded must not be the reason a video stops
- * playing, so on a fatal error the player is let go and the element goes
- * back to the plain file (`onFallback` is told). A remote playlist has nothing
- * to fall back to and is left to report itself.
+ * Points a video element at an HLS playlist, through a lazily loaded hls.js
+ * where the browser cannot play one natively. Safari keeps the plain file of a
+ * laddered video. A ladder that fails fatally falls back to the plain file and
+ * calls `onFallback`.
  *
  * @param {HTMLVideoElement} element the element to play in
  * @param {object} attachment the video attachment

@@ -35,11 +35,10 @@ use Throwable;
 /**
  * `/xrpc/<method>`: the AT Protocol surface of this instance as a PDS.
  *
- * Reached at the root through the web-server rules in contrib/webserver,
- * the way `/api/` is; the firehose (`subscribeRepos`) is a WebSocket the
- * daemon serves and the web server proxies to it. Every answer is JSON
- * with an `{error, message}` body on failure, or the bytes of a CAR file
- * or a blob, and carries the CORS header a web client needs.
+ * Reached at the root through the web-server rules in contrib/webserver; the
+ * firehose (`subscribeRepos`) is served by the daemon behind a proxy. Answers
+ * are JSON (`{error, message}` on failure), a CAR or a blob, always with
+ * CORS headers.
  */
 class AtprotoXrpcController extends Controller {
 	public function __construct(

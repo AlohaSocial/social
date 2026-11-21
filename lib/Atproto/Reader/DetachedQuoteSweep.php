@@ -18,13 +18,11 @@ use OCA\Social\Service\ConfigService;
 use OCP\AppFramework\Utility\ITimeFactory;
 
 /**
- * Notices a quote from here that its quoted author detached on Bluesky. The
- * fediverse says so (a `Reject` of the quote request); Bluesky does not —
- * the author lists the quote in their post's postgate — so the posts quoting
- * a Bluesky post of the last month are checked a page at a time
- * (`Postgates::detached()`), and a detached one is withdrawn here, as one
- * taken back on the fediverse is. The place it got to is kept, and it
- * starts over when it reaches the end.
+ * Notices a quote from here that its quoted author detached on Bluesky,
+ * which says so only in the post's postgate: posts quoting a Bluesky post of
+ * the last month are checked a page at a time (`Postgates::detached()`), and
+ * a detached one is withdrawn as on the fediverse. The cursor is kept and
+ * starts over at the end.
  */
 class DetachedQuoteSweep {
 	public const WINDOW = 30 * 86400;

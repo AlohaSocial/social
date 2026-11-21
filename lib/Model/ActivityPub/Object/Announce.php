@@ -14,11 +14,6 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 
-/**
- * Class Follow
- *
- * @package OCA\Social\Model\ActivityPub\Object
- */
 class Announce extends Stream implements JsonSerializable {
 	public const TYPE = 'Announce';
 
@@ -43,13 +38,8 @@ class Announce extends Stream implements JsonSerializable {
 
 	/**
 	 * The boost, as a client reads one: a status whose `reblog` is the status
-	 * that was boosted.
-	 *
-	 * Only a Stream can stand in `reblog`, because only a Stream exports the
-	 * shape of a status. An `Announce` naming anything else — an actor, a
-	 * collection, a type this app has no model for — is a boost of something a
-	 * timeline cannot show, and handing a client the wrong shape under a key it
-	 * decodes as a status is worse than handing it none.
+	 * that was boosted. Only a Stream can stand in `reblog`; an `Announce` of
+	 * anything else gets none rather than the wrong shape.
 	 *
 	 * @return array
 	 */

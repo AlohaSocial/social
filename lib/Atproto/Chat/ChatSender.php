@@ -24,19 +24,14 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
 /**
- * A direct message written here to people on Bluesky, sent to them as a
- * Bluesky direct message: one conversation with all of them
- * (`getConvoForMembers`), the text without the mentions that address it,
- * its links and hashtags as facets. Pictures stay here: Bluesky's direct
- * messages carry none. Answering a conversation that is a request on
- * Bluesky (somebody the person does not follow started it) accepts it
- * there, as answering it in a Bluesky app does.
+ * Sends a direct message written here to its Bluesky recipients, as one
+ * conversation with all of them (`getConvoForMembers`). Photos are not sent:
+ * Bluesky's direct messages carry none. Answering a conversation that is a
+ * request on Bluesky accepts it there.
  *
- * A message goes at most once. One recorded as sent is not sent again; as
- * `sendMessage` takes no idempotency key, the first attempt is recorded
- * before it goes (`ChatStore::attempting()`), and a retry looks among the
- * conversation's newest messages for the account's own of the same text
- * since then: found, it is recorded as sent, and only otherwise sent.
+ * `sendMessage` takes no idempotency key, so the first attempt is recorded
+ * before it goes (`ChatStore::attempting()`) and a retry first looks for the
+ * account's own message of the same text since then, sending only if none.
  */
 class ChatSender {
 	/** Bluesky's limit for one message */

@@ -15,11 +15,8 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * The IP blocks, from the command line.
- *
- * The admin API that manages them is served by this app, behind the same
- * middleware that enforces them; this and `social:ip-blocks:remove` need no
- * request at all.
+ * The IP blocks, from the command line, without going through the admin API
+ * and its middleware.
  */
 class IpBlocksList extends SocialCommand {
 	public function __construct(

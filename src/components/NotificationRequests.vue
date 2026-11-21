@@ -76,18 +76,9 @@ import { showError } from '../services/toast.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 
 /**
- * The senders whose notifications the policy is holding.
- *
- * The API has had this since the 4.3 policy landed and there was no page for
- * it, so somebody with a policy stricter than the default lost mentions with
- * no way to see that anything had been held — which is worse than not having
- * the policy at all. It unfolds at the top of Activities, under the line
- * that says how many people are waiting, which is where somebody looks
- * when a mention never arrived.
- *
- * One row per *sender*, which is the shape the API answers in and the shape
- * the decision has: accepting settles everything that account has sent and
- * will send. Deciding per notification would mean deciding again tomorrow.
+ * The senders whose notifications the policy is holding, unfolded at the top
+ * of Activities. One row per sender, as the API answers: accepting settles
+ * everything that account has sent and will send.
  */
 export default {
 	name: 'NotificationRequests',
@@ -196,10 +187,8 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async actAll(what) {
-			// the ids are sent to the server's own bulk route rather than
-			// looped here: one decision about the whole inbox is one request,
-			// and a loop that failed halfway would leave the page disagreeing
-			// with the server about what was decided
+			// one bulk request, so a failure halfway cannot leave the page
+			// disagreeing with the server about what was decided
 			const ids = this.requests.map((one) => one.id)
 			this.busy = ids
 			try {

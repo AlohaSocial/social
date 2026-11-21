@@ -33,10 +33,7 @@
 				{{ t('social', 'You feature no hashtags yet. The ones you pick sit at the top of your profile, under your bio.') }}
 			</p>
 
-			<!-- The first question anybody has here is "which of mine?", and
-			     the server already answers it: these are the tags this account
-			     posts with most and has not featured. Offering a bare text box
-			     instead would make somebody go and read their own timeline. -->
+			<!-- the tags this account posts with most and has not featured -->
 			<div v-if="suggestions.length > 0" class="featured-tags-settings__suggestions">
 				<h4 class="featured-tags-settings__subheading">
 					{{ t('social', 'Hashtags you post with') }}
@@ -75,11 +72,8 @@
 				</NcButton>
 			</form>
 
-			<!-- The server is the only thing that knows how many tags are one
-			     too many, so nothing here is refused before it has been asked.
-			     Its reason stays on the page rather than only in a toast: the
-			     way out of "you already feature ten" is to remove one of the
-			     rows above, and a message that has faded cannot say so. -->
+			<!-- only the server knows how many tags are too many; its reason stays on
+			     the page, since the way out is to remove one of the rows above -->
 			<NcNoteCard v-if="refusal" type="warning">
 				<ServerError :error="refusal" :alert="false" />
 			</NcNoteCard>
@@ -109,11 +103,8 @@ const MAX_HASHTAG_LENGTH = 127
 /**
  * A hashtag as the server stores one, for deciding whether the box holds one.
  *
- * The same rule as `FeaturedTagsRequest::normaliseHashtag()`: no leading `#`,
- * lowercased, and the character class the tag routes and the composer's
- * linkifier already treat as a hashtag. Only ever used to enable a button and
- * to say why one is off — whatever was typed is sent as typed, and the server
- * normalises and refuses for itself.
+ * The same rule as `FeaturedTagsRequest::normaliseHashtag()`. Only used to
+ * enable the button and say why it is off: what was typed is sent as typed.
  *
  * @param {string} value what was typed
  * @return {string} the tag, or '' for something that is not one
@@ -126,18 +117,7 @@ function asHashtag(value) {
 
 /**
  * The hashtags the reader pins to their own profile: pick some, drop some.
- *
- * `FeaturedTags.vue` has drawn these on a profile for a while and there was
- * nothing anywhere in this app that could change them, while
- * `/api/v1/instance` went on advertising `max_featured_tags`, so a Mastodon
- * client offered an editor this app did not have. Somebody could set their
- * featured tags from a phone and then find them unchangeable at a desk.
- *
- * It lives in Settings rather than on the profile because the suggestions are
- * a list of their own and the profile header has no room for one, and because
- * Settings is already where this app keeps the things you change about your
- * account. The profile links here, so the place the tags are seen leads to the
- * place they are set.
+ * The profile links here, since the suggestions need room the header lacks.
  */
 export default {
 	name: 'FeaturedTagsSettings',
@@ -257,12 +237,12 @@ export default {
 			this.busy = true
 			try {
 				const { data } = await axios.post(generateUrl('apps/social/api/v1/featured_tags'), { name })
-				// featuring one that is already featured answers the existing
-				// entity rather than refusing, so this replaces rather than appends
+				// featuring one that is already featured answers the existing entity, so
+				// this replaces rather than appends
 				this.featured = [...this.featured.filter((tag) => tag.id !== data.id), data]
 				this.suggestions = this.suggestions.filter((tag) => tag.name !== data.name)
-				// only when that is what was sent: clicking a suggestion while
-				// something is half-typed should not take the typing away
+				// only when that is what was sent: clicking a suggestion should not take
+				// half-typed text away
 				if (name === this.newTag) {
 					this.newTag = ''
 				}

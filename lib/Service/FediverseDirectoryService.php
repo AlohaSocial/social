@@ -23,43 +23,21 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Looking for somebody to follow, in directories other servers publish.
+ * Looks for somebody to follow in the directories other servers publish,
+ * asking several servers at once through APIs they serve without a token.
  *
- * The app could already find a person whose full handle you had already been
- * told, and suggest people out of a follow graph that a new account has none
- * of. Neither is how anybody actually finds anyone: you know a name, or a
- * subject, and not which of forty thousand servers they are on. What was
- * missing was somewhere to *ask*.
+ * Nothing about people is stored: an answer is cached for five minutes so
+ * typing does not hammer the sources. What is stored is about servers (the
+ * server directory's list and each peer's software), written by `refresh()`
+ * from `Cron\Cache` so listing the sources never waits on a remote host.
  *
- * So this asks several servers at once. Every API it uses is one those servers
- * serve to anybody without a token, because a directory is the part of a
- * server that exists to be read by strangers — nothing here holds credentials
- * for anyone else's instance, and nothing here can be made to.
- *
- * **What it does not do is aggregate.** No list is stored, nothing is indexed,
- * and an answer is kept for five minutes so that typing does not hammer four
- * servers per keystroke. The people in it are not this instance's to hold, and
- * a copy would be a directory nobody agreed to be in. What *is* stored is
- * about servers, not people: which ones a directory of servers lists and what
- * software each peer runs, written by `refresh()` from `Cron\Cache` so that
- * listing the sources never waits on a remote host.
- *
- * The kinds it can ask:
- *
- * - `local` — this instance's own directory and its cached actors. Always
- *   first, always present, never a network request.
- * - `mastodon` — `/api/v1/directory` and `/api/v1/accounts/lookup`, which is
- *   also what Pixelfed, Hometown, Glitch and most forks serve.
- * - `misskey` — `users/search`.
- * - `lemmy` — `search` with `type_=Users`.
- *
- * Mastodon has no public *search*, and that is a fact about Mastodon rather
- * than an omission here: `/api/v2/search` needs a token. What it does have is
- * an exact-handle lookup and a directory page, so a Mastodon-kind source is
- * asked both — the lookup answers "is there a `nextcloud` on that server",
- * the directory page answers "who is active there", and the query filters the
- * second. That is weaker than search and is reported as what it is, rather
- * than dressed up: see `DirectoryResults::isExhaustive()`.
+ * Source kinds: `local` (this instance, always first, no network),
+ * `mastodon` (`/api/v1/directory` and `/api/v1/accounts/lookup`, also
+ * served by Pixelfed and most forks), `misskey` (`users/search`), `lemmy`
+ * (`search` with `type_=Users`), `wordpress` (a hand-kept directory) and
+ * Bluesky's typeahead. Mastodon has no public search, so a Mastodon-kind
+ * source is asked the exact lookup plus a directory page filtered here; see
+ * `DirectoryResults::isExhaustive()`.
  *
  * @see DirectorySource for why the kind is configured rather than sniffed
  */
@@ -75,13 +53,9 @@ class FediverseDirectoryService {
 	public const TIMEOUT = 4;
 
 	/**
-	 * How long the whole fan-out has, in seconds. Four sources at four seconds
-	 * each is sixteen, which is longer than anybody waits for a search box, so
-	 * the sources are asked until this is spent and the rest are reported as
-	 * unasked rather than silently missing.
-	 *
-	 * A float, because it is added to `microtime(true)` and this codebase runs
-	 * psalm in strict binary operands mode.
+	 * How long the whole fan-out has, in seconds; sources not reached in time
+	 * are reported as unasked. A float because it is added to `microtime(true)`
+	 * (psalm strict binary operands).
 	 */
 	public const BUDGET = 10.0;
 
@@ -89,11 +63,8 @@ class FediverseDirectoryService {
 	public const CACHE_TTL = 300;
 
 	/**
-	 * How much of a Mastodon directory is read before the query is applied to
-	 * it. Its own maximum page is 80, and this is one page: a server that will
-	 * not answer a search cannot be made to by asking it eighty at a time
-	 * until something matches, and trying would be this instance walking
-	 * somebody else's user list.
+	 * How much of a Mastodon directory is read before the query is applied: one
+	 * page, its maximum of 80, rather than walking somebody else's user list.
 	 */
 	private const DIRECTORY_PAGE = 80;
 
@@ -101,19 +72,12 @@ class FediverseDirectoryService {
 	private const WORDPRESS_PAGE = 20;
 
 	/**
-	 * The sources an instance starts with.
-	 *
-	 * **Two, and named for what they are.** The editorial line is the same one
-	 * `StarterPackService` draws: the largest public instance of each of the
-	 * two software families whose whole purpose is people posting to people,
-	 * each serving the API used here to anybody without a token. Neither was
-	 * chosen because somebody here likes it, and an administrator who wants
-	 * different ones — or none — says so in the config below. This instance
-	 * publishes its own directory to them on exactly the same terms.
+	 * The sources an instance starts with: the large public instances of each
+	 * software family this can query without a token, plus a hand-kept
+	 * directory. An administrator can replace them in the config.
 	 */
 	private const BUILTIN = [
-		// a directory somebody keeps by hand, and the only one of these that
-		// can answer "who writes about X" — asked first for that reason
+		// Hand-kept, and the only one that can answer "who writes about X"; asked first.
 		['host' => 'fedi.directory', 'kind' => DirectorySource::KIND_WORDPRESS, 'label' => 'Fedi.Directory'],
 		['host' => 'mastodon.social', 'kind' => DirectorySource::KIND_MASTODON],
 		['host' => 'misskey.io', 'kind' => DirectorySource::KIND_MISSKEY],
@@ -128,9 +92,8 @@ class FediverseDirectoryService {
 	public const CONFIG_DISCOVERY = 'directory_discovery';
 
 	/**
-	 * A directory *of servers*, asked which ones are worth asking about
-	 * people. It publishes a curated list with each server's software, which
-	 * is exactly what is needed to know which API to speak to it.
+	 * A directory of servers, publishing a curated list with each server's
+	 * software, which tells which API to speak to it.
 	 */
 	private const DISCOVERY_HOST = 'fediverse.info';
 	private const DISCOVERY_PATH = '/api/_meta-api/instances/list';
@@ -142,11 +105,9 @@ class FediverseDirectoryService {
 	private const SOFTWARE_TTL = 604800;
 
 	/**
-	 * Where `refresh()` writes what it found out about servers: the list the
-	 * directory of servers answered with, and the software of each peer it
-	 * asked. An app value rather than a cache, because the cron writes it and a
-	 * web request reads it, and APCu — the memcache of most small instances —
-	 * is not shared between the two.
+	 * Where `refresh()` writes what it found out about servers. An app value
+	 * rather than a cache because the cron writes it and a web request reads
+	 * it, and APCu is not shared between the two.
 	 */
 	public const CONFIG_KNOWN = 'directory_known';
 
@@ -157,9 +118,8 @@ class FediverseDirectoryService {
 	private const KNOWN_MAX = 100;
 
 	/**
-	 * What a server calls its software, and which of the APIs above that is.
-	 * Everything Mastodon-compatible is asked as Mastodon, which is what
-	 * those projects intend.
+	 * What a server calls its software, and which of the APIs above that is;
+	 * everything Mastodon-compatible is asked as Mastodon.
 	 */
 	private const SOFTWARE_KINDS = [
 		'mastodon' => DirectorySource::KIND_MASTODON,
@@ -226,20 +186,9 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * The servers this instance actually federates with, most-known first.
-	 *
-	 * An editorial list is somebody else's idea of where people are; this is
-	 * this instance's own. The servers its accounts already follow people on
-	 * are, by definition, the ones its people are interested in, and asking
-	 * them costs nothing that following them did not already cost. Ranked by
-	 * how many of their accounts are cached here, because that is the
-	 * strongest signal available for "we deal with them a lot".
-	 *
-	 * The software has to be known before a server can be asked, since the
-	 * kind decides the API. What `refresh()` found out is all this reads: a
-	 * peer it has not asked yet is left out until it has, and a server whose
-	 * software this cannot speak to is left out rather than asked in a
-	 * language it does not answer.
+	 * The servers this instance federates with, ranked by how many of their
+	 * accounts are cached here. Only peers whose software `refresh()` has
+	 * already found, and can speak to, are included.
 	 *
 	 * @return DirectorySource[]
 	 */
@@ -293,12 +242,10 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * The search providers of the Aloha Directory's signed `search.json`.
-	 *
-	 * Each is an Aloha server, which serves the Mastodon directory and lookup
-	 * this asks a Mastodon-kind source with. They replace the built-in sources
-	 * while the administrator configured none, so that searches spread over
-	 * servers the curators accepted rather than land on the same few large ones.
+	 * The search providers of the Aloha Directory's signed `search.json`: Aloha
+	 * servers speaking the Mastodon directory and lookup. They replace the
+	 * built-in sources while the administrator configured none, spreading
+	 * searches over curated servers.
 	 *
 	 * @return DirectorySource[]
 	 */
@@ -318,13 +265,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Servers a directory of servers says exist.
-	 *
-	 * The list carries each server's software, so nothing has to be sniffed,
-	 * and `refresh()` asks for it once a day: which servers exist is not news
-	 * that changes between two searches. It is the weakest of the three ways a
-	 * source gets here — somebody else's editorial choice about servers this
-	 * instance has never spoken to — so it comes last and contributes few.
+	 * Servers the directory of servers lists, refreshed daily by `refresh()`.
+	 * The weakest source, so it comes last and contributes few.
 	 *
 	 * @return DirectorySource[]
 	 */
@@ -351,13 +293,10 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Finds out what `sources()` reads: the directory of servers' list, once a
-	 * day, and the software of the peers `sources()` would ask, once a week
-	 * each. Called from `Cron\Cache`, never from a request — the Discover page
-	 * used to wait three to five seconds on these on every load.
-	 *
-	 * Bounded per run by `LOOKUPS_PER_REFRESH`; a peer it did not get to is
-	 * asked on the next one, and until then `sources()` leaves it out.
+	 * Finds out what `sources()` reads: the server directory's list once a day
+	 * and each peer's software once a week. Called from `Cron\Cache`, never from
+	 * a request. Bounded by `LOOKUPS_PER_REFRESH`; peers not yet checked are
+	 * left out of `sources()`.
 	 */
 	public function refresh(): void {
 		$known = $this->known();
@@ -384,8 +323,7 @@ class FediverseDirectoryService {
 			if ($entry === null || $now - $entry['checked'] >= self::SOFTWARE_TTL) {
 				$lookups++;
 				$entry = ['name' => $this->softwareName($host), 'checked' => $now];
-				// the miss is remembered too: a server that does not publish
-				// NodeInfo will not start doing so before next week
+				// Remember a miss too; a server without NodeInfo is retried next week.
 				$known['software'][$host] = $entry;
 			}
 
@@ -402,8 +340,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * What `refresh()` last wrote, in a shape that can be read without
-	 * checking every key: an app value can be edited by hand.
+	 * What `refresh()` last wrote, normalised, since an app value can be edited
+	 * by hand.
 	 *
 	 * @return array{
 	 *     discovered: array{fetched: int, servers: list<array{host: string, software: string}>},
@@ -436,9 +374,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Software name from the bounded NodeInfo cache, without doing network I/O.
-	 * An unknown or stale peer is intentionally left to the existing instance-wide
-	 * publishing setting.
+	 * Software name from the bounded NodeInfo cache, without network I/O; an
+	 * unknown or stale peer falls back to the instance-wide publishing setting.
 	 */
 	public function knownSoftware(string $host): string {
 		$host = strtolower(trim($host));
@@ -456,9 +393,7 @@ class FediverseDirectoryService {
 
 	/**
 	 * The servers the directory of servers lists whose software one of these
-	 * APIs fits, or none when it does not answer — remembered as empty as
-	 * well, so a directory that is down is asked again tomorrow rather than
-	 * on every run.
+	 * APIs fits. A failure is remembered as empty, so it is retried tomorrow.
 	 *
 	 * @return list<array{host: string, software: string}>
 	 */
@@ -509,8 +444,7 @@ class FediverseDirectoryService {
 			$document = '';
 			foreach ($index['links'] ?? [] as $link) {
 				$href = (string)(is_array($link) ? ($link['href'] ?? '') : '');
-				// any schema version: they differ in what else they carry, not
-				// in the name of the software
+				// Any schema version: they all carry the software name.
 				if ($href !== '' && str_starts_with($href, $scheme . '://' . $host . '/')) {
 					$document = $href;
 				}
@@ -549,9 +483,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * One entry per host, the first to claim it winning: a server named in the
-	 * configured list and again by federation is one source, asked once, and
-	 * keeps the label and the origin the administrator gave it.
+	 * One entry per host, the first to claim it winning, so a configured server
+	 * keeps the administrator's label and origin.
 	 *
 	 * @param DirectorySource[] $sources
 	 *
@@ -567,12 +500,9 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Asks the sources about `$query` and merges what they say.
-	 *
-	 * A source that fails is **reported**, not dropped: "nobody by that name"
-	 * and "that server did not answer" are different answers and a reader
-	 * deciding whether to try another spelling needs to know which one they
-	 * got.
+	 * Asks the sources about `$query` and merges what they say. A failing source
+	 * is reported, not dropped, so "nobody by that name" and "did not answer"
+	 * stay distinct.
 	 *
 	 * @param string $host one source's host, or '' for all of them
 	 *
@@ -600,10 +530,8 @@ class FediverseDirectoryService {
 				$found = $this->ask($source, $query, $limit);
 				$reports[] = $this->report($source, 'ok', count($found));
 				foreach ($found as $account) {
-					// the first source to name somebody keeps them: sources are
-					// asked in the order they are configured, and this instance
-					// is asked first, so a person this server already knows is
-					// offered as the copy it knows
+					// The first source to name somebody wins; this instance is asked first, so
+					// a person it already knows is offered as its own copy.
 					$accounts[$account->getAcct()] ??= $account;
 				}
 			} catch (Throwable $e) {
@@ -652,11 +580,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * This instance's own people: the ones who opted in to being listed, and
-	 * the remote accounts it already holds.
-	 *
-	 * No network, so it is never the reason a search is slow, and it is asked
-	 * even when every other source is unreachable.
+	 * This instance's own people: those who opted in to being listed, and the
+	 * remote accounts it already holds. No network.
 	 *
 	 * @return DirectoryAccount[]
 	 */
@@ -720,13 +645,9 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * A Mastodon-compatible source, asked the two public questions it has.
-	 *
-	 * The lookup is exact and is what finds a person somebody half-remembers
-	 * the handle of. The directory page is who that server is happy to be
-	 * known for, and the query is applied here because the endpoint takes
-	 * none — which is why an empty query is the *better* case for this kind of
-	 * source rather than the degenerate one.
+	 * A Mastodon-compatible source, asked its two public questions: the exact
+	 * lookup, and a directory page filtered here because the endpoint takes no
+	 * query.
 	 *
 	 * @return DirectoryAccount[]
 	 */
@@ -741,7 +662,7 @@ class FediverseDirectoryService {
 					$found[$account->getAcct()] = $account;
 				}
 			} catch (Throwable $e) {
-				// no such handle there, which is an answer rather than a failure
+				// No such handle there: an answer, not a failure.
 				$this->logger->debug('[FediverseDirectoryService] no exact handle', [
 					'host' => $source->getHost(), 'exception' => $e,
 				]);
@@ -753,12 +674,8 @@ class FediverseDirectoryService {
 				'limit' => self::DIRECTORY_PAGE, 'offset' => 0, 'order' => 'active', 'local' => 'true',
 			]);
 		} catch (Throwable $e) {
-			// Pixelfed serves the lookup and answers 404 here, and it is not
-			// alone: the directory is the part of the Mastodon API a server
-			// may turn off, and an administrator may have. Whoever the exact
-			// lookup already found is still found -- reporting the source as
-			// failed would throw them away and tell the reader the server said
-			// nothing, when it answered the only question it takes.
+			// Pixelfed and servers with the directory turned off answer 404 here; keep
+			// what the exact lookup found rather than reporting the source as failed.
 			$this->logger->debug('[FediverseDirectoryService] no public directory', [
 				'host' => $source->getHost(), 'exception' => $e,
 			]);
@@ -784,19 +701,14 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Misskey, which has a real substring search over names and handles.
-	 *
-	 * `origin: combined` rather than `local`: a Misskey server knows about
-	 * people elsewhere too, and a reader looking for somebody does not care
-	 * which server was the one that had heard of them.
+	 * Misskey, which has a real substring search over names and handles;
+	 * `origin: combined` includes the remote people it knows.
 	 *
 	 * @return DirectoryAccount[]
 	 */
 	private function askMisskey(DirectorySource $source, string $query, int $limit): array {
 		if ($query === '') {
-			// its only listing endpoint is `users`, which is a different
-			// question with a different shape; an unsearched Misskey source
-			// contributes nothing rather than something misleading
+			// Its only listing endpoint, `users`, answers a different question.
 			return [];
 		}
 
@@ -815,9 +727,7 @@ class FediverseDirectoryService {
 				continue;
 			}
 
-			// `host` is null for that server's own people, which is the one
-			// thing that makes a Misskey handle ambiguous if taken at face
-			// value
+			// `host` is null for that server's own people.
 			$host = trim((string)($row['host'] ?? '')) ?: $source->getHost();
 
 			$account = new DirectoryAccount($username . '@' . $host, $source->getHost(), $source->getKind());
@@ -836,24 +746,15 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * A directory somebody keeps by hand, published as a WordPress site.
-	 *
-	 * Its REST API searches the entries, and an entry is a person written
-	 * about rather than a row in a user table — so this is the one source
-	 * that can answer a *subject*. What comes back is prose, and the handle
-	 * is in it: `@someone@example.org`, which is how those entries name
-	 * people because it is how the fediverse names people.
-	 *
-	 * A handle is only ever read out of an entry's own text. Nothing follows
-	 * the links in it, so an entry cannot make this instance fetch an address
-	 * somebody else chose.
+	 * A hand-kept directory published as a WordPress site, the one source that
+	 * can answer a subject. Handles are read out of each entry's text only;
+	 * links in it are never followed.
 	 *
 	 * @return DirectoryAccount[]
 	 */
 	private function askWordpress(DirectorySource $source, string $query, int $limit): array {
 		if ($query === '') {
-			// the endpoint is a search; with nothing to search for it answers
-			// with whatever is newest, which is not a directory
+			// With no query the endpoint returns the newest entries, not a directory.
 			return [];
 		}
 
@@ -894,12 +795,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * The first fediverse handle written in a piece of prose.
-	 *
-	 * Deliberately strict about what a handle is — letters, digits, dot, dash
-	 * and underscore around a single `@`, and a host with a dot in it. An
-	 * entry that names an account some other way contributes nobody, which is
-	 * better than contributing something that is not an account.
+	 * The first fediverse handle written in a piece of prose: letters, digits,
+	 * dot, dash and underscore around a single `@`, and a host with a dot.
 	 */
 	private function handleIn(string $text): string {
 		$text = html_entity_decode(strip_tags($text));
@@ -911,10 +808,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Lemmy, whose search is public and whose people carry their full actor id
-	 * — so the handle is read out of that rather than assembled, and a person
-	 * that Lemmy server merely knows about is attributed to the server they
-	 * are actually on.
+	 * Lemmy, whose search is public and whose people carry their full actor id,
+	 * so the handle names the server they are actually on.
 	 *
 	 * @return DirectoryAccount[]
 	 */
@@ -959,8 +854,7 @@ class FediverseDirectoryService {
 			return null;
 		}
 
-		// a Mastodon `acct` is bare for that server's own people and
-		// `user@host` for everybody else
+		// A Mastodon `acct` is bare for that server's own people.
 		if (!str_contains($acct, '@')) {
 			$acct .= '@' . $source->getHost();
 		}
@@ -978,8 +872,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Whether a directory row answers the query, for the one kind of source
-	 * that cannot be asked.
+	 * Whether a directory row answers the query, for a source that cannot be
+	 * asked one.
 	 */
 	private function matches(DirectoryAccount $account, string $query): bool {
 		if ($query === '') {
@@ -997,13 +891,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Drops everybody on a host this instance will not federate with.
-	 *
-	 * The fetch itself is already guarded — `CurlService` refuses a host the
-	 * access list excludes — but that guards the server being *asked*, and
-	 * these are people it is telling us about. Offering a follow button for
-	 * somebody on a blocked domain would be this instance recommending exactly
-	 * what it refuses to deliver to.
+	 * Drops everybody on a host this instance will not federate with:
+	 * `CurlService` guards which server is asked, not who it tells us about.
 	 *
 	 * @param array<string, DirectoryAccount> $accounts
 	 *
@@ -1030,11 +919,8 @@ class FediverseDirectoryService {
 	}
 
 	/**
-	 * Marks the people this instance already holds, in one pass over what it
-	 * has rather than a lookup per row.
-	 *
-	 * Nothing is fetched here. A row that is not marked is not a row that is
-	 * unknown to the fediverse — only one this server has not met yet.
+	 * Marks the people this instance already holds in its actor cache;
+	 * nothing is fetched.
 	 *
 	 * @param array<string, DirectoryAccount> $accounts
 	 */
@@ -1048,8 +934,6 @@ class FediverseDirectoryService {
 				$this->cacheActorService->getFromAccount($account->getAcct(), false);
 				$account->setKnown(true);
 			} catch (Throwable $e) {
-				// not held here, which is the ordinary case for a search that
-				// went looking somewhere else
 			}
 		}
 	}
@@ -1063,9 +947,7 @@ class FediverseDirectoryService {
 		return $this->curlService->retrieveJson(
 			'get',
 			'https://' . $source->getHost() . $path . '?' . http_build_query($params),
-			// a plain REST endpoint, so plain REST headers: the ActivityPub
-			// `Accept` this service otherwise sends asks a fediverse server for
-			// the other representation of whatever it is being asked about
+			// Plain REST: the ActivityPub `Accept` would ask for another representation.
 			['timeout' => self::TIMEOUT, 'json_headers' => false, 'headers' => ['Accept' => 'application/json']]
 		);
 	}
@@ -1134,8 +1016,7 @@ class FediverseDirectoryService {
 	 */
 	private function fromDefinition(array $definition): ?DirectorySource {
 		$host = strtolower(trim((string)($definition['host'] ?? '')));
-		// a host and nothing else: somebody will write a URL here, and the
-		// scheme and path are this class's to decide
+		// Keep only the host; the scheme and path are this class's to decide.
 		$host = (string)(parse_url(str_contains($host, '://') ? $host : 'https://' . $host, PHP_URL_HOST) ?? '');
 		if ($host === '') {
 			return null;
@@ -1143,9 +1024,8 @@ class FediverseDirectoryService {
 
 		$kind = strtolower(trim((string)($definition['kind'] ?? DirectorySource::KIND_MASTODON)));
 		if (!in_array($kind, DirectorySource::KINDS, true) || $kind === DirectorySource::KIND_LOCAL) {
-			// an unknown kind is read as the one most servers speak rather than
-			// dropped: a typo in a config value must not be why a source is
-			// missing from a page
+			// An unknown kind falls back to the most common one, so a config typo does
+			// not hide a source.
 			$kind = DirectorySource::KIND_MASTODON;
 		}
 

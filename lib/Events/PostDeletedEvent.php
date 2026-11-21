@@ -13,16 +13,9 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCP\EventDispatcher\Event;
 
 /**
- * A post written on this instance was deleted.
- *
- * The twin of `PostPublishedEvent`, and the reason that one is not enough on
- * its own: anything that copied a post somewhere else — an index, a mirror, an
- * Activity entry — needs to be told when it goes, or it keeps showing
- * something the author took back.
- *
- * Dispatched **after** the row is gone and the `Delete` is queued, with the
- * post as it last was: a listener that wants to remove its own copy needs the
- * id, and nothing else can hand it over once the row is deleted.
+ * A post written on this instance was deleted, for anything that copied it
+ * elsewhere (an index, a mirror, an Activity entry). Dispatched after the row
+ * is gone and the `Delete` is queued, with the post as it last was.
  */
 class PostDeletedEvent extends Event {
 	public function __construct(

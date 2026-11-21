@@ -17,8 +17,7 @@
 		<p v-if="shown.length === 0" class="social-admin__hint">
 			{{ t('social', 'No instance is on the list.') }}
 		</p>
-		<!-- an address or a reason on this list came from a moderator, but it
-		     is shown the same way everything else on this page is: interpolated -->
+		<!-- addresses and reasons are interpolated like everything else on this page, never rendered as HTML -->
 		<ul v-else-if="blockList" class="access__list">
 			<li v-for="entry in entries" :key="entry.domain" class="access__entry">
 				<div class="access__item">
@@ -171,13 +170,12 @@ import { showError } from '../../services/toast.js'
 const MAX_COMMENT = 1000
 
 /**
- * The instance-wide access list, and which way round it is read.
+ * The instance-wide access list, as an allow list or a block list.
  *
- * The same lists `occ social:fediverse` manages, which is why the list is
- * redrawn from what the route answers rather than from what was typed. On a
- * block list each entry is blocked or silenced and may carry two reasons:
- * one for the moderators, and one the published list of blocked servers
- * shows.
+ * `occ social:fediverse` manages the same lists, so the list is redrawn from
+ * what the route answers. On a block list each entry is blocked or silenced,
+ * with a reason for the moderators and one for the public list of blocked
+ * servers.
  */
 export default {
 	name: 'AccessSection',

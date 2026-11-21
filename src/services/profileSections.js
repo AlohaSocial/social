@@ -21,15 +21,11 @@ export function configureSocialProfileApp(app, globals) {
 }
 
 /**
- * Register a Social section with the Nextcloud Profile app.
- *
- * The profile page's classic app scripts are emitted before its `type=module`
- * entry. At that point `OCA.Profile.ProfileSections` does not exist yet. The
- * Profile app creates that registry immediately before mounting the page and
- * reads its sections during the mount, so deferring registration to
- * DOMContentLoaded or a timer is already too late. Intercept the registry's
- * first assignment and register synchronously, before the Profile page reads
- * it. If a Nextcloud version has already created the registry, register now.
+ * Register a Social section with the Nextcloud Profile app. The Profile app
+ * creates its `ProfileSections` registry just before mounting and reads it
+ * during the mount, after this classic script has run and too soon for any
+ * deferral, so the registry's first assignment is intercepted and the section
+ * registered synchronously. An existing registry is used at once.
  *
  * @param {{ProfileSections?: {registerSection?: (section: object) => void}}} profile the `OCA.Profile` namespace
  * @param {object} section section descriptor accepted by `registerSection`
@@ -52,9 +48,7 @@ export function registerProfileSection(profile, section) {
 		enumerable: descriptor?.enumerable ?? true,
 		get: () => registry,
 		set(value) {
-			// Restore an ordinary data property before invoking the registry, so
-			// later reads and any future assignments retain the Profile app's
-			// expected semantics.
+			// an ordinary data property again, as the Profile app expects
 			Object.defineProperty(profile, 'ProfileSections', {
 				configurable: true,
 				enumerable: descriptor?.enumerable ?? true,

@@ -25,23 +25,16 @@ import { isNewerId, newerId } from '../utils/snowflake.js'
  */
 
 /**
- * How many notifications have arrived since the reader last looked, and where
- * "last looked" is.
- *
- * Both come from the server, which keeps a marker — the same marker every
- * other Fediverse client keeps, so a badge cleared on a phone is cleared here
- * too. Nothing is stored in the browser: a per-device idea of "unread" is
- * worse than none.
+ * How many notifications arrived since the reader last looked, and where
+ * that is. Both come from the server's read marker, shared with every other
+ * client, so nothing is kept in the browser.
  */
 export const useNotificationsStore = defineStore('notifications', {
 	state: () => ({
 		unread: 0,
 		/**
-		 * How many conversations have something unread in them.
-		 *
-		 * A conversation and not a message: five messages in one exchange are
-		 * one thing to go and read, and a badge saying five would send
-		 * somebody looking for four conversations that are not there.
+		 * How many conversations, not messages, have something unread: five
+		 * messages in one exchange are one thing to read.
 		 */
 		unreadDirect: 0,
 		/** whether the count has been read once, so a rise can be told from a first answer */
@@ -51,12 +44,11 @@ export const useNotificationsStore = defineStore('notifications', {
 		/** whether the one-time notice about choosing who may reach you is due, as the policy says */
 		policyNotice: false,
 		/**
-		 * The row id the reader had read up to, the last time the server was
-		 * asked; '0' while unknown or when nothing has ever been read. What
-		 * the notifications page draws its "New" line from.
+		 * The row id the reader had read up to, as last fetched; '0' while
+		 * unknown or never read. Activities draws its "New" heading from it.
 		 *
-		 * A string: it is a twenty-digit snowflake, and a Number holds
-		 * seventeen of them. See `newestIdOf()`.
+		 * A string, as a twenty-digit snowflake does not fit a Number.
+		 * See `newestIdOf()`.
 		 */
 		lastReadId: '0',
 	}),
@@ -71,9 +63,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * The count on Activities in the sidebar: what is unread, and the
-		 * people waiting for a decision. Requests never ring the bell, so
-		 * they are part of the number rather than a badge of their own.
+		 * The count on Activities in the sidebar: unread notifications plus
+		 * the held senders waiting for a decision, who never ring the bell.
 		 *
 		 * @param {NotificationState} state the store state
 		 * @return {number} what the Activities badge shows
@@ -101,8 +92,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Reads how many conversations are unread. Silent on failure, for the
-		 * reason the notification count is: a badge is not worth a toast.
+		 * Reads how many conversations are unread. Silent on failure: a badge
+		 * is not worth a toast.
 		 *
 		 * @return {Promise<boolean>} whether the server answered
 		 */
@@ -120,9 +111,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Takes a new unread conversation count, with a chime for a
-		 * conversation that became unread since the last look -- never for
-		 * the count the page opened with, which is news to nobody.
+		 * Takes a new unread conversation count, chiming for a conversation
+		 * that became unread since the last count, never for the first one.
 		 *
 		 * @param {unknown} answered the count as the server sent it
 		 */
@@ -136,11 +126,10 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Reads all three sidebar counts in one request: the unread
-		 * notifications, the senders the policy holds (and whether its
-		 * one-time notice is due) and the unread conversations. The server
-		 * answers `304` while none of them changed. Silent on failure, like
-		 * each of the three on its own.
+		 * Reads all three sidebar counts in one request: unread notifications,
+		 * held senders (and whether the policy notice is due) and unread
+		 * conversations. The server answers `304` when none changed. Silent on
+		 * failure.
 		 *
 		 * @return {Promise<boolean>} whether the server answered
 		 */
@@ -161,9 +150,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Says the reader has seen the Direct messages page, and clears the
-		 * badge without waiting for the server to agree -- they have seen
-		 * them, so the badge is already wrong.
+		 * Marks the Direct messages page as seen and clears the badge without
+		 * waiting for the server.
 		 */
 		async markDirectMessagesRead() {
 			if (this.unreadDirect === 0) {
@@ -190,10 +178,9 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Reads how many senders the policy is holding back, off the policy's
-		 * own summary — the count Mastodon's clients draw their banner from —
-		 * and whether the one-time notice is due. Silent on failure: the line
-		 * and the notice simply stay away.
+		 * Reads how many senders the policy is holding back, from the policy's
+		 * summary as Mastodon clients do, and whether the one-time notice is
+		 * due. Silent on failure.
 		 *
 		 * @return {Promise<boolean>} whether the server answered
 		 */
@@ -212,8 +199,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Puts the one-time notice away for good. It goes at once; a failed
-		 * request only means it comes back on a later visit.
+		 * Puts the one-time notice away for good. It goes at once; if the
+		 * request fails it comes back on a later visit.
 		 */
 		async dismissPolicyNotice() {
 			this.setPolicyNotice(false)
@@ -243,12 +230,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Reads where the reader had got to, as the server remembers it.
-		 *
-		 * Asked when the notifications page opens, so that the line between
-		 * what is new and what was already seen is drawn where every client
-		 * agrees it is. A failure answers 0 — no line at all — rather than
-		 * guessing, and says nothing: the list itself is still readable.
+		 * Reads the server's read marker, where Activities draws the line
+		 * between new and seen. A failure answers '0' (no line), silently.
 		 *
 		 * @return {Promise<string>} the marker; '0' when unknown
 		 */
@@ -269,9 +252,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Marks everything up to `lastReadId` as read, and clears the badge
-		 * straight away rather than waiting for the server to agree — the
-		 * reader has seen the notifications, so the badge is already wrong.
+		 * Marks everything up to `lastReadId` as read, clearing the badge
+		 * without waiting for the server.
 		 *
 		 * @param {string|number} lastReadId the newest notification now seen
 		 */
@@ -297,15 +279,9 @@ export const useNotificationsStore = defineStore('notifications', {
 		},
 
 		/**
-		 * Marks everything read, whatever the page is filtered to.
-		 *
-		 * The marker is "read up to", so what it needs is the id of the newest
-		 * notification there is -- not the newest of the kind the reader
-		 * happens to be looking at. Filtered to Mentions, the newest mention
-		 * can be older than a dozen favourites, and moving the marker there
-		 * would leave the badge up over the very activities the reader had
-		 * just said they were done with. So the newest is asked for
-		 * unfiltered, and only then committed.
+		 * Marks everything read, whatever Activities is filtered to: the marker
+		 * is "read up to", so it is set from the newest notification fetched
+		 * unfiltered, not the newest of the filtered kind.
 		 *
 		 * @return {Promise<string>} the id it marked up to; '0' when it could not
 		 */
@@ -324,8 +300,7 @@ export const useNotificationsStore = defineStore('notifications', {
 			}
 
 			if (newest === '0') {
-				// a badge over an empty list: there is nothing to mark, and the
-				// count was wrong rather than the marker
+				// nothing to mark: the count was wrong, not the marker
 				this.setUnreadNotifications(0)
 
 				return '0'

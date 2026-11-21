@@ -14,11 +14,6 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
-/**
- * Class HashtagsRequest
- *
- * @package OCA\Social\Db
- */
 class HashtagsRequest extends HashtagsRequestBuilder {
 	/** The most rows a hashtag search will read, whatever it was asked for. */
 	public const SEARCH_LIMIT = 25;
@@ -27,8 +22,8 @@ class HashtagsRequest extends HashtagsRequestBuilder {
 
 	/**
 	 * The trend window each sortable counter column holds. The same counts are
-	 * kept in the `trend` JSON column, which is what the API hands back; these
-	 * exist so the database can order and cut the list itself.
+	 * in the `trend` JSON column the API returns; these let the database
+	 * order and cut the list.
 	 */
 	public const TREND_COLUMNS = [
 		'1h' => 'trend_1h',
@@ -39,27 +34,17 @@ class HashtagsRequest extends HashtagsRequestBuilder {
 	];
 
 	/**
-	 * How long a hashtag this table holds — the same as `social_stream_tag`,
-	 * which is where these rows are counted from. A longer one has nowhere to
-	 * go: `hashtag` is the primary key, so it can be neither truncated (two
-	 * tags would become one row) nor stored.
+	 * How long a hashtag this table holds, as in `social_stream_tag`. A longer
+	 * one cannot be stored: `hashtag` is the primary key, so truncating would
+	 * merge tags.
 	 */
 	public const HASHTAG_MAX_LENGTH = 127;
 
 	/**
-	 * Writes one hashtag's trend, whether or not it already has a row.
-	 *
-	 * The caller cannot tell the two apart: the trends cron knows the rows that
-	 * currently claim a trend, which is not the set of rows that exist — a
-	 * hashtag that trended, fell to zero and trends again has a row and is not
-	 * in that list. An INSERT for it is refused by the primary key, and the
-	 * exception used to end the whole pass.
-	 *
-	 * The UPDATE goes first because almost every hashtag the cron writes has
-	 * been seen before; it is followed by an insert that the database is asked
-	 * to skip on a conflict, so a row this process did not know about costs a
-	 * statement rather than a failed transaction — which on PostgreSQL takes
-	 * every later statement with it.
+	 * Writes one hashtag's trend, whether or not it already has a row. The
+	 * UPDATE goes first, since most hashtags were seen before, then an insert
+	 * the database skips on conflict, so an unknown row costs a statement
+	 * rather than a failed transaction (fatal on PostgreSQL).
 	 */
 	public function upsert(string $hashtag, array $trend): void {
 		if ($this->update($hashtag, $trend) > 0) {
@@ -117,10 +102,8 @@ class HashtagsRequest extends HashtagsRequestBuilder {
 	}
 
 	/**
-	 * Rows carry a `counters` entry next to the JSON `trend`: the same numbers
-	 * as the sortable columns hold them. The trends cron needs to see the two
-	 * disagree — a row upgraded from a version that had no columns has a
-	 * correct JSON and zeroed columns, and nothing else would ever notice.
+	 * Rows carry a `counters` entry next to the JSON `trend`: the sortable
+	 * columns' numbers, so the trends cron can see the two disagree.
 	 *
 	 * @param int $limit 0 for every row — what the trends cron needs, since it
 	 *                   has to know which hashtags already have a row
@@ -150,13 +133,8 @@ class HashtagsRequest extends HashtagsRequestBuilder {
 	}
 
 	/**
-	 * The hashtags that currently claim a trend — the only rows the trends cron
-	 * can act on.
-	 *
-	 * It used to read the whole table for this, on every run, to find the few
-	 * rows that have fallen out of the widest window and need their counters
-	 * cleared. Everything else it read was a hashtag with nothing to change.
-	 * The set this returns is inherently small: it is the trending list.
+	 * The hashtags that currently claim a trend, the only rows the trends cron
+	 * can act on; a small set, the trending list.
 	 *
 	 * @return array
 	 */
@@ -206,12 +184,8 @@ class HashtagsRequest extends HashtagsRequestBuilder {
 	}
 
 	/**
-	 * The most used hashtags within one window, most used first.
-	 *
-	 * Ordered and cut in the database. The counts live in a JSON column as
-	 * well, which is what the API hands back, but no supported database can be
-	 * asked to sort on that — so answering this used to mean loading every
-	 * hashtag the instance has ever seen into PHP, on every trends request.
+	 * The most used hashtags within one window, most used first, ordered and
+	 * cut in the database on the sortable column.
 	 *
 	 * @param string $period one of the windows in self::TREND_COLUMNS
 	 *
@@ -264,18 +238,8 @@ class HashtagsRequest extends HashtagsRequestBuilder {
 	}
 
 	/**
-	 * @param string $hashtag
-	 * @param bool $all
-	 *
-	 * @return array
-	 */
-	/**
-	 * The hashtags that travel with one: those on the same public posts,
-	 * most often first.
-	 *
-	 * Counted from `social_stream_tag` joined to itself on the post, and to
-	 * the post for its visibility: a tag on a followers-only post is not
-	 * public knowledge, so it does not count here, however often it recurs.
+	 * The hashtags that travel with one: those on the same public posts, most
+	 * often first. Tags on followers-only posts do not count.
 	 *
 	 * @return array<string, int> hashtag => how many public posts carry both
 	 */

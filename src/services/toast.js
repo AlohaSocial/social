@@ -4,27 +4,14 @@
  */
 
 /**
- * Toasts, fetched when something actually has to be said.
- *
- * The toasts come from `@nextcloud/dialogs/toast`, the entry point that holds
- * only them; the package's main entry also carries the file picker, the
- * conflict picker and the dialog builder.
- *
- * Nothing waits for a toast, so nothing here needs to be awaited: each call
- * returns a promise that the caller is free to ignore, and the library arrives
- * in its own chunk the first time one is shown. The import is memoised by the
- * module system, so the second toast is immediate.
- *
- * The signatures are `@nextcloud/dialogs`' own, forwarded unchanged, except
- * that `showError` also takes a sentence with the server's own words beside it.
+ * Toasts from `@nextcloud/dialogs/toast`, loaded in their own chunk on first
+ * use. The returned promises need not be awaited. Signatures are the library's,
+ * except that `showError` also takes the server's words for a "Details" fold.
  */
 
 import { t } from '@nextcloud/l10n'
 
 /**
- * The toast entry imports its own stylesheet, so both arrive in the `toast`
- * chunk, out of the entry this file was split out of to keep small.
- *
  * @return {Promise<typeof import('@nextcloud/dialogs/toast')>} the toast module, loaded once
  */
 function dialogs() {

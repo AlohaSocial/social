@@ -25,20 +25,13 @@ use OCA\Social\Model\Post;
 use OCA\Social\Model\Report;
 
 /**
- * What Pixelfed's own app asks for, in the shapes it reads.
+ * What Pixelfed's own app asks for on its `v1.1`/`v1.2` surface, in the
+ * shapes it reads: data this app already serves, read through the owning
+ * services and rearranged (a story carousel by account, a collection with
+ * `thumb` and `post_count`, a report with `report_type`).
  *
- * Pixelfed speaks Mastodon's client API for almost everything and its own
- * `v1.1`/`v1.2` surface for the rest. The rest is mostly the same data this
- * app already serves under Mastodon's paths, arranged the way the app's
- * screens expect: a story carousel grouped by account, a collection with a
- * `thumb` and a `post_count`, a report with a `report_type`. Nothing here is a
- * second implementation of anything — every method reads through the service
- * that owns the data and rearranges the answer.
- *
- * Two answers are honest rather than convenient. `pushState()` says push is
- * off and there is no token, because there is no Web Push here; `nagState()`
- * says there is nothing to nag about. Both keep the app's settings screens
- * from erroring without promising anything the server does not do.
+ * `pushState()` and `nagState()` answer that nothing is on, so the app's
+ * settings screens work without promising anything.
  */
 class PixelfedService {
 	/** The report reasons Pixelfed's app offers, and which Mastodon category each is. */
@@ -191,14 +184,10 @@ class PixelfedService {
 	}
 
 	/**
-	 * A report as the app files one — a reason, a thing and a kind of thing —
-	 * turned into the report this server keeps.
-	 *
-	 * The reason becomes Mastodon's category and is kept in the comment as
-	 * well, because `violation` says less than `underage` did. A report about
-	 * a post names its author and carries the post; one about a story names
-	 * the story's owner and nothing else, since a story has no client id a
-	 * moderator could open.
+	 * A report as the app files one (a reason, a thing and a kind of thing),
+	 * turned into the report this server keeps. The reason becomes Mastodon's
+	 * category and is kept in the comment too. A post report names its author
+	 * and carries the post; a story report names only the story's owner.
 	 *
 	 * @throws InvalidResourceException
 	 */
@@ -261,8 +250,8 @@ class PixelfedService {
 	}
 
 	/**
-	 * The push settings screen, told the truth: there is no Web Push here,
-	 * so nothing is enabled and there is no token to compare against.
+	 * The push settings screen: Pixelfed's own app push is not supported, so
+	 * nothing is enabled and there is no token to compare against.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -307,18 +296,10 @@ class PixelfedService {
 	}
 
 	/**
-	 * The preferences the Pixelfed app keeps on its server rather than on the
-	 * phone, so that a person who reinstalls it finds their app as they left
-	 * it.
-	 *
-	 * Eight switches, and not one of them is a setting of this app's: they
-	 * decide what *that client* draws. They are stored as one blob per account
-	 * under this app's user config and handed back unread, which is what
-	 * Pixelfed does with them too — the server's part is to remember, not to
-	 * interpret.
-	 *
-	 * The defaults are Pixelfed's own, so an app talking to this server behaves
-	 * on first run the way it does against the server it was written for.
+	 * The preferences the Pixelfed app keeps on its server, so a reinstalled
+	 * app finds them again. They are the client's, stored as one blob per
+	 * account in user config and handed back unread, with Pixelfed's own
+	 * defaults.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -340,12 +321,8 @@ class PixelfedService {
 	}
 
 	/**
-	 * Stores them, keeping only the switches that are Pixelfed's.
-	 *
-	 * Anything else a client sends is dropped rather than stored: this is a
-	 * blob written by a client and handed back to a client, and one that kept
-	 * whatever it was given would be a place to park arbitrary content under
-	 * somebody's account — the same rule `ScheduledStatus::setParams()` keeps.
+	 * Stores them, keeping only Pixelfed's switches, so the blob cannot hold
+	 * arbitrary content (as `ScheduledStatus::setParams()`).
 	 *
 	 * @param array<string, mixed> $common what the client sent
 	 * @return array<string, mixed>
@@ -410,13 +387,11 @@ class PixelfedService {
 	public const MUTUALS_LIMIT = 50;
 
 	/**
-	 * One direct-message thread as Pixelfed's app draws it: the other party
-	 * on top, then the messages between the two, oldest first.
-	 *
-	 * The messages are this app's direct posts, read through the same
-	 * destination rows the direct timeline uses; nothing is stored twice. A
-	 * message's `text` is the post's text without its markup, and one that
-	 * carries a picture is a `photo` (or `video`) with the file as `media`.
+	 * One direct-message thread as Pixelfed's app draws it: the other party on
+	 * top, then the messages, oldest first. Messages are this app's direct posts,
+	 * read through the direct timeline's destination rows; a message's `text` is
+	 * the post's text without markup, and one with a picture is a `photo` (or
+	 * `video`) with the file as `media`.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -454,11 +429,7 @@ class PixelfedService {
 
 	/**
 	 * Sends one message: a direct post addressed to the other account, through
-	 * the same path the composer's own direct messages take.
-	 *
-	 * The message goes out with the recipient's handle in front of it, which
-	 * is how a direct post names who it is for on this network — the app
-	 * shows the thread by account, so the handle is not in its way.
+	 * the composer's own path, with the recipient's handle in front.
 	 *
 	 * @return array<string, mixed> the message as the thread shows it
 	 * @throws InvalidResourceException
@@ -490,10 +461,8 @@ class PixelfedService {
 	}
 
 	/**
-	 * Takes one of the viewer's own messages back.
-	 *
-	 * Somebody else's message is the same 404 as one that never existed:
-	 * whether it exists is not this route's to tell.
+	 * Takes one of the viewer's own messages back; anybody else's is the same
+	 * 404 as one that never existed.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -512,9 +481,8 @@ class PixelfedService {
 	}
 
 	/**
-	 * The accounts the viewer follows that follow them back — who the app's
-	 * "new message" screen offers, since a direct message to a stranger is
-	 * the thing most people never want to receive.
+	 * The accounts the viewer follows that follow them back, which the app's
+	 * "new message" screen offers.
 	 *
 	 * @return list<Person>
 	 */
@@ -589,11 +557,9 @@ class PixelfedService {
 	}
 
 	/**
-	 * One collection as Pixelfed's app expects it.
-	 *
-	 * `visibility` uses Pixelfed's words: a followers-only collection is what
-	 * Pixelfed calls `private`. `thumb` is the first picture of the first
-	 * post, or nothing, and `url` is this app's own page for the collection.
+	 * One collection as Pixelfed's app expects it: a followers-only collection is
+	 * Pixelfed's `private`, `thumb` is the first picture of the first post, and
+	 * `url` is this app's page for it.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -662,12 +628,8 @@ class PixelfedService {
 	}
 
 	/**
-	 * The account id the app keys its own per-account state on.
-	 *
-	 * The viewer comes from `social_actor`, which is what this instance
-	 * decides about an account and carries no numeric id; the id every client
-	 * sees is the cached actor's. Without this every account answered `0`, so
-	 * two accounts on one phone shared whatever the app stored under it.
+	 * The account id the app keys its per-account state on: the cached actor's
+	 * id every client sees, since `social_actor` has no numeric id.
 	 */
 	private function profileId(Person $viewer): string {
 		if ($viewer->getNid() > 0) {

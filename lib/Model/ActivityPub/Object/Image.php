@@ -13,11 +13,6 @@ use JsonSerializable;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\UrlCloudException;
 
-/**
- * Class Image
- *
- * @package OCA\Social\Model\ActivityPub
- */
 class Image extends Document implements JsonSerializable {
 	public const TYPE = 'Image';
 

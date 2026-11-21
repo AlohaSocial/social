@@ -10,12 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Model;
 
 /**
- * One permission this instance has given out to quote one of its posts.
- *
- * What it is for is the revocation: FEP-044f takes a quote back with a
- * `Reject` naming the `QuoteRequest` that was accepted, so the request's id has
- * to be written down at the moment the grant is made or there is nothing to
- * name afterwards.
+ * One permission this instance has given out to quote one of its posts,
+ * recording the accepted `QuoteRequest`'s id, which a revoking `Reject`
+ * (FEP-044f) must name.
  */
 class QuoteGrant {
 	private int $id = 0;

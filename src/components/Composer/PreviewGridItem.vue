@@ -9,17 +9,14 @@
 			:style="frameStyle"
 			@load.capture="measurePreview"
 			@loadedmetadata.capture="measurePreview">
-			<!-- a refused attachment has no picture behind it, and the spinner
-			     MediaAttachment shows for `null` would never stop -->
+			<!-- a refused attachment has no file, and MediaAttachment's spinner
+			     for `null` would never stop -->
 			<div class="preview-item__filtered" :style="{ filter: filterCss(preview.filter) }">
 				<MediaAttachment v-if="!preview.failed" :attachment="fullPreview" />
 			</div>
 
-			<!-- Where the subject is. A square crop — the profile grid here, the
-			     timeline on Mastodon — is cut around this point rather than
-			     around the middle, which is where a face is not. The point is
-			     set by pressing, or dragging, on the picture itself, and moved
-			     by the arrow keys for anyone who is not using a pointer. -->
+			<!-- Focal point editor: square crops are cut around this point. Set by
+			     pressing or dragging on the photo, or with the arrow keys. -->
 			<div
 				v-if="focusing"
 				ref="focusPad"
@@ -33,8 +30,7 @@
 				@pointercancel="finishFocusing"
 				@keydown="nudgeByKey" />
 
-			<!-- the point itself, drawn whenever there is one and while one is
-			     being set; a picture with no point is cropped at the middle -->
+			<!-- the focal point, drawn when set and while editing -->
 			<span
 				v-if="showsCrosshair"
 				class="preview-item__crosshair"
@@ -48,9 +44,7 @@
 					</template>
 					<span>{{ t('social', 'Delete') }}</span>
 				</NcButton>
-				<!-- pictures the server holds only: the point is saved against
-				     the upload, and there is nothing to save it against until
-				     the upload has come back -->
+				<!-- uploaded photos only: the point is saved against the upload -->
 				<NcButton
 					v-if="canFocus"
 					variant="tertiary-no-background"
@@ -65,29 +59,23 @@
 				</NcButton>
 			</div>
 
-			<!-- a picture nobody described is a picture some readers never see -->
 			<span v-if="!described && !preview.failed" class="preview-item__missing" aria-hidden="true">
 				{{ t('social', 'No description') }}
 			</span>
 
-			<!-- says that a point is set without drawing attention to where:
-			     the crosshair is the where, and this is the badge that outlives
-			     the editor -->
+			<!-- a point is set; the crosshair shows where while editing -->
 			<span v-if="hasFocus && !focusing" class="preview-item__focal" aria-hidden="true">
 				{{ t('social', 'Focal point') }}
 			</span>
 
-			<!-- one attachment out of several can be refused, and the grid is
-			     the only place that can say which one -->
+			<!-- the grid is the only place that says which attachment was refused -->
 			<span v-if="preview.failed" class="preview-item__failed" role="status">
 				{{ t('social', 'Could not be attached') }}
 			</span>
 		</div>
 
-		<!-- Pictures only: there is nothing a filter could do to a video or an
-		     audio file, and offering one would be a button that does nothing.
-		     Not until the upload has landed either: the filtered copy baked in
-		     as the post is sent takes that upload's place. -->
+		<!-- Still photos only, and only once uploaded: the filtered copy made
+		     when the post is sent replaces that upload. -->
 		<FilterPicker
 			v-if="!preview.failed && isPicture && preview.data"
 			class="preview-item__filters"
@@ -157,7 +145,7 @@ export default {
 
 	data() {
 		return {
-			/** whether the picture is showing its focal point editor */
+			/** whether the photo is showing its focal point editor */
 			focusing: false,
 			/** whether a pointer is down on the editor and dragging the point */
 			dragging: false,
@@ -190,8 +178,7 @@ export default {
 		},
 
 		/**
-		 * Whether a focal point can be set at all: an uploaded picture. A
-		 * video is cropped by its poster and an audio file by nothing.
+		 * Whether a focal point can be set: an uploaded photo.
 		 *
 		 * @return {boolean}
 		 */
@@ -218,8 +205,8 @@ export default {
 		},
 
 		/**
-		 * Whether a filter would do anything. Video and audio have no filter
-		 * to apply, and an animated picture would come back as its first frame.
+		 * Whether filters are offered: still photos only, since an animated
+		 * one would come back as its first frame.
 		 *
 		 * @return {boolean}
 		 */
@@ -235,9 +222,8 @@ export default {
 		},
 
 		/**
-		 * What the swatches draw: the file in the browser, by the object URL
-		 * it is keyed by or was fetched under, and the server's preview for
-		 * a picture that has none yet.
+		 * What the filter swatches draw: the local object URL, else the
+		 * server's preview.
 		 *
 		 * @return {string}
 		 */
@@ -268,14 +254,13 @@ export default {
 		toggleFocusing() {
 			this.focusing = !this.focusing
 			if (this.focusing) {
-				// the pad takes the keys, so it takes the focus: pressing the
-				// button and then an arrow should move the point, not the page
+				// focus the pad so the arrow keys move the point, not the page
 				this.$nextTick(() => /** @type {HTMLElement|undefined} */ (this.$refs.focusPad)?.focus())
 			}
 		},
 
 		/**
-		 * @param {PointerEvent} event a press on the picture
+		 * @param {PointerEvent} event a press on the photo
 		 */
 		startFocusing(event) {
 			if (event.button !== undefined && event.button !== 0) {
@@ -284,8 +269,7 @@ export default {
 
 			event.preventDefault()
 			this.dragging = true
-			// keeps the moves coming even once the pointer has left the pad,
-			// which is exactly where a drag towards the edge ends up
+			// keep receiving moves when a drag leaves the pad
 			const pad = /** @type {HTMLElement|null} */ (event.currentTarget)
 			if (typeof pad?.setPointerCapture === 'function') {
 				pad.setPointerCapture(event.pointerId)
@@ -294,7 +278,7 @@ export default {
 		},
 
 		/**
-		 * @param {PointerEvent} event the pointer moving over the picture
+		 * @param {PointerEvent} event the pointer moving over the photo
 		 */
 		moveFocus(event) {
 			if (!this.dragging) {
@@ -305,8 +289,7 @@ export default {
 		},
 
 		/**
-		 * The drag is over, and this is the value worth a request: the moves
-		 * in between were the preview.
+		 * Ends a drag and commits the point; the moves before were only a preview.
 		 *
 		 * @param {PointerEvent} event the release
 		 */
@@ -349,7 +332,7 @@ export default {
 			event.preventDefault()
 			const focus = nudgeFocus(this.preview.focus, step[0], step[1])
 			this.$emit('focus', { key: this.randomKey, focus })
-			// a key press is a decision in itself; there is no release to wait for
+			// a key press commits at once; there is no release to wait for
 			this.$emit('commitFocus', { key: this.randomKey, focus })
 		},
 	},
@@ -387,7 +370,7 @@ export default {
 	font-weight: 600;
 }
 
-// the whole picture is the control; above the badges and under the buttons
+// the whole photo is the control; above the badges and under the buttons
 .preview-item__focus-pad {
 	position: absolute;
 	inset: 0;
@@ -401,10 +384,8 @@ export default {
 	}
 }
 
-// a ring with a dot, centred on the point, that takes no clicks of its own.
-// The dark outline is what keeps it visible over a white sky; it is an
-// outline rather than a shadow, which on a card means the elevation App.vue
-// defines and not a rim.
+// a ring with a dot, centred on the point, that takes no clicks. The dark
+// outline keeps it visible over bright photos.
 .preview-item__crosshair {
 	position: absolute;
 	z-index: 3;
@@ -486,9 +467,8 @@ export default {
 		color: white !important;
 	}
 
-	/* the attachment inside is as tall as its parent, so the wrapper that
-	   carries the filter has to be as tall as the frame, or the picture is
-	   drawn zero pixels high */
+	/* the attachment is as tall as its parent, so this wrapper must fill the
+	   frame or the photo is drawn zero pixels high */
 	&__filtered {
 		position: absolute;
 		inset: 0;

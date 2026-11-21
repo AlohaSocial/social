@@ -29,14 +29,11 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * Bluesky's custom feeds and lists, read here (§9.6). Which ones a person
- * keeps is their Bluesky preference (`savedFeedsPrefV2`), the one a Bluesky
- * app signed in here reads and writes too — a feed saved in either shows in
- * both, and comes along when the account moves. A feed or list is read from
- * the AppView as the person, so a feed that ranks for its reader ranks for
- * them; its posts are stored as any Bluesky post is and answered in the
- * feed's own order. The AppView's cursor is opaque: it is kept for the last
- * post of each page, so a client pages with the post it last saw.
+ * Bluesky custom feeds and lists, read here (§9.6). The ones a person keeps
+ * are their `savedFeedsPrefV2` preference, shared with a Bluesky app signed in
+ * here. Feeds are read from the AppView as the person, so a feed that ranks
+ * for its reader ranks for them; the opaque AppView cursor is kept for the
+ * last post of each page.
  */
 class BlueskyFeeds {
 	public const SAVED = 'app.bsky.actor.defs#savedFeedsPrefV2';
@@ -301,12 +298,9 @@ class BlueskyFeeds {
 	}
 
 	/**
-	 * Reads one public author-feed page into the shared stream so the ordinary
-	 * account-status API can return it with the same cards and pagination as
-	 * other remote accounts.
-	 *
-	 * The opaque AppView cursor is associated with the last local post id. A
-	 * missing or expired cursor ends paging instead of restarting at the top.
+	 * Reads one public author-feed page into the shared stream, for the ordinary
+	 * account-status API. The AppView cursor is kept for the last local post id;
+	 * a missing or expired one ends paging instead of restarting at the top.
 	 *
 	 * @return bool whether the client should ask again to continue filling this page
 	 */

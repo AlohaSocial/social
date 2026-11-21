@@ -34,18 +34,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * For you: the reader's hashtag interests, what teaches them, and the
- * feed made of them.
+ * For you: the reader's hashtag interests, what teaches them, and the feed
+ * made of them.
  *
- * Everything here is the viewer's own and nobody else's, so every route
- * resolves the viewer first and acts on nothing but them. With the feature
- * switched off by the administrator every route is a 404 — the feed, the
- * settings and the signals alike — rather than something that answers and
- * learns nothing.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]` for the reason every client API
- * controller has them: a Mastodon app has a bearer token and no session. A
- * session caller still has to pass the CSRF check, in `initViewer()`.
+ * Every route acts on the viewer alone, and is a 404 when the administrator
+ * switched the feature off. `#[PublicPage]` with `#[NoCSRFRequired]` as in
+ * every client API controller, since a Mastodon app has a bearer token and no
+ * session; a session caller still passes the CSRF check in `initViewer()`.
  */
 class InterestsController extends ClientApiController {
 	public function __construct(
@@ -157,22 +152,14 @@ class InterestsController extends ClientApiController {
 	 * The feed.
 	 *
 	 * A literal path rather than another name for
-	 * `TimelineApiController::timelines()`: that route ends in a slash, and the
-	 * router matches this path exactly before it tries adding one, so which
-	 * controller the filesystem lists first does not decide it. Paged with
-	 * `max_id` like every timeline, though what it names is a place in the
-	 * ranking rather than an age; `offset` is there for a client that pages
-	 * the way Mastodon's trends are paged.
+	 * `TimelineApiController::timelines()`, whose route ends in a slash; the
+	 * router matches this path exactly first. Paged with `max_id` (a place in
+	 * the ranking) or `offset`.
 	 *
 	 * `media` narrows it to `photos` or `videos`, each a ranking of its own;
-	 * Mastodon's `only_media` is the two together, so a phone app asking the
-	 * way it asks every timeline gets the posts with pictures and videos.
-	 * `only_short` is the ranking of short videos, by the rule the other
-	 * timelines' `only_short` applies (`Stream::shortKindOf()`), and wins
-	 * over both.
-	 * Anything else is ignored rather than refused, as the other media
-	 * parameters are: an unknown kind is a client asking for a narrowing this
-	 * instance does not offer, and the whole feed is still an answer.
+	 * `only_media` is the two together; `only_short` (`Stream::shortKindOf()`)
+	 * wins over both. Anything else is ignored, as for the other media
+	 * parameters.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

@@ -13,17 +13,10 @@ use OCA\Social\Db\RequestQueueRequest;
 use OCA\Social\Model\RequestQueue;
 
 /**
- * Where a post got to.
- *
- * When a post does not appear on another server the author has no way of
- * knowing whether it was sent, is still queued, was refused, or was given up
- * on -- the queue knew and nothing asked it on their behalf. This reads the
- * queue for one object and says, per server, which of those it is.
- *
- * It can only say so for as long as the rows are kept. A delivered request is
- * held for `RequestQueueService::RETENTION_SECONDS` and then purged, so an old
- * post reports nothing rather than reporting wrongly; the answer carries a
- * `retention` so a client can say "as of the last seven days" and mean it.
+ * Where a post got to: per server, whether its delivery was sent, is queued,
+ * failing or given up on. Only as long as the rows are kept
+ * (`RequestQueueService::RETENTION_SECONDS`); the answer carries `retention`
+ * so a client can say how far back it reaches.
  */
 class DeliveryService {
 	/** What a row's status and tries add up to, as a client should read it. */

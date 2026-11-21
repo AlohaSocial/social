@@ -12,16 +12,10 @@ namespace OCA\Social\Db;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * How many times each video posted here was watched, and today's record of
- * who has already been counted.
- *
- * Two tables, because they keep different things for different lengths of
- * time: the count for as long as the post exists (`social_video_views`), and
- * the viewers only for the day they are counted on (`social_video_seen`).
- *
- * Never an insert that catches a unique violation: on PostgreSQL that aborts
- * the transaction it runs in, so both writes go through
- * `insertIgnoreConflict()`.
+ * How many times each video posted here was watched (`social_video_views`,
+ * kept as long as the post) and who was counted today (`social_video_seen`,
+ * kept for the day). Both writes use `insertIgnoreConflict()`, since a caught
+ * unique violation aborts the transaction on PostgreSQL.
  */
 class VideoViewsRequest extends CoreRequestBuilder {
 	/**

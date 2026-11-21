@@ -129,11 +129,9 @@ class MovedBlobs {
 	}
 
 	/**
-	 * What the person is shown of records that lose a picture or video
-	 * that did not arrive, before they go on without it: a post by its date,
-	 * the start of its text and where it can be read now (the post here when
-	 * it is one, else its address on Bluesky); any other record, the
-	 * profile, by its collection alone.
+	 * What the person is shown of records that lose a photo or video that did
+	 * not arrive: a post by its date, the start of its text and where it can
+	 * be read now; any other record by its collection alone.
 	 *
 	 * @param iterable<StoredRecord> $records
 	 * @return list<array{collection: string, rkey: string, created_at: string, text: string, url: string}>

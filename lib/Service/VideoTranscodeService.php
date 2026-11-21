@@ -15,54 +15,25 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Turning a video into the one format the rest of the network will play.
+ * Turning a video into the one format the rest of the network will play:
+ * H.264 in an MP4 with AAC audio, bounded to a height an administrator sets,
+ * with `+faststart` so a browser can start playing early. Pixelfed accepts
+ * only `video/mp4`, Safari plays no WebM, and HEVC plays only in Safari.
  *
- * A video used to be stored exactly as it was uploaded, which is the honest
- * thing to do with somebody's file. The cost of that is not theoretical. **Pixelfed's default `media_types` accepts
- * `video/mp4` and nothing else**, so every `video/quicktime` posted from here —
- * which is to say every video straight off an iPhone — is dropped by its
- * `verifyAttachments()` without a word to anybody. Safari will not play WebM,
- * HEVC — which Android phones, and iPhones exporting through some apps, write
- * into an `.mp4` — plays in Safari and nowhere else, and a 4K `.mov` goes out
- * at whatever the camera wrote.
- *
- * So: H.264 in an MP4, AAC audio, bounded to a height an administrator sets,
- * with `+faststart` so the index is at the front and a browser can begin
- * playing before the file has arrived.
- *
- * Three things this is careful about.
- *
- * **It is on by default, and only where it can work.** Re-encoding is lossy
- * and the converted file replaces the original, which is why an
- * administrator can switch it off; left alone, a server with ffmpeg makes its
- * videos travel and a server without it changes nothing at all. An H.264 MP4
- * is never re-encoded.
- *
- * **Nothing it writes keeps the source's metadata.** A phone writes where a
- * video was recorded into the container, and ffmpeg copies a container's
- * metadata into whatever it writes unless told not to. Every upload has it
- * taken off as it is stored, by `withoutMetadata()`, which copies the
- * streams into a fresh container rather than re-encoding them.
- *
- * **It never runs during a request.** Transcoding a video is minutes, not the
- * seconds a poster frame takes, so the upload finishes as it always did and a
- * background job does the work afterwards. A video that has not been converted
- * yet is still there and still plays; it simply has not travelled well yet.
- *
- * **It refuses anything it cannot bound.** ffmpeg reads protocols and playlists
- * given the chance, so the whitelist is `file`, and a deadline kills a decoder
- * that a crafted file has made spin.
+ * On by default where ffmpeg exists, and switchable off since re-encoding is
+ * lossy and replaces the original; an H.264 MP4 is never re-encoded. Every
+ * upload loses its container metadata (such as GPS) via `withoutMetadata()`,
+ * which remuxes without re-encoding. Conversion runs in a background job,
+ * never in a request. ffmpeg's protocol whitelist is `file`, and a deadline
+ * kills a decoder a crafted file makes spin.
  */
 class VideoTranscodeService {
 	/** What everything on the network can play, and the only thing Pixelfed accepts. */
 	public const TARGET_TYPE = 'video/mp4';
 
 	/**
-	 * What is worth converting.
-	 *
-	 * `video/mp4` is not among them: it is already the target, and a
-	 * re-encode of it would be a second generation of loss for nothing. The
-	 * rest are the formats this app accepts on upload.
+	 * What is worth converting: the formats this app accepts on upload, except
+	 * `video/mp4`, which is already the target.
 	 */
 	public const CONVERTIBLE = [
 		'video/quicktime',
@@ -77,11 +48,8 @@ class VideoTranscodeService {
 	public const DEFAULT_MAX_HEIGHT = 1080;
 
 	/**
-	 * How long ffmpeg gets, per video.
-	 *
-	 * Generous, because this is the whole point of the job running in the
-	 * background rather than in a request — but finite, because a file that
-	 * makes a decoder spin must not hold a cron worker for ever.
+	 * How long ffmpeg gets, per video: generous for a background job, but
+	 * finite so a spinning decoder cannot hold a cron worker for ever.
 	 */
 	private const TIMEOUT_SECONDS = 900;
 
@@ -117,10 +85,8 @@ class VideoTranscodeService {
 	private const PROBE_TIMEOUT_SECONDS = 30;
 
 	/**
-	 * How fast to encode. `veryfast` is the knee of the curve for this kind of
-	 * material: several times quicker than `medium` for a file a few per cent
-	 * larger, which on a server converting other people's holiday videos is
-	 * the right side of the trade.
+	 * How fast to encode: `veryfast` is several times quicker than `medium`
+	 * for a file a few per cent larger.
 	 */
 	private const PRESET = 'veryfast';
 
@@ -152,11 +118,8 @@ class VideoTranscodeService {
 	}
 
 	/**
-	 * Whether a file of this type might be worth converting, which for an MP4
-	 * only its codec can say.
-	 *
-	 * Answered from the type alone, without reading the file: this is what a
-	 * new post asks to decide whether its delivery waits for the job.
+	 * Whether a file of this type might be worth converting, from the type
+	 * alone; a new post asks this to decide whether its delivery waits.
 	 */
 	public function mayNeedConversion(string $mimeType): bool {
 		if ($this->shouldConvert($mimeType)) {
@@ -167,12 +130,9 @@ class VideoTranscodeService {
 	}
 
 	/**
-	 * Whether this file has to be converted before it plays everywhere.
-	 *
-	 * An MP4 is converted when its video is not H.264 — HEVC is what phones
-	 * write, and only Safari plays it — and also when ffprobe cannot say that
-	 * it is. Without ffprobe nothing can be said about an MP4 at all, and it is
-	 * left as it is rather than re-encoded on a guess.
+	 * Whether this file has to be converted before it plays everywhere. An
+	 * MP4 is converted when its video is not H.264 or ffprobe cannot tell;
+	 * without ffprobe an MP4 is left as it is.
 	 *
 	 * @param string $path a readable path to the video
 	 */
@@ -230,11 +190,8 @@ class VideoTranscodeService {
 	}
 
 	/**
-	 * Converts one video, and says where the result is.
-	 *
-	 * The source is left alone: the caller decides whether to keep it, and
-	 * doing that here would mean this could destroy somebody's file on a path
-	 * that had not finished checking the result.
+	 * Converts one video, and says where the result is. The source is left
+	 * alone for the caller to decide about once the result is checked.
 	 *
 	 * @param string $path a readable path to the video
 	 *
@@ -261,13 +218,11 @@ class VideoTranscodeService {
 			// and ffmpeg will read all three if a container asks it to
 			'-protocol_whitelist', 'file',
 			'-i', $path,
-			// only ever smaller: a 480p video scaled up to 1080 is a bigger
-			// file of the same picture
+			// only ever smaller
 			'-vf', 'scale=-2:\'min(' . $height . ',ih)\'',
 			'-c:v', 'libx264',
-			// what a phone, a browser and Pixelfed all decode. `high` and
-			// yuv420p together are the combination that plays everywhere,
-			// including on hardware decoders that refuse 4:2:2
+			// `high` with yuv420p plays everywhere, including hardware decoders
+			// that refuse 4:2:2
 			'-profile:v', 'high',
 			'-pix_fmt', 'yuv420p',
 			'-preset', self::PRESET,
@@ -293,11 +248,9 @@ class VideoTranscodeService {
 	}
 
 	/**
-	 * The same video or sound file without the metadata its container
-	 * carries — where and with what it was recorded, its title, its chapters —
-	 * and without re-encoding anything: the streams are copied as they are.
-	 *
-	 * The source is left alone, as with `convert()`.
+	 * The same video or sound file without its container metadata (location,
+	 * device, title, chapters), with the streams copied, not re-encoded. The
+	 * source is left alone, as with `convert()`.
 	 *
 	 * @param string $path a readable path to the file
 	 *
@@ -389,9 +342,7 @@ class VideoTranscodeService {
 				break;
 			}
 
-			// the pipes are drained as it goes: ffmpeg writes progress to
-			// stderr, and a full pipe is a process that stops rather than one
-			// that finishes
+			// drain the pipes as it goes: a full pipe stalls ffmpeg
 			$output .= (string)@stream_get_contents($pipes[1]);
 			@stream_get_contents($pipes[2]);
 

@@ -30,12 +30,9 @@ import { translate as t } from '@nextcloud/l10n'
 import { fullDateTime } from '../utils/relativeTime.js'
 
 /**
- * The mark on a profile row whose link the owner proved is theirs.
- *
- * The tick draws itself once when it appears. That is the whole flourish: the
- * colour alone would say the same thing, so the animation is decoration and
- * `prefers-reduced-motion` turns it off without the mark losing its meaning.
- * The meaning itself is in the label, because a green tick is not readable.
+ * The mark on a profile row whose link the owner proved is theirs. The tick
+ * draws itself once, unless `prefers-reduced-motion`; the meaning is in the
+ * label.
  */
 export default {
 	name: 'VerifiedCheck',
@@ -51,11 +48,8 @@ export default {
 	computed: {
 		/**
 		 * What a screen reader says in place of the tick, and what the tooltip
-		 * shows. The date is worth having — a verification is a check that was
-		 * made once, and how long ago says how much it is worth — but a row
-		 * whose date did not come through, or came through in a shape the
-		 * browser cannot read, is still verified, so it falls back to the claim
-		 * on its own rather than trailing off after "verified on".
+		 * shows. A date that did not come through or cannot be read falls back
+		 * to the claim alone.
 		 *
 		 * @return {string} the label
 		 */

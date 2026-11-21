@@ -18,20 +18,12 @@ use OCA\Social\Service\StoryInteractionService;
 use OCA\Social\Service\ViewCountService;
 
 /**
- * The three ways a peer answers a story: `View`, `Story:Reaction`, `Story:Reply`
- * — and, since PeerTube sends one for every watch of a video, the way a peer
- * says it has watched a post.
+ * The ways a peer answers a short (a story in the code): `View`,
+ * `Story:Reaction`, `Story:Reply`; also PeerTube's `View` of a video.
  *
- * One interface for all three because the checks are the same and the decision
- * is the same: this is about a story, or it is about nothing. What is *done*
- * with it differs by one line, which is why the service takes them apart
- * rather than this.
- *
- * An answer names its story by address and nothing else, so the origin check
- * here is on the actor: the account claiming to have watched or reacted must
- * be on the server that sent the activity. The story's own ownership is
- * checked where it is read — it must be one of this instance's, still live,
- * and followed by whoever is answering.
+ * The origin check is on the actor, as an answer names its short only by
+ * address; the short itself is checked where it is read (ours, live, and
+ * followed by whoever answers).
  */
 class StoryAnswerInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(
@@ -45,15 +37,12 @@ class StoryAnswerInterface extends AbstractActivityPubInterface implements IActi
 	 */
 	#[\Override]
 	public function processIncomingRequest(ACore $item): void {
-		// what stops one server reporting a view, a reaction or a reply on
-		// behalf of an account on another
+		// Stops one server answering on behalf of an account on another.
 		$item->checkOrigin($item->getActorId());
 
 		if ($item instanceof View) {
-			// A `View` is not only a story's. PeerTube sends one to the owner
-			// of a video for every watch, which is the same fact about a post
-			// rather than about a story — so a view that names no story of ours
-			// is offered to the post counter before it is dropped.
+			// PeerTube sends a `View` per watch of a video, so a view naming no short
+			// of ours is offered to the post counter.
 			if (!$this->storyInteractionService->receiveView($item)) {
 				$this->viewCountService->receiveView($item->getStoryId(), $item->getActorId());
 			}

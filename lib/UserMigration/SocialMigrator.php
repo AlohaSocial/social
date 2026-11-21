@@ -50,48 +50,20 @@ use Throwable;
 /**
  * One user's Social data in a Nextcloud account export, and back out of one.
  *
- * What travels is what the account *is* and what it *chose*: the actor's
- * profile and flags, who it follows and who follows it, what it blocks and
- * mutes, its lists and the servers it blocks, what it wrote — with the
- * pictures and videos on it, and the banner over it — and what it kept
- * (bookmarks and favourites). The lists of accounts
- * are written in the shape Mastodon exports them, and the files under
- * `media_attachments/` in the layout Mastodon's own archive uses, so the archive
- * is useful outside Nextcloud too — `following_accounts.csv` is the file
- * `MigrationService::parseFollowsCsv()` reads and the one Mastodon's "Import
- * follows" accepts. The Bluesky account, where there is one, travels under
- * `bluesky/` in the formats atproto tools read: the repository as a CAR, the
- * blobs, the DID's log — export only, see exportBluesky().
+ * What travels is what the account is and chose: profile and flags, follows
+ * and followers, blocks and mutes, lists and blocked servers, its own posts
+ * with their media and banner, bookmarks and favourites. Lists of accounts
+ * use Mastodon's CSV shapes and media Mastodon's archive layout, so the
+ * archive is useful outside Nextcloud too. The Bluesky account travels under
+ * `bluesky/` (export only, see exportBluesky()).
  *
- * What deliberately does not travel:
+ * What does not travel: the private key (encrypted at rest by
+ * `PrivateKeyCipher`, unrevocable in ActivityPub; an imported account gets a
+ * new key pair and keeps continuity through `alsoKnownAs` and a `Move`);
+ * other people's posts; and moderation decisions, reports, queued requests,
+ * OAuth clients and tokens, which a user must not shed or carry over.
  *
- * - **the private key.** Without it the imported account cannot sign as the
- *   *old* actor — and it should not be able to. An export archive is an
- *   ordinary file: downloaded, mailed, left in another cloud. The key that a
- *   whole instance's worth of servers accept as proof of identity has no
- *   revocation in ActivityPub, and this app goes as far as encrypting it at
- *   rest (`PrivateKeyCipher`), so putting a plaintext copy in a user-held file
- *   would undo that for the convenience of a case that does not need it: an
- *   account imported on another server is a *new* actor with a new id, and
- *   `AccountService::createActor()` gives it a fresh pair. Identity continuity
- *   is carried by `alsoKnownAs` plus a `Move` from the old server — which is
- *   why the import records the old actor id as an alias — not by copying the
- *   secret. The public key is exported, because it is public and identifies
- *   which actor this was.
- * - **other people's posts.** The local copies of remote statuses are a cache
- *   of somebody else's content; it is re-fetched wherever it is needed and is
- *   not the user's to carry. Only what the user wrote is in `outbox.json`, and
- *   only the files of those posts are copied — and only where this instance
- *   stored them, which a streamed video (`Document::COPY_STREAMED`) never was.
- * - **moderation decisions taken against the account** (`social_moderation`),
- *   reports, the outbound request queue, OAuth clients, tokens and secrets. A
- *   suspension outlives even the deletion of an actor on purpose (see
- *   `PersonInterface::delete()`), so it must not be something a user can shed
- *   by exporting and re-importing, and a credential that survived a move would
- *   be a credential nobody can revoke.
- *
- * The import federates nothing except the follows, which cannot be re-created
- * any other way — see import().
+ * The import federates nothing but the follows; see import().
  */
 class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	use TMigratorBasicVersionHandling;
@@ -100,20 +72,15 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	public const PAGE = 50;
 
 	/**
-	 * The block and mute lists are read in one query — `getByActor()` takes no
-	 * offset — so the read is capped, and the cap is reported rather than
-	 * silently truncating.
+	 * The block and mute lists are read in one query (`getByActor()` takes no
+	 * offset), so the read is capped and the cap reported.
 	 */
 	public const RELATIONS_LIMIT = 5000;
 
 	private const PATH_ROOT = Application::APP_ID . '/';
 	/**
-	 * What says an archive holds Social data at all.
-	 *
-	 * Public because the Migration page reads archives too — see
-	 * `ZipImportSource` — and both halves have to agree on the one file that
-	 * decides it, or an archive would be accepted by one and refused by the
-	 * other.
+	 * What says an archive holds Social data at all; public, since the Migration
+	 * page's `ZipImportSource` must agree on it.
 	 */
 	public const PATH_ACTOR_PUBLIC = self::PATH_ROOT . 'actor.json';
 	private const PATH_ACTOR = self::PATH_ACTOR_PUBLIC;
@@ -131,12 +98,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	/** The Bluesky account: repository, blobs, the DID's log and document, see `BlueskyArchiveService`. */
 	private const PATH_BLUESKY = self::PATH_ROOT . BlueskyArchiveService::ROOT;
 	/**
-	 * Where the files sit, relative to the app's folder in the archive, in the
-	 * layout Mastodon's own export uses: `media_attachments/files/<id>/original.<ext>`
+	 * Where the files sit, relative to the app's folder in the archive, in
+	 * Mastodon's export layout: `media_attachments/files/<id>/original.<ext>`
 	 * for an attachment, `media_attachments/avatar.<ext>` and `header.<ext>` for
-	 * the profile. Written relative because that is what a `url` in `outbox.json`
-	 * is rewritten to, and a relative path is the one thing that still means
-	 * something once the archive has left this server.
+	 * the profile. Relative, as that is what `outbox.json` URLs are rewritten to.
 	 */
 	private const PATH_MEDIA = 'media_attachments/';
 	private const PATH_MEDIA_FILES = self::PATH_MEDIA . 'files/';
@@ -167,14 +132,9 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	private const UUID = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
 	/**
-	 * The header over `muted_accounts.csv`: Mastodon's two columns, and when
-	 * the mute runs out.
-	 *
-	 * The third column is this app's own. Every reader of the file finds its
-	 * columns by the header or by position and ignores what it does not know,
-	 * so the file is still the one Mastodon's "Import muted accounts" takes —
-	 * and a timed mute that travelled as a permanent one was a mute the user
-	 * never asked for and would have to find and undo by hand.
+	 * The header over `muted_accounts.csv`: Mastodon's two columns, and this
+	 * app's third, when the mute runs out, which readers that go by header or
+	 * position ignore.
 	 */
 	private const MUTES_HEADER = 'Account address,Hide notifications,Expires at';
 
@@ -232,11 +192,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * Counted rather than measured: four cheap counts, and a post costs about a
-	 * kilobyte of JSON. The media is the part that decides the answer — an
-	 * account with one video outweighs everything else in the archive put
-	 * together — so leaving it out, as this did while the files were not
-	 * exported, understated a real export by orders of magnitude.
+	 * Counted rather than measured: four cheap counts, a kilobyte of JSON per
+	 * post, and the media, which decides the answer.
 	 */
 	#[\Override]
 	public function getEstimatedExportSize(IUser $user): int|float {
@@ -259,14 +216,9 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * What the account's own files are worth in the estimate, in KiB.
-	 *
-	 * `social_cache_documents` has no size column, so this is a count per kind
-	 * rather than a measurement: a stored picture has been through the resize
-	 * and is a few hundred kilobytes, a sound file a few megabytes, a video
-	 * anything up to the instance's ceiling. One grouped count whose answer is
-	 * the right order of magnitude is worth more here than an exact figure that
-	 * would cost a stat of every file the export is about to copy anyway.
+	 * What the account's own files are worth in the estimate, in KiB: a count
+	 * per kind times a typical size, since `social_cache_documents` has no size
+	 * column and the right order of magnitude is enough.
 	 */
 	private function mediaSize(Person $actor): int {
 		try {
@@ -316,10 +268,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 
 	/**
 	 * The Bluesky account, where the person has one here: the files
-	 * `BlueskyArchiveService` writes, under `bluesky/`. Nothing is read
-	 * back from them on import — a Bluesky account comes here by a move,
-	 * not from a file — so they are for keeping, and for moving the
-	 * account without this server.
+	 * `BlueskyArchiveService` writes, under `bluesky/`. Never read back on
+	 * import, since a Bluesky account arrives by a move; they are for keeping.
 	 */
 	private function exportBluesky(
 		Person $actor,
@@ -368,19 +318,13 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The actor, without its private key. Exported as JSON rather than as the
-	 * actor document itself: this file is what the import reads back, and an
-	 * actor document is full of URLs of the server it is leaving.
+	 * The actor, without its private key, as JSON for the import to read back
+	 * rather than as an actor document full of this server's URLs.
 	 *
-	 * The pictures of the profile travel as files next to it, where this app
-	 * has files of them: the banner always, the avatar only when it is one of
-	 * this app's own — the picture of a local account is the Nextcloud
-	 * account's, which core's own migrator carries and which this would only
-	 * duplicate.
-	 *
-	 * The pictures are read off the cached copy of the account: that is the
-	 * row `BannerService` writes the banner to and every reader of the
-	 * profile is served from, and `social_actor` never holds it.
+	 * The profile pictures travel as files beside it, read off the cached actor
+	 * that `BannerService` writes: the banner always, the avatar only when it is
+	 * this app's own, since a local account's is the Nextcloud account's, which
+	 * core's migrator carries.
 	 */
 	private function exportActor(
 		Person $actor,
@@ -485,15 +429,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The handles of a paged follow query, in order, without the ones whose
-	 * account this server never cached — a bare actor URL is not a handle, and
-	 * writing one into the address column would produce a row every reader of
-	 * the format skips anyway.
-	 *
-	 * The account's own handle is left out too: every local actor holds a
-	 * loopback follow of itself (`FollowsRequest::generateLoopbackAccount()`),
-	 * so both lists named the exporter, and a `following_accounts.csv` naming
-	 * you is a row Mastodon's importer tries to follow you with.
+	 * The handles of a paged follow query, in order, leaving out accounts never
+	 * cached (a bare URL is no handle) and the account's own loopback follow
+	 * (`FollowsRequest::generateLoopbackAccount()`), which Mastodon's importer
+	 * would try to follow.
 	 *
 	 * @param callable(string):Follow[] $page the page after a cursor, '' for the first
 	 *
@@ -530,11 +469,9 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * Blocks and mutes, in the two files Mastodon writes them to.
-	 *
-	 * `blocked_accounts.csv` is a bare list of handles; `muted_accounts.csv`
-	 * has a header and carries the two things a mute stores besides its
-	 * target: whether notifications are hidden, and when it runs out.
+	 * Blocks and mutes, in Mastodon's two files: `blocked_accounts.csv`, bare
+	 * handles, and `muted_accounts.csv`, with whether notifications are hidden
+	 * and when the mute runs out.
 	 */
 	private function exportRelations(
 		Person $actor,
@@ -583,10 +520,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The lists and the blocked servers, as the two files Mastodon writes
-	 * them to — `lists.csv` and `blocked_domains.csv` — written by the same
-	 * code as the one-file downloads of the Migration page, so the archive
-	 * and those downloads cannot disagree about either.
+	 * The lists and the blocked servers as Mastodon's `lists.csv` and
+	 * `blocked_domains.csv`, by the same code as the Migration page's downloads.
 	 */
 	private function exportLists(string $userId, IExportDestination $exportDestination, OutputInterface $output): void {
 		try {
@@ -604,9 +539,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * What the user kept: the bookmarked and the favourited posts, as the URLs
-	 * of those posts — the shape Mastodon's `bookmarks.csv` has, and the only
-	 * shape that survives leaving this server, where the local ids mean nothing.
+	 * What the user kept: the bookmarked and favourited posts, as their URLs, as
+	 * Mastodon's `bookmarks.csv` has them.
 	 */
 	private function exportMarks(
 		Person $actor,
@@ -632,19 +566,12 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The user's own posts, as an ActivityPub `OrderedCollection`.
+	 * The user's own posts, as an ActivityPub `OrderedCollection`, written a page
+	 * at a time through a temporary file (as `CalendarMigrator` does), with
+	 * `totalItems` last.
 	 *
-	 * Written through a temporary file a page at a time, the way
-	 * `CalendarMigrator` does it: an account with ten years of posts must not
-	 * have to fit in memory to be exportable. `totalItems` is written last,
-	 * once counting is done — JSON does not care about key order and it saves
-	 * a second pass over the rows.
-	 *
-	 * The files the posts point at go into the archive as the posts are walked,
-	 * and each attachment's `url` is rewritten to where its file was put. The
-	 * address it had here is kept beside it as `originalUrl`: a reader that
-	 * cannot use the copy — or an import that finds the file missing — still
-	 * knows where the picture was served from.
+	 * The posts' files go into the archive as they are walked, each attachment's
+	 * `url` rewritten to its file and the old address kept as `originalUrl`.
 	 */
 	private function exportOutbox(
 		Person $actor,
@@ -687,11 +614,9 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * One timeline of this actor, page by page, oldest last.
-	 *
-	 * The cursor is the `nid` of the last row of the page, which is what
-	 * `ProbeOptions::setMaxId()` pages on, so a post added while the export
-	 * runs cannot make it loop.
+	 * One timeline of this actor, page by page, oldest last, paged on the last
+	 * row's `nid` (`ProbeOptions::setMaxId()`), so a post added meanwhile cannot
+	 * make it loop.
 	 *
 	 * @return iterable<Stream>
 	 */
@@ -730,18 +655,11 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * One post's attachments, copied into the archive, and the post rewritten
-	 * to point at them.
-	 *
-	 * Only what this instance has bytes of: a streamed video is somebody else's
-	 * file that was deliberately never copied here (`Document::COPY_STREAMED`),
-	 * and an attachment whose stored copy has been swept away has nothing to
-	 * put in the archive. Both keep the URL they had, which is all there ever
-	 * was of them.
-	 *
-	 * The serialised attachments and `getAttachments()` are the same list in
-	 * the same order — one is `array_map()`ed from the other — so the id of the
-	 * n-th attachment names the n-th file.
+	 * One post's attachments, copied into the archive, and the post rewritten to
+	 * point at them. Only what this instance has bytes of: streamed videos
+	 * (`Document::COPY_STREAMED`) and swept copies keep their URL. The serialised
+	 * attachments and `getAttachments()` are in the same order, so the n-th id
+	 * names the n-th file.
 	 *
 	 * @param array<string, mixed> $item the post as it will be written
 	 * @param array<MediaAttachment|array<string, mixed>> $attachments
@@ -772,9 +690,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 				continue;
 			}
 
-			// the attachment id, which is a row number, names the folder — and
-			// only ever a row number: what goes into a path in an archive is
-			// checked rather than trusted, whatever wrote the row
+			// the attachment id names the folder, and only a row number is accepted
+			// in an archive path
 			$media = $attachments[$index] ?? null;
 			$id = ($media instanceof MediaAttachment) ? $media->getId() : '';
 			$folder = (preg_match('/^[0-9]+$/', $id) === 1) ? $id : $uuid;
@@ -814,15 +731,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The bytes of one stored copy into the archive, without the file ever
-	 * being held: a video is gigabytes, and an export of one must cost no more
-	 * memory than an export of a sentence.
-	 *
-	 * A file the row names and storage no longer has is not an error — the
-	 * sweep that removed it was somebody's retention setting — so the export
-	 * carries on and the attachment keeps its URL. A destination that cannot be
-	 * written to is a different matter and is left to the caller: an archive
-	 * quietly missing half its pictures is worse than an export that failed.
+	 * The bytes of one stored copy into the archive, streamed, so a video costs
+	 * no more memory than a sentence. A file storage no longer has is skipped
+	 * (the attachment keeps its URL); a destination that cannot be written is
+	 * left to the caller to fail on.
 	 *
 	 * @return bool whether the file was written
 	 */
@@ -872,11 +784,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 
 	/**
 	 * What to call the file in the archive: the extension the media type
-	 * implies, else the one the URL carried, else none anybody will guess from.
-	 *
-	 * A profile picture is known only by its URL — the actor carries the link,
-	 * not the row — so where there is no type the URL is read for one, through
-	 * the same guess the client entity makes.
+	 * implies, else the URL's, guessed as the client entity guesses, since a
+	 * profile picture is known only by its URL.
 	 */
 	private static function extensionOf(string $mediaType, string $url): string {
 		if ($mediaType === '') {
@@ -923,23 +832,14 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * Safe to run on a server where the account already exists: the actor is
-	 * taken as it is found (and only created when there is none), every write
-	 * below is idempotent, and nothing is deleted — an import adds what the
-	 * archive knows to what is here.
+	 * Safe on a server where the account exists: the actor is created only when
+	 * missing, every write is idempotent, and nothing is deleted.
 	 *
-	 * Federation: an import sends no Delete, no Move and no Update{Person}
-	 * except the one that follows a restored bio, which goes to the followers
-	 * this account has here — on a freshly imported account, nobody — and is
-	 * the same Update the user's own edit of the bio sends. Blocks and mutes
-	 * are written straight to the relation table rather than through
-	 * `RelationshipService`, which would federate a `Block` to an account that
-	 * was already blocked before the move. The **follows** are the deliberate
-	 * exception: a Follow towards each account is the only way a follow can
-	 * exist at all, and it is what the user asked for by bringing the file.
-	 *
-	 * A missing file is not a failure: an archive from an older version of this
-	 * app, or one a user assembled by hand, imports whatever it does carry.
+	 * Only the follows federate, since a Follow is the only way a follow exists.
+	 * A restored bio sends the usual Update to this account's followers (none on
+	 * a fresh account). Blocks and mutes go straight to the relation table, not
+	 * through `RelationshipService`, which would federate a `Block` again. A
+	 * missing file is no failure: the import takes what the archive carries.
 	 */
 	#[\Override]
 	public function import(IUser $user, IImportSource $importSource, OutputInterface $output): void {
@@ -950,10 +850,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		}
 
 		if (!$this->archiveHasSocialData($importSource)) {
-			// every migrator that ran gets a version recorded, including for a
-			// user who never used this app: creating an account here would hand
-			// them a Fediverse identity, and publish it, on the strength of an
-			// empty folder
+			// every migrator that ran gets a version recorded; an empty folder must
+			// not create, and publish, a Fediverse identity
 			$output->writeln('No Aloha Social data in this archive, nothing to import…');
 
 			return;
@@ -985,7 +883,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		$this->importOutbox($actor, $importSource, $output);
 	}
 
-	/** Takes For you back; an archive from before they existed has none. */
+	/** Takes For you back; an archive without it has none. */
 	private function importInterests(Person $actor, IImportSource $importSource, OutputInterface $output): void {
 		$contents = $this->optionalFile($importSource, self::PATH_INTERESTS, $output);
 		if ($contents === null) {
@@ -1009,14 +907,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The profile, through the paths the app uses itself, and the old actor id
-	 * as an alias.
-	 *
-	 * The display name is not among them: it belongs to the Nextcloud account,
-	 * the core `account` migrator carries it, and `AccountService` re-derives
-	 * the actor's name from it. Neither is the key pair — see the class
-	 * comment — nor `movedTo`, which would point the new account's own
-	 * followers somewhere else.
+	 * The profile, through the app's own paths, and the old actor id as an
+	 * alias. Not the display name (the core `account` migrator carries it), the
+	 * key pair (see the class comment), or `movedTo`, which would send the new
+	 * account's followers elsewhere.
 	 */
 	private function importActor(string $userId, IImportSource $importSource, OutputInterface $output): void {
 		$contents = $this->optionalFile($importSource, self::PATH_ACTOR, $output);
@@ -1054,8 +948,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 				$this->accountService->setFields($userId, array_values($data['fields']));
 			}
 
-			// only when the archive has one: an archive written before bios
-			// existed must not blank the bio of the account importing it
+			// only when the archive has one, so an archive without a bio does not
+			// blank the account's
 			$summary = trim((string)($data['summary'] ?? ''));
 			if ($summary !== '') {
 				$this->accountService->setSummary($userId, $summary);
@@ -1088,10 +982,9 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * Re-follows everything in `following_accounts.csv`, through the ordinary
-	 * follow path — which resolves each handle and queues a Follow, exactly as
-	 * `occ social:account:import-follows` does with the same file. One handle
-	 * whose server is unreachable is reported and does not stop the others.
+	 * Re-follows everything in `following_accounts.csv` through the ordinary
+	 * follow path, as `occ social:account:import-follows` does. An unreachable
+	 * server is reported and does not stop the others.
 	 */
 	private function importFollows(string $userId, IImportSource $importSource, OutputInterface $output): void {
 		$csv = $this->optionalFile($importSource, self::PATH_FOLLOWING, $output);
@@ -1155,9 +1048,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The blocks and mutes, written straight to the relation table: a block
-	 * that was federated once when it was made does not need federating again,
-	 * and the account on the other end was never told the user moved.
+	 * The blocks and mutes, written straight to the relation table: they were
+	 * federated when made, and the other end need not hear of the move.
 	 */
 	private function importRelations(
 		Person $actor,
@@ -1190,10 +1082,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * One block or mute against a handle. The account is resolved the way the
-	 * app resolves any handle — which may fetch it, a plain signed GET; it
-	 * tells the other end nothing it was not going to learn from a follower
-	 * anyway, and without an actor id there is no relation to store.
+	 * One block or mute against a handle, resolved as the app resolves any
+	 * handle, which may fetch it with a plain signed GET.
 	 *
 	 * @param int $expiresAt when a timed mute runs out, or 0 for one that does
 	 *                       not
@@ -1241,9 +1131,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 			try {
 				$this->accountRelationService->setMuteExpiresAt($actor, $target, $expiresAt);
 			} catch (Throwable $e) {
-				// the mute is stored either way; without its expiry it is a
-				// permanent one, which is what this whole column is here to
-				// stop happening silently
+				// the mute is stored either way, and would turn permanent without its
+				// expiry
 				$this->logger->warning('cannot restore when a mute runs out', [
 					'handle' => $handle, 'exception' => $e,
 				]);
@@ -1266,13 +1155,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 
 	/**
 	 * `handle => when the mute runs out`, from the third column of a
-	 * `muted_accounts.csv`, by lower-cased handle. A file without the column —
-	 * Mastodon's own, or one written before it existed — has no expiries in
-	 * it, and every mute in it is permanent.
-	 *
-	 * Anything `strtotime()` cannot read is no expiry rather than a mute that
-	 * ended in 1970: a mute the file could not describe is left as the
-	 * permanent one it will be read as anyway.
+	 * `muted_accounts.csv`, by lower-cased handle. Without the column (Mastodon's
+	 * own file) every mute is permanent, as is any date `strtotime()` cannot read.
 	 *
 	 * @return array<string, int>
 	 */
@@ -1295,16 +1179,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * Marks again what the user had bookmarked and favourited — on the posts
-	 * this server already has.
-	 *
-	 * A post nobody here has ever seen is skipped rather than fetched: pulling
-	 * a decade of remote statuses out of other people's servers during an
-	 * import is a cost they did not agree to, and a mark is restored the moment
-	 * the post arrives here by any ordinary route. The mark is written locally
-	 * only — a favourite is not re-federated as a Like, which the author
-	 * already received once. A post is looked up as the importing account, so
-	 * one it may not read is left unmarked like one this server does not have.
+	 * Marks again what the user had bookmarked and favourited, on posts this
+	 * server already has: others are not fetched, and are marked when they
+	 * arrive. Marks are local; a favourite is not re-sent as a Like. Posts are
+	 * looked up as the importing account, so one it may not read stays unmarked.
 	 */
 	private function importMarks(Person $actor, IImportSource $importSource, OutputInterface $output): void {
 		foreach ([
@@ -1350,15 +1228,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The banner, and the avatar where the account has none of its own.
-	 *
-	 * The banner is this app's picture and is restored through the path that
-	 * owns it — which stores the bytes, points the cached actor at them and
-	 * tells the followers of this account, who on a freshly imported account
-	 * are nobody. The avatar is the Nextcloud account's rather than this app's,
-	 * so `AvatarService` decides: a picture that is already there is left
-	 * alone, and only an account still showing its generated initials gets the
-	 * one out of the archive.
+	 * The banner, and the avatar where the account has none of its own. The
+	 * banner goes through the path that owns it, which also tells this account's
+	 * followers. The avatar is the Nextcloud account's, so `AvatarService` sets
+	 * it only over generated initials.
 	 *
 	 * @param array<string, mixed> $data the actor file
 	 */
@@ -1413,20 +1286,11 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The posts are not restored — their ids belong to the server they were
-	 * written on, and writing statuses back is a piece of work of its own (see
-	 * `docs/Mastodon-Compatibility.md`) — but their **files** are, onto the
-	 * posts this server does have.
-	 *
-	 * That is the case an archive is read in after the pictures were lost and
-	 * the rows were not: a purge of the storage, a database restored from a
-	 * backup the files did not survive. Where the post is here and its picture
-	 * still is too, nothing happens; where the post is not here at all, or
-	 * where it is somebody else's, the file stays in the archive rather than
-	 * becoming a row nothing can show or one somebody else has to look at.
-	 *
-	 * The outbox is read whole, which it can be: it is the text of the posts,
-	 * and the files it names were never in it.
+	 * The posts are not restored (their ids belong to the server they were
+	 * written on; see `docs/Mastodon-Compatibility.md`), but their files are,
+	 * onto the posts this server still has without them, as after a storage
+	 * purge. Posts not here, or not the importer's, are left alone. The outbox
+	 * is read whole: it holds only text.
 	 */
 	private function importOutbox(
 		Person $actor,
@@ -1506,30 +1370,18 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * Whether a post named in the archive is one the importing account wrote
-	 * here.
-	 *
-	 * The ids in `outbox.json` are the user's: an archive is a file the user
-	 * hands the server, and every id in it is chosen by whoever wrote the file.
-	 * Without this, an id naming any other post on the instance — a cached
-	 * remote status, another local account's post — resolved, and its
-	 * attachments were rewritten to files out of the archive, for every viewer
-	 * of this instance.
-	 *
-	 * Local as well as the author, because the attachments of a remote post are
-	 * that server's to change: what is stored here is a copy, and rewriting it
-	 * would make this instance show something its origin never published.
+	 * Whether a post named in the archive is a local one the importing account
+	 * wrote. The archive's ids are the user's to choose, so without this any
+	 * post here could have its attachments rewritten; a remote post's are its
+	 * origin's.
 	 */
 	private function wrotePost(Person $actor, Stream $post): bool {
 		return $post->isLocal() && $post->getAttributedTo() === $actor->getId();
 	}
 
 	/**
-	 * The attachments of one archived post that name a file in the archive,
-	 * by their position in the post.
-	 *
-	 * A `url` that is not one of ours is an attachment this export could not
-	 * copy — it kept the address it had — and there is nothing here to read.
+	 * The attachments of one archived post that name a file in the archive, by
+	 * their position; a `url` not of ours was never copied.
 	 *
 	 * @param array<string, mixed> $item
 	 *
@@ -1561,20 +1413,10 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * The files of one post, put back through the path an upload takes.
-	 *
-	 * `DocumentService::storeLocalAttachment()` is what the composer's own
-	 * upload uses, so the type is sniffed from the bytes, anything this app
-	 * does not store is refused and the metadata comes off — an archive is a
-	 * file a user hands the server, and it gets no shorter a route in than a
-	 * picture picked in the browser. Nothing is transcoded on the way: the file
-	 * in the archive is the one that was stored here, already converted and
-	 * resized when it was first uploaded, and putting it through a second
-	 * generation of JPEG would lose quality for nothing.
-	 *
-	 * The post's own copy of its attachments (the `attachments` column, which
-	 * is what a timeline renders from) is rewritten once, at the end, rather
-	 * than per file.
+	 * The files of one post, put back through the composer's upload path
+	 * (`DocumentService::storeLocalAttachment()`), so they are sniffed, filtered
+	 * and stripped of metadata like any upload, but not transcoded again. The
+	 * post's `attachments` column is rewritten once at the end.
 	 *
 	 * @param array<int, array<string, mixed>> $archived
 	 * @param array<string, int> $tally
@@ -1602,9 +1444,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 
 			$path = $this->fileFromArchive($importSource, self::PATH_ROOT . (string)$attachment['url']);
 			if ($path === null) {
-				// nothing is invented in its place: the attachment keeps the
-				// address the file had where it was written, which is what
-				// `originalUrl` is in the archive for
+				// the attachment keeps the address it had, which is what `originalUrl`
+				// is in the archive for
 				$tally['missingFile']++;
 				continue;
 			}
@@ -1668,13 +1509,9 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 
 	/**
 	 * One file of the archive in a temporary file of its own, copied a chunk at
-	 * a time.
-	 *
-	 * Everything that stores media here takes a path rather than a string, on
-	 * purpose — a video is never held whole — so the import has to hand it one.
-	 * No more is copied than the largest file this instance stores
-	 * (`CacheDocumentService::largestFileBytes()`); a file past that is left
-	 * in the archive, since it would be refused when stored anyway.
+	 * a time, since media is stored from a path. Files larger than the largest
+	 * this instance stores (`CacheDocumentService::largestFileBytes()`) stay in
+	 * the archive.
 	 *
 	 * @return string|null the path, or null when the archive has no such file
 	 *                     or it is too large to store

@@ -18,11 +18,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
 
 /**
- * Brings an account's own posts over from the server it wrote them on.
- *
- * The same importer the Migration page uses, for the archives a browser
- * cannot upload: PHP's own upload ceilings are the reason this exists, and a
- * five-year archive with its pictures is usually past them.
+ * Brings an account's own posts over from the server it wrote them on, with
+ * the Migration importer, for archives too large for PHP's upload limits.
  */
 class AccountImportPosts extends SocialCommand {
 	public function __construct(

@@ -26,9 +26,8 @@ final class RecommendationTrendCandidates {
 
 	/**
 	 * Trending is a retrieval hint, not a ranking shortcut: the caller still
-	 * requires an automatic topic match before a status can enter a result.
-	 * Re-reading through the viewer-aware stream query applies current access,
-	 * block, mute and hidden-status rules after the public trend query.
+	 * requires a topic match, and re-reading through the viewer-aware stream
+	 * query applies access, block, mute and hidden-status rules.
 	 *
 	 * @param list<string> $excludeNids
 	 * @param list<string> $languages

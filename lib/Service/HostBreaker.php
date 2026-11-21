@@ -14,18 +14,11 @@ use OCA\Social\Db\HostBreakerRequest;
 /**
  * The circuit breaker on remote hosts, as one drain sees it.
  *
- * The state is `social_host_breaker`, shared between the cron, the async
- * worker, every `social:worker` process and both queues — which is the point:
- * one of them discovering that a host is down spares all of them. An instance
- * of this is what one drain loaded of it, plus what that drain learnt since.
- *
- * The list used to be per-pass, emptied at the start of every run, so a dead
- * peer was discovered afresh every twelve minutes, one 30-second timeout at a
- * time, for every row addressed to it. Kept in the table the discovery
- * survives the pass and the process — and a host that keeps failing is left
- * alone for longer each time, up to an hour, which is the difference between
- * a dead instance costing a few seconds a day and costing the whole budget.
- * Strikes older than `STRIKE_WINDOW` no longer count.
+ * The state is `social_host_breaker`, shared by the cron, the async worker,
+ * every `social:worker` process and both queues, so one of them finding a
+ * host down spares all of them. An instance of this is what one drain loaded,
+ * plus what it learnt since. A host that keeps failing is held back longer
+ * each time, up to an hour; strikes older than `STRIKE_WINDOW` no longer count.
  */
 class HostBreaker {
 	/** How long a host that has just failed is left alone, in seconds. */
@@ -35,10 +28,8 @@ class HostBreaker {
 	public const MAX = 3600;
 
 	/**
-	 * How long a strike counts. Longer than the ceiling: a host held back for
-	 * the full hour is asked again only once the hour is over, and a strike
-	 * that had lapsed by then sent a dead host back to a one-minute hold,
-	 * every hour, for ever.
+	 * How long a strike counts. Longer than the ceiling, so a host held for
+	 * the full hour still has its strikes when it is asked again.
 	 */
 	public const STRIKE_WINDOW = 4 * self::MAX;
 
@@ -66,12 +57,8 @@ class HostBreaker {
 
 	/**
 	 * When this host is worth asking again, or 0 when it is worth asking now.
-	 *
-	 * Asked before a request is made rather than after it times out, which is
-	 * the whole saving: a row addressed to a dead instance costs a lookup in a
-	 * map this drain loaded once instead of thirty seconds. The answer is a
-	 * timestamp rather than a yes/no because what is addressed to the host has
-	 * to be held back until then.
+	 * Asked before a request is made, from a map loaded once; a timestamp
+	 * because what is addressed to the host is held back until then.
 	 */
 	public function openUntil(string $host): int {
 		if (isset($this->failing[$host])) {
@@ -84,15 +71,9 @@ class HostBreaker {
 	}
 
 	/**
-	 * Records that this host is failing, for longer each consecutive time.
-	 *
-	 * The backoff is what stops a permanently dead instance from being
-	 * rediscovered every minute for ever; a host that answers again clears it,
-	 * so a peer that was merely restarting is not held at arm's length.
-	 *
-	 * A peer that said how long to leave it alone (`Retry-After` on a 429 or
-	 * 503) is left alone at least that long, but never longer than MAX: an
-	 * answer saying "a week" must not take a peer out of federation for one.
+	 * Records that this host is failing, for longer each consecutive time; a
+	 * host that answers again clears it. A peer's `Retry-After` (on a 429 or
+	 * 503) is honoured, but never beyond MAX.
 	 *
 	 * @param int $atLeast the seconds the peer asked for, 0 where it did not
 	 */
@@ -114,10 +95,8 @@ class HostBreaker {
 	}
 
 	/**
-	 * A host that answered: it is not failing, whatever it did before.
-	 *
-	 * Only a host this drain knows to have failed costs a write; a healthy
-	 * one, which is nearly every request, costs nothing.
+	 * A host that answered: it is not failing, whatever it did before. Only a
+	 * host this drain knows to have failed costs a write.
 	 */
 	public function close(string $host): void {
 		if (!isset($this->state()[$host])) {

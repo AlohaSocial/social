@@ -19,20 +19,12 @@ use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
 /**
- * Fills in `social_stream.author_host` for the posts stored before it.
- *
- * Queued by `Version1000Date20261008000503` rather than run inside it:
- * `social_stream` is the largest table this app has, and an upgrade that
- * walks all of it keeps the instance in maintenance mode for as long as that
- * takes. Every post stored since writes its own host, so one walk of the
- * table by `nid` reaches every row that has none.
- *
- * **Why it re-queues itself.** Like `DomainPurge`: a cron run is a slot
- * shared with every other job, so it does a bounded amount, then puts itself
- * back on the list with the `nid` it got to. When a page comes back short it
- * has reached the end, and it sets `stream_author_hosts_filled`, which is
- * what lets the domain-block and silenced-instance filters stop matching a
- * row by its actor id as well as by its host.
+ * Fills in `social_stream.author_host` for older posts. Queued by
+ * `Version1000Date20261008000503` so the upgrade does not walk the largest
+ * table in maintenance mode. Like `DomainPurge`, it does a bounded amount per
+ * run and re-queues itself with the `nid` it reached; at the end it sets
+ * `stream_author_hosts_filled`, which lets the domain filters stop also
+ * matching by actor id.
  */
 class StreamAuthorHosts extends QueuedJob {
 	/** Rows read per page. */

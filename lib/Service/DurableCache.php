@@ -17,48 +17,29 @@ use OCP\IConfig;
 use OCP\IMemcache;
 
 /**
- * Short-lived state that has to be kept even where no memcache is.
+ * Short-lived state that must be kept even without a memcache, where
+ * `createDistributed()` returns a `NullCache` and counters or replay lists
+ * would silently stop working.
  *
- * `ICacheFactory::createDistributed()` hands an instance without
- * `memcache.local` or `memcache.distributed` a `NullCache`: every `set()` is
- * dropped and every `get()` answers null. For a computed answer that only
- * costs time. For a counter or a list of what was already accepted it
- * switches the protection off — the inbox throttle reads zero on every
- * delivery, and a replayed signature looks new.
- *
- * So this is the distributed cache when there is one, and a table
- * (`social_durable_cache`) when there is not. The API is the part of `ICache`
- * those callers use, with the namespace passed on each call:
+ * Uses the distributed cache when there is one, else the
+ * `social_durable_cache` table, with the namespace passed on each call:
  *
  *     $this->durableCache->set('social.inbox', $key, 3, 120);
  *     $this->durableCache->get('social.inbox', $key);      // 3, or null
  *     $this->durableCache->inc('social.inbox', $key, 120); // 4
  *     $this->durableCache->remove('social.inbox', $key);
  *
- * - A value is anything `json_encode()` round-trips — a scalar or an array.
- *   `null` is what a miss reads as, so it cannot be stored.
- * - A TTL is seconds and always applies; 0 or less is `ICache::DEFAULT_TTL`.
- *   The table's rows are invisible from the moment they expire and are
- *   deleted by `Cron\Cache`.
- * - `inc()` sets the TTL when it creates the key and leaves it alone after,
- *   so a counter lives for one window however often it is counted. It is not
- *   atomic on the table: two requests counting at the same instant can both
- *   read the same value. That is fine for a ceiling and wrong for an id.
+ * - Values are anything `json_encode()` round-trips; `null` reads as a miss.
+ * - A TTL is seconds; 0 or less is `ICache::DEFAULT_TTL`. Expired rows are
+ *   invisible and deleted by `Cron\Cache`.
+ * - `inc()` sets the TTL only on creation. Not atomic on the table: fine for
+ *   a ceiling, wrong for an id.
  *
- * A memcache configured as `memcache.local` only (APCu) is used as well, and
- * APCu is not shared between the web server and `occ` or cron. State that a
- * background job writes for a web request to read goes through `getShared()`
- * and `setShared()`, which always use the table.
- *
- * `getBuffer()`, `setBuffer()` and `removeBuffer()` are for state any PHP
- * worker may write and any other must read soon after, such as the inbox's
- * early-update and early-undo buffers: a `memcache.distributed` that is
- * shared between processes (Redis, Memcached) when one is configured, and
- * the table otherwise. APCu never qualifies, whatever key it is configured
- * under, because each PHP process has its own. Nor does a cache the server
- * hands out in place of the configured one: an instance that is not
- * installed yet, and a PHPUnit run, get its in-process array cache for every
- * `memcache.*` setting, and that one is not even shared within the process.
+ * APCu is not shared with `occ` or cron, so `getShared()`/`setShared()`
+ * always use the table. `getBuffer()`/`setBuffer()`/`removeBuffer()` are for
+ * state any worker must see soon after another writes it: a shared
+ * `memcache.distributed` (Redis, Memcached) or else the table, never APCu or
+ * the in-process array cache.
  */
 class DurableCache {
 	/** memcache classes whose contents one PHP process cannot see from another */
@@ -175,12 +156,9 @@ class DurableCache {
 	}
 
 	/**
-	 * Atomically claims a shared key that does not have a live row.
-	 *
-	 * Unlike `setShared()`, simultaneous callers cannot overwrite one
-	 * another's claim: the table's unique key decides which insert wins. This
-	 * is useful for bounded shared slots when no distributed atomic cache is
-	 * configured.
+	 * Atomically claims a shared key that does not have a live row: unlike
+	 * `setShared()`, the table's unique key decides which concurrent insert
+	 * wins.
 	 */
 	public function addShared(string $namespace, string $key, mixed $value, int $ttl): bool {
 		$now = $this->now();
@@ -255,10 +233,8 @@ class DurableCache {
 	}
 
 	/**
-	 * Deletes the table's expired rows.
-	 *
-	 * Run whatever backs the cache today: an instance that has just been given
-	 * a memcache still has the rows it wrote before.
+	 * Deletes the table's expired rows, whatever backs the cache now, since
+	 * rows written before a memcache was configured remain.
 	 *
 	 * @return int how many rows went
 	 */

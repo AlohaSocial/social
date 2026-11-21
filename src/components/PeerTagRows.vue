@@ -7,13 +7,8 @@
 		<li v-for="tag in tags" :key="tag.name" class="peertags__row">
 			<router-link class="peertags__tag" :to="{ name: 'tags', params: { tag: tag.name } }">
 				<span class="peertags__name">#{{ tag.name }}</span>
-				<!--
-					Which servers said so, because that is the whole claim this
-					row makes. A count on its own would be a number out of
-					nowhere: these servers are of wildly different sizes and
-					adding their figures together would rank the biggest one's
-					opinion as everybody's.
-				-->
+				<!-- which servers said so: they differ wildly in size, so their counts
+				     are not added up -->
 				<span class="peertags__where">{{ whereText(tag) }}</span>
 			</router-link>
 			<HashtagFollowButton
@@ -33,16 +28,9 @@ import HashtagFollowButton from './HashtagFollowButton.vue'
 const NAMED = 2
 
 /**
- * Hashtags as other servers report them.
- *
- * Shared by the two places that show them — what a search found, and what is
- * busy elsewhere but not here — because they are the same row and differ only
- * in what put them on the screen.
- *
- * A tag here is followed exactly as a tag from this instance's own trending
- * list is: the button is the same one, and what fills that timeline afterwards
- * is still only what this instance federates with. Nothing about a tag being
- * busy on somebody else's server brings their posts here.
+ * Hashtags as other servers report them, for search results and for what is
+ * busy elsewhere. Following one only brings in what this instance already
+ * federates with.
  */
 export default {
 	name: 'PeerTagRows',
@@ -72,11 +60,8 @@ export default {
 		n,
 
 		/**
-		 * Where a tag is busy, named rather than counted.
-		 *
-		 * "Busy on mastodon.social" is checkable and "busy on 1 server" is
-		 * not, so the servers are named while there is room to name them and
-		 * counted only once there is not.
+		 * Where a tag is busy: servers are named while there is room, and counted
+		 * once there is not.
 		 *
 		 * @param {object} tag one `PeerTag`
 		 * @return {string}

@@ -4,17 +4,10 @@
  */
 
 /**
- * What goes inside the sidebar's Explore entry, and how much of it fits.
- *
- * The rail holds three things: the hashtags the reader follows, the lists they
- * have, and what this instance is talking about. The first two grow without
- * limit — somebody who follows forty tags would otherwise push their own feed
- * off a laptop screen — so the entry shows as much as there is room for.
- *
- * The three are not equal. A followed tag and a list were *chosen*; a trending
- * tag is merely popular, and it fills what is left after the chosen ones have
- * their places. What somebody follows can therefore never be pushed out of
- * their own sidebar by what happens to be busy today.
+ * What goes inside the sidebar's Explore entry, and how much of it fits: the
+ * hashtags the reader follows, their lists, and what this instance is talking
+ * about. Trending only fills what the chosen ones leave, so it never pushes
+ * them out.
  */
 
 /** A navigation row, as Nextcloud sizes one, when nothing has been measured. */
@@ -22,13 +15,7 @@ export const ROW_HEIGHT = 44
 
 /**
  * What the rail needs for everything that is not an Explore child, used only
- * when the rail cannot be measured.
- *
- * The real figure is taken from the DOM — see `capacityFrom()` — because the
- * parts are not all rows and they come and go: an error entry appears when
- * something breaks, and browser zoom changes every height at once. This is the
- * answer for the first paint, before there is anything to measure, and for
- * jsdom.
+ * before the rail can be measured (first paint, jsdom); see `capacityFrom()`.
  */
 const RESERVED_HEIGHT = 544
 
@@ -36,23 +23,15 @@ const RESERVED_HEIGHT = 544
 export const MAX_ENTRIES = 12
 
 /**
- * And never fewer than this.
- *
- * Zero: when there is no room left above the account footer the entries go
- * rather than run underneath it. The Explore row itself stays, so the reader
- * can still collapse it or make the window bigger, and nothing is drawn where
- * it cannot be read.
+ * And never fewer than this: with no room above the account footer the
+ * entries go rather than run underneath it; the Explore row itself stays.
  */
 export const MIN_ENTRIES = 0
 
 /**
- * How many entries fit, from a measurement of the rail itself.
- *
- * `free` is the height left over once everything that is *not* an Explore
- * child has been accounted for, which is why this cannot simply divide the
- * rail's height: the children are in the rail too, and a figure that counted
- * them would grow every time it was applied and shrink every time it was
- * re-measured.
+ * How many entries fit, from a measurement of the rail. `free` already
+ * excludes the Explore children, or the figure would change each time it was
+ * applied and measured again.
  *
  * @param {object} measured what the rail reports
  * @param {number} measured.free pixels available for children
@@ -88,13 +67,9 @@ export function entriesThatFit(viewportHeight) {
 }
 
 /**
- * How many of each kind to show, when there is not room for all of them.
- *
- * Proportional to how many there are, so somebody with twelve tags and one
- * list does not lose the list, and somebody with one tag and twelve lists does
- * not lose the tag. Both kinds keep at least one place while there is room for
- * one each — a truncation that silently drops a whole kind reads as the kind
- * having gone missing rather than as there being too little room.
+ * How many of each kind to show when there is not room for all, in
+ * proportion to how many there are; both keep at least one place while there
+ * is room for one each.
  *
  * @param {number} tags how many hashtags there are
  * @param {number} lists how many lists there are
@@ -144,14 +119,9 @@ export function shareOut(tags, lists, cap) {
 }
 
 /**
- * The entries the Explore item shows: what the reader follows, then their
- * lists and the Bluesky feeds they keep, then what the instance is talking
- * about. A kept feed was chosen as a list was, and shares the lists' room.
- *
- * Trending takes only the room the first two leave, and never a tag the reader
- * already follows — that tag is in the list above under the same name, and two
- * identical rows one after the other read as a bug rather than as two
- * meanings.
+ * The entries the Explore item shows: followed tags, then lists and kept
+ * Bluesky feeds (which share the lists' room), then trending in the room left,
+ * never repeating a tag the reader follows.
  *
  * @param {Array<{name: string}>} tags the hashtags the reader follows
  * @param {Array<{id: string, title: string}>} lists the reader's lists

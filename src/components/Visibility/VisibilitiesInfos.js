@@ -46,9 +46,8 @@ const visibilities = [
 export default visibilities
 
 /**
- * Whether anything in the app knows what to do with this id. A visibility read
- * back from localStorage — a draft or the last-used one — was written by some
- * version of this app, not necessarily this one.
+ * Whether anything in the app knows what to do with this id: a visibility
+ * read back from localStorage may have been written by another version.
  *
  * @param {string} id the id to check
  * @return {boolean}

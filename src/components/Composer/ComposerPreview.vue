@@ -8,9 +8,7 @@
 			<p class="composer-preview__caption">
 				{{ t('social', 'How this will read') }}
 			</p>
-			<!-- pressing the toolbar button again also closes it, which is a
-			     row further down and a thing to work out; the way out of a
-			     panel belongs on the panel -->
+			<!-- the way out of a panel belongs on the panel -->
 			<NcButton
 				variant="tertiary"
 				class="composer-preview__close"
@@ -29,14 +27,9 @@
 			{{ t('social', 'Nothing written yet.') }}
 		</p>
 		<p v-else class="composer-preview__body">
-			<!-- The text is drawn as its runs rather than as HTML: nothing here
-			     is ever parsed as markup, so a post that is all angle brackets
-			     is shown as the angle brackets that will be published.
-
-			     Every run is a span, plain text included, and each one's text
-			     sits against its tags: the body is `pre-wrap`, so a newline
-			     put here to make the markup prettier would be a space in the
-			     preview that is not in the post. -->
+			<!-- drawn as runs, never parsed as markup. Each run's text sits against its
+			     tags: the body is `pre-wrap`, so a newline here would be a space in
+			     the preview that is not in the post. -->
 			<span
 				v-for="(run, index) in runs"
 				:key="index"
@@ -57,20 +50,10 @@ import { linkifyRuns } from '../../utils/linkify.js'
 import { tagStyle } from '../../utils/tagColour.js'
 
 /**
- * What the post will look like once it is published.
- *
- * A post is typed as plain text and published as HTML: the server finds the
- * URLs, mentions and hashtags and links them (LinkifyService). Until this
- * existed the writer found out what had been picked up only after posting —
- * and a hashtag that did not take, or a mention that ran into the next word,
- * is exactly the kind of thing worth knowing before rather than after.
- *
- * The entities are found by utils/linkify.js, which mirrors the server's own
- * rules and is pinned to them by its tests. What this cannot know is whether a
- * mention resolves to a real account: the server only links one its `tag`
- * array vouches for, and it builds that array by looking the account up. So
- * this says "this is a mention", never "this account exists", and the wording
- * under the preview says as much.
+ * What the post will look like once the server has linked its URLs, mentions
+ * and hashtags (LinkifyService). The entities are found by utils/linkify.js,
+ * which mirrors the server's rules; whether a mention resolves to a real
+ * account is not known here, and the wording under the preview says so.
  */
 export default {
 	name: 'ComposerPreview',
@@ -126,9 +109,8 @@ export default {
 		},
 
 		/**
-		 * What was found, in words. A count of nothing is worth saying too:
-		 * "no hashtags" is the answer to why a post did not reach a tag
-		 * timeline.
+		 * What was found, in words. A count of nothing is worth saying too: "no
+		 * hashtags" explains why a post did not reach a tag timeline.
 		 *
 		 * @return {string} the summary under the preview
 		 */

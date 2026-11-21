@@ -21,13 +21,9 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  */
 interface IExtendedQueryBuilder extends IQueryBuilder {
 	/**
-	 * The statement types `IQueryBuilder::getType()` reports.
-	 *
-	 * The public interface returns the number but never names it, so the app
-	 * used to import `Doctrine\DBAL\Query\QueryBuilder` — a third-party class
-	 * it does not depend on — in four files purely to read these four
-	 * constants. `QueryBuilderTypeConstantsTest` holds them to the values
-	 * Doctrine assigns.
+	 * The statement types `IQueryBuilder::getType()` reports, which the public
+	 * interface does not name. `QueryBuilderTypeConstantsTest` holds them to
+	 * Doctrine's values.
 	 */
 	public const SELECT = 0;
 	public const DELETE = 1;

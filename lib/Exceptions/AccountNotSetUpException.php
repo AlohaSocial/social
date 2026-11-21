@@ -15,12 +15,9 @@ use Throwable;
 
 /**
  * A signed-in Nextcloud user who has not set up their account in this app
- * yet, with the address of the page where they do (CodedRefusal).
- *
- * A `ClientNotFoundException`, so a route that hands its credential failures
- * to `error()` hands this one too; each `error()` answers it with 403 and
- * the body of `toArray()` rather than with a 401, which a client reads as
- * its sign-in having ended.
+ * yet, with the address of the page where they do (CodedRefusal). A
+ * `ClientNotFoundException`, so routes hand it to `error()`, which answers
+ * 403 with `toArray()` rather than a 401 a client would read as signed out.
  */
 class AccountNotSetUpException extends ClientNotFoundException {
 	use CodedRefusal;

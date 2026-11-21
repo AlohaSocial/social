@@ -14,12 +14,8 @@ use OCA\Social\Model\Client\StatusRevision;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The versions a status has been through.
- *
- * Append-only by design: a revision is never updated and never rewritten, so
- * the history of a status is a fact about what happened to it rather than a
- * summary somebody's later edit could change. The only write that removes rows
- * is the one that removes the status itself.
+ * The versions a status has been through. Append-only: revisions are never
+ * updated, and only removing the status removes them.
  */
 class StatusRevisionsRequest extends StatusRevisionsRequestBuilder {
 	/** Highest revision id, used to start a streaming subscriber after existing edits. */
@@ -71,12 +67,8 @@ class StatusRevisionsRequest extends StatusRevisionsRequestBuilder {
 	}
 
 	/**
-	 * Every version of one status, oldest first — which is the order Mastodon
-	 * returns a history in, and the order the index is built for.
-	 *
-	 * Ordered by `id` and not by `published`: two edits made inside the same
-	 * second carry the same stamp, and the order they happened in is the one
-	 * thing a revision history may not get wrong.
+	 * Every version of one status, oldest first, as Mastodon returns a history.
+	 * Ordered by `id`, not `published`, as two edits in one second share a stamp.
 	 *
 	 * @return StatusRevision[]
 	 */
@@ -91,9 +83,7 @@ class StatusRevisionsRequest extends StatusRevisionsRequestBuilder {
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {
 			$revision = $this->parseStatusRevisionsSelectSql($data);
-			// the row holds the prim, which is not an id anything can be
-			// looked up by; the caller asked about a status, so it is handed
-			// back the status it asked about
+			// The row holds the prim; hand back the id the caller asked about.
 			$revision->setStreamId($streamId);
 			$revisions[] = $revision;
 		}
@@ -103,10 +93,8 @@ class StatusRevisionsRequest extends StatusRevisionsRequestBuilder {
 	}
 
 	/**
-	 * Whether anything at all has been recorded for a status.
-	 *
-	 * This is what decides, on an edit, whether the version being replaced is
-	 * the original and has to be written too — see StatusRevisionService.
+	 * Whether anything has been recorded for a status, which decides whether an
+	 * edit must also write the original (see StatusRevisionService).
 	 */
 	public function hasRevisions(string $streamId): bool {
 		$qb = $this->getStatusRevisionsSelectSql();
@@ -123,11 +111,8 @@ class StatusRevisionsRequest extends StatusRevisionsRequestBuilder {
 	}
 
 	/**
-	 * The versions of a status that no longer exists.
-	 *
-	 * A revision outliving its status would be unreachable — every read here
-	 * starts from a status that was resolved first — and would be handed to
-	 * whatever next occupied the same id.
+	 * The versions of a status that no longer exists, which would otherwise be
+	 * unreachable.
 	 */
 	public function deleteByStreamId(string $streamId): void {
 		$qb = $this->getStatusRevisionsDeleteSql();

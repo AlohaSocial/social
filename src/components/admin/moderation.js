@@ -6,12 +6,8 @@
 import { translate as t } from '@nextcloud/l10n'
 
 /**
- * What suspending costs, said before it is done.
- *
- * The reports table and the account browser both suspend, and both have to say
- * the same thing: the sentence is the one thing standing between a moderator
- * and a deletion that lifting the suspension will not undo. A function rather
- * than a constant, because the translation is not loaded when a module is.
+ * What suspending costs, shared by the reports table and the account browser.
+ * A function because the translation is not loaded when the module is.
  *
  * @return {string} the warning
  */

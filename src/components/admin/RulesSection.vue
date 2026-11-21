@@ -40,11 +40,9 @@ import { showError, showSuccess } from '../../services/toast.js'
 import { errorOf } from '../../utils/serverError.js'
 
 /**
- * The rules an instance asks people to follow.
- *
- * Stored exactly as they are stored today — one per line in an app value, the
- * shape `occ config:app:set social rules` writes and `/api/v1/instance/rules`
- * reads — so this is a place to edit them and not a second way of keeping them.
+ * The rules an instance asks people to follow, stored one per line in the app
+ * value that `occ config:app:set social rules` writes and
+ * `/api/v1/instance/rules` reads.
  */
 export default {
 	name: 'RulesSection',

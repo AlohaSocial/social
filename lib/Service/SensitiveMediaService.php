@@ -13,29 +13,18 @@ use OCA\Social\AppInfo\Application;
 use OCP\IConfig;
 
 /**
- * What happens to a post somebody marked sensitive.
+ * What happens to a post somebody marked sensitive: PeerTube's three NSFW
+ * policies under Mastodon's names (`reading:expand:media` on
+ * `/api/v1/preferences`), so clients can act on them:
  *
- * PeerTube gives an instance three NSFW policies and lets a person override
- * the one their instance chose; this app had one, hard-coded, and no way to
- * say anything about it. The three are the same three, under Mastodon's names
- * rather than PeerTube's — because Mastodon already has a field for exactly
- * this (`reading:expand:media` on `/api/v1/preferences`), every client that
- * speaks this API already reads it, and inventing a fourth vocabulary for the
- * same three states would mean no client could act on it:
+ * - `show_all` (PeerTube's display): drawn like other media; a content
+ *   warning still covers its post.
+ * - `default` (blur): covered, blurhash showing, one press away.
+ * - `hide_all` (hide): not drawn; opening the post is what it takes.
  *
- * - `show_all` — PeerTube's **display**. Sensitive media is drawn like any
- *   other; a content warning, which is a different thing, still covers its
- *   post.
- * - `default` — PeerTube's **blur**. The media is covered and its blurhash
- *   shows through it, one press away. What this app has always done, and the
- *   default here so that an upgrade changes nothing for anybody.
- * - `hide_all` — PeerTube's **hide**. The media is not drawn and there is no
- *   button to draw it: opening the post itself is what it takes.
- *
- * An account that has expressed no preference follows the instance, and an
- * instance that has expressed none is `default`. An account's own choice is
- * stored against its Nextcloud user rather than its actor, because it is a
- * fact about a person reading and not about an identity other servers see.
+ * An account without a preference follows the instance, whose default is
+ * `default`. The choice is stored per Nextcloud user, as it is about the
+ * reader, not an identity other servers see.
  */
 class SensitiveMediaService {
 	public const SHOW_ALL = 'show_all';
@@ -81,14 +70,8 @@ class SensitiveMediaService {
 	}
 
 	/**
-	 * What this account has chosen, as it chose it — `''` where it has not.
-	 *
-	 * Distinct from `policyFor()` on purpose: a settings page has to be able to
-	 * show "follow the instance" as the state it is, rather than as whichever
-	 * policy that currently resolves to. The two look the same until an
-	 * administrator changes the instance default, at which point a page that
-	 * could not tell them apart would have silently pinned everybody to the
-	 * old one.
+	 * What this account has chosen, `''` where it has not; distinct from
+	 * `policyFor()` so a settings page can show "follow the instance".
 	 */
 	public function choiceOf(string $userId): string {
 		if ($userId === '') {
@@ -103,9 +86,7 @@ class SensitiveMediaService {
 	}
 
 	/**
-	 * Records what an account chose. `''` puts it back to following the
-	 * instance, which is not the same as choosing what the instance currently
-	 * does.
+	 * Records what an account chose; `''` follows the instance.
 	 *
 	 * @return bool whether the value was one of the four things it may be
 	 */

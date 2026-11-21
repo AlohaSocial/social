@@ -28,23 +28,11 @@ use Throwable;
 /**
  * The imports an account asks for, run in the background and watched.
  *
- * Every import used to run inside the request that uploaded the file. Each
- * follow in a `following_accounts.csv` is a WebFinger lookup, an actor fetch
- * and a delivery; a few hundred of them ran into the web server's timeout,
- * and the rate limit that kept the server safe from that meant a timed-out
- * upload could not be tried again for an hour. A post import was the same
- * with a picture fetched per post, capped at two thousand a run and "upload
- * the same file again to carry on".
- *
- * Now the upload is kept in appdata, a row says what was asked, and
- * `Cron\RunImport` works it off on the next cron run with no request to
- * outlive, writing where it got to as it goes. The page polls the row. One
- * import of a kind at a time per account: a second press of the same button
- * while the first runs is refused rather than queued twice.
- *
- * The importers themselves are unchanged — the same `MigrationService` and
- * `PostImportService` calls, handed a progress callback — so what an import
- * does, and what it federates, is decided where it always was.
+ * The upload is kept in appdata, a row says what was asked, and
+ * `Cron\RunImport` works it off with no request to outlive, writing its
+ * progress as it goes for the page to poll. One import of a kind at a time
+ * per account. The importers are `MigrationService` and `PostImportService`,
+ * handed a progress callback.
  */
 class ImportQueueService {
 	/** Where the uploads wait, under this app's appdata. */
@@ -60,11 +48,9 @@ class ImportQueueService {
 	/** The code of a run whose kept upload could not be read back. */
 	public const FILE_MISSING = 'import-file-missing';
 	/**
-	 * How long a running import may go without writing its progress before
-	 * it counts as dead. A run writes every couple of seconds; one whose
-	 * process was killed (memory limit, time limit, a restart) never reaches
-	 * its `finally`, and would otherwise stay running, and refuse every
-	 * later import of its kind, for good.
+	 * How long a running import may go without writing its progress before it
+	 * counts as dead: a killed process never reaches its `finally`, and would
+	 * otherwise block every later import of its kind.
 	 */
 	public const STALE_SECONDS = 3600;
 
@@ -202,10 +188,9 @@ class ImportQueueService {
 
 	/**
 	 * What the row keeps about a failed run: a stable code the page explains
-	 * in the person's language, and the English sentence of a refusal for its
-	 * details. Any other exception is logged and kept as `$otherwise` alone:
-	 * its message is written for whoever reads the log, and may name paths or
-	 * queries.
+	 * in the person's language, and the English sentence of a refusal. Any
+	 * other exception is logged and kept as `$otherwise` alone, since its
+	 * message may name paths or queries.
 	 *
 	 * @return array{code: string, error?: string}
 	 */
@@ -298,9 +283,7 @@ class ImportQueueService {
 
 	/**
 	 * The callback an importer reports to after each item: the row is written
-	 * every few items or every couple of seconds, whichever comes first, so a
-	 * page polling it sees movement without the database seeing a write per
-	 * follow.
+	 * every few items or couple of seconds, whichever comes first.
 	 *
 	 * @return callable(int, int): void
 	 */

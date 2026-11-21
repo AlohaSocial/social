@@ -23,13 +23,11 @@
 			:aria-invalid="createError !== null"
 			:disabled="busy"
 			required>
-		<!-- the address as it is typed, not on the way out: the choice
-			     is permanent, so it is worth seeing before it is made -->
+		<!-- the address is shown as it is typed: the choice is permanent -->
 		<p id="account-setup-address" class="account-setup__address">
 			@{{ handle || '…' }}@{{ addressHost }}
 		</p>
-		<!-- the second address the account gets, where the administrator
-			     has switched that on -->
+		<!-- the account's Bluesky address, where the administrator has enabled it -->
 		<p v-if="blueskyEnabled && handle !== ''" class="account-setup__address account-setup__address--bluesky">
 			<span class="account-setup__bluesky-label">{{ t('social', 'On Bluesky too:') }}</span>
 			@{{ blueskyAddress }}

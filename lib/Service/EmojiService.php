@@ -21,22 +21,13 @@ use Psr\Log\LoggerInterface;
 /**
  * The emoji this instance publishes.
  *
- * `/api/v1/custom_emojis` answered `[]` unconditionally and outbound posts
- * carried no `Emoji` tags, so emoji from every other instance rendered here
- * and this one could publish none — the asymmetry a reader notices first,
- * because their own instance's emoji stop working the moment they move here.
- *
- * A shortcode is what goes between colons. What a post carries is the tag, not
- * the picture: `:blobcat:` stays in the content and an `Emoji` tag beside it
- * says where the picture is, which is how every fediverse server does it and
- * why an instance that has never heard of `blobcat` still renders the post.
- *
- * The picture lives in appdata under a name of this app's choosing and is
- * served from one route, so a local client and a remote server dereference the
- * same URL.
+ * A post keeps `:shortcode:` in its content and carries an `Emoji` tag saying
+ * where the image is, as every fediverse server does. The image lives in
+ * appdata and is served from one route, the same URL for local clients and
+ * remote servers.
  */
 class EmojiService {
-	/** The appdata folder the pictures live in. */
+	/** The appdata folder the images live in. */
 	private const FOLDER = 'emoji';
 
 	/** What an emoji may be: what a browser will render inline, and no more. */
@@ -46,19 +37,10 @@ class EmojiService {
 	public const MAX_SIZE = 256 * 1024;
 
 	/**
-	 * What a post is scanned for.
-	 *
-	 * Bounded by a colon on each side, and — this is the part a plain
-	 * `:(\w+):` gets wrong — neither colon may sit against a word character
-	 * or another colon. Without the two guards, `12:30:45` carries an emoji
-	 * called `30`, and `https://example.test` and `:-)` are each one colon
-	 * away from the same thing. Mastodon's own pattern, with this app's
-	 * shortcode alphabet.
-	 *
-	 * Case-insensitive, and the match is lowercased: a shortcode is stored in
-	 * lower case, but Mastodon compares them without regard to case and people
-	 * type `:BlobCat:`, which rendered as literal text here and on every peer
-	 * this post reached.
+	 * What a post is scanned for: Mastodon's pattern with this app's shortcode
+	 * alphabet. Neither colon may touch a word character or another colon, so
+	 * `12:30:45` and URLs do not match. Case-insensitive; matches are lowercased,
+	 * as shortcodes are stored.
 	 */
 	private const IN_TEXT = '/(?<![\w:]):([a-zA-Z0-9_]{2,64}):(?![\w:])/';
 
@@ -107,11 +89,8 @@ class EmojiService {
 	}
 
 	/**
-	 * The `Emoji` tags a piece of text needs, one per distinct shortcode in it
-	 * that this instance has a picture for.
-	 *
-	 * Unknown shortcodes are left alone: `:shrug:` on an instance without one
-	 * is text, here and everywhere it is delivered.
+	 * The `Emoji` tags a piece of text needs, one per distinct shortcode this
+	 * instance has an image for; unknown shortcodes stay text.
 	 *
 	 * @return array[] tags, ready for `ACore::addTag()`
 	 */
@@ -142,11 +121,11 @@ class EmojiService {
 	}
 
 	/**
-	 * Adds one, or replaces the picture behind a shortcode already in use.
+	 * Adds one, or replaces the image behind a shortcode already in use.
 	 *
-	 * @param string $path a readable file holding the picture
+	 * @param string $path a readable file holding the image
 	 *
-	 * @throws InvalidActionException the shortcode or the picture is not one
+	 * @throws InvalidActionException the shortcode or the image is not one
 	 */
 	public function add(
 		string $shortcode, string $path, string $category = '', bool $visible = true,
@@ -173,8 +152,7 @@ class EmojiService {
 			);
 		}
 
-		// the bytes decide, not the extension: this is served to every reader
-		// of every post that uses it
+		// The bytes decide the type, not the extension.
 		$mediaType = (string)@mime_content_type($path);
 		if (!in_array($mediaType, self::ALLOWED_TYPES, true)) {
 			throw new InvalidActionException('an emoji has to be a PNG, GIF, WebP or JPEG image');
@@ -185,17 +163,10 @@ class EmojiService {
 			throw new InvalidActionException('the picture could not be read');
 		}
 
-		// The same stripping every other upload gets. An emoji is usually a
-		// drawing with nothing in it to remove, but it is uploaded from a
-		// filesystem like anything else and is then served to every reader of
-		// every post that uses it -- on this instance and on every peer that
-		// mirrors it. A guarantee that holds for photographs and not for this
-		// is not a guarantee, and the cost when there is nothing to strip is
-		// that the bytes come back unchanged.
+		// Metadata is stripped as for every other upload.
 		$content = $this->imageMetadataService->strip($content, $mediaType);
 
-		// named after the shortcode: one picture per shortcode, and replacing
-		// it overwrites rather than leaving the old bytes behind
+		// Named after the shortcode, so replacing it overwrites the old bytes.
 		$filename = $shortcode . '.' . $this->extensionOf($mediaType);
 		$this->folder()->newFile($filename, $content);
 
@@ -207,11 +178,7 @@ class EmojiService {
 	}
 
 	/**
-	 * Removes one, picture and all.
-	 *
-	 * Posts that used it keep the shortcode as text: what they carry is the
-	 * tag they were federated with, and this instance no longer offering the
-	 * picture does not rewrite what was already said.
+	 * Removes one, image and all. Posts that used it keep the shortcode as text.
 	 *
 	 * @return bool whether there was one to remove
 	 */
@@ -225,8 +192,7 @@ class EmojiService {
 		try {
 			$this->folder()->getFile($filename)->delete();
 		} catch (\Exception $e) {
-			// the row is gone, which is what decides whether the emoji exists;
-			// a file left behind is a file, not a broken emoji
+			// The row decides whether the emoji exists; a leftover file is harmless.
 			$this->logger->notice('could not delete the picture of a custom emoji', [
 				'shortcode' => $shortcode, 'exception' => $e,
 			]);
@@ -236,7 +202,7 @@ class EmojiService {
 	}
 
 	/**
-	 * The picture behind a shortcode.
+	 * The image behind a shortcode.
 	 *
 	 * @throws NotFoundException
 	 */
@@ -249,7 +215,7 @@ class EmojiService {
 		return $this->folder()->getFile($emoji->getFilename());
 	}
 
-	/** The one address the picture has, for a client and for a peer alike. */
+	/** The one address of the image, for clients and peers alike. */
 	private function urlOf(CustomEmoji $emoji): string {
 		return $this->urlGenerator->linkToRouteAbsolute(
 			'social.InstanceApi.emojiOpen', ['shortcode' => $emoji->getShortcode()]

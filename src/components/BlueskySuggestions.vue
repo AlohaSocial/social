@@ -27,9 +27,7 @@ import { useFollowByHandle } from '../composables/useFollowByHandle.js'
 import logger from '../services/logger.js'
 
 /**
- * The accounts Bluesky suggests to the reader, read as them where they are
- * on Bluesky, and followed here by their handle like anybody else on
- * Discover.
+ * The accounts Bluesky suggests to the reader, followed here by their handle.
  */
 export default {
 	name: 'BlueskySuggestions',

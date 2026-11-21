@@ -21,72 +21,31 @@ use OCA\Social\Tools\Traits\TArrayTools;
 
 class RequestQueueService {
 	/**
-	 * A request is abandoned after this many failed delivery attempts.
-	 *
-	 * The schedule is Mastodon's (Sidekiq's `count^4 + 15` backoff, 16
-	 * attempts): a peer gets about two days to come back, which covers the
-	 * weekend outage the old 15 tries on `tries^4/3` (12-16 hours in total)
-	 * did not. The first attempts stay minutes apart, because a peer that was
-	 * only momentarily down is the common case; the cron runs every 12
-	 * minutes, so every wait below that is "next run". A row is retried once
-	 * `last + retryDelay(tries)` has passed:
-	 *
-	 *   failed tries | wait before the next attempt
-	 *   -------------|-----------------------------
-	 *              0 |  none: never failed, due at once
-	 *              1 |      16 s
-	 *              2 |      31 s
-	 *              3 |      96 s
-	 *              4 |     271 s  (4.5 min)
-	 *              5 |     640 s  (11 min)
-	 *              6 |   1 311 s  (22 min)
-	 *              7 |   2 416 s  (40 min)
-	 *              8 |   4 111 s  (1.1 h)
-	 *              9 |   6 576 s  (1.8 h)
-	 *             10 |  10 015 s  (2.8 h)
-	 *             11 |  14 656 s  (4.1 h)
-	 *             12 |  20 751 s  (5.8 h)
-	 *             13 |  28 576 s  (7.9 h)
-	 *             14 |  38 431 s  (10.7 h)
-	 *             15 |  50 640 s  (14.1 h)
-	 *             16 |  abandoned
-	 *
-	 * Total: 178 537 s, 49.6 hours, plus up to one cron interval per attempt.
-	 *
-	 * The schedule lives in `Backoff::outbound()`, which both this and the
-	 * query that reads the queue (`RequestQueueRequest::getStandby()`) take it
-	 * from.
+	 * A request is abandoned after this many failed delivery attempts, on
+	 * Mastodon's schedule (Sidekiq's `count^4 + 15`): seconds apart at first,
+	 * hours later, about 49.6 hours in all plus a cron interval per attempt, so
+	 * a peer can be down over a weekend. The schedule is `Backoff::outbound()`,
+	 * shared with `RequestQueueRequest::getStandby()`.
 	 */
 	public const MAX_TRIES = Backoff::OUTBOUND_MAX_TRIES;
 
 	/**
 	 * A request still on standby this long after it was queued is abandoned,
-	 * whatever its try count.
-	 *
-	 * The tries alone never end the rows of an instance that has gone away:
-	 * while the circuit breaker holds a host back its rows are postponed
-	 * without spending a try, and the breaker only lets one row through per
-	 * hold. Three days is the schedule above plus a cron interval per attempt,
-	 * with room to spare, so no row a reachable peer would still have taken
-	 * is cut short.
+	 * whatever its try count: rows held back by the circuit breaker spend no
+	 * tries. Three days is the whole schedule plus room to spare.
 	 */
 	public const MAX_AGE = 3 * 24 * 3600;
 
 	/**
-	 * How long a delivered or abandoned request is kept before it is purged.
-	 *
-	 * A finished row used to be deleted the moment it finished, which made the
-	 * queue a to-do list and nothing else: it could never say where a post had
-	 * got to, only where it had not got to yet. Seven days is long enough for an
-	 * author to wonder why a post never showed up somewhere and go and look, and
-	 * short enough that the table stays a queue rather than becoming an archive
-	 * of every delivery this instance ever made.
+	 * How long a delivered or abandoned request is kept before it is purged:
+	 * long enough for an author to check where a post got to, short enough to
+	 * keep the table a queue.
 	 */
 	public const RETENTION_SECONDS = 7 * 24 * 3600;
 
 	/**
-	 * How long a request waits after its n-th failure, in seconds; the table
-	 * on MAX_TRIES. `tries` is the count of failed attempts so far.
+	 * How long a request waits after its n-th failure, in seconds (see
+	 * MAX_TRIES). `tries` is the count of failed attempts so far.
 	 */
 	public static function retryDelay(int $tries): int {
 		return Backoff::outbound()->delay($tries);
@@ -154,11 +113,8 @@ class RequestQueueService {
 	}
 
 	/**
-	 * Queues a document that is already serialised, byte for byte.
-	 *
-	 * Forwarding has to send on what arrived: the sender's linked-data
-	 * signature covers the document as it stands, and re-encoding our own
-	 * model of it would both drop the signature and change what it signed.
+	 * Queues a document that is already serialised, byte for byte: a forwarded
+	 * document must keep the sender's linked-data signature valid.
 	 *
 	 * @param InstancePath[] $instancePaths
 	 * @param int $holdUntil when the rows may first be delivered, 0 for now.
@@ -194,26 +150,10 @@ class RequestQueueService {
 	}
 
 	/**
-	 * One delivery per inbox.
-	 *
-	 * The paths reaching here come from several places that know nothing of
-	 * each other: every mention adds the mentioned actor's inbox, the follower
-	 * fan-out adds one path per instance, boosters and repliers add theirs. A
-	 * post mentioning three people on one Mastodon server, or mentioning
-	 * somebody who also follows the author, produced that many identical
-	 * POSTs of the same activity to the same inbox — wasted on us, and
-	 * duplicate work for the peer, which drops all but the first as already
-	 * seen.
-	 *
-	 * Same inbox means same URI: the callers already prefer an instance's
-	 * shared inbox where it publishes one, so the shared inbox is the single
-	 * URI they converge on. An instance that publishes none is addressed by
-	 * its personal inboxes, which are distinct URIs and each still delivered —
-	 * uniquing must not turn two people on such a server into one delivery.
-	 *
-	 * Of two paths to one inbox the higher priority wins, so folding a
-	 * follower fan-out into a direct mention does not demote the delivery from
-	 * inline to the next cron run.
+	 * One delivery per inbox URI, since mentions, the follower fan-out, boosters
+	 * and repliers each add paths. Callers prefer shared inboxes, so those
+	 * converge; personal inboxes stay distinct. Of two paths to one inbox the
+	 * higher priority wins, so a direct mention stays inline.
 	 *
 	 * @param InstancePath[] $instancePaths
 	 *
@@ -237,8 +177,8 @@ class RequestQueueService {
 	}
 
 	/**
-	 * deciding if we run request on main thread,
-	 * based on set priority, and number of request linked to one token
+	 * Decides whether to run a request on the main thread, by its priority and
+	 * the number of requests under its token.
 	 *
 	 * @param string $token
 	 *
@@ -354,9 +294,8 @@ class RequestQueueService {
 	public function endRequest(RequestQueue $queue, bool $success) {
 		try {
 			if ($success === true) {
-				// kept, not deleted: it is the one record that this server got the
-				// post, and the author may ask. `purgeFinished()` takes it away once
-				// RETENTION_SECONDS have passed.
+				// kept as the record that the post was delivered, until
+				// `purgeFinished()` removes it after RETENTION_SECONDS
 				$this->requestQueueRequest->setAsSuccess($queue);
 			} else {
 				$this->requestQueueRequest->setAsFailure($queue);
@@ -366,13 +305,9 @@ class RequestQueueService {
 	}
 
 	/**
-	 * Holds a standby request back until `$until`.
-	 *
-	 * For a row whose host has an open circuit breaker: it was not attempted,
-	 * so it keeps `tries = 0` and would come back at the head of the very next
-	 * batch — ahead of every row that has been attempted and every row queued
-	 * since — and be skipped again. A few hundred of them to instances that
-	 * are gone filled the whole window and nothing else was ever delivered.
+	 * Holds a standby request back until `$until`, for a row whose host has an
+	 * open circuit breaker: never attempted, it would otherwise head every batch
+	 * and crowd out deliverable rows.
 	 */
 	public function postponeRequest(RequestQueue $queue, int $until): void {
 		if ($until <= time()) {
@@ -388,12 +323,9 @@ class RequestQueueService {
 	}
 
 	/**
-	 * The requests about one object that are still held back: on standby,
-	 * never attempted, and not due until some time from now.
-	 *
-	 * That is a held video post's fan-out — and also, for as long as it lasts,
-	 * a row the circuit breaker put off, which is the same state for the same
-	 * reason: it has not gone yet and must not go early.
+	 * The requests about one object that are still held back: on standby, never
+	 * attempted, not due yet. That is a held video post's fan-out, or a row the
+	 * circuit breaker put off.
 	 *
 	 * @return list<RequestQueue>
 	 */
@@ -447,13 +379,10 @@ class RequestQueueService {
 	}
 
 	/**
-	 * The md5 of the id of the object a serialised activity is about -- the
-	 * Note under a Create, Update or Delete, the object of an Announce -- or of
-	 * the activity's own id when it carries no object, or '' when it has neither.
-	 *
-	 * Read off the JSON rather than passed in, so that `ForwardService`, which
-	 * queues a third party's bytes verbatim, keys its rows the same way as
-	 * everything this instance wrote itself.
+	 * The md5 of the id of the object a serialised activity is about (the Note
+	 * under a Create, Update or Delete, the object of an Announce), else of the
+	 * activity's own id, else ''. Read off the JSON so `ForwardService`'s
+	 * verbatim bytes are keyed the same way.
 	 */
 	public static function objectIdPrimOf(string $activity): string {
 		$decoded = json_decode($activity, true);

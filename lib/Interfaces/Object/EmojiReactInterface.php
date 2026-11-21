@@ -27,22 +27,11 @@ use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\ReactionService;
 
 /**
- * Reactions arriving from a peer, and going away again.
- *
- * The shape is the one `LikeInterface` uses, because a reaction is a like with
- * an emoji on it: an `EmojiReact` is saved, and an `Undo` of one deletes it.
- *
- * Two things are deliberately not done here that `LikeInterface` does:
- *
- * - **No notification.** A like already notifies, and a reaction is the same
- *   gesture with a picture chosen for it. An instance federating with a
- *   Misskey-family server would otherwise turn a reaction bar into a
- *   notification each, for something the reader can see on the post.
- * - **No `details` counter on the post.** Likes keep a count in the stream row
- *   because a count is all there is to show. A reaction bar needs the emoji
- *   and who used each one, which is a read of this table however it is
- *   counted, so a second copy of the number would only be something to keep
- *   in step.
+ * Reactions arriving from a peer, and going away again, shaped like
+ * `LikeInterface`: an `EmojiReact` is saved, its `Undo` deletes it. Unlike a
+ * like, it raises no notification (a Misskey reaction bar would otherwise
+ * notify per emoji) and keeps no `details` counter, as the bar reads this
+ * table anyway.
  */
 class EmojiReactInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(
@@ -119,16 +108,14 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 			throw new ItemAlreadyExistsException();
 		}
 
-		// a reaction to a post this instance does not hold is nothing it can
-		// draw, and storing it would be a row that is never read
+		// A post not held here: nothing to draw it on.
 		try {
 			$post = $this->streamRequest->getStreamById($reaction->getObjectId());
 		} catch (Exception $e) {
 			throw new ItemAlreadyExistsException('unknown post');
 		}
 
-		// the author blocked the account reacting, which is the end of it,
-		// as a follow from it is
+		// The author blocked the reacting account.
 		if ($post->isLocal() && $this->actorRelationRequest?->exists(
 			$post->getAttributedTo(), $reaction->getActorId(), ActorRelation::TYPE_BLOCK
 		) === true) {
@@ -140,8 +127,7 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		}
 
 		if (!$this->reactionsRequest->save($reaction)) {
-			// already stored: the Fediverse redelivers, and the unique index
-			// is what makes that harmless
+			// Already stored: redeliveries are settled by the unique index.
 			throw new ItemAlreadyExistsException();
 		}
 		if (LikeInterface::undoneBeforeArrival(

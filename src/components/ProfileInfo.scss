@@ -27,11 +27,8 @@
 }
 
 /**
- * "Followed by Hugo, Aiko and one other you follow."
- *
- * The faces overlap into a small stack, the way a shared thing is drawn
- * everywhere: three 20px circles in a row would read as three separate people
- * to click on, and they are not links -- the sentence is what is being read.
+ * "Followed by Hugo, Aiko and one other you follow." The faces overlap into a
+ * stack so they do not read as separate things to click.
  */
 .user-profile__familiar {
 	display: flex;
@@ -68,12 +65,8 @@
 }
 
 /**
- * The private note folds away.
- *
- * It was the loudest thing on somebody else's profile: an open textarea above
- * their bio, their links and their posts, whether or not a note had ever been
- * written. The summary is a quiet line under the follow button; it opens by
- * itself when there is a note to read.
+ * The private note folds into a quiet line under the follow button, and opens
+ * by itself when there is a note to read.
  */
 .user-profile__private-note-fold {
 	margin: 6px 0 0;
@@ -109,9 +102,8 @@
 	position: relative;
 
 	&__banner {
-		/* the card centres its children, and this one has no content of its
-		   own — only a background — so without a width of its own it collapses
-		   to nothing and the banner is loaded, applied and never seen */
+		/* the card centres its children, and this one has only a background,
+		   so without a width it collapses to nothing */
 		width: 100%;
 		min-height: 120px;
 		max-height: 200px;
@@ -157,8 +149,7 @@
 		white-space: nowrap;
 	}
 
-	// quiet on purpose: the name is what the page is about, and the
-	// addresses under it are there for the moment somebody needs one
+	// quiet on purpose: the name is what the page is about
 	&__handles {
 		display: flex;
 		flex-direction: column;
@@ -296,8 +287,8 @@
 					color: var(--color-primary-element-text);
 				}
 
-				/* focus does not borrow the banner's colour: an indicator whose
-				   contrast depends on somebody's uploaded picture is not one */
+				/* focus does not borrow the banner's colour, whose contrast
+				   depends on an uploaded picture */
 				&:focus-visible {
 					outline: 2px solid var(--color-primary-element);
 					outline-offset: 1px;
@@ -420,8 +411,7 @@
 	&__fields-status {
 		font-size: 13px;
 
-		// a row with nothing to say about it must not leave a gap between the
-		// rows above and below it
+		// an empty row must not leave a gap
 		&:empty {
 			display: none;
 		}

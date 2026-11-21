@@ -4,13 +4,8 @@
  */
 
 /**
- * One clock for the whole app.
- *
- * A relative timestamp ("5 minutes ago") is only true for a minute, and
- * `fromNow()` is pure: nothing re-read it, so every post in the timeline kept
- * whatever it said when it was rendered. Every entry subscribing its own
- * `setInterval` would be one timer per post, so there is a single interval
- * here and the subscribers are called from it.
+ * One clock for the whole app, so relative timestamps ("5 minutes ago") stay
+ * true without one interval per post.
  */
 
 /** how often the wording is re-checked; a minute is the smallest unit shown */

@@ -18,28 +18,12 @@ use OCP\IAppConfig;
 
 /**
  * This app's posts, accounts and channels in the shapes PeerTube's own clients
- * read.
+ * read: a translation layer, in one file like `PixelfedController`.
  *
- * The same move the Pixelfed routes are: a client that already exists, pointed
- * at this instance, is worth more than a client nobody has written. PeerTube's
- * API is not Mastodon's — different names, different ids, a different idea of
- * what a video is — so this is a translation layer and not an alias, and it
- * lives in one file for the same reason `PixelfedController` does: somebody
- * should be able to read the whole of what one client is promised in one place.
- *
- * **Ids.** PeerTube addresses a video by an integer and by a uuid. The integer
- * here is the post's `nid`, which is what this app's own API gives a client;
- * the uuid is the one `PeerTubeService::uuidFor()` already mints and already
- * publishes on the wire, so a video seen through this API and the same video
- * seen over ActivityPub carry the same uuid rather than two that nothing can
- * tell apart. `shortUUID` is that uuid again: PeerTube's short form is its own
- * base-62 encoding, and a made-up one would be a key that resolves nowhere.
- *
- * **What it does not do.** Nothing here writes. PeerTube's upload is a
- * resumable protocol with a transcoding state machine behind it, and a
- * half-built one that accepted a file and lost it would be worse than none.
- * Comments are read and not posted, for the same reason a client posting
- * through this route would bypass the review queue the composer goes through.
+ * The integer id of a video is the post's `nid`; the uuid is the one
+ * `PeerTubeService::uuidFor()` publishes on the wire, so both views agree, and
+ * `shortUUID` repeats it, as a made-up short form would resolve nowhere.
+ * Nothing here writes: no uploads, and comments are read but not posted.
  */
 class PeerTubeApiService {
 	/**
@@ -69,14 +53,8 @@ class PeerTubeApiService {
 
 	/**
 	 * The object a PeerTube client reads once, on launch, to decide whether it
-	 * can talk to this server at all.
-	 *
-	 * Every switch is answered with what is **true here** rather than with
-	 * PeerTube's default. Signup is `false` because an account on this instance
-	 * is a Nextcloud account and is not made through this API; the import and
-	 * upload switches are `false` because nothing here writes; and the quota is
-	 * the real one, in bytes, with `-1` for "no quota", which is PeerTube's own
-	 * way of saying it.
+	 * can talk to this server, answered with what is true here: no signup,
+	 * imports or uploads, and the real quota in bytes (`-1` for none).
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -104,11 +82,8 @@ class PeerTubeApiService {
 			'theme' => ['registered' => [], 'default' => 'default'],
 			'email' => ['enabled' => false],
 			'contactForm' => ['enabled' => false],
-			// what this app *is*, said plainly. A client that reports the
-			// server version to its user should not be told a PeerTube version
-			// this server is not running, so both are here: the number its
-			// checks compare against, and the name of what is actually
-			// answering.
+			// both the PeerTube version a client's checks compare against and the
+			// name of what is actually answering
 			'serverVersion' => self::PEERTUBE_VERSION,
 			'serverCommit' => '',
 			'software' => [
@@ -168,12 +143,9 @@ class PeerTubeApiService {
 	}
 
 	/**
-	 * One post as PeerTube's `Video`.
-	 *
-	 * A post that is not a video still answers here, with a duration of zero
-	 * and no file: the alternative is a list with holes in it, and a client
-	 * that asked for videos is given only videos anyway — this shape is
-	 * reached by a route that has already narrowed to them.
+	 * One post as PeerTube's `Video`. A post that is not a video answers with
+	 * a duration of zero and no file, though the routes reaching this have
+	 * already narrowed to videos.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -208,9 +180,8 @@ class PeerTubeApiService {
 				? ['id' => 1, 'label' => 'Public'] : ['id' => 2, 'label' => 'Unlisted'],
 			'name' => (string)($meta['title'] ?? $this->titleOf($post)),
 			'truncatedDescription' => mb_substr(trim(strip_tags($post->getContent())), 0, 250),
-			// the video meta first, and the attachment's own second: a video
-			// posted before this app recorded a title and a running time has
-			// no meta at all, and its duration is still on the file
+			// the video meta first, then the attachment's own: a video without
+			// video meta still has its duration on the file
 			'duration' => (int)($meta['duration'] ?? 0) ?: $this->durationOf($file),
 			'aspectRatio' => null,
 			'isLocal' => $post->isLocal(),
@@ -326,13 +297,8 @@ class PeerTubeApiService {
 	}
 
 	/**
-	 * The signed-in account as PeerTube's `User`.
-	 *
-	 * The email is **not** here. PeerTube's own answer carries one, and a
-	 * Nextcloud account's address is not this API's to hand to whatever client
-	 * holds a token: nothing a video client does needs it, and a field that is
-	 * absent is read as "this server does not say" rather than as a wrong
-	 * address.
+	 * The signed-in account as PeerTube's `User`, without the email: a
+	 * Nextcloud account's address is not this API's to hand to a client.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -394,12 +360,8 @@ class PeerTubeApiService {
 	}
 
 	/**
-	 * The `{total, data}` wrapper every list route here answers in.
-	 *
-	 * `total` is the size of **this page** rather than of everything there is.
-	 * This app's timelines are keyed on a cursor and have no count to give,
-	 * and a number invented for the shape's sake is one a client would draw a
-	 * pager from.
+	 * The `{total, data}` wrapper every list route here answers in. `total` is
+	 * the size of this page: the timelines are cursor-based and have no count.
 	 *
 	 * @param array<int, mixed> $data
 	 * @return array{total: int, data: array<int, mixed>}
@@ -409,12 +371,9 @@ class PeerTubeApiService {
 	}
 
 	/**
-	 * PeerTube's `{id, label}` for a category, a licence or a language.
-	 *
-	 * The id is 0 throughout: PeerTube's ids are indexes into its own lists,
-	 * which this app does not have and must not guess at — a wrong id is a
-	 * client showing the wrong category with confidence. The label is the half
-	 * that means anything off its own instance, and is what this app stores.
+	 * PeerTube's `{id, label}` for a category, a licence or a language. The id
+	 * is always 0, as PeerTube's ids index its own lists; the label is what
+	 * this app stores.
 	 *
 	 * @return array{id: int, label: string}|null
 	 */
@@ -425,13 +384,8 @@ class PeerTubeApiService {
 	}
 
 	/**
-	 * How long the file runs, where the post itself does not say.
-	 *
-	 * A video posted before this app recorded a title and a running time has
-	 * no video metadata at all, and the duration is still on the attachment —
-	 * where it was written when the file was stored. `asLocal()` hands `meta`
-	 * back as an object so a client decoding a dictionary takes it, which is
-	 * why this is not a plain array read.
+	 * How long the file runs, where the post itself does not say: from the
+	 * attachment's `meta`, which `asLocal()` returns as an object.
 	 *
 	 * @param array<string, mixed>|null $file
 	 */
@@ -455,10 +409,8 @@ class PeerTubeApiService {
 	 * @return array<string, mixed>
 	 */
 	private function channelSummaryFor(Stream $post): array {
-		// read, never created: this is a read path, and making an actor on one
-		// would be a write per video per page. An account that has never posted
-		// a video has no channel, and its own account stands in — which is what
-		// a PeerTube client draws when a video has no channel it can resolve.
+		// read, never created, on this read path; an account without a channel
+		// stands in for one, as a PeerTube client draws a video without one
 		foreach ($this->channelsRequest->getByOwner($post->getAttributedTo()) as $channel) {
 			if ($channel->isDefault()) {
 				return $this->channel($channel);

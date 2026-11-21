@@ -17,17 +17,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Where somebody stopped watching, and what they were in the middle of.
- *
- * PeerTube's `WatchAction`, and the thing that makes a long video usable at
- * all: a two-hour talk watched in three sittings is three sittings of finding
- * the place again. It is a fact about a **reader** — never federated, never
- * shown to anybody else, and never counted into anything — which is also what
- * keeps it cheap: one row per (post, viewer), moved rather than appended.
- *
- * Neither the videos somebody barely started nor the ones they finished are
- * offered back. A "continue watching" row that hands back a video somebody
- * watched to the end is a row nobody presses twice.
+ * Where somebody stopped watching a video (PeerTube's `WatchAction`): private
+ * to the reader, never federated or counted, one row per (post, viewer).
+ * Videos barely started or finished are not offered back.
  */
 class WatchService {
 	public function __construct(
@@ -38,13 +30,9 @@ class WatchService {
 	}
 
 	/**
-	 * Remembers where somebody got to, and says whether the store took it.
-	 *
-	 * Nothing here may fail a request: a player reporting its position is not
-	 * something worth an error over, and a bookmark that was not written is a
-	 * video that starts at the beginning. But the answer tells a player that
-	 * what it reported is not what the server holds, so its own copy is not
-	 * mistaken for a stored one.
+	 * Remembers where somebody got to. Never fails the request, but says whether
+	 * the server holds the reported position, so a player does not mistake its
+	 * own copy for a stored one.
 	 *
 	 * @return bool whether the position is where the server holds it
 	 */
@@ -54,14 +42,12 @@ class WatchService {
 		}
 
 		try {
-			// past the end is the end, and a duration nobody stated is one
-			// nothing can be measured against
+			// Clamp; an unstated duration measures nothing.
 			$duration = max(0, $duration);
 			if ($duration > 0) {
 				$position = min($position, $duration);
 
-				// watched to the end is not a place to come back to: the
-				// bookmark is dropped rather than left pointing at the credits
+				// Finished: the bookmark is dropped.
 				if ($position >= (int)floor((float)$duration * WatchRequest::FINISHED_RATIO)) {
 					$this->watchRequest->forget($post->getId(), $viewer->getId());
 
@@ -130,8 +116,7 @@ class WatchService {
 				$post->setWatchProgress($watch['position'], $watch['duration'], $watch['updated']);
 				$posts[] = $post;
 			} catch (Throwable $e) {
-				// a video that has been deleted since: the bookmark outlives
-				// it for a while and is simply not offered
+				// Deleted since: not offered.
 			}
 		}
 

@@ -17,18 +17,11 @@ use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Exceptions\AtprotoException;
 
 /**
- * A post's HTML as Bluesky text: plain text with facets on UTF-8 byte
- * offsets, fitted to one record or split into thread-sized parts.
- *
- * Paragraphs become blank lines and `<br>` a newline; a hashtag and a
- * mention keep their text, a link its href (or `text (href)` when the text
- * is something else). Facets: `#tag` for hashtags, `#link` for every URL,
- * `#mention` for a mention the caller can name a DID for and `#link` to the
- * profile otherwise.
- *
- * The HTML is read into pieces — runs of text, breaks, and the spans a
- * facet covers — and the whitespace is tidied on the pieces before the
- * text is joined, so every offset is computed once, on the final text.
+ * A post's HTML as Bluesky text: plain text with facets on UTF-8 byte offsets,
+ * fitted to one record or split into thread-sized parts. A mention the caller
+ * can name a DID for gets a `#mention` facet, any other a `#link` to the
+ * profile. Whitespace is tidied on the parsed pieces before they are joined,
+ * so every offset is computed once, on the final text.
  */
 class TextMapper {
 	/** Bluesky's limit */
@@ -59,7 +52,7 @@ class TextMapper {
 	 * single-record result remains a compact excerpt for callers that need it.
 	 *
 	 * @param array<int, array{index: array{byteStart: int, byteEnd: int}, features: array}> $facets
-	 * @param string[] $extraLines lines added before the link whether or not the text was cut ("+2 more pictures")
+	 * @param string[] $extraLines lines added before the link whether or not the text was cut ("+2 more photos")
 	 * @param bool $alwaysLink append the link even to text that fits (a poll's votes are here)
 	 * @return array{text: string, facets: array, truncated: bool, threadParts?: array<int, array{text: string, facets: array}>}
 	 */

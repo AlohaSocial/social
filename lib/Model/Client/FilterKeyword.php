@@ -13,11 +13,7 @@ use JsonSerializable;
 
 /**
  * One word or phrase a filter matches on, as Mastodon's `FilterKeyword`
- * entity.
- *
- * `wholeWord` is the difference between a filter on "cat" that also hides
- * every post about a catalogue and one that does not; what it does to the
- * comparison is `FilterService::keywordRegex()`.
+ * entity. `wholeWord` is applied by `FilterService::keywordRegex()`.
  */
 class FilterKeyword implements JsonSerializable {
 	/** The width of `social_filter_kw.keyword`. */

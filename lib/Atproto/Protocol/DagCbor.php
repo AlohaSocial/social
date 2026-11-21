@@ -15,26 +15,21 @@ use stdClass;
 /**
  * The DRISL subset of CBOR that AT Protocol stores and signs: minimal integer
  * heads, map keys sorted by length then bytes, no floats, no indefinite
- * lengths, and tag 42 for a CID link. One encoding per value, so the CID of
- * a record is the same on every implementation.
+ * lengths, tag 42 for CID links. One encoding per value, so a record's CID is
+ * the same on every implementation.
  *
- * The PHP model: a list array is a CBOR array, any other array is a map with
- * string keys, int/string/bool/null are themselves, Bytes is a byte string
- * and Cid is a link. Decoding gives the same model back.
- *
- * PHP's `[]` is both the empty list and the empty map; it is the empty
- * list. The empty map is a `stdClass` with no properties, which decoding
- * gives for one and which encodes as one (any `stdClass` encodes as the map
- * of its properties), so that what was read re-encodes to the same bytes.
+ * PHP model: a list array is a CBOR array, any other array a string-keyed
+ * map, Bytes a byte string, Cid a link. `[]` is the empty list; the empty map
+ * is a `stdClass` with no properties, so decoded data re-encodes to the same
+ * bytes.
  */
 final class DagCbor {
 	/** deeper than any record or MST node; a bound on untrusted input */
 	private const MAX_DEPTH = 64;
 
 	/**
-	 * the most values one decode reads, map keys included: far more than any
-	 * record, tree node or commit holds, and a bound on the memory a few
-	 * bytes can make, as one byte is a whole value (an empty map is an object)
+	 * The most values one decode reads, map keys included: far beyond any real
+	 * record, and a bound on the memory a few hostile bytes can claim.
 	 */
 	private const MAX_ITEMS = 128 * 1024;
 

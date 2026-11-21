@@ -92,12 +92,8 @@ import { showError } from '../services/toast.js'
 
 /**
  * What to type into a phone or desktop app to use this account there, and
- * which apps are known to work.
- *
- * The addresses are `AboutService::appAddresses()`: a Mastodon app's only
- * once the client API answers at the domain root, a Bluesky app's only while
- * Bluesky is on. A page that already has them from `/about/info` hands them
- * in; anywhere else the card asks for them itself.
+ * which apps are known to work. The addresses are
+ * `AboutService::appAddresses()`, handed in or fetched from `/about/info`.
  */
 export default {
 	name: 'UseInAppCard',

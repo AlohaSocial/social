@@ -16,13 +16,10 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use Throwable;
 
 /**
- * Who a client is, on each request it makes to the authorization server.
- *
- * A public client is its `client_id` and nothing more. A confidential one
- * signs a client assertion (RFC 7523) with a key it publishes in its
- * metadata; the key it used — id, algorithm, thumbprint — is what the
- * session is bound to, and a refresh must be made with the same key, still
- * published.
+ * Authenticates a client on each request to the authorization server. A public
+ * client is its `client_id`; a confidential one signs a client assertion
+ * (RFC 7523), and the session is bound to that key, which every refresh must
+ * use while it is still published.
  */
 class ClientAuthenticator {
 	public const ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';

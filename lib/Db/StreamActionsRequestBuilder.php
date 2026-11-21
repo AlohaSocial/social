@@ -12,11 +12,6 @@ namespace OCA\Social\Db;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class StreamActionsRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class StreamActionsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
@@ -45,7 +40,7 @@ class StreamActionsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */

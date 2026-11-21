@@ -15,25 +15,13 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 
 /**
- * Mastodon's Conversation entity: one thread of direct messages, as the
- * Conversations screen of Tusky, Ivory, Ice Cubes and Phanpy draws it.
+ * Mastodon's Conversation entity: one thread of direct messages.
  *
- * `id` is the nid of the thread's root post — the message with no parent, or
- * the topmost parent this instance stores. This app has no conversation row to
- * take an id from, and the id has to mean the same thing on the next request
- * or `POST /api/v1/conversations/{id}/read` would mark something else read:
- * the root is the one message of a thread that every message in it agrees on,
- * and its nid is already stable, already unique and already the id this API
- * hands out for that post. See ConversationService for what that costs.
- *
- * `accounts` are the other participants — never the viewer, as on Mastodon,
- * which is what lets a client title the row "Bob" rather than "You and Bob".
- * A conversation with nobody else in it (a note to self) therefore has an
- * empty `accounts`, which is also what Mastodon answers.
- *
- * `last_status` may be null: Mastodon declares it nullable and a client has to
- * cope with it. Here it is null only if the page was built from a thread whose
- * newest message could not be read back.
+ * `id` is the nid of the thread's root post, the one message every message in
+ * it agrees on, so it stays the same between requests (no conversation row
+ * exists; see ConversationService). `accounts` are the other participants,
+ * never the viewer, so a note to self has none, as on Mastodon. `last_status`
+ * is null only when the newest message could not be read back.
  */
 class Conversation implements JsonSerializable {
 	private int|string $id = 0;
@@ -101,19 +89,15 @@ class Conversation implements JsonSerializable {
 	}
 
 	/**
-	 * The nid the page cursor moves on: the newest message of the thread, not
-	 * the thread's own id. Conversations are ordered by their newest message,
-	 * so that is the only value a cursor can be compared against.
+	 * The nid the page cursor moves on: the thread's newest message, which
+	 * conversations are ordered by.
 	 */
 	public function getLastStatusNid(): int|string {
 		return ($this->lastStatus === null) ? 0 : $this->lastStatus->getNid();
 	}
 
 	/**
-	 * Exactly Mastodon's four keys.
-	 *
-	 * `id` is a string here and an int in the row, as every other id on this
-	 * wire is: a client that declares `id: String` cannot decode a number.
+	 * Exactly Mastodon's four keys; `id` is a string, as everywhere on this wire.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

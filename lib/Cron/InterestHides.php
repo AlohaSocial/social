@@ -17,15 +17,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Forgets what For you no longer needs.
- *
- * A "less like this" hide names a post so the reader's For you feed leaves
- * it out, and the feed only looks back a few days: once a post is older than
- * that it cannot come back into the feed, and the row that hid it is dead
- * weight. The recommendation event and exposure logs are trimmed here too
- * (`RecommendationSignalRequest::trim()`) rather than after every event a
- * reader sends. Once a day is plenty — a leftover row costs a line in a
- * small table.
+ * Forgets what For you no longer needs: "less like this" hides older than the
+ * feed's window, and the recommendation event and exposure logs
+ * (`RecommendationSignalRequest::trim()`). Daily.
  */
 class InterestHides extends TimedJob {
 	private const INTERVAL = 86400;

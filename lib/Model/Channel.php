@@ -12,12 +12,9 @@ namespace OCA\Social\Model;
 use JsonSerializable;
 
 /**
- * One channel: the `Group` actor an account publishes videos under.
- *
- * The row is the *binding*, not the actor — the actor is an ordinary row in
- * `social_actor` with a key pair, an inbox and followers, like every other.
- * What is here is what makes it a channel: whose it is, what it is called, and
- * whether it is the one a video goes to when nobody chose.
+ * One channel: the binding between an account and the `Group` actor it
+ * publishes videos under (an ordinary `social_actor` row): whose it is, its
+ * name, and whether it is the default for videos.
  */
 class Channel implements JsonSerializable {
 	private int $id = 0;

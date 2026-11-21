@@ -4,10 +4,8 @@
 -->
 <template>
 	<div class="filters">
-		<!-- The first thing to say, because it is the thing nobody remembers
-		     setting: these filters are taking posts away right now, and a
-		     conversation with a hole in it is what that looks like from the
-		     outside. -->
+		<!-- First, because filters set long ago from another client may be
+		     hiding posts without the reader remembering. -->
 		<NcNoteCard v-if="hiding.length > 0" type="warning">
 			<p>
 				{{ n('social', '%n filter is taking posts out of what you read.', '%n filters are taking posts out of what you read.', hiding.length) }}
@@ -135,23 +133,10 @@ import { contextLabel, expiryLabel, isActive } from '../utils/filters.js'
 import { errorOf } from '../utils/serverError.js'
 
 /**
- * The reader's keyword filters: what they are, and everything that can be done
- * to them.
- *
- * These filters were reachable only from a Mastodon client, and they apply to
- * every read this app makes — so one set from a phone months ago has been
- * shaping this timeline with nothing on any page saying so. That is what this
- * section is for, and why a filter that *hides* posts is announced at the top
- * rather than merely listed.
- *
- * The v2 API only. v1 is Mastodon's deprecated one and is still served for old
- * clients, but there a filter *is* a single phrase: editing a filter of three
- * words through it would mean three rows with three ids that are not the ids
- * the v2 list shows. The model this app stores is the v2 one.
- *
- * Every write is followed by a read of the whole list rather than by patching
- * the row in place: the server decides the order and the expiry it stored, and
- * a keyword added here comes back with the id an edit will need.
+ * The reader's keyword filters, which also apply to filters set from any
+ * Mastodon client. Uses the v2 API only, whose model is the one stored (v1
+ * splits a filter into one row per phrase). Every write reloads the whole list,
+ * since the server decides order, expiry and keyword ids.
  */
 export default {
 	name: 'FiltersSettings',
@@ -389,8 +374,7 @@ export default {
 		border-top: 1px solid var(--color-border);
 		padding: 8px 0;
 
-		/* an expired filter is not doing anything, and the list should not
-		   read as though it were */
+		/* an expired filter does nothing */
 		&--inactive {
 			opacity: 0.6;
 		}

@@ -27,13 +27,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The direct messages local accounts receive on Bluesky's chat service,
- * read into their messages here (`ChatStore`): a Bluesky conversation is a
- * conversation here like any other. The chat log (`getLog`) is read as each
- * account, from where it was read up to; an account's first read backfills
- * all unread conversations and messages before establishing the log cursor. The log
- * also brings what the account wrote in a Bluesky app, and how far it read
- * a conversation there, which is read here too.
+ * Reads the direct messages local accounts receive on Bluesky's chat service
+ * into their conversations here (`ChatStore`), following each account's chat
+ * log (`getLog`); an account's first read backfills its unread conversations.
  */
 class ChatPoller {
 	public const INTERVAL = 120;

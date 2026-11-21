@@ -64,17 +64,11 @@ import { nextCursor } from '../utils/linkHeader.js'
 const PAGE_SIZE = 20
 
 /**
- * The photographs somebody else took that this account is named in.
+ * The photos other people posted that this account is named in. What the
+ * reader may see is the server's decision, so this renders what it is given.
  *
- * Not a filter of the account's own posts: every post here belongs to
- * somebody else, which is why it is a page rather than a fourth kind beside
- * Photos and Videos. What the reader may see is the server's decision — a
- * post they could not otherwise read is simply not in the answer — so this
- * page renders what it is given and asks no questions of its own.
- *
- * It pages on the `Link` header and not on the last post drawn: a page the
- * reader may not see all of comes back short without being the last, so only
- * the header's absence says there is nothing more.
+ * It pages on the `Link` header: a page with posts the reader may not see
+ * comes back short without being the last.
  */
 export default {
 	name: 'ProfileTagged',
@@ -190,8 +184,7 @@ export default {
 				return
 			}
 			const account = this.account
-			// tied to the load that drew the first page: a page for a profile
-			// the reader has since left is theirs no longer
+			// tied to the load that drew the first page
 			const isNewest = this.loads.current()
 			this.loadingMore = true
 			try {

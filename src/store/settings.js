@@ -30,10 +30,9 @@ export const useSettingsStore = defineStore('settings', {
 		},
 
 		/**
-		 * Whether the reader hides how many likes, dislikes, boosts and
-		 * followers things have. The server already sends zeros then; the
-		 * page needs to know as well, because it counts on its own when the
-		 * reader likes something and would draw a 1.
+		 * Whether the reader hides how many likes, dislikes, boosts and followers
+		 * things have. The page needs to know so that it does not count up its own
+		 * like to 1 where the server sent zero.
 		 *
 		 * @param {SettingsState} state the store state
 		 * @return {boolean}
@@ -53,8 +52,7 @@ export const useSettingsStore = defineStore('settings', {
 		},
 
 		/**
-		 * Whether the one-key shortcuts are on. They are unless the reader
-		 * turned them off.
+		 * Whether the one-key shortcuts are on; they are unless turned off.
 		 *
 		 * @param {SettingsState} state the store state
 		 * @return {boolean}

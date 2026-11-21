@@ -31,25 +31,11 @@ use Throwable;
 /**
  * What a status used to say: `GET /api/v1/statuses/:id/history`.
  *
- * A route of its own rather than another method on `ApiController` because
- * the revisions are a subsystem of their own — their own table, their own
- * request class and their own entity — and because the visibility rule it
- * needs is the one `StatusApiController::statusGet()` already applies and nothing
- * more.
- *
- * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController` and
- * `ListController`: a Mastodon client authenticates with a bearer token and
- * has no Nextcloud session or CSRF token to present.
- *
- * Unlike the list routes, a viewer is *optional* here — Mastodon serves the
- * history of a public status to anybody, and so does `statusGet` for the
- * status itself, so requiring one would hide the history of a post whose
- * current text is public. Nothing is thereby exposed: the status is resolved
- * through `StreamService::getStreamByNid()`, whose visibility filter is a
- * predicate of the statement, so a status the caller may not read is a 404
- * before any revision is looked at. A bearer token that *is* presented still
- * has its scope checked — a token granted less than it claims does not become
- * an anonymous caller, it is refused.
+ * `#[PublicPage]` with `#[NoCSRFRequired]` like `ApiController`, since a
+ * Mastodon client has a bearer token and no session. A viewer is optional, as
+ * in Mastodon: the status is resolved through `StreamService::getStreamByNid()`,
+ * whose visibility filter makes a status the caller may not read a 404 before
+ * any revision is read. A presented bearer token still has its scope checked.
  */
 class HistoryController extends ClientApiController {
 
@@ -68,12 +54,8 @@ class HistoryController extends ClientApiController {
 
 	/**
 	 * Every version of the status, oldest first, as Mastodon `StatusEdit`
-	 * entities — the first one being what was posted and the last what is
-	 * showing now.
-	 *
-	 * Unpaged, as Mastodon's is: a status has as many versions as its author
-	 * made by hand, and a client draws the whole "edited" dialog from one
-	 * call.
+	 * entities: the first is what was posted, the last what shows now.
+	 * Unpaged, as Mastodon's is.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

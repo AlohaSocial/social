@@ -16,14 +16,9 @@ use OCA\Social\Exceptions\SocialAppConfigException;
 
 /**
  * The instance-wide settings an administrator can change from the settings
- * page, and the bounds each one is held to.
- *
- * Every one of these existed as an app config key and could be set with `occ
- * config:app:set`, which is where they stayed: nothing on the page read or
- * wrote them, so an administrator learnt of `secure_mode` from a peer's
- * complaint and of `max_size` from a user's failed upload. Read and written
- * here in one place so the page, the endpoint and the tests agree on what a
- * value may be.
+ * page, and the bounds each one is held to, in one place so the page, the
+ * endpoint and the tests agree. Each is an app config key, settable with
+ * `occ config:app:set` too.
  */
 class ServerSettingsService {
 	/** The longest an instance description may be; Mastodon's own ceiling. */
@@ -119,8 +114,8 @@ class ServerSettingsService {
 					$contactAccount = $actor->getPreferredUsername();
 				}
 			} catch (ActorDoesNotExistException|SocialAppConfigException $e) {
-				// An account removed since the setting was saved is no longer a
-				// contact. The administrator can choose another one in the form.
+				// an account removed since the setting was saved is no contact; the
+				// administrator can choose another
 			}
 		}
 
@@ -211,11 +206,8 @@ class ServerSettingsService {
 	}
 
 	/**
-	 * Validates every value of the Server card and writes them all, or writes
-	 * none.
-	 *
-	 * All-or-nothing on purpose: a form that saved six of its eight fields
-	 * and refused two leaves the administrator guessing which took.
+	 * Validates every value of the Server card and writes them all, or none, so
+	 * the administrator never has to guess which took.
 	 *
 	 * @param int $maxSize megabytes, 1 to MAX_SIZE_MB
 	 * @param int $maxVideoSize megabytes, 1 to MAX_VIDEO_SIZE_MB
@@ -280,12 +272,9 @@ class ServerSettingsService {
 			);
 		}
 
-		// Cleaned rather than refused, because what an administrator types
-		// here is a list and the mistakes are commas: an entry that is not a
-		// height in range is dropped, and a list with nothing usable left in
-		// it is the one thing worth refusing, since silently falling back to
-		// the default would be a page that says one thing and a server that
-		// does another.
+		// Cleaned rather than refused, since typed lists go wrong in the commas:
+		// entries that are not a height in range are dropped, and only a list
+		// with nothing usable left is refused.
 		$heights = [];
 		foreach (explode(',', $videoLadderHeights) as $part) {
 			$height = (int)trim($part);
@@ -304,8 +293,7 @@ class ServerSettingsService {
 			);
 		}
 
-		// 0 is "no quota", which is the default and what every instance
-		// running today has in effect
+		// 0 is "no quota", the default
 		if ($videoQuota < 0 || $videoQuota > VideoQuotaService::MAX_QUOTA_MB) {
 			throw new SettingRefusedException(
 				'video_quota must be 0, or a size in MB up to ' . VideoQuotaService::MAX_QUOTA_MB,
@@ -313,10 +301,8 @@ class ServerSettingsService {
 			);
 		}
 
-		// Refused rather than cleaned, unlike the ladder heights: this is a
-		// choice from three and not a list somebody types, so a value that is
-		// not one of the three is a client sending something else and not a
-		// person mistyping.
+		// Refused rather than cleaned, unlike the ladder heights: a choice from
+		// three, so anything else is a client error, not a typo.
 		if (!in_array($nsfwPolicy, SensitiveMediaService::POLICIES, true)) {
 			throw new SettingRefusedException(
 				'nsfw_policy must be one of ' . implode(', ', SensitiveMediaService::POLICIES),

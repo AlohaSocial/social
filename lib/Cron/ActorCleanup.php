@@ -20,29 +20,15 @@ use Psr\Log\LoggerInterface;
 /**
  * Finishes detaching a deleted account from the posts that addressed it.
  *
- * Queued by `PersonInterface::delete()` when more posts name the account than
- * one request should rewrite, so — like `Cron\DomainPurge` and unlike `Cache`
- * and `Queue` — it is not registered in `info.xml`: a job listed there is added
- * once at install time with no argument, and this one is meaningless without an
- * actor.
- *
- * **Why it exists at all.** The deletion arrives as a `Delete` in an inbox
- * request that a peer is waiting on. Rewriting every post that ever addressed a
- * long-lived account does not fit in that request, and the failure is not
- * merely slow: the peer times out and re-sends the `Delete`, so the work starts
- * again from the beginning — for ever, on exactly the accounts that have the
- * most of it.
- *
- * **Why it re-queues itself.** Same reason the domain purge does. A pass does a
- * bounded number of rows and puts itself back on the list while any remain,
- * and each pass finds its own work by asking what is still stored, so a pass
- * that dies costs only its own progress.
+ * Queued by `PersonInterface::delete()` when too many posts name the account
+ * for the inbox request, which the peer would otherwise time out and resend
+ * for ever. Not in `info.xml`, since it needs an actor argument. Like
+ * `Cron\DomainPurge`, a pass does a bounded number of rows and re-queues
+ * itself while any remain.
  */
 class ActorCleanup extends QueuedJob {
 	/**
-	 * Rows per run. Each one may read a post and write it back, so this is a
-	 * bound on the cron slot rather than on the work: what is left is the next
-	 * run's.
+	 * Rows per run, bounding the cron slot; what is left is the next run's.
 	 */
 	private const ROWS_PER_RUN = 2000;
 
@@ -78,9 +64,8 @@ class ActorCleanup extends QueuedJob {
 
 			$this->jobList->add(self::class, ['actor' => $actorId]);
 		} catch (\Throwable $e) {
-			// not retried for ever: the rows it did rewrite stay rewritten, and
-			// what is left is a post addressed to an account that is gone —
-			// which the visibility filter already treats as nobody
+			// not retried for ever: what is left is a post addressed to a gone
+			// account, which the visibility filter treats as nobody
 			$this->logger->warning('[Cron\\ActorCleanup] could not finish detaching an account', [
 				'actor' => $actorId, 'exception' => $e,
 			]);

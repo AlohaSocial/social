@@ -6,14 +6,9 @@
 import { translate as t } from '@nextcloud/l10n'
 
 /**
- * Words on colour, drawn to a picture: a text story, a short post as a card,
- * and the stickers on a picture story all end here.
- *
- * Drawn to a canvas and uploaded as an ordinary picture rather than invented
- * as a new kind of post, so it federates as what it looks like. A Mastodon
- * reader sees a picture with the words on it; the words themselves travel as
- * the picture's description (and, for a post, as the post), so they are still
- * searchable and still read aloud.
+ * Draws text cards and photo stickers to a canvas. The result is uploaded as
+ * an ordinary image so it federates as what it looks like; the words travel
+ * as its description.
  */
 
 /**
@@ -79,11 +74,8 @@ export function gradientCss(gradient) {
 }
 
 /**
- * Breaks text into lines that fit.
- *
- * A line break the writer typed is always kept. Within a paragraph words are
- * packed greedily, and a word longer than the whole line -- a URL, a long
- * hashtag -- is cut where it has to be rather than left to run off the card.
+ * Breaks text into lines that fit, keeping typed line breaks and cutting a
+ * word longer than a whole line.
  *
  * @param {string} text what to lay out
  * @param {(line: string) => number} measure how wide a line is drawn
@@ -131,11 +123,7 @@ export function wrapLines(text, measure, maxWidth) {
 }
 
 /**
- * Finds the largest type the text fits the box at.
- *
- * Short text is drawn big and long text small, which is what makes a text
- * card look designed: three words should fill it, and three sentences should
- * still fit.
+ * Finds the largest type size at which the text fits the box.
  *
  * @param {string} text what to lay out
  * @param {(line: string, size: number) => number} measure how wide a line is at a size
@@ -229,14 +217,8 @@ export async function renderTextCard(text, gradient, { width = 1080, height = 10
 }
 
 /**
- * Draws stickers onto a picture and hands back the result.
- *
- * Each sticker is an emoji or a line of text at a position given as fractions
- * of the picture, so what was placed over a preview of any size lands in the
- * same place on the full picture.
- *
- * Never throws and never loses the upload: a picture the browser cannot draw
- * comes back as it went in.
+ * Draws stickers (emoji or text, positioned as fractions of the picture) onto
+ * a photo. Never throws: a picture the browser cannot draw is returned as is.
  *
  * @param {File} file the picture
  * @param {Array<{ kind: string, value: string, x: number, y: number, scale?: number }>} stickers what to draw, and where

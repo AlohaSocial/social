@@ -36,13 +36,8 @@ class MediaRecover extends SocialCommand {
 	}
 
 	/**
-	 * The attachments a stored post's source names.
-	 *
-	 * ActivityPub writes one attachment either as a list of one or as the
-	 * object on its own, and both are on the wire. Only the list was read, so
-	 * a post whose sender sent the single form was passed over in silence --
-	 * not counted, not reported, and left without its picture by the command
-	 * whose whole job is to give it back.
+	 * The attachments a stored post's source names. ActivityPub sends one
+	 * attachment either as a list of one or as the object itself; both are read.
 	 *
 	 * @param string $source the post as its sender sent it
 	 *
@@ -114,11 +109,8 @@ class MediaRecover extends SocialCommand {
 						$output->writeln('<info>Recovered ' . count($attachments) . ' attachment(s): ' . $row['id'] . '</info>');
 					} else {
 						// the write only touches a post whose attachments are
-						// still empty, so nothing changed means somebody else
-						// filled them while this was running -- an import, a
-						// redelivery. Not a failure, but not nothing either:
-						// unsaid, the summary read "1 affected, 0 recovered, 0
-						// failed" and there was no way to tell that from a bug.
+						// still empty, so nothing changed means something else
+						// filled them meanwhile; counted apart from failures
 						$skipped++;
 						$output->writeln('<comment>Already filled, left alone: ' . $row['id'] . '</comment>');
 					}

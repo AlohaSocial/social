@@ -27,14 +27,9 @@ use OCP\IUserManager;
 use OCP\IUserSession;
 
 /**
- * The External users cards of the Social settings page.
- *
- * Administrators only, like `ServerSettingsController`: this controller
- * carries none of the relaxing attributes, so the server dispatches it for
- * an administrator with a session and a CSRF token and for nobody else. Who
- * may have an account on this server is not a moderator's decision. The
- * changes that cannot be taken back, and the two-factor switch, ask for the
- * administrator's password again.
+ * The External users cards of the Social settings page. Administrators only,
+ * like `ServerSettingsController`; the irreversible changes and the
+ * two-factor switch ask for the administrator's password again.
  */
 class ExternalUsersController extends Controller {
 	public function __construct(

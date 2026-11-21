@@ -16,13 +16,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Puts what the bell was just told into the Activity app as well: the stream
- * on the Activity page, and the digest mail for those who turn it on.
- *
- * One entry per notification, published with the same subject the bell uses
- * (`NotificationService::SUBJECTS`), so `Provider` words both the same way.
- * Never throws: an activity entry that cannot be written must not undo the
- * Like that caused it.
+ * Mirrors each bell notification into the Activity app, with the same subject
+ * (`NotificationService::SUBJECTS`) so `Provider` words both alike. Never
+ * throws: a failed activity entry must not undo the action that caused it.
  */
 class Publisher {
 	public const TYPE = 'social';

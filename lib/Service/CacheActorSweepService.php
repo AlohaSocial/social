@@ -14,31 +14,15 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
 /**
- * Evicts the cached remote actors nothing here refers to any more.
+ * Evicts the cached remote actors nothing here refers to any more: nobody
+ * here follows them or is followed by them, no post of theirs is stored, no
+ * follow request, block, mute or endorsement names them, and they have been
+ * neither seen nor tried for `cache_actor_days` (default 180; 0 disables).
+ * Swept actors are fetched again when needed; local actors are never touched.
  *
- * A cached actor row was written the first time this instance met the
- * account — a like on a local post, a boost seen in a timeline, a reply in a
- * thread — and until now nothing ever removed one except the account's own
- * instance sending a `Delete`, or a moderator purging its domain. A year of
- * federating leaves tens of thousands of such rows, each with an avatar in
- * appdata, for accounts nobody here has anything to do with.
- *
- * An actor is swept when nobody here follows it, it follows nobody here, no
- * post of its is stored, no follow request or block/mute/endorsement names it
- * either way, and it has been neither seen nor tried for `cache_actor_days`
- * (default 180; 0 disables). Anything swept is fetched again the moment it is
- * needed, so what is lost is a request, never a relationship or a post. Local
- * actors are never touched.
- *
- * A like or a boost of a local post is deliberately not one of the conditions,
- * which is also where Mastodon's `tootctl accounts prune` draws the line: the
- * row in `social_action` stays and names the actor, and the profile behind it
- * is fetched again when somebody opens the list of who liked the post. Adding
- * it would mean a fourth `NOT EXISTS` against the second-largest table in the
- * app, on every pass, to keep rows for accounts that touched one post once.
- *
- * Paged like `StreamPruneService`: the page is read, deleted, and read again,
- * bounded per cron pass so eviction never dominates a slot.
+ * Likes and boosts of local posts do not keep an actor, as with Mastodon's
+ * `tootctl accounts prune`: the `social_action` row stays. Paged like
+ * `StreamPruneService`, bounded per cron pass.
  */
 class CacheActorSweepService {
 	public const PAGE = 100;

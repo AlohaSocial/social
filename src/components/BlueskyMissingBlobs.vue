@@ -43,10 +43,9 @@ import { showError } from '../services/toast.js'
 import { errorOf } from '../utils/serverError.js'
 
 /**
- * A move here that stopped because pictures or videos did not arrive
- * (`needs_decision`): the person has them copied again or, once they
- * confirmed it, goes on without them. Emits the move as the server answers
- * it.
+ * A move here that stopped because photos or videos did not arrive
+ * (`needs_decision`): copy them again, or confirm going on without them.
+ * Emits the move as the server answers it.
  */
 export default {
 	name: 'BlueskyMissingBlobs',

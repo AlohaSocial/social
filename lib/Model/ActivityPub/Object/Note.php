@@ -264,29 +264,16 @@ class Note extends Stream implements JsonSerializable {
 	}
 
 	/**
-	 * A post that is a video goes onto the wire as a `Video`, not a `Note`.
+	 * A post that is a video goes onto the wire as a `Video`, not a `Note`,
+	 * since PeerTube and other video-native servers ingest only `Video`. Only
+	 * the serialisation changes; the row stays a `Note`.
 	 *
-	 * This is the outbound half of what `PeerTubeService` reads. PeerTube --
-	 * and every other video-native server -- ingests `Video` objects and
-	 * nothing else, so a Social instance publishing `Note`s had, from their
-	 * side, no videos at all: not badly-formatted ones, none. Only the
-	 * serialisation changes; the row stays a `Note`, exactly as an incoming
-	 * `Video` is stored as one.
-	 *
-	 * Three guards, in cost order so the cheap ones decide first:
-	 *
-	 * - only for the wire. The client API is Mastodon's and has no `Video`.
-	 * - only for **local** posts. A remote note is somebody else's document and
-	 *   is re-serialised as it arrived.
-	 * - only when the post *is* a video: one attachment, and it a video. See
-	 *   `PeerTubeService::soleVideo()`.
-	 *
-	 * The app value is the default for unknown peers. The outbound queue can
-	 * override it on a cloned post for a peer whose software is already known:
-	 * PeerTube receives `Video`, Pixelfed receives `Note`. No network lookup is
-	 * made while publishing. The override changes only the serialized copy; the
-	 * stored post remains a `Note`, and the caller signs each variant after the
-	 * object has been selected. `attachment` is present either way.
+	 * Only on the wire (the client API has no `Video`), only for local posts,
+	 * and only when the post is one video (`PeerTubeService::soleVideo()`).
+	 * The app value is the default for unknown peers; the outbound queue can
+	 * override it on a cloned post for a peer whose software is known
+	 * (PeerTube gets `Video`, Pixelfed `Note`) and signs each variant.
+	 * `attachment` is present either way.
 	 */
 	private function asVideoIfItIsOne(array $result): array {
 		if ($this->getExportFormat() === self::FORMAT_LOCAL || !$this->isLocal()) {
@@ -310,13 +297,10 @@ class Note extends Stream implements JsonSerializable {
 				return $result;
 			}
 
-			// Which channel it is filed under. PeerTube resolves a video's
-			// channel by looking for a `Group` here and refuses the video
-			// outright when there is none, so this is not decoration: without
-			// it every `Video` this app published was thrown away on arrival.
-			// Read, never created — the channel is made when the post is
-			// written (`PostService::createPost()`), because making an actor
-			// inside a serialisation is a write on a read path.
+			// The channel it is filed under: PeerTube looks for a `Group` and
+			// refuses a video without one. Read, never created: the channel is
+			// made when the post is written (`PostService::createPost()`), as
+			// creating an actor while serialising would write on a read path.
 			$attributedTo = Server::get(ChannelService::class)->attributionOf($this->getAttributedTo());
 		} catch (Throwable $e) {
 			// nothing to resolve it from: publish the post as it was rather
@@ -348,12 +332,9 @@ class Note extends Stream implements JsonSerializable {
 	}
 
 	/**
-	 * The rungs of a laddered video, addressed absolutely.
-	 *
-	 * Empty for a video with no ladder, which is every video on an instance
-	 * that has not turned the setting on — and the reason this asks the
-	 * attachment first: `hls_url` is set only where the row says there is one,
-	 * so the ordinary case costs no query at all.
+	 * The rungs of a laddered video, addressed absolutely; empty for a video
+	 * with no ladder. The attachment's `hls_url` is asked first, so the usual
+	 * case costs no query.
 	 *
 	 * @return array<array{height: int, size: int, bandwidth: int, href: string}>
 	 */

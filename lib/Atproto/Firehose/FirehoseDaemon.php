@@ -22,32 +22,18 @@ use Psr\Log\LoggerInterface;
  * `occ social:atproto:serve`: the long-running process that serves the
  * event stream.
  *
- * The web requests write frames to the event table; this reads them in
- * order and hands each to every subscriber that is caught up. A subscriber
- * that connected with a cursor is replayed from the row after it, out of
- * what the table still holds (the replay window), and told with an
- * `#info OutdatedCursor` when it asked for more than that; one that asked
- * for a future sequence number is refused with `FutureCursor`.
+ * Web requests write frames to the event table; this polls it (every
+ * POLL_IDLE seconds when idle) and sends each frame to every caught-up
+ * subscriber, so a restart loses nothing. A subscriber with a cursor is
+ * replayed from the table in batches between rounds, the next batch once it
+ * has read most of the last (REPLAY_LOW_WATER); a cursor past the window
+ * gets `#info OutdatedCursor`, a future one `FutureCursor`. One address may
+ * ask for REPLAYS_PER_ADDRESS replays per REPLAY_WINDOW. Subscribers are
+ * pinged every PING_INTERVAL and closed after IDLE_TIMEOUT.
  *
- * A replay is sent a batch at a time, between the rounds that serve
- * everybody else, and the next batch only once the subscriber has read
- * most of the last (REPLAY_LOW_WATER): a long backlog reaches a consumer
- * as fast as it reads, holds no other subscriber up, and does not fill the
- * output buffer past the point where a slow consumer is dropped. One
- * address may ask for REPLAYS_PER_ADDRESS replays per REPLAY_WINDOW.
- *
- * Every subscriber is pinged each PING_INTERVAL seconds, and one that has
- * not answered anything for IDLE_TIMEOUT is closed.
- *
- * Polling, every POLL_IDLE seconds when nothing happened and at once after
- * something did: one code path, no shared memory, and a restart loses
- * nothing because the table is the stream.
- *
- * A row's sequence number is taken when it is inserted and seen when its
- * transaction commits, so a lower number can turn up after a higher one
- * is already there. The stream never moves past a number that is not
- * there until GAP_GRACE seconds have passed without it; a gap that stays
- * is a write that rolled back, and the stream goes on without it.
+ * Sequence numbers are taken at insert and seen at commit, so a gap is
+ * waited on for GAP_GRACE seconds before the stream moves past it (a rolled
+ * back write).
  */
 class FirehoseDaemon {
 	public const DEFAULT_BIND = '127.0.0.1:8787';

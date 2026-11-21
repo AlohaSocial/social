@@ -20,15 +20,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A story that arrived from another server.
- *
- * Published as an `Add` addressed to the author's followers and withdrawn with
- * a `Delete` — Pixelfed's verbs, because Pixelfed is the network that has
- * stories. Both land here: `save()` for the story the `Add` carried, and
- * `activity()` for the `Delete` that names one.
- *
- * Whether it is kept at all is `StoryService`'s decision, and it is a short
- * one: only when somebody on this instance follows the author.
+ * A story (a short, in the UI) from another server: Pixelfed's `Add` to the
+ * author's followers, handled by `save()`, and `Delete`, handled by
+ * `activity()`. `StoryService` keeps it only when somebody here follows the
+ * author.
  */
 class StoryInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(
@@ -56,9 +51,8 @@ class StoryInterface extends AbstractActivityPubInterface implements IActivityPu
 			$author = $this->cacheActorService->getFromId($item->getAttributedTo());
 			$this->storyService->receive($item, $author);
 		} catch (Throwable $e) {
-			// a story nobody here follows the author of, one that has already
-			// expired, one whose picture cannot be had: each is a story not to
-			// keep rather than a delivery to refuse
+			// unfollowed author, already expired, or media unavailable: not
+			// kept, but not a delivery to refuse either
 			$this->logger->debug('an incoming story was not kept', [
 				'story' => $item->getId(), 'reason' => $e->getMessage(),
 			]);

@@ -28,22 +28,16 @@ class InstanceService {
 	use TArrayTools;
 
 	/**
-	 * How long a post may be, in characters. Mastodon's own limit, advertised
-	 * because a client that is told no limit assumes 500 and greys out the
-	 * button on the 501st character. Nothing truncates to it: `PostService`
-	 * refuses a post over it, so what a client is told is what it gets.
+	 * How long a post may be, in characters, as on Mastodon; a client told no
+	 * limit assumes 500. `PostService` refuses longer posts rather than
+	 * truncating.
 	 */
 	public const MAX_CHARACTERS = 5000;
 
 	/**
-	 * Every mime type this app could conceivably accept an upload of.
-	 *
-	 * This is *not* the allowlist — `CacheDocumentService::filterMimeTypes()`
-	 * is, and each candidate below is put to it, so a type that service refuses
-	 * never reaches a client. It only bounds the question: a type the service
-	 * starts accepting that is missing from here would be under-reported (a
-	 * client would not offer it), never over-reported (a client offering an
-	 * upload the server then rejects).
+	 * Every mime type this app could conceivably accept an upload of. Not the
+	 * allowlist: each is put to `CacheDocumentService::filterMimeTypes()`, so a
+	 * type missing here is only under-reported, never over-reported.
 	 */
 	private const MIME_CANDIDATES = [
 		'image/jpeg', 'image/gif', 'image/png', 'image/webp', 'image/avif', 'image/heic',
@@ -62,9 +56,8 @@ class InstanceService {
 
 	/**
 	 * Where the counted `user_count`, `status_count` and `domain_count` are
-	 * remembered, as JSON with a `computed_at` timestamp, and for how long.
-	 * Five minutes is fresh enough for a number nobody reads to the unit, and
-	 * it keeps the table walks behind them off the request path.
+	 * remembered, as JSON with a `computed_at` timestamp, and for how long: five
+	 * minutes keeps the table walks off the request path.
 	 */
 	public const STATS_CACHE_KEY = 'instance_stats';
 	public const STATS_CACHE_SECONDS = 300;
@@ -113,23 +106,18 @@ class InstanceService {
 			return $this->createLocal();
 		}
 
-		// The row is written once, at install, and never updated: an instance
-		// that has since been renamed, moved to another address or upgraded
-		// would keep answering with whatever was true on the day it was set up.
-		// Everything a client is told is derived here, from the configuration
-		// as it stands now, so the stored row is only a marker that the
-		// instance exists.
+		// The stored row is written once, at install, so everything a client is
+		// told is derived from the current configuration; the row only marks that
+		// the instance exists.
 		$this->fillLocal($instance, $format);
 
 		return $instance;
 	}
 
 	/**
-	 * Everything /api/v1/instance and /api/v2/instance answer with.
-	 *
-	 * This is the first request every Mastodon client makes, and it decides
-	 * whether the client will talk to this server at all: an empty `uri`, or a
-	 * missing `configuration`, reads as "cannot connect to server".
+	 * Everything /api/v1/instance and /api/v2/instance answer with: the first
+	 * request of every Mastodon client, which reads an empty `uri` or missing
+	 * `configuration` as "cannot connect to server".
 	 */
 	private function fillLocal(Instance $instance, int $format): void {
 		$cloudHost = $this->configService->getCloudHost();
@@ -261,15 +249,10 @@ class InstanceService {
 	}
 
 	/**
-	 * `stats` as an object with all three keys, all of them live.
-	 *
-	 * `user_count` is the number of accounts here: local actors that are not
-	 * deleted or suspended, never the Nextcloud users of every backend, most
-	 * of whom have no account. All three are counted from the database and
-	 * remembered for a few minutes, see `countedStats()`. An administrator
-	 * can hide the account and post counts, which are then 0: the client API
-	 * requires numbers. Nothing is read back from the stored row: it holds
-	 * whatever was true on the day the instance was set up.
+	 * `stats` with all three keys, counted from the database and remembered for
+	 * a few minutes (`countedStats()`). `user_count` is the local actors not
+	 * deleted or suspended. Hidden counts are 0, since the client API requires
+	 * numbers.
 	 */
 	private function stats(): array {
 		$counted = $this->countedStats();
@@ -313,10 +296,9 @@ class InstanceService {
 	}
 
 	/**
-	 * The counted numbers, from app config when a recent count is there,
-	 * from the database otherwise — and then written back for the next
-	 * STATS_CACHE_SECONDS. Also memoised for the request, since the instance
-	 * entity is built more than once per response.
+	 * The counted numbers, from app config when a recent count is there, else
+	 * from the database and written back for STATS_CACHE_SECONDS; memoised for
+	 * the request too.
 	 *
 	 * @return array{user_count: int, status_count: int, domain_count: int}
 	 */
@@ -364,9 +346,8 @@ class InstanceService {
 			'media_attachments' => [
 				'supported_mime_types' => $this->supportedMimeTypes(),
 				'image_size_limit' => $this->imageSizeLimit(),
-				// its own ceiling, not the picture one: a client reads this to
-				// decide whether to offer the upload at all, and telling it
-				// 10 MB when the server takes two gigabytes means it never does
+				// its own ceiling, not the picture one, or a client would never offer a
+				// video larger than that
 				'video_size_limit' => $this->videoSizeLimit(),
 				'image_matrix_limit' => CacheDocumentService::MAX_PIXELS,
 				'video_frame_rate_limit' => 0,
@@ -384,11 +365,8 @@ class InstanceService {
 			'vapid' => [
 				'public_key' => $this->vapidService->publicKey(),
 			],
-			// Mastodon carries this in the v2 entity only. It is in both here,
-			// because this app's own web client reads the v1 entity for the
-			// limits and would otherwise need a second request to find out
-			// whether to draw a translate button; a client that does not know
-			// the key ignores it.
+			// Mastodon has this in the v2 entity only; it is in v1 too because this
+			// app's web client reads v1 for the limits.
 			'translation' => [
 				'enabled' => $this->translationService->isAvailable(),
 			],
@@ -403,10 +381,8 @@ class InstanceService {
 	}
 
 	/**
-	 * The mime types an upload may actually have, asked of the one place that
-	 * decides: `CacheDocumentService::filterMimeTypes()`. Duplicating its list
-	 * here would let the two drift, and a client would then offer an upload the
-	 * server refuses.
+	 * The mime types an upload may actually have, asked of
+	 * `CacheDocumentService::filterMimeTypes()` so the two cannot drift.
 	 *
 	 * @return string[]
 	 */
@@ -435,19 +411,10 @@ class InstanceService {
 	}
 
 	/**
-	 * The ceiling a **video** is held to, which is a different question.
-	 *
-	 * `max_size` is 10 MB and that is a sensible default for the thing it was
-	 * written for -- a picture, read whole into memory to have its metadata
-	 * stripped and a preview made of it. A video is neither: it is never held
-	 * in memory (see `CacheDocumentService::saveMediaFromTemp()`) and 10 MB is
-	 * about forty seconds of it, which is not a video anybody meant to post.
-	 *
-	 * Its own app value, `max_video_size`, so that raising one does not raise
-	 * the other -- a 2 GB *picture* is not a thing an instance should accept.
-	 * An admin who has deliberately raised `max_size` past this default still
-	 * gets what they asked for: the larger of the two wins, because the
-	 * narrower ceiling was never meant to constrain the wider one.
+	 * The ceiling a video is held to: its own `max_video_size`, since a video is
+	 * never held in memory (`CacheDocumentService::saveMediaFromTemp()`) and the
+	 * picture's `max_size` would allow only seconds of it. When `max_size` was
+	 * raised above it, the larger wins.
 	 */
 	public function maxVideoUploadSize(): int {
 		$megabytes = $this->configService->getAppValueInt(ConfigService::SOCIAL_MAX_VIDEO_SIZE);
@@ -519,19 +486,10 @@ class InstanceService {
 	}
 
 	/**
-	 * The server's privacy policy, as Mastodon's entity carries it.
-	 *
-	 * Read from Nextcloud's own setting — Administration → Theming, "Privacy
-	 * policy link" — rather than from a policy of this app's own. A Nextcloud
-	 * has one privacy policy, and it covers everything on the server including
-	 * this app; a second one kept here would be a second answer to the same
-	 * question, and the two would disagree the first time one of them was
-	 * edited.
-	 *
-	 * Nextcloud stores a link where Mastodon's entity carries text, so the
-	 * text is the link. `null` where the administrator has set none: the
-	 * caller answers 404, which is what Mastodon answers for a policy that
-	 * does not exist, and is a better answer than inventing one.
+	 * The server's privacy policy, as Mastodon's entity carries it: Nextcloud's
+	 * own "Privacy policy link" from Theming, which covers this app too. The link
+	 * is the content; `null` where none is set, which the caller answers with 404,
+	 * as Mastodon does.
 	 *
 	 * @return array{updated_at: string, content: string}|null
 	 */
@@ -540,8 +498,8 @@ class InstanceService {
 	}
 
 	/**
-	 * The server's terms of service, from Nextcloud's "Legal notice link" —
-	 * the same reasoning as the privacy policy, and the same `null`.
+	 * The server's terms of service, from Nextcloud's "Legal notice link", like
+	 * the privacy policy.
 	 *
 	 * @return array{updated_at: string, content: string}|null
 	 */
@@ -561,11 +519,9 @@ class InstanceService {
 		$escaped = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 
 		return [
-			// no date is stored for either, and Mastodon's field is not
-			// optional: today is the honest answer to "when was this last
-			// changed" only in the sense that this is when it was last read,
-			// which is what a client uses it for -- deciding whether to show
-			// the document again
+			// no date is stored for either, and Mastodon's field is required: the
+			// time it was read is what a client uses to decide whether to show it
+			// again
 			'updated_at' => gmdate('Y-m-d\TH:i:s') . '.000Z',
 			'content' => '<p>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
 				. ': <a href="' . $escaped . '">' . $escaped . '</a></p>',

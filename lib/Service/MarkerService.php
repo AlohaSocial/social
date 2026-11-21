@@ -14,16 +14,9 @@ use OCA\Social\Tools\Nid;
 use OCP\Config\IUserConfig;
 
 /**
- * How far through a timeline someone has read.
- *
- * Mastodon calls these markers and every client keeps them per timeline, so
- * the position follows a reader between the web app and their phone. The only
- * thing the app itself needs one for is the unread badge — but a marker is the
- * shape the client API already asks for, so it is the shape stored.
- *
- * A per-user config value rather than a table: there is one small row per
- * person, it is written when a timeline is opened and read when the badge is
- * drawn, and none of that is worth a migration.
+ * How far through a timeline someone has read: Mastodon's markers, which
+ * clients keep per timeline, and which drive the unread badge. Stored as a
+ * per-user config value, one small row per person.
  */
 class MarkerService {
 	/** The timelines a marker may be kept for, as the client API names them. */
@@ -69,10 +62,9 @@ class MarkerService {
 	}
 
 	/**
-	 * The last read position as a nid, which is what a comparison against a
-	 * stream's nid needs — as its decimal string, because a nid does not fit
-	 * a PHP int everywhere. An unread timeline, or a marker from a client that
-	 * stored something that is not a nid, reads as zero — everything unread.
+	 * The last read position as a nid, as a decimal string since a nid does not
+	 * fit a PHP int everywhere. An unread timeline or a marker that is not a nid
+	 * reads as zero, everything unread.
 	 */
 	public function lastReadId(string $userId, string $timeline): string {
 		$markers = $this->getAll($userId);
@@ -90,13 +82,10 @@ class MarkerService {
 	}
 
 	/**
-	 * Counts entries behind the marker as unread until the reader next reports
-	 * a position on that timeline.
-	 *
-	 * For what was not there when the marker passed it: a notification the
-	 * policy held and that was released afterwards sits below a marker the
-	 * reader moved while it was hidden, and is still news to them. Moving the
-	 * marker back instead would un-read everything in between.
+	 * Counts entries behind the marker as unread until the reader next reports a
+	 * position on that timeline, for what arrived below the marker afterwards (a
+	 * notification the policy held and released). Moving the marker back would
+	 * un-read everything in between.
 	 *
 	 * @param string[] $ids nids; those at or past the marker are unread already and ignored
 	 */
@@ -160,12 +149,9 @@ class MarkerService {
 	}
 
 	/**
-	 * Moves a marker forward.
-	 *
-	 * Never backwards: two clients reading the same account report their own
-	 * positions, and the one that is further behind must not un-read what the
-	 * other has already seen. Any report, moving or not, also reads what
-	 * `markUnread()` kept unread behind the marker.
+	 * Moves a marker forward, never back, so a client further behind cannot
+	 * un-read what another has seen. Any report also reads what `markUnread()`
+	 * kept unread.
 	 *
 	 * @return array{last_read_id: string, version: int, updated_at: string}
 	 */

@@ -31,14 +31,11 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * What Bluesky did to local accounts (§10). A PDS is not told when somebody
- * on Bluesky follows, likes, reposts or answers one of its users — those
- * are records in other repositories, indexed by the AppView — so the
- * AppView's notifications are asked for, as each user, with a token their
- * key signed. Each notification becomes the activity a Fediverse server
- * would have sent: a `Follow` of the account, a `Like` or `Announce` of
- * the post, a reply, mention or quote stored as the post it is in; the
- * import path makes the notification, the count and the follower row.
+ * What Bluesky did to local accounts (§10). Follows, likes, reposts and
+ * replies are records in other repositories, so the AppView's notifications
+ * are read as each user, with a token their key signed. Each becomes the
+ * activity a Fediverse server would have sent, so the import path makes the
+ * notification, the count and the follower row.
  */
 class NotificationPoller {
 	public const INTERVAL = 60;

@@ -34,18 +34,13 @@ use Throwable;
 /**
  * A repository's writes and reads.
  *
- * A write is one commit: the records change, the tree's nodes on the way
- * to them are rewritten, the commit is signed, the changed blocks are
- * stored and the old ones dropped, the head moves, and one firehose frame
- * is appended — all in
- * one database transaction, so a failure half-way leaves the previous
- * commit as the repository. The transaction starts by locking the head
- * row, so two commits of one repository run one after the other and the
- * second builds on the first. A record made once per Social object
- * (RepoWrite::createOnce()) is looked for under that lock, so of two
- * commits that both found none before, the second writes nothing. The
- * lexicon is checked before anything is signed; nothing that does not fit
- * reaches a relay.
+ * A write is one commit, in one database transaction: records change, the
+ * tree's nodes on the way are rewritten, the commit is signed, changed blocks
+ * stored and old ones dropped, the head moves, and one firehose frame is
+ * appended. The transaction locks the head row first, so commits of one
+ * repository run in turn; a record made once per Social object
+ * (RepoWrite::createOnce()) is looked for under that lock. The lexicon is
+ * checked before anything is signed.
  */
 class RepositoryService {
 	/** what one commit may change: the firehose caps `ops` at 200 */
@@ -391,12 +386,10 @@ class RepositoryService {
 	}
 
 	/**
-	 * A repository that moved here (§13.1), written as one commit: the
-	 * records as they were, byte for byte, so each keeps its CID and every
-	 * reference to it stays good, under a commit this server signs with the
-	 * account's new key. Records are not checked against a lexicon: a
-	 * repository holds whatever its owner wrote, of any application. Nothing
-	 * goes on the firehose; the account is announced when it is activated.
+	 * A repository that moved here (§13.1), written as one commit: the records
+	 * byte for byte, so each keeps its CID, under a commit signed with the
+	 * account's new key. Records are not checked against a lexicon, and
+	 * nothing goes on the firehose until the account is activated.
 	 *
 	 * @param array<string, string> $records path => record bytes (DAG-CBOR)
 	 * @param string $afterRev the old repository's revision, which this one follows

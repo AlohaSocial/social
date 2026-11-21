@@ -15,9 +15,6 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * What a moderator has decided about something that is trending.
  *
- * Two reads: "is this one rejected", asked once per trend page for the whole
- * page, and "what has been decided", which is the panel.
- *
  * @package OCA\Social\Db
  */
 class TrendReviewRequest extends CoreRequestBuilder {
@@ -28,12 +25,9 @@ class TrendReviewRequest extends CoreRequestBuilder {
 	public const KINDS = [self::KIND_TAG, self::KIND_LINK, self::KIND_STATUS];
 
 	/**
-	 * Records a decision, replacing whatever stood before.
-	 *
-	 * Deciding twice is a change rather than a second row, which is what the
-	 * unique index is for — and why the violation is handled rather than
-	 * avoided with a read first: between the read and the write is where the
-	 * second moderator's click lands.
+	 * Records a decision, replacing whatever stood before. The unique index
+	 * settles concurrent decisions, so the violation is handled rather than
+	 * avoided by reading first.
 	 */
 	public function decide(string $kind, string $ref, bool $approved, string $moderator): void {
 		$qb = $this->getQueryBuilder();
@@ -61,10 +55,7 @@ class TrendReviewRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Everything of one kind that must not trend.
-	 *
-	 * The rejected ones only: what is approved trends like anything nobody has
-	 * looked at, so the read that matters is "what is being kept out".
+	 * Everything of one kind that was rejected from trending.
 	 *
 	 * @return string[] the references, lowercased for a tag
 	 */

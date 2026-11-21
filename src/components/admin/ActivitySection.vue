@@ -30,12 +30,8 @@
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 
 /**
- * Two numbers, and what they are counting.
- *
- * An administrator's first question about a social server is whether anybody
- * is using it, and this page answered every other question first. Deliberately
- * two figures rather than a chart: a chart of an instance with four accounts
- * is noise, and the shape of the week is not a decision anybody takes.
+ * Whether anybody is using the server: posts and authors in the last day and
+ * week. Two figures rather than a chart, which on a small instance is noise.
  */
 export default {
 	name: 'ActivitySection',

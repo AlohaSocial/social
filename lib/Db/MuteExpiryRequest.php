@@ -14,12 +14,9 @@ use DateTimeZone;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * When a mute runs out.
- *
- * One row per (muter, muted), and only for a mute that was given a duration: a
- * permanent mute — the common case — stores nothing here at all. The mute
- * itself is a row in `social_actor_relation`; this says when to stop reading
- * it, and nothing ever deletes a row here to make that happen.
+ * When a mute runs out: one row per (muter, muted), only for a mute given a
+ * duration. The mute itself is a row in `social_actor_relation`; this says
+ * when to stop reading it.
  */
 class MuteExpiryRequest extends MuteExpiryRequestBuilder {
 	/**

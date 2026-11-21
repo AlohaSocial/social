@@ -18,22 +18,20 @@ use OCP\Migration\SimpleMigrationStep;
 /**
  * The AT Protocol side of every account: this instance is a Bluesky host.
  *
- * `social_atproto_identity` is one row per local actor — its `did:plc`, its
- * handle and its sealed signing key; `social_atproto_instance_key` holds the
- * instance's own rotation and service keys. `social_atproto_repo` is each
- * repository's signed head, `social_atproto_record` its live records with
- * their DAG-CBOR bytes and the Social object each came from, and
- * `social_atproto_block` the Merkle tree nodes and commits by CID, because
- * the sync endpoints and the firehose serve blocks. `social_atproto_blob`
- * names the stored documents a record refers to by CID.
- * `social_atproto_event` is the firehose: one frame per commit, numbered by
- * the database, kept for the replay window. `social_atproto_plc_log` records
- * every PLC operation before it is sent, so a crash between the two leaves a
- * row to reconcile from.
+ * - `social_atproto_identity`: per local actor, its `did:plc`, handle and
+ *   sealed signing key; `social_atproto_instance_key`: the instance's own
+ *   rotation and service keys.
+ * - `social_atproto_repo`: each repository's signed head;
+ *   `social_atproto_record`: live records with their DAG-CBOR bytes and
+ *   source Social object; `social_atproto_block`: tree nodes and commits by
+ *   CID, served by sync and the firehose; `social_atproto_blob`: stored
+ *   documents a record refers to by CID.
+ * - `social_atproto_event`: the firehose, one frame per commit, kept for the
+ *   replay window; `social_atproto_plc_log`: each PLC operation, recorded
+ *   before it is sent so a crash leaves a row to reconcile from.
  *
- * Byte columns are BLOBs sized past 64 KB: a commit's frame carries the
- * changed tree nodes and the record, which a profile with a long bio or a
- * post with many facets pushes past MySQL's plain BLOB.
+ * Byte columns are BLOBs larger than 64 KB, since a commit frame can exceed
+ * MySQL's plain BLOB.
  */
 class Version1000Date20261008000010 extends SimpleMigrationStep {
 	/** MEDIUMBLOB on MySQL; the others do not size BLOBs */

@@ -9,10 +9,7 @@
 		:class="{ 'post-avatar--remote': !origin.local, 'post-avatar--compact': size !== null }"
 		:style="{ '--instance-colour': origin.colour, '--avatar-size': size === null ? undefined : size + 'px' }"
 		:title="origin.local ? undefined : origin.instance">
-		<!-- the ring says which instance in colour, which is nothing at all to
-		     a reader who cannot see it or cannot tell two hues apart. The post
-		     header shows the instance in words too, but not every avatar sits
-		     next to one -->
+		<!-- the instance in words, for readers who cannot see the ring's colour -->
 		<span v-if="!origin.local" class="hidden-visually">
 			{{ t('social', 'Account on {instance}', { instance: origin.instance }) }}
 		</span>
@@ -21,14 +18,10 @@
 			:fallback="item.account"
 			variant="block"
 			placement="bottom-start">
-			<!-- the face beside a post is the most obvious thing on screen to
-			     click, and it did nothing. `component :is` because the profile
-			     section on a Nextcloud user page runs an app with no router in
-			     it, where a `router-link` resolves to nothing and would take
-			     the avatar with it -->
-			<!-- `disableMenu`: NcAvatar hangs Nextcloud's own profile card off a
-			     local account's avatar on hover, and it opened over this one.
-			     See ActorAvatar, which says the rest. -->
+			<!-- `component :is` because the profile section on a Nextcloud user
+			     page has no router, where a `router-link` would render nothing.
+			     `disableMenu` keeps NcAvatar's own profile card from opening over
+			     this one (see ActorAvatar). -->
 			<component :is="linkTag" v-bind="linkProps">
 				<NcAvatar
 					v-if="pattern !== ''"
@@ -170,8 +163,6 @@ export default {
 	height: 52px;
 	width: 52px;
 
-	/* a ring in the colour of the server the author is on, so a timeline
-	   visibly spans instances instead of hiding it after the @ */
 	/* sized by the caller: no padding, the box is the face */
 	&--compact {
 		padding: 0;

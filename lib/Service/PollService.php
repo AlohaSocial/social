@@ -31,17 +31,12 @@ use Psr\Log\LoggerInterface;
 /**
  * Voting on polls, whoever holds the one being voted on.
  *
- * A vote on a *remote* poll is a bare Note whose `name` is the chosen option,
- * addressed only to the poll's author — exactly what Mastodon expects;
- * authoritative counts arrive later as Update{Question} from the origin server
- * and refresh the stored source.
- *
- * A vote on a *local* poll has no origin to ask: this instance is the origin,
- * so the vote is counted here — through the same path an incoming vote takes —
- * and the new counts go out to the author's followers as Update{Question}.
- *
- * Either way the chosen indices are remembered per viewer in the stream action,
- * so the poll renders as voted.
+ * A vote on a remote poll is a bare Note whose `name` is the chosen option,
+ * addressed only to the poll's author, as Mastodon expects; the counts arrive
+ * later as Update{Question}. A vote on a local poll is counted here, through
+ * the same path an incoming vote takes, and the new counts go out as
+ * Update{Question}. Either way the chosen indices are kept per viewer in the
+ * stream action.
  */
 class PollService {
 	use TStringTools;
@@ -64,14 +59,8 @@ class PollService {
 	}
 
 	/**
-	 * @throws StreamNotFoundException when the id is not a known poll
-	 */
-	/**
-	 * How far back a first sweep looks for closed polls.
-	 *
-	 * A day: long enough that a cron that missed a few runs still announces
-	 * what closed while it was down, short enough that switching the feature
-	 * on does not tell everybody about a poll from last year.
+	 * How far back a first sweep looks for closed polls: a day, so a cron that
+	 * missed a few runs still announces them, but nothing old.
 	 */
 	public const SWEEP_FLOOR = 86400;
 
@@ -81,6 +70,9 @@ class PollService {
 	protected const VOTE_LOCK_WAIT = 3000000;
 	private const VOTE_LOCK_STEP = 50000;
 
+	/**
+	 * @throws StreamNotFoundException when the id is not a known poll
+	 */
 	public function getPoll(int|string $nid, ?Person $viewer = null): Question {
 		$stream = $this->streamRequest->getStreamByNid($nid);
 		if (!$stream instanceof Question) {
@@ -171,12 +163,9 @@ class PollService {
 
 	/**
 	 * An incoming Note that is a vote on one of our polls: counted here, never
-	 * stored as a timeline item. Returns whether the note was consumed.
-	 *
-	 * A vote is a bare Note whose name is an option of a local poll it replies
-	 * to. Votes on expired polls, a second vote for an option already voted for
-	 * and any further vote in a single-choice poll are swallowed without
-	 * counting.
+	 * stored as a timeline item. Returns whether the note was consumed. Votes
+	 * on expired polls, repeat votes for an option and extra votes in a
+	 * single-choice poll are swallowed without counting.
 	 */
 	public function handleIncomingVote(Note $note): bool {
 		if ($note->getName() === '' || $note->getInReplyTo() === '' || $note->isLocal()) {
@@ -363,23 +352,17 @@ class PollService {
 	}
 
 	/**
-	 * The status export (with poll entity) for API responses.
-	 */
-	/**
-	 * Tells the people who voted in a poll that it has closed.
-	 *
-	 * A poll closes by its own end time passing, so nothing *happens* at the
-	 * moment it does: without a sweep, a voter never learns the result arrived.
-	 * One notification per poll per reader — the id carries both, so a second
-	 * sweep over the same poll writes nothing.
+	 * Tells the people who voted in a poll that it has closed, since nothing
+	 * else happens when the end time passes. One notification per poll per
+	 * reader; the id carries both, so a second sweep writes nothing.
 	 *
 	 * @return int how many polls were announced
 	 */
 	public function announceClosedPolls(int $limit = 50): int {
 		$announced = 0;
 
-		// taken before the read, so a poll closing while the sweep runs is
-		// inside the next window rather than between the two
+		// taken before the read, so a poll closing during the sweep falls in
+		// the next window
 		$now = $this->now();
 		$since = $this->lastSweep($now);
 		$polls = $this->streamRequest->getPollsClosedSince($since, $limit, $now);
@@ -411,14 +394,10 @@ class PollService {
 	}
 
 	/**
-	 * Where the next sweep starts.
-	 *
-	 * Now, unless the read was cut off at its limit: the polls are read
-	 * earliest end first, so the ones left over closed after the last one
-	 * read, and the next sweep starts a second before that — a poll announced
-	 * twice is dropped by its notification id. Unless every poll read closed
-	 * in that same second, when starting there again would read the same
-	 * page for ever.
+	 * Where the next sweep starts: now, unless the read hit its limit; then a
+	 * second before the last poll read (polls are read earliest end first, and
+	 * a duplicate is dropped by its notification id), unless every poll read
+	 * closed in that second, which would repeat the page for ever.
 	 *
 	 * @param Question[] $polls
 	 */
@@ -433,11 +412,8 @@ class PollService {
 	}
 
 	/**
-	 * How far the last sweep got, and a floor under it.
-	 *
-	 * The floor matters on an instance that has never swept: without it the
-	 * first run would announce every poll that ever closed, to everybody who
-	 * ever voted.
+	 * How far the last sweep got, with a floor so a first run does not
+	 * announce every poll that ever closed.
 	 */
 	private function lastSweep(int $now): int {
 		$stored = (int)$this->configService->getAppValue(ConfigService::SOCIAL_POLLS_SWEPT);
@@ -445,6 +421,9 @@ class PollService {
 		return max($stored, $now - self::SWEEP_FLOOR);
 	}
 
+	/**
+	 * The status export (with poll entity) for API responses.
+	 */
 	public function exportPoll(Question $poll): array {
 		$poll->setExportFormat(ACore::FORMAT_LOCAL);
 

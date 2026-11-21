@@ -15,22 +15,10 @@ use OCP\IUserSession;
 use OCP\Log\Audit\CriticalActionPerformedEvent;
 
 /**
- * The moderator decisions that go into the server's audit log.
- *
- * Everything here was already written to `social.log` at info level, which is
- * a log nobody keeps and anybody with the app can write to. An administrator
- * asked six months later who suspended an account, or which of three
- * moderators blocked an instance, had the strike history for the two actions
- * that recorded one and nothing at all for the rest.
- *
- * `CriticalActionPerformedEvent` is what core's `admin_audit` app listens for,
- * so these land in the same file, in the same format, as "user X was added to
- * group Y" — kept as long as the audit log is kept, and written by the server
- * rather than by the app. When `admin_audit` is off nothing listens and the
- * event costs a dispatch.
- *
- * The message carries `%s` for each parameter in order: that is how
- * `admin_audit` renders it.
+ * The moderator decisions that go into the server's audit log, through
+ * `CriticalActionPerformedEvent`, which core's `admin_audit` app writes to its
+ * file; when it is off the event costs a dispatch. The message carries `%s`
+ * for each parameter in order, as `admin_audit` renders it.
  */
 class AuditService {
 	public function __construct(
@@ -49,11 +37,8 @@ class AuditService {
 	}
 
 	/**
-	 * A decision that no longer stands.
-	 *
-	 * Worth as much as the decision itself: a suspension nobody can see the
-	 * end of is one an administrator cannot tell from a suspension that is
-	 * still in force.
+	 * A decision that no longer stands, so a lifted suspension can be told
+	 * from one still in force.
 	 */
 	public function accountLifted(string $actorId): void {
 		$this->log('Social: what stood against the account "%s" was lifted by "%s"', $actorId);
@@ -65,11 +50,8 @@ class AuditService {
 	}
 
 	/**
-	 * An instance added to or removed from the federation access list.
-	 *
-	 * The same list means opposite things in the two access modes, so the
-	 * sentence does too: on a block list an entry is an instance this server
-	 * refuses, on an allow list it is one of the few it will talk to at all.
+	 * An instance added to or removed from the federation access list, worded
+	 * for the access mode: refused on a block list, allowed on an allow list.
 	 *
 	 * @param bool $added whether it went on the list or came off it
 	 * @param bool $blockList whether the list names who is refused

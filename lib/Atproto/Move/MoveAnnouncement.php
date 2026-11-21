@@ -17,11 +17,9 @@ use OCA\Social\Service\PostService;
 use Psr\Container\ContainerInterface;
 
 /**
- * After a Bluesky account moved away, the person's account here says where
- * it went — one public post, or a profile field — through the ordinary post
- * and profile paths, so it is theirs to edit or delete afterwards. The
- * text is a short English template, as the switch wizard's announcement
- * is.
+ * After a Bluesky account moved away, says where it went in one public post
+ * or a profile field, written through the ordinary paths so the person can
+ * edit or delete it. The text is a short English template.
  */
 class MoveAnnouncement {
 	public const POST = 'post';

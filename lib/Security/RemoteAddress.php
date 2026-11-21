@@ -12,16 +12,11 @@ namespace OCA\Social\Security;
 /**
  * Decides whether an outbound request is allowed to reach a given host.
  *
- * Federation talks to arbitrary hosts on the public internet, so the app cannot
- * use an allowlist — but it must not be steered at the instance's own network.
- * Unless an administrator has opted in (`allow_local_remote_servers`), a host that
- * is, or resolves to, anything but a globally reachable unicast address
- * (private, loopback, link-local, shared, reserved, documentation, multicast,
- * or an IPv6 address wrapping one of those) is refused. `169.254.169.254` and
- * `100.100.100.200`, cloud metadata endpoints, are covered.
- *
- * The classifier is pure so it can be tested without a network; the DNS lookups it
- * performs for a hostname are the only side effect.
+ * Unless an administrator opted in (`allow_local_remote_servers`), a host
+ * that is, or resolves to, anything but a globally reachable unicast address
+ * (private, loopback, link-local, shared, reserved, documentation,
+ * multicast, or IPv6 wrapping one of those) is refused, including cloud
+ * metadata endpoints such as `169.254.169.254`. Pure apart from DNS lookups.
  */
 final class RemoteAddress {
 	/**
@@ -78,10 +73,9 @@ final class RemoteAddress {
 			return self::inAny($packed, self::IPV4_NON_PUBLIC);
 		}
 
-		// An IPv6 address that only wraps an IPv4 one is classified by the
-		// address it wraps: IPv4-mapped (::ffff:a.b.c.d), SIIT
-		// (::ffff:0:a.b.c.d), NAT64 (64:ff9b::/96, delivered to the embedded
-		// address by a translating network) and 6to4 (2002:aabb:ccdd::/48).
+		// An IPv6 address wrapping an IPv4 one is classified by the wrapped address:
+		// IPv4-mapped (::ffff:a.b.c.d), SIIT (::ffff:0:a.b.c.d), NAT64
+		// (64:ff9b::/96) and 6to4 (2002:aabb:ccdd::/48).
 		$hex = bin2hex($packed);
 		if (str_starts_with($hex, '00000000000000000000ffff')
 			|| str_starts_with($hex, '0000000000000000ffff0000')
@@ -131,25 +125,18 @@ final class RemoteAddress {
 	}
 
 	/**
-	 * Whether a host — a literal IP or a name — is, or resolves to, a local address.
-	 *
-	 * A name is refused if *any* of its resolved addresses is local, so a record
-	 * that mixes a public and a loopback address cannot be used to slip through.
+	 * Whether a host, a literal IP or a name, is or resolves to a local address;
+	 * a name is local if any of its addresses is.
 	 */
 	public static function isLocalHost(string $host): bool {
 		return self::reachableAddresses($host) === [];
 	}
 
 	/**
-	 * The addresses a request to a host may be sent to: a literal public
-	 * address itself, or every address a name resolves to when all of them
-	 * are public. Empty when the host is local, when any of its addresses is,
-	 * or when it resolves to nothing — an unresolvable target is not a
-	 * legitimate peer, and failing closed is the safe direction.
-	 *
-	 * The request is pinned to exactly this set (see
-	 * `CurlService::pinReachable()`), so what was checked is what is reached:
-	 * a name that answers differently to a second lookup gains nothing.
+	 * The addresses a request to a host may be sent to: a literal public address,
+	 * or every address a name resolves to when all are public. Empty when any is
+	 * local or the name does not resolve (fail closed). Requests are pinned to
+	 * this set (`CurlService::pinReachable()`), so a second lookup cannot differ.
 	 *
 	 * @return list<string>
 	 */
@@ -177,17 +164,9 @@ final class RemoteAddress {
 	private const MEMO_TTL = 60;
 
 	/**
-	 * Answers already given, for a short while.
-	 *
-	 * A delivery run resolves the same few dozen hosts over and over: one post
-	 * to two hundred inboxes is two hundred DNS round-trips for a handful of
-	 * distinct names, each one blocking the request behind it. Remembering the
-	 * answers for the length of the run removes almost all of them.
-	 *
-	 * Deliberately per-process rather than a shared cache: a cron pass is
-	 * where the repetition is. The entry carries the whole address set, which
-	 * is what a request is pinned to, and it is forgotten after MEMO_TTL so a
-	 * long-running worker follows a host that has moved.
+	 * Per-process memo of resolved addresses, as a delivery run resolves the same
+	 * few hosts many times; entries expire after MEMO_TTL so a long-running
+	 * worker follows a moved host.
 	 *
 	 * @var array<string, array{0: int, 1: list<string>}> host => [expires, addresses]
 	 */

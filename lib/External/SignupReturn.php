@@ -14,13 +14,11 @@ use OCA\Social\Service\ConfigService;
 use OCP\IURLGenerator;
 
 /**
- * Where a registration that an app started goes once the account exists:
- * back to this server's own OAuth authorization request, so the app's sign-in
- * finishes without the person logging in a second time.
- *
- * Nothing else is accepted. The address is checked whenever it is used, and
- * what comes out is the authorize route of this app as a path with the
- * original query, the shape core's login form takes as `redirect_url`.
+ * Where a registration an app started goes once the account exists: back to
+ * this server's own OAuth authorization request, so the app's sign-in finishes
+ * without a second login. Nothing else is accepted; the result is this app's
+ * authorize route as a path with the original query, the shape core's login
+ * form takes as `redirect_url`.
  */
 class SignupReturn {
 	/** Longer than any authorization request an app sends, short enough to store. */

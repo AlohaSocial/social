@@ -25,13 +25,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who follows an account on another server, and whom it follows, wherever
- * they do: the follows this server knows, and the ones the network the
- * account lives on lists (`FollowListSource`), one list with nothing to
- * tell them apart. What the network lists is read in the background
- * (`Cron\FillFollowLists`) and kept for an hour in the table, where the web
- * request reads it. An account that keeps its list to itself there has it
- * kept here too: the list is empty.
+ * Who follows an account on another server, and whom it follows: the follows
+ * this server knows merged with what the account's network lists
+ * (`FollowListSource`). The network's list is read in the background
+ * (`Cron\FillFollowLists`) and kept for an hour in the table; a list the
+ * account hides there is empty here too.
  */
 class FollowListService {
 	public const FOLLOWERS = ProbeOptions::FOLLOWERS;
@@ -53,11 +51,10 @@ class FollowListService {
 	}
 
 	/**
-	 * One page of the list: the accounts known here, paged as always, and
-	 * after the last of them the ones the network lists. A page that reaches
-	 * into those is continued by the `max_id` of its last account: `next`
-	 * is that cursor ('' at the end), and null on a page of this server's
-	 * own accounts alone, which pages as it always has.
+	 * One page of the list: the accounts known here, paged as usual, then the
+	 * ones the network lists. `next` is the `max_id` cursor of the page's last
+	 * account once it reaches into those ('' at the end), and null on a page
+	 * of local knowledge alone.
 	 *
 	 * @param ProbeOptions $options the page asked for, its probe and account set
 	 * @return array{accounts: Person[], next: string|null, filling: bool}

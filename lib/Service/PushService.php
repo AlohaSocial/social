@@ -18,14 +18,9 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Tells connected web clients about new timeline entries through the
- * notify_push app, so they refresh immediately instead of on their next
- * poll. Entirely optional: when notify_push is not installed every call is
- * a cheap no-op and clients keep polling.
- *
- * The push says what arrived, as `{"kinds": [...]}`: a post for the home
- * timeline, a direct message, a notification. Each part of the page answers
- * only what can change it, so a followed account posting does not reload the
- * direct messages, and a favourite does not reload the home timeline.
+ * notify_push app, so they refresh at once; without notify_push every call
+ * is a no-op and clients keep polling. The push names what arrived
+ * (`{"kinds": [...]}`), so each part of the page reloads only for its own.
  */
 class PushService {
 	/** the custom notify_push event name web clients listen on */
