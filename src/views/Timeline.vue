@@ -24,31 +24,12 @@
 				:label="t('social', 'Which posts to show')"
 				:compact="scopesCompact"
 				@intent="prefetchScope" />
+			<FeedHelp :scope="scope" :underfilled="showRecommendationCoverageNote" />
 		</div>
 
-		<!-- the one-time notices, one at a time, in the column above the
-		     posts: the next waits until the one before it is put away -->
-		<Transition name="feed-notice" mode="out-in" appear>
-			<InterestsNotice v-if="oneTimeNotice === 'interests'" key="interests" class="feed-notice" />
-			<InfoCard
-				v-else-if="oneTimeNotice === 'coverage'"
-				key="coverage"
-				:dismissKey="COVERAGE_NOTICE"
-				:title="t('social', 'Available recommendations')"
-				class="timeline-recommendation-coverage feed-notice"
-				@dismiss="putAway(COVERAGE_NOTICE)">
-				{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated posts and may show more as new posts arrive.') }}
-			</InfoCard>
-			<InfoCard
-				v-else-if="oneTimeNotice === 'scope'"
-				:key="scopeNotice"
-				:dismissKey="scopeNotice"
-				:title="t('social', 'About this feed')"
-				class="timeline-scope-description feed-notice"
-				@dismiss="putAway(scopeNotice)">
-				<p>{{ scopeDescription }}</p>
-			</InfoCard>
-			<InterestsLearningBanner v-else-if="oneTimeNotice === 'learning'" key="learning" class="feed-notice" />
+		<!-- said once, on the first feed of a session: what For you learns from -->
+		<Transition name="feed-notice" appear>
+			<InterestsNotice v-if="showInterestsNotice" class="feed-notice" />
 		</Transition>
 
 		<PageHeader
@@ -215,7 +196,7 @@ import TimelineSwitcher from './../components/TimelineSwitcher.vue'
 import FirstPostCelebration from './../components/FirstPostCelebration.vue'
 import Announcements from './../components/Announcements.vue'
 import HashtagFollowButton from './../components/HashtagFollowButton.vue'
-import InterestsLearningBanner from './../components/InterestsLearningBanner.vue'
+import FeedHelp from './../components/FeedHelp.vue'
 import InterestsNotice from './../components/InterestsNotice.vue'
 import OnThisDay from './../components/OnThisDay.vue'
 import ShortsBar from './../components/ShortsBar.vue'
@@ -225,8 +206,7 @@ import HashtagFollowedList from './../components/HashtagFollowedList.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import InfoCard from '../components/InfoCard.vue'
-import { claimNoticeForPage, infoCardDismissed } from '../services/infoCards.js'
+import { claimNoticeForPage } from '../services/infoCards.js'
 import eventBus, { NOTIFICATIONS_READ } from './../services/eventBus.js'
 import { rememberFilter, rememberedFilter } from './../services/notifications.js'
 import { hasInterestsFeed, isTracking } from './../services/interests.js'
@@ -248,8 +228,6 @@ const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkNa
 const DirectMessages = defineAsyncComponent(() => import(/* webpackChunkName: "direct-messages" */'../components/DirectMessages.vue'))
 const FirstRun = defineAsyncComponent(() => import(/* webpackChunkName: "first-run" */'../components/FirstRun.vue'))
 
-/** the card that says a ranked feed has few posts to offer */
-const COVERAGE_NOTICE = 'recommendation-coverage-v1'
 // how far down the scopes fold to icons, and how near the top they open again
 const SCOPES_FOLD_AT = 120
 const SCOPES_OPEN_AT = 40
@@ -261,12 +239,11 @@ export default {
 		Announcements,
 		IconCheckAll,
 		NcButton,
-		InfoCard,
 		FirstPostCelebration,
 		FirstRun,
 		HashtagFollowButton,
 		HashtagFollowedList,
-		InterestsLearningBanner,
+		FeedHelp,
 		InterestsNotice,
 		OnThisDay,
 		ShortsBar,
@@ -304,9 +281,7 @@ export default {
 			markingAllRead: false,
 			/** whether the held senders are unfolded under their count */
 			showRequests: false,
-			COVERAGE_NOTICE,
 			/** the one-time cards put away while this page is open */
-			dismissedNotices: [],
 			/** whether this page is the one the learning notice was given to */
 			interestsNoticeHere: false,
 		}
@@ -526,17 +501,6 @@ export default {
 				&& (interests?.recommendationsEnabled === true || hasInterestsFeed(interests))
 		},
 
-		/** What the two personalized-reading choices contain. */
-		scopeDescription() {
-			if (this.scope === 'home') {
-				return t('social', 'My Feed shows posts from accounts you follow, in chronological order.')
-			}
-			if (this.scope === 'interests' && this.hasInterestsTab) {
-				return t('social', 'For You ranks eligible public posts using automatically learned interests, post content, freshness, followed accounts and discovery. Separately enabled activity learning can refine new sessions. It can include posts from beyond the accounts you follow.')
-			}
-			return ''
-		},
-
 		/**
 		 * Whether to say, once, that reading is being learned from: only while
 		 * it is, only until the reader has answered, and only on a page whose
@@ -562,37 +526,6 @@ export default {
 		 */
 		showInterestsNotice() {
 			return this.interestsNoticeDue && this.interestsNoticeHere
-		},
-
-		/** @return {string} the dismissal key of this scope's explanation */
-		scopeNotice() {
-			return 'feed-help-v1:' + this.scope
-		},
-
-		/**
-		 * Which one-time card stands above the posts: one at a time, so a page
-		 * never opens on a stack of them. The learning notice asks for an
-		 * answer and goes first; a feed's own explanation waits behind it.
-		 *
-		 * @return {string} `interests`, `coverage`, `scope`, `learning`, or '' for none
-		 */
-		oneTimeNotice() {
-			const open = (key) => !this.dismissedNotices.includes(key) && !infoCardDismissed(key)
-
-			if (this.showInterestsNotice) {
-				return 'interests'
-			}
-			if (this.showRecommendationCoverageNote && open(COVERAGE_NOTICE)) {
-				return 'coverage'
-			}
-			if (this.scopeDescription && open(this.scopeNotice)) {
-				return 'scope'
-			}
-			if (this.type === 'interests' && this.hasInterestsTab) {
-				return 'learning'
-			}
-
-			return ''
 		},
 
 		/**
@@ -833,15 +766,6 @@ export default {
 		claimInterestsNotice() {
 			this.interestsNoticeHere = this.interestsNoticeDue
 				&& claimNoticeForPage('interests-notice-v1', this.timelineKey)
-		},
-
-		/**
-		 * Lets the next one-time card through once one is put away.
-		 *
-		 * @param {string} key the card's dismissal key
-		 */
-		putAway(key) {
-			this.dismissedNotices.push(key)
 		},
 
 		choosePhotoLayout(layout) {
@@ -1239,6 +1163,10 @@ export default {
  * less transparency, and a forced palette, get an opaque band instead.
  */
 .feed-scopes {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
 	position: sticky;
 	inset-block-start: 0;
 	z-index: 20;
