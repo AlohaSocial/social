@@ -63,7 +63,7 @@
 	"devDependencies": {
 		"@axe-core/playwright": "^4.14.0",
 		"@babel/core": "^8.0.6",
-		"@discordapp/twemoji": "16.0.1",
+		"@discordapp/twemoji": "17.0.3",
 		"@nextcloud/babel-config": "^2.0.0",
 		"@nextcloud/browserslist-config": "^3.1.2",
 		"@nextcloud/eslint-config": "^9.0.1",
