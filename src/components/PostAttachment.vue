@@ -173,11 +173,9 @@ export default {
 		/**
 		 * Where a press on the media goes, or `null` to open the viewer here. In
 		 * a timeline the post is a link to itself, so its photo opens the post.
-		 *
-		 * @type {import('vue').PropType<object|null>}
 		 */
 		to: {
-			type: Object,
+			type: /** @type {import('vue').PropType<object|null>} */ (Object),
 			default: null,
 		},
 	},
