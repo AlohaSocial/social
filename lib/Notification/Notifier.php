@@ -108,7 +108,7 @@ class Notifier implements INotifier {
 
 			case 'favourite':
 				$notification->setParsedSubject(
-					$l10n->t('%s favorited your post', [$this->account($params)])
+					$l10n->t('%s liked your post', [$this->account($params)])
 				);
 				$this->point($notification, $params);
 				break;
