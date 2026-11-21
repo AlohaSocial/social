@@ -296,7 +296,8 @@ export default {
 
 	data() {
 		return {
-			active: 'accounts',
+			// People needs an account: its suggestions and directories are the reader's own
+			active: useSettingsStore().getServerData?.public === true ? 'posts' : 'accounts',
 			loading: false,
 			error: null,
 			/**
@@ -398,7 +399,7 @@ export default {
 			return [
 				// `short` is what a phone shows instead of the icons, which
 				// alone do not say which list is which
-				{ value: 'accounts', label: t('social', 'People'), short: t('social', 'People'), icon: AccountMultipleOutline },
+				...(this.visitor ? [] : [{ value: 'accounts', label: t('social', 'People'), short: t('social', 'People'), icon: AccountMultipleOutline }]),
 				{ value: 'packs', label: t('social', 'Starter packs'), short: t('social', 'Packs'), icon: PackageVariantClosed },
 				{ value: 'posts', label: t('social', 'Photos'), short: t('social', 'Photos'), icon: ImageMultiple },
 				{ value: 'videos', label: t('social', 'Videos'), short: t('social', 'Videos'), icon: PlayBoxMultiple },
