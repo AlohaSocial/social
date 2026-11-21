@@ -178,7 +178,7 @@ export default {
 		resetButtons() {
 			return [
 				{ label: t('social', 'Cancel'), callback: () => { this.confirmingReset = false } },
-				{ label: t('social', 'Clear'), variant: 'error', disabled: this.saving, callback: () => this.reset() },
+				{ label: t('social', 'Clear'), variant: /** @type {'error'} */ ('error'), disabled: this.saving, callback: () => this.reset() },
 			]
 		},
 	},
