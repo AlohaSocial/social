@@ -26,10 +26,8 @@ test('recommendation explanations survive an ordinary status response and stay o
 		const reason = entry.locator('.interest-reason')
 		await expect(reason).toContainText('Based on your interests')
 		const before = await reason.textContent()
-		await entry.hover()
-		await entry.locator('button.action-item__menutoggle').first().click()
 		const refreshed = page.waitForResponse((response) => response.url().endsWith(`/statuses/${status.id}/bookmark`) && response.request().method() === 'POST')
-		await page.getByRole('menuitem', { name: 'Bookmark', exact: true }).click()
+		await entry.getByRole('button', { name: 'Bookmark', exact: true }).click()
 		const response = await refreshed
 		expect(response.ok()).toBe(true)
 		expect((await response.json()).interest).toBeNull()
