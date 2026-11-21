@@ -209,7 +209,7 @@ export function appPages(profile = OTHER_USER) {
 		{ name: 'bookmarks', path: '/timeline/bookmarks', marker: '.social__wrapper' },
 		{ name: 'statistics', path: '/statistics', marker: '.stats' },
 		{ name: 'blocking', path: '/blocked', marker: '.social__blocked' },
-		{ name: 'migration', path: '/migration', marker: '.social__migration' },
+		{ name: 'migration', path: '/migration', marker: '.settings .migration' },
 		{ name: 'settings', path: '/settings', marker: '.settings' },
 		{ name: 'search', path: '/search/alohasearch', marker: '.social__wrapper' },
 	]

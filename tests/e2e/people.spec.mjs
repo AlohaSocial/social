@@ -191,8 +191,11 @@ test.describe('other people, in a browser', () => {
 		const renamed = `${name} (renamed)`
 		const lists = async () => (await me.get(`${APP}/api/v1/lists`)).json()
 
-		await openApp(page, '/settings#lists')
-		const section = page.locator('.lists-settings')
+		// the action shows on the sidebar's Explore entry while it is hovered
+		await openApp(page)
+		await page.locator('.app-navigation-entry', { hasText: 'Explore' }).first().hover()
+		await page.getByRole('button', { name: 'Manage lists', exact: true }).click()
+		const section = page.getByRole('dialog').locator('.lists-settings')
 		await expect(section).toBeVisible()
 
 		await section.getByRole('textbox', { name: 'New list' }).fill(name)
@@ -220,7 +223,7 @@ test.describe('other people, in a browser', () => {
 
 		await renamedRow.getByRole('button', { name: `More actions for ${renamed}` }).click()
 		await page.getByRole('menuitem', { name: 'Delete' }).click()
-		await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+		await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).last().click()
 		await expect(section.locator('.lists-settings__item').filter({ hasText: renamed })).toHaveCount(0)
 		expect((await lists()).some((entry) => entry.id === list.id), 'the server let it go').toBe(false)
 	})
