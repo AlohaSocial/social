@@ -78,6 +78,7 @@ function mountNavigation(options = {}, route = { name: 'timeline', params: {} })
 	}
 
 	return mount(Navigation, {
+		attachTo: options.attachTo,
 		global: { plugins: [pinia], mocks: { $route: route, $router: router }, stubs },
 	})
 }
@@ -924,11 +925,12 @@ describe('Navigation', () => {
 
 	describe('the travelling mark', () => {
 		it('sits on nothing until it has a row to sit on', () => {
-			const wrapper = mountNavigation()
+			const wrapper = mountNavigation({ attachTo: document.body })
 
 			// jsdom lays nothing out, so every box is zero and the mark stays off
 			expect(wrapper.vm.indicator.height).toBe(0)
 			expect(wrapper.find('.navigation__indicator').isVisible()).toBe(false)
+			wrapper.unmount()
 		})
 
 		it('takes its place from the row that is lit', () => {

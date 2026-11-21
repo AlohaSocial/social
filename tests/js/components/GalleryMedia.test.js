@@ -21,6 +21,15 @@ function photo(overrides = {}) {
 	}
 }
 
+/**
+ * @param {import('@vue/test-utils').DOMWrapper<HTMLElement>} frame
+ * @return {number} the frame's aspect ratio, however the DOM writes it
+ */
+function aspectRatio(frame) {
+	const [width, height = '1'] = frame.element.style.aspectRatio.split('/')
+	return Number(width) / Number(height)
+}
+
 function mountMedia(props = {}) {
 	return mount(GalleryMedia, {
 		props: { attachment: photo(), ...props },
@@ -45,7 +54,7 @@ describe('GalleryMedia', () => {
 		it('gives the frame the shape of the picture, so nothing reflows on load', () => {
 			const frame = mountMedia().find('.photo')
 
-			expect(frame.attributes('style')).toContain(`aspect-ratio: ${1600 / 1200}`)
+			expect(aspectRatio(frame)).toBeCloseTo(1600 / 1200, 4)
 		})
 
 		it('falls back to the small copy when the original reported no size', () => {
@@ -73,8 +82,7 @@ describe('GalleryMedia', () => {
 		it('reserves a default shape for media that carries no dimensions at all', () => {
 			const attachment = photo({ meta: null })
 
-			expect(mountMedia({ attachment }).find('.photo').attributes('style'))
-				.toContain(`aspect-ratio: ${4 / 3}`)
+			expect(aspectRatio(mountMedia({ attachment }).find('.photo'))).toBeCloseTo(4 / 3, 4)
 		})
 
 		it('takes the shape the caller asks for over the picture\'s own', () => {
