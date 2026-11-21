@@ -3,18 +3,13 @@
  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="social__follow-requests">
-		<PageHeader :title="t('social', 'Follow requests')" clearNavigation />
-		<!-- the empty state waits for the last row to finish collapsing (the
-		     delay is on .empty-enter-active) so the two do not cross -->
-		<transition name="empty">
-			<EmptyContent
-				v-if="!loading && !loadFailed && cursor === '' && requests.length === 0"
-				:item="emptyState" />
-		</transition>
+	<!-- at the top of Activities while somebody is waiting; nothing at all otherwise -->
+	<section v-if="requests.length > 0 || loadFailed" class="follow-requests" :aria-labelledby="headingId">
+		<h2 :id="headingId" class="follow-requests__heading">
+			{{ n('social', '%n person asks to follow you', '%n people ask to follow you', requests.length) }}
+		</h2>
 		<!-- keyed on the account id, never on the index: on removal an index
-		     key makes Vue patch the row above into the one below and drop the
-		     last row, so the wrong row would collapse -->
+		     key makes Vue patch the row above into the one below -->
 		<transition-group name="collapse" tag="div" class="follow-request-list">
 			<div v-for="account in requests" :key="account.id" class="follow-request">
 				<div class="follow-request__user">
@@ -28,7 +23,6 @@
 					<NcButton
 						:disabled="busy.includes(account.id)"
 						variant="primary"
-						:aria-label="t('social', 'Accept')"
 						@click="decide(account, true)">
 						<template #icon>
 							<Check :size="20" />
@@ -37,7 +31,6 @@
 					</NcButton>
 					<NcButton
 						:disabled="busy.includes(account.id)"
-						:aria-label="t('social', 'Reject')"
 						@click="decide(account, false)">
 						<template #icon>
 							<Close :size="20" />
@@ -47,32 +40,27 @@
 				</div>
 			</div>
 		</transition-group>
-		<div v-if="loadFailed" class="loading-indicator" role="alert">
+		<div v-if="loadFailed" class="follow-requests__failed" role="alert">
 			<p>{{ t('social', 'Failed to load follow requests') }}</p>
 			<NcButton @click="fetchRequests(cursor !== '')">
 				{{ t('social', 'Try again') }}
 			</NcButton>
-		</div>
-		<div v-else-if="loading" class="loading-indicator" role="status">
-			{{ t('social', 'Loading…') }}
 		</div>
 		<p v-else-if="cursor !== ''" class="follow-requests__more">
 			<NcButton :disabled="loadingMore" @click="fetchRequests(true)">
 				{{ loadingMore ? t('social', 'Loading…') : t('social', 'Load more') }}
 			</NcButton>
 		</p>
-	</div>
+	</section>
 </template>
 
 <script>
-import PageHeader from '../components/PageHeader.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import { translate as t } from '@nextcloud/l10n'
+import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { showError } from '../services/toast.js'
-import ActorAvatar from '../components/ActorAvatar.vue'
+import ActorAvatar from './ActorAvatar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import EmptyContent from '../components/EmptyContent.vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import logger from '../services/logger.js'
@@ -84,10 +72,8 @@ const PAGE_SIZE = 40
 export default {
 	name: 'FollowRequests',
 	components: {
-		PageHeader,
 		ActorAvatar,
 		NcButton,
-		EmptyContent,
 		Check,
 		Close,
 	},
@@ -106,23 +92,9 @@ export default {
 	},
 
 	computed: {
-		/**
-		 * The page empty. The action is the switch the sentence names: the
-		 * page is empty for two quite different reasons, and one of them is
-		 * that the switch is off.
-		 *
-		 * @return {object}
-		 */
-		emptyState() {
-			return {
-				illustration: 'nobody-yet',
-				title: t('social', 'No pending follow requests'),
-				description: t('social', 'When your account is locked, people asking to follow you show up here.'),
-				action: {
-					label: t('social', 'Who can find and follow you'),
-					to: { name: 'settings', hash: '#account' },
-				},
-			}
+		/** @return {string} the id that names the section for screen readers */
+		headingId() {
+			return `follow-requests-${this.$.uid}`
 		},
 	},
 
@@ -131,6 +103,9 @@ export default {
 	},
 
 	methods: {
+		t,
+		n,
+
 		/**
 		 * The pending requests, a page at a time.
 		 *
@@ -203,11 +178,16 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.social__follow-requests {
+.follow-requests {
 	max-width: var(--social-column);
-	margin: 15px auto;
-	padding: 0 10px;
+	margin: 0 auto 16px;
+	padding: 0 10px 8px;
+	border-bottom: 1px solid var(--color-border);
 
+	&__heading {
+		margin: 8px 0 4px;
+		font-size: 1.1em;
+	}
 }
 
 .follow-request {
@@ -247,7 +227,7 @@ export default {
 	}
 }
 
-.loading-indicator {
+.follow-requests__failed {
 	text-align: center;
 	padding: 20px;
 }

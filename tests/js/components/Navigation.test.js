@@ -1061,7 +1061,6 @@ describe('Navigation', () => {
 			'Direct messages',
 			'Discover',
 			// the profile entry appears only when an ActivityPub account exists
-			'Follow requests',
 			'Favorites',
 			'Bookmarks',
 			'Statistics',
@@ -1081,7 +1080,6 @@ describe('Navigation', () => {
 		const wrapper = mountNavigation()
 
 		expect(moreNames(wrapper)).toEqual([
-			'Follow requests',
 			'Favorites',
 			'Bookmarks',
 			'Statistics',
@@ -1261,7 +1259,6 @@ describe('Navigation', () => {
 		['Direct messages', { name: 'timeline', params: { type: 'direct' } }],
 		['Favorites', { name: 'timeline', params: { type: 'favourites' } }],
 		['Statistics', { name: 'statistics' }],
-		['Follow requests', { name: 'follow-requests' }],
 		['Bookmarks', { name: 'timeline', params: { type: 'bookmarks' } }],
 		['About this server', { name: 'about' }],
 		['Settings', { name: 'settings' }],
@@ -1378,7 +1375,6 @@ describe('Navigation', () => {
 		['/timeline/videos', 'Videos'],
 		['/timeline/favourites', 'Favorites'],
 		['/timeline/bookmarks', 'Bookmarks'],
-		['/follow_requests', 'Follow requests'],
 	])('marks only one entry active on %s', (path, active) => {
 		const wrapper = mountNavigation({}, appRouter.resolve(path))
 		expect(activeNames(wrapper)).toEqual([active])
@@ -1852,7 +1848,6 @@ describe('Navigation entries are links', () => {
 		['My Feed', '/index.php/apps/social/timeline'],
 		['Activities', '/index.php/apps/social/timeline/notifications'],
 		['Direct messages', '/index.php/apps/social/timeline/direct'],
-		['Follow requests', '/index.php/apps/social/follow_requests'],
 		['Favorites', '/index.php/apps/social/timeline/favourites'],
 		['Bookmarks', '/index.php/apps/social/timeline/bookmarks'],
 		['Blocking', '/index.php/apps/social/blocked'],
@@ -1880,17 +1875,16 @@ describe('Navigation entries are links', () => {
 		// and only calls preventDefault() when it has one. Driven from a click
 		// handler instead, the fragment navigation that followed the click
 		// reached vue-router as a popstate and cancelled the route change that
-		// the click had just started — which is why "Follow requests", whose
-		// chunk still had to be fetched, went nowhere while every entry on the
-		// already-loaded timeline chunk resolved before the popstate landed.
+		// the click had just started — which is why an entry whose chunk still
+		// had to be fetched went nowhere.
 		const wrapper = await mountReal()
 		const event = new MouseEvent('click', { bubbles: true, cancelable: true })
-		link(wrapper, 'Follow requests').element.dispatchEvent(event)
+		link(wrapper, 'Discover').element.dispatchEvent(event)
 		await flushPromises()
 
 		expect(event.defaultPrevented).toBe(true)
 		// the view is a lazy chunk, so the navigation lands a few ticks later
-		await vi.waitFor(() => expect(appRouter.currentRoute.value.name).toBe('follow-requests'))
+		await vi.waitFor(() => expect(appRouter.currentRoute.value.name).toBe('discover'))
 	})
 
 	/**
