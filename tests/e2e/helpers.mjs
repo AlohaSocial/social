@@ -205,7 +205,6 @@ export function appPages(profile = OTHER_USER) {
 		{ name: 'direct-messages', path: '/timeline/direct', marker: '.direct-messages' },
 		{ name: 'discover', path: '/discover', marker: '.discover' },
 		{ name: 'profile', path: `/@${profile}`, marker: '.user-profile' },
-		{ name: 'follow-requests', path: '/follow_requests', marker: '.social__follow-requests' },
 		{ name: 'liked-posts', path: '/timeline/favourites', marker: '.social__wrapper' },
 		{ name: 'bookmarks', path: '/timeline/bookmarks', marker: '.social__wrapper' },
 		{ name: 'statistics', path: '/statistics', marker: '.stats' },
