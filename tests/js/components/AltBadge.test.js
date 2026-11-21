@@ -18,10 +18,12 @@ function mountBadge(description = 'A cat asleep on a keyboard') {
 
 describe('the ALT badge', () => {
 	it('starts closed, and says so', () => {
-		const wrapper = mountBadge()
+		// in the document, where jsdom computes the style that hides it
+		const wrapper = mount(AltBadge, { props: { description: 'A cat asleep on a keyboard' }, attachTo: document.body })
 
 		expect(wrapper.find('.alt-badge').attributes('aria-expanded')).toBe('false')
 		expect(wrapper.find('.alt-description').isVisible()).toBe(false)
+		wrapper.unmount()
 	})
 
 	it('reveals the description when pressed', async () => {
