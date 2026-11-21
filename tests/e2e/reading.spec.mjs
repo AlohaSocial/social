@@ -107,7 +107,7 @@ test.describe('reading, in a browser', () => {
 	test('Discover opens each tab without emptying the page', async ({ page }) => {
 		await openApp(page, '/discover')
 
-		for (const tab of ['People', 'Starter packs', 'Pictures', 'Videos', 'Hashtags']) {
+		for (const tab of ['People', 'Starter packs', 'Photos', 'Videos', 'Hashtags']) {
 			await page.locator('.discover .switcher').getByRole('radio', { name: tab }).click()
 			await expect(page.locator('.discover'), `${tab} kept the page`).toBeVisible()
 			await expect(page.locator('.discover')).not.toBeEmpty()
