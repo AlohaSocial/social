@@ -255,7 +255,7 @@ class InterestsController extends ClientApiController {
 	/**
 	 * Why a reader whose settings are not `active` is not learned from.
 	 *
-	 * @param array{learning: bool, paused: bool, instancePaused: bool, noticeAcknowledged: bool} $settings
+	 * @param array{learning: bool, paused: bool, instancePaused: bool, noticeAcknowledged: bool, ...} $settings
 	 */
 	public static function notLearningReason(array $settings): string {
 		if (!$settings['learning']) {
