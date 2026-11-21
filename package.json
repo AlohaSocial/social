@@ -72,7 +72,7 @@
 		"@playwright/test": "^1.64.1",
 		"@vitejs/plugin-vue": "^6.0.10",
 		"@vitest/coverage-v8": "^5.1.0",
-		"@vue/compiler-dom": "3.5.44",
+		"@vue/compiler-dom": "3.5.45",
 		"@vue/compiler-sfc": "^3.5.44",
 		"@vue/test-utils": "^2.5.1",
 		"babel-loader": "^10.1.1",
