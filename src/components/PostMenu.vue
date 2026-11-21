@@ -3,227 +3,227 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcActions @update:open="$emit('update:open', $event)">
-		<NcActionButton v-if="canQuote" closeAfterClick @click="$emit('quote')">
-			<template #icon>
-				<FormatQuoteClose :size="20" />
-			</template>
-			{{ t('social', 'Quote') }}
-		</NcActionButton>
-		<NcActionButton
-			v-if="isMine"
-			icon="icon-rename"
-			closeAfterClick
-			@click="$emit('edit')">
-			{{ t('social', 'Edit') }}
-		</NcActionButton>
-		<!-- the answer to "this no longer belongs on my profile" that is not
-		     destroying it. Nothing federates: the post stays on every server
-		     that received it, which is what deleting is for -->
-		<NcActionButton
-			v-if="isMine && isLocal"
-			:disabled="archiving"
-			closeAfterClick
-			@click="$emit('archive')">
-			<template #icon>
-				<IconArchiveOutline :size="20" />
-			</template>
-			{{ item.archived ? t('social', 'Put back on my profile') : t('social', 'Archive') }}
-		</NcActionButton>
-		<!-- who may quote it, and who already has. The two are deliberately one
-		     dialog: the reason to let people quote you is the same reason to be
-		     able to stop one of them -->
-		<NcActionButton
-			v-if="isMine && isLocal"
-			closeAfterClick
-			@click="$emit('manageQuotes')">
-			<template #icon>
-				<FormatQuoteClose :size="20" />
-			</template>
-			{{ t('social', 'Quotes of this post') }}
-		</NcActionButton>
-		<NcActionButton
-			v-if="isMine && isLocal"
-			closeAfterClick
-			@click="$emit('manageReplies')">
-			<template #icon>
-				<IconCommentAccountOutline :size="20" />
-			</template>
-			{{ t('social', 'Who can reply') }}
-		</NcActionButton>
-		<!-- a reply in a thread of the reader's own: they may hide it from
-		     the conversation, wherever it was written -->
-		<NcActionButton
-			v-if="item.can_hide === true && item.in_reply_to_id"
-			closeAfterClick
-			@click="$emit('hideReply', !item.hidden_by_author)">
-			<template #icon>
-				<IconEyeOutline v-if="item.hidden_by_author" :size="20" />
-				<IconEyeOffOutline v-else :size="20" />
-			</template>
-			{{ item.hidden_by_author ? t('social', 'Show reply') : t('social', 'Hide reply') }}
-		</NcActionButton>
-		<!-- who is in the picture, which only the author may say: anybody able
-		     to write a name onto anybody's photograph could put a post in front
-		     of an audience that did not ask for it -->
-		<NcActionButton
-			v-if="isMine && hasPictures"
-			closeAfterClick
-			@click="$emit('tagPeople')">
-			<template #icon>
-				<IconAccountBoxMultiple :size="20" />
-			</template>
-			{{ t('social', 'Tag people') }}
-		</NcActionButton>
-		<NcActionButton
-			v-if="isMine"
-			icon="icon-delete"
-			closeAfterClick
-			@click="$emit('delete')">
-			{{ t('social', 'Delete') }}
-		</NcActionButton>
-		<!-- the correction people actually make: the post goes and its words
-		     come back in the composer, to be posted again as a new post -->
-		<NcActionButton v-if="isMine" closeAfterClick @click="$emit('redraft')">
-			<template #icon>
-				<PencilBoxOutline :size="20" />
-			</template>
-			{{ t('social', 'Delete & re-draft') }}
-		</NcActionButton>
-		<NcActionButton
-			v-if="canTranslate"
-			:disabled="translating"
-			closeAfterClick
-			@click="$emit('translate')">
-			<template #icon>
-				<Translate :size="20" />
-			</template>
-			{{ translated ? t('social', 'Show original') : t('social', 'Translate') }}
-		</NcActionButton>
-		<!-- where the post got to: the queue knows, and this asks it for the
-		     author, who is the only one it is answered for -->
-		<NcActionButton v-if="isMine && isLocal" closeAfterClick @click="$emit('delivery')">
-			<template #icon>
-				<SendCheck :size="20" />
-			</template>
-			{{ t('social', 'Delivery status') }}
-		</NcActionButton>
-		<!-- NcActionLink sets rel="nofollow noreferrer noopener" itself -->
-		<NcActionLink
-			v-if="(!origin.local || onBluesky) && item.url"
-			:href="item.url"
-			target="_blank">
-			<template #icon>
-				<OpenInNew :size="20" />
-			</template>
-			{{ onBluesky ? t('social', 'Open on Bluesky') : t('social', 'Open on original instance') }}
-		</NcActionLink>
-		<NcActionButton v-if="canEmbed" closeAfterClick @click="copyEmbedCode">
-			<template #icon>
-				<ContentCopy :size="20" />
-			</template>
-			{{ t('social', 'Copy code') }}
-		</NcActionButton>
-		<NcActionButton closeAfterClick @click="$emit('bookmark')">
-			<template #icon>
-				<Bookmark v-if="item.bookmarked" :size="20" />
-				<BookmarkOutline v-else :size="20" />
-			</template>
-			{{ item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark') }}
-		</NcActionButton>
-		<!-- the keyboard's way to a reaction: the heart offers them on a hold
-		     or a right-click, neither of which a keyboard has -->
-		<NcActionButton v-if="!isPublic" closeAfterClick @click="$emit('react')">
-			<template #icon>
-				<EmoticonPlusOutline :size="20" />
-			</template>
-			{{ t('social', 'Add a reaction') }}
-		</NcActionButton>
-		<!-- the thread, not the person: muting an account is too blunt when
-		     one conversation has gone wrong, and it is possible only after
-		     the unwanted mention has arrived -->
-		<NcActionButton v-if="!isPublic" closeAfterClick @click="$emit('muteConversation')">
-			<template #icon>
-				<BellOutline v-if="item.muted" :size="20" />
-				<BellOffOutline v-else :size="20" />
-			</template>
-			{{ item.muted ? t('social', 'Unmute conversation') : t('social', 'Mute conversation') }}
-		</NcActionButton>
-		<!-- an album is made of the reader's own pictures; where the picture
-		     is, is where it is put into one -->
-		<NcActionButton v-if="canCollect" closeAfterClick @click="$emit('collect')">
-			<template #icon>
-				<FolderMultiplePlusOutline :size="20" />
-			</template>
-			{{ t('social', 'Add to a collection') }}
-		</NcActionButton>
-		<NcActionButton v-if="canPin" closeAfterClick @click="$emit('pin')">
-			<template #icon>
-				<Pin v-if="!item.pinned" :size="20" />
-				<PinOff v-else :size="20" />
-			</template>
-			{{ item.pinned ? t('social', 'Unpin from profile') : t('social', 'Pin to profile') }}
-		</NcActionButton>
-		<!-- teaches For you about the post's hashtags; only offered where
-		     there is something to teach it -->
-		<NcActionButton v-if="canLessLikeThis && !canOfferRecommendationFeedback" closeAfterClick @click="$emit('lessLikeThis')">
-			<template #icon>
-				<ThumbDownOutline :size="20" />
-			</template>
-			{{ t('social', 'Less like this') }}
-		</NcActionButton>
-		<template v-if="canOfferRecommendationFeedback">
-			<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_SIMILAR')">
+	<NcActions @update:open="onOpen">
+		<!-- one level down: For you feedback, or the details of a post of your own -->
+		<template v-if="submenu !== ''">
+			<NcActionButton @click="submenu = ''">
 				<template #icon>
-					<ThumbUpOutline :size="20" />
+					<IconArrowLeft :size="20" />
 				</template>
-				{{ t('social', 'Show me more like this post') }}
+				{{ t('social', 'Back') }}
 			</NcActionButton>
-			<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'LESS_SIMILAR')">
-				<template #icon>
-					<ThumbDownOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me less like this post') }}
-			</NcActionButton>
-			<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'HIDE_POST')">
-				<template #icon>
-					<IconEyeOffOutline :size="20" />
-				</template>
-				{{ t('social', 'Hide this post from For You') }}
-			</NcActionButton>
-			<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'MORE_AUTHOR')">
-				<template #icon>
-					<AccountPlusOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me more from this author') }}
-			</NcActionButton>
-			<NcActionButton :disabled="recommendationFeedbackLoading || !feedbackContext?.format" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_FORMAT')">
-				<template #icon>
-					<ShapeOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me more {format}', { format: recommendationFormatLabel }) }}
-			</NcActionButton>
+			<NcActionSeparator />
+			<template v-if="submenu === 'tune'">
+				<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_SIMILAR')">
+					<template #icon>
+						<ThumbUpOutline :size="20" />
+					</template>
+					{{ t('social', 'More like this') }}
+				</NcActionButton>
+				<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'LESS_SIMILAR')">
+					<template #icon>
+						<ThumbDownOutline :size="20" />
+					</template>
+					{{ t('social', 'Less like this') }}
+				</NcActionButton>
+				<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'MORE_AUTHOR')">
+					<template #icon>
+						<AccountPlusOutline :size="20" />
+					</template>
+					{{ t('social', 'More from this author') }}
+				</NcActionButton>
+				<NcActionButton :disabled="recommendationFeedbackLoading || !feedbackContext?.format" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_FORMAT')">
+					<template #icon>
+						<ShapeOutline :size="20" />
+					</template>
+					{{ t('social', 'More {format}', { format: recommendationFormatLabel }) }}
+				</NcActionButton>
+				<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'HIDE_POST')">
+					<template #icon>
+						<IconEyeOffOutline :size="20" />
+					</template>
+					{{ t('social', 'Hide from For you') }}
+				</NcActionButton>
+			</template>
+			<template v-else-if="submenu === 'details'">
+				<NcActionButton v-if="isMine && isLocal" closeAfterClick @click="$emit('delivery')">
+					<template #icon>
+						<SendCheck :size="20" />
+					</template>
+					{{ t('social', 'Delivery status') }}
+				</NcActionButton>
+				<NcActionButton v-if="canEmbed" closeAfterClick @click="copyEmbedCode">
+					<template #icon>
+						<ContentCopy :size="20" />
+					</template>
+					{{ t('social', 'Copy embed code') }}
+				</NcActionButton>
+			</template>
 		</template>
-		<!-- what to do about somebody else, from the post that made the reader
-		     want to: both take their posts out of every timeline at once -->
-		<NcActionButton v-if="canModerateAuthor" closeAfterClick @click="$emit('mute')">
-			<template #icon>
-				<VolumeOff :size="20" />
+
+		<template v-else>
+			<NcActionButton v-if="canQuote" closeAfterClick @click="$emit('quote')">
+				<template #icon>
+					<FormatQuoteClose :size="20" />
+				</template>
+				{{ t('social', 'Quote') }}
+			</NcActionButton>
+			<NcActionButton
+				v-if="canTranslate"
+				:disabled="translating"
+				closeAfterClick
+				@click="$emit('translate')">
+				<template #icon>
+					<Translate :size="20" />
+				</template>
+				{{ translated ? t('social', 'Show original') : t('social', 'Translate') }}
+			</NcActionButton>
+			<!-- NcActionLink sets rel="nofollow noreferrer noopener" itself -->
+			<NcActionLink
+				v-if="(!origin.local || onBluesky) && item.url"
+				:href="item.url"
+				target="_blank">
+				<template #icon>
+					<OpenInNew :size="20" />
+				</template>
+				{{ onBluesky ? t('social', 'Open on Bluesky') : t('social', 'Open on original instance') }}
+			</NcActionLink>
+			<!-- the keyboard's way to a reaction: the heart offers them on a hold or a right-click -->
+			<NcActionButton v-if="!isPublic" closeAfterClick @click="$emit('react')">
+				<template #icon>
+					<EmoticonPlusOutline :size="20" />
+				</template>
+				{{ t('social', 'Add a reaction') }}
+			</NcActionButton>
+			<NcActionButton v-if="!isPublic" closeAfterClick @click="$emit('muteConversation')">
+				<template #icon>
+					<BellOutline v-if="item.muted" :size="20" />
+					<BellOffOutline v-else :size="20" />
+				</template>
+				{{ item.muted ? t('social', 'Unmute conversation') : t('social', 'Mute conversation') }}
+			</NcActionButton>
+			<!-- a reply in a thread of the reader's own, which they may hide wherever it was written -->
+			<NcActionButton
+				v-if="item.can_hide === true && item.in_reply_to_id"
+				closeAfterClick
+				@click="$emit('hideReply', !item.hidden_by_author)">
+				<template #icon>
+					<IconEyeOutline v-if="item.hidden_by_author" :size="20" />
+					<IconEyeOffOutline v-else :size="20" />
+				</template>
+				{{ item.hidden_by_author ? t('social', 'Show reply') : t('social', 'Hide reply') }}
+			</NcActionButton>
+
+			<template v-if="isMine">
+				<NcActionCaption :name="t('social', 'Your post')" />
+				<NcActionButton icon="icon-rename" closeAfterClick @click="$emit('edit')">
+					{{ t('social', 'Edit') }}
+				</NcActionButton>
+				<NcActionButton v-if="isLocal" closeAfterClick @click="$emit('manageReplies')">
+					<template #icon>
+						<IconCommentAccountOutline :size="20" />
+					</template>
+					{{ t('social', 'Who can reply') }}
+				</NcActionButton>
+				<!-- who may quote it, and who already has, in one dialog -->
+				<NcActionButton v-if="isLocal" closeAfterClick @click="$emit('manageQuotes')">
+					<template #icon>
+						<FormatQuoteClose :size="20" />
+					</template>
+					{{ t('social', 'Quotes of this post') }}
+				</NcActionButton>
+				<!-- only the author may say who is in a photo -->
+				<NcActionButton v-if="hasPhotos" closeAfterClick @click="$emit('tagPeople')">
+					<template #icon>
+						<IconAccountBoxMultiple :size="20" />
+					</template>
+					{{ t('social', 'Tag people') }}
+				</NcActionButton>
+				<NcActionButton v-if="canPin" closeAfterClick @click="$emit('pin')">
+					<template #icon>
+						<Pin v-if="!item.pinned" :size="20" />
+						<PinOff v-else :size="20" />
+					</template>
+					{{ item.pinned ? t('social', 'Unpin from profile') : t('social', 'Pin to profile') }}
+				</NcActionButton>
+				<NcActionButton v-if="canCollect" closeAfterClick @click="$emit('collect')">
+					<template #icon>
+						<FolderMultiplePlusOutline :size="20" />
+					</template>
+					{{ t('social', 'Add to a collection') }}
+				</NcActionButton>
+				<!-- off the profile without deleting: the post stays on every server that received it -->
+				<NcActionButton
+					v-if="isLocal"
+					:disabled="archiving"
+					closeAfterClick
+					@click="$emit('archive')">
+					<template #icon>
+						<IconArchiveOutline :size="20" />
+					</template>
+					{{ item.archived ? t('social', 'Put back on my profile') : t('social', 'Archive') }}
+				</NcActionButton>
+				<NcActionButton
+					v-if="isLocal || canEmbed"
+					isMenu
+					@click="submenu = 'details'">
+					<template #icon>
+						<IconInformationOutline :size="20" />
+					</template>
+					{{ t('social', 'Details') }}
+				</NcActionButton>
+				<NcActionButton icon="icon-delete" closeAfterClick @click="$emit('delete')">
+					{{ t('social', 'Delete') }}
+				</NcActionButton>
 			</template>
-			{{ t('social', 'Mute {account}', { account: item.account.acct }) }}
-		</NcActionButton>
-		<NcActionButton v-if="canModerateAuthor" closeAfterClick @click="$emit('block')">
-			<template #icon>
-				<Cancel :size="20" />
+			<NcActionButton v-else-if="canEmbed" closeAfterClick @click="copyEmbedCode">
+				<template #icon>
+					<ContentCopy :size="20" />
+				</template>
+				{{ t('social', 'Copy embed code') }}
+			</NcActionButton>
+
+			<template v-if="canOfferRecommendationFeedback">
+				<NcActionSeparator />
+				<NcActionButton isMenu @click="submenu = 'tune'">
+					<template #icon>
+						<IconTune :size="20" />
+					</template>
+					{{ t('social', 'Tune For you') }}
+				</NcActionButton>
 			</template>
-			{{ t('social', 'Block {account}', { account: item.account.acct }) }}
-		</NcActionButton>
-		<NcActionButton v-if="!isMine" closeAfterClick @click="$emit('report')">
-			<template #icon>
-				<Flag :size="20" />
+			<template v-else-if="canLessLikeThis">
+				<NcActionSeparator />
+				<NcActionButton closeAfterClick @click="$emit('lessLikeThis')">
+					<template #icon>
+						<ThumbDownOutline :size="20" />
+					</template>
+					{{ t('social', 'Less like this') }}
+				</NcActionButton>
 			</template>
-			{{ t('social', 'Report') }}
-		</NcActionButton>
+
+			<template v-if="!isMine && !isPublic">
+				<NcActionCaption :name="t('social', 'About {account}', { account: item.account.acct })" />
+				<NcActionButton v-if="canModerateAuthor" closeAfterClick @click="$emit('mute')">
+					<template #icon>
+						<VolumeOff :size="20" />
+					</template>
+					{{ t('social', 'Mute') }}
+				</NcActionButton>
+				<NcActionButton v-if="canModerateAuthor" closeAfterClick @click="$emit('block')">
+					<template #icon>
+						<Cancel :size="20" />
+					</template>
+					{{ t('social', 'Block') }}
+				</NcActionButton>
+				<NcActionButton closeAfterClick @click="$emit('report')">
+					<template #icon>
+						<Flag :size="20" />
+					</template>
+					{{ t('social', 'Report') }}
+				</NcActionButton>
+			</template>
+		</template>
 	</NcActions>
 </template>
 
@@ -232,11 +232,14 @@ import { translate as t } from '@nextcloud/l10n'
 import { showError, showSuccess } from '../services/toast.js'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActionLink from '@nextcloud/vue/components/NcActionLink'
+import NcActionCaption from '@nextcloud/vue/components/NcActionCaption'
 import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionSeparator from '@nextcloud/vue/components/NcActionSeparator'
+import IconArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
+import IconInformationOutline from 'vue-material-design-icons/InformationOutline.vue'
+import IconTune from 'vue-material-design-icons/TuneVariant.vue'
 import BellOffOutline from 'vue-material-design-icons/BellOffOutline.vue'
 import BellOutline from 'vue-material-design-icons/BellOutline.vue'
-import Bookmark from 'vue-material-design-icons/Bookmark.vue'
-import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import EmoticonPlusOutline from 'vue-material-design-icons/EmoticonPlusOutline.vue'
 import Cancel from 'vue-material-design-icons/Cancel.vue'
 import ContentCopy from 'vue-material-design-icons/ContentCopy.vue'
@@ -250,7 +253,6 @@ import IconEyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
 import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
-import PencilBoxOutline from 'vue-material-design-icons/PencilBoxOutline.vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
 import PinOff from 'vue-material-design-icons/PinOff.vue'
 import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
@@ -282,8 +284,6 @@ export default {
 	components: {
 		BellOffOutline,
 		BellOutline,
-		Bookmark,
-		BookmarkOutline,
 		EmoticonPlusOutline,
 		Cancel,
 		ContentCopy,
@@ -299,11 +299,15 @@ export default {
 		ThumbDownOutline,
 		ThumbUpOutline,
 		ShapeOutline,
+		IconArrowLeft,
+		IconInformationOutline,
+		IconTune,
 		NcActionButton,
+		NcActionCaption,
 		NcActionLink,
 		NcActions,
+		NcActionSeparator,
 		OpenInNew,
-		PencilBoxOutline,
 		Pin,
 		PinOff,
 		SendCheck,
@@ -386,10 +390,8 @@ export default {
 		'hideReply',
 		'tagPeople',
 		'delete',
-		'redraft',
 		'translate',
 		'delivery',
-		'bookmark',
 		'react',
 		'muteConversation',
 		'collect',
@@ -400,6 +402,13 @@ export default {
 		'block',
 		'report',
 	],
+
+	data() {
+		return {
+			/** '' for the main menu, 'tune' or 'details' for a submenu */
+			submenu: '',
+		}
+	},
 
 	computed: {
 		/** @return {boolean} whether recommendation feedback applies to this author's post in For You */
@@ -453,7 +462,7 @@ export default {
 		},
 
 		/** @return {boolean} whether there is a picture to name anybody in */
-		hasPictures() {
+		hasPhotos() {
 			return (this.item.media_attachments ?? []).length > 0
 		},
 
@@ -464,7 +473,7 @@ export default {
 		 * offering the action on anything else would be offering a refusal
 		 */
 		canCollect() {
-			return this.isMine && this.isLocal && this.hasPictures
+			return this.isMine && this.isLocal && this.hasPhotos
 		},
 
 		/**
@@ -528,6 +537,13 @@ export default {
 
 	methods: {
 		t,
+		onOpen(open) {
+			if (!open) {
+				this.submenu = ''
+			}
+			this.$emit('update:open', open)
+		},
+
 		async copyEmbedCode() {
 			try {
 				const embedUrl = new URL(this.item.url)

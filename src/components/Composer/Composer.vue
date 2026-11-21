@@ -886,7 +886,6 @@ export default {
 		initialQuote: { type: Object, default: null },
 		initialDraft: { type: Object, default: null },
 		initialDraftContext: { type: String, default: '' },
-		initialRedraft: { type: Object, default: null },
 		showReplyContext: { type: Boolean, default: false },
 		listenForIntents: { type: Boolean, default: true },
 
@@ -1059,7 +1058,6 @@ export default {
 			// unmounted() removes only these and not other components' listeners
 			onComposerReply: null,
 			onComposerQuote: null,
-			onComposerRedraft: null,
 			onComposerFocus: null,
 			onComposerPublished: null,
 			handedOffDraft: null,
@@ -1184,9 +1182,6 @@ export default {
 		 * @return {string} '' for a post of its own
 		 */
 		draftContext() {
-			if (this.initialRedraft !== null) {
-				return `redraft.${this.initialRedraft.id}`
-			}
 			// a re-draft opened from the Drafts list stays that draft when the
 			// post it answers or quotes is put back beside it
 			if (this.initialDraftContext.startsWith('redraft.')) {
@@ -1638,12 +1633,6 @@ export default {
 			eventBus.on('composer-quote', this.onComposerQuote)
 		}
 
-		// a post that was just deleted, coming back to be written again
-		this.onComposerRedraft = (post) => this.redraft(post)
-		if (this.listenForIntents) {
-			eventBus.on('composer-redraft', this.onComposerRedraft)
-		}
-
 		// the shortcuts help offers "n" to write a post; this is what answers it
 		this.onComposerFocus = () => this.focusInput()
 		if (this.listenForIntents) {
@@ -1665,7 +1654,6 @@ export default {
 
 		// before the mention prefill, which declines to overwrite a non-empty
 		// composer: whatever the last attempt left is what the reader wants back
-		const existingDraft = this.editItem ? null : loadDraft(this.draftContext)
 		if (this.editItem) {
 			this.restoreEdit()
 		} else {
@@ -1677,9 +1665,6 @@ export default {
 			} else {
 				this.onComposerReply(this.inReplyTo)
 			}
-		}
-		if (this.initialRedraft !== null && existingDraft === null) {
-			this.redraft(this.initialRedraft)
 		}
 
 		if (this.initialMention !== null) {
@@ -1732,7 +1717,6 @@ export default {
 		}
 		eventBus.off('composer-reply', this.onComposerReply)
 		eventBus.off('composer-quote', this.onComposerQuote)
-		eventBus.off('composer-redraft', this.onComposerRedraft)
 		eventBus.off('shortcut:compose', this.onComposerFocus)
 		eventBus.off('composer-published', this.onComposerPublished)
 	},
@@ -2312,55 +2296,6 @@ export default {
 					resolve(false)
 				}
 			})
-		},
-
-		/**
-		 * Fills the composer from a post that has just been deleted.
-		 *
-		 * Everything the post carried that this box can hold: the words, the
-		 * content warning, the audience, the language and the pictures. The
-		 * pictures are the uploads the server still holds — deleting a post
-		 * removes the post, not the media rows behind it — so they are put
-		 * back by id rather than uploaded again, which is what makes this
-		 * different from copying the text out by hand.
-		 *
-		 * A poll is not carried. Its votes belong to the post that was
-		 * deleted, and a new poll with the old options and no votes is a
-		 * different thing wearing its clothes; whoever wants one adds it here.
-		 *
-		 * Whatever is already in the box wins. A re-draft arrives from a menu
-		 * two clicks away, and overwriting half-written words with an old post
-		 * is not a correction anybody asked for.
-		 *
-		 * @param {object} post the post as the timeline held it
-		 */
-		redraft(post) {
-			this.expand()
-
-			if (this.statusIsEmpty && this.inputElement() !== undefined) {
-				this.inputElement().innerText = htmlToPlainText(post.content || '')
-				this.updateStatusContent()
-			}
-
-			const warning = (post.spoiler_text || '').trim()
-			if (warning !== '') {
-				this.showWarning = true
-				this.spoilerText = warning
-			}
-
-			if (isKnownVisibility(post.visibility)) {
-				this.visibility = post.visibility
-				this.visibilityChosen = true
-			}
-
-			if (isLanguageCode(post.language || '')) {
-				this.language = post.language
-			}
-
-			this.restoreMedia(post.media_attachments ?? [])
-			this.restoreRedraftTargets(post.in_reply_to_id ?? '', '', post.quote?.quoted_status ?? null)
-
-			this.focusInput()
 		},
 
 		/**

@@ -8,13 +8,13 @@ import { login, openApp } from './helpers.mjs'
 
 /**
  * The two things a Mastodon user reaches for in Settings and in a post's menu:
- * filtering a word, and correcting a post by deleting it and writing it again.
+ * filtering a word, and correcting a post of their own.
  *
  * Both are worth a browser test rather than a unit test because both are a
  * page talking to a route: the unit suite can prove the component asks, and
  * only this can prove the server answers.
  */
-test.describe('filters, and writing a post again', () => {
+test.describe('filters, and a post of your own', () => {
 	test.beforeEach(async ({ page }) => {
 		await login(page)
 	})
@@ -55,9 +55,9 @@ test.describe('filters, and writing a post again', () => {
 		await expect(section.locator('.filters__item', { hasText: word })).toHaveCount(0)
 	})
 
-	test('a post of your own offers Delete & re-draft', async ({ page }) => {
+	test('a post of your own offers Edit and Delete', async ({ page }) => {
 		await openApp(page)
-		const text = `Redraft check ${Date.now()}`
+		const text = `Own post check ${Date.now()}`
 
 		await page.locator('.navigation__compose').click()
 		const composer = page.locator('.modal-composer')
@@ -69,6 +69,7 @@ test.describe('filters, and writing a post again', () => {
 		await expect(post).toBeVisible({ timeout: 20_000 })
 		await post.hover()
 		await post.locator('button.action-item__menutoggle').first().click()
-		await expect(page.getByRole('menuitem', { name: 'Delete & re-draft' })).toBeVisible()
+		await expect(page.getByRole('menuitem', { name: 'Edit', exact: true })).toBeVisible()
+		await expect(page.getByRole('menuitem', { name: 'Delete', exact: true })).toBeVisible()
 	})
 })

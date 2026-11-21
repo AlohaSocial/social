@@ -604,7 +604,7 @@ in the sidebar.
   pushed out by what happens to be trending: the trending tags take only the
   room the rest leave, and a tag you already follow is not offered twice.
 - **Favorites** and **Bookmarks** — what you liked, and what you saved
-  with **Bookmark** in a post's menu. Bookmarks are private and never leave
+  with the bookmark button under a post. Bookmarks are private and never leave
   this server.
 - **Statistics** — what you have posted here and what came back: likes,
   boosts, replies and quotes per post, your best posts, when your posts do
@@ -634,8 +634,8 @@ Videos and Shorts can use the same ranking with the relevant media filter. A
 sparse candidate pool may include fallback discovery, so this feed is not a
 complete or guaranteed index of anything.
 
-Post menus offer feedback such as hiding a post, seeing more from an author, or
-seeing less like similar content. These actions influence recommendations; they
+**Tune For you** in a post's menu offers feedback: more or less like this, more
+from this author, more of this kind of post, or hiding the post. These actions influence recommendations; they
 do not follow, mute or block anyone. The feed may show a short explanation for a
 post while it is in For You. The explanation is tied to that feed and does not
 appear in ordinary timelines.
@@ -1341,7 +1341,7 @@ steps to move the account with your recovery phrase, even when this server is go
 it carries the recovery tool too. The archive from the **Migration** page holds the same files
 under `social/bluesky/`.
 
-The post menu's *Delivery status* shows whether a post is on Bluesky and opens
+*Details → Delivery status* in the menu of your own post shows whether a post is on Bluesky and opens
 it there.
 
 **Reading Bluesky.** Type a Bluesky handle — `alice.bsky.social`, no `@` —
