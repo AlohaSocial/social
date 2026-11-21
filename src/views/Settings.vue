@@ -123,23 +123,17 @@
 
 <script>
 import PageHeader from '../components/PageHeader.vue'
-import ArchivedPosts from '../components/ArchivedPosts.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
-import DraftsButton from '../components/DraftsButton.vue'
-import HeldPosts from '../components/HeldPosts.vue'
 import IntroductionSettings from '../components/IntroductionSettings.vue'
-import ScheduledPosts from '../components/ScheduledPosts.vue'
 import ShortcutsSettings from '../components/ShortcutsSettings.vue'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import IconAccount from 'vue-material-design-icons/AccountCircleOutline.vue'
 import IconAccountCheck from 'vue-material-design-icons/AccountCheckOutline.vue'
 import IconApps from 'vue-material-design-icons/KeyOutline.vue'
-import IconArchive from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconBellRing from 'vue-material-design-icons/BellRingOutline.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
-import IconDrafts from 'vue-material-design-icons/FileDocumentEditOutline.vue'
 import IconDirectMessages from 'vue-material-design-icons/MessageLockOutline.vue'
 import IconHelp from 'vue-material-design-icons/HelpCircleOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
@@ -148,11 +142,8 @@ import IconInvite from 'vue-material-design-icons/EmailPlusOutline.vue'
 import IconKeyboard from 'vue-material-design-icons/KeyboardOutline.vue'
 import IconLists from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconNotifications from 'vue-material-design-icons/BellOutline.vue'
-import IconPosts from 'vue-material-design-icons/NoteTextOutline.vue'
 import IconReading from 'vue-material-design-icons/BookOpenPageVariantOutline.vue'
 import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
-import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
-import IconScheduled from 'vue-material-design-icons/ClockOutline.vue'
 import IconSearch from 'vue-material-design-icons/Magnify.vue'
 import IconSecurity from 'vue-material-design-icons/ShieldKeyOutline.vue'
 import IconSenses from 'vue-material-design-icons/VolumeHigh.vue'
@@ -164,7 +155,6 @@ import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
 import { n, t } from '@nextcloud/l10n'
 import { useServerData } from '../composables/useServerData.js'
-import { useTimelineStore } from '../store/timeline.js'
 import { currentSection, scrollToSection, watchSections } from '../services/sectionRail.js'
 import { matchesQuery } from '../services/settingsSearch.js'
 
@@ -210,27 +200,22 @@ export default {
 		PageHeader,
 		AccountSettings,
 		ProfileLayoutSettings,
-		ArchivedPosts,
 		AuthorizedApps,
 		BlueskySettings,
 		DeleteAccount,
 		DirectMessagesSettings,
-		DraftsButton,
 		ExternalStorage,
 		FeaturedTagsSettings,
-		HeldPosts,
 		ForYouSettings,
 		IntroductionSettings,
 		InviteSettings,
 		IconAccount,
 		IconAccountCheck,
 		IconApps,
-		IconArchive,
 		IconBluesky,
 		IconBellRing,
 		IconDelete,
 		IconDirectMessages,
-		IconDrafts,
 		IconHelp,
 		IconInterests,
 		IconIntroduction,
@@ -238,11 +223,8 @@ export default {
 		IconKeyboard,
 		IconLists,
 		IconNotifications,
-		IconPosts,
 		IconReading,
 		IconRecap,
-		IconReview,
-		IconScheduled,
 		IconSearch,
 		IconSecurity,
 		IconCounts,
@@ -262,15 +244,13 @@ export default {
 		FilesCommentsSettings,
 		SensesSettings,
 		SensitiveMediaSettings,
-		ScheduledPosts,
 		ShortcutsSettings,
 	},
 
 	setup() {
 		const { serverData } = useServerData()
-		const timelineStore = useTimelineStore()
 
-		return { serverData, timelineStore }
+		return { serverData }
 	},
 
 	data() {
@@ -415,52 +395,6 @@ export default {
 					title: t('social', 'Who may reach you'),
 					lede: t('social', 'Whose posts, likes and follows reach you right away, and whose wait for you to look.'),
 				},
-				// the composer's own list, drawn here as a list rather than a button;
-				// it leaves out the drafts of direct messages, as it does there
-				{
-					id: 'drafts',
-					group: 'posts',
-					icon: 'IconDrafts',
-					component: 'DraftsButton',
-					props: { inline: true, disabled: this.timelineStore.composerDisplayStatus },
-					title: t('social', 'Drafts'),
-					lede: t('social', 'Posts, replies and quotes you started and have not sent yet. Continue one in the composer or delete it.'),
-				},
-				{
-					id: 'scheduled',
-					group: 'posts',
-					icon: 'IconScheduled',
-					component: 'ScheduledPosts',
-					title: t('social', 'Scheduled posts'),
-					lede: t('social', 'What you have written to be published later. Move one to another time or cancel it here.'),
-				},
-				{
-					id: 'review',
-					group: 'posts',
-					icon: 'IconReview',
-					component: 'HeldPosts',
-					title: t('social', 'Waiting for review'),
-					lede: t('social', 'Posts a moderator looks at before they go out, such as the first post of a new account. You can take one back.'),
-				},
-				{
-					id: 'archive',
-					group: 'posts',
-					icon: 'IconArchive',
-					component: 'ArchivedPosts',
-					title: t('social', 'Archived posts'),
-					lede: t('social', 'Posts you put away. They are off your profile and your timelines here, but not deleted on other servers. Put one back any time.'),
-				},
-				// Files is not open to a self-registered external user
-				...(external
-					? []
-					: [{
-							id: 'files-comments',
-							group: 'posts',
-							icon: 'IconFilesComments',
-							component: 'FilesCommentsSettings',
-							title: t('social', 'Replies in Files'),
-							lede: t('social', 'A photo you post from Files keeps a link to its file. Replies to the post can be read in the file\'s Comments tab, next to the photo they are about.'),
-						}]),
 				{
 					id: 'apps',
 					group: 'security',
@@ -469,6 +403,17 @@ export default {
 					title: t('social', 'Authorized apps'),
 					lede: t('social', 'Apps signed in to your account, such as a phone client. Sign out the ones you no longer use, or all of them after losing a phone.'),
 				},
+				// Files is not open to a self-registered external user
+				...(external
+					? []
+					: [{
+							id: 'files-comments',
+							group: 'security',
+							icon: 'IconFilesComments',
+							component: 'FilesCommentsSettings',
+							title: t('social', 'Replies in Files'),
+							lede: t('social', 'A photo you post from Files keeps a link to its file. Replies to the post can be read in the file\'s Comments tab, next to the photo they are about.'),
+						}]),
 				// where this server gives every account a Bluesky identity
 				...(this.serverData?.bluesky?.enabled === true
 					? [{
@@ -558,12 +503,6 @@ export default {
 					icon: 'IconNotifications',
 					title: t('social', 'Activities'),
 					description: t('social', 'When the app may interrupt you, and who may reach you.'),
-				},
-				{
-					id: 'posts',
-					icon: 'IconPosts',
-					title: t('social', 'Your posts'),
-					description: t('social', 'Drafts, and posts waiting to go out, waiting for review, or put away.'),
 				},
 				{
 					id: 'security',

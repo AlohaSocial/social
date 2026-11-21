@@ -2848,6 +2848,7 @@ Each store is installed per Pinia instance rather than per module registration, 
 | Path | Route name | View |
 |------|-----------|------|
 | `/` | — (redirects to `timeline`) | — |
+| `/timeline/favourites`, `/timeline/bookmarks` | — | redirect to `profile.saved` of the reader's own profile (`?list=bookmarks` for bookmarks) |
 | `/timeline/:type?` | `timeline` | Timeline |
 | `/timeline/:type?/tags/:tag` | `tags` | Timeline |
 | `/timeline/:type?/list/:id` | `list` | Timeline |
@@ -2867,12 +2868,12 @@ Each store is installed per Pinia instance rather than per module registration, 
 | `/shorts` | `shorts` | VideoShorts |
 | `/reels` | — (redirects to `shorts`, keeping the query) | — |
 | `/switch` | `switch` | SwitchWizard |
-| `/statistics` | `statistics` | Statistics |
+| `/statistics` | — | redirects to `profile.statistics` of the reader's own profile |
 | `/search/:term?` | `search` | Search |
 | `/@:account/:id` | `single-post` | TimelineSinglePost |
 | `/ostatus/follow` | — | Profile + ProfileTimeline |
 
-`profile.followers` and `profile.following` render the same `ProfileFollowers` component; it decides what to load from the route.
+`profile.followers` and `profile.following` render the same `ProfileFollowers` component; it decides what to load from the route. On the reader's own profile `profileKinds()` adds three tabs nobody else sees (`isOwnProfile()`): `profile.saved` (`ProfileSaved`: Favorites and Bookmarks), `profile.drafts` (`ProfileDrafts`: drafts, scheduled posts, posts waiting for review and archived posts) and `profile.statistics` (`ProfileStatistics`: `Statistics` with `embedded`, without its own header and account card). Each sends anybody else back to the profile.
 
 Views outside the router: `AccountSetup.vue` (rendered by `App.vue` while the reader has no local account: a branded welcome and a collapsible fediverse explanation precede the choice between creating an account here and publishing an existing external handle on the Nextcloud profile. Creating is selected by default, and only the selected form is shown; the creation form is `src/components/AccountSetupForm.vue`, which the sign-in page an app opens uses as well. The suggested username, live address preview, permanence warning and optional Bluesky address appear before explicit submission; the Bluesky address is computed by `src/utils/blueskyHandle.js`, a port of `HandleMapper::label()` that `tests/Atproto/Identity/fixtures/handle-labels.json` pins to the PHP from both sides, and the number the server adds to a taken label is only announced, since the page cannot know it. Linking creates no local account and does not enable posting through the external one: the screen ends on a done view with a link back to Nextcloud and a way to the creation form, and a later visit notes the `linkedHandle` above the two answers), `Dashboard.vue` (mounted by the dashboard entry), `OAuth2Authorize.vue` (mounted by the OAuth entry on `#social-oauth2`; for somebody without an account it asks for the username first, without the linking answer, which gives an app nothing to sign in to, and reloads into the consent once the account exists), `ProfilePageIntegration.vue` (registered by the profile entry as the `social-profile-section` custom element), and `OStatus.vue` (unreachable, per the table above).
 
