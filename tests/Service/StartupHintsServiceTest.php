@@ -42,14 +42,12 @@ class StartupHintsServiceTest extends TestCase {
 		$actor = (new Person())->setId('https://cloud.example/users/alice');
 		$this->announcements->method('hasActive')->willReturn(true);
 		$this->stories->method('hasLive')->willReturn(false);
-		$this->memories->method('recapEnabled')->with('alice')->willReturn(true);
 		$this->memories->method('mayHaveMemories')->with($actor)->willReturn(false);
 		$this->teams->method('hasTeamsFor')->with('alice')->willReturn(false);
 
 		$this->assertSame([
 			'has_announcements' => true,
 			'has_stories' => false,
-			'recap_enabled' => true,
 			'has_memories' => false,
 			'has_teams' => false,
 		], $this->service->forViewer($actor, 'alice'));

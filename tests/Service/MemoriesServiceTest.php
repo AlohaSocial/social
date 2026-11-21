@@ -182,14 +182,22 @@ class MemoriesServiceTest extends TestCase {
 		$this->assertSame([], $this->service->onThisDay(new Person(), new DateTimeZone('UTC')));
 	}
 
-	public function testTheRecapIsOffUntilItIsAskedFor(): void {
+	/** Statistics shows the week to everybody; the switch only puts it in a feed. */
+	public function testTheRecapCountsTheWeekWithTheFeedLineOff(): void {
 		$this->configService->method('getValueForUser')->willReturn('');
-		$this->profileHighlightsService->expects($this->never())->method('forActor');
+		$this->profileHighlightsService->method('forActor')->willReturn([
+			'available' => true,
+			'since' => 0,
+			'weeks' => [0, 2, 4],
+			'week_starts' => 0,
+			'hashtags' => [],
+		]);
 
 		$recap = $this->service->recap($this->actor(), 'alice');
 
 		$this->assertFalse($recap['enabled']);
-		$this->assertSame(0, $recap['this_week']);
+		$this->assertSame(4, $recap['this_week']);
+		$this->assertSame(2, $recap['last_week']);
 	}
 
 	/**

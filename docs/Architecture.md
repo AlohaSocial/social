@@ -982,7 +982,7 @@ behind it and is never refused there.
 
 It is built from plain buttons rather than from `NcCheckboxRadioSwitch`, for the one thing that component cannot do: a single indicator that *travels* between the three. Three controls that light up tell you where you landed; one pill that slides tells you where you came from, which is what makes a switch feel like a switch. The cost is that the accessibility is hand-written rather than inherited, so it is written in full — a `radiogroup` of `radio` buttons, `aria-checked`, arrow keys in both axes that wrap at the ends, a roving tabindex so the control is one tab stop rather than three, and the focus following the selection the way it does in a radio group. The pill itself is `aria-hidden`: what it shows is already on the options. The track is 42px — 30 for an option, 3 of padding either side — which is a little under a Nextcloud button, because the control labels a timeline rather than competing with it. An option is as wide as its own words and does not shrink (`flex: 0 0 auto`); the track sits in a scroll container, so seven translated labels stay readable in a reading column and the edges fade where more options are off screen. The pill is measured off the option it sits under, and the chosen option is scrolled into view as it changes. The compact presentation is a container query on the control's own width, not the window: below 600px the labels go and the icons stay, so a phone gets it even when the window is wide and the column is not. The states are written as `.switcher .switcher__option` rather than as one class because the server styles bare `button` elements and its `button:not(.button-vue, [class^="vs__"]):hover` is the more specific selector — left alone, Nextcloud's hover colour paints over the pill on the option you just chose. The movement — the slide, the overshoot, the kick the chosen icon gives, the turn the globe makes — is all inside `@media (prefers-reduced-motion: reduce)`, which switches every bit of it off.
 
-**What a switch looks like.** Changing scope changes the posts and nothing else. The scopes are one page to `pageOrder.js` (`isSamePage()`), so the view transition that animates a move between sidebar entries is not run for them: sliding the whole column moved the switcher out from under the pointer that had just used it. When the reader points at another scope on the switcher — the pointer entering it, focus, or a touch (`TimelineSwitcher`'s `intent` event) — `Timeline.vue` has the store fetch that scope's first page (`prefetchTimeline()`), and only then: most readers never switch, and the federated scope is the slowest and largest page there is, so fetching every scope on a timer after the first paint cost every visit three requests for pages almost nobody looked at. Those pages join the remembered lists — five of them, which covers the four scopes and wherever the reader came from — and a switch puts one on screen in the same render, without a request. A page fetched ahead is put back for three minutes; older, the switch asks the server as before, holding the list being left on screen dimmed while it does. Entries that replace a list already on screen appear in place rather than rising in, and the Shorts bar, the weekly recap and the memories are kept alive (`<KeepAlive>`) while the reader is on another scope, so coming back to My Feed does not draw them from nothing and push the posts down when each one's request answers; the Shorts bar is read again on the way back only when it is more than a minute old.
+**What a switch looks like.** Changing scope changes the posts and nothing else. The scopes are one page to `pageOrder.js` (`isSamePage()`), so the view transition that animates a move between sidebar entries is not run for them: sliding the whole column moved the switcher out from under the pointer that had just used it. When the reader points at another scope on the switcher — the pointer entering it, focus, or a touch (`TimelineSwitcher`'s `intent` event) — `Timeline.vue` has the store fetch that scope's first page (`prefetchTimeline()`), and only then: most readers never switch, and the federated scope is the slowest and largest page there is, so fetching every scope on a timer after the first paint cost every visit three requests for pages almost nobody looked at. Those pages join the remembered lists — five of them, which covers the four scopes and wherever the reader came from — and a switch puts one on screen in the same render, without a request. A page fetched ahead is put back for three minutes; older, the switch asks the server as before, holding the list being left on screen dimmed while it does. Entries that replace a list already on screen appear in place rather than rising in, and the Shorts bar and the memories are kept alive (`<KeepAlive>`) while the reader is on another scope, so coming back to My Feed does not draw them from nothing and push the posts down when each one's request answers; the Shorts bar is read again on the way back only when it is more than a minute old.
 
 It chooses between whatever it is given rather than between three timelines it knows about: each option carries a `value`, a label, an icon and the route it stands for, and the component routes and animates. That is why a **profile** carries the same control — Posts, Photos and Videos are the same shape of choice, one account seen three ways rather than three places — and why the words in those routes are the route's own (`timeline`, `federated`, `image`, `video`) rather than the labels beside them.
 
@@ -2825,9 +2825,9 @@ None of those entries is self-contained. Vue, `@nextcloud/vue` and pinia used to
 
 Server-side state is not a store: it is passed through Nextcloud's initial state as `serverData` and read by `useServerData`.
 
-**What the first screen need not ask for.** `serverData.startup` (`StartupHintsService`, signed-in readers with an account only) answers five questions the home timeline used to send a request each for, and nearly always got nothing back: `has_announcements` (an announcement applies now), `has_stories` (a 24-hour short is live anywhere on the instance), `recap_enabled` (the reader turned the weekly recap on), `has_memories` (the reader has a post, not a reply, more than a year less two days old, so On this day can find something) and `has_teams` (one of the reader's groups has a team account). Each is a single cheap query, and `false` only where the answer is certainly empty; a check that fails says `true`. `services/startupHints.js` reads them: `Announcements`, `ShortsBar`, `WeeklyRecap`, `OnThisDay` and the composer's team picker skip their request on `false` and ask where the page said nothing. The announcements and stories hints spare the first read only, because either can change while the page is open; `RecapSettings` corrects `recap_enabled` when the switch moves. The page also no longer carries `DirectMessages.vue` or `FirstRun.vue` in the home chunk (both `defineAsyncComponent`), nor `DeliveryDialog.vue` in the post card (fetched with the other rarely opened dialogs), and every toast goes through `services/toast.js`, which loads `@nextcloud/dialogs/toast` on the first toast — a static import of the package anywhere puts its 58 KB gzipped toast chunk, mostly the file picker's translations, on the path to the first screen (`tests/js/services/toast.test.js` guards it).
+**What the first screen need not ask for.** `serverData.startup` (`StartupHintsService`, signed-in readers with an account only) answers four questions the home timeline used to send a request each for, and nearly always got nothing back: `has_announcements` (an announcement applies now), `has_stories` (a 24-hour short is live anywhere on the instance), `has_memories` (the reader has a post, not a reply, more than a year less two days old, so On this day can find something) and `has_teams` (one of the reader's groups has a team account). Each is a single cheap query, and `false` only where the answer is certainly empty; a check that fails says `true`. `services/startupHints.js` reads them: `Announcements`, `ShortsBar`, `OnThisDay` and the composer's team picker skip their request on `false` and ask where the page said nothing. The announcements and stories hints spare the first read only, because either can change while the page is open. The page also no longer carries `DirectMessages.vue` or `FirstRun.vue` in the home chunk (both `defineAsyncComponent`), nor `DeliveryDialog.vue` in the post card (fetched with the other rarely opened dialogs), and every toast goes through `services/toast.js`, which loads `@nextcloud/dialogs/toast` on the first toast — a static import of the package anywhere puts its 58 KB gzipped toast chunk, mostly the file picker's translations, on the path to the first screen (`tests/js/services/toast.test.js` guards it).
 
-Reader preferences that shape the first feed are in that same initial state. `hideCounts` keeps counts consistent between the server response and optimistic actions; `hideRepliesInFeeds` filters replies out of the Home, public and hashtag feed cards while leaving them available in conversations. The `feed_preferences` API stores that choice per account, and the first server-provided Home page uses it before rendering so a refresh does not briefly show replies the reader chose to hide.
+Reader preferences that shape the first feed are in that same initial state. `hideCounts` keeps counts consistent between the server response and optimistic actions. Replies are never cards of their own in the Home, public and hashtag feeds (`FeedDisplayService::hidesReplies()`, true for every signed-in reader); they are read in their conversations.
 
 The reader's own account travels the same way. `NavigationController::provideViewerAccount()` puts the cached actor — the one `GET /api/v1/global/account/info` answers with, in the same export format — into the initial state as `currentAccount`, and `App.vue` seeds the account store from it. The app used to ask for it in `beforeMount()`, which cost every load a second authenticated round trip before anything could render, for something the page request was already holding. A page rendered before the account exists provides nothing, and the app asks the old way.
 
@@ -3167,13 +3167,11 @@ over a fixed list of moments (`like`, `boost`, `react`, `post`, `follow`, `dm`,
 `heart`, `roll`). The sounds are synthesised with the Web Audio API — a few
 oscillators and an envelope each, a band-passed noise sweep for `post` — so
 nothing is downloaded or decoded, and one `AudioContext` is made on the first
-press, which is the only moment a browser lets one start. The two switches are
-per device and per account in `localStorage` (`userKey()`), not on the server:
-sound is off until turned on, vibration on unless turned off (the app vibrated
-on a like before the switch existed), and `buzz()` also answers
+press, which is the only moment a browser lets one start. There is no
+switch: sound plays and the device vibrates, except that `buzz()` answers
 `prefers-reduced-motion`. The DM chime rides on
 `fetchUnreadDirectMessages()`: it sounds when the count rises, never for the
-first count a page reads. `SensesSettings.vue` is the Settings section.
+first count a page reads.
 
 **Shorts, kept and 24-hour.** Home carries the **Shorts bar** above the feed:
 the viewer's own tile (*Your shorts*, with a **+**), then the people they follow
@@ -3215,9 +3213,8 @@ with sound; when `play()` is rejected with `NotAllowedError` it plays it muted
 once more and sets `soundHeld`, which draws the "Tap for sound" hint. `muted`
 is the reader's choice and `soundHeld` only the browser's refusal for the video
 playing now, so the next video is asked with sound again. The choice is kept in
-`sessionStorage` (`userKey('social.videoMuted')`); without one, the
-per-device **Start videos with sound** switch (`videoSoundEnabled()` in
-`senses.js`, on by default) decides. WebKit allows sound per element, only once
+`sessionStorage` (`userKey('social.videoMuted')`); without one, videos start
+with sound. WebKit allows sound per element, only once
 a gesture has allowed that element, and a scroll is not a gesture. So Shorts
 has **one** `<video>` that sits absolutely over the slide on screen
 (`--at: playing`) and swaps its `src`, while the other slides show their
@@ -3320,12 +3317,12 @@ bound onto the section's component where it takes any) and sorts them
 into up to five groups: **Account and privacy** (`#account`; `#contact` —
 `ContactSettings.vue`: *Approve who follows you*, then `DirectMessagesSettings`
 at `#direct-messages` and `NotificationPolicySettings` at `#notification-policy`;
-`#profile-layout`; `#blocked` — `BlockedAccounts` with `embedded`; `#migration` —
+`#blocked` — `BlockedAccounts` with `embedded`; `#migration` —
 `MigrationSettings`; `#delete`, last because it cannot be undone), **Reading**
 (`#interests` — `ForYouSettings.vue`, one On / Paused / Off choice that sets both
 the hashtag interests and, where the administrator has recommendations on, the
 activity profile, plus the languages and one *Clear what was learned* —,
-`#sensitive`, `#counts`, `#feed-display`, `#recap`, `#senses`), **Activities**
+`#sensitive`, `#counts`), **Activities**
 (`#notifications`: right away or once a day, and quiet hours), **Apps** (`#apps`,
 `#files-comments`, `#storage`) and **Bluesky** where the server gives every account
 a Bluesky identity (`#bluesky` — `BlueskySettings.vue`, the handle, the DID, your
@@ -4302,7 +4299,8 @@ opening once when drawn (`onceKey` limits that to once per page load for a
 named moment) and simply open under reduced motion. The first post's
 celebration and a finished sign-up use it.
 
-**The weekly recap as a picture.** `WeeklyRecap`'s **Share as image** draws the
+**The weekly recap.** `WeeklyRecap` sits at the top of the reader's own
+Statistics tab: this week's post count and last week's. Its **Share as image** draws the
 week on a 1080px square canvas in the theme accent (`utils/recapImage.js`:
 the app's flower, the count, the recap's own translated sentences, the host)
 and opens the composer with the PNG attached through `composer-open`. The
@@ -5021,15 +5019,12 @@ update; if no Create arrives, the cache entry expires without making a post.
 
 ### Public profile navigation preferences
 
-`Model\ProfileLayout` validates the public default and visible tabs. `AccountService`
-reads and writes the existing per-user `profile_layout` config and rebuilds the
-actor cache; no new permission store or content query is introduced. `Person`
-exports the selection through the local account API and the optional native
-ActivityPub presentation extension. `LocalController::accountProfileLayout()`
-requires the current Nextcloud account and CSRF protection. Invalid defaults
-return 422. The parent Profile view supplies the same preference to its existing
-child views and resolves unspecified entry URLs with `router.replace`; explicit
-tab links remain authoritative. Public page state carries the configured cloud
+`Model\ProfileLayout` validates a default and visible tabs read from a remote
+actor's `profileDefaultTab` and `profileTabs`. A local actor always has
+`ProfileLayout::DEFAULT` (Posts, every tab): `Person::importFromDatabase()`
+ignores the layout in a local cached document, so a value stored by an earlier
+version has no effect. The web profile does not apply a layout at all.
+Public page state carries the configured cloud
 address without running signed-in setup, and local public lookups use bare
 usernames rather than generated remote handles. Guest views do not use private
 read-marker endpoints.

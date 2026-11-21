@@ -27,17 +27,11 @@ class FeedDisplayServiceTest extends TestCase {
 		$this->service = new FeedDisplayService($config);
 	}
 
-	public function testRepliesAreShownUntilTheReaderHidesThem(): void {
-		$this->assertFalse($this->service->hidesReplies('alice'));
-		$this->assertSame(['hide_replies' => false, 'thread_sort' => 'oldest'], $this->service->export('alice'));
+	public function testRepliesStayInTheirConversationsForEveryReader(): void {
+		$this->stored['alice'] = '0';
 
-		$this->service->setHidesReplies('alice', true);
-		$this->assertSame('1', $this->stored['alice']);
 		$this->assertTrue($this->service->hidesReplies('alice'));
-
-		$this->service->setHidesReplies('alice', false);
-		$this->assertSame('0', $this->stored['alice']);
-		$this->assertFalse($this->service->hidesReplies('alice'));
+		$this->assertSame(['hide_replies' => true, 'thread_sort' => 'oldest'], $this->service->export('alice'));
 	}
 
 	public function testNobodyInParticularHasNoFeedPreference(): void {

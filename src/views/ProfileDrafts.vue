@@ -46,15 +46,13 @@ export default {
 		TimelineSwitcher,
 	},
 
-	props: { profileLayout: { type: Object, default: undefined } },
-
 	computed: {
 		account() {
 			return String(this.$route.params.account ?? '')
 		},
 
 		kinds() {
-			return profileKinds(this.account, this.profileLayout, 'drafts')
+			return profileKinds(this.account)
 		},
 
 		sections() {

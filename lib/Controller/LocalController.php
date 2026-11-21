@@ -518,21 +518,6 @@ class LocalController extends Controller {
 		}
 	}
 
-	/** Update presentation only; the authenticated personal account owns the setting. */
-	#[NoAdminRequired]
-	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/account/profile-layout')]
-	public function accountProfileLayout(array $layout = []): DataResponse {
-		try {
-			$this->ownAccount();
-
-			return $this->success(['layout' => $this->accountService->setProfileLayout($this->userId, $layout)]);
-		} catch (\InvalidArgumentException $e) {
-			return $this->fail($e, [], Http::STATUS_UNPROCESSABLE_ENTITY, false);
-		} catch (Exception $e) {
-			return $this->failFor($e);
-		}
-	}
-
 	/**
 	 * One local account, as a profile page shows it. Rate limited, more
 	 * loosely than `globalAccountInfo`, so the route cannot be used to read

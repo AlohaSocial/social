@@ -8,6 +8,7 @@
 			:options="kinds"
 			value="statistics"
 			:label="t('social', 'Which of their posts to show')" />
+		<WeeklyRecap />
 		<Statistics embedded />
 	</div>
 </template>
@@ -16,6 +17,7 @@
 import { t } from '@nextcloud/l10n'
 import { defineAsyncComponent } from 'vue'
 import TimelineSwitcher from '../components/TimelineSwitcher.vue'
+import WeeklyRecap from '../components/WeeklyRecap.vue'
 import { isOwnProfile, profileKinds } from '../composables/useProfileKinds.js'
 
 /** How the owner's posts did, on their own profile. */
@@ -25,9 +27,8 @@ export default {
 	components: {
 		Statistics: defineAsyncComponent(() => import(/* webpackChunkName: "statistics" */'./Statistics.vue')),
 		TimelineSwitcher,
+		WeeklyRecap,
 	},
-
-	props: { profileLayout: { type: Object, default: undefined } },
 
 	computed: {
 		account() {
@@ -35,7 +36,7 @@ export default {
 		},
 
 		kinds() {
-			return profileKinds(this.account, this.profileLayout, 'statistics')
+			return profileKinds(this.account)
 		},
 	},
 

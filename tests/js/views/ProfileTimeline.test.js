@@ -305,8 +305,7 @@ describe('ProfileTimeline', () => {
 
 	describe('the preview of their pictures', () => {
 		const MosaicStub = { name: 'ProfileMosaic', props: ['account', 'to'], template: '<div class="mosaic-stub" />' }
-		const mountWith = (route, profileLayout = undefined) => mount(ProfileTimeline, {
-			props: { profileLayout },
+		const mountWith = (route) => mount(ProfileTimeline, {
 			global: {
 				plugins: [pinia],
 				mocks: { $route: route },
@@ -325,12 +324,6 @@ describe('ProfileTimeline', () => {
 
 		it.each(['image', 'video'])('is not drawn over the %s tab, which is pictures already', (media) => {
 			const wrapper = mountWith({ name: 'profile', params: { account: 'bob' }, query: { media } })
-
-			expect(wrapper.findComponent(MosaicStub).exists()).toBe(false)
-		})
-
-		it('is not drawn for an account that keeps Photos off its profile', () => {
-			const wrapper = mountWith({ name: 'profile', params: { account: 'bob' }, query: {} }, { tabs: ['posts', 'videos'] })
 
 			expect(wrapper.findComponent(MosaicStub).exists()).toBe(false)
 		})
