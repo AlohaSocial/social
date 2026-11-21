@@ -289,7 +289,7 @@ export const useNotificationsStore = defineStore('notifications', {
 					notifications: { last_read_id: String(lastReadId) },
 				})
 			} catch (error) {
-				showError(t('social', 'Could not save your place in the notifications'))
+				showError(t('social', 'Could not save your place in Activities'))
 				logger.error('Failed to move the notifications marker', { error })
 				// put back whatever the server actually thinks
 				this.fetchUnreadNotifications()

@@ -11,7 +11,7 @@
 			:item="{
 				illustration: 'quiet-timeline',
 				title: t('social', 'Nothing is waiting'),
-				description: t('social', 'When your settings hold a notification back, the person who sent it shows up here.'),
+				description: t('social', 'When your settings hold an activity back, the person behind it shows up here.'),
 			}" />
 
 		<template v-else>

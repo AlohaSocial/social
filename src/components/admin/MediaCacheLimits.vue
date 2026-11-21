@@ -8,7 +8,7 @@
 			{{ t('social', 'Media from other servers') }}
 		</h4>
 		<p class="social-admin__hint">
-			{{ t('social', 'Pictures and videos in posts from other servers are copied here so they load quickly. Once a day, copies past either limit are deleted, oldest first. A deleted copy is fetched again when somebody looks at it. 0 turns a limit off. Uploads from this server are never deleted.') }}
+			{{ t('social', 'Photos and videos in posts from other servers are copied here so they load quickly. Once a day, copies past either limit are deleted, oldest first. A deleted copy is fetched again when somebody looks at it. 0 turns a limit off. Uploads from this server are never deleted.') }}
 		</p>
 		<div class="media-cache">
 			<NcTextField

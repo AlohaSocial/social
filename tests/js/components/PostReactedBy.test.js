@@ -103,7 +103,7 @@ describe('PostReactedBy', () => {
 		expect(axios.get).toHaveBeenCalledWith(`${API}/statuses/42/reblogged_by`, expect.anything())
 		expect(axios.get).toHaveBeenCalledWith(`${API}/statuses/42/favourited_by`, expect.anything())
 		expect(wrapper.text()).toContain('Boosted by')
-		expect(wrapper.text()).toContain('Favourited by')
+		expect(wrapper.text()).toContain('Favorited by')
 		expect(wrapper.text()).not.toMatch(/by \d/)
 	})
 
@@ -118,7 +118,7 @@ describe('PostReactedBy', () => {
 		const rows = wrapper.findAll('.reacted-by__group')
 		expect(rows).toHaveLength(2)
 		expect(rows[0].text()).toContain('Boosted by 1 person')
-		expect(rows[1].text()).toContain('Favourited by 2 people')
+		expect(rows[1].text()).toContain('Favorited by 2 people')
 		expect(rows[1].findAll('.reacted-by__face')).toHaveLength(2)
 	})
 
@@ -128,7 +128,7 @@ describe('PostReactedBy', () => {
 		await flushPromises()
 
 		expect(wrapper.findAll('.reacted-by__group')).toHaveLength(1)
-		expect(wrapper.text()).toContain('Favourited by 1 person')
+		expect(wrapper.text()).toContain('Favorited by 1 person')
 	})
 
 	it('draws nothing rather than an error when the server refuses', async () => {
@@ -190,7 +190,7 @@ describe('PostReactedBy', () => {
 
 		expect(wrapper.findAll('.reacted-by__face')).toHaveLength(12)
 		// and the count, not the faces, is what says how many there are
-		expect(wrapper.text()).toContain('Favourited by 30 people')
+		expect(wrapper.text()).toContain('Favorited by 30 people')
 	})
 
 	it('fills the faces in again once, when the server is reading who reacted elsewhere', async () => {

@@ -327,7 +327,7 @@ describe('Statistics', () => {
 			.findAll('.stats__row dt')
 			.map((dt) => dt.text())
 
-		expect(labels[0]).toBe('With a picture or a video')
+		expect(labels[0]).toBe('With a photo or a video')
 		expect(labels).toContain('Text only')
 	})
 

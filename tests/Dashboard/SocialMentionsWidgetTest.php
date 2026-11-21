@@ -81,7 +81,7 @@ class SocialMentionsWidgetTest extends TestCase {
 			->willReturn('/apps/social/timeline/notifications');
 
 		$this->assertSame('/apps/social/timeline/notifications', $this->widget->getUrl());
-		$this->assertSame('Open notifications', $this->widget->getWidgetButtons('alice')[0]->getText());
+		$this->assertSame('Open Activities', $this->widget->getWidgetButtons('alice')[0]->getText());
 	}
 
 	public function testItAsksTheNotificationsProbeForMentionsOnly(): void {

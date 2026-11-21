@@ -411,16 +411,16 @@
 							<span v-if="compactOptions">{{ t('social', 'Made with AI') }}</span>
 						</NcButton>
 						<NcButton
-							:title="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
+							:title="showGifs ? t('social', 'Close the GIF library') : t('social', 'Add from the GIF library')"
 							variant="tertiary"
-							:aria-label="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
+							:aria-label="showGifs ? t('social', 'Close the GIF library') : t('social', 'Add from the GIF library')"
 							:aria-pressed="showGifs"
 							:disabled="attachmentsFull"
 							@click.prevent="showGifs = !showGifs">
 							<template #icon>
 								<FileGifBox :size="22" decorative title="" />
 							</template>
-							<span v-if="compactOptions">{{ t('social', 'Add from the picture library') }}</span>
+							<span v-if="compactOptions">{{ t('social', 'Add from the GIF library') }}</span>
 						</NcButton>
 
 						<NcButton

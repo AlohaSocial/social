@@ -25,7 +25,7 @@
 					type="number"
 					min="1"
 					max="10240"
-					:label="t('social', 'Largest picture or file (MB)')" />
+					:label="t('social', 'Largest photo or file (MB)')" />
 				<NcTextField
 					v-model="form.maxVideoSize"
 					class="server__number"
@@ -42,7 +42,7 @@
 					type="number"
 					min="0"
 					max="16384"
-					:label="t('social', 'Shrink pictures to (pixels)')"
+					:label="t('social', 'Shrink photos to (pixels)')"
 					:helperText="t('social', '0 keeps every upload exactly as it arrived, which is the default. A ceiling saves disk and bandwidth.')" />
 				<NcTextField
 					v-model="form.imageQuality"
@@ -308,9 +308,9 @@ export default {
 				// thing that tells the administrator what to change
 				this.saved = false
 				const reason = errorOf(error, t('social', 'Could not save the server settings'), {
-					max_size: t('social', 'Largest picture or file (MB)'),
+					max_size: t('social', 'Largest photo or file (MB)'),
 					max_video_size: t('social', 'Largest video (MB)'),
-					image_max_edge: t('social', 'Shrink pictures to (pixels)'),
+					image_max_edge: t('social', 'Shrink photos to (pixels)'),
 					image_quality: t('social', 'Stored at quality'),
 					video_max_height: t('social', 'Shrink videos to (pixels tall)'),
 					video_ladder_heights: t('social', 'Sizes to write (pixels tall, comma-separated)'),

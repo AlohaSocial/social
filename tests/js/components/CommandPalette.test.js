@@ -147,7 +147,7 @@ describe('CommandPalette', () => {
 				'Direct messages',
 				'My profile',
 				'Bookmarks',
-				'Liked posts',
+				'Favorites',
 				'Statistics',
 				'Settings',
 				'Lists',

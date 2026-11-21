@@ -388,7 +388,7 @@ export default {
 		emptyMediaDescription() {
 			return (this.active === 'videos')
 				? t('social', 'Videos people are watching will appear here.')
-				: t('social', 'Pictures people are looking at will appear here.')
+				: t('social', 'Photos people are looking at will appear here.')
 		},
 
 		tabs() {
@@ -400,7 +400,7 @@ export default {
 				// alone do not say which list is which
 				{ value: 'accounts', label: t('social', 'People'), short: t('social', 'People'), icon: AccountMultipleOutline },
 				{ value: 'packs', label: t('social', 'Starter packs'), short: t('social', 'Packs'), icon: PackageVariantClosed },
-				{ value: 'posts', label: t('social', 'Pictures'), short: t('social', 'Photos'), icon: ImageMultiple },
+				{ value: 'posts', label: t('social', 'Photos'), short: t('social', 'Photos'), icon: ImageMultiple },
 				{ value: 'videos', label: t('social', 'Videos'), short: t('social', 'Videos'), icon: PlayBoxMultiple },
 				{ value: 'tags', label: t('social', 'Hashtags'), short: t('social', 'Tags'), icon: Pound },
 			]

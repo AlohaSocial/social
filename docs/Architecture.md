@@ -2993,7 +2993,7 @@ labels as well as icons; scheduling and location share a group, followed by
 publishing settings, where language and reply policy sit beside each other.
 The **More options** toggle leads the toolbar in every composer, including
 inline composers on feeds, profiles, search, video pages and replies. The
-dialog title carries the author's avatar and a **New story** action beside
+dialog title carries the author's avatar and a **New short** action beside
 the title when stories are available; the story action opens the 24-hour short
 composer. The composer's inline author row is hidden in the dialog. A restored
 draft opens the options when it contains a non-default secondary setting.
@@ -3954,7 +3954,7 @@ It asked `only_media` alone until 0.26.70, which is Mastodon's question — *doe
 this post carry an attachment* — and is not the one a page called Photos is
 asking: measured against a live instance, forty posts of that timeline carried
 twenty-five video attachments. `media_type` is the app's own narrowing and the
-profile's Photos tab and Explore's Pictures tab were both already sending it;
+profile's Photos tab and Explore's Photos tab were both already sending it;
 this one page was not. `only_media` still goes out beside it, so a server that
 has not been upgraded yet answers with media rather than with everything. A post
 carrying both a picture and a video is `mixed` and is in both pages, which is

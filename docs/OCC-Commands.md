@@ -1649,7 +1649,7 @@ Supported `timeline` values (the `switch` in `StreamRequest::getTimeline()`):
 | `public` | Public timeline |
 | `direct` | Direct messages |
 | `account` | Posts of one account (combine with `--account`) |
-| `favourites` | Liked posts |
+| `favourites` | Favorites |
 | `bookmarks` | Posts the viewer bookmarked |
 | `notifications` | Notifications (rendered in the notification format) |
 | `#<tag>` | A leading `#` selects the hashtag timeline for `<tag>` |

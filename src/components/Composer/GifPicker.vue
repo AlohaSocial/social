@@ -8,13 +8,13 @@
 			<NcTextField
 				:modelValue="term"
 				class="gif-picker__search"
-				:label="t('social', 'Search the picture library')"
+				:label="t('social', 'Search the GIF library')"
 				:showTrailingButton="false"
 				@update:modelValue="onSearch" />
 			<NcButton
 				variant="tertiary"
-				:title="t('social', 'Close the picture library')"
-				:aria-label="t('social', 'Close the picture library')"
+				:title="t('social', 'Close the GIF library')"
+				:aria-label="t('social', 'Close the GIF library')"
 				@click="$emit('close')">
 				<template #icon>
 					<Close :size="20" />
@@ -149,7 +149,7 @@ export default {
 		 */
 		emptyMessage() {
 			return this.term === ''
-				? t('social', 'There are no pictures on this instance.')
+				? t('social', 'There are no GIFs on this instance.')
 				: t('social', 'Nothing here matches that.')
 		},
 

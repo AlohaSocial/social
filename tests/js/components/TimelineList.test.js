@@ -1866,8 +1866,8 @@ describe('TimelineList', () => {
 			['direct', 'Nothing private yet'],
 			['timeline', 'No local posts found'],
 			['federated', 'No global posts found'],
-			['notifications', 'No notifications found'],
-			['favourites', 'No liked posts found'],
+			['notifications', 'No activities yet'],
+			['favourites', 'No favorites found'],
 			['tags', 'No posts found for this tag'],
 		])('describes an empty %s timeline', async (type, title) => {
 			const { wrapper } = mountList({ route: { name: 'timeline', params: { type } } })

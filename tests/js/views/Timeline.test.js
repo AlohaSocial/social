@@ -311,7 +311,7 @@ describe('Timeline', () => {
 		[{ name: 'timeline', params: { type: 'notifications' } }, 'Activities', false],
 		[{ name: 'timeline', params: { type: 'timeline' } }, 'Local timeline', false],
 		[{ name: 'timeline', params: { type: 'federated' } }, 'Global timeline', false],
-		[{ name: 'timeline', params: { type: 'favourites' } }, 'Liked posts', false],
+		[{ name: 'timeline', params: { type: 'favourites' } }, 'Favorites', false],
 		[{ name: 'timeline', params: { type: 'bookmarks' } }, 'Bookmarks', false],
 		[{ name: 'timeline', params: { type: 'photos' } }, 'Photos', false],
 		[{ name: 'timeline', params: { type: 'videos' } }, 'Videos', false],
@@ -852,7 +852,7 @@ describe('Timeline', () => {
 			const wrapper = mountTimeline({ params: { type: 'notifications' } })
 
 			expect(filters(wrapper).props('options').map((option) => option.label))
-				.toEqual(['All', 'Mentions', 'Favourites', 'Boosts', 'Follows', 'Polls', 'Edits'])
+				.toEqual(['All', 'Mentions', 'Favorites', 'Boosts', 'Follows', 'Polls', 'Edits'])
 			// a filter of this page, not a page of its own
 			expect(filters(wrapper).props('options').every((option) => option.to === undefined)).toBe(true)
 		})
@@ -953,7 +953,7 @@ describe('Timeline', () => {
 			useNotificationsStore().setPolicyNotice(true)
 			const wrapper = mountTimeline({ params: { type: 'notifications' } })
 
-			expect(notice(wrapper).text()).toContain('You can now choose who reaches your notifications — new accounts and people you don\'t follow can wait for your review.')
+			expect(notice(wrapper).text()).toContain('You can now choose who reaches your activities — new accounts and people you don\'t follow can wait for your review.')
 			expect(notice(wrapper).text()).toContain('Choose in Settings')
 			expect(notice(wrapper).findComponent(RouterLinkStub).props('to')).toEqual({ name: 'settings', hash: '#notification-policy' })
 		})

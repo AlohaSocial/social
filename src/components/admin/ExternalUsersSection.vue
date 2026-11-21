@@ -37,7 +37,7 @@
 					type="number"
 					min="0"
 					:label="t('social', 'Media each may upload (MB)')"
-					:helperText="t('social', 'Pictures and videos they post. 0 is no limit.')" />
+					:helperText="t('social', 'Photos and videos they post. 0 is no limit.')" />
 				<NcTextField
 					v-model="form.minAge"
 					type="number"

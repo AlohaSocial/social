@@ -96,7 +96,7 @@ class NotifierSubjectsTest extends TestCase {
 	public static function subjectProvider(): array {
 		return [
 			'mention' => ['mention', 'Bob mentioned you in a post'],
-			'favourite' => ['favourite', 'Bob favourited your post'],
+			'favourite' => ['favourite', 'Bob favorited your post'],
 			'reblog' => ['reblog', 'Bob boosted your post'],
 			'follow' => ['follow', 'Bob is now following you'],
 			'follow_request' => ['follow_request', 'Bob wants to follow you'],
@@ -144,7 +144,7 @@ class NotifierSubjectsTest extends TestCase {
 			$this->notification('favourite', $this->params(['account' => ''])), 'en'
 		);
 
-		$this->assertSame(' favourited your post', $this->rendered['subject']);
+		$this->assertSame(' favorited your post', $this->rendered['subject']);
 	}
 
 	public static function nonUrlProvider(): array {

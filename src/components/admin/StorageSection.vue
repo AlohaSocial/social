@@ -21,7 +21,7 @@
 				</div>
 			</div>
 			<p class="social-admin__hint">
-				{{ t('social', 'What was posted from here is somebody\'s own work and is not going anywhere. The cached half is copies of other servers\' pictures and videos, kept within the limits below.') }}
+				{{ t('social', 'What was posted from here is somebody\'s own work and is not going anywhere. The cached half is copies of other servers\' photos and videos, kept within the limits below.') }}
 			</p>
 			<p class="social-admin__hint">
 				{{ t('social', 'Measured {when}.', { when: measuredAt }) }}

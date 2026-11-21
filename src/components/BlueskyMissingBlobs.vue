@@ -5,7 +5,7 @@
 <template>
 	<NcNoteCard type="warning" class="migration__bluesky-missing">
 		<p>
-			{{ n('social', '%n picture or video of your posts could not be copied here.', '%n pictures or videos of your posts could not be copied here.', count) }}
+			{{ n('social', '%n photo or video of your posts could not be copied here.', '%n photos or videos of your posts could not be copied here.', count) }}
 			{{ t('social', 'Your account is not pointed at this server until you decide.') }}
 		</p>
 		<ServerError v-if="error" :error="error" />
@@ -21,7 +21,7 @@
 			v-if="confirming"
 			:open="true"
 			:name="t('social', 'Go on without them?')"
-			:message="n('social', '%n picture or video of your posts could not be copied here. Your account is pointed at this server without it: the posts that show it lose it, and it is not copied later.', '%n pictures or videos of your posts could not be copied here. Your account is pointed at this server without them: the posts that show them lose them, and they are not copied later.', count)"
+			:message="n('social', '%n photo or video of your posts could not be copied here. Your account is pointed at this server without it: the posts that show it lose it, and it is not copied later.', '%n photos or videos of your posts could not be copied here. Your account is pointed at this server without them: the posts that show them lose them, and they are not copied later.', count)"
 			:confirmLabel="t('social', 'Go on without them')"
 			@update:open="confirming = false"
 			@confirm="decide(true)">

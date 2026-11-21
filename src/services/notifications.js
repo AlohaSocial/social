@@ -315,9 +315,9 @@ export function notificationSummary(notification) {
 		case 'severed_relationships':
 			return t('social', 'Some of your follows were removed because a server was blocked')
 		case 'story:react':
-			return t('social', '{account} reacted to your story', { account })
+			return t('social', '{account} reacted to your short', { account })
 		case 'story:comment':
-			return t('social', '{account} replied to your story', { account })
+			return t('social', '{account} replied to your short', { account })
 		case 'tagged':
 			return t('social', '{account} tagged you in a photo', { account })
 		case 'admin.sign_up':
