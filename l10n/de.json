@@ -3428,6 +3428,19 @@
     "Tune For you" : "„Für dich“ anpassen",
     "About {account}" : "Über {account}",
     "Anybody here can be followed from Mastodon or any other fediverse app." : "Allen hier kannst du von Mastodon oder einer anderen Fediverse-App aus folgen.",
-    "Read the public feed" : "Öffentlichen Feed lesen"
+    "Read the public feed" : "Öffentlichen Feed lesen",
+    "A list is a few of the people you follow, read as a timeline of its own." : "Eine Liste umfasst einige der Personen, denen du folgst, und wird als eigene Timeline gelesen.",
+    "Who can find you" : "Wer dich finden kann",
+    "Who can contact you" : "Wer dich kontaktieren kann",
+    "Blocked and muted" : "Blockiert und stummgeschaltet",
+    "Moving your account" : "Dein Konto umziehen",
+    "Account and privacy" : "Konto und Privatsphäre",
+    "Apps" : "Apps",
+    "Once a day, in a summary" : "Einmal am Tag, als Zusammenfassung",
+    "At" : "Um",
+    "Filtered activities" : "Gefilterte Aktivitäten",
+    "Also learn from likes, saves and the videos I watch" : "Auch aus Likes, Gespeichertem und angesehenen Videos lernen",
+    "Learn from my reading" : "Aus meinem Lesen lernen",
+    "Clear what was learned" : "Gelerntes löschen"
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

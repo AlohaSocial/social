@@ -27,49 +27,27 @@
 					value="digest"
 					:modelValue="draft.mode"
 					@update:modelValue="setMode">
-					{{ t('social', 'In a digest, at the times I choose') }}
+					{{ t('social', 'Once a day, in a summary') }}
 				</NcCheckboxRadioSwitch>
 			</fieldset>
 
 			<div v-if="isDigest" class="delivery-settings__group">
-				<ul class="delivery-settings__times">
-					<li v-for="(time, index) in draft.times" :key="index" class="delivery-settings__row">
-						<label :for="fieldId('time', index)" class="delivery-settings__label">
-							{{ t('social', 'Time {n}', { n: index + 1 }) }}
-						</label>
-						<input
-							:id="fieldId('time', index)"
-							class="delivery-settings__input"
-							type="time"
-							step="60"
-							required
-							:value="time"
-							@input="typeTime(index, $event)"
-							@blur="flushTimes">
-						<NcButton
-							v-if="draft.times.length > 1"
-							variant="tertiary"
-							:disabled="saving"
-							:aria-label="t('social', 'Remove time {n}', { n: index + 1 })"
-							@click="removeTime(index)">
-							<template #icon>
-								<IconClose :size="20" />
-							</template>
-						</NcButton>
-					</li>
-				</ul>
-				<NcButton
-					v-if="draft.times.length < maxTimes"
-					variant="tertiary"
-					:disabled="saving"
-					@click="addTime">
-					<template #icon>
-						<IconPlus :size="20" />
-					</template>
-					{{ t('social', 'Add a time') }}
-				</NcButton>
+				<div class="delivery-settings__row delivery-settings__daily">
+					<label :for="fieldId('time', 0)" class="delivery-settings__label">
+						{{ t('social', 'At') }}
+					</label>
+					<input
+						:id="fieldId('time', 0)"
+						class="delivery-settings__input"
+						type="time"
+						step="60"
+						required
+						:value="draft.times[0]"
+						@input="typeTime($event)"
+						@blur="flushTimes">
+				</div>
 				<p class="delivery-settings__hint">
-					{{ t('social', 'Phone and desktop get one summary per time, grouped by kind.') }}
+					{{ t('social', 'Phone and desktop get one summary, grouped by kind.') }}
 				</p>
 				<p v-if="timesError !== ''" class="delivery-settings__error" aria-live="polite">
 					{{ timesError }}
@@ -150,14 +128,10 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import debounce from 'debounce'
-import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import IconClose from 'vue-material-design-icons/Close.vue'
-import IconPlus from 'vue-material-design-icons/Plus.vue'
 import logger from '../services/logger.js'
 import {
 	DEFAULT_DELIVERY,
-	MAX_TIMES,
 	fetchNotificationDelivery,
 	isValidTime,
 	normaliseDelivery,
@@ -190,9 +164,6 @@ export default {
 	name: 'NotificationDeliverySettings',
 
 	components: {
-		IconClose,
-		IconPlus,
-		NcButton,
 		NcCheckboxRadioSwitch,
 	},
 
@@ -234,10 +205,6 @@ export default {
 			return this.isDigest || this.quietOn
 		},
 
-		/** @return {number} */
-		maxTimes() {
-			return MAX_TIMES
-		},
 	},
 
 	created() {
@@ -337,45 +304,11 @@ export default {
 		},
 
 		/**
-		 * The one place a time is added, so what it is added as is decided
-		 * once: the hour after the latest one, so the new row does not sit on
-		 * top of an existing one and is saved straight away rather than
-		 * waiting to be typed.
-		 */
-		addTime() {
-			if (this.draft.times.length >= MAX_TIMES) {
-				return
-			}
-			const taken = sortTimes(this.draft.times)
-			const latest = taken.length > 0 ? Number(taken[taken.length - 1].slice(0, 2)) : 7
-			let hour = (latest + 1) % 24
-			while (taken.includes(`${String(hour).padStart(2, '0')}:00`)) {
-				hour = (hour + 1) % 24
-			}
-			const time = `${String(hour).padStart(2, '0')}:00`
-			this.draft.times = [...this.draft.times, time]
-			this.saveTimesDebounced?.clear?.()
-			this.save({ times: sortTimes(this.draft.times) })
-		},
-
-		/** @param {number} index the row to drop */
-		removeTime(index) {
-			if (this.draft.times.length <= 1) {
-				return
-			}
-			this.draft.times = this.draft.times.filter((_, position) => position !== index)
-			this.saveTimesDebounced?.clear?.()
-			this.timesError = ''
-			this.save({ times: sortTimes(this.draft.times) })
-		},
-
-		/**
-		 * @param {number} index the row being typed in
 		 * @param {Event} event the input event, whose target holds the time so far
 		 */
-		typeTime(index, event) {
+		typeTime(event) {
 			const value = /** @type {HTMLInputElement} */ (event.target).value
-			this.draft.times = this.draft.times.map((time, position) => (position === index ? value : time))
+			this.draft.times = [value]
 			this.saveTimesDebounced?.()
 		},
 

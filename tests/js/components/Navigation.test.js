@@ -460,8 +460,11 @@ describe('Navigation', () => {
 			const manage = wrapper.findAll('.nav-caption__action').find((button) => button.text() === 'Manage lists')
 			expect(manage).toBeDefined()
 			await manage.trigger('click')
+			await flushPromises()
 
-			expect(router.push).toHaveBeenCalledWith({ name: 'settings', hash: '#lists' })
+			// edited where they are read, not in Settings
+			expect(router.push).not.toHaveBeenCalled()
+			expect(wrapper.findComponent({ name: 'SettingsDialog' }).props('title')).toBe('Lists')
 		})
 
 		/** The settings page owns them; this sidebar holds a copy of its own. */
@@ -1061,8 +1064,6 @@ describe('Navigation', () => {
 			'Direct messages',
 			'Discover',
 			// the profile entry appears only when an ActivityPub account exists
-			'Blocking',
-			'Migration',
 			'About this server',
 			'Settings',
 		])
@@ -1077,8 +1078,6 @@ describe('Navigation', () => {
 		const wrapper = mountNavigation()
 
 		expect(moreNames(wrapper)).toEqual([
-			'Blocking',
-			'Migration',
 			'About this server',
 			'Settings',
 		])
@@ -1265,12 +1264,12 @@ describe('Navigation', () => {
 		expect(router.push).toHaveBeenCalledWith(to)
 	})
 
-	it('offers the blocked and muted accounts in the settings section', () => {
+	/** Blocking and Migration are sections of Settings now. */
+	it('keeps only About and Settings under the account besides the profile', () => {
 		const wrapper = mountNavigation()
-		const entry = item(wrapper, 'Blocking')
 
-		expect(entry.attributes('data-href')).toBe(router.resolve({ name: 'blocked-accounts' }).href)
-		expect(wrapper.find('.nav-settings').text()).toContain('Blocking')
+		expect(wrapper.find('.nav-settings').text()).not.toContain('Blocking')
+		expect(wrapper.find('.nav-settings').text()).not.toContain('Migration')
 	})
 
 	// these rows live inside the Explore entry; that they do, and what they may
@@ -1837,8 +1836,6 @@ describe('Navigation entries are links', () => {
 		['My Feed', '/index.php/apps/social/timeline'],
 		['Activities', '/index.php/apps/social/timeline/notifications'],
 		['Direct messages', '/index.php/apps/social/timeline/direct'],
-		['Blocking', '/index.php/apps/social/blocked'],
-		['Migration', '/index.php/apps/social/migration'],
 	])('gives %s a real href', async (name, href) => {
 		expect(link(await mountReal(), name).attributes('href')).toBe(href)
 	})

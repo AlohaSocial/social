@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<form class="profile-layout-settings" @submit.prevent="save">
+	<div class="profile-layout-settings">
 		<p v-if="!account" role="status">
 			{{ t('social', 'Loading your account …') }}
 		</p>
@@ -13,7 +13,7 @@
 				id="profile-default-tab"
 				v-model="defaultTab"
 				:disabled="saving"
-				@change="saved = false">
+				@change="save">
 				<option value="posts">
 					{{ t('social', 'Posts') }}
 				</option>
@@ -42,14 +42,8 @@
 			<p v-if="saved" role="status">
 				{{ t('social', 'Profile layout saved') }}
 			</p>
-			<NcButton type="submit" variant="primary" :disabled="saving">
-				<template v-if="saving" #icon>
-					<NcLoadingIcon :size="20" />
-				</template>
-				{{ t('social', 'Save') }}
-			</NcButton>
 		</template>
-	</form>
+	</div>
 </template>
 
 <script>
@@ -57,9 +51,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { t } from '@nextcloud/l10n'
 import { mapStores } from 'pinia'
-import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { useAccountStore } from '../store/account.js'
 import { errorOf } from '../utils/serverError.js'
 
@@ -67,7 +59,7 @@ const ALL_TABS = ['posts', 'photos', 'videos', 'tagged', 'collections']
 
 export default {
 	name: 'ProfileLayoutSettings',
-	components: { NcButton, NcCheckboxRadioSwitch, NcLoadingIcon },
+	components: { NcCheckboxRadioSwitch },
 	data: () => ({ defaultTab: 'posts', tabs: [...ALL_TABS], saving: false, error: '', saved: false }),
 	computed: {
 		...mapStores(useAccountStore),
@@ -100,7 +92,7 @@ export default {
 			if (!this.tabs.includes(this.defaultTab)) {
 				this.defaultTab = 'posts'
 			}
-			this.saved = false
+			this.save()
 		},
 
 		async save() {

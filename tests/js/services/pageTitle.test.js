@@ -26,8 +26,6 @@ describe('the page title', () => {
 	it.each([
 		['settings', 'Settings'],
 		['discover', 'Discover'],
-		['blocked-accounts', 'Blocking'],
-		['migration', 'Migration'],
 		['shorts', 'Shorts'],
 		['search', 'Search'],
 		['not-found', 'Page not found'],

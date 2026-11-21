@@ -53,9 +53,7 @@ async function mountSettings(answer = instant) {
 const controls = (wrapper) => wrapper.findAllComponents({ name: 'NcCheckboxRadioSwitch' })
 const radio = (wrapper, value) => controls(wrapper).find((control) => control.props('type') === 'radio' && control.props('value') === value)
 const toggle = (wrapper, label) => controls(wrapper).find((control) => control.props('type') === 'switch' && control.text() === label)
-const timeInputs = (wrapper) => wrapper.findAll('.delivery-settings__times input[type="time"]')
-const buttonNamed = (wrapper, text) => wrapper.findAllComponents({ name: 'NcButton' }).find((button) => button.text() === text)
-const removeButtons = (wrapper) => wrapper.findAllComponents({ name: 'NcButton' }).filter((button) => (button.attributes('aria-label') ?? '').startsWith('Remove time'))
+const timeInputs = (wrapper) => wrapper.findAll('.delivery-settings__daily input[type="time"]')
 
 /**
  * @param {object} data what the server says is wrong
@@ -87,7 +85,7 @@ describe('the notification delivery section', () => {
 
 		expect(axios.get).toHaveBeenCalledWith(ROUTE)
 		expect(radio(wrapper, 'digest').props('modelValue')).toBe('digest')
-		expect(timeInputs(wrapper).map((input) => input.element.value)).toEqual(['08:00', '18:00'])
+		expect(timeInputs(wrapper).map((input) => input.element.value)).toEqual(['08:00'])
 		expect(toggle(wrapper, 'Quiet hours').props('modelValue')).toBe(true)
 		expect(wrapper.find('.delivery-settings__pair').exists()).toBe(true)
 		expect(wrapper.findAll('.delivery-settings__pair input[type="time"]').map((input) => input.element.value))
@@ -112,49 +110,20 @@ describe('the notification delivery section', () => {
 		await flushPromises()
 
 		expect(axios.patch).toHaveBeenCalledWith(ROUTE, { mode: 'digest' })
-		expect(timeInputs(wrapper)).toHaveLength(2)
-		expect(wrapper.text()).toContain('Phone and desktop get one summary per time, grouped by kind.')
+		expect(timeInputs(wrapper)).toHaveLength(1)
+		expect(wrapper.text()).toContain('Phone and desktop get one summary, grouped by kind.')
 		expect(toggle(wrapper, 'Direct messages').props('modelValue')).toBe(true)
 		expect(toggle(wrapper, 'Mentions from people I follow').props('modelValue')).toBe(true)
 	})
 
-	/** Every row has a name a screen reader can say, and a button that says what it removes. */
-	it('labels each time by its place and each remove button by the row it removes', async () => {
+	/** One summary a day, at one time, with a name a screen reader can say. */
+	it('asks for one time of day', async () => {
 		const wrapper = await mountSettings(digest)
 
-		const labels = wrapper.findAll('.delivery-settings__times label')
-		expect(labels.map((label) => label.text())).toEqual(['Time 1', 'Time 2'])
-		labels.forEach((label, index) => {
-			expect(timeInputs(wrapper)[index].attributes('id')).toBe(label.attributes('for'))
-		})
-		expect(removeButtons(wrapper).map((button) => button.attributes('aria-label'))).toEqual(['Remove time 1', 'Remove time 2'])
-		expect(wrapper.find('ul.delivery-settings__times').exists()).toBe(true)
-	})
-
-	it('adds the hour after the latest one, up to four, and saves straight away', async () => {
-		const wrapper = await mountSettings(digest)
-
-		await buttonNamed(wrapper, 'Add a time').trigger('click')
-		await flushPromises()
-		expect(axios.patch).toHaveBeenLastCalledWith(ROUTE, { times: ['08:00', '18:00', '19:00'] })
-
-		await buttonNamed(wrapper, 'Add a time').trigger('click')
-		await flushPromises()
-		expect(axios.patch).toHaveBeenLastCalledWith(ROUTE, { times: ['08:00', '18:00', '19:00', '20:00'] })
-
-		expect(timeInputs(wrapper)).toHaveLength(4)
-		expect(buttonNamed(wrapper, 'Add a time')).toBeUndefined()
-	})
-
-	it('removes a time and saves what is left, but never the last one', async () => {
-		const wrapper = await mountSettings(digest)
-
-		await removeButtons(wrapper)[0].trigger('click')
-		await flushPromises()
-
-		expect(axios.patch).toHaveBeenLastCalledWith(ROUTE, { times: ['18:00'] })
-		expect(timeInputs(wrapper)).toHaveLength(1)
-		expect(removeButtons(wrapper)).toHaveLength(0)
+		const label = wrapper.find('.delivery-settings__daily label')
+		expect(label.text()).toBe('At')
+		expect(timeInputs(wrapper)[0].attributes('id')).toBe(label.attributes('for'))
+		expect(wrapper.text()).not.toContain('Add a time')
 	})
 
 	/** A time arrives in pieces, so the save waits for the typing to stop and sends the list sorted. */
@@ -169,22 +138,22 @@ describe('the notification delivery section', () => {
 		await flushPromises()
 
 		expect(axios.patch).toHaveBeenCalledTimes(1)
-		expect(axios.patch).toHaveBeenCalledWith(ROUTE, { times: ['18:00', '20:00'] })
-		expect(timeInputs(wrapper).map((input) => input.element.value)).toEqual(['18:00', '20:00'])
+		expect(axios.patch).toHaveBeenCalledWith(ROUTE, { times: ['20:00'] })
+		expect(timeInputs(wrapper).map((input) => input.element.value)).toEqual(['20:00'])
 	})
 
 	it('saves at once when the field is left', async () => {
 		vi.useFakeTimers()
 		const wrapper = await mountSettings(digest)
 
-		await timeInputs(wrapper)[1].setValue('21:30')
-		await timeInputs(wrapper)[1].trigger('blur')
+		await timeInputs(wrapper)[0].setValue('21:30')
+		await timeInputs(wrapper)[0].trigger('blur')
 		await flushPromises()
 
-		expect(axios.patch).toHaveBeenCalledWith(ROUTE, { times: ['08:00', '21:30'] })
+		expect(axios.patch).toHaveBeenCalledWith(ROUTE, { times: ['21:30'] })
 	})
 
-	it('refuses an empty or repeated time here, with a reason, rather than asking the server', async () => {
+	it('refuses an empty time here, with a reason, rather than asking the server', async () => {
 		vi.useFakeTimers()
 		const wrapper = await mountSettings(digest)
 
@@ -194,18 +163,11 @@ describe('the notification delivery section', () => {
 		expect(axios.patch).not.toHaveBeenCalled()
 		expect(wrapper.find('.delivery-settings__error').text()).toBe('Each time needs hours and minutes, like 08:00.')
 
-		await timeInputs(wrapper)[0].setValue('18:00')
-		vi.advanceTimersByTime(PAUSE)
-		await flushPromises()
-		expect(axios.patch).not.toHaveBeenCalled()
-		expect(wrapper.find('.delivery-settings__error').text()).toBe('Two of the times are the same.')
-
-		await timeInputs(wrapper)[0].setValue('08:00')
+		await timeInputs(wrapper)[0].setValue('18:30')
 		vi.advanceTimersByTime(PAUSE)
 		await flushPromises()
 		expect(wrapper.find('.delivery-settings__error').exists()).toBe(false)
-		// back where the server has it, so there is nothing to send
-		expect(axios.patch).not.toHaveBeenCalled()
+		expect(axios.patch).toHaveBeenCalledWith(ROUTE, { times: ['18:30'] })
 	})
 
 	it('goes back to what the server has when it refuses, and says why', async () => {
@@ -218,7 +180,7 @@ describe('the notification delivery section', () => {
 		await flushPromises()
 
 		expect(showError).toHaveBeenCalledWith({ text: 'Could not save that setting', details: 'At most four times a day' })
-		expect(timeInputs(wrapper).map((input) => input.element.value)).toEqual(['08:00', '18:00'])
+		expect(timeInputs(wrapper).map((input) => input.element.value)).toEqual(['08:00'])
 	})
 
 	it('falls back to its own words when a failure has none', async () => {

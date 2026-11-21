@@ -177,6 +177,17 @@ describe('Discover', () => {
 			expect(get).not.toHaveBeenCalledWith(expect.stringContaining('suggestions'), expect.anything())
 		})
 
+		it('offers invitations on People where the administrators allow them', () => {
+			const pinia = createPinia()
+			setActivePinia(pinia)
+			useSettingsStore().setServerData({ externalInvites: true })
+			get.mockResolvedValue({ data: [] })
+			const wrapper = mount(Discover, { shallow: true, global: { plugins: [pinia] } })
+
+			expect(wrapper.vm.invitesOffered).toBe(true)
+			expect(wrapper.find('.discover__invite').exists()).toBe(true)
+		})
+
 		it('offers Videos beside Photos, and no News tab', () => {
 			const tabs = Discover.computed.tabs.call({})
 
