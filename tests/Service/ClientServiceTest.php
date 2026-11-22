@@ -299,15 +299,80 @@ class ClientServiceTest extends TestCase {
 		$this->service->createApp($client);
 	}
 
-	/** Mastodon clients register scopes this server has never heard of. */
-	public function testUnknownScopesAreRegisteredAsTheyCame(): void {
+	/** The scopes Mastodon defines register, its admin and `profile` scopes included. */
+	public function testTheScopesMastodonDefinesAreRegistered(): void {
 		$client = $this->registeredClient();
-		$client->setAppScopes(['read', 'write', 'follow', 'push', 'admin:read', 'profile', 'write:something-new']);
+		$client->setAppScopes(['read', 'write', 'follow', 'push', 'admin:read', 'admin:write:reports', 'profile', 'read:statuses']);
 		$this->clientRequest->expects($this->once())->method('saveApp');
 
 		$this->service->createApp($client);
 
-		$this->assertSame(['read', 'write', 'follow', 'push', 'admin:read', 'profile', 'write:something-new'], $client->getAppScopes());
+		$this->assertSame(['read', 'write', 'follow', 'push', 'admin:read', 'admin:write:reports', 'profile', 'read:statuses'], $client->getAppScopes());
+	}
+
+	/**
+	 * A client written for a newer Mastodon asks for scopes this server does
+	 * not define. It still registers, and keeps only the scopes that mean
+	 * something here: what the consent page shows is never text the app chose.
+	 */
+	public function testUnknownScopesAreDroppedAndDoNotBreakTheRegistration(): void {
+		$client = $this->registeredClient();
+		$client->setAppScopes(['read', 'write:something-new', 'Approved by your administrator', 'push']);
+		$this->clientRequest->expects($this->once())->method('saveApp')
+			->with($this->callback(static fn (SocialClient $saved): bool => $saved->getAppScopes() === ['read', 'push']));
+
+		$this->service->createApp($client);
+
+		$this->assertSame(['read', 'push'], $client->getAppScopes());
+	}
+
+	/** With no scope left that this server defines, the app gets `read`, as for a blank value. */
+	public function testARegistrationWithOnlyUnknownScopesGetsRead(): void {
+		$client = $this->registeredClient();
+		$client->setAppScopes(['write:something-new']);
+		$this->clientRequest->expects($this->once())->method('saveApp');
+
+		$this->service->createApp($client);
+
+		$this->assertSame(['read'], $client->getAppScopes());
+	}
+
+	/** @return array<string, array{callable(SocialClient): void, string}> */
+	public static function overlongRegistrationProvider(): array {
+		return [
+			'a name' => [static fn (SocialClient $client) => $client->setAppName(str_repeat('n', ClientService::APP_NAME_LIMIT + 1)), 'Name is too long'],
+			'a website' => [static fn (SocialClient $client) => $client->setAppWebsite('https://app.example/' . str_repeat('w', ClientService::APP_WEBSITE_LIMIT)), 'Website is too long'],
+			'one redirect URI' => [static fn (SocialClient $client) => $client->setAppRedirectUris(['https://app.example/' . str_repeat('r', ClientService::APP_REDIRECT_URI_LIMIT)]), 'Redirect URI is too long'],
+			'many redirect URIs' => [static fn (SocialClient $client) => $client->setAppRedirectUris(array_map(static fn (int $i): string => 'https://app.example/cb' . $i, range(1, 100))), 'Redirect URI is too long'],
+		];
+	}
+
+	/**
+	 * Longer than its column, a registration made the database refuse the
+	 * insert and the client got a 500; it is a validation failure, as on
+	 * Mastodon.
+	 *
+	 * @param callable(SocialClient): void $overlong
+	 */
+	#[DataProvider('overlongRegistrationProvider')]
+	public function testAnOverlongRegistrationIsRefused(callable $overlong, string $message): void {
+		$client = $this->registeredClient();
+		$overlong($client);
+		$this->clientRequest->expects($this->never())->method('saveApp');
+
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage($message);
+		$this->service->createApp($client);
+	}
+
+	public function testARegistrationAtTheLimitsIsTaken(): void {
+		$client = $this->registeredClient();
+		$client->setAppName(str_repeat('n', ClientService::APP_NAME_LIMIT))
+			->setAppWebsite('https://app.example/' . str_repeat('w', ClientService::APP_WEBSITE_LIMIT - 20))
+			->setAppRedirectUris(['https://app.example/' . str_repeat('r', ClientService::APP_REDIRECT_URI_LIMIT - 20)]);
+		$this->clientRequest->expects($this->once())->method('saveApp');
+
+		$this->service->createApp($client);
 	}
 
 	public static function moveInCallbacks(): array {

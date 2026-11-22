@@ -84,8 +84,10 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	/**
 	 * Records an app token: an authorization with an empty `user_id`, which
 	 * `getByToken()` returns as a `SocialClient` acting for nobody. One per
-	 * app; the app row is marked as used, as `authorize()` does, so it is not
-	 * swept as never authorized.
+	 * app. Unlike `authorize()` it does not mark the app as authorized: the
+	 * row keeps the app from being swept while the token lives, and once the
+	 * token has gone idle the app is swept like any registration nobody
+	 * signed in with.
 	 *
 	 * @param string[] $scopes
 	 */
@@ -99,12 +101,6 @@ class ClientAuthRequest extends ClientRequestBuilder {
 			'redirect_uri' => '',
 			'token' => $this->secretHasher->hash($token),
 		]);
-
-		$app = $this->getQueryBuilder();
-		$app->update(self::TABLE_CLIENT)
-			->set('last_update', $app->createNamedParameter(new DateTime('+1 second'), IQueryBuilder::PARAM_DATE))
-			->where($app->expr()->eq('id', $app->createNamedParameter($clientId, IQueryBuilder::PARAM_INT)));
-		$app->executeStatement();
 	}
 
 	/**

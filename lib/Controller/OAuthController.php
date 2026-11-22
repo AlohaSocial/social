@@ -201,7 +201,9 @@ class OAuthController extends Controller {
 		$client = new SocialClient();
 		$client->setAppWebsite($website);
 		$client->setAppRedirectUris($redirect_uris);
-		$client->setAppScopes($client->getScopesFromString($scopes));
+		// separated by any whitespace; none at all is `read`, as on Mastodon
+		$scopes = array_values(array_unique(preg_split('/\s+/', trim($scopes), -1, PREG_SPLIT_NO_EMPTY) ?: ['read']));
+		$client->setAppScopes($scopes);
 		$client->setAppName($client_name);
 
 		try {

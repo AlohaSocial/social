@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\Controller\OAuthController;
 use OCA\Social\Db\ClientAuthRequest;
 use OCA\Social\Db\ClientRequest;
 use OCA\Social\Db\DeviceAuthorizationRequest;
@@ -62,6 +63,30 @@ class ClientService {
 	/** what an app token may do: read what anybody may read */
 	public const APP_TOKEN_SCOPES = ['read'];
 
+	/**
+	 * Mastodon's limits on a registration (`ApplicationExtension`), the
+	 * website's lowered to what its column holds.
+	 */
+	public const APP_NAME_LIMIT = 60;
+	public const APP_WEBSITE_LIMIT = 255;
+	/** the redirect URIs together, one per line, as Mastodon measures them */
+	public const APP_REDIRECT_URI_LIMIT = 2000;
+
+	/**
+	 * The scopes an app keeps beyond the ones the routes ask for
+	 * (`OAuthController::SCOPES`): Mastodon's `profile` and admin scopes, and
+	 * this app's move-in scope.
+	 */
+	private const REGISTRABLE_SCOPES = [
+		'profile', MoveFinishService::SCOPE,
+		'admin:read', 'admin:read:accounts', 'admin:read:reports', 'admin:read:domain_allows',
+		'admin:read:domain_blocks', 'admin:read:ip_blocks', 'admin:read:email_domain_blocks',
+		'admin:read:canonical_email_blocks',
+		'admin:write', 'admin:write:accounts', 'admin:write:reports', 'admin:write:domain_allows',
+		'admin:write:domain_blocks', 'admin:write:ip_blocks', 'admin:write:email_domain_blocks',
+		'admin:write:canonical_email_blocks',
+	];
+
 	/** the path a move-in callback ends in, after any `/index.php` or subdirectory */
 	public const MOVE_IN_CALLBACK_PATH = '/apps/social/migration/move-in/callback';
 
@@ -110,9 +135,31 @@ class ClientService {
 			throw new ClientException('missing client_name');
 		}
 
+		// Mastodon's validation messages, as its 422 carries them
+		if (mb_strlen($client->getAppName()) > self::APP_NAME_LIMIT) {
+			throw new ClientException('Validation failed: Name is too long (maximum is ' . self::APP_NAME_LIMIT . ' characters)');
+		}
+
 		if (empty($client->getAppRedirectUris())) {
 			throw new ClientException('missing redirect_uris');
 		}
+
+		if (mb_strlen(implode("\n", $client->getAppRedirectUris())) > self::APP_REDIRECT_URI_LIMIT) {
+			throw new ClientException('Validation failed: Redirect URI is too long (maximum is ' . self::APP_REDIRECT_URI_LIMIT . ' characters)');
+		}
+
+		if (mb_strlen($client->getAppWebsite()) > self::APP_WEBSITE_LIMIT) {
+			throw new ClientException('Validation failed: Website is too long (maximum is ' . self::APP_WEBSITE_LIMIT . ' characters)');
+		}
+
+		// A scope this server does not define is dropped rather than refused,
+		// so a client written for a newer Mastodon still registers, and the
+		// consent page never shows text the app made up. None left is `read`,
+		// as a blank value is.
+		$scopes = array_values(array_filter(
+			$client->getAppScopes(), static fn (mixed $scope): bool => self::isRegistrableScope((string)$scope)
+		));
+		$client->setAppScopes(($scopes === []) ? ['read'] : $scopes);
 
 		foreach ($client->getAppRedirectUris() as $uri) {
 			if (!self::isAcceptableRedirectUri((string)$uri)) {
@@ -134,6 +181,11 @@ class ClientService {
 		$client->setAppClientSecret($this->token(40));
 
 		$this->clientRequest->saveApp($client);
+	}
+
+	/** Whether a registration keeps this scope: one Mastodon or this server defines. */
+	public static function isRegistrableScope(string $scope): bool {
+		return in_array($scope, OAuthController::SCOPES, true) || in_array($scope, self::REGISTRABLE_SCOPES, true);
 	}
 
 	/**
