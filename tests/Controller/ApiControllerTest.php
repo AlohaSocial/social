@@ -1251,6 +1251,33 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('season finale', $created->getSpoilerText());
 	}
 
+	/** What was posted, a direct message perhaps, is not written to the log. */
+	public function testStatusNewLogsTheShapeOfThePostAndNotItsText(): void {
+		$this->route = 'social.StatusApi.statusNew';
+		$this->bearerFor(['read', 'write']);
+		$this->request->method('getParams')->willReturn([
+			'status' => '@bob the door code is 4711',
+			'visibility' => 'direct',
+		]);
+		$activity = $this->createMock(ACore::class);
+		$activity->method('getObjectId')->willReturn('https://cloud.example/apps/social/@alice/n1');
+		$this->postService->method('createPost')->willReturn($activity);
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
+		$logged = [];
+		$logger = $this->createStub(LoggerInterface::class);
+		$logger->method('debug')->willReturnCallback(function (string $message, array $context = []) use (&$logged): void {
+			$logged[] = [$message, $context];
+		});
+
+		$this->controllerWithHeaders('Bearer s3cret', [], $logger)->statusNew();
+
+		$this->assertContains(
+			['[' . \OCA\Social\Controller\StatusApiController::class . '] statusNew', ['length' => 26, 'visibility' => 'direct']],
+			$logged
+		);
+		$this->assertStringNotContainsString('4711', (string)json_encode($logged));
+	}
+
 	public function testABearerTokenIsScopedEvenWhenASessionExists(): void {
 		// the token's grant must not silently widen to the cookie's full access
 		$this->route = 'social.StatusApi.statusNew';

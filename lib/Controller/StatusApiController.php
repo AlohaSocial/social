@@ -139,11 +139,14 @@ class StatusApiController extends MastodonApiController {
 			$this->initViewer(true);
 
 			$input = file_get_contents('php://input');
-			$this->logger->debug('[' . static::class . '] statusNew: ' . $input);
-
 			$data = $this->convertInput($input);
 			$status = new Status();
 			$status->import($data);
+			// what was posted stays out of the log: it may be a direct message
+			$this->logger->debug('[' . static::class . '] statusNew', [
+				'length' => mb_strlen($status->getStatus()),
+				'visibility' => $status->getVisibility(),
+			]);
 			if (array_key_exists('event', $data)) {
 				$event = $status->getEvent();
 				if ($event === null

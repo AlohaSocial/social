@@ -136,7 +136,7 @@ class MediaApiController extends MastodonApiController {
 			// memory to be hashed, sniffed and (for an image) decoded.
 			$this->refuseOversized($size, $type);
 
-			$this->logger->debug('[' . static::class . '] mediaNew: ' . json_encode($file));
+			$this->logger->debug('[' . static::class . '] mediaNew', ['type' => $type, 'size' => $size]);
 
 			// a cover for a video, as Mastodon's API names it; anything
 			// wrong with it costs the cover and not the upload
@@ -285,7 +285,7 @@ class MediaApiController extends MastodonApiController {
 
 		$mediaAttachment = $document->convertToMediaAttachment($this->urlGenerator);
 
-		$this->logger->debug('generated attachment: ' . json_encode($mediaAttachment));
+		$this->logger->debug('generated attachment', ['id' => $mediaAttachment->getId(), 'type' => $mediaAttachment->getType()]);
 
 		return $mediaAttachment;
 	}
