@@ -66,11 +66,15 @@ class FeaturedCollection {
 		}
 
 		try {
-			$collection = $this->curlService->retrieveObject($actor->getFeatured());
+			$collection = CurlService::servedAsActivityPub(
+				$this->curlService->retrieveObject($actor->getFeatured()), $actor->getFeatured()
+			);
 			$items = $collection['orderedItems'] ?? $collection['items'] ?? null;
 			if (!is_array($items) && is_string($collection['first'] ?? null)) {
 				// a paged collection: the first page is the newest pins
-				$page = $this->curlService->retrieveObject($collection['first']);
+				$page = CurlService::servedAsActivityPub(
+					$this->curlService->retrieveObject($collection['first']), $collection['first']
+				);
 				$items = $page['orderedItems'] ?? $page['items'] ?? [];
 			}
 		} catch (Exception $e) {

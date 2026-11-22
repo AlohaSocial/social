@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\RemoteOutboxPageReader;
@@ -82,7 +83,7 @@ class RemoteOutboxPageReaderTest extends TestCase {
 	}
 	public function testResolvesUriAndCreateObjectReferencesWithABoundedBudget(): void {
 		$url = 'https://remote.example/posts/1';
-		$note = ['id' => $url, 'type' => 'Note', 'attributedTo' => $this->actor()->getId()];
+		$note = ['id' => $url, 'type' => 'Note', 'attributedTo' => $this->actor()->getId(), '_contentType' => 'application/activity+json'];
 		$curl = $this->createMock(CurlService::class);
 		$curl->expects(self::exactly(2))->method('retrieveObject')->with($url, true, 3)->willReturn($note);
 		$reader = new RemoteOutboxPageReader($curl, new NullLogger());
@@ -99,13 +100,27 @@ class RemoteOutboxPageReaderTest extends TestCase {
 		$url = 'https://remote.example/posts/1';
 		$curl = $this->createMock(CurlService::class);
 		$curl->expects(self::once())->method('retrieveObject')->with($url, true, 3)
-			->willReturn(['id' => 'https://other.example/post', 'type' => 'Note']);
+			->willReturn(['id' => 'https://other.example/post', 'type' => 'Note', '_contentType' => 'application/activity+json']);
 		$reader = new RemoteOutboxPageReader($curl, new NullLogger());
 		$remaining = 6;
 
 		foreach (['https://other.example/post', 'https://evil@remote.example/post', $url] as $reference) {
 			self::assertNull($reader->resolveEntry($this->actor(), $reference, $remaining)['item']);
 		}
+	}
+
+	/** A JSON file on the actor's server is not the actor's post unless it is served as ActivityPub. */
+	public function testAReferenceNotServedAsActivityPubIsRefused(): void {
+		$url = 'https://remote.example/posts/1';
+		$curl = $this->createMock(CurlService::class);
+		$curl->method('retrieveObject')->with($url, true, 3)->willReturn([
+			'id' => $url, 'type' => 'Note', 'attributedTo' => $this->actor()->getId(), '_contentType' => 'application/json',
+		]);
+		$reader = new RemoteOutboxPageReader($curl, new NullLogger());
+		$remaining = 6;
+
+		$this->expectException(InvalidOriginException::class);
+		$reader->resolveEntry($this->actor(), $url, $remaining);
 	}
 
 	public function testBoostObjectsAreLeftForTheOriginVerifiedCacheWorker(): void {

@@ -142,7 +142,7 @@ class RemoteOutboxPageReader {
 				return ['item' => null, 'deferred' => true];
 			}
 			$remaining--;
-			$entry = $this->curlService->retrieveObject($url, true, 3);
+			$entry = CurlService::servedAsActivityPub($this->curlService->retrieveObject($url, true, 3), $url);
 			if (($entry['id'] ?? '') !== $url) {
 				return ['item' => null, 'deferred' => false];
 			}

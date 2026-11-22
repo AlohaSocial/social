@@ -1225,7 +1225,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	 * `preferredUsername@host`, the handle an actor document states about
 	 * itself, or `''` while either half is missing.
 	 */
-	private function canonicalAccount(): string {
+	public function canonicalAccount(): string {
 		$host = parse_url($this->getId(), PHP_URL_HOST);
 		if ($this->getPreferredUsername() === '' || !is_string($host) || $host === '') {
 			return '';

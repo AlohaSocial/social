@@ -45,6 +45,7 @@ use Psr\Log\NullLogger;
 #[AllowMockObjectsWithoutExpectations]
 class StreamQueueServiceTest extends TestCase {
 	private const STREAM_ID = 'https://cloud.example.com/apps/social/@alice/1';
+	private const AP_TYPE = 'application/activity+json; charset=utf-8';
 	private const REPLY_URL = 'https://remote.example/notes/99';
 	private const PARENT_URL = 'https://remote.example/notes/parent';
 	private const BOB = 'https://remote.example/users/bob';
@@ -303,8 +304,8 @@ class StreamQueueServiceTest extends TestCase {
 		$this->curlService->expects($this->once())
 			->method('retrieveObject')
 			->with(self::REPLY_URL)
-			->willReturn(['id' => self::REPLY_URL, 'type' => 'Note']);
-		$this->ap->method('getItemFromData')->with(['id' => self::REPLY_URL, 'type' => 'Note'])->willReturn($fetched);
+			->willReturn(['id' => self::REPLY_URL, 'type' => 'Note', '_contentType' => self::AP_TYPE]);
+		$this->ap->method('getItemFromData')->with(['id' => self::REPLY_URL, 'type' => 'Note', '_contentType' => self::AP_TYPE])->willReturn($fetched);
 		$this->cacheActorService->expects($this->once())->method('getFromId')->with(self::BOB)->willReturn(new Person());
 		$noteInterface = $this->createMock(NoteInterface::class);
 		$noteInterface->expects($this->once())
@@ -351,7 +352,7 @@ class StreamQueueServiceTest extends TestCase {
 		$this->curlService->expects($this->once())
 			->method('retrieveObject')
 			->with(self::PARENT_URL)
-			->willReturn(['id' => self::PARENT_URL, 'type' => 'Note']);
+			->willReturn(['id' => self::PARENT_URL, 'type' => 'Note', '_contentType' => self::AP_TYPE]);
 		$this->ap->method('getItemFromData')->willReturn($parent);
 		$this->cacheActorService->method('getFromId')->willReturn(new Person());
 		$noteInterface = $this->createMock(NoteInterface::class);
@@ -395,7 +396,7 @@ class StreamQueueServiceTest extends TestCase {
 
 				return $parent;
 			});
-		$this->curlService->method('retrieveObject')->willReturn(['id' => self::PARENT_URL, 'type' => 'Note']);
+		$this->curlService->method('retrieveObject')->willReturn(['id' => self::PARENT_URL, 'type' => 'Note', '_contentType' => self::AP_TYPE]);
 		$this->ap->method('getItemFromData')->willReturn($parent);
 		$this->cacheActorService->method('getFromId')->willReturn(new Person());
 		$noteInterface = $this->createStub(NoteInterface::class);
@@ -422,7 +423,7 @@ class StreamQueueServiceTest extends TestCase {
 				}
 				throw new StreamNotFoundException();
 			});
-		$this->curlService->method('retrieveObject')->willReturn(['id' => 'x']);
+		$this->curlService->method('retrieveObject')->willReturn(['id' => 'x', '_contentType' => self::AP_TYPE]);
 		$this->ap->method('getItemFromData')->willReturn($fetched);
 		$this->ap->method('getInterfaceForItem')->willReturn($this->createStub(NoteInterface::class));
 		$this->miscService->expects($this->once())
@@ -435,6 +436,33 @@ class StreamQueueServiceTest extends TestCase {
 			});
 		// nothing left to cache: the queue entry is complete
 		$this->streamQueueRequest->expects($this->once())->method('setAsSuccess');
+
+		$this->service->manageStreamQueue($queue);
+
+		$this->assertFalse($updatedCache->hasItem(self::REPLY_URL));
+	}
+
+	public function testAReplyNotServedAsActivityPubIsRemovedFromTheCache(): void {
+		$queue = $this->queue();
+		$stream = $this->streamWithCache();
+		$this->streamRequest->method('getStreamById')
+			->willReturnCallback(function (string $id) use ($stream) {
+				if ($id === self::STREAM_ID) {
+					return $stream;
+				}
+				throw new StreamNotFoundException();
+			});
+		$this->curlService->method('retrieveObject')
+			->willReturn(['id' => self::REPLY_URL, 'type' => 'Note', '_contentType' => 'application/json']);
+		$this->ap->expects($this->never())->method('getItemFromData');
+		$this->miscService->expects($this->once())
+			->method('log')
+			->with($this->stringContains('InvalidOriginException'), 1);
+		$updatedCache = null;
+		$this->streamRequest->method('updateCache')
+			->willReturnCallback(function (Stream $s, Cache $cache) use (&$updatedCache) {
+				$updatedCache = $cache;
+			});
 
 		$this->service->manageStreamQueue($queue);
 
@@ -594,7 +622,7 @@ class StreamQueueServiceTest extends TestCase {
 		$note->setAttributedTo(self::BOB);
 		$note->setUpdated($updated);
 		$this->curlService->expects($this->once())->method('retrieveObject')->with(self::REPLY_URL)
-			->willReturn(['id' => $id, 'type' => 'Note']);
+			->willReturn(['id' => $id, 'type' => 'Note', '_contentType' => self::AP_TYPE]);
 		$this->ap->method('getItemFromData')->willReturn($note);
 
 		return $note;
@@ -621,6 +649,21 @@ class StreamQueueServiceTest extends TestCase {
 
 	public function testAFetchedPostThatIsNotTheOneAskedForIsDropped(): void {
 		$this->fetchedNote('https://remote.example/notes/other');
+		$this->importService->expects($this->never())->method('parseIncomingRequest');
+		$this->streamQueueRequest->expects($this->once())->method('delete');
+		$this->streamQueueRequest->expects($this->never())->method('setAsFailure');
+
+		$this->service->manageStreamQueue($this->fetchQueue());
+	}
+
+	/**
+	 * Anybody who can put a JSON file at an address on a host (a public
+	 * share, a paste) could otherwise speak for every account there.
+	 */
+	public function testAFetchedPostNotServedAsActivityPubIsDropped(): void {
+		$this->curlService->expects($this->once())->method('retrieveObject')->with(self::REPLY_URL)
+			->willReturn(['id' => self::REPLY_URL, 'type' => 'Note', '_contentType' => 'application/json']);
+		$this->ap->expects($this->never())->method('getItemFromData');
 		$this->importService->expects($this->never())->method('parseIncomingRequest');
 		$this->streamQueueRequest->expects($this->once())->method('delete');
 		$this->streamQueueRequest->expects($this->never())->method('setAsFailure');
