@@ -21,25 +21,16 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Finishes a move *from the new side*, when the old server is this app too.
+ * Finishes a move from the new side when the old server is this app too:
+ * Mastodon has no API for it, but between two instances of this app this one
+ * registers itself on the old one as an OAuth application asking only for
+ * `write:migration`, sends the person there to consent, and with the token
+ * calls the old instance's move route naming this account.
  *
- * A move is sent by the old server, and Mastodon offers no API for it: a
- * person moving from Mastodon always ends in Mastodon's own form. Between
- * two instances of this app the last step can be done from here. The old
- * instance is an OAuth server like any Mastodon; this one registers itself
- * there as an application asking for one scope, `write:migration`, sends the
- * person to log in and consent on their old Nextcloud, and with the token
- * that comes back calls the old instance's move route naming this account.
- *
- * A token with `write:migration` can do nothing else, and nothing else can
- * do this — the old instance accepts that scope spelled out, never the broad
- * `write` every phone app holds. It grants the scope only to a registration
- * that asks for it alone with this one callback as its redirect URI, behind
- * the person's password, and moves the account only to an account on the
- * callback's host (`ClientService::migrationScopeProblem()`,
- * `MigrationApiController`). It still checks, as it does for its own button,
- * that the target names the old account in `alsoKnownAs`, which the move-in
- * here set.
+ * The old instance grants that scope only to a registration asking for it
+ * alone with this callback, moves only to an account on the callback's host
+ * (`ClientService::migrationScopeProblem()`, `MigrationApiController`), and
+ * checks the target's `alsoKnownAs`, which the move-in here set.
  */
 class MoveFinishService {
 	public const SCOPE = 'write:migration';
@@ -166,9 +157,8 @@ class MoveFinishService {
 				throw new MoveErrorException('the old server did not hand out a token', 'old-server-refused');
 			}
 
-			// by id rather than by handle: the old server resolves an id as it
-			// is, where a handle is parsed first and one on a bare hostname is
-			// not one
+			// by id rather than by handle: the old server parses a handle, and one on
+			// a bare hostname would not be one
 			$actor = $this->accountService->getActorFromUserId($userId);
 			$moved = $this->post(
 				$pending['base'] . '/api/v1/migration/move/authorized',
@@ -237,9 +227,8 @@ class MoveFinishService {
 	}
 
 	/**
-	 * A JSON POST to the old server, through the guarded client: the same
-	 * federation and local-address checks every outbound request gets. An
-	 * answer that is not a 2xx comes back as an exception from the client.
+	 * A JSON POST to the old server through the guarded client, with its
+	 * federation and local-address checks; a non-2xx answer throws.
 	 *
 	 * @param array<string, string> $body
 	 * @param array<string, string> $headers

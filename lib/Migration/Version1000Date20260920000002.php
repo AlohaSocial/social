@@ -16,33 +16,16 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_cache_actors.host`: the server an account is on, as a column.
- *
- * Four things ask "which servers does this instance know, and how many
- * accounts does it hold on each" — the instance statistics, the network
- * figures, the directory's federation sources and the Pixelfed admin API —
- * and every one of them read **every cached actor row** and split the handle
- * in PHP, because there was nothing to group on. On an instance that has been
- * federating for a year that is hundreds of thousands of rows fetched to
- * produce a list of a few thousand hosts, on a page an administrator opens.
- *
- * The host is derived from the handle and never changes for a row: an account
- * that moves servers is a different account with a different id. That is what
- * makes the copy safe — there is no update path to keep in step, only an
- * insert.
- *
- * Existing rows are backfilled here in batches. A row that has not been
- * reached yet carries `''`, which the grouping skips: the count is briefly low
- * rather than wrong, and one pass of the upgrade fixes it.
+ * Backfills `social_cache_actors.host`, the server an account is on, so
+ * hosts can be grouped in SQL. The host never changes for a row (a moved
+ * account has a new id). Rows not yet reached carry `''`, which grouping
+ * skips.
  */
 class Version1000Date20260920000002 extends SimpleMigrationStep {
 	/**
-	 * How many rows one backfill statement carries.
-	 *
-	 * Two bound parameters a row — the `WHEN` and the `IN` — plus one `THEN`,
-	 * so 5,000 rows is 15,000 placeholders: inside SQLite's 32,766 ceiling,
-	 * which is the smallest of the three, with room to spare. See
-	 * `Version1000Date20260917000001`, where a larger batch failed on SQLite.
+	 * How many rows one backfill statement carries: three placeholders a row,
+	 * 15,000 in all, inside SQLite's 32,766 limit (see
+	 * `Version1000Date20260917000001`).
 	 */
 	private const BATCH = 5000;
 
@@ -52,15 +35,12 @@ class Version1000Date20260920000002 extends SimpleMigrationStep {
 	}
 
 	/**
-	 * The columns this step used to add are in `Version1000Date20221118000002`,
-	 * which describes the whole schema and runs before this. What is left here
-	 * is the half a schema cannot express: the rows.
+	 * The columns are in `Version1000Date20221118000002`; this fills the rows.
 	 */
 
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		// `*PREFIX*` is what the connection rewrites; there is no public API
-		// that hands the prefix over as a string
+		// The connection rewrites `*PREFIX*`; no public API returns the prefix.
 		$table = '*PREFIX*' . CoreRequestBuilder::TABLE_CACHE_ACTORS;
 
 		$total = (int)$this->connection->executeQuery(
@@ -72,10 +52,8 @@ class Version1000Date20260920000002 extends SimpleMigrationStep {
 
 		$output->info('filling in the server of ' . $total . ' cached account(s)');
 
-		// keyset on `id_prim`, not "the next rows still empty": a handle with
-		// no `@` (a relay, an actor saved with no `preferredUsername`) is
-		// written back as `''`, still matches, and without the cursor the same
-		// 5,000 of them came back as every page and the upgrade never ended
+		// Keyset on `id_prim`: rows whose handle has no `@` are written back as ''
+		// and would otherwise be selected again forever.
 		$done = 0;
 		$after = '';
 		while (true) {
@@ -118,11 +96,7 @@ class Version1000Date20260920000002 extends SimpleMigrationStep {
 	}
 
 	/**
-	 * The server out of a handle.
-	 *
-	 * A handle with no `@` in it is a local account, whose host is this one —
-	 * and which this column is not about. It is left empty, which is what the
-	 * grouping skips.
+	 * The server out of a handle; '' for a handle without `@`, a local account.
 	 */
 	public static function hostOf(string $account): string {
 		$at = strrpos($account, '@');

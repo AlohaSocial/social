@@ -18,16 +18,13 @@ use OCP\Migration\SimpleMigrationStep;
 /**
  * The two tables behind replies shown as comments in the Files app.
  *
- * `social_file_post` ties a Nextcloud file to the post it was attached to.
- * The row is written when the file is copied into an attachment, with only
- * the attachment's nid, and gets its post when that post is published; a row
- * still without one after two days is an attachment nobody posted.
+ * `social_file_post` ties a Nextcloud file to the post it was attached to; the
+ * row is written with the attachment's nid and gets its post when that is
+ * published, and a row still without one after two days was never posted.
  *
- * `social_file_comment` ties a reply to the comment that shows it on one
- * file, in either direction: a reply copied in as a comment, or a comment
- * the post's author wrote in Files and that went out as a reply. One row per
- * file, since a post with three pictures from Files has its replies on all
- * three.
+ * `social_file_comment` ties a reply to the comment that shows it on one file,
+ * in either direction. One row per file, as a post with three photos from
+ * Files has its replies on all three.
  */
 class Version1000Date20261008000001 extends SimpleMigrationStep {
 	/**

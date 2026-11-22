@@ -23,16 +23,11 @@ use OCP\User\Backend\ISetDisplayNameBackend;
 use OCP\User\Backend\ISetPasswordBackend;
 
 /**
- * The Nextcloud user backend of self-registered external users.
- *
- * Externals are real Nextcloud users, so the login form, sessions, two-factor
- * authentication, password reset and the Users page work for them unchanged.
- * Accounts are only created by the signup flow (`ExternalUserService`), never
- * through the Users page: this backend deliberately does not implement
- * `ICreateUserBackend`.
- *
- * Built on every request before login, so it holds nothing but the table and
- * a per-request cache of the rows it has looked up, misses included.
+ * The Nextcloud user backend of self-registered external users, who are real
+ * Nextcloud users (login, sessions, 2FA, password reset). Accounts are made
+ * only by the signup flow (`ExternalUserService`), so `ICreateUserBackend` is
+ * not implemented. Built before login on every request, so it holds only the
+ * table and a per-request cache, misses included.
  */
 class ExternalUserBackend extends ABackend implements
 	ICheckPasswordBackend,

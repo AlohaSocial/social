@@ -30,15 +30,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The gate every administration route stands behind.
- *
- * One place decides who is an administrator of this instance and how a
- * refusal is worded, so that Mastodon's admin API and Pixelfed's cannot
- * drift into answering the same person differently. A caller arrives with
- * a bearer token or a session; either way the answer to a non-administrator
- * is deliberately the same whether the user exists, has a Social account or
- * simply may not moderate: the admin API tells them nothing about the
- * instance, not even that.
+ * The gate every administration route stands behind, so Mastodon's and
+ * Pixelfed's admin APIs decide and word refusals alike. A non-administrator
+ * gets the same answer whether or not they exist or have a Social account.
  */
 abstract class AdminApiControllerBase extends Controller {
 	use ListParameter;
@@ -145,8 +139,8 @@ abstract class AdminApiControllerBase extends Controller {
 	 */
 	protected function error(Throwable $e): DataResponse {
 		if ($e instanceof InsufficientScopeException || $e instanceof ModerationNotAllowedException) {
-			// no WWW-Authenticate: PHP turns any response carrying it into a 401,
-			// and a 401 tells a client its token is dead and to sign in again
+			// No WWW-Authenticate: PHP turns any response carrying it into a 401, which
+			// a client reads as its token being dead.
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 

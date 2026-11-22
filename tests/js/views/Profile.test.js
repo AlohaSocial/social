@@ -109,22 +109,6 @@ describe('Profile', () => {
 		vi.restoreAllMocks()
 	})
 
-	it('uses a public profile default only for an unspecified tab', async () => {
-		const route = reactive({ name: 'profile', params: { account: 'bob@remote.example' }, query: {} })
-		const wrapper = mountProfile(route)
-		await flushPromises()
-		accountStore.addAccount({ actorId: bob.url, data: { ...bob, profile_layout: { default_tab: 'photos', tabs: ['posts', 'photos'] } } })
-		await flushPromises()
-
-		expect(wrapper.vm.$router.replace).toHaveBeenCalledWith(expect.objectContaining({ query: { media: 'image' } }))
-		wrapper.vm.$router.replace.mockClear()
-		route.query = { media: 'posts' }
-		await flushPromises()
-		wrapper.vm.applyDefaultProfileTab()
-		expect(wrapper.vm.$router.replace).not.toHaveBeenCalled()
-		wrapper.unmount()
-	})
-
 	it('loads the routed remote account, then its relationship, and shows the profile with the details view', async () => {
 		const wrapper = mountProfile({ name: 'profile', params: { account: 'bob@remote.example' } })
 		expect(wrapper.classes()).toContain('icon-loading')

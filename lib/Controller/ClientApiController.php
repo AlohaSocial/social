@@ -32,30 +32,19 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What every client-API controller needs before it can answer anything: who is
- * asking, whether their token is allowed to ask, and what to say when something
- * goes wrong.
+ * The base of the client-API controllers: who is asking, whether their token
+ * may ask, and what to answer when something goes wrong. Controllers built on
+ * `MastodonApiController` and `LocalController` keep their own session
+ * handling.
  *
- * Every client-API controller extends it except the ones built on
- * `MastodonApiController` and `LocalController`, which grew their own session
- * handling before it existed and still answer in their own shapes. A controller that needs more than a
- * viewer overrides `prepareViewer()`, and one that maps an exception of its
- * own overrides `error()` and hands everything else to it.
- *
- * The rules it encodes are the ones the copies already agreed on:
- *
- *  - A bearer token identifies the caller. Failing that, a Nextcloud session
- *    that passes its CSRF check does -- which is what lets the app's own
- *    frontend call these routes without minting a token for itself.
- *  - A session of somebody who has not set up their account here is told
- *    where to do that (`AccountNotSetUpException`, a 403), not refused as if
- *    the sign-in had failed.
- *  - A granular scope is satisfied by itself or by the broad scope containing
- *    it (`read:lists` by `read:lists` or by `read`), and by nothing else. Not
- *    by another granular variant of the same parent: a token granted
- *    `read:statuses` has not been granted the caller's collections.
+ *  - A bearer token identifies the caller; failing that, a Nextcloud session
+ *    that passes its CSRF check, so the app's own frontend needs no token.
+ *  - A session of somebody without an account here gets
+ *    `AccountNotSetUpException` (403), not an authentication failure.
+ *  - A granular scope is satisfied by itself or its broad scope (`read:lists`
+ *    by `read`), never by another granular variant of the same parent.
  *  - "Not there", "somebody else's" and "no such account" are one answer, so
- *    that none of them can be told apart from the others by someone probing.
+ *    a prober cannot tell them apart.
  */
 abstract class ClientApiController extends Controller {
 	use OwnAccount;
@@ -86,13 +75,10 @@ abstract class ClientApiController extends Controller {
 	/**
 	 * Who is asking, held to the scopes the route needs.
 	 *
-	 * With `$required` false a caller without usable credentials is answered
-	 * as nobody and the viewer stays null; a token that is valid but lacks
-	 * the scope is still refused, since it said who it was.
-	 *
-	 * An account suspended here is refused (`AccountSuspendedException`, a
-	 * 403) unless `$whileSuspended` says the route is one a suspended account
-	 * keeps, such as taking its data with it.
+	 * With `$required` false a caller without credentials is answered as
+	 * nobody; a valid token lacking the scope is still refused. A suspended
+	 * account is refused (`AccountSuspendedException`, 403) unless
+	 * `$whileSuspended` allows the route, such as taking its data with it.
 	 *
 	 * @param string[] $scopes
 	 *

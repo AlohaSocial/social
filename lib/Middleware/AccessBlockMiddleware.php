@@ -24,36 +24,16 @@ use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
- * Turns away everything an IP block at `no_access` covers.
+ * Turns away everything an IP block at `no_access` covers, on every route of
+ * this app, with a 403 so peers stop redelivering (see `docs/Architecture.md`).
  *
- * Here rather than at the two or three routes somebody would remember: "no
- * access" is a statement about the whole app, and a block that held on the
- * inbox but not on the API — or on last month's routes but not on the ones
- * added since — is not the thing an admin thought they were switching on.
- * Every request this app serves passes through one middleware; this is it.
+ * The list is read on every request from `AccessBlockService`'s distributed
+ * cache, once per request; there is deliberately no "no blocks" flag that
+ * could drift and silently stop enforcement.
  *
- * **403, not 429 or 404.** The address is being refused deliberately and
- * permanently, and telling it so is what makes a peer stop redelivering rather
- * than queue for days — the same reasoning as the refused inbox delivery in
- * `docs/Architecture.md`.
- *
- * The check costs a read of the list on every request, whether or not
- * anything is blocked: an empty list is still a list that has to be read.
- * `AccessBlockService` keeps it in Nextcloud's distributed cache, dropped on
- * every write, so that read is a cache lookup rather than a query; it is read
- * once and then lives for the length of the request, so the cost does not grow
- * with the number of blocks or the number of times the list is consulted.
- *
- * Skipping the read on an instance with no blocks would want a flag saying so,
- * and a flag that drifted out of step with the table would stop enforcing an
- * access list without saying anything — which is the wrong way round for a
- * security control to fail, for one cache lookup a request.
- *
- * **Nextcloud administrators are let through to the administration
- * routes**: the admin API (`AdminApiControllerBase`) and every route only an
- * administrator may call (no `NoAdminRequired`, no `PublicPage`), such as the
- * settings page's own. That is where a block is lifted, and a block that
- * covers the administrator's address must not be one only SQL can undo.
+ * Nextcloud administrators are let through to the administration routes (the
+ * admin API, `AdminApiControllerBase`, and every admin-only route), so a
+ * block covering their address can still be lifted.
  */
 class AccessBlockMiddleware extends Middleware {
 	public function __construct(

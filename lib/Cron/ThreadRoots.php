@@ -20,14 +20,11 @@ use Psr\Log\LoggerInterface;
  * Gives the direct messages stored before `social_stream.root_prim` existed
  * the root of their thread.
  *
- * Queued once by `Version1000Date20261016100400`, so — like `SearchIndex` —
- * it is not registered in `info.xml`. It reads `social_stream` in nid order
- * from the cursor it keeps in the app settings, a chunk at a time and for a
- * bounded time per run (`ConversationsRequest::backfillRoots()`), and puts
- * itself back on the list until a chunk comes back short: every direct
- * message stored since has its root from the moment it was stored. A message
- * that already has one is passed over, so a run repeated after a failure
- * changes nothing it already did; one that fails is logged and passed over.
+ * Queued once by `Version1000Date20261016100400`, so not in `info.xml`. Walks
+ * `social_stream` in nid order from a cursor in the app settings, a bounded
+ * chunk per run (`ConversationsRequest::backfillRoots()`), requeueing itself
+ * until a chunk comes back short. Messages with a root are skipped, so
+ * reruns are safe; a failing one is logged and skipped.
  */
 class ThreadRoots extends QueuedJob {
 	/** Where the job has got to, as a nid. */

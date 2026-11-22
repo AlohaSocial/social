@@ -32,18 +32,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The reader's own numbers.
- *
- * Client-API routes, so the Statistics page reaches them with its session and
- * a mobile client with the token it signed in with. Both ask for
- * `read:statuses`: the figures are counted from the caller's own posts, all of
- * them, and the account block beside them (handle, follower and following
- * counts) is what every status entity carries about its author anyway. It is
- * only ever about the caller — there is no account parameter, so there is
- * nothing to point at somebody else.
- *
- * Rate limited because the answer is a walk over the account's posts rather
- * than a lookup, and a reload loop should not be able to spend that repeatedly.
+ * The reader's own numbers, for the Statistics tab of their profile and for
+ * mobile clients. `read:statuses` suffices: the figures are counted from the
+ * caller's own posts, and there is no account parameter. Rate limited, since
+ * the answer walks all of the account's posts.
  */
 class StatisticsController extends ClientApiController {
 	public function __construct(
@@ -73,17 +65,13 @@ class StatisticsController extends ClientApiController {
 			$this->initViewer(['read:statuses']);
 
 			$statistics = $this->statisticsService->cachedForAccount($this->viewer(), $days, $fresh);
-			// the size of the place all this went out to, which nothing
-			// counted here can say. Null when it is switched off or the
+			// the size of the network as a whole; null when switched off or the
 			// survey did not answer, and the page leaves the section out
-			// rather than drawing zeros
 			$statistics['network'] = $this->networkStatsService->network();
-			// and whether that place is growing, which is the question a
-			// single number cannot answer. A second source, named as such: the
-			// snapshot above publishes no history at all
+			// and whether it is growing, from a second source, since the snapshot
+			// above has no history
 			$statistics['growth'] = $this->networkGrowthService->growth();
-			// and what it is made of: "forty thousand servers" is an
-			// abstraction, and the list of platforms is a picture of a place
+			// and the platforms it is made of
 			$statistics['software'] = $this->networkStatsService->software();
 
 			return new DataResponse($statistics, Http::STATUS_OK);
@@ -101,12 +89,8 @@ class StatisticsController extends ClientApiController {
 	}
 
 	/**
-	 * The same figures as a file, for somebody who wants to keep them.
-	 *
-	 * A page somebody checks every month is a page they will want a record of
-	 * — and this app stores none of it, so the only copy is the one they take.
-	 * CSV because that is what a spreadsheet opens; the whole answer is in
-	 * `json` for anybody who wants the shape rather than the summary.
+	 * The same figures as a file to keep, since this app stores no history: CSV
+	 * for a spreadsheet, or the whole answer as `json`.
 	 *
 	 * @param int $days the window, one of `StatisticsService::WINDOWS`
 	 * @param string $format `csv` or `json`
@@ -155,11 +139,8 @@ class StatisticsController extends ClientApiController {
 	}
 
 	/**
-	 * The figures worth putting in a spreadsheet, one per row.
-	 *
-	 * Flattened deliberately rather than dumped: a CSV of a nested structure
-	 * is a worse JSON file. What goes in is what somebody would chart — the
-	 * totals, the rates, and the per-month series.
+	 * The figures worth charting, one per row: totals, rates and the per-month
+	 * series, flattened.
 	 *
 	 * @param array<string, mixed> $statistics
 	 */
@@ -228,8 +209,8 @@ class StatisticsController extends ClientApiController {
 		}
 
 		foreach ($rows as $row) {
-			// account names, hashtags and server names are other people's
-			// words, and a spreadsheet would run one that reads as a formula
+			// account names, hashtags and server names are other people's words, and a
+			// spreadsheet would run one that reads as a formula
 			fputcsv($handle, array_map(
 				static fn ($cell) => is_string($cell) ? Csv::neutralise($cell) : $cell,
 				$row

@@ -15,10 +15,9 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The two aggregates behind `stats` on `/api/v1/instance` and `usage` on
- * NodeInfo. Both walk a whole table, so `InstanceService` remembers their
- * result for a few minutes rather than asking on every hit — that endpoint is
- * the first request every client makes.
+ * The aggregates behind `stats` on `/api/v1/instance` and `usage` on
+ * NodeInfo. Both walk a whole table, so `InstanceService` caches them for a
+ * few minutes.
  */
 class InstanceStatsRequest extends CoreRequestBuilder {
 	use TArrayTools;
@@ -70,10 +69,8 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 
 	/**
 	 * Local statuses published in a window, for the weekly activity series.
-	 *
 	 * `published_time` is a DATETIME, so the window is bound as dates: an
-	 * integer compared against it matches nothing on SQLite and is an error
-	 * on PostgreSQL.
+	 * integer matches nothing on SQLite and fails on PostgreSQL.
 	 */
 	public function countLocalStatusesBetween(int $from, int $to): int {
 		$qb = $this->getQueryBuilder();
@@ -97,11 +94,8 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Every instance this one has heard of, lower-cased and sorted.
-	 *
-	 * The same walk `countRemoteDomains()` does, kept as one implementation:
-	 * `/api/v1/instance/peers` answers this list and the stats answer its size,
-	 * and two walks would be two answers to the same question.
+	 * Every instance this one has heard of, lower-cased and sorted; the same
+	 * walk as `countRemoteDomains()`, so the peers list and its count agree.
 	 *
 	 * @return string[]
 	 */
@@ -120,10 +114,6 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 	 * The remote instances this one has heard of, each with how many of its
 	 * accounts are cached here.
 	 *
-	 * The same scan as the domain list — the host is read off the account
-	 * handle in PHP because there is no host column to group on — so the
-	 * count comes for free.
-	 *
 	 * @return array<string, int> host => cached accounts, most first
 	 */
 	public function remoteHostCounts(): array {
@@ -136,15 +126,9 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 	/**
 	 * @return array<string, int> host => how many cached accounts are on it
 	 *
-	 * Grouped in the database on `social_cache_actors.host`, which exists for
-	 * this: the four callers used to read every cached actor row and split the
-	 * handle in PHP, which on an instance that has been federating for a year
-	 * is hundreds of thousands of rows fetched to produce a list of a few
-	 * thousand hosts.
-	 *
-	 * A row whose host has not been backfilled yet is skipped rather than
-	 * guessed at, so the count is briefly low rather than wrong; one pass of
-	 * the upgrade's backfill fixes it.
+	 * Grouped in the database on `social_cache_actors.host`. Rows whose host
+	 * is not backfilled yet are skipped, so the count is briefly low rather
+	 * than wrong.
 	 */
 	private function remoteHosts(): array {
 		$qb = $this->getQueryBuilder();

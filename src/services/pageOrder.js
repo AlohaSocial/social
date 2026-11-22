@@ -4,15 +4,9 @@
  */
 
 /**
- * Where each page sits in the sidebar, so that moving between two of them has
- * a direction.
- *
- * A fade says a page was replaced; a slide says which way you went, and the
- * way you went is down or up the list you clicked in. The order here is the
- * sidebar's order -- see `Navigation.vue`, whose entries carry these same
- * destinations -- and anything not in the list sits past the end, because a
- * post, a tag or somebody's profile is somewhere you go *from* the sidebar
- * rather than a rung on it.
+ * Where each page sits in the sidebar (`Navigation.vue`), so moving between two
+ * of them has a direction. Anything not listed (a post, a tag, a profile) sits
+ * past the end.
  */
 
 /** The sidebar, top to bottom, as route identities. */
@@ -25,11 +19,6 @@ const ORDER = [
 	'timeline:direct',
 	'discover',
 	'profile',
-	'follow-requests',
-	'timeline:favourites',
-	'timeline:bookmarks',
-	'statistics',
-	'blocked-accounts',
 	'settings',
 ]
 
@@ -44,11 +33,9 @@ const BEYOND = ORDER.length
 const FEED_SCOPES = ['', 'home', 'interests', 'timeline', 'federated']
 
 /**
- * What a route is called for the purpose of ordering.
- *
- * The timeline is six sidebar entries wearing one route name, told apart by
- * `params.type`, so the type is part of the identity -- except for the feed's
- * scopes, which are all the first entry. Everything else is its route name.
+ * What a route is called for the purpose of ordering: its name, plus
+ * `params.type` for the timeline, which is several sidebar entries under one
+ * route name. The feed's scopes are all the first entry.
  *
  * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}} route a route, or anything with `name` and `params`
  * @return {string} the identity
@@ -66,9 +53,7 @@ export function pageIdentity(route) {
 
 /**
  * Whether two routes are the same page, read differently: another scope of the
- * feed, another scope of Photos, the same page with another query. Nothing is
- * animated between them -- the reader changed what the page shows, not where
- * they are.
+ * feed or of Photos, or another query. Nothing is animated between them.
  *
  * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}} to where they are going
  * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}|null|undefined} from where they were
@@ -91,11 +76,8 @@ export function pageRank(route) {
 }
 
 /**
- * Which way the reader went.
- *
- * `''` when there is no direction to give: the same page, or a move that
- * neither page is on the sidebar for -- a post to another post, say -- where
- * a slide would be inventing a geography that is not there.
+ * Which way the reader went: `''` for the same page, or when neither page is
+ * on the sidebar (a post to another post, say).
  *
  * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}} to where they are going
  * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}} from where they were

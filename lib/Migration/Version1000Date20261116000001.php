@@ -20,20 +20,12 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_req_queue.creation`: when a delivery was queued.
- *
- * A delivery whose host is held back by the circuit breaker is postponed
- * without spending a try, so the try count alone never ends the rows of an
- * instance that has gone away. The age does: `RequestQueueRequest::
- * abandonExhausted()` gives up on a row once it is older than the whole
- * retry schedule, read on (`status`, `creation`).
- *
- * (`author_prim`, `status`) answers whether a deleted account still has
- * deliveries waiting, which is what keeps its signing key until they have
- * gone, and serves `deleteByAuthor()`.
- *
- * Rows already queued are dated now, so the ones addressed to dead hosts
- * expire one schedule after the upgrade. Run again, it finds none undated.
+ * `social_req_queue.creation`: when a delivery was queued. A delivery held
+ * back by the circuit breaker spends no try, so
+ * `RequestQueueRequest::abandonExhausted()` gives up by age instead, read on
+ * (`status`, `creation`). (`author_prim`, `status`) answers whether a deleted
+ * account still has deliveries waiting (which keeps its signing key) and
+ * serves `deleteByAuthor()`. Existing rows are dated now.
  */
 class Version1000Date20261116000001 extends SimpleMigrationStep {
 	public function __construct(

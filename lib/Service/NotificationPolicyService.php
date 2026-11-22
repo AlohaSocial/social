@@ -25,49 +25,30 @@ use OCA\Social\Model\Moderation;
 use Psr\Container\ContainerInterface;
 
 /**
- * Mastodon 4.3's notification policy and the requests inbox it fills.
+ * Mastodon 4.3's notification policy and the requests inbox it fills:
+ * notifications from accounts the reader has no relationship with are held,
+ * gathered per sender, and the reader decides about the sender once.
  *
- * What it is for: an account that is mentioned by strangers can either read
- * every notification or turn notifications off. The policy is the third
- * answer — notifications from accounts the reader has no relationship with are
- * *held* rather than shown or lost, gathered per sender, and the reader
- * decides about the sender once.
+ * An account without a stored policy accepts everything; an account created
+ * here is given one at creation (`startCalm()`): the administrator's defaults,
+ * else `NotificationPolicy::CALM`. `drop` is treated as `filter` when reading,
+ * as the inbox stores the row long before: a loosened policy can still show
+ * what was held.
  *
- * An account that has never stored a policy holds nothing back: every one of
- * the five questions answers `accept`, which is what every account had before
- * this existed, so accounts from before new ones started calm keep receiving
- * everything until their owner chooses. An account created here is given
- * a stored policy at creation (`startCalm()`): the administrator's defaults,
- * else `NotificationPolicy::CALM`.
+ * The same rules (`isHeld()`) apply when the list is read, when a notification
+ * is stored, so a held one raises no bell, push or mail (`isHeldFor()`, from
+ * `NotificationService::emit()`), and, for a reader who takes direct messages
+ * from nobody, when direct messages are listed (`heldDirectSenders()`, from
+ * `ConversationService`).
  *
- * Held, not deleted. `drop` is Mastodon's third answer and this app treats it
- * as `filter` at read time for one reason: the notification row is written by
- * the inbox, long before anybody reads it, and dropping it there would mean
- * the policy decides what is *stored* — so a policy loosened on Tuesday could
- * not show what was refused on Monday. The reader sees the same thing either
- * way; what differs is whether the decision can be taken back.
+ * Who may send direct messages (`directMessagesFrom()`) is
+ * `for_private_mentions` seen from the other side, plus "nobody", stored beside
+ * the policy (`DIRECT_NOBODY_KEY`) and written to Bluesky's
+ * `chat.bsky.actor.declaration` when it changes.
  *
- * The policy applies in three places, with the same rules (`isHeld()`): when
- * the list is read, so what is held is not listed, when a notification is
- * stored, so what is held raises no Nextcloud notification — no bell, push or
- * mail (`isHeldFor()`, called from `NotificationService::emit()`), and, for a
- * reader who takes direct messages from nobody, when the direct messages are
- * listed, so a conversation a held sender started is not among them
- * (`heldDirectSenders()`, called from `ConversationService`).
- *
- * Who may send the account direct messages (`directMessagesFrom()`) is the
- * policy's `for_private_mentions` seen from the other side: everybody when
- * it accepts them, the people the account follows when it holds the rest,
- * and nobody when it holds every direct message, whoever sent it — the one
- * answer the five questions have no room for, stored beside the policy
- * (`DIRECT_NOBODY_KEY`). Bluesky has the same setting
- * (`chat.bsky.actor.declaration`), written whenever the answer changes.
- *
- * Reading is where the list is filtered, not writing, and that has a cost
- * worth naming: `/api/v1/notifications` reads a page and then removes what is held,
- * so a page can come back short. It is the same trade `FilterService` makes,
- * and the paging cursor is taken from what the query returned rather than from
- * what survived, so a shortened page never ends the client's paging early.
+ * `/api/v1/notifications` filters after reading a page, so a page can come
+ * back short; its cursor is taken from what the query returned, as with
+ * `FilterService`.
  */
 class NotificationPolicyService {
 	/** Where the five decisions are stored, as JSON, per account. */
@@ -102,12 +83,9 @@ class NotificationPolicyService {
 	public const REQUESTS_MAX_LIMIT = 80;
 
 	/**
-	 * How many notifications the requests inbox looks back over.
-	 *
-	 * The inbox is derived rather than stored, so "everything held" means
-	 * reading notifications until there are none left. This bounds that: a
-	 * sender whose last notification is further back than this is not listed,
-	 * and a reader who wants it can still find the notification itself.
+	 * How many notifications the requests inbox looks back over: it is derived,
+	 * not stored, so this bounds the read. An older held notification can still
+	 * be found itself.
 	 */
 	public const LOOKBACK = ProbeOptions::MAX_LOOKBACK;
 
@@ -166,10 +144,9 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * Changes what new accounts start with. Only `accept` and `filter`: the
-	 * administrator decides whether something waits for review, never that it
-	 * is thrown away for somebody who has not chosen that. Accounts that exist
-	 * already are not touched.
+	 * Changes what new accounts start with, `accept` or `filter` only: the
+	 * administrator may make things wait for review, never throw them away.
+	 * Existing accounts are not touched.
 	 *
 	 * @param array<string, mixed> $changes
 	 *
@@ -351,7 +328,7 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * The rows the policy holds back, out of what the sidebar's count reads
+	 * The rows the policy holds back, out of what the requests count reads
 	 * instead of whole notifications (`StreamRequest::getNotificationSenders()`):
 	 * the same rules as `partition()`, asked of the same facts.
 	 *
@@ -366,12 +343,8 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * Which of the described notifications the policy holds back.
-	 *
-	 * Every fact the five questions need is gathered once for the whole page
-	 * rather than per notification: a page is tens of rows from a handful of
-	 * senders, and asking "do I follow this account" per row would be tens of
-	 * queries for an answer that does not change inside one page.
+	 * Which of the described notifications the policy holds back, with the
+	 * facts gathered once for the whole page rather than per row.
 	 *
 	 * @param array<array-key, array{sender: string, creation: int, privateMention: bool, ...}> $about
 	 *
@@ -459,16 +432,11 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * Which of the senders a direct message from is held, for a reader who
-	 * takes direct messages from nobody: the rules `isHeldFor()` applies to a
-	 * direct mention, asked of several senders at once. What keeps a
-	 * conversation they started out of the reader's direct messages
-	 * (`ConversationService`) while its mention waits among the requests.
-	 *
-	 * Any other answer holds no conversation, only its notification, as
-	 * Mastodon does: a stranger's message is still in the reader's direct
-	 * messages, where a reader on the default policy would otherwise never
-	 * find it.
+	 * Which senders' direct messages are held, for a reader who takes direct
+	 * messages from nobody: `isHeldFor()`'s rules for a direct mention, for
+	 * several senders at once, keeping those conversations out of the direct
+	 * messages (`ConversationService`). Any other answer holds only the
+	 * notification, as in Mastodon.
 	 *
 	 * @param array<string, int> $senders sender id => account creation as a unix time, 0 when unknown
 	 *
@@ -494,12 +462,8 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * The senders whose notifications are being held, each with what they have
-	 * sent, newest first.
-	 *
-	 * A sender the reader has dismissed is not among them: dismissing is
-	 * "stop asking me about this account", and an inbox that offers them again
-	 * tomorrow has not done what it was told.
+	 * The senders whose notifications are being held, each with what they
+	 * have sent, newest first; senders the reader dismissed are left out.
 	 *
 	 * @param Stream[] $held
 	 * @param array<string, bool> $dismissed sender ids the reader said no to
@@ -556,11 +520,9 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * "Show me this account's notifications after all."
-	 *
-	 * Stored as a relation, so it settles everything that account has sent and
-	 * will send — which is the whole point of deciding about the sender rather
-	 * than about each notification. It is not a follow and federates nothing.
+	 * "Show me this account's notifications after all": stored as a relation,
+	 * so it settles everything the account sent and will send. Not a follow,
+	 * and federates nothing.
 	 */
 	public function accept(Person $viewer, Person $sender): void {
 		$this->accountRelationService->acceptNotifications($viewer, $sender);
@@ -571,12 +533,9 @@ class NotificationPolicyService {
 	}
 
 	/**
-	 * "Stop asking me about this account."
-	 *
-	 * The held notifications stay where they are and stay hidden; what changes
-	 * is that the sender is no longer offered as a decision to take. Mastodon
-	 * deletes them; here nothing is deleted, so a policy the reader loosens
-	 * later still has something to show.
+	 * "Stop asking me about this account": the held notifications stay hidden
+	 * but are not deleted, unlike Mastodon, so a policy loosened later still
+	 * has something to show.
 	 */
 	public function dismiss(Person $viewer, Person $sender): void {
 		$this->accountRelationService->dismissNotifications($viewer, $sender);

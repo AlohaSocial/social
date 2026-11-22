@@ -16,15 +16,9 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Converting the stored videos now, rather than one every quarter-hour.
- *
- * The background job exists so that a server converting a backlog is never the
- * reason its cron is slow; that makes it about a hundred videos a day, which
- * is the right speed for something nobody is waiting on. An administrator who
- * has just turned the setting on and would rather not wait a week has this.
- *
- * It is the same conversion the job does, one file at a time, and it stops
- * when there is nothing left or when the limit is reached.
+ * Converts the stored videos now, one file at a time, instead of waiting for
+ * the background job's one every quarter-hour. Stops when nothing is left or
+ * the limit is reached.
  */
 class MediaTranscode extends SocialCommand {
 	public function __construct(
@@ -75,8 +69,7 @@ class MediaTranscode extends SocialCommand {
 			}
 
 			$converted++;
-			// one line per file: this runs for minutes per video and an
-			// administrator watching it wants to see that it is moving
+			// one line per file: each video takes minutes
 			$output->writeln('  converted ' . $converted);
 		}
 

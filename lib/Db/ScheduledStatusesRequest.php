@@ -19,16 +19,9 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * The posts an account has asked to have published later.
  *
- * Every read a client can reach takes the owner's actor id and compares it in
- * SQL. That is the whole of the access control on a scheduled post: nothing
- * reachable from a request can return, change or delete a row that belongs to
- * somebody else, so no caller has to remember to check. A waiting post is
- * unpublished text the author has not shown anyone yet — the one thing here
- * nobody but its owner may see.
- *
- * The two methods the cron uses — `getDue()` and `claim()` — are the
- * exceptions, and they are unscoped on purpose: the job runs for every account
- * at once and has no viewer to be scoped to.
+ * Every read a client can reach compares the owner's actor id in SQL, which
+ * is the whole access control on unpublished text. Only the cron's
+ * `getDue()` and `claim()` are unscoped, as the job runs for every account.
  */
 class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	/**
@@ -77,9 +70,8 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	/**
 	 * One waiting post of one account.
 	 *
-	 * @throws ItemNotFoundException there is no such post *of this account*,
-	 *                               which is also the answer for one that
-	 *                               belongs to somebody else
+	 * @throws ItemNotFoundException there is no such post of this account,
+	 *                               including one of somebody else's
 	 */
 	public function getById(int $id, string $actorId): ScheduledStatus {
 		$qb = $this->getScheduledSelectSql();
@@ -98,29 +90,13 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	}
 
 	/**
-	 * A page of the account's waiting posts, soonest first — which is the
-	 * order a client draws them in, and the order this is stored in.
+	 * A page of the account's waiting posts, soonest first.
 	 *
-	 * The cursor a caller sends is a row id, because that is what the API
-	 * promises. What it *means* here is the position of that row in the order
-	 * above, which is not the same thing: an id is creation order, and
-	 * `scheduled_at` is publication order that `reschedule()` can move at any
-	 * time. Comparing ids while ordering by time is a cursor that does not
-	 * describe the sequence being paged — with rows at 10:00, 08:00, 09:00
-	 * (ids 1, 2, 3), `limit=2` gives [2, 3], and continuing from `max_id=3`
-	 * keeps ids below 3, sorts them by time, and hands back id 2 a second
-	 * time.
-	 *
-	 * So the id is resolved to the pair it stands for, `(scheduled_at, id)`,
-	 * and the comparison is made on the pair. That keeps the promise — the
-	 * caller still sends an id — and makes the cursor mean a place in the
-	 * order it is paging.
-	 *
-	 * `min_id` and `since_id` ask for what comes *after* that place and read
-	 * forwards. `max_id` asks for what comes *before* it, which is the page
-	 * ending at the cursor rather than the earliest page there is: that one is
-	 * read backwards, `limit` rows, and turned round again, exactly as
-	 * Mastodon pages a descending list.
+	 * The cursor is a row id, as the API promises, but ids follow creation and
+	 * `reschedule()` moves posts in time, so the id is resolved to its
+	 * `(scheduled_at, id)` pair and compared on that. `min_id` and `since_id`
+	 * read forwards from it; `max_id` reads the `limit` rows before it
+	 * backwards and turns them round, as Mastodon pages a descending list.
 	 *
 	 * @return ScheduledStatus[]
 	 */
@@ -134,9 +110,7 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 		$qb = $this->getScheduledSelectSql();
 		$qb->andWhere($qb->expr()->eq('ss.actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
 
-		// one direction at a time, and the two that mean the same thing are
-		// the same cursor: Mastodon's `since_id` and `min_id` both ask for
-		// what follows
+		// Mastodon's `since_id` and `min_id` both ask for what follows.
 		$after = ((int)$minId > 0) ? (int)$minId : $sinceId;
 		$backwards = ($maxId > 0 && $after < 1);
 
@@ -153,24 +127,16 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 
 		$page = $this->getScheduledFromRequest($qb);
 
-		// read backwards to find the rows next to the cursor; handed back in
-		// the order the list is drawn in
+		// Read backwards to find the rows next to the cursor; returned in list order.
 		return $backwards ? array_reverse($page) : $page;
 	}
 
 	/**
 	 * Everything ordered after (or before) the row a cursor names.
 	 *
-	 * `(scheduled_at, id)` compared as a pair, spelled out rather than as a
-	 * row constructor: `(a, b) > (c, d)` is standard SQL that MySQL and
-	 * PostgreSQL both understand and SQLite does not index, and this app
-	 * supports all three.
-	 *
-	 * A cursor that names no row of this account — one published or cancelled
-	 * between two pages, which for a *scheduled* post is an ordinary thing to
-	 * happen — has no pair to stand for. It falls back to comparing ids, which
-	 * is what this did for every cursor before and is at worst the old
-	 * behaviour for a case that used to be the only behaviour.
+	 * `(scheduled_at, id)` is compared as a pair spelled out, since SQLite does
+	 * not index a row constructor. A cursor naming no row of this account (one
+	 * published or cancelled between pages) falls back to comparing ids.
 	 */
 	private function beyond(
 		SocialQueryBuilder $qb,
@@ -220,13 +186,9 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	}
 
 	/**
-	 * How many the account has waiting between two instants, against
-	 * Mastodon's per-day cap.
-	 *
-	 * The day is bounded by the caller in PHP rather than by casting the
-	 * column to a date in SQL, which is what Mastodon does: `::date` is
-	 * PostgreSQL's, and the three other databases this app supports each spell
-	 * it differently or not at all.
+	 * How many the account has waiting between two instants, against Mastodon's
+	 * per-day cap. The day is bounded in PHP, since casting to a date in SQL
+	 * differs between databases.
 	 */
 	public function countByActorBetween(string $actorId, int $from, int $until): int {
 		$qb = $this->countScheduledSelectSql();
@@ -249,10 +211,7 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 
 	/**
 	 * The posts whose time has come, across every account, soonest first.
-	 *
-	 * Bounded, because a cron slot is: an instance whose cron has been dead
-	 * for a week must publish what it can and come back for the rest, rather
-	 * than start a run it cannot finish and publish nothing.
+	 * Bounded, so a cron that was down for a week catches up over several runs.
 	 *
 	 * @param string[] $exceptActors the actor ids whose posts are held back
 	 *                               and left out, so they do not fill the
@@ -283,10 +242,7 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	}
 
 	/**
-	 * The uploads every waiting post names, as nid => true.
-	 *
-	 * Read in pages by id; the table holds what people have scheduled, which
-	 * each account is limited in.
+	 * The uploads every waiting post names, as nid => true, read in pages by id.
 	 *
 	 * @return array<int, true>
 	 */
@@ -312,13 +268,8 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 
 	/**
 	 * Takes a row out of the table for a publisher, and says whether this
-	 * caller is the one who got it.
-	 *
-	 * The delete is what claims the post, not a flag: two cron workers that
-	 * read the same due row both try this, the database lets exactly one of
-	 * them affect a row, and only that one goes on to publish. A flag would
-	 * need a second write to clear and would leave the post federated twice if
-	 * the worker died between the two.
+	 * caller got it. The delete is the claim: of two cron workers only one
+	 * affects the row, and nothing is left to clear if a worker dies.
 	 */
 	public function claim(int $id): bool {
 		$qb = $this->getScheduledDeleteSql();
@@ -342,10 +293,8 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	}
 
 	/**
-	 * Everything an account leaves behind here when it is deleted. Called from
-	 * the account-deletion path, like every other deleteRelatedId() — a post
-	 * that would be published under an account that no longer exists is worse
-	 * than a lost draft.
+	 * Everything an account leaves behind here when it is deleted, so nothing
+	 * is published under an account that no longer exists.
 	 */
 	public function deleteRelatedId(string $actorId): void {
 		$qb = $this->getScheduledDeleteSql();
@@ -377,15 +326,9 @@ class ScheduledStatusesRequest extends ScheduledStatusesRequestBuilder {
 	}
 
 	/**
-	 * A timestamp as the date columns here hold one.
-	 *
-	 * Every other date in this schema is written from `new DateTime('now')`,
-	 * which carries the server's timezone, and DBAL formats a DateTime in
-	 * whatever zone the object has. A `DateTime('@…')` is always UTC, so a
-	 * time built from a timestamp would be stored hours away from the `now`
-	 * the job compares it with on any instance that is not on UTC — and a post
-	 * published hours early is a post published before its author meant it to
-	 * be.
+	 * A timestamp as the date columns here hold one: in the server's timezone,
+	 * like the `new DateTime('now')` the job compares it with, since a
+	 * `DateTime('@…')` is UTC and would publish hours early off UTC.
 	 */
 	private function dateTime(int $timestamp): DateTime {
 		return (new DateTime('@' . $timestamp))->setTimezone(new DateTimeZone(date_default_timezone_get()));

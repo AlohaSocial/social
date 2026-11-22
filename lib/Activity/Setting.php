@@ -14,10 +14,9 @@ use OCP\Activity\ActivitySettings;
 use OCP\IL10N;
 
 /**
- * The line in Activity's settings that lets a person choose whether what
- * happens to them on Social shows in their activity stream and in the digest
- * mail. Activity's own notifications are off and stay off: this app has a bell
- * of its own (`Notification\Notifier`), and two bells for one follow is one too many.
+ * The line in Activity's settings choosing whether what happens to a person
+ * on Social shows in their activity stream and digest mail. Activity's own
+ * notifications stay off, as this app has its own (`Notification\Notifier`).
  */
 class Setting extends ActivitySettings {
 	public const IDENTIFIER = 'social';
@@ -34,7 +33,7 @@ class Setting extends ActivitySettings {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Somebody <strong>followed</strong> you, <strong>mentioned</strong> you, or <strong>boosted</strong> or <strong>favourited</strong> a post of yours on Aloha Social');
+		return $this->l10n->t('Somebody <strong>followed</strong> you, <strong>mentioned</strong> you, or <strong>boosted</strong> or <strong>liked</strong> a post of yours on Aloha Social');
 	}
 
 	#[\Override]

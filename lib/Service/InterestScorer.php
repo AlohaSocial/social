@@ -13,26 +13,17 @@ use OCA\Social\Db\FollowedTagsRequest;
 use OCA\Social\Model\Interest;
 
 /**
- * The arithmetic of For you, and nothing else.
+ * The arithmetic of For you, with everything it needs handed in (no database,
+ * clock or configuration), so each rule can be tested. `InterestService` reads
+ * and writes around it; `InterestFeedService` ranks posts with the weights.
  *
- * No database, no clock of its own and no configuration read behind the
- * caller's back: every number it needs is handed to it, so every rule the
- * feature has can be tested as a rule. `InterestService` does the reading and
- * the writing around it; `InterestFeedService` uses the weights to rank posts.
- *
- * The rules, in the order a signal meets them:
- *
- *  - Passive time on screen is neutral. Only a Shorts player's measured
- *    playback ratio, explicit actions and skips can teach the profile.
- *  - **A post's signal is split** evenly across its hashtags, so a post with
- *    ten tags teaches ten tags a little rather than each of them a lot; past
- *    fifteen it is tag spam and teaches nothing.
- *  - **Scores decay** with a half-life, worked out when a score is read rather
- *    than by a job that rewrites every row, so what someone was into last
- *    spring does not run their feed today.
- *  - **The list** is followed tags and automatically learned tags above the
- *    threshold, ranked by score and limited to the cap. Legacy manual and
- *    pinned rows are ignored so old reader choices no longer steer the feed.
+ *  - Passive time on screen is neutral; only a Shorts player's measured
+ *    playback ratio, explicit actions and skips teach the profile.
+ *  - A post's signal is split evenly across its hashtags; past fifteen tags
+ *    it is spam and teaches nothing.
+ *  - Scores decay with a half-life, computed when read.
+ *  - The list is followed tags and learned tags above the threshold, ranked
+ *    by score up to the cap. Manual and pinned rows are ignored.
  */
 class InterestScorer {
 	/**
@@ -154,15 +145,12 @@ class InterestScorer {
 	}
 
 	/**
-	 * Adds a signal to a row, in place.
-	 *
-	 * The row's score is decayed to now first, so the old score and the new
-	 * signal are in the same currency. When the last signal
-	 * came in an earlier week, the score as that week ends is kept for the
-	 * trend.
+	 * Adds a signal to a row, in place, decaying its score to now first. When
+	 * the last signal came in an earlier week, the score as that week ended is
+	 * kept for the trend.
 	 */
 	public function fold(Interest $interest, float $delta, int $now): Interest {
-		// Reader-selected legacy rows no longer seed automatic learning.
+		// manual and pinned rows do not seed automatic learning
 		if ($interest->isManual() || $interest->isPinned()) {
 			$interest = new Interest($interest->getHashtag());
 		}

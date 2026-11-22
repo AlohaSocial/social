@@ -16,16 +16,10 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Building the ladders now, rather than one every half-hour.
- *
- * The same reasoning as `social:media:transcode`: the job is paced so that a
- * server working through a backlog is never the reason its cron is slow, and
- * an administrator who has just turned the setting on and would rather not
- * wait a fortnight has this instead.
- *
- * Slower per video than the transcoder by however many rungs the ladder has,
- * which is worth saying out loud before somebody starts it on a library of ten
- * thousand.
+ * Builds the ladders now instead of one every half-hour, for an administrator
+ * who has just turned the setting on; the cron job is paced so a backlog never
+ * slows the server's cron. Slower per video than the transcoder by the number
+ * of rungs, so mind a large library.
  */
 class MediaLadder extends SocialCommand {
 	public function __construct(

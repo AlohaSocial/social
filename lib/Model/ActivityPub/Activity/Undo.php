@@ -12,11 +12,6 @@ namespace OCA\Social\Model\ActivityPub\Activity;
 use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
-/**
- * Class Undo
- *
- * @package OCA\Social\Model\ActivityPub\Activity
- */
 class Undo extends ACore implements JsonSerializable {
 	public const TYPE = 'Undo';
 

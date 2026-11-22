@@ -13,16 +13,9 @@ use JsonSerializable;
 use OCA\Social\Tools\Nid;
 
 /**
- * One keyword filter of one account, as Mastodon's v2 `Filter` entity.
- *
- * A filter is a title, the timelines it applies to, when it stops applying,
- * what to do with a status it matches, and the keywords that match one. The
- * matching itself is `FilterService`'s; this holds the row and the shape a
- * client is handed.
- *
- * `expiresAt` is a timestamp and `0` means "never", not "expired in 1970":
- * every read compares with `isActive()` rather than with the number, so the
- * two cannot be confused.
+ * One keyword filter of one account, as Mastodon's v2 `Filter` entity; the
+ * matching is `FilterService`'s. `expiresAt` 0 means never: reads go through
+ * `isActive()`, not the number.
  */
 class Filter implements JsonSerializable {
 	/** The home timeline and any list. */
@@ -56,9 +49,8 @@ class Filter implements JsonSerializable {
 	public const MAX_TITLE = 255;
 
 	/**
-	 * The width of `social_filter.contexts`, which holds the comma-joined
-	 * list — far wider than the five names can ever need, and the check is
-	 * here so a future context cannot silently be cut in half.
+	 * The width of `social_filter.contexts`, which holds the comma-joined list,
+	 * checked so a longer list cannot be cut silently.
 	 */
 	public const MAX_CONTEXTS = 255;
 
@@ -201,11 +193,8 @@ class Filter implements JsonSerializable {
 	}
 
 	/**
-	 * Whether this filter covers that post by name.
-	 *
-	 * The post is named by its `nid`, which is the id the client API hands out
-	 * and the id a client sends back — see the `social_filter_st` migration
-	 * for why the URI is not what is stored.
+	 * Whether this filter covers that post, by the `nid` the client API hands out
+	 * (see the `social_filter_st` migration).
 	 */
 	public function covers(int|string $statusId): bool {
 		if (!ctype_digit((string)$statusId) || Nid::compare($statusId, '0') < 1) {
@@ -223,9 +212,7 @@ class Filter implements JsonSerializable {
 	}
 
 	/**
-	 * An expired filter stops applying on its own, with nothing run to make it
-	 * happen: no cleanup job exists, and one that failed to run would otherwise
-	 * silently keep hiding statuses the account expected back.
+	 * An expired filter stops applying by itself, with no cleanup job to run.
 	 */
 	public function isActive(?int $now = null): bool {
 		return $this->expiresAt === 0 || $this->expiresAt > ($now ?? time());
@@ -236,10 +223,8 @@ class Filter implements JsonSerializable {
 	}
 
 	/**
-	 * The contexts of a filter as they are stored and compared: the names
-	 * Mastodon defines, once each, in the order it lists them. Anything else a
-	 * client sent is dropped — a context nothing reads would be a filter the
-	 * account believes is applied somewhere it is not.
+	 * The contexts of a filter as stored and compared: Mastodon's names, once
+	 * each, in its order. Anything else is dropped, since nothing would read it.
 	 *
 	 * @param array<mixed> $raw
 	 *
@@ -259,9 +244,8 @@ class Filter implements JsonSerializable {
 	}
 
 	/**
-	 * The action a client asked for, or '' for something that is not one — the
-	 * caller answers 422 rather than storing a filter whose action nothing
-	 * knows how to apply.
+	 * The action a client asked for, or '' for something that is not one, which
+	 * the caller answers with 422.
 	 */
 	public static function normaliseAction(string $raw): string {
 		$action = strtolower(trim($raw));
@@ -270,18 +254,16 @@ class Filter implements JsonSerializable {
 	}
 
 	/**
-	 * The title as it is stored: trimmed, and cut to the column's width in
-	 * characters rather than bytes, so a multi-byte title is not cut through
-	 * the middle of a character.
+	 * The title as stored: trimmed, and cut to the column's width in characters,
+	 * not bytes.
 	 */
 	public static function normaliseTitle(string $raw): string {
 		return mb_substr(trim($raw), 0, self::MAX_TITLE, 'UTF-8');
 	}
 
 	/**
-	 * The stored form of the context list, and back. Comma-joined: the five
-	 * names carry no comma, the list is read whole and never searched by SQL,
-	 * and a reader of the row can see what it says.
+	 * The stored form of the context list, and back: comma-joined, since the
+	 * names carry no comma and SQL never searches it.
 	 */
 	public function exportContexts(): string {
 		return implode(',', $this->contexts);
@@ -292,9 +274,8 @@ class Filter implements JsonSerializable {
 	}
 
 	/**
-	 * The filter as it appears inside a status' `filtered` key: what the client
-	 * needs to decide whether to blur and what to say it is blurring for.
-	 * Mastodon leaves the keywords out there, and so does this.
+	 * The filter as it appears inside a status' `filtered` key, without the
+	 * keywords, as on Mastodon.
 	 */
 	public function exportAsResultFilter(): array {
 		return [

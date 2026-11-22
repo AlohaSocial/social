@@ -128,13 +128,11 @@ class AtprotoRecoveryController extends Controller {
 	}
 
 	/**
-	 * `GET /api/v1/social/bluesky/archive`: the viewer's Bluesky account as
-	 * a zip file — repository, blobs, the DID's log and document, the
-	 * offline recovery script — sent while it is written, so the first
-	 * bytes go out at once and nothing of it is kept on disk. A download
-	 * the browser navigates to, so no request token; the password is
-	 * confirmed first, and an account gets a few an hour, as each reads
-	 * the whole repository.
+	 * `GET /api/v1/social/bluesky/archive`: the viewer's Bluesky account as a
+	 * zip (repository, blobs, DID log and document, recovery script),
+	 * streamed and never kept on disk. Browser-navigated, so no request
+	 * token; the password is confirmed first and a few downloads an hour are
+	 * allowed, as each reads the whole repository.
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]

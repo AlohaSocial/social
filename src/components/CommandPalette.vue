@@ -80,11 +80,11 @@ import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
 import IconAccountClock from 'vue-material-design-icons/AccountClock.vue'
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconBookmark from 'vue-material-design-icons/Bookmark.vue'
-import IconCancel from 'vue-material-design-icons/Cancel.vue'
 import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
 import IconCog from 'vue-material-design-icons/Cog.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
 import IconCompass from 'vue-material-design-icons/Compass.vue'
+import IconFileDocumentEditOutline from 'vue-material-design-icons/FileDocumentEditOutline.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconImageMultiple from 'vue-material-design-icons/ImageMultiple.vue'
@@ -93,7 +93,6 @@ import IconMagnify from 'vue-material-design-icons/Magnify.vue'
 import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultiple.vue'
 import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
-import IconSwapHorizontal from 'vue-material-design-icons/SwapHorizontal.vue'
 import eventBus from '../services/eventBus.js'
 import { isPaletteKey, SHORTCUTS, PALETTE_EVENT } from '../services/shortcuts.js'
 import { useAccountStore } from '../store/account.js'
@@ -181,21 +180,26 @@ export default {
 				{ key: 'discover', icon: IconCompass, title: t('social', 'Discover'), to: { name: 'discover' } },
 				{ key: 'activities', icon: IconBell, title: t('social', 'Activities'), to: { name: 'timeline', params: { type: 'notifications' } } },
 				{ key: 'direct', icon: IconCommentAccount, title: t('social', 'Direct messages'), to: { name: 'timeline', params: { type: 'direct' } } },
-				...(account?.acct ? [{ key: 'profile', icon: IconAccountCircle, title: t('social', 'My profile'), to: { name: 'profile', params: { account: account.acct } } }] : []),
-				{ key: 'follow-requests', icon: IconAccountClock, title: t('social', 'Follow requests'), to: { name: 'follow-requests' } },
-				{ key: 'liked', icon: IconHeart, title: t('social', 'Liked posts'), to: { name: 'timeline', params: { type: 'favourites' } } },
-				{ key: 'bookmarks', icon: IconBookmark, title: t('social', 'Bookmarks'), to: { name: 'timeline', params: { type: 'bookmarks' } } },
-				{ key: 'statistics', icon: IconChartBox, title: t('social', 'Statistics'), to: { name: 'statistics' } },
-				{ key: 'blocking', icon: IconCancel, title: t('social', 'Blocking'), to: { name: 'blocked-accounts' } },
-				{ key: 'migration', icon: IconSwapHorizontal, title: t('social', 'Migration'), to: { name: 'migration' } },
+				...(account?.acct
+					? [
+							{ key: 'profile', icon: IconAccountCircle, title: t('social', 'My profile'), to: { name: 'profile', params: { account: account.acct } } },
+							{ key: 'liked', icon: IconHeart, title: t('social', 'Favorites'), to: { name: 'profile.saved', params: { account: account.acct } } },
+							{ key: 'bookmarks', icon: IconBookmark, title: t('social', 'Bookmarks'), to: { name: 'profile.saved', params: { account: account.acct }, query: { list: 'bookmarks' } } },
+							{ key: 'drafts', icon: IconFileDocumentEditOutline, title: t('social', 'Drafts'), to: { name: 'profile.drafts', params: { account: account.acct } } },
+							{ key: 'statistics', icon: IconChartBox, title: t('social', 'Statistics'), to: { name: 'profile.statistics', params: { account: account.acct } } },
+						]
+					: []),
+				{ key: 'follow-requests', icon: IconAccountClock, title: t('social', 'Follow requests'), to: { name: 'timeline', params: { type: 'notifications' } } },
 				{ key: 'about', icon: IconInformationOutline, title: t('social', 'About this server'), to: { name: 'about' } },
 				{ key: 'settings', icon: IconCog, title: settings, to: { name: 'settings' } },
-				inSettings('account', t('social', 'Who can find and follow you')),
-				inSettings('lists', t('social', 'Lists')),
+				inSettings('account', t('social', 'Who can find you')),
+				inSettings('contact', t('social', 'Who can contact you')),
+				inSettings('blocked', t('social', 'Blocked and muted')),
+				inSettings('migration', t('social', 'Moving your account')),
+				{ key: 'lists', icon: IconCog, title: t('social', 'Lists'), action: 'lists' },
 				inSettings('notifications', t('social', 'When to tell you')),
-				inSettings('drafts', t('social', 'Drafts')),
-				inSettings('scheduled', t('social', 'Scheduled posts')),
-				inSettings('shortcuts', t('social', 'Keyboard shortcuts')),
+				{ key: 'shortcuts', icon: IconCog, title: t('social', 'Keyboard shortcuts'), action: 'shortcuts' },
+				{ key: 'introduction', icon: IconCog, title: t('social', 'Show the introduction again'), to: { name: 'timeline', query: { replay: '1' } } },
 			]
 		},
 
@@ -288,6 +292,10 @@ export default {
 
 			if (command.action === 'compose') {
 				nextTick(() => eventBus.emit('composer-open', { opener }))
+			} else if (command.action === 'lists') {
+				nextTick(() => eventBus.emit('lists:manage'))
+			} else if (command.action === 'shortcuts') {
+				nextTick(() => eventBus.emit('shortcut:help'))
 			} else if (isCurrentLocation(this.$router, this.$route, command.to)) {
 				scrollToTop()
 			} else {

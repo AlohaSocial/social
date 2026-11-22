@@ -25,7 +25,7 @@ vi.mock('../../../src/components/Composer/Composer.vue', () => ({
 	__isKeepAlive: false,
 	default: {
 		name: 'Composer',
-		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'],
+		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialDraft', 'initialDraftContext', 'listenForIntents'],
 		emits: ['posted'],
 		template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />',
 	},
@@ -63,7 +63,7 @@ const stubs = {
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
 	NcModal: { props: { name: String, labelId: String, closeOnClickOutside: Boolean, show: Boolean }, emits: ['close', 'update:show'], template: '<div class="modal-stub" :data-name="name" :data-label-id="labelId" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { name: 'Composer', data: () => ({ loading: false, isEditDirty: false, hasPendingUploads: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	Composer: { name: 'Composer', data: () => ({ loading: false, isEditDirty: false, hasPendingUploads: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -78,6 +78,7 @@ function mountNavigation(options = {}, route = { name: 'timeline', params: {} })
 	}
 
 	return mount(Navigation, {
+		attachTo: options.attachTo,
 		global: { plugins: [pinia], mocks: { $route: route, $router: router }, stubs },
 	})
 }
@@ -460,8 +461,11 @@ describe('Navigation', () => {
 			const manage = wrapper.findAll('.nav-caption__action').find((button) => button.text() === 'Manage lists')
 			expect(manage).toBeDefined()
 			await manage.trigger('click')
+			await flushPromises()
 
-			expect(router.push).toHaveBeenCalledWith({ name: 'settings', hash: '#lists' })
+			// edited where they are read, not in Settings
+			expect(router.push).not.toHaveBeenCalled()
+			expect(wrapper.findComponent({ name: 'SettingsDialog' }).props('title')).toBe('Lists')
 		})
 
 		/** The settings page owns them; this sidebar holds a copy of its own. */
@@ -921,11 +925,12 @@ describe('Navigation', () => {
 
 	describe('the travelling mark', () => {
 		it('sits on nothing until it has a row to sit on', () => {
-			const wrapper = mountNavigation()
+			const wrapper = mountNavigation({ attachTo: document.body })
 
 			// jsdom lays nothing out, so every box is zero and the mark stays off
 			expect(wrapper.vm.indicator.height).toBe(0)
 			expect(wrapper.find('.navigation__indicator').isVisible()).toBe(false)
+			wrapper.unmount()
 		})
 
 		it('takes its place from the row that is lit', () => {
@@ -1061,12 +1066,6 @@ describe('Navigation', () => {
 			'Direct messages',
 			'Discover',
 			// the profile entry appears only when an ActivityPub account exists
-			'Follow requests',
-			'Liked posts',
-			'Bookmarks',
-			'Statistics',
-			'Blocking',
-			'Migration',
 			'About this server',
 			'Settings',
 		])
@@ -1081,12 +1080,6 @@ describe('Navigation', () => {
 		const wrapper = mountNavigation()
 
 		expect(moreNames(wrapper)).toEqual([
-			'Follow requests',
-			'Liked posts',
-			'Bookmarks',
-			'Statistics',
-			'Blocking',
-			'Migration',
 			'About this server',
 			'Settings',
 		])
@@ -1259,10 +1252,6 @@ describe('Navigation', () => {
 		['My Feed', { name: 'timeline' }],
 		['Activities', { name: 'timeline', params: { type: 'notifications' } }],
 		['Direct messages', { name: 'timeline', params: { type: 'direct' } }],
-		['Liked posts', { name: 'timeline', params: { type: 'favourites' } }],
-		['Statistics', { name: 'statistics' }],
-		['Follow requests', { name: 'follow-requests' }],
-		['Bookmarks', { name: 'timeline', params: { type: 'bookmarks' } }],
 		['About this server', { name: 'about' }],
 		['Settings', { name: 'settings' }],
 	])('points the %s entry at its route', async (name, to) => {
@@ -1277,12 +1266,12 @@ describe('Navigation', () => {
 		expect(router.push).toHaveBeenCalledWith(to)
 	})
 
-	it('offers the blocked and muted accounts in the settings section', () => {
+	/** Blocking and Migration are sections of Settings now. */
+	it('keeps only About and Settings under the account besides the profile', () => {
 		const wrapper = mountNavigation()
-		const entry = item(wrapper, 'Blocking')
 
-		expect(entry.attributes('data-href')).toBe(router.resolve({ name: 'blocked-accounts' }).href)
-		expect(wrapper.find('.nav-settings').text()).toContain('Blocking')
+		expect(wrapper.find('.nav-settings').text()).not.toContain('Blocking')
+		expect(wrapper.find('.nav-settings').text()).not.toContain('Migration')
 	})
 
 	// these rows live inside the Explore entry; that they do, and what they may
@@ -1376,9 +1365,6 @@ describe('Navigation', () => {
 		['/timeline/federated', 'My Feed'],
 		['/timeline/photos', 'Photos'],
 		['/timeline/videos', 'Videos'],
-		['/timeline/favourites', 'Liked posts'],
-		['/timeline/bookmarks', 'Bookmarks'],
-		['/follow_requests', 'Follow requests'],
 	])('marks only one entry active on %s', (path, active) => {
 		const wrapper = mountNavigation({}, appRouter.resolve(path))
 		expect(activeNames(wrapper)).toEqual([active])
@@ -1507,7 +1493,6 @@ describe('Navigation', () => {
 		it.each([
 			['composer-reply', 'inReplyTo'],
 			['composer-quote', 'initialQuote'],
-			['composer-redraft', 'initialRedraft'],
 		])('keeps the initial context for lazy loading: %s', async (event, prop) => {
 			const wrapper = mountNavigation()
 			const post = { id: '123', content: '<p>Context</p>' }
@@ -1853,11 +1838,6 @@ describe('Navigation entries are links', () => {
 		['My Feed', '/index.php/apps/social/timeline'],
 		['Activities', '/index.php/apps/social/timeline/notifications'],
 		['Direct messages', '/index.php/apps/social/timeline/direct'],
-		['Follow requests', '/index.php/apps/social/follow_requests'],
-		['Liked posts', '/index.php/apps/social/timeline/favourites'],
-		['Bookmarks', '/index.php/apps/social/timeline/bookmarks'],
-		['Blocking', '/index.php/apps/social/blocked'],
-		['Migration', '/index.php/apps/social/migration'],
 	])('gives %s a real href', async (name, href) => {
 		expect(link(await mountReal(), name).attributes('href')).toBe(href)
 	})
@@ -1869,11 +1849,10 @@ describe('Navigation entries are links', () => {
 		// timeline the reader had actually chosen.
 		const entry = (wrapper, name) => wrapper.findAll('li').find((li) => li.text().startsWith(name))
 		const lit = (wrapper, names) => names.filter((name) => entry(wrapper, name)?.find('.app-navigation-entry').classes().includes('active'))
-		const names = ['My Feed', 'Photos', 'Videos', 'Activities', 'Direct messages', 'Liked posts', 'Bookmarks']
+		const names = ['My Feed', 'Photos', 'Videos', 'Activities', 'Direct messages']
 
 		expect(lit(await mountReal('/timeline/direct'), names)).toEqual(['Direct messages'])
 		expect(lit(await mountReal('/timeline'), names)).toEqual(['My Feed'])
-		expect(lit(await mountReal('/timeline/favourites'), names)).toEqual(['Liked posts'])
 	})
 
 	it('does not let the browser follow the anchor as well', async () => {
@@ -1881,17 +1860,16 @@ describe('Navigation entries are links', () => {
 		// and only calls preventDefault() when it has one. Driven from a click
 		// handler instead, the fragment navigation that followed the click
 		// reached vue-router as a popstate and cancelled the route change that
-		// the click had just started — which is why "Follow requests", whose
-		// chunk still had to be fetched, went nowhere while every entry on the
-		// already-loaded timeline chunk resolved before the popstate landed.
+		// the click had just started — which is why an entry whose chunk still
+		// had to be fetched went nowhere.
 		const wrapper = await mountReal()
 		const event = new MouseEvent('click', { bubbles: true, cancelable: true })
-		link(wrapper, 'Follow requests').element.dispatchEvent(event)
+		link(wrapper, 'Discover').element.dispatchEvent(event)
 		await flushPromises()
 
 		expect(event.defaultPrevented).toBe(true)
 		// the view is a lazy chunk, so the navigation lands a few ticks later
-		await vi.waitFor(() => expect(appRouter.currentRoute.value.name).toBe('follow-requests'))
+		await vi.waitFor(() => expect(appRouter.currentRoute.value.name).toBe('discover'))
 	})
 
 	/**

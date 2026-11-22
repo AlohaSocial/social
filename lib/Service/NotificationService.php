@@ -44,42 +44,21 @@ use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * What a Nextcloud user is told about their Social account outside the Social
- * tab, and what they can do with the in-app notifications once told.
+ * Raises the Nextcloud notification (bell, mobile app, mail digest) for each
+ * stored in-app notification, and dismisses in-app notifications.
  *
- * The app stores its own notifications as stream items — the rows
- * `/api/v1/notifications` serves — and until this existed that was the only
- * place anything was ever said: somebody who was mentioned, followed,
- * favourited or boosted learned about it by opening Social and looking.
- * Mastodon clients may receive their own Web Push notification; this service
- * delivers the separate Nextcloud notification used by the bell, mobile app
- * and mail digest.
- *
- * The emit hangs off the *stored* notification rather than off each of the
- * four places that create one. There is exactly one path that writes a
- * notification row — `SocialAppNotificationInterface::save()` — so hooking it
- * is what keeps the bell and the in-app list from ever disagreeing about what
- * happened: a row that was suppressed, or that was never written because the
- * post was not local, cannot produce a bell either.
- *
- * The bell is the one half the reader can turn down. Nothing at all is raised
- * for a notification the reader's policy holds for review, or for one about a
- * post in a thread they muted: the row is stored all the same, because the
- * requests inbox is built from it and unmuting lists it again. What is raised
- * may then be held by `NotificationDelivery` for a digest or for quiet hours;
- * the stored row is what the digest counts and what the in-app list shows,
- * and only the Nextcloud notification waits.
+ * Hooked to `SocialAppNotificationInterface::save()`, the one path that writes
+ * a notification row, so the bell and the in-app list cannot disagree.
+ * Nothing is raised for a notification the reader's policy holds for review
+ * or about a muted thread, though the row is still stored; what is raised may
+ * be held by `NotificationDelivery` for a digest or quiet hours.
  */
 class NotificationService {
 	/**
 	 * Mastodon's notification type for each sub-type that gets a Nextcloud
 	 * notification, which is also the subject `Notifier` renders it from.
-	 *
-	 * `Stream::NOTIFICATION_TYPES` names the same things for the client API.
-	 * They are asserted against each other in NotificationServiceTest rather
-	 * than shared, because they answer different questions: that map says what
-	 * a client may filter on, this one says what a Nextcloud user is told
-	 * about, and a type may be added to one before the other.
+	 * `Stream::NOTIFICATION_TYPES` answers a different question (what a client
+	 * may filter on); NotificationServiceTest checks the two against each other.
 	 */
 	public const SUBJECTS = [
 		Mention::TYPE => 'mention',
@@ -88,9 +67,8 @@ class NotificationService {
 		Follow::TYPE => 'follow',
 		Follow::TYPE_REQUEST => 'follow_request',
 		Update::TYPE => 'update',
-		// the two events this instance raises itself that a reader wants to
-		// hear about: a poll they voted in closing, and a post from an account
-		// whose bell they rang
+		// Events this instance raises itself: a poll the reader voted in closing,
+		// and a post from an account whose bell they rang.
 		Stream::SUBTYPE_POLL => 'poll',
 		Stream::SUBTYPE_STATUS => 'status',
 	];
@@ -102,14 +80,9 @@ class NotificationService {
 	private const CLEAR_PAGE = ProbeOptions::MAX_LIMIT;
 
 	/**
-	 * The most notifications one clear() call will dismiss.
-	 *
-	 * Each one costs two queries -- a delete and a withdrawal from Nextcloud's
-	 * own notification manager -- and the loop was bounded only by how many the
-	 * viewer had. An account with a large backlog could therefore spend an
-	 * unbounded HTTP request doing it, and time out having cleared some
-	 * unknowable fraction anyway. Stopping at a known point and saying so is the
-	 * same outcome, minus the timeout: a client that wants the rest calls again.
+	 * The most notifications one clear() call will dismiss, each costing two
+	 * queries, so a large backlog cannot time out the request; a client calls
+	 * again for the rest.
 	 */
 	private const CLEAR_MAX = 5000;
 
@@ -134,11 +107,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells Nextcloud about a notification row that was just stored.
-	 *
-	 * Never throws and never lets a failure reach the caller: this is called
-	 * from the inbox, and an incoming Like that cannot be announced is still a
-	 * Like that has to be accepted.
+	 * Tells Nextcloud about a notification row that was just stored. Never
+	 * throws: it runs from the inbox, which must still accept the activity.
 	 */
 	public function onNotification(SocialAppNotification $notification, string $actorId = ''): void {
 		$pushEligible = false;
@@ -155,8 +125,7 @@ class NotificationService {
 	}
 
 	/**
-	 * Resolved when needed: what the push needs to know about a post needs
-	 * services that need this one.
+	 * Resolved lazily because of a service cycle.
 	 */
 	private function pushService(): ?PushService {
 		try {
@@ -169,9 +138,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Queues the Web Push of a notification, for an account that has a push
-	 * subscription at all: most have none, and a job for each of their
-	 * notifications would only find that out.
+	 * Queues the Web Push of a notification, only for an account with a push
+	 * subscription.
 	 */
 	private function queueMastodonPush(SocialAppNotification $notification): void {
 		try {
@@ -195,13 +163,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Mastodon's `update`: the people who boosted a post are told when its
-	 * author edits it, because what they passed on is not what it now says.
-	 *
-	 * Only boosters, which is the notification Mastodon sends and the one this
-	 * app's own TODO names. The author is not told about their own edit, and a
-	 * remote booster is not told by us — their server notifies them from the
-	 * same Update activity.
+	 * Mastodon's `update`: the local people who boosted a post are told when its
+	 * author edits it. Remote boosters are notified by their own server.
 	 */
 	public function onStatusEdited(Stream $post): void {
 		try {
@@ -212,8 +175,7 @@ class NotificationService {
 
 		$author = $this->accountOf($post->getAttributedTo());
 
-		// part of the id, so a second edit is a second notification rather than
-		// a write that collides with the first one and is dropped
+		// Part of the id, so each edit is its own notification.
 		$edit = ($post->getUpdated() !== '') ? $post->getUpdated() : (string)time();
 
 		foreach ($this->actionsRequest->getByObjectId($post->getId()) as $action) {
@@ -247,16 +209,9 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells the people who asked to hear about an account that it has posted.
-	 *
-	 * Mastodon's bell on a profile: a subscription separate from following,
-	 * written by `POST /accounts/{id}/follow` with `notify` set. Only local
-	 * subscribers — a remote one is told by their own server, from the same
-	 * post.
-	 *
-	 * A reply is not one of these. The bell means "tell me when they post",
-	 * and a thread somebody else started is not that; Mastodon reads it the
-	 * same way.
+	 * Tells the local subscribers of an account's bell (`POST /accounts/{id}/follow`
+	 * with `notify`) that it has posted. Replies do not count, as in Mastodon;
+	 * remote subscribers are told by their own server.
 	 */
 	public function onNewStatus(Stream $post): void {
 		if ($post->getInReplyTo() !== '') {
@@ -286,8 +241,8 @@ class NotificationService {
 	}
 
 	/**
-	 * The bell's notification of a post, for one subscriber: one per post
-	 * and subscriber, whichever way it came.
+	 * The bell's notification of a post, one per post and subscriber whichever
+	 * way it came.
 	 */
 	private function statusNotification(Stream $stored, string $author, string $subscriber): SocialAppNotification {
 		/** @var SocialAppNotification $item */
@@ -306,11 +261,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells the people who voted in a poll that it has closed.
-	 *
-	 * Mastodon tells the author too, which is why the author is not skipped:
-	 * somebody who ran a poll wants the result as much as anybody who answered
-	 * it.
+	 * Tells the people who voted in a poll that it has closed, and its author,
+	 * as Mastodon does.
 	 *
 	 * @param string[] $voters actor ids
 	 */
@@ -350,16 +302,12 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells a local account what a moderator decided about it.
-	 *
-	 * The warning already reached them through Nextcloud's own notifications,
-	 * which a Mastodon client cannot see — so somebody moderated through a
-	 * client was told nothing a client could show them.
+	 * Tells a local account what a moderator decided about it, so a Mastodon
+	 * client can show it too.
 	 */
 	public function onModerationWarning(string $actorId, string $action, string $text): void {
 		if (!$this->isLocal($actorId)) {
-			// telling a remote account means telling its instance, and no
-			// activity says "your user has been warned"
+			// No activity tells a remote instance its user was warned.
 			return;
 		}
 
@@ -384,13 +332,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells the poster of a story that somebody has answered it.
-	 *
-	 * The poster and nobody else, whoever the answer came from and wherever it
-	 * came from: a reaction to a story is not a public fact about the story,
-	 * it is a message to one person. The notification carries the text, because
-	 * a reply lives with the story and a story lives a day — there is nowhere
-	 * to go and read it later.
+	 * Tells the poster of a short that somebody answered it, and nobody else.
+	 * The notification carries the text, since the short is gone in a day.
 	 */
 	public function onStoryInteraction(Story $story, StoryInteraction $interaction): void {
 		if (!$this->isLocal($story->getOwnerId()) || $story->getOwnerId() === $interaction->getActorId()) {
@@ -407,9 +350,7 @@ class NotificationService {
 			$item->addDetail(Details::STORY_ID, (string)$story->getId());
 			$item->addDetail(Details::CONTENT, $interaction->getContent());
 			$item->addDetail(Details::ACCOUNT, $this->accountOf($interaction->getActorId()));
-			// attributedTo is who the notification is *about*, which is what a
-			// client draws as its account — the person who answered, not the
-			// person being told
+			// attributedTo is who answered, which the client draws as the account.
 			$item->setAttributedTo($interaction->getActorId())
 				->setSubType($reply ? Stream::SUBTYPE_STORY_REPLY : Stream::SUBTYPE_STORY_REACT)
 				->setId($story->getOwnerId() . '/notification+story/' . md5($interaction->getSourceId()))
@@ -424,12 +365,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells somebody they have been named in a photograph.
-	 *
-	 * Local accounts only: a remote one is told by its own server, which
-	 * learns the name from the `Mention` the tag writes onto the post. Sending
-	 * this as well would be telling them twice through one of the two channels
-	 * they have.
+	 * Tells a local account it has been named in a photo; a remote one learns
+	 * it from the post's `Mention`.
 	 */
 	public function onPhotoTag(Stream $post, Person $author, Person $tagged): void {
 		if (!$this->isLocal($tagged->getId()) || $tagged->getId() === $author->getId()) {
@@ -513,11 +450,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Tells a local account that a block has cut its follows.
-	 *
-	 * Blocking a domain deletes the follows in both directions, and until this
-	 * the accounts that lost them were told nothing — they simply stopped
-	 * seeing somebody and had no way of learning why.
+	 * Tells a local account that a domain block deleted its follows with that
+	 * domain.
 	 */
 	public function onRelationshipsSevered(string $actorId, string $domain, int $lost): void {
 		if ($lost < 1 || !$this->isLocal($actorId)) {
@@ -549,27 +483,15 @@ class NotificationService {
 	 * served it.
 	 *
 	 * @throws ItemNotFoundException the id names no notification of the
-	 *                               viewer's — which is the answer a
-	 *                               notification of somebody else's gets too
+	 *                               viewer's, including somebody else's
 	 */
 	public function get(Person $viewer, int|string $id): Stream {
 		return $this->find($viewer, $id);
 	}
 
 	/**
-	 * Dismisses one notification.
-	 *
-	 * The row is deleted, not marked: Mastodon's dismiss is final — the
-	 * notification never comes back and no client offers to un-dismiss one —
-	 * and a flag would mean every read of the notification timeline carries a
-	 * filter for a row that will never be shown again, plus a table to write
-	 * it in. Deleting also keeps the two halves in step, since the list is
-	 * built straight off these rows: there is no second place where a
-	 * dismissed notification could still exist.
-	 *
-	 * The post the notification is about is untouched. So is the Like or
-	 * Announce behind it, so counters do not move because somebody cleared
-	 * their bell.
+	 * Dismisses one notification. The row is deleted, as Mastodon's dismiss is
+	 * final; the post and the Like or Announce behind it are untouched.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -581,14 +503,9 @@ class NotificationService {
 	}
 
 	/**
-	 * Dismisses every notification the viewer has, and answers how many that
-	 * was.
-	 *
-	 * Paged, with a cursor that only ever moves down: the rows are deleted as
-	 * they are read, so re-asking for the first page would work too, but a
-	 * delete that silently matched nothing would then loop forever.
-	 *
-	 * Stops at CLEAR_MAX and leaves the rest for the next call.
+	 * Dismisses every notification the viewer has, up to CLEAR_MAX, and answers
+	 * how many that was. The cursor only moves down, so a delete that matched
+	 * nothing cannot loop forever.
 	 */
 	public function clear(Person $viewer): int {
 		$cleared = 0;
@@ -623,8 +540,7 @@ class NotificationService {
 	private function emit(SocialAppNotification $notification, string $actorId): bool {
 		$subject = self::SUBJECTS[$notification->getSubType()] ?? '';
 		if ($subject === '') {
-			// nothing a client can name and nothing this app can word; a bell
-			// for it would say only that "something happened"
+			// No client name and no wording for it.
 			return false;
 		}
 
@@ -634,9 +550,7 @@ class NotificationService {
 			return false;
 		}
 		if ($recipientId === $actorId && $subject !== 'poll') {
-			// somebody boosting their own post, or replying to themselves with
-			// their own handle in it, is not news to them -- their own poll
-			// closing is, which is also who Mastodon tells
+			// Not news to the actor themselves, except their own poll closing, as in Mastodon.
 			return false;
 		}
 
@@ -661,9 +575,7 @@ class NotificationService {
 		$local = $this->localActor($actorId);
 		$parameters = [
 			'account' => ($actor === null) ? $actorId : $this->labelOf($actor),
-			// into this app, not at the remote object: a bell entry that opened
-			// a Mastodon page for a post the reader can see here was the
-			// complaint in alohasocial/social#1628
+			// Into this app, not to the remote object.
 			'link' => in_array($subject, ['follow', 'follow_request'], true)
 				? $this->profileLink($actor, $actorId)
 				: $this->postLink($notification),
@@ -685,8 +597,7 @@ class NotificationService {
 			$this->notificationManager->notify($raised);
 		}
 
-		// the same news, in the Activity app's stream and digest mail — with
-		// the actor as the Nextcloud user they are, when they are one here
+		// The same news in the Activity app, with a local actor as their Nextcloud user.
 		$activityActor = $actor;
 		if ($local !== null) {
 			$activityActor ??= $local;
@@ -702,12 +613,8 @@ class NotificationService {
 
 	/**
 	 * Whether the bell stays quiet about this one because the reader chose a
-	 * digest or is in their quiet hours. The stored row is untouched either
-	 * way: it is what the digest will count and what the in-app list shows.
-	 *
-	 * The follow lookup is made only for a mention, which is the one subject
-	 * whose pass-through depends on it; a like from a stranger and a like from
-	 * a friend are held alike.
+	 * digest or is in quiet hours; the stored row is untouched. The follow lookup
+	 * is made only for a mention, the one subject it matters for.
 	 */
 	private function isHeld(
 		SocialAppNotification $notification,
@@ -743,8 +650,8 @@ class NotificationService {
 	}
 
 	/**
-	 * A mention in a post addressed to its readers alone. There is no DM row
-	 * of its own: a direct message reaches the bell as the mention it carries.
+	 * A mention in a post addressed to its readers alone; a direct message
+	 * reaches the bell as the mention it carries.
 	 */
 	private function isDirectMessage(SocialAppNotification $notification): bool {
 		return $this->postOf($notification)?->getVisibility() === Stream::TYPE_DIRECT;
@@ -787,9 +694,8 @@ class NotificationService {
 	}
 
 	/**
-	 * A follow request was answered: the bell entry that asked is taken down
-	 * with the row behind it, so it does not come back on the next reload.
-	 * Never throws -- the answer is given whether or not the bell hears.
+	 * A follow request was answered: its bell entry is removed with the row
+	 * behind it. Never throws.
 	 */
 	public function onFollowRequestAnswered(Person $viewer, string $followerId): void {
 		try {
@@ -849,12 +755,8 @@ class NotificationService {
 	}
 
 	/**
-	 * Who acted.
-	 *
-	 * `attributedTo` for all but a mention: a mention row is attributed to the
-	 * account being told, not to the author who wrote the post, so the author
-	 * is read off the post the row points at — from the copy the caller
-	 * already has where there is one.
+	 * Who acted: `attributedTo`, except for a mention, whose row is attributed to
+	 * the account told, so the author is read off the post.
 	 */
 	private function actorOf(SocialAppNotification $notification): string {
 		if ($notification->getSubType() !== Mention::TYPE) {
@@ -875,13 +777,9 @@ class NotificationService {
 	}
 
 	/**
-	 * Nothing is raised for an actor the recipient has blocked, who has
-	 * blocked the recipient, or whom the recipient muted with notifications
-	 * hidden — the rule the stored row is written under, applied to the actor
-	 * who acted rather than to the row's `attributedTo`.
-	 *
-	 * A mute that has run out is not a mute: the row stays in place and stops
-	 * applying, which is how a timed mute ends without anything deleting it.
+	 * Nothing is raised for an actor the recipient has blocked, who has blocked
+	 * the recipient, or whom the recipient muted with notifications hidden; an
+	 * expired mute does not count.
 	 */
 	private function isSuppressed(string $recipientId, string $actorId): bool {
 		foreach ($this->actorRelationRequest->getBetween($recipientId, $actorId) as $relation) {
@@ -901,10 +799,9 @@ class NotificationService {
 	}
 
 	/**
-	 * The notification's `object_id`, which the notifications table caps at 64
-	 * characters — an ActivityPub id is routinely longer than that. Derived,
-	 * so dismissing the in-app row can clear the same Nextcloud notification
-	 * without anything having stored the pairing.
+	 * The notification's `object_id`, capped at 64 characters by the
+	 * notifications table. Derived, so dismissing the in-app row can clear the
+	 * same Nextcloud notification.
 	 */
 	private function objectId(string $id): string {
 		return sha1($id);
@@ -934,12 +831,8 @@ class NotificationService {
 	}
 
 	/**
-	 * The viewer's notification with this id.
-	 *
-	 * Read through the same query the timeline is built from, so a
-	 * notification that is not the viewer's is not found rather than refused,
-	 * and one whose sub-type has no Mastodon name — which the timeline leaves
-	 * out, since a client cannot decode it — is not found either.
+	 * The viewer's notification with this id, read through the timeline's own
+	 * query, so somebody else's or one with no Mastodon type is not found.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -978,8 +871,7 @@ class NotificationService {
 
 	private function cachedActor(string $actorId): ?Person {
 		try {
-			// the local cache only: an inbox request must not go out to
-			// another server to find out what to call somebody
+			// Local cache only: an inbox request must not fetch from another server.
 			return $this->cacheActorsRequest->getFromId($actorId);
 		} catch (Exception $e) {
 			return null;
@@ -987,11 +879,9 @@ class NotificationService {
 	}
 
 	/**
-	 * The acting account's picture as this server serves it, or `''`: for an
-	 * account of this server its Nextcloud avatar, for anyone else the cached
-	 * copy of its icon. Never the address on the account's own server, which
-	 * the Nextcloud web interface's content policy will not load, and which
-	 * would tell that server who is reading their notifications.
+	 * The acting account's picture as this server serves it, or `''`: the
+	 * Nextcloud avatar for a local account, else the cached icon. Never the
+	 * remote address, which the CSP blocks and which would leak the reader.
 	 */
 	private function avatarOf(?Person $local, ?Person $cached): string {
 		$userId = ($local === null) ? '' : $local->getUserId();

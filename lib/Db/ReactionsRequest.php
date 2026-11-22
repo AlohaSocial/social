@@ -72,14 +72,10 @@ class ReactionsRequest extends ReactionsRequestBuilder {
 
 	/**
 	 * How many accounts reacted to each of these posts with each emoji,
-	 * counted by the database rather than read row by row, so a post with
-	 * thousands of reactions is counted in full.
-	 *
-	 * Left out: reactions by the accounts in `$hiddenActorIds`, by accounts on
-	 * the instances in `$hiddenHosts` (subdomains included) and, for a viewer,
-	 * by accounts the viewer blocks, is blocked by or mutes. Each of those is
-	 * an anti-join probe on the relation's unique index, not a list in the
-	 * statement, so a viewer with a long block list costs no more.
+	 * counted in the database. Left out: reactions by `$hiddenActorIds`, by
+	 * accounts on `$hiddenHosts` (subdomains included) and, for a viewer, by
+	 * accounts they block, are blocked by or mute, each as an anti-join on the
+	 * relation's unique index.
 	 *
 	 * @param string[] $objectIds
 	 * @param string $viewerId the reader's actor id, or '' for anonymous
@@ -237,9 +233,6 @@ class ReactionsRequest extends ReactionsRequestBuilder {
 
 	/**
 	 * Everything on a post, for when the post itself goes.
-	 *
-	 * A deleted post used to leave its likes and its hashtags behind; this
-	 * table is not going to repeat that.
 	 */
 	public function deleteByObjectId(string $objectId): void {
 		$qb = $this->getReactionsDeleteSql();

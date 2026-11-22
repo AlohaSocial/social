@@ -13,19 +13,10 @@ use JsonSerializable;
 use OCA\Social\Tools\DbTime;
 
 /**
- * One thing a moderator decided about one account, kept after the fact.
- *
- * `Moderation` is what stands *now* — one row an account, replaced by the next
- * decision and deleted when it is lifted. This is the history it used to
- * throw away: the third silence in a month looked exactly like the first, and
- * whoever lifted the last one took the only evidence that it had happened.
- *
- * A **warning** is a strike whose action is `WARNING`: it applied nothing,
- * which is the step the ladder was missing between doing nothing and taking
- * the account out of the timelines.
- *
- * Mastodon's `AccountWarning`, without the appeal — an appeal needs somewhere
- * for the account to write, and a remote account has no login here at all.
+ * One thing a moderator decided about one account, kept after the fact:
+ * `Moderation` is what stands now, this is the history. A warning is a strike
+ * whose action is `WARNING` and applies nothing. Mastodon's `AccountWarning`,
+ * without the appeal, as a remote account has no login here.
  */
 class Strike implements JsonSerializable {
 	/** Said something and applied nothing: Mastodon's `none`. */
@@ -35,12 +26,8 @@ class Strike implements JsonSerializable {
 	public const TAKEDOWN = 'delete_statuses';
 
 	/**
-	 * The end of whatever stood against the account.
-	 *
-	 * Not one of Mastodon's actions, because Mastodon has nowhere to put it:
-	 * there, lifting is an `AccountWarning` that gets an `appeal`. Here it is
-	 * the record that answers "who lifted this, and when" — which the log line
-	 * it used to be could not, because it named nobody.
+	 * The end of whatever stood against the account, recording who lifted it
+	 * and when; Mastodon has no such action.
 	 */
 	public const LIFT = 'lift';
 
@@ -50,11 +37,8 @@ class Strike implements JsonSerializable {
 	];
 
 	/**
-	 * The ones that stand against the account, which is what the browser's
-	 * strike column counts.
-	 *
-	 * A lift is in the history and not in the count: an account warned once
-	 * and then let off has one thing standing against it, not two.
+	 * The ones that stand against the account, which the browser's strike
+	 * column counts; a lift is in the history, not in the count.
 	 */
 	public const COUNTED = [self::WARNING, Moderation::SILENCE, Moderation::SUSPEND, self::TAKEDOWN];
 

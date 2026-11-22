@@ -13,18 +13,10 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * "I watched your story."
- *
- * `View` is in the Activity Streams vocabulary and Pixelfed uses it for one
- * thing only: a receipt sent to the author of a story somebody has just
- * watched. That is why the object is not the story's address but a small
- * wrapper around it — `{"type": "Story", "object": "<address>"}` — which is
- * the shape Pixelfed's own `StoryViewDeliver` builds and the shape its inbox
- * insists on.
- *
- * It is addressed to the author alone. Who watched a story is told to the
- * person who posted it and to nobody else, which is the same rule this app
- * keeps for the local count.
+ * "I watched your story": Pixelfed's receipt to a story's author. The object
+ * is a wrapper, `{"type": "Story", "object": "<address>"}`, as Pixelfed's
+ * `StoryViewDeliver` builds it and its inbox insists. Addressed to the author
+ * alone.
  */
 class View extends ACore implements JsonSerializable {
 	public const TYPE = 'View';

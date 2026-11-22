@@ -31,13 +31,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who liked, boosted or quoted a post, wherever they did: the reactions
- * this server received, and the ones the networks the post is on list
- * (`InteractionSource`), merged into one list with nothing to tell them
- * apart. A visible reaction list asks its network inline with a short timeout;
- * background fills keep lists current when nobody is reading them. Both are
- * kept for an hour in the table, where web requests can share them. Counts on
- * the post are refreshed separately by `CountService`.
+ * Who liked, boosted or quoted a post: the reactions this server received
+ * merged with what the post's networks list (`InteractionSource`). A visible
+ * list asks its network inline with a short timeout, background fills keep
+ * the rest current, and both are kept for an hour in the table. Counts are
+ * refreshed by `CountService`.
  */
 class InteractionService {
 	public const QUOTES = 'Quote';
@@ -117,10 +115,9 @@ class InteractionService {
 	}
 
 	/**
-	 * Read the reaction list inline when a reader opens it. The regular
-	 * background refresh can wait for a scheduled job; the visible read is
-	 * bounded to the AppView's short timeout and shares one lock per post and
-	 * reaction kind, so simultaneous viewers do not duplicate the request.
+	 * Read the reaction list inline when a reader opens it, within the
+	 * AppView's short timeout and one lock per post and reaction kind, so
+	 * simultaneous viewers share one request.
 	 *
 	 * @return ?bool null when no inline source applies, otherwise whether the
 	 *               list is still being filled (a lock holder or fallback job)

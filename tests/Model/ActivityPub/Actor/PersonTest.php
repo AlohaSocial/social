@@ -296,6 +296,19 @@ class PersonTest extends TestCase {
 		$this->assertSame('http://plain.example/header.png', $cached->getHeader());
 	}
 
+	/** A remote actor's published layout is kept; a local one always opens on Posts with every tab. */
+	public function testOnlyARemoteCachedActorKeepsItsProfileLayout(): void {
+		$source = json_encode(['profileDefaultTab' => 'photos', 'profileTabs' => ['posts', 'photos']]);
+
+		$remote = new Person();
+		$remote->importFromDatabase(['id' => 'https://other.example/users/bob', 'source' => $source]);
+		$this->assertSame(['default_tab' => 'photos', 'tabs' => ['posts', 'photos']], $remote->getProfileLayout());
+
+		$local = new Person();
+		$local->importFromDatabase(['id' => 'https://cloud.example/users/alice', 'local' => 1, 'source' => $source]);
+		$this->assertSame(\OCA\Social\Model\ProfileLayout::DEFAULT, $local->getProfileLayout());
+	}
+
 	/**
 	 * The header used to fall back to the avatar, and the cached copy of a
 	 * local actor handed that fallback back as if it were a banner: every

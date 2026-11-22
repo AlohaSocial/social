@@ -4,18 +4,8 @@
  */
 
 /**
- * "Share to Social" in the Files app.
- *
- * The composer could already attach a picture that is on the server, through
- * its own file picker. This is the same road walked from the other end: a
- * reader looking at the picture in Files, where the thought "I want to post
- * this" actually occurs, gets an action that carries it into the composer.
- *
- * Deliberately small. The Files page is opened far more often than a post is
- * written from it, and this script is loaded on every one of those pages, so
- * it registers the action and nothing else: no framework, no composer, no
- * store. The work happens in the app, which is where the composer lives; this
- * only hands over the paths, in the URL, and the app's navigation reads them.
+ * "Share to Social" in the Files app. Loaded on every Files page, so it only
+ * registers the action and hands the paths to the app's composer in the URL.
  */
 
 import { FileType, registerFileAction } from '@nextcloud/files'
@@ -24,14 +14,9 @@ import { generateUrl } from '@nextcloud/router'
 import { knownLimits, loadLimits } from './services/instanceLimits.js'
 
 /**
- * How many files a post may carry: the server's number once it has been
- * asked, and the number it used to hard-code until then.
- *
- * `enabled()` is synchronous and is asked whenever the selection changes, so
- * it cannot wait for the server. The first time it is asked with more than
- * one file it sends for the real ceiling -- one request, on the first
- * occasion a Files page has any use for it rather than on every Files page --
- * and answers from the fallback meanwhile.
+ * How many files a post may carry. `enabled()` is synchronous, so this answers
+ * from a fallback and fetches the server's limit the first time more than one
+ * file is selected.
  *
  * @param {number} selected how many files are picked
  * @return {number} the ceiling
@@ -59,10 +44,8 @@ export function isShareable(node) {
 }
 
 /**
- * Where the composer is opened with these files already attached: the app's
- * home timeline, with one `attach` query parameter per path. The paths are
- * relative to the reader's own folder, which is the only place the server
- * resolves them in.
+ * The home timeline URL that opens the composer with these files attached:
+ * one `attach` parameter per path, relative to the reader's own folder.
  *
  * @param {import('@nextcloud/files').INode[]} nodes the files picked
  * @return {string} the URL to send the browser to
@@ -91,11 +74,9 @@ export function shareToSocial(nodes, navigate = (url) => window.location.assign(
 export const shareAction = {
 	id: 'social-share',
 	displayName: () => t('social', 'Share to Aloha Social'),
-	title: ({ nodes }) => n('social', 'Post this picture on Aloha Social', 'Post these %n pictures on Aloha Social', nodes.length),
+	title: ({ nodes }) => n('social', 'Post this photo on Aloha Social', 'Post these %n photos on Aloha Social', nodes.length),
 	iconSvgInline: () => ICON,
-	// every one of them has to be something a post can carry, and no more of
-	// them than a post can carry: the composer would have to refuse the rest,
-	// and an action that half works is worse than one that is not offered
+	// offered only when the composer can take every selected file
 	enabled: ({ nodes }) => nodes.length > 0
 		&& nodes.length <= maxAttachments(nodes.length)
 		&& nodes.every(isShareable),
@@ -105,8 +86,7 @@ export const shareAction = {
 	async execBatch({ nodes }) {
 		return shareToSocial(nodes)
 	},
-	// after the built-in ones — open, download, share — and before the
-	// long tail of everything else
+	// after the built-in open, download and share actions
 	order: 25,
 }
 

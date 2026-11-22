@@ -5,7 +5,6 @@
 
 import { computed, ref } from 'vue'
 import logger from '../services/logger.js'
-import { videoSoundEnabled } from '../services/senses.js'
 import { userKey } from '../utils/browserStore.js'
 
 /** Where the reader's mute choice is kept for the rest of the tab's life. */
@@ -44,45 +43,23 @@ function rememberMute(muted) {
 }
 
 /**
- * Forgets the choice made in this tab, so that the device's own switch in
- * Settings is what the next video starts with.
- */
-export function forgetMuteChoice() {
-	try {
-		session()?.removeItem(userKey(SESSION_KEY))
-	} catch {
-		// nothing was kept, so there is nothing to forget
-	}
-}
-
-/**
- * Playing a video with its sound on wherever the browser allows it, and with
+ * Plays a video with its sound on wherever the browser allows it, and with
  * one tap otherwise.
  *
- * No page can start sound without a user gesture. Opening Shorts by a click
- * counts as one; a pasted link or a reload does not, and the
- * browser then rejects `play()` with a `NotAllowedError`. That rejection is
- * the autoplay rule answering rather than a fault: the video plays muted
- * instead, and `soundHeld` says so, for the "Tap for sound" hint beside the
- * speaker.
- *
- * Two things are kept apart on purpose. `muted` is what the reader chose, and
- * lasts for the tab in sessionStorage; `soundHeld` is what the browser refused
- * for the video playing now, and is asked again for the next one. A refusal
- * therefore never turns into a choice: one refused video does not silence
- * every video after it for somebody who wanted sound.
- *
- * Unmuting from the speaker is a gesture, which is what lets the element play
- * with sound from then on — in WebKit per element, which is why a player that
- * follows the reader reuses one element rather than making a new one per
- * video.
+ * Without a user gesture (a pasted link, a reload) `play()` with sound rejects
+ * with `NotAllowedError`; the video then plays muted and `soundHeld` drives the
+ * "Tap for sound" hint. `muted` is the reader's choice, kept for the tab in
+ * sessionStorage; `soundHeld` is the browser's refusal for the current video
+ * only, so one refusal never silences the videos after it. WebKit allows sound
+ * per element after an unmute, which is why a player that follows the reader
+ * reuses one element.
  *
  * @return {{muted: import('vue').Ref<boolean>, soundHeld: import('vue').Ref<boolean>, silent: import('vue').ComputedRef<boolean>, playWithSound: (video: HTMLMediaElement|null|undefined) => Promise<void>, toggleMute: (video: HTMLMediaElement|null|undefined) => void}}
  *         the state a player draws its speaker from, and the two things it does
  */
 export function useSoundAutoplay() {
-	/** the reader's choice: this tab's, or else the device's */
-	const muted = ref(rememberedMute() ?? !videoSoundEnabled())
+	/** the reader's choice in this tab; sound on until they mute */
+	const muted = ref(rememberedMute() ?? false)
 	/** the browser would not start the current video with sound */
 	const soundHeld = ref(false)
 	/** whether what is playing is actually silent, for the speaker to show */

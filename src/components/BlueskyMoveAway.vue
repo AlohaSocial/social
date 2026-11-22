@@ -26,7 +26,7 @@
 		<NcNoteCard v-else-if="move && move.state === 'needs_decision'" type="warning" class="migration__bluesky-decision">
 			<p>
 				{{ move.progress.code === 'blobs-missing'
-					? n('social', '{n} picture or video did not arrive on {pds}. Your account still points here.', '{n} pictures or videos did not arrive on {pds}. Your account still points here.', move.progress.missing, { n: move.progress.missing, pds: move.pds })
+					? n('social', '{n} photo or video did not arrive on {pds}. Your account still points here.', '{n} photos or videos did not arrive on {pds}. Your account still points here.', move.progress.missing, { n: move.progress.missing, pds: move.pds })
 					: t('social', 'Your posts did not all arrive on {pds}. Your account still points here.', { pds: move.pds }) }}
 			</p>
 			<ServerError v-if="actionError" :error="actionError" />
@@ -45,7 +45,7 @@
 				v-if="confirmingWithout"
 				:open="true"
 				:name="t('social', 'Switch without them?')"
-				:message="n('social', '{n} picture or video did not arrive on {pds}. Your account is pointed at {pds} without it: the posts that show it lose it there, and it is not copied later.', '{n} pictures or videos did not arrive on {pds}. Your account is pointed at {pds} without them: the posts that show them lose them there, and they are not copied later.', move.progress.missing, { n: move.progress.missing, pds: move.pds })"
+				:message="n('social', '{n} photo or video did not arrive on {pds}. Your account is pointed at {pds} without it: the posts that show it lose it there, and it is not copied later.', '{n} photos or videos did not arrive on {pds}. Your account is pointed at {pds} without them: the posts that show them lose them there, and they are not copied later.', move.progress.missing, { n: move.progress.missing, pds: move.pds })"
 				:confirmLabel="t('social', 'Switch without them')"
 				@update:open="confirmingWithout = false"
 				@confirm="decide(true)">
@@ -273,8 +273,8 @@ export default {
 					return t('social', 'Copying your posts')
 				case 'blobs':
 					return typeof blobs === 'number'
-						? t('social', 'Copying your pictures and videos ({n} so far)', { n: blobs })
-						: t('social', 'Copying your pictures and videos')
+						? t('social', 'Copying your photos and videos ({n} so far)', { n: blobs })
+						: t('social', 'Copying your photos and videos')
 				case 'prefs':
 					return t('social', 'Copying your settings')
 				case 'check':

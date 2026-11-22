@@ -5,6 +5,7 @@
 <template>
 	<div class="stats">
 		<PageHeader
+			v-if="!embedded"
 			:title="t('social', 'Statistics')"
 			:description="t('social', 'What you have posted here, and what came back. Counted from this server when you opened the page, so it is never a stale number.')"
 			clearNavigation />
@@ -55,7 +56,7 @@
 
 		<template v-else-if="stats">
 			<!-- who -->
-			<section class="stats__card stats__hero">
+			<section v-if="!embedded" class="stats__card stats__hero">
 				<div class="stats__hero-who">
 					<NcAvatar
 						:user="uid"
@@ -467,13 +468,8 @@
 				</p>
 			</section>
 
-			<!--
-				How big the place is that all of the above went out to. Every
-				other number here is counted from this server's own rows, which
-				is what makes them trustworthy and also what makes them small: a
-				reader with four followers cannot tell from them whether they
-				are posting into a village or a city.
-			-->
+			<!-- how big the network these posts went out to is; every other figure
+			     here is counted from this server's own rows -->
 			<section v-if="stats.network" class="stats__card stats__network">
 				<h3>{{ t('social', 'The network you are posting into') }}</h3>
 				<ul class="stats__figures">
@@ -509,13 +505,7 @@
 				</p>
 			</section>
 
-			<!--
-				What it is made of. "Forty thousand servers" is an abstraction;
-				the list of platforms is a picture of a place — and for
-				somebody reading this from inside a Nextcloud, that the network
-				is many kinds of software talking to each other is the whole
-				point of it.
-			-->
+			<!-- what the network is made of: many kinds of software talking to each other -->
 			<section v-if="platforms.length" class="stats__card stats__platforms">
 				<h3>{{ t('social', 'What the fediverse runs on') }}</h3>
 
@@ -549,13 +539,7 @@
 				</p>
 			</section>
 
-			<!--
-				And whether that network is growing, which is the question the
-				figures above cannot answer: a reader deciding whether to write
-				here wants to know if this is somewhere more people are
-				arriving or somewhere they are leaving, and no amount of
-				precision about today says.
-			-->
+			<!-- whether the network is growing, which today's figures cannot say -->
 			<section v-if="growth" class="stats__card stats__growth">
 				<h3>{{ t('social', 'How the fediverse has grown') }}</h3>
 
@@ -734,12 +718,12 @@
 			<section v-if="stats.media && stats.media.images > 0" class="stats__card">
 				<h3>
 					<IconImage :size="20" />
-					{{ t('social', 'Your pictures') }}
+					{{ t('social', 'Your photos') }}
 				</h3>
 				<ul class="stats__figures">
 					<li>
 						<strong>{{ number(stats.media.images) }}</strong>
-						<span>{{ n('social', 'picture posted', 'pictures posted', stats.media.images) }}</span>
+						<span>{{ n('social', 'photo posted', 'photos posted', stats.media.images) }}</span>
 					</li>
 					<li>
 						<strong>{{ decimal(stats.media.described_share) }}%</strong>
@@ -748,7 +732,7 @@
 					</li>
 				</ul>
 				<p v-if="stats.media.described_share < 100" class="stats__note">
-					{{ t('social', 'A picture without a description is a picture nobody using a screen reader can read. This is the one number on the page you can move on your own.') }}
+					{{ t('social', 'A photo without a description is a photo nobody using a screen reader can read. This is the one number on the page you can move on your own.') }}
 				</p>
 			</section>
 
@@ -863,16 +847,10 @@ function windowIcon(days) {
 }
 
 /**
- * The reader's own numbers.
- *
- * Everything here is drawn with CSS rather than a charting library: two bar
- * charts and a set of meters do not justify the weight of one, and this app
- * has just spent a release getting that weight down.
- *
- * The bars are scaled to the tallest column rather than to an absolute, which
- * is what makes a quiet month visible next to a busy one. Each carries its own
- * figure in a `title` and in the accessible name, because a bar whose only
- * value is its height says nothing to somebody who cannot see it.
+ * The reader's own numbers. The charts are CSS rather than a charting library,
+ * which a few bars and meters do not justify. Bars are scaled to the tallest
+ * column, so a quiet month shows next to a busy one, and each carries its
+ * figure in a `title` and its accessible name.
  */
 export default {
 	name: 'Statistics',
@@ -901,6 +879,11 @@ export default {
 		NcLoadingIcon,
 	},
 
+	props: {
+		/** on the owner's profile, under its header, rather than a page of its own */
+		embedded: { type: Boolean, default: false },
+	},
+
 	data() {
 		return {
 			loading: true,
@@ -918,19 +901,8 @@ export default {
 
 	computed: {
 		/**
-		 * Who counted the network and when. The date matters: these are the
-		 * one set of figures on this page that this server did not count
-		 * itself, and a survey nobody has run for a month is worth reading as
-		 * one.
-		 *
-		 * @return {string} the sentence before the link to the source
-		 */
-		/**
-		 * The windows on offer, named rather than numbered.
-		 *
-		 * The server decides which ones exist — each is a walk and a cache
-		 * entry of its own — so the list is read from the answer rather than
-		 * written down twice.
+		 * The windows on offer, named rather than numbered, as the server lists
+		 * them in its answer.
 		 *
 		 * @return {object[]} each with the days it covers as its `value`, its
 		 *                    label and its icon, as TimelineSwitcher takes them
@@ -965,11 +937,8 @@ export default {
 		},
 
 		/**
-		 * What the account did, month by month, as one stacked bar each.
-		 *
-		 * Stacked rather than three lines because the question it answers is
-		 * "what was I doing that month", and the parts of an answer belong in
-		 * one column. Scaled to the busiest month, like every other chart here.
+		 * What the account did, month by month, as one stacked bar each, scaled
+		 * to the busiest month.
 		 *
 		 * @return {object[]} one entry per month
 		 */
@@ -1044,6 +1013,12 @@ export default {
 				.filter((side) => side.people.length > 0)
 		},
 
+		/**
+		 * Who counted the network and when: the one set of figures here this
+		 * server did not count itself, so its date matters.
+		 *
+		 * @return {string} the sentence before the link to the source
+		 */
 		networkNote() {
 			const measured = this.stats?.network?.measured
 			const on = measured ? new Date(measured) : null
@@ -1058,12 +1033,9 @@ export default {
 		},
 
 		/**
-		 * The platforms, as bands of a bar and rows of a list.
-		 *
-		 * Coloured from a fixed palette rather than from the theme's accent:
-		 * six bands of one hue is a gradient, and this is a legend. The last
-		 * row is everything not named, which keeps the shares summing to the
-		 * whole.
+		 * The platforms, as bands of a bar and rows of a list, in a fixed
+		 * palette rather than the accent, as this is a legend. The last row is
+		 * everything not named, so the shares sum to the whole.
 		 *
 		 * @return {Array<object>}
 		 */
@@ -1232,9 +1204,8 @@ export default {
 			const peers = this.stats?.network?.peers ?? 0
 			const servers = this.stats?.network?.servers ?? 0
 			if (peers > 0 && servers > 0) {
-				// a young instance talks to two servers out of forty thousand,
-				// which is 0.0% — a true number that tells its reader nothing.
-				// Below a tenth of a per cent the count is the honest figure
+				// below a tenth of a per cent (a young instance that talks to two
+				// servers) the count says more than 0.0%
 				const share = (peers / servers) * 100
 
 				facts.push(share < 0.1
@@ -1287,15 +1258,9 @@ export default {
 		},
 
 		/**
-		 * The name the account publishes under.
-		 *
-		 * The account's own display name first: the page is about the account,
-		 * and that name is not always the Nextcloud one. But an account that
-		 * has never been given a name of its own carries its login name as one
-		 * — `admin` sits in that column for anybody who never opened the
-		 * profile editor — and a page headed "admin" is headed nobody. Where
-		 * the published name is only the handle again, the name the rest of
-		 * this server calls the reader by is the better answer.
+		 * The name the account publishes under: its display name, unless that
+		 * is only its handle again (as for an account never given a name), in
+		 * which case the name this server calls the reader by.
 		 *
 		 * @return {string}
 		 */
@@ -1327,13 +1292,9 @@ export default {
 		},
 
 		/**
-		 * How much of the account's history the figures were counted over.
-		 *
-		 * The bar is full either way — the walk always finished — and it is
-		 * the colour and the words beside it that say whether it finished
-		 * because it ran out of posts or because it hit its ceiling. A bar
-		 * drawn at the share of the ceiling used would say 2% of an account
-		 * that has been counted down to its very first post.
+		 * How much of the account's history the figures were counted over. The
+		 * bar is always full; its colour and words say whether the walk ran out
+		 * of posts or hit its ceiling.
 		 *
 		 * @return {{capped: boolean, label: string}}
 		 */
@@ -1361,11 +1322,8 @@ export default {
 		},
 
 		/**
-		 * The four figures the two windows are compared on.
-		 *
-		 * Each carries both its own line and the line of the window before it,
-		 * drawn against the taller of the two so that the pair can be read as
-		 * one picture rather than two charts that happen to sit side by side.
+		 * The four figures the two windows are compared on, each line drawn
+		 * against the taller of the pair so the two read as one picture.
 		 *
 		 * @return {Array<object>}
 		 */
@@ -1412,11 +1370,8 @@ export default {
 
 		/**
 		 * The window's posts in the order the reader asked for, each with its
-		 * reach against the best of them.
-		 *
-		 * Sorted here rather than on the server: it is a hundred rows that are
-		 * already in the browser, and a round trip to reorder them would be a
-		 * round trip to reorder them.
+		 * reach against the best of them; sorted here, as the rows are already
+		 * in the browser.
 		 *
 		 * @return {Array<object>}
 		 */
@@ -1469,11 +1424,8 @@ export default {
 		},
 
 		/**
-		 * How far above the middle post the best one was.
-		 *
-		 * The number an agency looks for after a mean and a median disagree:
-		 * one post carrying a month is a different account from one whose
-		 * posts all do about the same.
+		 * How far above the median post the best one was, which tells one post
+		 * carrying a month from posts that all do about the same.
 		 *
 		 * @return {number}
 		 */
@@ -1504,7 +1456,7 @@ export default {
 		content() {
 			const rows = this.stats?.content ?? []
 			const labels = {
-				with_media: t('social', 'With a picture or a video'),
+				with_media: t('social', 'With a photo or a video'),
 				text_only: t('social', 'Text only'),
 				with_hashtag: t('social', 'With a hashtag'),
 				no_hashtag: t('social', 'Without one'),
@@ -1617,7 +1569,7 @@ export default {
 				{ key: 'originals', label: t('social', 'Posts of your own'), count: posts.originals ?? 0 },
 				{ key: 'replies', label: t('social', 'Replies'), count: posts.replies ?? 0 },
 				{ key: 'boosts', label: t('social', 'Boosts of other people'), count: posts.boosts ?? 0 },
-				{ key: 'media', label: t('social', 'With a picture or a video'), count: posts.with_media ?? 0 },
+				{ key: 'media', label: t('social', 'With a photo or a video'), count: posts.with_media ?? 0 },
 				{ key: 'public', label: t('social', 'Public'), count: visibility.public ?? 0 },
 				{ key: 'unlisted', label: t('social', 'Unlisted'), count: visibility.unlisted ?? 0 },
 				{ key: 'followers', label: t('social', 'Followers only'), count: visibility.followers ?? 0 },
@@ -1720,11 +1672,8 @@ export default {
 		},
 
 		/**
-		 * A language tag as the reader's own word for that language.
-		 *
-		 * `Intl.DisplayNames` is in every browser this app supports; where a
-		 * tag is not one it knows, the tag itself is a better answer than a
-		 * blank.
+		 * A language tag as the reader's own word for that language, or the tag
+		 * itself where `Intl.DisplayNames` does not know it.
 		 *
 		 * @param {string} tag a BCP 47 language tag
 		 * @return {string} its name, or the tag
@@ -1795,14 +1744,9 @@ export default {
 		},
 
 		/**
-		 * The accounts series as SVG points, scaled to its own range rather
-		 * than to zero.
-		 *
-		 * A series that runs from thirty million to thirty-eight drawn from
-		 * zero is a flat line with a lot of empty chart under it; drawn from
-		 * its own floor it is the shape the numbers actually have. The floor
-		 * is a tenth below the smallest value so the line never touches the
-		 * bottom edge.
+		 * The accounts series as SVG points, scaled to its own range rather than
+		 * to zero so its shape shows; the floor is a tenth below the smallest
+		 * value so the line never touches the bottom edge.
 		 *
 		 * @param {number} height the box to draw into
 		 * @return {string} the points
@@ -1848,11 +1792,8 @@ export default {
 		},
 
 		/**
-		 * One sparkline, as SVG points.
-		 *
-		 * Drawn into a fixed 100 × 32 box that the CSS stretches, with the
-		 * stroke left un-stretched: a line whose thickness changes with the
-		 * width of the card reads as a different line.
+		 * One sparkline, as SVG points in a fixed 100 × 32 box that the CSS
+		 * stretches, with the stroke kept un-stretched.
 		 *
 		 * @param {number[]} values one day each
 		 * @param {number} tallest what to scale against
@@ -1950,11 +1891,9 @@ export default {
 	}
 }
 
-/* Six bands of one hue is a gradient; this is a legend, so the hues are spread
-   and the bar is read against the list beside it. The hue comes from
-   `seriesStyle()` as a pair of custom properties, and the choice between them
-   is made here, where the theme is known -- a fixed palette is a set of
-   colours chosen against one background, and this app has two. */
+/* A legend, so the hues are spread rather than shades of one. The hue comes
+   from `seriesStyle()` as a light and a dark custom property, and the choice
+   between them is made here, where the theme is known. */
 .stats__composition {
 	display: flex;
 	height: 14px;
@@ -1990,9 +1929,7 @@ export default {
 	background: var(--series-colour);
 }
 
-/* The dark value, chosen here rather than in the component: a hue picked
-   against a light background does not carry to a dark one, and only the
-   stylesheet knows which it is in. */
+/* The dark value, chosen here because only the stylesheet knows the theme. */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
 		.stats__composition-band,

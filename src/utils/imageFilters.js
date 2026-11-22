@@ -7,10 +7,8 @@ import { t } from '@nextcloud/l10n'
 
 /**
  * The longest edge a picture is drawn at before it is filtered or uploaded.
- *
- * iOS refuses a canvas over 16 777 216 pixels (4096 × 4096) and says so only
- * by handing back no blob, so a 24 or 48 MP phone photo could not be drawn at
- * all. 4096 is also well past what any timeline shows a picture at.
+ * iOS returns no blob from a canvas over 16 777 216 pixels (4096 × 4096), and
+ * no timeline shows a picture larger.
  */
 export const MAX_EDGE = 4096
 
@@ -25,20 +23,11 @@ const BAND_ROWS = 256
 
 /**
  * The filters the composer offers, as the CSS filter functions they are made
- * of, in order: `[function, amount]`, hue-rotate in degrees.
- *
- * Data rather than a CSS string, because the same list is used twice. The
- * preview is the CSS built from it — one `filter:` on the `<img>`, no canvas,
- * drawn on the GPU — and baking it in is either that same CSS handed to a
- * canvas context or, where the canvas has no working `filter` (WebKit), the
- * same steps worked out per pixel. Either way the picture uploaded is the
- * picture that was on screen.
- *
- * Only functions `STEPS` implements may appear here.
- *
- * They are deliberately mild. A filter that cannot be undone after upload should
- * not be the kind that ruins a photograph, and these are the adjustments people
- * actually reach for rather than the novelty ones.
+ * of, in order: `[function, amount]`, hue-rotate in degrees. Data rather than a
+ * CSS string: the preview uses it as CSS, and baking it in either hands that
+ * CSS to a canvas or, where the canvas ignores `filter` (WebKit), runs the same
+ * `STEPS` per pixel, so the upload matches the preview. Only functions `STEPS`
+ * implements may appear. Kept mild, since a filter cannot be undone after upload.
  *
  * @type {Array<{id: string, steps: Array<[string, number]>}>}
  */
@@ -216,12 +205,9 @@ export function filterPixels(data, id) {
 let canvasFilterWorks = null
 
 /**
- * Whether this browser's 2D canvas really applies `filter`.
- *
- * Asked by drawing, not by looking for the property: some engines have it
- * and ignore it. One red pixel is drawn through `grayscale(1)` and read back;
- * a canvas that filtered it has r = g = b, one that did not still has red.
- * Asked once per page.
+ * Whether this browser's 2D canvas really applies `filter`, found by drawing
+ * one red pixel through `grayscale(1)` and reading it back, since some engines
+ * have the property and ignore it. Asked once per page.
  *
  * @return {boolean}
  */
@@ -285,12 +271,10 @@ export function fitWithin(width, height, edge) {
 }
 
 /**
- * Decodes a picture the right way up.
- *
- * `imageOrientation: 'from-image'` applies the EXIF orientation, which a
- * canvas copy has to carry in its pixels since it carries no EXIF. Asked for
- * by name because it was not always the default; a browser that does not
- * know the option throws a TypeError and is asked again without it.
+ * Decodes a picture the right way up: `imageOrientation: 'from-image'` bakes
+ * the EXIF orientation into the pixels, since a canvas copy has no EXIF. A
+ * browser that does not know the option throws a TypeError and is asked again
+ * without it.
  *
  * @param {File} file the picture
  * @return {Promise<ImageBitmap>}
@@ -347,28 +331,20 @@ async function render(bitmap, size, filterId, type) {
 }
 
 /**
- * Gets a picture ready to upload: drawn through a filter, and small enough
- * for the server and for the browser's canvas.
+ * Gets a picture ready to upload: drawn through a filter, and small enough for
+ * the server and for the browser's canvas.
  *
- * - With no filter, a picture that is within `MAX_EDGE` and `sizeLimit` is
- *   handed back untouched: it is not re-encoded for nothing.
+ * - With no filter, a picture within `MAX_EDGE` and `sizeLimit` is handed back
+ *   untouched rather than re-encoded.
  * - Anything larger is drawn at a longest edge of `MAX_EDGE`, and smaller
- *   still, a step at a time, while the result is over `sizeLimit` — a 48 MP
- *   phone JPEG is shrunk here rather than refused by the server after the
- *   whole of it has been uploaded.
+ *   still, a step at a time, while the result is over `sizeLimit`.
  *
- * JPEG in, JPEG out, at a quality chosen to be visually lossless. PNG is kept as
- * PNG so a screenshot or a picture with transparency does not gain a black
- * background where its alpha was. GIF and WebP are never touched, because a
- * canvas would keep only the first frame of an animated one. Anything that is
- * not an image the browser can decode — a video, an audio file, a HEIC the
- * browser cannot draw — comes back untouched, because there is nothing here
- * that could filter it.
+ * JPEG stays JPEG and PNG stays PNG, keeping its transparency. GIF and WebP are
+ * never touched, as a canvas keeps only the first frame of an animation, and
+ * anything the browser cannot decode comes back as it is.
  *
- * Never throws: a filter is a decoration, and losing somebody's upload because
- * a canvas would not cooperate is not a trade worth making. The original file is
- * returned instead, and the caller decides what to do with one that is still
- * over the limit.
+ * Never throws: on failure the original file is returned, and the caller
+ * decides what to do with one still over the limit.
  *
  * @param {File} file the picture as it was chosen
  * @param {object} [options] what to do with it
@@ -426,10 +402,7 @@ export async function prepareImage(file, { filter = 'none', sizeLimit = 0 } = {}
 }
 
 /**
- * The name the prepared copy carries.
- *
- * The extension has to follow the type: a JPEG called `.heic` is a file whose
- * name lies about it, and the mime is what everything downstream actually reads.
+ * The name the prepared copy carries, with an extension that matches its type.
  *
  * @param {string} name the original name
  * @param {string} type the mime of the copy

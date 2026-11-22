@@ -13,30 +13,17 @@ use Exception;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
- * Moving in from a network that is not this one.
+ * Moving in from a network that is not this one: finding the people again
+ * (posts are `PostImportService`'s, follow lists `MigrationService`'s).
  *
- * Importing posts is somebody else's job here (`PostImportService`) and so is
- * importing a follow list (`MigrationService`). What is left is the part no
- * export can do for you: **finding the people again**.
- *
- * Instagram and X hand over a list of accounts you followed *there*, and those
- * names mean nothing on the fediverse — except that Threads federates, and a
- * Threads handle is the Instagram one at `threads.net`. So the list is worth
- * one lookup each: most will not be there, and the ones that are, are people
- * you already chose to follow once.
- *
- * Nothing is followed here. This answers who exists; the follow is a separate
- * decision the wizard asks for, one checkbox at a time.
+ * An Instagram export lists whom you followed there; a Threads handle is the
+ * Instagram one at `threads.net`, and Threads federates, so each name is
+ * worth one lookup. Nothing is followed here; the wizard asks.
  */
 class SwitchService {
 	/**
-	 * How many names one request looks up.
-	 *
-	 * Each is a webfinger against another server, so a list of eight hundred
-	 * is eight hundred outbound requests — which is a page that never finishes
-	 * and a server that looks like it is scanning. The wizard asks again for
-	 * the next batch and says how far it has got, so the work is visible and
-	 * can be stopped.
+	 * How many names one request looks up: each is a WebFinger against another
+	 * server, so the wizard asks batch by batch and shows its progress.
 	 */
 	public const PROBE_BATCH = 25;
 
@@ -52,13 +39,9 @@ class SwitchService {
 	}
 
 	/**
-	 * The handles worth looking up, out of an archive.
-	 *
-	 * Instagram's JSON export says who you follow in
-	 * `following.json` / `connections/followers_and_following/following.json`,
-	 * as `string_list_data[].value`. The same shape appears in several places
-	 * in that archive and has changed names between exports, so the file is
-	 * searched for the shape rather than for a path.
+	 * The handles worth looking up, out of an Instagram JSON export's
+	 * `string_list_data[].value`, found by shape since its path varies between
+	 * exports.
 	 *
 	 * @param string $body the uploaded file
 	 *
@@ -90,13 +73,9 @@ class SwitchService {
 	}
 
 	/**
-	 * Which of those accounts actually exist.
-	 *
-	 * One batch, because the wizard walks the list a batch at a time — see
-	 * `PROBE_BATCH`. What comes back says how many were *checked* rather than
-	 * how many were found, so the caller's cursor moves whether or not
-	 * anybody was there; a cursor that moved by the number found would ask
-	 * about the same names for ever.
+	 * Which of those accounts exist, one batch (`PROBE_BATCH`) at a time. The
+	 * answer counts how many were checked, not found, so the caller's cursor
+	 * always moves.
 	 *
 	 * @param string[] $handles what to look up
 	 *
@@ -132,13 +111,8 @@ class SwitchService {
 	}
 
 	/**
-	 * The card to post where you used to be.
-	 *
-	 * A handle and an address somebody can copy into a last post on the
-	 * network they are leaving. Written here rather than in the page so that
-	 * the handle is the one this server actually publishes — a page that built
-	 * it from the Nextcloud user id would be wrong for every account whose
-	 * fediverse name differs from it, which is most of the interesting ones.
+	 * The card to post where you used to be: the handle this server publishes,
+	 * which may differ from the Nextcloud user id, and an address to copy.
 	 *
 	 * @param Person $actor whose
 	 *
@@ -160,10 +134,8 @@ class SwitchService {
 	}
 
 	/**
-	 * Every `string_list_data[].value` anywhere in the document.
-	 *
-	 * Instagram nests the same shape under a different key in each export it
-	 * has ever written, so this walks for the shape instead of naming a path.
+	 * Every `string_list_data[].value` anywhere in the document, found by shape
+	 * since Instagram nests it differently in each export.
 	 *
 	 * @param array<mixed> $node where to look
 	 * @param string[] $into what was found, by reference

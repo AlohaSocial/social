@@ -20,14 +20,9 @@ use Throwable;
 /**
  * Signs every OAuth application out of an account whose password changed or
  * was reset: the Mastodon apps (`ClientService::revokeAllOf()`) and the
- * Bluesky apps that signed in through this server's OAuth.
- *
- * Nextcloud dispatches the event from `IUser::setPassword()`, which is what
- * the personal settings, the lost-password form, the Users page, the
- * provisioning API and `occ user:resetpassword` all call, for a Social-only
- * account (`ExternalUserBackend`) as for any other. Nextcloud's own sessions
- * and app passwords are Nextcloud's to handle, and Bluesky app passwords are
- * the person's own credentials, revoked where they were made.
+ * Bluesky apps signed in through this server's OAuth. `IUser::setPassword()`
+ * dispatches the event for every way a password changes. Nextcloud sessions
+ * and Bluesky app passwords are left to their own owners.
  *
  * @template-implements IEventListener<\OCP\EventDispatcher\Event>
  */

@@ -5,13 +5,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { forgetMuteChoice, useSoundAutoplay } from '../../../src/composables/useSoundAutoplay.js'
+import { useSoundAutoplay } from '../../../src/composables/useSoundAutoplay.js'
 
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
-const device = vi.hoisted(() => ({ sound: true }))
-vi.mock('../../../src/services/senses.js', () => ({ videoSoundEnabled: () => device.sound }))
 
 const refused = () => Object.assign(new Error('no'), { name: 'NotAllowedError' })
 
@@ -29,7 +27,6 @@ function element(play = vi.fn().mockResolvedValue(undefined)) {
  */
 describe('useSoundAutoplay', () => {
 	beforeEach(() => {
-		device.sound = true
 		window.sessionStorage.clear()
 	})
 
@@ -130,17 +127,6 @@ describe('useSoundAutoplay', () => {
 		expect(video.muted).toBe(true)
 	})
 
-	it('starts muted on a device switched to that, until the tab says otherwise', () => {
-		device.sound = false
-		expect(useSoundAutoplay().muted.value).toBe(true)
-
-		useSoundAutoplay().toggleMute(null)
-		expect(useSoundAutoplay().muted.value).toBe(false)
-
-		forgetMuteChoice()
-		expect(useSoundAutoplay().muted.value).toBe(true)
-	})
-
 	/** a private window may refuse storage outright */
 	it('still works when the session store throws', async () => {
 		vi.spyOn(window.sessionStorage, 'getItem').mockImplementation(() => {
@@ -149,9 +135,6 @@ describe('useSoundAutoplay', () => {
 		vi.spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
 			throw new Error('QuotaExceededError')
 		})
-		vi.spyOn(window.sessionStorage, 'removeItem').mockImplementation(() => {
-			throw new Error('SecurityError')
-		})
 
 		const sound = useSoundAutoplay()
 		expect(sound.muted.value).toBe(false)
@@ -159,7 +142,6 @@ describe('useSoundAutoplay', () => {
 		const video = element()
 		expect(() => sound.toggleMute(video)).not.toThrow()
 		expect(sound.muted.value).toBe(true)
-		expect(() => forgetMuteChoice()).not.toThrow()
 		await sound.playWithSound(video)
 		expect(video.muted).toBe(true)
 	})

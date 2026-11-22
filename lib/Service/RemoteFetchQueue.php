@@ -23,17 +23,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The remote fetches a page would like done and must not wait for.
+ * The remote fetches a page would like done and must not wait for: a page
+ * shows what is known here and queues a background job per missing piece,
+ * so one slow server cannot hold a whole timeline.
  *
- * Rendering a page used to fetch what was missing from it over HTTP, one
- * actor at a time and at the federation timeout each, so one slow server
- * held a reader's whole timeline. A page now shows what is known here and
- * hands the rest to this, which queues a background job per missing piece;
- * the next look at the page has it.
- *
- * A job is queued once per argument (`IJobList::has()`), so a busy page asked
- * for a hundred times before cron runs is still one job per actor, and one
- * call queues at most `MAX_PER_CALL`, so a page cannot fill the job list.
+ * A job is queued once per argument (`IJobList::has()`), and one call queues
+ * at most `MAX_PER_CALL`, so a busy page cannot fill the job list.
  */
 class RemoteFetchQueue {
 	/** The most jobs one call queues; more than one page of anything names. */
@@ -93,11 +88,8 @@ class RemoteFetchQueue {
 
 	/**
 	 * Queues a sync of a remote account's outbox, at most once per
-	 * `TIMELINE_SYNC_INTERVAL` per account.
-	 *
-	 * The interval is stamped when the job is queued rather than when it ran:
-	 * what it bounds is how often a profile being looked at makes this
-	 * instance read somebody's outbox, however many people look.
+	 * `TIMELINE_SYNC_INTERVAL` per account, stamped when queued so it bounds
+	 * how often profile views trigger a read, however many people look.
 	 *
 	 * @return bool whether a sync was asked for
 	 */

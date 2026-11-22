@@ -36,7 +36,7 @@ class PermissionDescriberTest extends TestCase {
 			['Know which account you are', false],
 			['Create: likes', true],
 			['Use app.bsky.feed.getTimeline at Bluesky, as you', false],
-			['Upload pictures', true],
+			['Upload photos', true],
 			['See your e-mail address', false],
 			['Beiträge', true],
 			['mystery:scope', true],

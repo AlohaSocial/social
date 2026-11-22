@@ -14,16 +14,13 @@ import { focusParam, isFocalPoint } from '../utils/focalPoint.js'
 import { isFilterActive, prepareImage } from '../utils/imageFilters.js'
 
 /**
- * What the composer takes as an attachment. The file dialog is given these
- * as its `accept`, and a drop or a paste is held to the same list, so that
- * what can be dragged in is exactly what can be picked.
+ * What the composer takes as an attachment, from the file dialog, a drop or a paste alike.
  */
 const ACCEPTED_MEDIA_TYPES = ['image/', 'video/', 'audio/']
 
 /**
- * The files a post may carry besides media, as CacheDocumentService::
- * DOCUMENT_MIME_TYPES has them: what people on a Nextcloud actually have to
- * share. The extensions are for a browser that reports no type for a file.
+ * The documents a post may carry, as in CacheDocumentService::DOCUMENT_MIME_TYPES.
+ * The extensions are for a browser that reports no type for a file.
  */
 const ACCEPTED_DOCUMENT_TYPES = [
 	'application/pdf',
@@ -42,9 +39,7 @@ const ACCEPTED_DOCUMENT_TYPES = [
 const ACCEPTED_DOCUMENT_EXTENSIONS = ['.pdf', '.txt', '.md', '.csv', '.zip', '.epub', '.odt', '.ods', '.odp', '.docx', '.xlsx', '.pptx']
 
 /**
- * What the file picker offers. Narrower than what the composer takes from a
- * drop or an upload: Files is where the pictures are, and an audio file picked
- * out of a folder tree is not what this button is for.
+ * What the Files picker offers: narrower than a drop or an upload, without audio.
  */
 const PICKABLE_MEDIA_TYPES = ['image/*', 'video/*', ...ACCEPTED_DOCUMENT_TYPES]
 
@@ -52,14 +47,12 @@ const PICKABLE_MEDIA_TYPES = ['image/*', 'video/*', ...ACCEPTED_DOCUMENT_TYPES]
 const REFUSAL_DURATION = 400
 
 /**
- * Everything the composer does with attachments: taking them from the file
- * dialog, a drop, a paste, Files or the picture library; uploading them with
- * progress; filters, descriptions and focal points; and the ceiling on how
- * many a post may carry.
+ * The composer's attachments: picking, dropping, pasting and uploading them,
+ * filters, descriptions, focal points and the per-post limit.
  *
  * Attachments are keyed by the object URL of the file's preview, or by a
- * made-up key for one that has no file in the browser (Files, the library, a
- * re-draft), and each holds the server's answer in `data` once there is one.
+ * made-up key for one that has no file in the browser (Files, the library, an
+ * edit or a draft), and each holds the server's answer in `data` once there is one.
  *
  * @param {object} composer what the attachments need from the composer
  * @param {() => void} composer.expand opens it, as attaching something does
@@ -71,55 +64,41 @@ export function useComposerAttachments({ expand, root }) {
 
 	/** @type {import('vue').Ref<Record<string, import('../types/Composer.js').LocalAttachment>>} */
 	const attachments = ref({})
-	/** whether an attachment is on its way to the server */
 	const uploading = ref(false)
 	/** how far the current upload has got, 0..1 */
 	const uploadProgress = ref(0)
-	/** what the progress bar is working on, in words */
 	const progressLabel = ref('')
 	/** whether the Files dialog is open or its picks are being attached */
 	const picking = ref(false)
 	/** keeps two picks of the same file apart, since the path cannot */
 	const pickCount = ref(0)
-	/** whether files are being dragged over the card right now */
 	const draggingFiles = ref(false)
 	/** briefly true after a drop of something the composer cannot take */
 	const refusedDrop = ref(false)
-	/** when the refused-drop notice goes away */
 	let refusalTimer = null
 
-	/** what a post may carry, as the server holds it */
 	const maxAttachments = computed(() => instanceStore.maxAttachments)
 
-	/** the `accept` of the file dialog, from one list */
+	/** the `accept` of the file dialog */
 	const acceptedTypes = computed(() => [...ACCEPTED_MEDIA_TYPES.map((type) => `${type}*`), ...ACCEPTED_DOCUMENT_TYPES, ...ACCEPTED_DOCUMENT_EXTENSIONS].join(','))
 
-	/** whether the composer holds a picture */
 	const hasAttachments = computed(() => Object.keys(attachments.value).length > 0)
 
-	/** whether the post is carrying all the server takes */
 	const attachmentsFull = computed(() => Object.keys(attachments.value).length >= maxAttachments.value)
 
 	/** attachments that can carry a description and have not been given one */
 	const undescribed = computed(() => Object.values(attachments.value).filter((attachment) => attachment.data?.id !== undefined && (attachment.description || '').trim() === '').length)
 
-	/** uploads the server refused */
 	const failedUploads = computed(() => Object.values(attachments.value).filter((attachment) => attachment.failed === true).length)
 
-	/** whether an upload has not come back yet */
 	const hasPendingUploads = computed(() => Object.values(attachments.value).some((attachment) => attachment.failed !== true && attachment.data === null))
 
-	/**
-	 * Whether an attachment is still being asked about (one a draft came
-	 * back with) or fetched (one a filter was chosen for); the post waits
-	 */
+	/** whether an attachment is still being rechecked (from a draft) or fetched (for a filter); the post waits */
 	const checkingMedia = computed(() => Object.values(attachments.value).some((attachment) => attachment.checking === true || attachment.fetching === true))
 
 	/**
-	 * The attachments as a draft keeps them: by the upload, with what was
-	 * written about them, where their subject is and the filter chosen. The
-	 * upload made on attaching rather than a filtered copy of it, because
-	 * the filter is baked in again from the file when the post goes out.
+	 * The attachments as a draft keeps them. The unfiltered upload is kept,
+	 * because the filter is baked in again from the file when the post goes out.
 	 *
 	 * @type {import('vue').ComputedRef<import('../services/draft.js').DraftMedia[]>}
 	 */
@@ -145,10 +124,8 @@ export function useComposerAttachments({ expand, root }) {
 		}))
 
 	/**
-	 * Whether this post is a video: one attachment, and it a video.
-	 *
-	 * The same rule the wire form applies — a `Video` object *is* the
-	 * video, so a post carrying a video and three photographs is a post.
+	 * Whether this post is a video: exactly one attachment, and it a video,
+	 * as in the federated `Video` object.
 	 */
 	const isVideoPost = computed(() => {
 		const all = Object.values(attachments.value)
@@ -158,7 +135,6 @@ export function useComposerAttachments({ expand, root }) {
 				|| (all[0].data?.media_type || '').startsWith('video/'))
 	})
 
-	/** the ids the post will carry */
 	const mediaIds = computed(() => Object.values(attachments.value)
 		.map((attachment) => attachment.data?.id)
 		.filter((id) => id !== undefined && id !== null))
@@ -174,17 +150,14 @@ export function useComposerAttachments({ expand, root }) {
 	async function handleFileChange(event) {
 		const target = /** @type {HTMLInputElement} */ (event.target)
 		const files = Array.from(target.files ?? [])
-		// the input keeps its selection, so picking the same file twice in
-		// a row would otherwise be ignored the second time
+		// the input keeps its selection, so picking the same file again would be ignored
 		target.value = ''
 
 		await attachFiles(files)
 	}
 
 	/**
-	 * Whether a drag is carrying files, as opposed to a selection being
-	 * dragged around inside the composer — text moved from one line to the
-	 * next is not an attachment and must not light the card up.
+	 * Whether a drag is carrying files, as opposed to text dragged inside the composer.
 	 *
 	 * @param {Event} event a drag event
 	 * @return {boolean}
@@ -220,8 +193,7 @@ export function useComposerAttachments({ expand, root }) {
 			return
 		}
 
-		// without this the browser keeps the drop for itself and opens the
-		// file in the tab, which navigates away and takes the draft with it
+		// without this the browser opens the file in the tab and the draft is lost
 		event.preventDefault()
 		if (event.dataTransfer) {
 			event.dataTransfer.dropEffect = 'copy'
@@ -230,14 +202,10 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * dragleave fires just as loudly when the pointer crosses from the card
-	 * onto one of its own children, which is where the highlight usually
-	 * starts flickering. Where the pointer went is the answer: it has only
-	 * left when it went somewhere outside this element, or nowhere at all
-	 * (relatedTarget is null when the drag leaves the window). A counter of
-	 * enters and leaves would answer the same question, but it can only be
-	 * repaired by an event that may never come — one missed leave and the
-	 * card stays lit for good — while this is decided fresh every time.
+	 * dragleave also fires when the pointer moves onto a child of the card, so
+	 * the drag has only left when relatedTarget is outside the card or null
+	 * (out of the window). Unlike an enter/leave counter, one missed event
+	 * cannot leave the card lit.
 	 *
 	 * @param {DragEvent} event the drag leaving something
 	 */
@@ -260,38 +228,34 @@ export function useComposerAttachments({ expand, root }) {
 			return
 		}
 
-		// same reason as dragover: an unhandled drop is a navigation
+		// an unhandled drop is a navigation
 		event.preventDefault()
 		draggingFiles.value = false
-		// dropping a picture is a way of starting a post, so a closed
-		// composer opens rather than swallowing the file out of sight
+		// a drop onto a closed composer opens it
 		expand()
 
 		await attachDropped(Array.from(event.dataTransfer?.files ?? []))
 	}
 
 	/**
-	 * A picture on the clipboard becomes an attachment; everything else is
-	 * left to the contenteditable and its autocomplete, exactly as before.
+	 * A file on the clipboard becomes an attachment; everything else is left
+	 * to the contenteditable and its autocomplete.
 	 *
 	 * @param {ClipboardEvent} event the paste
 	 */
 	function handlePaste(event) {
 		const files = Array.from(event.clipboardData?.files ?? []).filter((file) => acceptsFile(file))
 		if (files.length === 0) {
-			// text, a link, a mention pasted back in: none of our business
 			return
 		}
 
-		// otherwise the browser drops the image into the box as markup the
-		// post cannot carry
+		// otherwise the browser inserts the image as markup the post cannot carry
 		event.preventDefault()
 		attachFiles(files)
 	}
 
 	/**
-	 * Attaches what the composer takes and turns the rest away, which is
-	 * all the file dialog does with them — it never offers them at all.
+	 * Attaches what the composer takes and refuses the rest.
 	 *
 	 * @param {File[]} files everything that was dropped
 	 */
@@ -320,11 +284,8 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * How many of these there is still room for, with a word about the rest.
-	 *
-	 * The server refuses the ninth attachment outright, so the refusal
-	 * belongs here, where it can still be explained and where the eight
-	 * that do fit are not lost with it.
+	 * The items there is still room for, with an error about the rest. The
+	 * server would refuse the whole request when over the limit.
 	 *
 	 * @param {Array} items files or paths, in the order they were offered
 	 * @return {Array} the ones the post can still carry
@@ -338,7 +299,7 @@ export function useComposerAttachments({ expand, root }) {
 		return items.slice(0, room)
 	}
 
-	/** Says that the post is carrying as much as it can. */
+	/** Says that the post carries as many attachments as it can. */
 	function announceCeiling() {
 		showError(n(
 			'social',
@@ -349,8 +310,7 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Attaches pictures the reader already has in Nextcloud, without a trip
-	 * through the browser: the path is all that is sent.
+	 * Attaches files from the reader's Nextcloud by path, without a trip through the browser.
 	 */
 	async function pickFromFiles() {
 		if (attachmentsFull.value) {
@@ -361,21 +321,15 @@ export function useComposerAttachments({ expand, root }) {
 		let picked
 		picking.value = true
 		try {
-			// imported here rather than at the top: the picker is most of
-			// `@nextcloud/dialogs`, and it is wanted only by somebody who
-			// has just clicked "attach from Files"
+			// loaded on demand: the picker is most of `@nextcloud/dialogs`
 			const { getFilePickerBuilder } = await import('@nextcloud/dialogs')
 			picked = await getFilePickerBuilder(t('social', 'Pick files to attach'))
 				.setMultiSelect(true)
 				.setMimeTypeFilter(PICKABLE_MEDIA_TYPES)
 				.allowDirectories(false)
-				// Without this the dialog has **no confirm button at all**:
-				// a picker built with neither `addButton` nor
-				// `setButtonFactory` renders none, so a file could be
-				// selected and there was nothing to press, and the only way
-				// out was to close the dialog — which rejects, and attaches
-				// nothing. `pick()` resolves with the selection when a
-				// button is pressed, so the callback has nothing to do.
+				// a picker without `addButton` or `setButtonFactory` has no
+				// confirm button; `pick()` resolves with the selection, so
+				// the callback has nothing to do
 				.addButton({
 					label: t('social', 'Attach'),
 					variant: 'primary',
@@ -384,8 +338,7 @@ export function useComposerAttachments({ expand, root }) {
 				.build()
 				.pick()
 		} catch (error) {
-			// closing the dialog without picking rejects, and changing one's
-			// mind is not a failure to report
+			// closing the dialog without picking rejects; not an error
 			logger.debug('The file picker was closed', { error })
 			return
 		} finally {
@@ -404,20 +357,15 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Attaches a picture from the instance's shared library.
-	 *
-	 * The same shape as attaching from Files: a placeholder goes into the
-	 * grid at once so the reader sees that something is happening, and the
-	 * server's answer replaces it. Whether there is room for it is the
-	 * caller's to ask, because the caller owns the picker it came from.
+	 * Attaches a picture from the instance's shared library, showing a
+	 * placeholder until the server answers. The caller checks for room.
 	 *
 	 * @param {{slug: string, title: string}} gif the one that was chosen
 	 */
 	async function attachLibraryGif(gif) {
 		expand()
 
-		// the same picture may be chosen twice, and the slug cannot tell
-		// those two attachments apart
+		// the counter keeps two picks of the same picture apart
 		const key = `gif:${++pickCount.value}:${gif.slug}`
 		attachments.value = {
 			...attachments.value,
@@ -445,9 +393,8 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Asks the server for one attachment per path, in order, keeping the
-	 * ones it accepts. A path it refuses is marked and left in the grid:
-	 * the others are already attached and must not go down with it.
+	 * Asks the server for one attachment per path, in order. A path it
+	 * refuses is marked failed without affecting the others.
 	 *
 	 * @param {string[]} paths files in the reader's own storage
 	 */
@@ -457,8 +404,7 @@ export function useComposerAttachments({ expand, root }) {
 		picking.value = accepted.length > 0
 		progressLabel.value = t('social', 'Attaching from Files…')
 		for (const [index, path] of accepted.entries()) {
-			// the same picture may be picked twice, and the path cannot
-			// tell those two attachments apart
+			// the counter keeps two picks of the same file apart
 			const key = `nextcloud:${++pickCount.value}:${path}`
 			attachments.value = {
 				...attachments.value,
@@ -494,14 +440,10 @@ export function useComposerAttachments({ expand, root }) {
 	const wantedFilters = new Map()
 
 	/**
-	 * Remembers the filter chosen for an attachment. Nothing is uploaded:
-	 * the preview is CSS and updates at once, and the filter is baked in
-	 * once, as the post is sent (`bakeFilters()`).
-	 *
-	 * The filter is baked in from the file, and a picture added from Files,
-	 * written again from a deleted post or brought back by a draft has none
-	 * in the browser: it is fetched first, and the post waits for it. One
-	 * that cannot be had leaves the picture as it is, and says so.
+	 * Remembers the filter chosen for an attachment; the preview is CSS and
+	 * `bakeFilters()` applies it when the post is sent. An attachment with no
+	 * file in the browser (from Files, an edit or a draft) has its file
+	 * fetched first; if that fails, the filter is dropped with an error.
 	 *
 	 * @param {object} change what was chosen
 	 * @param {string} change.key the attachment's key
@@ -513,7 +455,7 @@ export function useComposerAttachments({ expand, root }) {
 			return
 		}
 		if (wantedFilters.has(key)) {
-			// the file is on its way already; the last choice is the one
+			// the file is already being fetched; the last choice wins
 			wantedFilters.set(key, filter)
 			return
 		}
@@ -539,7 +481,7 @@ export function useComposerAttachments({ expand, root }) {
 			return
 		}
 		if (!loaded) {
-			showError(t('social', 'Could not load the picture to apply the filter, so it stays as it is'))
+			showError(t('social', 'Could not load the photo to apply the filter, so it stays as it is'))
 		}
 		attachments.value = {
 			...attachments.value,
@@ -571,18 +513,9 @@ export function useComposerAttachments({ expand, root }) {
 
 	/**
 	 * Bakes each attachment's filter in and puts the filtered copy in place
-	 * of the upload, just before the post is sent.
-	 *
-	 * At send rather than when the choice settles: a settle is a guess at
-	 * when somebody has finished choosing, and every wrong guess was another
-	 * full upload, with a race against Post while it was in flight. Here each
-	 * filtered picture is uploaded exactly once more, and the post cannot go
-	 * out carrying the copy it was meant to replace. The upload made on
-	 * attaching stays what the post carries when no filter is chosen, and is
-	 * what descriptions and focal points are saved against until then.
-	 *
-	 * A picture the browser could not filter comes back as it was and is
-	 * posted as it was, as a filter is a decoration.
+	 * of the upload, just before the post is sent, so each filtered picture
+	 * is uploaded exactly once more. A picture the browser cannot filter is
+	 * posted unfiltered.
 	 *
 	 * @return {Promise<boolean>} false when a filtered copy would not upload,
 	 *         so the post should not go out without it
@@ -626,10 +559,8 @@ export function useComposerAttachments({ expand, root }) {
 
 	/**
 	 * Puts the copy an attachment's filter asks for in place of its upload.
-	 *
-	 * The upload made on attaching is kept as `unfiltered`, so that going
-	 * back to Original after a post that did not go out posts that upload
-	 * again rather than the filtered one.
+	 * The original upload is kept as `unfiltered`, for going back to Original
+	 * after a failed post.
 	 *
 	 * @param {string} key the attachment's object URL
 	 * @return {Promise<boolean>} whether the attachment is ready to be posted
@@ -662,9 +593,7 @@ export function useComposerAttachments({ expand, root }) {
 			return true
 		}
 
-		// the description was typed against this picture and belongs to it
-		// rather than to the upload it happened to be stored as, and so does
-		// the focal point: a filter changes the colours, not where the face is
+		// the description and focal point carry over to the filtered copy
 		const description = (current.description || '').trim()
 		await Promise.all([
 			description !== '' ? timelineStore.describeMedia({ id: mediaData.id, description }) : null,
@@ -687,8 +616,8 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Previews each file, uploads it, and remembers what came back. The one
-	 * road in: the file dialog, a drop and a paste all arrive here.
+	 * Previews each file, uploads it, and remembers what came back. The file
+	 * dialog, a drop and a paste all arrive here.
 	 *
 	 * @param {File[]} allFiles the files to attach, in order
 	 */
@@ -708,8 +637,6 @@ export function useComposerAttachments({ expand, root }) {
 			}
 
 			uploading.value = true
-			// real progress, from the request itself: the bar used to be
-			// hard-coded to 40% behind a `v-if="false"`
 			uploadProgress.value = index / files.length
 			const upload = await fitForUpload(file)
 			if (upload === null) {
@@ -742,8 +669,7 @@ export function useComposerAttachments({ expand, root }) {
 				...attachments.value,
 				[url]: {
 					...attachments.value[url],
-					// a failed upload is marked, never left as
-					// `data: undefined` for the submit path to trip over
+					// never `data: undefined`, which the submit path would trip over
 					data: mediaData?.id === undefined ? null : mediaData,
 					failed: mediaData?.id === undefined,
 				},
@@ -753,17 +679,10 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * What of a file is uploaded: the file itself, or a picture shrunk to
-	 * what the server and the canvas take, or nothing.
-	 *
-	 * The server holds every upload that is not a video to one size limit,
-	 * and a video to another, and says so only after all of it has arrived;
-	 * a picture is shrunk before it goes (`prepareImage()`), and anything
-	 * still over its limit is refused here, where it costs nobody an upload
-	 * — least of all a video, which cannot be shrunk and would otherwise
-	 * travel whole before being turned away. The file kept on the attachment
-	 * is the original, so a filter chosen later is drawn from it rather
-	 * than from a copy already compressed once.
+	 * What of a file is uploaded: the file itself, a picture shrunk by
+	 * `prepareImage()`, or nothing when it is over the server's size limit
+	 * (refused here, before a wasted upload). The attachment keeps the
+	 * original, so a later filter is drawn from it.
 	 *
 	 * @param {File} file what was attached
 	 * @return {Promise<File|null>} what to upload, or null when it is too large
@@ -796,8 +715,6 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Takes an attachment off the post.
-	 *
 	 * @param {string} key which one
 	 */
 	function deletePreview(key) {
@@ -809,8 +726,7 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Lets go of the blob URLs a preview was drawn from. Without this the
-	 * file stays in memory for the life of the document.
+	 * Revokes the blob URLs of a preview, which otherwise keep the file in memory.
 	 *
 	 * @param {string} key the attachment key, which is the URL of a file
 	 *                     attached from this browser
@@ -818,9 +734,8 @@ export function useComposerAttachments({ expand, root }) {
 	 *        attachment, whose file may have been fetched later
 	 */
 	function releasePreview(key, attachment) {
-		// an attachment picked out of Files is keyed by its path: there is
-		// no object URL behind the key, though there may be one for a file
-		// fetched for a filter
+		// keys that are not blob URLs (Files, library, edit, draft) may still
+		// have an objectUrl from a file fetched for a filter
 		const urls = [key, attachment?.objectUrl ?? ''].filter((url) => url.startsWith('blob:'))
 
 		for (const url of urls) {
@@ -836,13 +751,8 @@ export function useComposerAttachments({ expand, root }) {
 	const savingDescriptions = new Set()
 
 	/**
-	 * Sends whatever descriptions were written, once, as the post goes, and
-	 * waits for those still on their way from a field just left.
-	 *
-	 * Saving per keystroke would be a request per letter; saving here means
-	 * the description travels with the post that carries the picture.
-	 * Leaving the field for the Post button sends its description a moment
-	 * before the post, and a post created first has the picture without it.
+	 * Saves unsaved descriptions as the post goes, and waits for those still
+	 * being saved from a field just left, so the post never goes out first.
 	 */
 	async function saveDescriptions() {
 		const described = Object.values(attachments.value).filter((attachment) => attachment.data?.id
@@ -888,8 +798,8 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Remembers what an attachment shows. Kept locally while the post is
-	 * being written and sent when it goes, rather than on every keystroke.
+	 * Remembers an attachment's description locally; it is saved when the
+	 * field is left or the post is sent.
 	 *
 	 * @param {object} update what changed
 	 * @param {string} update.key which attachment
@@ -943,18 +853,15 @@ export function useComposerAttachments({ expand, root }) {
 		await timelineStore.focusMedia({ id: attachment.data.id, focus: focusParam(focus) })
 	}
 
-	/** Every attachment gone, and the previews they were drawn from let go of. */
+	/** Removes every attachment and releases its preview. */
 	function clearAttachments() {
 		Object.entries(attachments.value).forEach(([key, attachment]) => releasePreview(key, attachment))
 		attachments.value = {}
 	}
 
 	/**
-	 * Puts back the pictures of a post that has just been deleted.
-	 *
-	 * They are the uploads the server still holds — deleting a post removes
-	 * the post, not the media rows behind it — so they come back by id rather
-	 * than being uploaded again, as many as the post has room for.
+	 * Puts back the attachments of a post being edited, by id rather than
+	 * uploading them again, as many as there is room for.
 	 *
 	 * @param {object[]} media the post's `media_attachments`
 	 */
@@ -965,11 +872,8 @@ export function useComposerAttachments({ expand, root }) {
 				continue
 			}
 
-			// the same shape an upload leaves behind, with the server's
-			// answer already in hand: `data.id` is what goes out as
-			// `media_ids`, and `saved` is the description as the server
-			// already holds it, so it is not written again unless it is
-			// changed
+			// `saved` is the description the server holds, so it is only
+			// written again when changed
 			restored[`redraft:${++pickCount.value}:${item.id}`] = {
 				file: null,
 				path: item.description || item.url || String(item.id),
@@ -983,15 +887,9 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Puts back the attachments a draft kept, and asks the server about each
-	 * one again.
-	 *
-	 * They are in the grid at once, as the draft described them, so the post
-	 * looks the way it was left; Post waits until the server has answered for
-	 * all of them. An upload nobody posted can be cleared away while the
-	 * draft waits, and one the server no longer has is taken off with a word
-	 * about it rather than left to fail the post. One the server could not be
-	 * asked about stays as the draft had it.
+	 * Puts back the attachments a draft kept and rechecks each with the
+	 * server, which may have cleaned up unposted uploads. One the server no
+	 * longer has is removed with a warning; Post waits for all the answers.
 	 *
 	 * @param {import('../services/draft.js').DraftMedia[]} kept what the draft held, in order
 	 */
@@ -1032,11 +930,8 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Asks the server about one attachment a draft came back with.
-	 *
-	 * A filtered picture needs its file again, since the filter is baked in
-	 * from the file as the post is sent; when that cannot be had the filter
-	 * is dropped, so that the preview shows what would be posted.
+	 * Rechecks one attachment a draft came back with. A filtered picture has
+	 * its file fetched again for baking; if that fails, the filter is dropped.
 	 *
 	 * @param {string} key the attachment
 	 * @return {Promise<boolean>} false when the server no longer has it

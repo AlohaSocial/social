@@ -25,7 +25,7 @@ vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
-vi.mock('../../../src/services/senses.js', () => ({ feel, videoSoundEnabled: () => true }))
+vi.mock('../../../src/services/senses.js', () => ({ feel }))
 const { sendSignals, fetchRecommendationPreferences } = vi.hoisted(() => ({
 	sendSignals: vi.fn(() => Promise.resolve()),
 	fetchRecommendationPreferences: vi.fn(() => Promise.resolve({ learning_mode: 'on', generation: 7 })),

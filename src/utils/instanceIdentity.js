@@ -4,13 +4,9 @@
  */
 
 /**
- * A timeline here is a mix of accounts from many servers, and the only trace
- * of that in the UI used to be the part of the handle after the `@`. Giving
- * every instance a colour of its own makes the spread visible: you learn to
- * recognise where a post came from before reading the handle.
- *
- * The colour is derived from the hostname, so it is the same on every client,
- * every session and every instance — no storage, no coordination.
+ * Every instance gets a colour of its own, so a reader learns where a post
+ * came from before reading the handle. The colour is derived from the
+ * hostname, so it is the same everywhere without storage.
  */
 
 import { isBlueskyAccount } from './accountLocality.js'
@@ -49,13 +45,9 @@ export function instanceOf(acct) {
 }
 
 /**
- * How light a colour may be and still carry white text at 4.5:1.
- *
- * A fixed lightness cannot do this: at the same 52%, blue is dark enough for
- * white text and yellow is nowhere near — `hsl(60, 62%, 52%)` against white is
- * about 1.5:1, which is an unreadable badge for whoever happens to be on that
- * instance. So the hue is kept and the lightness is brought down until the
- * contrast is real.
+ * The contrast white text needs against an instance colour. A fixed lightness
+ * cannot give it (yellow at 52% is about 1.5:1), so the hue is kept and the
+ * lightness lowered until it does.
  */
 const TARGET_CONTRAST = 4.5
 

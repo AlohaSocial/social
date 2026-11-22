@@ -38,7 +38,6 @@ const ComposerStub = {
 }
 const OnThisDayStub = { name: 'OnThisDay', template: '<div class="on-this-day-stub" />' }
 const AnnouncementsStub = { name: 'Announcements', template: '<div class="announcements-stub" />' }
-const WeeklyRecapStub = { name: 'WeeklyRecap', template: '<div class="weekly-recap-stub" />' }
 const ShortsBarStub = { name: 'ShortsBar', template: '<div class="shorts-bar-stub" />' }
 const NotificationRequestsStub = { name: 'NotificationRequests', emits: ['changed'], template: '<div class="notification-requests-stub" />' }
 const TimelineListStub = {
@@ -86,7 +85,7 @@ function mountTimeline(route = {}) {
 			// Announcements what the instance is telling everybody; each is its
 			// own request with its own tests, and left real they would answer
 			// after these tests have finished
-			stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: ShortsBarStub, NotificationRequests: NotificationRequestsStub },
+			stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, ShortsBar: ShortsBarStub, NotificationRequests: NotificationRequestsStub },
 		},
 	})
 }
@@ -130,14 +129,13 @@ describe('Timeline', () => {
 	describe('the reader\'s own feed', () => {
 		const cards = (wrapper) => ({
 			shorts: wrapper.find('.shorts-bar-stub').exists(),
-			recap: wrapper.find('.weekly-recap-stub').exists(),
 			memories: wrapper.find('.on-this-day-stub').exists(),
 		})
 
-		it('draws the Shorts bar, the recap and the memories on the home feed', () => {
+		it('draws the Shorts bar and the memories on the home feed', () => {
 			const wrapper = mountTimeline({ name: 'timeline', params: {} })
 
-			expect(cards(wrapper)).toEqual({ shorts: true, recap: true, memories: true })
+			expect(cards(wrapper)).toEqual({ shorts: true, memories: true })
 		})
 
 		it.each([
@@ -149,7 +147,7 @@ describe('Timeline', () => {
 		])('draws none of them on %s', (type) => {
 			const wrapper = mountTimeline({ name: 'timeline', params: { type } })
 
-			expect(cards(wrapper)).toEqual({ shorts: false, recap: false, memories: false })
+			expect(cards(wrapper)).toEqual({ shorts: false, memories: false })
 		})
 
 		it('keeps them while the reader is on another scope of the feed', async () => {
@@ -162,7 +160,7 @@ describe('Timeline', () => {
 				global: {
 					plugins: [pinia],
 					mocks: { $route: route, $router: { replace: vi.fn() } },
-					stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: CountedShortsBar, NotificationRequests: NotificationRequestsStub },
+					stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, ShortsBar: CountedShortsBar, NotificationRequests: NotificationRequestsStub },
 				},
 			})
 
@@ -179,7 +177,7 @@ describe('Timeline', () => {
 		it('draws none of them on a hashtag page', () => {
 			const wrapper = mountTimeline({ name: 'tags', params: { tag: 'nextcloud' } })
 
-			expect(cards(wrapper)).toEqual({ shorts: false, recap: false, memories: false })
+			expect(cards(wrapper)).toEqual({ shorts: false, memories: false })
 		})
 	})
 
@@ -239,10 +237,10 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'home', params: {} })
 		expect(timelineStore.type).toBe('home')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('home')
-		expect(wrapper.find('.info-card h2').text()).toBe('About this feed')
+		expect(wrapper.findComponent({ name: 'FeedHelp' }).props('scope')).toBe('home')
 	})
 
-	it('explains when For you has too few different posts to fill the feed', async () => {
+	it('tells the feed help when For you has too few different posts to fill the feed', async () => {
 		const wrapper = mountTimeline({ params: { type: 'interests' } })
 		timelineStore.recommendationCoverage = {
 			[timelineStore.getTimelineIdentity]: { state: 'UNDERFILLED', known_eligible: 3, returned: 3, remote_refresh_queued: true },
@@ -250,18 +248,8 @@ describe('Timeline', () => {
 		timelineStore.addToTimeline([{ id: 'short-feed', created_at: '2026-01-01T00:00:00Z' }])
 		await nextTick()
 
-		expect(wrapper.text()).toContain('Only a few posts are available in this feed right now.')
-	})
-
-	it('explains limited availability when For you has no posts yet', async () => {
-		const wrapper = mountTimeline({ params: { type: 'interests' } })
-		timelineStore.recommendationCoverage = {
-			[timelineStore.getTimelineIdentity]: { state: 'UNDERFILLED', known_eligible: 0, returned: 0, remote_refresh_queued: true },
-		}
-		await nextTick()
-
-		expect(timelineStore.getTimeline).toHaveLength(0)
-		expect(wrapper.text()).toContain('Only a few posts are available in this feed right now.')
+		expect(wrapper.findComponent({ name: 'FeedHelp' }).props('underfilled')).toBe(true)
+		expect(wrapper.find('.info-card').exists()).toBe(false)
 	})
 
 	it.each(['timeline', 'federated', 'favourites'])('switches the store to the %s timeline from the route', (type) => {
@@ -311,7 +299,7 @@ describe('Timeline', () => {
 		[{ name: 'timeline', params: { type: 'notifications' } }, 'Activities', false],
 		[{ name: 'timeline', params: { type: 'timeline' } }, 'Local timeline', false],
 		[{ name: 'timeline', params: { type: 'federated' } }, 'Global timeline', false],
-		[{ name: 'timeline', params: { type: 'favourites' } }, 'Liked posts', false],
+		[{ name: 'timeline', params: { type: 'favourites' } }, 'Favorites', false],
 		[{ name: 'timeline', params: { type: 'bookmarks' } }, 'Bookmarks', false],
 		[{ name: 'timeline', params: { type: 'photos' } }, 'Photos', false],
 		[{ name: 'timeline', params: { type: 'videos' } }, 'Videos', false],
@@ -331,7 +319,7 @@ describe('Timeline', () => {
 			global: {
 				plugins: [pinia],
 				mocks: { $route: route, $router: { replace: vi.fn() } },
-				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: ShortsBarStub, NotificationRequests: NotificationRequestsStub },
+				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, ShortsBar: ShortsBarStub, NotificationRequests: NotificationRequestsStub },
 			},
 		})
 		expect(document.title).toBe('Activities - Aloha - Nextcloud')
@@ -427,7 +415,7 @@ describe('Timeline', () => {
 					$route: { name: 'timeline', params: {}, query: { welcome: '1', other: 'x' } },
 					$router: { replace },
 				},
-				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: ShortsBarStub, NotificationRequests: NotificationRequestsStub },
+				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, ShortsBar: ShortsBarStub, NotificationRequests: NotificationRequestsStub },
 			},
 		})
 		await wrapper.findComponent(FirstRunStub).vm.$emit('done')
@@ -734,10 +722,10 @@ describe('Timeline', () => {
 			.toEqual(['My Feed', 'Local', 'Global'])
 	})
 
-	it('explains how My Feed and For You differ', () => {
+	it('explains the chosen feed behind the (?) beside the tabs, not in a card above the posts', () => {
 		const home = mountTimeline()
-		expect(home.find('.timeline-scope-description p').text())
-			.toBe('My Feed shows posts from accounts you follow, in chronological order.')
+		expect(home.findComponent({ name: 'FeedHelp' }).props('scope')).toBe('home')
+		expect(home.find('.timeline-scope-description').exists()).toBe(false)
 		home.unmount()
 
 		useSettingsStore().setServerData({
@@ -745,23 +733,7 @@ describe('Timeline', () => {
 			interests: { enabled: false, learning: false, recommendationsEnabled: true },
 		})
 		const forYou = mountTimeline({ params: { type: 'interests' } })
-		expect(forYou.find('.timeline-scope-description p').text())
-			.toBe('For You ranks eligible public posts using automatically learned interests, post content, freshness, followed accounts and discovery. Separately enabled activity learning can refine new sessions. It can include posts from beyond the accounts you follow.')
-	})
-
-	it('allows putting away feed explanations without hiding another feed context', async () => {
-		const home = mountTimeline()
-		await home.find('.timeline-scope-description button').trigger('click')
-		expect(home.find('.timeline-scope-description').exists()).toBe(false)
-		home.unmount()
-		const reopened = mountTimeline()
-		expect(reopened.find('.timeline-scope-description').exists()).toBe(false)
-		reopened.unmount()
-		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
-		const forYou = mountTimeline({ params: { type: 'interests' } })
-		expect(forYou.find('.timeline-scope-description').exists()).toBe(true)
-		forYou.unmount()
-		await flushPromises()
+		expect(forYou.findComponent({ name: 'FeedHelp' }).props('scope')).toBe('interests')
 	})
 
 	/**
@@ -852,7 +824,7 @@ describe('Timeline', () => {
 			const wrapper = mountTimeline({ params: { type: 'notifications' } })
 
 			expect(filters(wrapper).props('options').map((option) => option.label))
-				.toEqual(['All', 'Mentions', 'Favourites', 'Boosts', 'Follows', 'Polls', 'Edits'])
+				.toEqual(['All', 'Mentions', 'Favorites', 'Boosts', 'Follows', 'Polls', 'Edits'])
 			// a filter of this page, not a page of its own
 			expect(filters(wrapper).props('options').every((option) => option.to === undefined)).toBe(true)
 		})
@@ -953,7 +925,7 @@ describe('Timeline', () => {
 			useNotificationsStore().setPolicyNotice(true)
 			const wrapper = mountTimeline({ params: { type: 'notifications' } })
 
-			expect(notice(wrapper).text()).toContain('You can now choose who reaches your notifications — new accounts and people you don\'t follow can wait for your review.')
+			expect(notice(wrapper).text()).toContain('You can now choose who reaches your activities — new accounts and people you don\'t follow can wait for your review.')
 			expect(notice(wrapper).text()).toContain('Choose in Settings')
 			expect(notice(wrapper).findComponent(RouterLinkStub).props('to')).toEqual({ name: 'settings', hash: '#notification-policy' })
 		})
@@ -1245,7 +1217,7 @@ describe('one column above the feed', () => {
 		expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.feed-notice-enter-active,\s*\.feed-notice-leave-active \{\s*transition: none;/)
 	})
 
-	it('shows one one-time card at a time, the next once it is put away', async () => {
+	it('puts no explanation cards above For you', async () => {
 		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
 		const wrapper = mountTimeline({ params: { type: 'interests' } })
 		timelineStore.recommendationCoverage = {
@@ -1253,12 +1225,6 @@ describe('one column above the feed', () => {
 		}
 		await nextTick()
 
-		expect(wrapper.findAll('.info-card')).toHaveLength(1)
-		expect(wrapper.find('.timeline-recommendation-coverage').exists()).toBe(true)
-
-		await wrapper.find('.timeline-recommendation-coverage button').trigger('click')
-
-		expect(wrapper.findAll('.info-card')).toHaveLength(1)
-		expect(wrapper.find('.timeline-scope-description').exists()).toBe(true)
+		expect(wrapper.findAll('.info-card')).toHaveLength(0)
 	})
 })

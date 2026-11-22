@@ -4,13 +4,7 @@
 -->
 <template>
 	<div class="oauth">
-		<!--
-			After the consent form is submitted, the out-of-band flow lands
-			back here with a code. It used to be answered with a JSON body, so
-			a browser drew `{"code":"..."}` on a blank document one click after
-			being promised the code would be shown -- which reads as the button
-			having done nothing at all.
-		-->
+		<!-- the out-of-band flow lands back here with a code after the consent form -->
 		<div v-if="code" class="guest-box oauth__box">
 			<header class="oauth__header">
 				<span class="oauth__seal oauth__seal--success">
@@ -21,13 +15,8 @@
 			<p class="oauth__lead">
 				{{ t('social', 'Paste this code into {appDisplayName} to finish signing in. It can be used once, and only by the application that asked for it.', { appDisplayName: appName }) }}
 			</p>
-			<!--
-				A field rather than a <code> block: it is selectable, and a
-				phone can pick it up with a tap. A textarea rather than an
-				input, because the code is longer than the box is wide and an
-				input answers that by cutting it off at an ellipsis -- so the
-				one thing the page exists to show could not be read off screen.
-			-->
+			<!-- a textarea, so the long code is selectable and wraps rather than
+			     being cut off at an ellipsis -->
 			<textarea
 				ref="code"
 				class="code"
@@ -85,13 +74,8 @@
 			</form>
 		</div>
 
-		<!--
-			Somebody whose first visit is from an app has no account here
-			yet: they choose their username before they are asked anything
-			about the app. Reloading then draws the consent for the new
-			account, from this same address and so with the app's request
-			unchanged.
-		-->
+		<!-- somebody whose first visit is from an app chooses a username first;
+		     reloading then draws the consent for the same request -->
 		<div v-else-if="setup" class="guest-box oauth__box">
 			<header class="oauth__header">
 				<img
@@ -131,11 +115,7 @@
 			:action="device ? deviceDecisionUrl : undefined"
 			@submit="onSubmit">
 			<header class="oauth__header">
-				<!--
-					An application registers no logo, so the mark is the letter
-					its name starts with -- enough to tell two requests apart at
-					a glance, and honest about being no logo at all.
-				-->
+				<!-- applications register no logo, so the mark is the first letter of the name -->
 				<img
 					v-if="appLogo"
 					class="oauth__seal oauth__seal--logo"
@@ -145,11 +125,8 @@
 					{{ appInitial }}
 				</span>
 				<h1>{{ device ? t('social', 'Authorize this device') : t('social', 'Authorization required') }}</h1>
-				<!--
-					A Bluesky app is known by its client_id, an address; the
-					name it gives is not checked, so the address is shown whole
-					and is not offered as a link to follow.
-				-->
+				<!-- a Bluesky app is known by its client_id, an address; its name is not
+				     checked, so the address is shown whole and not as a link -->
 				<template v-if="atproto">
 					<span v-if="appWebsite" class="oauth__client-id">{{ appWebsite }}</span>
 					<span v-if="trusted" class="oauth__client-note">
@@ -222,11 +199,8 @@
 			</ul>
 			<ul v-else class="scopes">
 				<li v-for="scope in scopes" :key="scope" class="scopes__item">
-					<!--
-						Two icons rather than one: a scope that only reads and a
-						scope that acts as you are not the same grant, and a
-						list where every line looks alike hides that.
-					-->
+					<!-- two icons: a scope that only reads and one that acts as you are not
+					     the same grant -->
 					<span
 						class="scopes__icon"
 						:class="{ 'scopes__icon--write': changes(scope) }">
@@ -269,10 +243,7 @@
 			</template>
 			<template v-else>
 				<div class="button-row">
-					<!--
-					Refusing is the safe answer, so it is not painted as the
-					dangerous one; the grant is the button that carries weight.
-				-->
+					<!-- refusing is the safe answer, so it is not painted as the dangerous one -->
 					<NcButton :href="denyUrl">
 						{{ t('social', 'Deny') }}
 					</NcButton>
@@ -356,8 +327,7 @@ export default {
 			account: loadState('social', 'account', null),
 			scopes: loadState('social', 'scopes', []),
 			redirectUri: loadState('social', 'redirectUri', ''),
-			// where refusing sends the browser: back to the client with
-			// error=access_denied, which is the answer it is owed
+			// where refusing sends the browser: back to the client with error=access_denied
 			denyUrl: loadState('social', 'denyUrl', generateUrl('/apps/social/')),
 			deviceUserCode: loadState('social', 'deviceUserCode', ''),
 			devicePending: loadState('social', 'devicePending', false),
@@ -372,8 +342,7 @@ export default {
 	computed: {
 		/**
 		 * What the scopes mean, one line each. An unknown scope is shown as it
-		 * was asked for rather than hidden — consent to something unnamed is
-		 * not consent.
+		 * was asked for: consent to something unnamed is not consent.
 		 *
 		 * @return {object} the label of every scope this server issues
 		 */
@@ -386,12 +355,12 @@ export default {
 				'read:blocks': t('social', 'See the accounts you block'),
 				'read:bookmarks': t('social', 'See your bookmarks'),
 				'read:collections': t('social', 'See your collections'),
-				'read:favourites': t('social', 'See your favourites'),
+				'read:favourites': t('social', 'See your favorites'),
 				'read:filters': t('social', 'See your filters'),
 				'read:follows': t('social', 'See who you follow and who follows you'),
 				'read:lists': t('social', 'See your lists'),
 				'read:mutes': t('social', 'See the accounts you mute'),
-				'read:notifications': t('social', 'Read your notifications'),
+				'read:notifications': t('social', 'Read your activities'),
 				'read:search': t('social', 'Search as you'),
 				'read:statuses': t('social', 'Read your posts and your timelines'),
 				'read:stories': t('social', 'See your 24-hour shorts'),
@@ -400,13 +369,13 @@ export default {
 				'write:bookmarks': t('social', 'Add and remove your bookmarks'),
 				'write:collections': t('social', 'Create and change your collections'),
 				'write:conversations': t('social', 'Manage your conversations'),
-				'write:favourites': t('social', 'Favourite and unfavourite posts as you'),
+				'write:favourites': t('social', 'Favorite and unfavorite posts as you'),
 				'write:filters': t('social', 'Create and change your filters'),
 				'write:follows': t('social', 'Follow and unfollow accounts for you'),
 				'write:lists': t('social', 'Create and change your lists'),
 				'write:media': t('social', 'Upload files as you'),
 				'write:mutes': t('social', 'Mute and unmute accounts and conversations for you'),
-				'write:notifications': t('social', 'Dismiss your notifications'),
+				'write:notifications': t('social', 'Dismiss your activities'),
 				'write:reports': t('social', 'Send reports as you'),
 				'write:statuses': t('social', 'Publish, edit and delete posts as you'),
 				'write:stories': t('social', 'Publish and delete 24-hour shorts as you'),
@@ -478,8 +447,8 @@ export default {
 		},
 
 		/**
-		 * Where the authorization code is about to be sent — the one part of
-		 * the request that decides who ends up holding it.
+		 * Where the authorization code is about to be sent, which decides who ends
+		 * up holding it.
 		 *
 		 * @return {string} a sentence naming the destination
 		 */
@@ -543,10 +512,9 @@ export default {
 		},
 
 		/**
-		 * A grant that lets the application move the account away or
-		 * administer the server goes to its own route, which Nextcloud holds
-		 * behind the password: asked for here first, so the form arrives
-		 * confirmed.
+		 * A grant that moves the account away or administers the server goes to its
+		 * own route, behind Nextcloud's password confirmation, which is asked for here
+		 * first.
 		 *
 		 * @param {SubmitEvent} event the consent form's submission
 		 */
@@ -592,18 +560,12 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-/* `scopped` for a long time, which quietly published all of this to every
-   page that ever loaded this bundle. */
-// `.wrapper` before, which is also what Nextcloud's guest layout calls its
-// own container -- two elements one selector apart, which made this hard to
-// look at in a browser.
 .oauth {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	// no viewport height here: the guest layout already places and centres
-	// what it is given, and a second full-screen box inside it pushed the
-	// form below the fold with its buttons off the bottom of the window
+	// no viewport height: the guest layout already places and centres what it
+	// is given
 	inline-size: 100%;
 }
 
@@ -615,9 +577,8 @@ export default {
 	box-shadow: 0 0 10px var(--color-box-shadow);
 	inline-size: 100%;
 	max-width: 480px;
-	// the guest layout centres everything it contains; a list of permissions
-	// read as a stack of centred receipt lines, so the body is set back to
-	// reading order and only the heading stays centred
+	// the guest layout centres everything; the body is set back to reading
+	// order and only the heading stays centred
 	text-align: start;
 
 	h1 {

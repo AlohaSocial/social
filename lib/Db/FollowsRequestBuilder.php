@@ -15,11 +15,6 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Tools\Exceptions\RowNotFoundException;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class FollowsRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class FollowsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
@@ -48,7 +43,7 @@ class FollowsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */
@@ -68,7 +63,7 @@ class FollowsRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql count request
 	 *
 	 * @return SocialQueryBuilder
 	 */
@@ -152,9 +147,8 @@ class FollowsRequestBuilder extends CoreRequestBuilder {
 			$actor = $this->parseAccountsLeftJoin($data);
 			$follow->setActor($actor);
 		} catch (InvalidResourceException $e) {
-			// neither join brought an actor: the follow is returned without
-			// one rather than dropped, since its own columns are what most
-			// callers read
+			// no actor from either join: the follow is returned without one, since
+			// most callers read only its own columns
 		}
 
 		return $follow;

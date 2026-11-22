@@ -92,10 +92,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		if ($activity->getType() === Create::TYPE) {
 			$activity->checkOrigin($item->getId());
 			// Mastodon attributes an incoming Create to the actor performing it,
-			// whatever the object's `attributedTo` says. Same here: the origin
-			// check alone is host-wide, and let one user of a shared server
-			// publish under a neighbour's name. A Create without an actor has
-			// nobody to attribute to and fails the origin check below.
+			// whatever the object's `attributedTo` says; so does this, as the origin
+			// check alone is host-wide. A Create without an actor fails the origin
+			// check below.
 			$item->setAttributedTo($activity->getActorId());
 			$activity->checkOrigin($item->getAttributedTo());
 			if (DeleteInterface::deletedBeforeArrival($this->durableCache, $item->getId(), $activity->getActorId())) {
@@ -150,11 +149,10 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			$this->streamRequest->update($item);
 			$this->queueMedia($item);
 			if ($stored->getSubType() === 'Event' || $item->getSubType() === 'Event') {
-				// Event facts live in a dedicated key in `details`. The general
-				// stream update rewrites the ActivityPub fields, but deliberately
-				// leaves locally maintained details alone; merge just this key so
-				// a Gancio date or venue change is visible without losing counters,
-				// quote state, or other local metadata.
+				// Event facts live in a dedicated key in `details`, which the general
+				// stream update leaves alone; merge just this key so a Gancio date or
+				// venue change shows without losing counters, quote state or other
+				// local metadata.
 				$this->streamRequest->updateDetails($item, Details::EVENT);
 			}
 			if (in_array($stored->getSubType(), Stream::ARTICLE_SUBTYPES, true)
@@ -164,10 +162,8 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			if (!$edited) {
 				return;
 			}
-			// the version being replaced, recorded the way a local edit records
-			// one: without it `GET /statuses/{nid}/history` answered a remote
-			// post edited three times with a single synthetic version, and the
-			// "edited" dialog had nothing to compare
+			// the version being replaced, recorded as a local edit records one, for
+			// `GET /statuses/{nid}/history` and the "edited" dialog
 			$this->revisionService->recordEdit($stored, $item);
 			$this->notificationService->onStatusEdited($item);
 			$this->fileCommentsService->onReplyUpdated($item);
@@ -254,14 +250,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 
 	/**
 	 * Whether an incoming Update changes what the post says, as against only
-	 * the tallies of its poll.
-	 *
-	 * Mastodon sends `Update{Question}` as the votes come in, without
-	 * `updated`. Taken for an edit, each one would record an identical
-	 * revision and tell everyone here who boosted the poll that it had been
-	 * edited. An edit is what Mastodon counts as one: a change to the text,
-	 * the content warning, the sensitivity, the attachments or the poll's
-	 * options.
+	 * its poll's tallies, which Mastodon sends as `Update{Question}` without
+	 * `updated`. An edit is what Mastodon counts as one: a change to the
+	 * text, content warning, sensitivity, attachments or poll options.
 	 */
 	private static function isEdit(Stream $stored, Stream $incoming): bool {
 		return $stored->getContent() !== $incoming->getContent()
@@ -296,12 +287,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 
 	/**
 	 * The stored copy of the note an Update or Delete refers to, provided the
-	 * activity comes from the note's author.
-	 *
-	 * The origin check compares hosts, so on its own it let any account on the
-	 * author's server edit or remove the author's post here. Mastodon looks the
-	 * status up by uri *and* account; a peer's activity finds nothing and is
-	 * dropped. Here it is refused out loud, the way a foreign origin is.
+	 * activity comes from the note's author: the origin check compares only
+	 * hosts. Mastodon looks the status up by uri and account; here a mismatch
+	 * is refused out loud, as a foreign origin is.
 	 *
 	 * @throws StreamNotFoundException nothing is stored under that id
 	 * @throws InvalidOriginException the actor is not the stored author
@@ -320,14 +308,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * Whether an incoming edit is older, by its `updated`, than the version
-	 * already stored.
-	 *
-	 * Edits are delivered out of order — separate queues, a retry overtaking
-	 * the next edit — and applied in arrival order a late older one put the
-	 * text back to what the author had already replaced. Mastodon drops an
-	 * update whose `updated` is earlier than the stored edit time, and so does
-	 * this; either side without a date is applied as before.
+	 * Whether an incoming edit is older, by its `updated`, than the stored
+	 * version: edits can arrive out of order, and Mastodon also drops an older
+	 * one. Either side without a date is applied.
 	 */
 	private static function isOlderEdit(Stream $incoming, Stream $stored): bool {
 		$incomingTime = ($incoming->getUpdated() === '') ? false : strtotime($incoming->getUpdated());
@@ -429,15 +412,12 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * A reply whose parent this instance never received used to sit in every
-	 * timeline "in reply to nothing", for good: nothing ever fetched the parent.
-	 * The parent goes into the note's cache and the note into the stream queue —
-	 * exactly how an Announce has its object fetched — so the fetch happens after
-	 * the inbox request is answered, and is retried by the queue if the parent's
-	 * server is down. The queue saves the parent through save() as well, which
-	 * queues *its* parent in turn: the whole thread is completed, one level per
-	 * pass. `StreamQueueService` stamps each fetched ancestor with its depth, and
-	 * the climb stops at the cap.
+	 * Has a reply's missing parent fetched: into the note's cache and the
+	 * note into the stream queue, as an Announce's object is, so the fetch
+	 * happens after the inbox request and is retried if the parent's server
+	 * is down. Each fetched parent queues its own in turn;
+	 * `StreamQueueService` stamps each ancestor with its depth and the climb
+	 * stops at the cap.
 	 *
 	 * @return bool whether a queue entry is needed once the note is saved
 	 */
@@ -458,16 +438,10 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * The post an incoming quote names is as likely to be a stranger as a
-	 * reply's parent is, and is fetched the same way: into the note's cache and
-	 * through the stream queue, so nothing waits on the quoted author's server
-	 * inside the inbox request. Rendering depends on it — until the quoted post
-	 * is here the client is told the quote is `pending` — and the queue retries
-	 * where a single attempt would give up.
-	 *
-	 * The depth counter is shared with the reply climb on purpose: a quote of a
-	 * quote of a quote is the same unbounded walk through other people's
-	 * servers that the cap exists to stop.
+	 * Has the post an incoming quote names fetched the way a reply's parent
+	 * is, through the stream queue; until it is here the client is told the
+	 * quote is `pending`. The depth counter is shared with the reply climb,
+	 * so quote chains are bounded too.
 	 *
 	 * @return bool whether a queue entry is needed once the note is saved
 	 */
@@ -509,9 +483,8 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 
 	/**
 	 * A public or unlisted post that links somewhere gets its preview read by
-	 * a background job: reading the page here would hold up the inbox for as
-	 * long as a stranger's web server feels like taking. A followers-only or
-	 * direct post never does (`LinkPreviewService::generate()`).
+	 * a background job, so a slow web server cannot hold up the inbox. A
+	 * followers-only or direct post never does (`LinkPreviewService::generate()`).
 	 */
 	private function queueLinkPreview(Note $note): void {
 		if (!$note->isOpenToAnyone()
@@ -525,12 +498,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * A note lives on its author's instance, so `attributedTo` must share the host of
-	 * the note's own id. This is the invariant every path into storage relies on: the
-	 * Create path also matches both against the request origin, but the fetch-and-store
-	 * paths (an announced object being cached, an outbox being synced) have no request
-	 * to compare against — without this check, a document served by one instance could
-	 * claim an author on another and be stored as that author's post.
+	 * A note lives on its author's instance, so `attributedTo` must share the
+	 * host of the note's own id: the fetch-and-store paths (a cached announced
+	 * object, a synced outbox) have no request origin to compare against.
 	 *
 	 * @throws InvalidOriginException
 	 */
@@ -552,16 +522,13 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	public function delete(ACore $item): void {
 		/** @var Note $item */
 		// guarded by type so that a note's id never takes a row of another kind
-		// with it -- and a poll is stored as the `Question` it is, so a guard
-		// of `Note` alone left every deleted poll where it was
+		// with it; a poll is stored as the `Question` it is
 		$type = ($item->getType() === Question::TYPE) ? Question::TYPE : Note::TYPE;
 		$this->streamRequest->deleteById($item->getId(), $type);
 		$this->linkPreviewService->deleteCard($item->getId());
 		$this->fileCommentsService->onDeleted($item);
-		// the post it answered counts one reply fewer now. `updateDetails()`
-		// recounts rather than decrements, so it has to run after the row has
-		// gone — and a delete that never called it left the parent claiming a
-		// reply nothing could show, for good.
+		// the post it answered counts one reply fewer now; `updateDetails()`
+		// recounts, so it runs after the row has gone
 		$this->updateDetails($item);
 	}
 
@@ -623,14 +590,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			$notification = AP::instance()->getItemFromType(SocialAppNotification::TYPE);
 			$notification->setDetailItem(Details::POST, $post);
 			$notification->addDetail(Details::ACCOUNT, $post->getActor()->getAccount());
-			// the author, not the reader. The notification timeline finds this
-			// row by its recipient rows in social_stream_dest, so `attributedTo`
-			// is free to say who *did* the thing — which is what it means on
-			// every other notification, what the client shows as the acting
-			// account, and what the block and mute filter compares against.
-			// Naming the recipient here had that filter comparing the reader
-			// with themselves, so a mention from an account they had blocked
-			// reached them anyway.
+			// the author, not the reader: the notification timeline finds this row
+			// by its recipient rows, so `attributedTo` says who did the thing, as on
+			// every other notification, and the block and mute filter compares it
 			$notification->setAttributedTo($post->getActor()->getId())
 				->setSubType(Mention::TYPE)
 				// one row per recipient: a post mentioning three people wrote

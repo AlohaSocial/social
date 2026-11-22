@@ -21,16 +21,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Who may send a person direct messages, on Bluesky: the
- * `chat.bsky.actor.declaration` record in their repository (`self`), whose
- * `allowIncoming` the chat service goes by — `all`, `following` or `none`,
- * the same three answers as the setting here
- * (`NotificationPolicyService::directMessagesFrom()`). Written when the
- * setting changes; on the account's first read of its messages only when
- * the setting is narrower than Bluesky's own default (`following`), so a
- * person is never opened to strangers on Bluesky without choosing it. One
- * a Bluesky app writes through this server becomes the setting here, which
- * writes it.
+ * The `chat.bsky.actor.declaration` record (`self`) whose `allowIncoming`
+ * (`all`, `following` or `none`) mirrors the direct-message setting here
+ * (`NotificationPolicyService::directMessagesFrom()`).
+ *
+ * On the account's first read of its messages it is written only when the
+ * setting is narrower than Bluesky's default (`following`), so nobody is
+ * opened to strangers on Bluesky without choosing it.
  */
 class ChatDeclaration {
 	public const COLLECTION = 'chat.bsky.actor.declaration';

@@ -9,16 +9,13 @@
 		:class="{ 'shorts-bar--empty': others.length === 0 }"
 		:aria-labelledby="others.length > 0 ? 'shorts-bar-heading' : undefined">
 		<!-- the row only while somebody the reader follows has a 24-hour
-		     short up: a lone "Your shorts" is a place to make one, and that
-		     lives in the composer's camera; All shorts is in the sidebar.
-		     The dialog below stays mounted for the camera. -->
+		     short up; the dialog below stays mounted for the composer's camera -->
 		<template v-if="others.length > 0">
 			<h2 id="shorts-bar-heading" class="shorts-bar__heading">
 				{{ t('social', 'Shorts') }}
 			</h2>
 			<ul class="shorts-bar__list">
-				<!-- the reader's own place is always there, with or without a
-				     24-hour short in it: it is where one is made from -->
+				<!-- the reader's own place, always there: it is where a short is made from -->
 				<li class="shorts-bar__item shorts-bar__item--own">
 					<router-link
 						v-if="ownGroup"
@@ -93,8 +90,7 @@
 			</ul>
 		</template>
 
-		<!-- New short, opened on 24 hours: a picture or a card goes on to
-		     the picture editor from inside the dialog -->
+		<!-- New short, opened on 24 hours -->
 		<ShortComposerDialog
 			v-if="composing"
 			v-model:open="composing"
@@ -123,26 +119,18 @@ import { useSettingsStore } from '../store/settings.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { accountStyle } from '../services/accountColour.js'
 
-// the dialog is the heavy half and most visits never open it
 /** How old the bar may be when the reader comes back to it, in milliseconds. */
 const RELOAD_AFTER = 60 * 1000
 
+// the dialog is the heavy half and most visits never open it
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
 
 /**
- * The Shorts bar above the home timeline: whose 24-hour shorts are up.
- *
- * The stories carousel grouped by account: the reader's own place first, then
- * the people they follow, those with something unseen first, with a ring
- * around the faces that still hold something unseen; last, a tile on to the
- * whole Shorts feed. A face opens the Shorts feed at that person
- * (`/shorts?account=`), which is where every short is watched; the reader's
- * own place opens New short on its 24-hour lifetime when there is nothing in
- * it yet, and the + does the same at any time.
- *
- * The row is drawn only while somebody the reader follows has a 24-hour short
- * up; otherwise the section takes no room and only keeps the dialog, which
- * the post composer's camera opens through `SHORT_COMPOSE`.
+ * The Shorts bar above the home timeline: the reader's own place, then the
+ * people they follow who have a 24-hour short up, unseen first, then a tile
+ * on to the Shorts feed. A face opens the Shorts feed at that person.
+ * Without others' shorts the section takes no room and only holds the
+ * dialog, which the composer's camera opens through `SHORT_COMPOSE`.
  */
 export default {
 	name: 'ShortsBar',
@@ -175,12 +163,8 @@ export default {
 		...mapStores(useAccountStore, useSettingsStore),
 
 		/**
-		 * The reader, as something to draw a face from.
-		 *
-		 * The account store's copy where it has arrived, and the Nextcloud
-		 * user otherwise — the store is filled by a request that may not have
-		 * come back yet, and a bar that waits for it is missing on the first
-		 * paint and, where that request fails, for good.
+		 * The reader, from the account store once it has arrived and from the
+		 * Nextcloud user until then, so the bar does not wait on that request.
 		 *
 		 * @return {object|null}
 		 */
@@ -195,8 +179,7 @@ export default {
 				return null
 			}
 
-			// the face is Nextcloud's, drawn by the user id; the handle is the
-			// account's, which need not be the same name
+			// the face is drawn by the Nextcloud user id; the handle can differ
 			return {
 				id: user.uid,
 				acct: this.username || user.uid,
@@ -208,9 +191,8 @@ export default {
 		},
 
 		/**
-		 * Whether this instance offers 24-hour shorts at all (the admin's
-		 * `stories` section). Default on, and on for a server that said
-		 * nothing about it.
+		 * Whether the admin's `stories` section offers 24-hour shorts; on
+		 * unless the server says otherwise.
 		 *
 		 * @return {boolean} whether to draw the bar
 		 */
@@ -241,8 +223,7 @@ export default {
 		eventBus.on(SHORT_COMPOSE, this.compose)
 	},
 
-	// kept alive while the reader is on another scope of the feed: back on
-	// My Feed the bar is drawn as it was, and read again only if it is old
+	// kept alive across feed scopes; reloaded on return only if stale
 	activated() {
 		if (this.loadedAt !== 0 && Date.now() - this.loadedAt > RELOAD_AFTER) {
 			this.load()
@@ -262,11 +243,8 @@ export default {
 		},
 
 		/**
-		 * What to call somebody under their face.
-		 *
-		 * The first word of their display name. "Maya Lin…" and "Petra No…" are
-		 * what a full name comes to in the space a tile has, and a first name is
-		 * both shorter and warmer than a truncated surname.
+		 * The first word of the display name, which fits under a face where a
+		 * full name would be truncated.
 		 *
 		 * @param {object} account whose shorts they are
 		 * @return {string} one word, or the handle when there is no name
@@ -291,8 +269,7 @@ export default {
 		/** @return {Promise<void>} */
 		async load() {
 			this.loadedAt = Date.now()
-			// the page said no story was live anywhere on the instance; that
-			// spares the first read only, and any later one asks the server
+			// the page's hint only spares the first read
 			if (!mayHave('has_stories')) {
 				setHint('has_stories', true)
 				return
@@ -302,8 +279,7 @@ export default {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/stories/carousel'))
 				this.groups = this.group(Array.isArray(data) ? data : [])
 			} catch (error) {
-				// a bar that could not be loaded is no bar: the timeline below
-				// is the page, and a toast over it for this would be noise
+				// the timeline is the page; a toast for a missing bar would be noise
 				logger.error('could not load the 24-hour shorts', { error })
 				this.groups = []
 			}
@@ -378,9 +354,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-/* a ring that swells and fades: drawn as a pseudo-element rather than a
-   box-shadow, because a shadow on a card is this app's elevation and means
-   something else */
+/* drawn as a pseudo-element, not a box-shadow: a shadow is this app's elevation */
 @keyframes shorts-breathe {
 	0% { transform: scale(1); opacity: .45; }
 	70%, 100% { transform: scale(1.22); opacity: 0; }
@@ -445,19 +419,10 @@ export default {
 	display: flex;
 	padding: 3px;
 	border-radius: 50%;
-	// seen: a quiet grey ring; unseen: the accent, which is what the eye
-	// looks for in a row of faces
+	// seen: a quiet grey ring
 	border: 2px solid var(--color-border-dark);
 
-	/**
-	 * Unseen: the account's own colour, breathing.
-	 *
-	 * The accent made every unseen ring the same colour as every other, so a
-	 * row of faces was a row of identical circles; `--account-hue` is the
-	 * colour that account is everywhere else in the app. The breath is two
-	 * seconds and barely there -- enough to say "something here", not enough
-	 * to be a thing moving on the page while somebody is reading.
-	 */
+	// unseen: the account's own colour, breathing too slowly to distract
 	.shorts-bar__tile--unseen & {
 		border-color: hsl(var(--account-hue, 210) 65% 50%);
 		position: relative;

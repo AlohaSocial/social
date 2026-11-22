@@ -18,13 +18,7 @@
 			</template>
 		</NcTextField>
 
-		<!--
-			Searching replaces the list rather than filtering it. What is on
-			screen otherwise is a ranking of one window on one server, and
-			narrowing that to a word answers a question nobody asked: the
-			reader who typed wants the tag wherever it is, which is what the
-			servers are asked for.
-		-->
+		<!-- a search asks other servers for the tag rather than filtering this server's ranking -->
 		<template v-if="searching">
 			<NcLoadingIcon v-if="finding" class="trending__loading" :size="32" />
 
@@ -46,12 +40,7 @@
 		</template>
 
 		<template v-else>
-			<!--
-			The list answers "what is busy here", so which stretch of time it
-			means is part of the answer rather than a setting: the server ranks
-			by the window it is asked for, so an hour and ten days are two
-			different lists, not two labels on one.
-		-->
+			<!-- each window is a separate ranking from the server -->
 			<div class="trending__periods" role="tablist" :aria-label="t('social', 'Over what time')">
 				<NcButton
 					v-for="option in periods"
@@ -83,11 +72,7 @@
 						<span class="trending__body">
 							<span class="trending__name">#{{ tag.name }}</span>
 							<span class="trending__count">{{ countText(tag) }}</span>
-							<!--
-							How busy this tag is against the busiest one on the
-							list, which is the only comparison the numbers here
-							support. Decoration: the count above it is the fact.
-						-->
+							<!-- usage relative to the busiest tag on the list; decoration only -->
 							<span class="trending__bar" aria-hidden="true">
 								<span class="trending__bar-fill" :style="{ width: share(tag) }" />
 							</span>
@@ -112,12 +97,7 @@
 				</template>
 			</NcEmptyContent>
 
-			<!--
-			What other servers are busy with, and this one is not. A small
-			instance's own trending list is a list of what the few people on it
-			posted today, and on a new one it is empty; this is the same
-			question asked of servers that have an answer to it.
-		-->
+			<!-- what other servers are busy with, for small or new instances whose own list is thin -->
 			<section v-if="elsewhere.length > 0" class="trending__elsewhere">
 				<h2 class="trending__heading">
 					{{ t('social', 'Busy elsewhere in the fediverse') }}
@@ -153,20 +133,13 @@ const LIMIT = 20
 /** How long the box waits after the last keystroke before it asks anybody. */
 const DEBOUNCE = 400
 
-/**
- * The shortest query worth sending to five servers. One letter matches
- * everything and tells the reader nothing.
- */
+/** The shortest query worth sending to other servers. */
 const MIN_LENGTH = 2
 
 /** The most followed tags the server answers in one page. */
 const FOLLOWED_PAGE_SIZE = 50
 
-/**
- * How many pages of followed tags are read before giving up on knowing all of
- * them. Past this many follows, twenty lookups — one per button — is the
- * cheaper way to draw the page.
- */
+/** Past this many pages of followed tags, each button looks up its own tag instead. */
 const FOLLOWED_MAX_PAGES = 5
 
 export default {
@@ -194,9 +167,8 @@ export default {
 			/** the hashtags this reader follows, or null while that is unknown */
 			followed: null,
 			/**
-			 * The read of `followed`, which the rows wait for: a button drawn
-			 * before it is settled asks about its own tag, and the list would
-			 * then have saved nothing.
+			 * The read of `followed`, which the rows wait for so that the
+			 * buttons do not each look up their own tag.
 			 *
 			 * @type {Promise<void>}
 			 */
@@ -212,12 +184,7 @@ export default {
 			reports: [],
 			/** whether a fan-out is in flight */
 			finding: false,
-			/**
-			 * Which question the peers are being asked. The text alone is not
-			 * enough to tell two requests apart — the reader may type back to
-			 * what they had — and the failure path has to know as surely as
-			 * the answer path does.
-			 */
+			/** a counter telling apart requests for the same text, so a stale failure does not clear newer results */
 			asking: 0,
 			timer: null,
 		}
@@ -255,11 +222,7 @@ export default {
 		},
 
 		/**
-		 * What other servers are busy with and this one is not.
-		 *
-		 * A tag already ranked in the list above is not repeated here: it is
-		 * the same tag, and showing it twice would make the second list look
-		 * like a second opinion rather than a different question.
+		 * What other servers are busy with, without the tags already ranked here.
 		 *
 		 * @return {object[]}
 		 */
@@ -286,16 +249,13 @@ export default {
 		},
 
 		/**
-		 * An empty list means nothing was posted in *this* window, which is a
-		 * different thing from an instance where nobody uses hashtags at all.
+		 * An empty list means nothing was posted in this window, not that nobody
+		 * here uses hashtags.
 		 *
 		 * @return {string}
 		 */
 		emptyDescription() {
-			// "No trending hashtags" above a list of twenty of them reads as a
-			// broken page. On the instances this feature exists for -- small
-			// ones, new ones -- that is the normal case, so the empty state
-			// points at what is underneath it instead of at a longer window.
+			// point at the other servers' list below rather than at a longer window
 			if (this.elsewhere.length > 0) {
 				return t('social', 'Nobody here has used one in this stretch of time. What other servers are talking about is below.')
 			}
@@ -340,8 +300,7 @@ export default {
 			clearTimeout(this.timer)
 			const query = this.query.trim()
 
-			// back to nothing typed: the trend is on screen again, and what is
-			// busy elsewhere belongs under it
+			// with nothing typed, ask what is trending elsewhere for under the list
 			this.timer = setTimeout(
 				() => this.ask(query.length >= MIN_LENGTH ? query : ''),
 				DEBOUNCE,
@@ -349,13 +308,8 @@ export default {
 		},
 
 		/**
-		 * Asks the other servers, either what is trending there or about one
-		 * tag. One request either way: the server fans out, not this.
-		 *
-		 * A failure here is quiet. The trending list above it is this
-		 * instance's own and is already on screen, and an error card about
-		 * strangers' servers on top of a page that is working would be this
-		 * app apologising for somebody else.
+		 * Asks the other servers, through this one, what is trending there or
+		 * about one tag. A failure is quiet: this server's own list still works.
 		 *
 		 * @param {string} query what to look for, or '' for what is trending
 		 */
@@ -380,9 +334,7 @@ export default {
 				this.reports = Array.isArray(data?.sources) ? data.sources : []
 			} catch (error) {
 				logger.debug('Could not ask other servers about hashtags', { error })
-				// only where this is still the question being asked: a request
-				// that failed after the reader typed on would otherwise clear
-				// the results of the one that succeeded
+				// a failure after the reader typed on must not clear newer results
 				if (generation === this.asking) {
 					this.peers = []
 					this.reports = []
@@ -407,8 +359,7 @@ export default {
 					params: { limit: LIMIT, period },
 				})
 				await this.followedRead
-				// another window was chosen while this was in flight, and this
-				// answer is a ranking of the one that is gone
+				// another window was chosen while this was in flight
 				if (period !== this.period) {
 					return
 				}
@@ -417,9 +368,7 @@ export default {
 				this.error = null
 			} catch (error) {
 				logger.error('Could not load the trending hashtags', { error, period })
-				// the same guard the answer above gets: a window that failed
-				// after the reader moved to another one would put its error
-				// over a ranking that had already arrived and is correct
+				// an outdated window's failure must not cover the current ranking
 				if (period === this.period) {
 					this.error = t('social', 'Could not load this. The server may be busy.')
 				}
@@ -431,15 +380,9 @@ export default {
 		},
 
 		/**
-		 * Which of these the reader already follows, in a few requests rather
-		 * than one per tag: twenty rows on this page would otherwise be twenty
-		 * lookups before anything could be drawn.
-		 *
-		 * The buttons take this list as the whole truth — a tag not in it is
-		 * drawn as not followed — so it is handed to them only once the server
-		 * has said there is no further page. A reader who follows more than
-		 * `FOLLOWED_MAX_PAGES` pages of tags gets no list at all, and
-		 * each button asks about its own tag instead.
+		 * Reads which tags the reader follows, so the buttons need no lookup each.
+		 * The buttons take the list as complete, so it is set only after the last
+		 * page; past `FOLLOWED_MAX_PAGES` it stays null and each button asks itself.
 		 */
 		async loadFollowed() {
 			if (this.serverData.public) {
@@ -509,8 +452,7 @@ export default {
 				return '0%'
 			}
 
-			// a floor, so the quietest tag on the list is still a bar rather
-			// than an empty track that reads as "no data"
+			// a floor, so the quietest tag still shows a bar
 			return Math.max(6, Math.round((this.uses(tag) / this.busiest) * 100)) + '%'
 		},
 	},
@@ -612,8 +554,7 @@ export default {
 	color: var(--color-text-maxcontrast);
 }
 
-/* the top three carry the accent, which is what makes a ranking readable at a
-   glance rather than a list that happens to be in an order */
+/* the top three carry the accent */
 .trending__row:nth-child(-n + 3) .trending__rank {
 	color: var(--color-primary-element);
 }

@@ -5,14 +5,13 @@
 <template>
 	<div class="social__blocked">
 		<PageHeader
+			v-if="!embedded"
 			:title="t('social', 'Blocking')"
 			:description="t('social', 'Everything you have decided not to read, in one place: the accounts you have blocked or muted, the servers you have hidden, the words you would rather not see — and the senders your notification settings are holding back, waiting on you.')"
 			clearNavigation />
 
-		<!-- One card per decision, all of them the same shape: what it is, one
-		     line saying what it does, then the list. They used to be four runs
-		     of text with a bold word over each, and the two that are usually
-		     empty took a screenful apiece to say so. -->
+		<!-- one card per decision, each the same shape: what it is, one line
+		     saying what it does, then the list -->
 		<section class="block-card">
 			<header class="block-card__head">
 				<span class="block-card__icon">
@@ -30,9 +29,8 @@
 			<p v-if="!loading && blocked.length === 0" class="block-card__empty">
 				{{ t('social', 'No blocked accounts') }} — {{ t('social', 'Accounts you block from their profile show up here.') }}
 			</p>
-			<!-- keyed on the account id, never on the index: an index key makes
-			     Vue patch the row above into the one below on removal and drop
-			     the last row, so the wrong row would collapse -->
+			<!-- keyed on the account id: an index key would collapse the wrong
+			     row on removal -->
 			<transition-group name="collapse" tag="div" class="blocked-account-list">
 				<div v-for="account in blocked" :key="`block-${account.id}`" class="blocked-account">
 					<div class="blocked-account__user">
@@ -233,7 +231,7 @@
 				</h3>
 			</header>
 			<p class="block-card__lede">
-				{{ t('social', 'Hides posts that are tagged as made with AI, that their author marked, or whose pictures say so in their metadata. It cannot recognise what nobody labelled.') }}
+				{{ t('social', 'Hides posts that are tagged as made with AI, that their author marked, or whose photos say so in their metadata. It cannot recognise what nobody labelled.') }}
 			</p>
 			<NcCheckboxRadioSwitch
 				type="switch"
@@ -261,17 +259,15 @@
 			<BlueskyLabelersSettings @unavailable="labelersOff = true" />
 		</section>
 
-		<!-- and after the standing rules, the one thing here that is still
-		     waiting on the reader: the senders a notification policy is
-		     holding. It was a sidebar entry of its own, which stayed empty
-		     for anybody whose policy holds nothing. -->
+		<!-- held senders wait at the top of Activities; this card says where,
+		     and which settings hold them -->
 		<section id="filtered-notifications" class="block-card">
 			<header class="block-card__head">
 				<span class="block-card__icon">
 					<IconInboxOutline :size="20" />
 				</span>
 				<h3 class="block-card__title">
-					{{ t('social', 'Filtered notifications') }}
+					{{ t('social', 'Filtered activities') }}
 				</h3>
 			</header>
 			<p class="block-card__lede">
@@ -344,6 +340,11 @@ export default {
 		TagOutline,
 		VolumeHigh,
 		VolumeOff,
+	},
+
+	props: {
+		/** a section of Settings, under its heading, rather than a page */
+		embedded: { type: Boolean, default: false },
 	},
 
 	setup() {
@@ -591,9 +592,8 @@ export default {
 	padding: 0 10px;
 }
 
-/* One card per decision. A card rather than a heading and a rule because
-   these four are parallel and independent -- a reader looking for the muted
-   list should be able to find it by shape, not by reading down. */
+/* One card per decision, so a reader finds a list by its shape rather than
+   by reading down. */
 .block-card {
 	margin-bottom: 14px;
 	padding: 14px 16px 12px;
@@ -607,8 +607,8 @@ export default {
 		gap: 10px;
 	}
 
-	/* the icon says which of the four this is at a glance, and the disc keeps
-	   the four heads the same height whatever the glyph */
+	/* the icon says which card this is at a glance; the disc keeps the heads
+	   the same height whatever the glyph */
 	&__icon {
 		display: flex;
 		align-items: center;
@@ -646,9 +646,8 @@ export default {
 		line-height: 1.5;
 	}
 
-	/* One line rather than a full empty state. Two of these four are empty on
-	   almost every instance, and an illustration apiece pushed the lists that
-	   do have something in them off the bottom of the screen. */
+	/* one line rather than a full empty state: most of these lists are empty
+	   on most instances */
 	&__empty {
 		margin: 10px 0 0;
 		color: var(--color-text-maxcontrast);
@@ -718,14 +717,9 @@ export default {
 }
 
 /**
- * An unblocked or unmuted account collapses out of its list rather than
- * blinking away, so the row that answered stays visible for the moment it
- * takes to go and the rows below close the gap instead of jumping.
- *
- * Same motion as the shared `list` transition in App.vue — .2s ease for the
- * fade and the shift — with the height taken out over .3s ease-out, the way
- * the welcome banner in Timeline.vue collapses. The max-height is headroom
- * for one row, not a measurement: it only has to be larger than a row.
+ * An unblocked or unmuted account collapses out of its list, so the rows below
+ * close the gap rather than jump. The max-height is headroom for one row, not
+ * a measurement.
  */
 .collapse-enter-active,
 .collapse-leave-active {

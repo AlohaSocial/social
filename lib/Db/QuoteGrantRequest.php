@@ -14,25 +14,17 @@ use OCA\Social\Model\QuoteGrant;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The permissions this instance has given out to quote its posts.
- *
- * One row per (quoted post, quoting post). It exists for the thing that cannot
- * be done without it: **taking a quote back**, which means sending a `Reject`
- * naming the `QuoteRequest` that was accepted, and there is nothing to name
- * unless the request was written down. It is also what an author's list of who
- * has quoted a post is read from, including quotes by servers whose posts have
- * never reached anybody here.
+ * The permissions this instance has given to quote its posts, one row per
+ * (quoted post, quoting post): taking a quote back sends a `Reject` naming
+ * the accepted `QuoteRequest`, and an author's list of quotes is read from it.
  *
  * @package OCA\Social\Db
  */
 class QuoteGrantRequest extends CoreRequestBuilder {
 	/**
-	 * Records a grant, replacing whatever stood before.
-	 *
-	 * A peer retries, so the same request arrives more than once and is
-	 * answered with the same stamp each time; the unique index makes that one
-	 * row, and the violation is handled rather than avoided by reading first —
-	 * between the read and the write is where the retry lands.
+	 * Records a grant, replacing whatever stood before. A peer's retry of the
+	 * same request hits the unique index, which is handled rather than read
+	 * for first, as the retry can land between a read and a write.
 	 */
 	public function save(QuoteGrant $grant): void {
 		$qb = $this->getQueryBuilder();

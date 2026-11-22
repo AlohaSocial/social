@@ -29,9 +29,8 @@ use OCP\Util;
 use Psr\Log\LoggerInterface;
 
 /**
- * Which instances this one is failing to reach. Deliveries are dropped once
- * they run out of tries, and until now that happened without anyone being
- * told; this puts it where an admin already looks.
+ * Which instances this one is failing to reach, so dropped deliveries show
+ * where an admin already looks.
  */
 class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButtonWidget, IReloadableWidget, IConditionalWidget {
 	public function __construct(
@@ -105,9 +104,8 @@ class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButton
 	}
 
 	/**
-	 * Asked of the user the API names, as `isEnabled()` is of the one looking:
-	 * a widget that checked only what the dashboard offers would tell any
-	 * client which instances this one cannot reach.
+	 * Asked of the user the API names, as `isEnabled()` is of the viewer, so no
+	 * client learns which instances this one cannot reach.
 	 */
 	#[\Override]
 	public function getItemsV2(string $userId, ?string $since = null, int $limit = 7): WidgetItems {
@@ -122,8 +120,7 @@ class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButton
 
 			$items = [];
 			if ($failing > 0) {
-				// the totals lead, so a queue in trouble is visible even when
-				// none of the failures could be pinned on a named host
+				// Totals first, so trouble shows even when no host can be named.
 				$items[] = new WidgetItem(
 					$this->l10n->n(
 						'%n delivery is failing',
@@ -150,8 +147,7 @@ class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButton
 				);
 			}
 
-			// the dashboard prints the half-empty message above the rows, so a
-			// widget with rows must not send one
+			// The half-empty message is drawn above the rows, so not with rows.
 			return new WidgetItems(
 				$items,
 				$this->l10n->t('Everything is being delivered'),

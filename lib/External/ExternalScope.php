@@ -10,18 +10,12 @@ declare(strict_types=1);
 namespace OCA\Social\External;
 
 /**
- * What an external user may reach outside the Social app.
- *
- * A list of what is allowed, not of what is refused: a controller nobody
- * thought of — an app installed next year — is refused. The allowed set is
- * Social itself, logging in and out with two-factor authentication, the
- * personal settings sections for the account's own details, password and
- * security, appearance and notifications, the notifications the Social
- * notifier sends, and the few assets every page loads.
- *
- * Controllers are named by class rather than by route, because the router
- * hands the middleware a controller and a method, and a class name cannot be
- * spelled two ways.
+ * What an external user may reach outside the Social app: an allow list, so
+ * anything not thought of is refused. Allowed are Social itself, login and
+ * logout with two-factor authentication, the personal settings sections for
+ * their own details, password and security, appearance and notifications, the
+ * Social notifier's notifications, and the assets every page loads.
+ * Controllers are named by class, since that has only one spelling.
  */
 final class ExternalScope {
 	public const ALLOW = 'allow';
@@ -72,9 +66,8 @@ final class ExternalScope {
 
 	/** Single methods of controllers that also serve things an external user may not see. */
 	private const METHODS = [
-		// The core welcome wizard records that its one-time introduction was
-		// completed through DELETE /apps/firstrunwizard/wizard. Allow only this
-		// method so external accounts do not see it again at every login.
+		// the welcome wizard records its introduction as done via
+		// DELETE /apps/firstrunwizard/wizard; only that method is allowed
 		'OCA\\FirstRunWizard\\Controller\\WizardController' => ['disable'],
 		'OC\\Core\\Controller\\OCSController' => ['getCapabilities', 'getConfig'],
 		'OCA\\Provisioning_API\\Controller\\UsersController' => [

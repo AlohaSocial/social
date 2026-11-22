@@ -12,11 +12,9 @@ namespace OCA\Social\Db;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The table behind `DurableCache` when there is no memcache.
- *
- * Keys arrive hashed and values encoded: this class stores strings with an
- * expiry and knows nothing about what they mean. A row whose `expires` has
- * passed is invisible to every read before the purge gets to it.
+ * The table behind `DurableCache` when there is no memcache: hashed keys,
+ * encoded string values with an expiry. Expired rows are invisible to reads
+ * before the purge removes them.
  *
  * @see \OCA\Social\Service\DurableCache
  */
@@ -38,12 +36,9 @@ class DurableCacheRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Stores a value, replacing whatever the key held.
-	 *
-	 * An update first and an insert only when it touched nothing, the insert
-	 * one that skips a conflict rather than raising it: two requests writing
-	 * the same key at once is ordinary here, and a caught unique violation
-	 * would abort the surrounding transaction on PostgreSQL.
+	 * Stores a value, replacing whatever the key held: an update, then an insert
+	 * that skips a conflict, since concurrent writes are ordinary and a caught
+	 * unique violation would abort the transaction on PostgreSQL.
 	 */
 	public function write(string $key, string $value, int $expires): void {
 		$qb = $this->getQueryBuilder();

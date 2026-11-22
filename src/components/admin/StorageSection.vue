@@ -21,7 +21,7 @@
 				</div>
 			</div>
 			<p class="social-admin__hint">
-				{{ t('social', 'What was posted from here is somebody\'s own work and is not going anywhere. The cached half is copies of other servers\' pictures and videos, kept within the limits below.') }}
+				{{ t('social', 'What was posted from here is somebody\'s own work and is not going anywhere. The cached half is copies of other servers\' photos and videos, kept within the limits below.') }}
 			</p>
 			<p class="social-admin__hint">
 				{{ t('social', 'Measured {when}.', { when: measuredAt }) }}
@@ -36,8 +36,7 @@
 
 		<MediaCacheLimits v-if="mediaCache" :mediaCache="mediaCache" />
 
-		<!-- who is holding the video. "Social is using 400 GB" is not
-		     actionable; "this account is holding 380 of it" is -->
+		<!-- which accounts hold the video, so the total is actionable -->
 		<template v-if="videoStorage">
 			<h4 class="storage__heading">
 				{{ t('social', 'Video') }}
@@ -93,11 +92,8 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import MediaCacheLimits from './MediaCacheLimits.vue'
 
 /**
- * Two numbers about disk, and which of them an administrator can act on.
- *
- * The split is the point. "Social is using 40 GB" is not actionable; "31 GB of
- * it is cached copies of other servers' pictures, and these are its limits"
- * is.
+ * Disk use, split into what is local and what is cached from other servers,
+ * so an administrator knows what can be acted on.
  */
 export default {
 	name: 'StorageSection',
@@ -113,11 +109,7 @@ export default {
 			default: null,
 		},
 
-		/**
-		 * Who is holding video, the quota they are held to, and where the
-		 * store actually is. Null for a delegate, who moderates rather than
-		 * administers.
-		 */
+		/** who holds video, their quota and where it is stored; null for a delegate */
 		videoStorage: {
 			type: Object,
 			default: null,
@@ -162,9 +154,8 @@ export default {
 		},
 
 		/**
-		 * Where the files are. Nextcloud has no per-app object store — this
-		 * says whether the instance-wide one is in force, which is the
-		 * supported way to put this somewhere other than the data directory.
+		 * Where the files are: Nextcloud has no per-app object store, so this
+		 * says whether the instance-wide one is in force.
 		 *
 		 * @return {string}
 		 */

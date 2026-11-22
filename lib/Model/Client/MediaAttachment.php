@@ -40,19 +40,16 @@ class MediaAttachment implements JsonSerializable {
 	private string $type = '';
 	private string $mediaType = '';
 	/**
-	 * How many bytes the stored file is; 0 where nothing measured it.
-	 *
-	 * Never serialised to a client — Mastodon's entity has no such field — and
-	 * carried only so the wire form of a video can state it: PeerTube drops a
-	 * video file link that has no `size`.
+	 * How many bytes the stored file is; 0 where nothing measured it. Not in
+	 * Mastodon's entity; carried for the wire form of a video, since PeerTube
+	 * drops a video file link without `size`.
 	 */
 	private int $sizeBytes = 0;
 	private ?string $url = null;
 	private string $previewUrl = '';
 	/**
-	 * The master playlist of this video's ladder, where it has one. Not one of
-	 * Mastodon's keys — Mastodon has no such thing — so a client that does not
-	 * know it simply plays `url`, which is the same video at one size.
+	 * The master playlist of this video's ladder, where it has one. Not a
+	 * Mastodon key; a client that does not know it plays `url`.
 	 */
 	private string $hlsUrl = '';
 	private ?string $remoteUrl = null;
@@ -86,12 +83,9 @@ class MediaAttachment implements JsonSerializable {
 	}
 
 	/**
-	 * The full media type (`image/jpeg`), as opposed to `type`, which is the
-	 * half of it Mastodon's client entity carries (`image`).
-	 *
-	 * Kept because the ActivityPub `Document` this becomes on the way out has
-	 * to state it: a peer that does not sniff the file has nothing else to go
-	 * on, and this was an empty string on every attachment this app federated.
+	 * The full media type (`image/jpeg`), as opposed to `type`, the half
+	 * Mastodon's client entity carries (`image`). The ActivityPub `Document`
+	 * must state it for peers that do not sniff the file.
 	 */
 	public function getMediaType(): string {
 		return $this->mediaType;
@@ -238,26 +232,15 @@ class MediaAttachment implements JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's MediaAttachment entity.
-	 *
-	 * Every key is always present. This used to be wrapped in `array_filter()`
-	 * with no callback, which drops every *falsy* value rather than every empty
-	 * one: an attachment with no alt text lost `description`, an image with no
-	 * preview lost `preview_url`, a local upload lost `remote_url`, and the
-	 * first attachment ever cached (id `"0"`) lost its `id`. A client that
-	 * declares those keys non-optional — which Mastodon's own documentation
-	 * permits, since Mastodon always sends them — fails to decode the
-	 * attachment, and with it the whole status it hangs off.
+	 * Mastodon's MediaAttachment entity. Every key is always present, since
+	 * clients may treat them as required and fail to decode the status.
 	 */
 	public function asLocal(): array {
 		$meta = $this->getMeta()?->jsonSerialize();
 		$preview = $this->onThisInstance($this->getPreviewUrl());
 		$remote = $this->getRemoteUrl();
-		// An attachment this instance holds no copy of names no url here:
-		// there is nothing on this server to fetch, and a link that 404s tells
-		// a client less than no link at all. Mastodon sends null for the same
-		// case; `remote_url` and `cache_error` below say where it came from
-		// and why there is no copy.
+		// no copy here means no url here, as Mastodon sends null;
+		// `remote_url` and `cache_error` say where it came from and why
 		$url = $this->onThisInstance($this->getUrl());
 
 		return [
@@ -265,10 +248,8 @@ class MediaAttachment implements JsonSerializable {
 			// one of Mastodon's five: a Document that named no media type
 			// left this empty, which no client's enum has
 			'type' => in_array($this->getType(), self::CLIENT_TYPES, true) ? $this->getType() : 'unknown',
-			// not Mastodon's: the full mime, kept so that the ActivityPub
-			// Document this row is served as later can state it. Pixelfed
-			// refuses an attachment without one; Mastodon sniffs the URL and
-			// hid for weeks that every re-served post had lost it.
+			// not Mastodon's: the full mime, so the ActivityPub Document served
+			// later can state it (Pixelfed refuses an attachment without one)
 			'media_type' => $this->getMediaType(),
 			'url' => ($url === null || $url === '') ? null : $url,
 			'preview_url' => ($preview === null || $preview === '') ? null : $preview,
@@ -277,10 +258,8 @@ class MediaAttachment implements JsonSerializable {
 			// connection. Always present, null where there is no ladder.
 			'hls_url' => ($this->hlsUrl === '') ? null : $this->hlsUrl,
 			'remote_url' => ($remote === null || $remote === '') ? null : $remote,
-			// A rejected remote copy is different from a missing preview. Keep
-			// the finite error code so this app can tell a reader why it was
-			// refused without exposing the remote response or bypassing cache
-			// limits by loading the source directly in their browser.
+			// the finite error code of a refused remote copy, so the reader can
+			// be told why without exposing the remote response
 			'cache_error' => $this->cacheError > 0 ? $this->cacheError : null,
 			// `meta` is an object on the wire, never a list: an empty
 			// AttachmentMeta json-encodes as `[]`, which a client decoding a
@@ -328,14 +307,10 @@ class MediaAttachment implements JsonSerializable {
 	}
 
 	/**
-	 * A media link pointed at the address this instance answers on now.
-	 *
-	 * The stored link was absolute when the attachment was written, so rows
-	 * written before the instance moved — or written by cron under a different
-	 * `overwrite.cli.url` than a web request would have used — point at a host
-	 * that no longer serves them. Only the last segment, the document uuid,
-	 * stays meaningful, so the link is rebuilt from it. Anything whose tail is
-	 * not one of our uuids is somebody else's URL and is handed back untouched.
+	 * A media link pointed at the address this instance answers on now. The
+	 * stored link is absolute and may name an old host or another
+	 * `overwrite.cli.url`, so it is rebuilt from its last segment, the
+	 * document uuid. A link whose tail is not one of our uuids is returned as is.
 	 */
 	private function onThisInstance(?string $stored): ?string {
 		if ($stored === null || $stored === '') {
@@ -343,9 +318,7 @@ class MediaAttachment implements JsonSerializable {
 		}
 
 		// a streamed video names a row, not a copy, and is rebuilt the same
-		// way and for the same reason: the link was written by whichever
-		// `overwrite.cli.url` the inbox request ran under. A playlist goes
-		// through the route that rewrites the addresses in it.
+		// way; a playlist goes through the route that rewrites its addresses
 		if (preg_match(self::MEDIA_STREAM, $stored, $matches) === 1) {
 			return Server::get(IURLGenerator::class)->linkToRouteAbsolute(
 				DocumentService::isPlaylist($this->mediaType) ? 'social.MediaApi.mediaPlaylist' : 'social.MediaApi.mediaStream',
@@ -375,23 +348,15 @@ class MediaAttachment implements JsonSerializable {
 			= [
 				'type' => Document::TYPE,
 				'mediaType' => $this->getMediaType(),
-				// The origin where this instance holds no copy of its own. A
-				// peer asked for the bytes has to be told a host that serves
-				// them, and an empty url — or one pointing at a copy that was
-				// refused here — is a statement no receiver can act on. This
-				// is server to server, so it raises none of the questions
-				// `asLocal()` answers by refusing to name the origin.
+				// the origin where this instance holds no copy, since a peer
+				// needs a host that serves the bytes
 				'url' => ($this->getUrl() === '') ? (string)$this->getRemoteUrl() : $this->getUrl(),
 				// the wire carries the alt text as `name`
 				'name' => ($this->getDescription() === '') ? null : $this->getDescription(),
 			];
 
-		// Stated only when they are known, and never as a zero or an empty
-		// string. `"width": 0` is a false statement about a picture, and a
-		// receiver is entitled to act on it: Pixelfed validates these three
-		// as `nullable|min:…` when the key is present and drops the **whole
-		// post** when one fails, so a post whose attachment had no stored
-		// dimensions vanished on the other side without a word.
+		// stated only when known, never as zero or empty: Pixelfed validates
+		// these when present and drops the whole post if one fails
 		$blurhash = $this->getBlurHash();
 		if ($blurhash !== '') {
 			$document['blurhash'] = $blurhash;

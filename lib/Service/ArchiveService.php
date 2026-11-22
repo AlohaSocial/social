@@ -17,22 +17,9 @@ use OCA\Social\Model\ActivityPub\Stream;
 /**
  * Putting one of your own posts away, and getting it back.
  *
- * Deleting was the only thing this app offered somebody who no longer wanted a
- * post on their profile, and it is a bad answer to a common question: a
- * photograph from four years ago is not something to destroy because it has
- * stopped belonging at the top of a profile.
- *
- * **Nothing federates.** An archived post is still on every server that
- * received it, and taking it back from them is what `Delete` is for — a
- * different decision, with a different button, that cannot be undone. What
- * archiving says is "not on my profile *here* any more", and it is
- * reversible, which is the whole point of it.
- *
- * The audience is unchanged too. A public post that has been archived is not
- * thereby private: somebody who kept the link still opens it, and anybody who
- * boosted it still shows it. Archiving hides a post from the lists this
- * server builds, and a post is not a secret because it is out of a list — a
- * post that must stop being readable is one to delete.
+ * Archiving only takes a post out of the lists this server builds; nothing
+ * federates and the audience is unchanged, so anyone with the link can still
+ * open it. Taking it back from other servers is what `Delete` is for.
  */
 class ArchiveService {
 	/** What one page of somebody's archive holds. */
@@ -44,9 +31,8 @@ class ArchiveService {
 	}
 
 	/**
-	 * @throws ItemNotFoundException no such post *of this account*, which is
-	 *                               also the answer for somebody else's and
-	 *                               for one this server did not write
+	 * @throws ItemNotFoundException no such post of this account, including
+	 *                               somebody else's and one not written here
 	 */
 	public function archive(Person $actor, int|string $nid): void {
 		if (!$this->streamRequest->setArchived($nid, $actor->getId(), true)) {

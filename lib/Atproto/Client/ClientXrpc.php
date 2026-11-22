@@ -25,14 +25,11 @@ use OCA\Social\Exceptions\MoveErrorException;
 use OCA\Social\Service\ModerationService;
 
 /**
- * The part of the XRPC surface a Bluesky app signed in here uses (§6.2,
- * §6.3): sessions, its own account, writes and uploads, service-auth
- * tokens for Bluesky's video service, preferences, the PLC signature a
- * tool moving the account away asks for (`PlcSignatureService`), and
- * everything of `app.bsky.*` passed on to the AppView. What is not a
- * signed-in call is the public surface's (`XrpcService`), and is answered
- * there. An account moving here (`createAccount`, and the session that
- * makes) is `InboundMoveService`'s.
+ * The XRPC surface for a Bluesky app signed in here (§6.2, §6.3): sessions,
+ * its own account, writes and uploads, service-auth tokens for the video
+ * service, PLC signatures (`PlcSignatureService`), preferences, and
+ * `app.bsky.*` passed on to the AppView. Unauthenticated calls are
+ * `XrpcService`'s; an account moving here is `InboundMoveService`'s.
  */
 class ClientXrpc {
 	public const UPLOAD = 'com.atproto.repo.uploadBlob';
@@ -287,12 +284,10 @@ class ClientXrpc {
 	}
 
 	/**
-	 * `com.atproto.repo.uploadBlob`, from a file the body was copied to: by a
-	 * signed-in app, or by Bluesky's video service with a token the account
-	 * signed for it (`getServiceAuth`). A video may weigh up to Bluesky's
-	 * limit for one; anything else is held to a picture's. What the file
-	 * is, for the app's `blob:` permission as for the size, is read from
-	 * its bytes rather than from the `Content-Type` the app sent.
+	 * `com.atproto.repo.uploadBlob`, from a file the body was copied to, by a
+	 * signed-in app or by Bluesky's video service (`getServiceAuth`). Only a
+	 * video may exceed a picture's limit; the type is sniffed from the bytes,
+	 * not taken from `Content-Type`.
 	 *
 	 * @param array<string, string> $headers lower-cased names
 	 * @throws XrpcException
@@ -302,10 +297,9 @@ class ClientXrpc {
 	}
 
 	/**
-	 * Who may upload, checked from the headers alone so that a request
-	 * without a valid token is refused before its body is read. The token is
-	 * verified once, here: a DPoP proof and a service-auth token are single
-	 * use. The answer takes the file the body was copied to.
+	 * Who may upload, checked from the headers before the body is read. The
+	 * token is verified only here, since DPoP proofs and service-auth tokens are
+	 * single use. The answer takes the file the body was copied to.
 	 *
 	 * @param array<string, string> $headers lower-cased names
 	 * @return Closure(string): array
@@ -485,12 +479,10 @@ class ClientXrpc {
 	}
 
 	/**
-	 * The body of a write, as json() reads it, except that in a record kept
-	 * as the app wrote it (WriteService::KEPT_AS_WRITTEN) empty or numeric-key JSON
-	 * objects stay maps (represented by `stdClass`, see DagCbor) rather
-	 * than becoming lists: that record goes into the
-	 * repository as it is, and its CID has to be the one the app computed.
-	 * Records Social maps are rebuilt, and read as arrays as before.
+	 * The body of a write, as json() reads it, except that in a record kept as
+	 * written (WriteService::KEPT_AS_WRITTEN) empty or numeric-key objects stay
+	 * maps (`stdClass`, see DagCbor): that record is stored as is, so its CID
+	 * must be the one the app computed.
 	 *
 	 * @throws XrpcException
 	 */

@@ -42,13 +42,9 @@ import { showError } from '../services/toast.js'
 import { errorOf } from '../utils/serverError.js'
 
 /**
- * Which of the reader's lists one account is in, as a row of boxes: "Add to
- * list" from a profile. Ticking and unticking write straight away, so there
- * is nothing to save and the one button closes the dialog.
- *
- * Only the reader's hand-made lists are offered. A group list's members are
- * the group's, and offering a box the server would refuse is worse than no
- * box.
+ * "Add to list" from a profile: which of the reader's lists one account is
+ * in. Each tick writes at once, so there is nothing to save. Group lists are
+ * left out, since their members are the group's.
  */
 export default {
 	name: 'ListMembershipDialog',

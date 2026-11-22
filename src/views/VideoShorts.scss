@@ -83,8 +83,7 @@
 		border-radius: var(--border-radius-large, 12px);
 		background: var(--social-on-dark-ground);
 		scroll-snap-type: y mandatory;
-		/* the one gesture this page has, and it must not also pull the page
-		   behind it down to refresh */
+		/* swiping must not also pull the page to refresh */
 		overscroll-behavior-y: contain;
 
 		&:focus-visible {
@@ -110,7 +109,6 @@
 		opacity: 0.8;
 	}
 
-	/* Choose which videos fill the player. */
 	&__scopes {
 		display: flex;
 		grid-row: 1;
@@ -193,8 +191,7 @@
 		inset-inline: 0;
 		inline-size: 100%;
 		block-size: 100%;
-		/* contain rather than cover: a video shot wide is not improved by
-		   having its sides cut off to fill a tall window */
+		/* contain, so a wide video keeps its sides in a tall window */
 		object-fit: contain;
 		background: var(--social-on-dark-ground);
 	}
@@ -229,8 +226,7 @@
 
 	&__sound {
 		position: absolute;
-		/* bottom right, clear of both the app's own sidebar toggle in the top
-		   left and the way out in the top right */
+		/* clear of the sidebar toggle and the close button at the top */
 		inset-block-end: 16px;
 		inset-inline-end: 16px;
 		display: flex;
@@ -243,8 +239,7 @@
 		background: var(--social-on-dark-scrim);
 		color: var(--social-on-dark-text);
 		cursor: pointer;
-		/* over the caption, which runs the width of the slide underneath it
-		   and used to swallow every press meant for this button */
+		/* over the caption, which runs the width of the slide underneath it */
 		z-index: 2;
 	}
 
@@ -375,8 +370,7 @@
 		/* room on the end for the sound button, which sits over this */
 		padding: 16px 72px 16px 16px;
 		color: var(--social-on-dark-text);
-		/* the words sit on whatever the video happens to be showing, so they
-		   carry their own ground rather than hoping it is dark there */
+		/* the words carry their own dark ground over the video */
 		background: linear-gradient(to top, var(--social-on-dark-scrim-heavy), transparent);
 	}
 
@@ -423,8 +417,7 @@
 		margin: 0;
 		overflow-wrap: anywhere;
 		white-space: pre-line;
-		/* a caption is a caption, not the post: three lines and the rest is
-		   behind Open the post */
+		/* three lines; the rest is behind Open the post */
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
@@ -520,10 +513,8 @@
 	}
 }
 
-/* Windows high contrast and the like replace every colour with the system's
-   and take the scrims away, leaving words on bare video. The controls take
-   the system's button colours with a border, the caption a solid canvas, so
-   each stays readable on whatever frame is under it. */
+/* Forced colours remove the scrims, so the controls get system button colours
+   and a border and the caption a solid canvas. */
 @media (forced-colors: active) {
 	.shorts__create,
 	.shorts__scopes,
@@ -555,12 +546,9 @@
 	}
 }
 
-/* A phone: the player takes the whole page below Nextcloud's header (and
-   above the phone bar), the way every short-video app has it. The title and
-   the scopes float over the top of the video, like, sound and next stand in a
-   rail on the end, and the caption keeps to two lines with the rest in a
-   sheet. `shorts--phone` is set from the same query as the stylesheets'
-   600px (services/phone.js), so a wider screen never sees any of this. */
+/* A phone: the player fills the page between Nextcloud's header and the phone
+   bar, with the scopes over the video and the actions in a rail on the end.
+   `shorts--phone` comes from the same 600px query (services/phone.js). */
 .shorts--phone {
 	gap: 0;
 	background: var(--social-on-dark-ground);
@@ -699,8 +687,7 @@
 		-webkit-line-clamp: 2;
 	}
 
-	/* a word after the caption rather than a pill: the caption is two lines
-	   and the pill was most of a third */
+	/* a word after the two-line caption, not a pill, to save height */
 	.short__caption-toggle {
 		min-block-size: 32px;
 		padding: 0;

@@ -4,13 +4,10 @@
  */
 
 /**
- * The HTML the composer's @ and # autocomplete (tributejs) draws.
- *
- * tributejs takes its menu rows and the chip it inserts as HTML strings and
- * sets them with `innerHTML`, so every value in them is escaped here: a
- * username, a profile address and an avatar come from whatever server the
- * account lives on, and the server keeps a display name as plain text on the
- * understanding that whatever renders it escapes it.
+ * The HTML the composer's @ and # autocomplete (tributejs) draws. tributejs
+ * sets it with `innerHTML`, so every value is escaped here: usernames,
+ * addresses and avatars come from remote servers, and display names are kept
+ * as plain text.
  */
 
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }

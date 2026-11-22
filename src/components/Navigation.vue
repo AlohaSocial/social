@@ -12,30 +12,17 @@
 				@keydown.enter="onSearchSubmit" />
 		</template>
 		<template #list>
-			<!-- The mark that says where you are, as one thing that moves
-			     rather than a highlight that blinks out of one row and into
-			     another. It animates the *click*, at the place the click
-			     happened, which is the one piece of feedback that is instant
-			     however long the page it opens takes to arrive.
-
-			     Measured rather than laid out: the rows are
-			     `@nextcloud/vue`'s and this is drawn over them, so it is
-			     positioned from the active row's own box and follows it. -->
+			<!-- The mark that slides to the active row, so a click is answered
+			     at once however long the page takes. The rows are
+			     `@nextcloud/vue`'s, so it is positioned from the active row's box. -->
 			<span
 				v-show="indicator.height > 0"
 				class="navigation__indicator"
 				:class="{ 'navigation__indicator--settled': indicator.settled }"
 				:style="{ transform: `translateY(${indicator.top}px)`, height: `${indicator.height}px` }"
 				aria-hidden="true" />
-			<!-- The one thing in the sidebar that is not a place to go: it is
-			     what the app is for, so it is a call to action rather than a
-			     row among rows. It was an NcAppNavigationItem with no `to`,
-			     which renders href="#" and needed a .prevent to stop the bare
-			     fragment becoming a history entry; a button has nowhere to go
-			     by construction. NcButton rather than a bare <button> because
-			     the server's own button rules all exclude `.button-vue` — a
-			     hand-rolled one has to win an argument with them in every
-			     state, and loses the pressed one. -->
+			<!-- NcButton rather than a bare <button>: the server's button rules
+			     all exclude `.button-vue`, and a hand-rolled one loses to them. -->
 			<NcButton
 				v-if="!currentAccount?.moved"
 				class="navigation__compose"
@@ -48,8 +35,7 @@
 				</template>
 				{{ t('social', 'New post') }}
 			</NcButton>
-			<!-- a moved account posts to nobody: its followers were sent to the
-			     new one, and the server refuses the post anyway -->
+			<!-- a moved account cannot post: the server refuses it -->
 			<p v-else class="navigation__moved">
 				{{ t('social', 'This account has moved to {acct}.', { acct: '@' + currentAccount.moved.acct }) }}
 			</p>
@@ -61,19 +47,15 @@
 				<template #icon>
 					<IconAlertCircle class="error-icon" :size="20" />
 				</template>
-				<!-- `counter` is a slot in @nextcloud/vue 9, not a prop: passing
-				     the number as `:counter` rendered nothing at all -->
+				<!-- `counter` is a slot in @nextcloud/vue 9, not a prop -->
 				<template #counter>
 					<NcCounterBubble :count="errorCount" type="highlighted" />
 				</template>
 			</NcAppNavigationItem>
 
-			<!-- `href` rather than `to`: with `to`, the component ORs its own
-			     router-derived state into `active`, and vue-router counts
-			     /timeline as active while /timeline/direct is open — so My Feed
-			     stayed lit next to whichever timeline was actually chosen.
-			     navigate() keeps the click in the SPA while leaving a modified
-			     click (new tab, new window) to the browser. -->
+			<!-- `href` rather than `to`: with `to` the component ORs in the
+			     router's own active state, which lights /timeline while
+			     /timeline/direct is open. navigate() keeps plain clicks in the app. -->
 			<NcAppNavigationItem
 				v-for="item in menu.timelines"
 				:key="item.key"
@@ -89,11 +71,8 @@
 				<template #icon>
 					<component :is="item.icon" :size="20" />
 				</template>
-				<!-- A count, not an alarm. `highlighted` is the loud accent
-				     bubble Nextcloud uses for something that needs answering;
-				     what this is counting is things that happened. The bell
-				     wobbles once when the number goes up, which is noticed and
-				     is over. -->
+				<!-- not `highlighted`: this counts things that happened, not
+				     things that need answering -->
 				<template v-if="item.counter > 0" #counter>
 					<NcCounterBubble :count="item.counter" />
 				</template>
@@ -101,18 +80,8 @@
 
 			<NcAppNavigationSpacer />
 
-			<!-- One entry for everything there is to look at besides your own
-			     feed: the hashtags you follow, your lists, and what this
-			     instance is talking about — in one collapsible row rather than
-			     three captions that each grow without limit.
-
-			     Trending used to be a section of its own above this one. It is
-			     in here now, last and only in the room the other two leave, so
-			     that what somebody chose to follow can never be pushed out of
-			     their own sidebar by what happens to be busy today.
-
-			     The binoculars mark this as a place to explore, apart from
-			     Discover's compass and from the lists and tags nested beneath it. -->
+			<!-- Followed tags, lists, Bluesky feeds and trending tags in one
+			     collapsible entry. Trending only gets the room the others leave. -->
 			<NcAppNavigationItem
 				v-if="exploreTotal > 0"
 				ref="exploreItem"
@@ -124,12 +93,7 @@
 				<template #icon>
 					<IconBinoculars :size="20" />
 				</template>
-				<!-- Followed tags, trending tags and lists were one
-				     undifferentiated column, so which kind a row was had to be read
-				     off its icon. A caption before each run costs one line and says
-				     it. A run of one still gets its caption: the point is that the
-				     reader knows what they are looking at, not that the list is
-				     long enough to need dividing. -->
+				<!-- a caption over each run of one kind, even a run of one -->
 				<template v-for="group in exploreGroups" :key="group.kind">
 					<NcAppNavigationCaption :name="group.caption" />
 					<NcAppNavigationItem
@@ -148,9 +112,7 @@
 							<IconTrendingUp v-else-if="entry.kind === 'trend'" :size="20" />
 							<IconPound v-else :size="20" />
 						</template>
-						<!-- how busy it is, which is the whole reason a trending
-						     tag is worth a row: a followed one is there because it
-						     was chosen, not because of a number -->
+						<!-- a trending tag shows how busy it is -->
 						<template v-if="entry.kind === 'trend'" #extra>
 							<span class="navigation__subname">
 								{{ n('social', '%n post', '%n posts', usesOf(entry.tag)) }}
@@ -159,10 +121,8 @@
 					</NcAppNavigationItem>
 				</template>
 
-				<!-- the lists are made and filled in Settings; this is where a
-				     reader looks for the way there -->
 				<template #actions>
-					<NcActionButton closeAfterClick @click="navigate({ name: 'settings', hash: '#lists' })">
+					<NcActionButton closeAfterClick @click="managingLists = true">
 						<template #icon>
 							<IconCog :size="20" />
 						</template>
@@ -181,24 +141,16 @@
 		</template>
 		<template #footer>
 			<div class="navigation__footer">
-				<!-- The way out of every app in Nextcloud is the thing at the
-				     bottom with your face on it, so that is what this is: the
-				     name the reader publishes under, their portrait, and
-				     everything they go looking for rather than read, behind it.
-				     `NcAppNavigationSettings` draws a cog and offers no slot to
-				     replace it, so the picture is set as that icon's background
-				     and the cog itself is hidden. -->
+				<!-- The account menu, under the reader's name and portrait.
+				     `NcAppNavigationSettings` has no slot for its cog icon, so the
+				     portrait is set as the icon's background and the cog hidden. -->
 				<NcAppNavigationSettings
 					class="navigation__more"
 					:style="{ '--social-face': faceImage, '--entry-total': moreCount }"
 					:name="profileName">
-					<!-- `--entry-index`, with `--entry-total` above, is what
-					     staggers the opening: the bottom row pops first and the
-					     rest follow upward. Both are passed from here because
-					     the DOM cannot be counted -- every entry sits in a
-					     wrapper of its own, so each one is its parent's first
-					     child and neither `nth-child` nor `nth-last-child`
-					     distinguishes them. -->
+					<!-- `--entry-index` and `--entry-total` stagger the opening.
+					     Each entry sits in its own wrapper, so `nth-child` cannot
+					     count them. -->
 					<NcAppNavigationItem
 						v-for="(item, index) in menu.more"
 						:key="item.key"
@@ -215,32 +167,9 @@
 							<NcCounterBubble :count="item.counter" type="highlighted" />
 						</template>
 					</NcAppNavigationItem>
-					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length }"
-						:name="t('social', 'Blocking')"
-						:href="hrefFor({ name: 'blocked-accounts' })"
-						:active="isActive({ to: { name: 'blocked-accounts' } })"
-						@click="navigate({ name: 'blocked-accounts' }, $event)">
-						<template #icon>
-							<IconCancel :size="20" />
-						</template>
-					</NcAppNavigationItem>
-					<!-- Moving an account in or out of this server: a job
-					     somebody sits down to do with a file manager open, so a
-					     page of its own rather than a section of Settings. -->
-					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 1 }"
-						:name="t('social', 'Migration')"
-						:href="hrefFor({ name: 'migration' })"
-						:active="isActive({ to: { name: 'migration' } })"
-						@click="navigate({ name: 'migration' }, $event)">
-						<template #icon>
-							<IconSwapHorizontal :size="20" />
-						</template>
-					</NcAppNavigationItem>
 					<!-- the server's rules, contact and legal links -->
 					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 2 }"
+						:style="{ '--entry-index': menu.more.length }"
 						:name="t('social', 'About this server')"
 						:href="hrefFor({ name: 'about' })"
 						:active="isActive({ to: { name: 'about' } })"
@@ -249,11 +178,8 @@
 							<IconInformationOutline :size="20" />
 						</template>
 					</NcAppNavigationItem>
-					<!-- last, and on its own: everything above this menu is a
-					     place to read something, and this is the one place to
-					     change something -->
 					<NcAppNavigationItem
-						:style="{ '--entry-index': menu.more.length + 3 }"
+						:style="{ '--entry-index': menu.more.length + 1 }"
 						:name="t('social', 'Settings')"
 						:href="hrefFor({ name: 'settings' })"
 						:active="isActive({ to: { name: 'settings' } })"
@@ -267,14 +193,17 @@
 		</template>
 	</NcAppNavigation>
 
-	<!-- `closeOnClickOutside` is a boolean prop with no default, so the dialog
-	     ignored a click on the dimmed page around it and only the X closed it.
-	     Nothing is lost by closing: the draft is saved on every keystroke and
-	     restored the next time the composer opens.
+	<SettingsDialog
+		v-if="managingLists"
+		:title="t('social', 'Lists')"
+		:description="t('social', 'A list is a few of the people you follow, read as a timeline of its own.')"
+		@close="managingLists = false">
+		<ListsSettings />
+	</SettingsDialog>
 
-	     Both dialogs are labelled by a heading of their own rather than by
-	     `name`: NcModal draws a name into the page header, above the mask,
-	     where it sat over Nextcloud's search box -->
+	<!-- Closing on an outside click loses nothing: the draft is saved on every
+	     keystroke. Labelled by its own heading rather than `name`, which NcModal
+	     draws into the page header over Nextcloud's search box. -->
 	<NcModal
 		v-if="showComposer"
 		closeOnClickOutside
@@ -302,11 +231,9 @@
 					<template #icon>
 						<IconImageMultiple :size="20" />
 					</template>
-					{{ t('social', 'New story') }}
+					{{ t('social', 'New short') }}
 				</NcButton>
 			</div>
-			<!-- the box emptied and the modal stayed open, which reads as if
-			     nothing had been sent -->
 			<PostEditForm
 				v-if="composerEdit"
 				ref="postEditForm"
@@ -326,7 +253,6 @@
 				:initialQuote="composerQuote"
 				:initialDraft="composerDraft"
 				:initialDraftContext="composerDraftContext"
-				:initialRedraft="composerRedraft"
 				:initialFiles="composerFiles"
 				:initialPaths="composerPaths"
 				emojiPickerContainer=".modal-wrapper"
@@ -388,6 +314,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCounterBubble from '@nextcloud/vue/components/NcCounterBubble'
 
 import { defineAsyncComponent } from 'vue'
+import SettingsDialog from './SettingsDialog.vue'
 
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconBinoculars from 'vue-material-design-icons/Binoculars.vue'
@@ -398,25 +325,19 @@ import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.v
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
 import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
-import IconAccountClock from 'vue-material-design-icons/AccountClock.vue'
-import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
-import IconBookmark from 'vue-material-design-icons/Bookmark.vue'
 import IconPound from 'vue-material-design-icons/Pound.vue'
 import IconTrendingUp from 'vue-material-design-icons/TrendingUp.vue'
 import IconAccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
-import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { cssUrl } from '../utils/cssUrl.js'
 import { capacityFrom, chooseEntries, entriesThatFit } from '../utils/explore.js'
 import { offTimelinePush, onTimelinePush, PUSH_DIRECT, PUSH_NOTIFICATION } from '../services/timelinePush.js'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import IconCancel from 'vue-material-design-icons/Cancel.vue'
 import IconInformationOutline from 'vue-material-design-icons/InformationOutline.vue'
-import IconSwapHorizontal from 'vue-material-design-icons/SwapHorizontal.vue'
 import IconCog from 'vue-material-design-icons/Cog.vue'
 import IconAlertCircle from 'vue-material-design-icons/AlertCircle.vue'
 
@@ -442,33 +363,26 @@ import { ownAvatarUrl } from '../services/avatar.js'
 // its own chunk keeps all of that out of the entry bundle
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./Composer/Composer.vue'))
 const PostEditForm = defineAsyncComponent(() => import(/* webpackChunkName: "composer-edit" */'./PostEditForm.vue'))
+const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'./ListsSettings.vue'))
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
 
 /** how often to re-read the badges when the server cannot push */
 const UNREAD_POLL_MS = 60 * 1000
 
-/**
- * The longest the badge poll waits while the server keeps failing, in
- * milliseconds. Each failed round doubles the wait from `UNREAD_POLL_MS` up
- * to this; the first answer puts it back.
- */
+/** the longest the badge poll backs off to while the server keeps failing */
 const MAX_UNREAD_POLL_MS = 5 * 60 * 1000
 
 /** how long to let the typing settle before searching */
 const SEARCH_DEBOUNCE_MS = 300
 
-/**
- * Where the Explore entry remembers whether it was left open.
- *
- * `localStorage` rather than a user setting: it is a per-browser convenience
- * worth nothing to anybody else, and a reader whose browser cannot store it
- * simply gets it open, which is the better default.
- */
+/** where the Explore entry remembers, per browser, whether it was left open */
 const EXPLORE_OPEN_KEY = 'social.navigation.exploreOpen'
 
 export default {
 	name: 'Navigation',
 	components: {
+		ListsSettings,
+		SettingsDialog,
 		NcActionButton,
 		NcAppNavigation,
 		NcAppNavigationSearch,
@@ -489,9 +403,7 @@ export default {
 		IconAccountCircle,
 		IconBell,
 		IconCommentAccount,
-		IconHeart,
 		IconPlus,
-		IconBookmark,
 		IconPound,
 		IconTrendingUp,
 		IconAccountGroup,
@@ -499,9 +411,7 @@ export default {
 		IconBluesky,
 		IconBinoculars,
 		IconCompass,
-		IconCancel,
 		IconInformationOutline,
-		IconSwapHorizontal,
 		IconCog,
 		IconAlertCircle,
 	},
@@ -527,11 +437,7 @@ export default {
 			exploreOpen: true,
 			/** the window's height, the fallback until the rail can be measured */
 			viewportHeight: 0,
-			/**
-			 * How many entries the rail has room for, measured from the rail.
-			 * `null` until there is something to measure — zero is a real
-			 * answer, so it cannot double as "not measured yet".
-			 */
+			/** how many entries the rail has room for; `null` until measured */
 			measuredCap: null,
 			localSearch: '',
 			/** where the travelling mark is, in the list's own coordinates */
@@ -544,11 +450,11 @@ export default {
 			ringing: false,
 			ringTimer: null,
 			showComposer: false,
+			managingLists: false,
 			composerReply: null,
 			composerQuote: null,
 			composerDraft: null,
 			composerDraftContext: '',
-			composerRedraft: null,
 			composerEdit: null,
 			composerFiles: [],
 			composerSaving: false,
@@ -559,7 +465,7 @@ export default {
 			composerOpener: null,
 			stopComposerRouteGuard: null,
 			onComposerBeforeUnload: null,
-			/** the 24-hour story composer opened from the New post dialog */
+			/** the short composer opened from the New post dialog */
 			showStoryComposer: false,
 			/** files "Share to Social" in the Files app sent along, attached when the dialog opens */
 			composerPaths: [],
@@ -583,9 +489,7 @@ export default {
 		...mapStores(useAccountStore, useErrorsStore, useInstanceStore, useNotificationsStore, useSettingsStore, useTimelineStore),
 
 		/**
-		 * Everything inside Explore, however much of it the rail can show.
-		 *
-		 * @return {number} how many hashtags and lists there are in all
+		 * @return {number} how many entries Explore holds, however many fit
 		 */
 		exploreTotal() {
 			return this.followedTags.length + this.lists.length + this.blueskyFeeds.length + this.trendingToShow.length
@@ -597,7 +501,7 @@ export default {
 		},
 
 		/**
-		 * How many entries there is room for, which shrinks with the window.
+		 * How many entries there is room for.
 		 *
 		 * @return {number}
 		 */
@@ -606,8 +510,7 @@ export default {
 		},
 
 		/**
-		 * What Explore actually draws: hashtags first, then lists, shared out
-		 * between the two when there is not room for all of them.
+		 * What Explore draws, as `chooseEntries` shares out the room.
 		 *
 		 * @return {Array<object>}
 		 */
@@ -616,13 +519,8 @@ export default {
 		},
 
 		/**
-		 * The same rows, in runs of a kind, each run with a caption.
-		 *
-		 * The order is whatever `chooseEntries` decided -- which rows are worth
-		 * the room is its question, and this does not reopen it. All this does
-		 * is put a word over each run so a reader knows whether they are
-		 * looking at a tag they chose, a tag the instance is talking about, or
-		 * a list of theirs.
+		 * The same rows in `chooseEntries` order, grouped into runs of a kind,
+		 * each with a caption.
 		 *
 		 * @return {Array<{kind: string, caption: string, entries: object[]}>}
 		 */
@@ -643,10 +541,7 @@ export default {
 		},
 
 		/**
-		 * The trending tags worth a row: the ones this reader does not already
-		 * follow. A followed tag is in the list above under the same name, and
-		 * counting it here as well would make Explore claim to hold more than
-		 * it can show.
+		 * The trending tags this reader does not already follow.
 		 *
 		 * @return {Array<object>}
 		 */
@@ -694,28 +589,16 @@ export default {
 		},
 
 		/**
-		 * How many rows the account menu holds.
-		 *
-		 * The stylesheet staggers them from the bottom row upward, so it needs
-		 * the count as well as each row's index: the delay is
-		 * `total - 1 - index`. Blocking, Migration and Settings are written out
-		 * in the template rather than coming from `menu.more`, so they are
-		 * added here; a test holds this equal to the number of entries drawn.
+		 * How many rows the account menu holds, for the stylesheet's stagger.
+		 * About and Settings are written out in the template, so they are added.
 		 */
 		moreCount() {
-			return this.menu.more.length + 4
+			return this.menu.more.length + 2
 		},
 
 		/**
-		 * The reader's own face, as a URL for the button at the bottom.
-		 *
-		 * The server's avatar endpoint rather than the account's `avatar`
-		 * field: it answers for every account — a generated set of initials
-		 * when nobody has uploaded a picture — so the button is never a blank
-		 * circle, and it is the same picture the rest of Nextcloud shows.
-		 *
-		 * The version in the address is what makes a newly uploaded picture
-		 * appear: see services/avatar.js.
+		 * The reader's Nextcloud avatar, which is never blank: the server
+		 * generates initials when there is no picture.
 		 *
 		 * @return {string} where the picture is
 		 */
@@ -727,7 +610,7 @@ export default {
 			return ownAvatarUrl(32)
 		},
 
-		/** @return {boolean} whether the signed-in account can post a story */
+		/** @return {boolean} whether the signed-in account can post a short */
 		storiesAvailable() {
 			return Boolean(this.currentUser)
 				&& !this.settingsStore.getServerData?.public
@@ -755,17 +638,10 @@ export default {
 					{
 						key: 'social-home',
 						icon: IconHome,
-						// the switcher over the timelines has called this one "My Feed"
-						// since it was written: next to Local and Global what
-						// distinguishes it is whose posts it holds, not where it sits.
-						// The sidebar was the last place still calling it Home, for the
-						// same destination.
 						title: t('social', 'My Feed'),
 						to: { name: 'timeline' },
-						// Local and Global are scopes of this page rather than
-						// pages of their own now that the switcher sets them,
-						// so the entry stays lit while the reader is on one:
-						// otherwise the sidebar shows nothing chosen at all
+						// Local and Global are scopes of this page, so the entry
+						// stays lit on them
 						covers: MY_FEED_COVERS,
 					},
 					{
@@ -775,11 +651,6 @@ export default {
 						title: t('social', 'Photos'),
 						to: { name: 'timeline', params: { type: 'photos' } },
 					},
-					// its own entry rather than a filter inside Photos: a video
-					// is watched rather than glanced at, and the two are mixed
-					// together nowhere else on the fediverse either — PeerTube
-					// publishes nothing but videos and Pixelfed nothing but
-					// pictures
 					{
 						key: 'social-videos',
 						offered: this.offers('videos'),
@@ -787,13 +658,7 @@ export default {
 						title: t('social', 'Videos'),
 						to: { name: 'timeline', params: { type: 'videos' } },
 					},
-					// the same videos again, watched one at a time rather than
-					// chosen from a grid. Its own entry under Videos, not a
-					// button on that page: it is where somebody arriving from
-					// TikTok or YouTube Shorts goes first, and a way in that
-					// only shows once you are already on another page is one
-					// most people never find. Offered with Videos, since it is
-					// the same videos.
+					// the same videos, one at a time, so offered with Videos
 					{
 						key: 'social-shorts',
 						offered: this.offers('videos'),
@@ -801,9 +666,6 @@ export default {
 						title: t('social', 'Shorts'),
 						to: { name: 'shorts' },
 					},
-					// what happened to the reader — a mention, a like, a follow.
-					// "Activities" rather than "Notifications": only some of it
-					// was ever notified.
 					{
 						key: 'social-notifications',
 						icon: IconBell,
@@ -826,28 +688,9 @@ export default {
 					},
 				]),
 
-				// The sidebar's top level is for the timelines a reader moves
-				// between all day; these three are things they go looking for,
-				// and eight equal-weight entries made the first five harder to
-				// pick out. They keep their routes, their icons and their
-				// active state — only where they are drawn changes.
+				// Under the reader's face at the foot of the sidebar. The profile
+				// holds what they saved, their drafts and their statistics.
 				more: [
-					// first, because it is the reader's own page rather than
-					// somewhere they go looking: the button this menu hangs off
-					// used to *be* the link to it, and moving that button here
-					// without putting the link back would have left a profile
-					// nobody could reach.
-					//
-					// One entry, not two. There were "My profile", pointing at
-					// Nextcloud's user page, and "Social profile", pointing at
-					// the profile this app publishes — two rows a few pixels
-					// apart, both called somebody's profile, and no way to tell
-					// from the sidebar which one had your posts on it. This is
-					// the app's own profile: the page with the posts, the
-					// followers and the bio, which is what somebody clicking
-					// their own name in a social app is looking for. Nextcloud's
-					// user page is still where Nextcloud puts it, under the
-					// avatar at the top right of every app.
 					...(this.currentAccount?.acct
 						? [{
 								key: 'social-profile',
@@ -856,30 +699,6 @@ export default {
 								to: { name: 'profile', params: { account: this.currentAccount.acct } },
 							}]
 						: []),
-					{
-						key: 'social-follow-requests',
-						icon: IconAccountClock,
-						title: t('social', 'Follow requests'),
-						to: { name: 'follow-requests' },
-					},
-					{
-						key: 'social-liked',
-						icon: IconHeart,
-						title: t('social', 'Liked posts'),
-						to: { name: 'timeline', params: { type: 'favourites' } },
-					},
-					{
-						key: 'social-bookmarks',
-						icon: IconBookmark,
-						title: t('social', 'Bookmarks'),
-						to: { name: 'timeline', params: { type: 'bookmarks' } },
-					},
-					{
-						key: 'social-statistics',
-						icon: IconChartBox,
-						title: t('social', 'Statistics'),
-						to: { name: 'statistics' },
-					},
 				],
 
 			}
@@ -888,10 +707,7 @@ export default {
 
 	watch: {
 		/**
-		 * Something arrived. The bell says so once.
-		 *
-		 * Only upwards: reading the page takes the number down, and a bell that
-		 * wobbled then would be ringing about the reader's own click.
+		 * Wobbles the bell once when the count goes up, never when it goes down.
 		 *
 		 * @param {number} now the count now
 		 * @param {number} before what it was
@@ -909,7 +725,7 @@ export default {
 		},
 
 		/**
-		 * another page: the mark goes to the row that is lit now
+		 * Moves the mark to the row that is lit now.
 		 *
 		 * @param {import('vue-router').RouteLocationNormalized} to where the reader is going
 		 * @param {import('vue-router').RouteLocationNormalized} from where they were
@@ -920,9 +736,8 @@ export default {
 		},
 
 		/**
-		 * The entry is not in the rail until there is something to put in it,
-		 * so there is nothing to observe or measure at mount: both wait for
-		 * the hashtags and lists to arrive.
+		 * The Explore entry is only rendered once it has content, so observing
+		 * and measuring it waits for that.
 		 */
 		exploreTotal: {
 			async handler(total) {
@@ -957,9 +772,7 @@ export default {
 			}
 		},
 
-		// the box has to follow the store, not just read it once: synced only
-		// in mounted() it kept showing a term the reader had already navigated
-		// away from
+		// follows the store, so navigating away from a search clears the box
 		searchQuery: {
 			immediate: true,
 			handler(query) {
@@ -973,9 +786,11 @@ export default {
 			'composer-open': (intent) => this.openComposer(intent),
 			'composer-reply': (reply) => this.openComposer({ reply }),
 			'composer-quote': (quote) => this.openComposer({ quote }),
-			'composer-redraft': (redraft) => this.openComposer({ redraft }),
 			'composer-edit': (intent) => this.openComposer(intent),
 			'shortcut:compose': () => this.openComposer(),
+			'lists:manage': () => {
+				this.managingLists = true
+			},
 		}
 		for (const [event, handler] of Object.entries(this.composerHandlers)) {
 			eventBus.on(event, handler)
@@ -996,9 +811,7 @@ export default {
 		}
 
 		this.$nextTick(() => this.placeIndicator())
-		// none of these is what the reader opened the page for, and fired
-		// together with the timeline they slowed it down by their number:
-		// they wait for it (services/boot.js says how)
+		// none of these may compete with the first timeline request
 		afterFirstTimeline(() => {
 			this.fetchTrending()
 			this.fetchLists()
@@ -1006,8 +819,7 @@ export default {
 			this.fetchFollowedTags()
 			this.refreshBadges()
 		})
-		// this one defers itself: the composer asks for it too, and it must
-		// wait whichever of the two asks first
+		// defers itself, as the composer may ask first
 		this.instanceStore.load()
 		// the settings page changes them; this sidebar holds its own copy
 		this.onListsChanged = () => this.fetchLists()
@@ -1026,10 +838,8 @@ export default {
 		}
 		this.openComposerFromQuery()
 
-		// the badges are only honest if they keep up: with notify_push the
-		// server says when something arrived, and without it a slow poll is
-		// enough -- while somebody is looking; a hidden tab catches up when
-		// it comes back. A post for the home timeline changes none of them.
+		// with notify_push the server says when a badge changes; without it a
+		// slow poll runs while the tab is visible
 		if (!onTimelinePush(this.refreshBadges, [PUSH_DIRECT, PUSH_NOTIFICATION])) {
 			this.pollTimer = setInterval(this.pollIfVisible, UNREAD_POLL_MS)
 			document.addEventListener('visibilitychange', this.pollOnReturn)
@@ -1081,7 +891,6 @@ export default {
 			this.composerQuote = intent.quote || null
 			this.composerDraft = intent.draft || null
 			this.composerDraftContext = typeof intent.context === 'string' ? intent.context : ''
-			this.composerRedraft = intent.redraft || null
 			this.composerEdit = intent.edit || null
 			this.composerFiles = intent.files || []
 			this.composerPaths = intent.paths || []
@@ -1173,9 +982,7 @@ export default {
 		},
 
 		/**
-		 * The badge in words: the bubble sits outside the entry's link, so a
-		 * screen reader hearing "Activities" was told nothing of the number
-		 * beside it.
+		 * The badge in words, as the bubble sits outside the entry's link.
 		 *
 		 * @param {number|undefined} count what the badge shows
 		 * @return {string|undefined} what the entry says about it, or nothing
@@ -1185,9 +992,7 @@ export default {
 		},
 
 		/**
-		 * Reads the counts the sidebar badges show, all three in one
-		 * request, for a poll and for a push of a direct message or a
-		 * notification alike.
+		 * Reads the counts the sidebar badges show, in one request.
 		 *
 		 * @return {Promise<boolean>} whether the server answered
 		 */
@@ -1201,10 +1006,7 @@ export default {
 			}
 		},
 
-		/**
-		 * The polling tick. A tab nobody is looking at does not ask: on an
-		 * instance with many open tabs that was most of the traffic there was.
-		 */
+		/** The polling tick; a hidden tab does not ask. */
 		pollIfVisible() {
 			if (document.visibilityState === 'hidden') {
 				this.hiddenSince = this.hiddenSince || Date.now()
@@ -1226,8 +1028,7 @@ export default {
 				return
 			}
 
-			// twice the wait each time, up to the ceiling: 120 s, 240 s, then
-			// five minutes between attempts while the server keeps failing
+			// doubles the wait on each failure, up to MAX_UNREAD_POLL_MS
 			this.pollWait = Math.min(Math.max(this.pollWait, UNREAD_POLL_MS) * 2, MAX_UNREAD_POLL_MS)
 			this.pollSkip = Math.round(this.pollWait / UNREAD_POLL_MS) - 1
 		},
@@ -1263,23 +1064,7 @@ export default {
 		},
 
 		/**
-		 * Puts the travelling mark on the row that is lit.
-		 *
-		 * Read off the row rather than computed from an index: the rows are not
-		 * all the same height -- a counter makes one taller -- and Explore folds,
-		 * which moves everything below it.
-		 *
-		 * The first placement does not animate. A mark that slid in from the top
-		 * of the sidebar every time the app opened would be the first thing a
-		 * reader saw and would say nothing.
-		 */
-		/**
-		 * The icon of the row just chosen acknowledges the press.
-		 *
-		 * At the sidebar rather than at the page, and that is the point: the page
-		 * may be a chunk away, and something has to answer the click now. Only
-		 * when the page actually changed -- a press on the row you are already on
-		 * is not a choice.
+		 * Pops the icon of the row just chosen, when the page actually changes.
 		 *
 		 * @param {object} to where the reader is going
 		 * @param {object} from where they were
@@ -1289,9 +1074,8 @@ export default {
 				return
 			}
 
-			// matched on where the entry goes rather than on what is lit: the
-			// route has not been applied yet when this runs, so asking which
-			// row is active answers with the one being left
+			// matched on the entry's target: the route is not applied yet, so
+			// the active row is still the one being left
 			const entry = this.menu.timelines.find((item) => pageIdentity(item.to) === pageIdentity(to))
 			window.clearTimeout(this.chosenTimer)
 			this.chosen = entry?.key ?? ''
@@ -1300,6 +1084,10 @@ export default {
 			}, 420)
 		},
 
+		/**
+		 * Puts the travelling mark on the active row, measured because rows
+		 * differ in height. The first placement does not animate.
+		 */
 		placeIndicator() {
 			const list = this.$el?.querySelector?.('.app-navigation__list')
 			const active = list?.querySelector?.('.app-navigation-entry--active')
@@ -1321,12 +1109,7 @@ export default {
 		},
 
 		/**
-		 * Whether this instance offers a section.
-		 *
-		 * Default on, and on for anything the server did not mention: an older
-		 * server, or a page rendered before this setting existed, sends nothing,
-		 * and a sidebar that lost two entries because of that would look like
-		 * the app had broken.
+		 * Whether this instance offers a section; on unless the server says off.
 		 *
 		 * @param {string} section photos or videos
 		 * @return {boolean} whether to draw its entry
@@ -1336,11 +1119,8 @@ export default {
 		},
 
 		/**
-		 * Drops the entries this instance does not offer.
-		 *
-		 * `offered` is taken off the entries that pass, because every entry is
-		 * spread into the template as it stands and a stray property would end up
-		 * on the component.
+		 * Drops the entries this instance does not offer, and the `offered`
+		 * property from the rest.
 		 *
 		 * @param {object[]} entries the menu as written
 		 * @return {object[]} the menu as drawn
@@ -1357,9 +1137,8 @@ export default {
 		},
 
 		/**
-		 * "Share to Social" in the Files app lands here with `?attach=<path>`
-		 * once per file. Open the New post dialog with them, and take the
-		 * query off the address so a reload does not attach them twice.
+		 * Opens the New post dialog with the `?attach=<path>` files from "Share
+		 * to Social" in Files, and drops the query so a reload does not repeat it.
 		 */
 		openComposerFromQuery() {
 			const raw = this.$route?.query?.attach
@@ -1378,11 +1157,7 @@ export default {
 
 		t,
 		n,
-		/**
-		 * What the instance is talking about. The counts are kept by cron, so
-		 * this is one cheap read; a failure leaves the section out rather than
-		 * bothering anyone about it.
-		 */
+		/** Reads the trending tags; a failure leaves them out silently. */
 		async fetchTrending() {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/trends/tags'), {
@@ -1394,19 +1169,7 @@ export default {
 			}
 		},
 
-		/**
-		 * The reader's lists. Asking for them is also what makes the group
-		 * lists they are missing, so this is asked once per page and the
-		 * answer drawn as it comes.
-		 */
-		/**
-		 * The hashtags the reader follows.
-		 *
-		 * These had no place in the sidebar at all: somebody could follow a
-		 * tag and then only meet it again by going to its page. A failure
-		 * leaves them out rather than bothering anyone about it, the way the
-		 * trending read does.
-		 */
+		/** Reads the hashtags the reader follows; a failure leaves them out silently. */
 		async fetchFollowedTags() {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/followed_tags'))
@@ -1416,10 +1179,6 @@ export default {
 			}
 		},
 
-		/**
-		 * @param {object} entry one Explore entry
-		 * @return {object} where pressing it goes
-		 */
 		/**
 		 * @param {object} entry one of the Explore children
 		 * @return {string} something stable to key it by
@@ -1442,6 +1201,10 @@ export default {
 			return entry.kind === 'list' ? entry.list.title : `#${entry.tag.name}`
 		},
 
+		/**
+		 * @param {object} entry one Explore entry
+		 * @return {object} where pressing it goes
+		 */
 		routeFor(entry) {
 			if (entry.kind === 'feed') {
 				return feedRoute(entry.feed.uri)
@@ -1465,9 +1228,7 @@ export default {
 				)
 			}
 
-			// the two kinds of hashtag row look alike and mean different
-			// things: one is a choice this reader made, the other is what the
-			// instance happens to be busy with
+			// tells a trending tag apart from a followed one, which looks alike
 			if (entry.kind === 'trend') {
 				return t('social', 'Being posted about on this server right now')
 			}
@@ -1499,15 +1260,13 @@ export default {
 			try {
 				window.localStorage.setItem(EXPLORE_OPEN_KEY, open ? '1' : '0')
 			} catch {
-				// a private window or blocked site data; the entry still works,
-				// it just opens again next time
+				// blocked storage: the entry just opens again next time
 			}
 		},
 
 		/**
 		 * Re-measures whenever the rail changes shape, not only when the
-		 * window does: an error entry appearing, a zoom, a theme with taller
-		 * rows.
+		 * window does.
 		 */
 		watchRail() {
 			if (typeof ResizeObserver !== 'function') {
@@ -1537,19 +1296,9 @@ export default {
 		},
 
 		/**
-		 * How many entries the rail actually has room for, right now.
-		 *
-		 * Measured rather than worked out from the window, because the rail
-		 * holds things that come and go — an error entry when something
-		 * breaks — and because browser zoom and a denser theme change every
-		 * height at once.
-		 * A constant for "everything that is not an Explore child" was wrong
-		 * the first time it was written and would go wrong again.
-		 *
-		 * The free space is the rail's own height less everything in it that
-		 * is not an Explore child. It has to be measured that way round: the
-		 * children are in the rail too, so a figure that counted them would
-		 * grow each time it was applied and shrink each time it was read back.
+		 * How many entries the rail has room for: its height less everything
+		 * above the Explore children, so the result does not depend on how
+		 * many children are drawn.
 		 */
 		measureRail() {
 			const item = /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.exploreItem)?.$el
@@ -1564,17 +1313,11 @@ export default {
 				return
 			}
 
-			// Where the children begin, in the rail's own content
-			// coordinates. This is set by everything *above* them and not by
-			// how many there are, which is what keeps the measurement from
-			// feeding on itself.
+			// where the children begin, in the rail's content coordinates
 			const listTop = list.getBoundingClientRect().top
 			const childrenTop = children.getBoundingClientRect().top - listTop + list.scrollTop
 
-			// The pitch from one row to the next, which is the only figure
-			// that carries whatever margin they have. `offsetHeight` does not,
-			// and summing it left the rail overflowing by exactly the margins
-			// — the last entries ran under the account footer.
+			// row to row, which includes the margins `offsetHeight` leaves out
 			const first = rows[0].getBoundingClientRect()
 			const pitch = rows.length > 1
 				? rows[1].getBoundingClientRect().top - first.top
@@ -1590,8 +1333,7 @@ export default {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/lists'))
 				const lists = Array.isArray(data) ? data : []
-				// group lists first: nobody made them, and they are what a
-				// colleague is looking for; within each kind, as the server orders
+				// group lists first, each kind in the server's order
 				this.lists = [
 					...lists.filter((list) => list.nextcloud_group),
 					...lists.filter((list) => !list.nextcloud_group),
@@ -1629,10 +1371,6 @@ export default {
 		},
 
 		/**
-		 * @param {object} tag a Tag entity
-		 * @return {boolean} whether its timeline is the one being shown
-		 */
-		/**
 		 * @param {object} to a route location
 		 * @return {string} where it points, so the entry is a real link that can
 		 *                  be opened in a new tab or copied
@@ -1645,16 +1383,14 @@ export default {
 		},
 
 		/**
-		 * Follows the entry inside the app, unless the reader asked the browser
-		 * for something else — the modifier keys and the middle button belong to
-		 * them, which is the rule router-link itself applies.
+		 * Follows the entry inside the app, leaving modified and middle clicks
+		 * to the browser as router-link does.
 		 *
 		 * @param {object} to a route location
 		 * @param {MouseEvent} [event] the click
 		 */
 		navigate(to, event) {
-			// Let the browser follow an absolute Nextcloud page URL. This keeps
-			// normal link behavior (including modified clicks) for cross-app pages.
+			// the browser follows an absolute URL to another Nextcloud page
 			if (typeof to === 'string') {
 				return
 			}
@@ -1688,10 +1424,7 @@ export default {
 			this.errorsStore.clearErrors()
 		},
 
-		/**
-		 * Searching now costs a request, so it waits for the typing to stop.
-		 * Un-debounced, every keystroke went straight through.
-		 */
+		/** Searching costs a request, so it waits for the typing to stop. */
 		onSearchInput() {
 			if (this.searchTimer !== null) {
 				window.clearTimeout(this.searchTimer)
@@ -1703,9 +1436,8 @@ export default {
 		},
 
 		/**
-		 * Enter submits the search: asked at once, and with other servers
-		 * asked about an address this one has not met, which typing alone
-		 * never does.
+		 * Enter searches at once and also resolves unknown addresses on other
+		 * servers, which typing alone never does.
 		 */
 		onSearchSubmit() {
 			if (this.searchTimer !== null) {
@@ -1730,16 +1462,9 @@ export default {
 @use '../styles/layout.scss' as layout;
 
 /**
- * The mark that travels between the rows.
- *
- * Drawn over `@nextcloud/vue`'s rows rather than inside one, because they are
- * not ours to change, and positioned from the active row's measured box --
- * see `placeIndicator`. It is decoration: the rows carry their own active
- * state for anybody not looking at the screen.
- *
- * `--settled` is what allows it to move. The first placement has it off, so
- * the mark appears where it belongs instead of sliding down from the top of
- * the sidebar the moment the app opens.
+ * The mark that travels between the rows, positioned by `placeIndicator`.
+ * `--settled` lets it move; the first placement has it off so it does not
+ * slide in from the top.
  */
 .navigation__indicator {
 	position: absolute;
@@ -1766,9 +1491,7 @@ export default {
 	position: relative;
 }
 
-/* one small pop on the icon of the row just chosen: the press is answered at
-   the sidebar, which is where it happened, rather than only by the page that
-   may still be loading */
+/* one small pop on the icon of the row just chosen */
 @keyframes navigation-chosen {
 	0% { transform: scale(1); }
 	45% { transform: scale(1.22); }
@@ -1794,8 +1517,7 @@ export default {
 	transform-origin: 50% 20%;
 }
 
-/* smaller than Nextcloud's default, which is sized for a number that has to be
-   answered rather than one that is only being reported */
+/* smaller than Nextcloud's default, as these counts need no answer */
 :deep(.counter-bubble__counter) {
 	font-size: 11px;
 	min-inline-size: 18px;
@@ -1815,18 +1537,14 @@ export default {
 	}
 }
 
-/* The button the More menu hangs off is the reader's own account: their
-   portrait where the cog was, and the name they publish under beside it.
-   `NcAppNavigationSettings` renders that cog from a hard-coded path with no
-   slot to replace it, so the icon box carries the picture as its background
-   and the cog inside it is hidden rather than fought with. */
+/* The reader's portrait in place of `NcAppNavigationSettings`' hard-coded
+   cog, which has no slot: the icon box carries it as a background. */
 .navigation__more :deep(.button-vue__icon) {
 	background-image: var(--social-face);
 	background-position: center;
 	background-size: cover;
 	border-radius: 50%;
-	// the picture is the icon, so the glyph that was there must not show
-	// through it — including its own background, which is not transparent
+	// the cog and its non-transparent background must not show through
 	overflow: hidden;
 
 	svg {
@@ -1835,16 +1553,13 @@ export default {
 }
 
 .navigation__more :deep(.button-vue__text) {
-	// the button's wrapper has no gap of its own, so the name sits against the
-	// portrait unless it is given one
+	// the wrapper has no gap of its own
 	margin-inline-start: 8px;
 	font-weight: 600;
 }
 
-/* The row is a menu, not a link to the profile, and says so with the
-   up-and-down chevrons account switchers use. The component has no slot
-   beside its name, so the mark is drawn here, as a mask filled with the
-   text colour. */
+/* Up-and-down chevrons mark the row as a menu. The component has no slot
+   beside its name, so they are a mask filled with the text colour. */
 .navigation__more :deep(.button-vue__wrapper)::after {
 	content: '';
 	flex: 0 0 auto;
@@ -1872,24 +1587,10 @@ export default {
 }
 
 /*
- * The account menu is a panel over the sidebar, not more of the sidebar.
- *
- * Its rows are `NcAppNavigationItem`s -- the same component the timelines
- * above are drawn with -- so opening it put eight more rows on the end of a
- * column of seven, in the same type at the same indent with the same icons.
- * Nothing said where the places to read ended and the reader's own pages
- * began, and over a full sidebar the whole thing read as one list that had
- * grown rather than as a menu that had opened.
- *
- * So while it is open the drawer is drawn as its own surface: the page's
- * background rather than the sidebar's, a rounded edge, a hairline and a
- * shadow cast up over the rows it covers. Closed, it is a row like any other
- * again -- nothing here applies until the button says it is open.
- *
- * The panel is addressed as the container's only child carrying an `id`: that
- * is the element the button's `aria-controls` points at, and the component's
- * own class names are content-hashed (`_content_CW2CF`) and change with the
- * next release of the library. There is a test for both.
+ * Open, the account menu is drawn as a panel over the sidebar so it does not
+ * read as more sidebar rows. The panel is addressed as the container's child
+ * with an `id` (the button's `aria-controls` target), because the component's
+ * class names are content-hashed.
  */
 .navigation__more {
 	/* the shadow falls on the entries above, so the panel has to be over them */
@@ -1899,22 +1600,9 @@ export default {
 }
 
 /*
- * Open, the drawer is liquid glass: a clear, rounded pane that floats 6px in
- * from the sidebar's sides and foot, only lightly frosted and saturated, so
- * the entries it covers stay visible as a soft, colourful haze instead of
- * disappearing under a white slab. Light catches its rim -- a bright line
- * along the top, a faint dark one along the bottom and a glow just inside the
- * edge -- and a shadow drops beneath it, which is what separates it from the
- * entries it overlaps.
- *
- * The pane is a pseudo-element behind the drawer's contents rather than the
- * drawer itself: insetting the drawer would move the account row 6px every
- * time the menu opened, out of line with the entries' icons above it. The
- * pane pops up around the row instead, springing slightly past its size.
- *
- * Built from `--color-main-background` and `--color-main-text`, so the dark
- * theme gets dark glass. The rim light is white in both, but fainter in the
- * dark, where a strong white line would glare.
+ * The open panel is a lightly frosted glass pane with a lit rim and a shadow.
+ * It is a pseudo-element so the account row does not shift when it opens.
+ * The rim light is fainter in the dark theme.
  */
 .navigation__more {
 	--social-glass-light: #fff;
@@ -1958,67 +1646,23 @@ export default {
 }
 
 .navigation__more > :deep(div[id]) {
-	/* The library caps this at 300px, which is four pixels short of the eight
-	   entries this menu has: Settings, the last of them, was cut in half and
-	   reachable only by scrolling a panel that did not look scrollable. It
-	   still gives way to a short window rather than running off the screen. */
+	/* above the library's 300px cap so no entry is cut off, but still within a
+	   short window */
 	max-height: min(60vh, 420px);
 }
 
-/* The account row is the panel's head while the panel is open, so it is set
-   in the ink the rest of the sidebar uses for the page you are on, and the
-   rows below it are inset from it. */
+/* the account row heads the open panel */
 .navigation__more:has(button[aria-expanded="true"]) :deep(.button-vue__text) {
 	color: var(--color-main-text);
 }
 
 /*
- * The account menu opens as a drawer: each row pops up out of its own bottom
- * edge, the row nearest the button first and the rest following upward.
- *
- * `NcAppNavigationSettings` animates its own `max-height`, so the panel grew
- * and the rows inside it were simply there when it finished -- the container
- * moved and its contents did not. These scale up from 82%, overshooting a
- * little on the way (the tail of the easing curve goes past 1), so the menu
- * reads as growing out of the button along with the glass behind it rather
- * than as a list that was already written and got uncovered.
- *
- * **An animation and not a transition, because a transition cannot run here.**
- * The panel is held by `v-show`, so while the menu is shut it is
- * `display: none` and its rows are not rendered at all. An element that was
- * not rendered has no previous value to transition *from*, so the browser
- * jumps straight to the final one: the rows appeared fully formed, all eight
- * at once, and the stagger this file has carried since it was written never
- * ran a single time. The delay was computed correctly and thrown away. A
- * keyframe animation does start when an element is first rendered, which is
- * exactly the moment in question.
- *
- * The stagger runs from the bottom row up, which is the direction the panel
- * itself grows: it is anchored at the foot of the sidebar, so an opening
- * drawer pushes its own top edge upward. Rows appearing the other way would
- * run against it. There is nothing to mirror for right-to-left -- a scale
- * has no leading edge -- so the drawer is the same in both.
- *
- * Driven off `aria-expanded`, which is the accordion's own state and the only
- * hook it offers: there is no `open` prop and no event, and the component's
- * internal class names are content-hashed, so anything keyed on those would
- * break on the next release of the library.
- *
- * The delay comes from `--entry-index` and `--entry-total`, both set in the
- * template. The DOM cannot be counted here: `NcAppNavigationItem` puts every
- * entry in a wrapper of its own, so each one is its parent's first child and
- * `nth-child` hands them all the same delay -- and `nth-last-child`, which
- * would give the bottom-up order directly, fails for the same reason. There
- * are tests that they are laid out that way and that the total matches the
- * number of entries, so these comments stop being true loudly rather than
- * quietly.
- *
- * Nothing here needs an `@supports` guard any more. Where `:has()` is not
- * supported the whole rule is invalid and dropped, and because the resting
- * state of a row is now its own -- opacity and scale live in the keyframes,
- * not in a base rule -- what is left is a menu that opens without animating.
- * The guard existed to stop a bare `opacity: 0` from leaving it permanently
- * empty, and there is no longer a bare `opacity: 0`.
+ * The menu rows pop up one after another from the bottom row, the way the
+ * panel grows. A keyframe animation, not a transition: the panel is `v-show`n,
+ * so its rows have no previous value to transition from. Keyed on
+ * `aria-expanded`, the component's only open state; the delay comes from
+ * `--entry-index` and `--entry-total` set in the template. Without `:has()`
+ * the menu simply opens without animating.
  */
 @keyframes social-menu-pop {
 	from {
@@ -2035,9 +1679,7 @@ export default {
 	animation-delay: calc((var(--entry-total, 1) - 1 - var(--entry-index, 0)) * 32ms);
 }
 
-/* A reader who asked for no movement gets the menu all at once, with no
-   stagger: a row that appears a fifth of a second after the one below it is
-   the movement they turned off, even though nothing travels. */
+/* reduced motion: the whole menu at once, with no stagger */
 @media (prefers-reduced-motion: reduce) {
 	.navigation__more:has(button[aria-expanded="true"]) :deep(.app-navigation-entry),
 	.navigation__more:has(button[aria-expanded="true"])::before {
@@ -2045,19 +1687,7 @@ export default {
 	}
 }
 
-/*
- * The composer draws its own frame, and in a dialog that is one frame too many.
- *
- * In a timeline it is a card among cards: a border, a radius and the app's
- * resting shadow are how it says it is the box that makes the posts below it,
- * and `position: sticky` keeps it at the top while they scroll past. A dialog
- * has already said all of that -- it is a panel over a dimmed page, with its
- * own edge -- so the inner border reads as a box drawn inside a box, and
- * sticking to the top of something that does not scroll does nothing at all.
- *
- * Undone here rather than in the composer: what changes is not the composer but
- * where it is, and this is the only place that knows.
- */
+/* in a dialog the composer drops its own card frame and stickiness */
 .modal-composer :deep(.new-post) {
 	margin: 0;
 	padding: 0;
@@ -2068,18 +1698,8 @@ export default {
 	box-shadow: none;
 }
 
-/*
- * The gap the composer lost when its frame came off.
- *
- * In a timeline the composer is a card with 18px of padding of its own. The
- * rule above takes the card away inside a dialog -- rightly, a panel over a
- * dimmed page has already drawn one frame -- but it took the padding with it,
- * and nothing put it back, so the box you write in and the Post button sat
- * hard against the dialog's edge. The dialog owns the inset now, which is
- * what the Errors dialog beside it has always done.
- *
- * Less at the top than the sides: the dialog's own heading sits in it.
- */
+/* the dialog supplies the inset the composer's card padding gave; less at the
+   top, where the heading sits */
 .modal-composer {
 	padding: 12px 18px 18px;
 
@@ -2162,32 +1782,6 @@ export default {
 	}
 }
 
-/* The call to action.
- *
- * Concentric: a pill that becomes briefly larger than itself. Two rings open
- * outward from its own outline while the disc grows inside it, so everything on
- * screen expands from the same two centres at once. Nothing fills, nothing
- * sweeps, no colour changes hands — the button is the primary colour at rest and
- * the primary colour when reached for, and the only thing that happens is size.
- *
- * The shape is why it works. At 44px tall a full pill is a 22px radius, so its
- * end caps are arcs of a 22px circle; the plus already sits in a 28px disc, a
- * 14px circle, with 8px of air around it. Rounded all the way, the two are the
- * same family of curve and a ring drawn around the outside is concentric with
- * the badge inside. At the 8px corner this button used to have, the same ring
- * cut across the disc instead of agreeing with it.
- *
- * Rings rather than a blurred shadow: `0 0 0 <spread>` is a hard outline offset
- * from the border box, which is the only kind of shadow that stays the button's
- * own shape at any distance from it.
- */
-
-/* The class is written twice because it has to win, not because it is two
- * things. `.button-vue[data-v-…]` sets `border-radius`, `font-weight` and
- * `transition` at exactly the specificity a single scoped class has, which
- * leaves the winner to source order — and the order of this component's styles
- * against the library's is not something this file gets to decide. Everything
- * that would otherwise be a silent tie lives in here. */
 .navigation__moved {
 	margin: 0 8px 8px;
 	padding: 8px 12px;
@@ -2197,68 +1791,31 @@ export default {
 	font-size: var(--font-size-small, 13px);
 }
 
+/* The New post button: a pill whose rings and plus disc grow on hover.
+ * The class is doubled to beat `.button-vue[data-v-…]`, which has the same
+ * specificity as one scoped class and would otherwise win on source order. */
 .navigation__compose.navigation__compose {
 	position: relative;
 	margin: 2px 4px 8px;
-	/* `wide` sets `width: 100%`, which is the container's full content width --
-	   and the margin above it has nowhere to go. The button was as wide as the
-	   whole list *and* shifted 4px right, so its right edge overhung the rows
-	   below it and ran into the edge of the sidebar; the left looked correct
-	   because there the margin pushed it inward. The width has to come off
-	   explicitly: `auto` is no use on a `<button>`, which shrink-wraps, and that
-	   is why NcButton reaches for `fit-content` and `100%` and never `auto`. */
+	/* `wide` is `width: 100%`, which with the margin would overhang the sidebar */
 	width: calc(100% - 8px);
 	font-weight: 600;
-	/* The height the design was drawn at, and the reason the rest of it works.
-	   NcButton stands at `--default-clickable-area`, which this server sets to
-	   34px — and the plus already sits in a 28px disc, so at 34 the badge has
-	   three pixels of air and reads as jammed between the two edges rather than
-	   held inside them. At 44 it has eight, the pill's end caps become arcs of a
-	   22px circle against the disc's 14, and a ring drawn around the outside is
-	   concentric with the badge inside instead of merely near it.
-
-	   It does make this taller than every other control in the sidebar. That is
-	   the one thing in there that is not a place to go, so it is the one thing
-	   that may be. */
+	/* tall enough that the 28px plus disc sits concentrically in the pill's
+	   end cap, which the server's 34px clickable area is not */
 	min-height: 44px;
-	/* a true pill: half of the 44 above */
 	border-radius: 999px;
-	/* NcButton draws a 1px border weighted to 2px along the bottom. On a solid
-	   primary fill it is invisible either way, but rings drawn around an uneven
-	   outline are not concentric with anything. */
+	/* NcButton's heavier bottom border would make the rings uneven */
 	border: 0;
-	/* NcButton pads to `--button-radius` + a baseline, which is 12px and was
-	   drawn as 8: at 12 the disc sits too far inside its own end cap for the two
-	   curves to read as the same shape. */
 	padding-inline: 8px;
-	/* The rings hang outside the button, so nothing may clip them. NcButton
-	   sets `overflow: hidden` on itself, which does not affect a shadow on the
-	   button but does cut one off a child -- and the rings are a child now, for
-	   the reason below. */
+	/* NcButton's `overflow: hidden` would clip the rings drawn by ::after */
 	overflow: visible;
 	transition: transform .32s cubic-bezier(.22, 1.2, .48, 1);
 }
 
 /*
- * The rings, on a layer of their own.
- *
- * They were two `box-shadow`s on the button, grown from zero spread. That reads
- * correctly and paints terribly: `box-shadow` is not a compositor property, so
- * every frame of the growth was a repaint on the main thread -- the same thread
- * that, while the app is still starting, is parsing chunks and mounting a
- * timeline that renders every post it has with a plain `v-for`. The rings lost
- * that race, which is why the button looked dead until the page settled.
- *
- * Here the shadow is painted once, at full size, and never animated. What
- * animates is `opacity` and `transform` on the layer holding it, and those two
- * are handled by the compositor: once the hover has been noticed the growth
- * runs off the main thread and keeps its frame rate no matter what Vue is doing
- * on the other side of the page.
- *
- * What this cannot fix is a main thread blocked solid. Noticing `:hover` at all
- * is a style recalculation, and a recalculation waits its turn like everything
- * else; through one long task the button still cannot respond. It responds
- * through all the short ones, which is most of a page load.
+ * The rings, painted once on their own layer. Only `opacity` and `transform`
+ * animate, so the compositor runs the hover while the main thread is busy
+ * loading the page; animating `box-shadow` would repaint every frame.
  */
 .navigation__compose::after {
 	content: '';
@@ -2275,15 +1832,11 @@ export default {
 		opacity .28s ease,
 		transform .32s cubic-bezier(.22, 1.2, .48, 1);
 	pointer-events: none;
-	/* promoted up front: a layer created at the moment of the hover would be
-	   created by the main thread, which is the thread being waited on */
+	/* promoted up front, not by the main thread at hover time */
 	will-change: opacity, transform;
 }
 
-/* Reached for, by pointer or by keyboard. The focus ring is the server's and
-   arrives `!important`, so on focus the rings give way to it — which is the
-   right way round: the ring that says "the keyboard is here" is the one that
-   has to be unmissable. */
+/* on focus the server's `!important` focus ring wins over the rings */
 .navigation__compose.navigation__compose:is(:hover, :focus-visible) {
 	transform: translateY(-1px);
 }
@@ -2301,26 +1854,20 @@ export default {
 	transform: scale(.97);
 }
 
-/* the plus sits in a disc of its own, which grows with the rings rather than
-   kicking once and settling back: the whole gesture is one expansion, and a pop
-   that returns to where it started would be the one thing on screen not doing
-   it. It grows rather than turns, as it always did — a plus is the same plus at
-   every right angle, so a rotation of one is movement nobody can see. */
-/* the glyph rather than the icon box it sits in, which is nearly as tall as
-   the button and would make a disc the size of the whole end of it */
+/* the plus sits in a disc that grows with the rings; on the glyph, as the icon
+   box is nearly as tall as the button */
 .navigation__compose :deep(.plus-icon) {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
-	/* a wash of the label's own colour, so the disc belongs to the button
-	   whatever the instance's primary colour is */
+	/* the label's colour, so it suits any primary colour */
 	background: color-mix(in srgb, var(--color-primary-element-text) 22%, transparent);
 	transition:
 		background-color .2s ease,
 		transform .32s cubic-bezier(.22, 1.2, .48, 1);
 }
 
-/* the wrapper has no gap of its own, and the label sits against the disc */
+/* the wrapper has no gap of its own */
 .navigation__compose :deep(.button-vue__text) {
 	margin-inline-start: 6px;
 }
@@ -2350,10 +1897,5 @@ export default {
 	.navigation__compose:is(:hover, :focus-visible) :deep(.plus-icon) {
 		transform: none;
 	}
-
-	/* the rings still open, they just open at once: a reader who asked for no
-	   movement still has to be able to tell a hovered button from a resting
-	   one, and with nothing else changing the rings are all there is to tell
-	   them with */
 }
 </style>

@@ -21,11 +21,6 @@ use OCP\IDBConnection;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
-/**
- * Class ClientRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class ClientRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
@@ -53,13 +48,9 @@ class ClientRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * An app registration, and nothing else.
-	 *
-	 * The `auth_*` and `token` columns of `social_client` are what an
-	 * authorization used to be stored in; they are read and written through
-	 * `ClientAuthRequest` now. Selecting the legacy columns handed every app
-	 * registration a set of `auth_*` values that no writer has kept current
-	 * since the split, which is a trap for anything that reads them.
+	 * An app registration, and nothing else: the legacy `auth_*` and `token`
+	 * columns of `social_client` are stale, and authorizations are read through
+	 * `ClientAuthRequest`.
 	 *
 	 * @return SocialQueryBuilder
 	 */

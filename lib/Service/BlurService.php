@@ -14,13 +14,9 @@ use kornrunner\Blurhash\Blurhash;
 
 class BlurService {
 	/**
-	 * The longest side of the copy the hash is taken from, in pixels.
-	 *
-	 * A 4×3-component blurhash describes only the broadest shapes of a
-	 * picture, and the encoder holds one PHP array per pixel: the full
-	 * 800-px preview cost hundreds of megabytes and a second or two per
-	 * picture, a 32-px copy under a megabyte and milliseconds, for the same
-	 * placeholder.
+	 * The longest side of the copy the hash is taken from, in pixels. A 4×3
+	 * blurhash only needs the broadest shapes, and the encoder holds a PHP
+	 * array per pixel, so 32 px costs milliseconds where 800 px cost seconds.
 	 */
 	public const SAMPLE_SIZE = 32;
 

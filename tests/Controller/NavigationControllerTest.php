@@ -236,8 +236,6 @@ class NavigationControllerTest extends TestCase {
 			// whether the like, boost and follower numbers are hidden, which
 			// the page needs before it draws a post
 			'hideCounts' => true,
-			// whether standalone replies are omitted from the feeds
-			'hideRepliesInFeeds' => false,
 			// whether the one-key shortcuts are on, before the first key
 			'keyboardShortcuts' => true,
 			// which sections this instance offers, so the sidebar is drawn
@@ -293,7 +291,7 @@ class NavigationControllerTest extends TestCase {
 		$actor = (new Person())->setPreferredUsername('alice');
 		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn($actor);
 		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
-		$hints = ['has_announcements' => false, 'has_stories' => false, 'recap_enabled' => false, 'has_memories' => true, 'has_teams' => false];
+		$hints = ['has_announcements' => false, 'has_stories' => false, 'has_memories' => true, 'has_teams' => false];
 		$startup = $this->createMock(\OCA\Social\Service\StartupHintsService::class);
 		$startup->expects($this->once())->method('forViewer')->with($actor, 'alice')->willReturn($hints);
 
@@ -355,6 +353,8 @@ class NavigationControllerTest extends TestCase {
 
 		$this->assertInstanceOf(PublicTemplateResponse::class, $response);
 		$this->assertSame('main', $response->getTemplateName());
+		// the same name in the header as on a public profile
+		$this->assertSame('Aloha Social', $response->getHeaderTitle());
 		$this->assertTrue($this->serverData()['public']);
 		$this->assertFalse($this->serverData()['needsAccount']);
 		$this->assertFalse($this->serverData()['isAdmin']);
@@ -689,7 +689,7 @@ class NavigationControllerTest extends TestCase {
 		yield 'moving in' => ['/switch', 'personal'];
 		yield 'statistics' => ['/statistics', 'personal'];
 		yield 'settings' => ['/settings', 'personal'];
-		yield 'about' => ['/about', 'personal'];
+		yield 'about' => ['/about', 'navigate'];
 		yield 'shorts' => ['/shorts', 'navigate'];
 		yield 'the earlier address of shorts' => ['/reels', 'navigate'];
 		yield 'search' => ['/search', 'navigate'];
@@ -714,7 +714,7 @@ class NavigationControllerTest extends TestCase {
 		$personal = new \ReflectionMethod(NavigationController::class, 'personal');
 		$this->assertSame([], $personal->getAttributes(PublicPage::class), 'personal() is a public page');
 		$this->assertSame(
-			['/about', '/blocked', '/follow_requests', '/migration', '/settings', '/statistics', '/switch'],
+			['/blocked', '/follow_requests', '/migration', '/settings', '/statistics', '/switch'],
 			self::sorted(array_keys($this->routesOf('personal')))
 		);
 

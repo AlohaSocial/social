@@ -19,19 +19,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\IRepairStep;
 
 /**
- * Remote statuses stored before visibility estimation landed carry an empty
- * visibility, so clients cannot tell a public post from a direct message.
- * This backfills them once with the same addressing heuristic used for new
- * arrivals: as:Public in `to` is public, in `cc` unlisted, the author's
- * followers collection followers-only, anything else direct. Rows with a
- * visibility are never touched, so re-runs change nothing.
- *
- * Changing nothing is not the same as costing nothing, which is why there is a
- * marker. The two bulk updates and the chunked scan all filter on
- * `visibility = '' AND local = 0`, and neither column is indexed, so every
- * `occ upgrade` walked social_stream — the largest table in the app — three
- * times over to find the work already done, with the instance in maintenance
- * mode. The marker is set once a run completes.
+ * Backfills the empty visibility of remote statuses stored without one, with
+ * the heuristic used for new arrivals: as:Public in `to` is public, in `cc`
+ * unlisted, the author's followers collection followers-only, else direct.
+ * A marker is set once a run completes, because the filter columns are not
+ * indexed and re-scanning social_stream on every `occ upgrade` is costly.
  */
 class BackfillRemoteVisibility implements IRepairStep {
 	private const CHUNK = 1000;

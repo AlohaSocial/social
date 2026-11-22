@@ -22,12 +22,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Replies the author of a thread hid: any reply in the thread of one of
- * their posts, wherever it was written. Kept on the thread's first post; a
- * conversation read here leaves them out, or shows them marked, and a thread
- * that is on Bluesky lists them in its threadgate (`hiddenReplies`), which
- * every AppView honours. A Bluesky author's hidden replies are hidden here
- * the same way (`PostStore`).
+ * Replies the author of a thread hid, kept on the thread's first post: left
+ * out or shown marked here, and listed in the threadgate (`hiddenReplies`)
+ * of a thread on Bluesky, which every AppView honours. A Bluesky author's
+ * hidden replies are hidden here the same way (`PostStore`).
  */
 class HiddenReplyService {
 	public function __construct(

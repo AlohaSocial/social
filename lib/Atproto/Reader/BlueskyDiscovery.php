@@ -19,11 +19,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * What Bluesky has to discover, for Discover here: the topics trending on
- * Bluesky, each a custom feed to read here or a search, and the accounts
- * Bluesky suggests to the person, read as them where they are on Bluesky.
- * Trends are the same for everybody and kept a few minutes; an AppView that
- * offers neither answers nothing rather than an error.
+ * Bluesky's trending topics (each a custom feed or a search) and the accounts
+ * it suggests to the person, for Discover. Trends are shared and cached a few
+ * minutes; an AppView that offers neither yields nothing, not an error.
  */
 class BlueskyDiscovery {
 	/** how long the trending topics are kept */

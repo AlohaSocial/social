@@ -12,11 +12,8 @@ namespace OCA\Social\Model;
 use JsonSerializable;
 
 /**
- * One relay this instance has asked to subscribe to.
- *
- * The row is the *subscription*, not the relay: what it records is the
- * `Follow` this instance sent, whether the relay answered it, and where to
- * deliver. A relay nobody here has subscribed to has no row.
+ * One relay subscription: the `Follow` this instance sent, whether the relay
+ * answered it, and where to deliver.
  */
 class Relay implements JsonSerializable {
 	/** The Follow has gone out and the relay has not answered. */

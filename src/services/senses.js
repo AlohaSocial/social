@@ -3,29 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { userKey } from '../utils/browserStore.js'
-
 /**
  * Sound and touch: the small confirmations that are felt or heard rather than
- * seen.
- *
- * Both are a property of the device rather than of the account -- sound on the
- * laptop at home, silence on the one at work, vibration on the phone -- so the
- * two switches live in this browser and not on the server. Sound is **off**
- * until somebody turns it on: Nextcloud is used in offices. Vibration is on,
- * because the app already vibrated on a like before these switches existed,
- * and turning it off by default would take something away from everybody who
- * never opens Settings.
- *
- * The sounds are synthesised rather than shipped as files. Each is a few
- * oscillators and an envelope, well under a second, so there is nothing to
- * download, nothing to license, and nothing to decode before the first one can
- * play.
+ * seen. The sounds are synthesised from a few oscillators, so there is nothing
+ * to download or decode.
  */
-
-const SOUND_KEY = 'social.sounds'
-const VIBRATION_KEY = 'social.vibration'
-const VIDEO_SOUND_KEY = 'social.videoSound'
 
 /**
  * The moments that make a sound or a buzz, and how each one feels.
@@ -44,73 +26,8 @@ export const PATTERNS = {
 	roll: [4, 20, 4, 20, 4],
 }
 
-/** @return {Storage|null} the store, or null where the browser refuses it */
-function store() {
-	try {
-		return window.localStorage
-	} catch {
-		return null
-	}
-}
-
 /**
- * @param {string} name the key
- * @param {boolean} fallback what an unset key means
- * @return {boolean} the switch as it was left
- */
-function readSwitch(name, fallback) {
-	const value = store()?.getItem(userKey(name))
-
-	return value === null || value === undefined ? fallback : value === '1'
-}
-
-/**
- * @param {string} name the key
- * @param {boolean} on the new position
- */
-function writeSwitch(name, on) {
-	try {
-		store()?.setItem(userKey(name), on ? '1' : '0')
-	} catch {
-		// a private window refuses storage; the switch then lasts the page
-	}
-}
-
-/** @return {boolean} whether this device makes sounds; off until turned on */
-export function soundsEnabled() {
-	return readSwitch(SOUND_KEY, false)
-}
-
-/** @param {boolean} on whether this device should make sounds */
-export function setSoundsEnabled(on) {
-	writeSwitch(SOUND_KEY, on)
-}
-
-/** @return {boolean} whether this device vibrates; on unless turned off */
-export function vibrationEnabled() {
-	return readSwitch(VIBRATION_KEY, true)
-}
-
-/** @param {boolean} on whether this device should vibrate */
-export function setVibrationEnabled(on) {
-	writeSwitch(VIBRATION_KEY, on)
-}
-
-/**
- * @return {boolean} whether Shorts start with their sound on; on
- *         unless turned off, because pressing play on a video is asking to hear it
- */
-export function videoSoundEnabled() {
-	return readSwitch(VIDEO_SOUND_KEY, true)
-}
-
-/** @param {boolean} on whether videos on this device should start with sound */
-export function setVideoSoundEnabled(on) {
-	writeSwitch(VIDEO_SOUND_KEY, on)
-}
-
-/**
- * Vibrates for a moment, where the device can and the reader has not said no.
+ * Vibrates for a moment, where the device can.
  *
  * A reader who asked their system for less motion is asked here too: a buzz
  * is movement, felt in the hand.
@@ -120,7 +37,7 @@ export function setVideoSoundEnabled(on) {
  */
 export function buzz(moment) {
 	const pattern = PATTERNS[moment]
-	if (pattern === undefined || !vibrationEnabled()) {
+	if (pattern === undefined) {
 		return false
 	}
 
@@ -264,20 +181,17 @@ const SOUNDS = {
 }
 
 /**
- * Plays the sound for a moment, if this device has sound switched on.
+ * Plays the sound for a moment.
  *
  * Never throws: a sound is a decoration, and a press must not fail because an
  * audio context would not start.
  *
  * @param {string} moment what just happened, one of the keys of SOUNDS
- * @param {object} [options] options
- * @param {boolean} [options.force] play even with sound off, for the button
- *                                  that lets somebody hear them before choosing
  * @return {boolean} whether a sound was started
  */
-export function play(moment, { force = false } = {}) {
+export function play(moment) {
 	const sound = SOUNDS[moment]
-	if (sound === undefined || (!force && !soundsEnabled())) {
+	if (sound === undefined) {
 		return false
 	}
 

@@ -69,12 +69,8 @@
 							<VerifiedBadge :account="account" />
 						</span>
 						<span class="account-hover-card__handle">@{{ account.acct || handle }}</span>
-						<!-- Where this account lives. It used to be a chip on every
-						     remote post, which put a hostname beside every byline
-						     in a timeline whose whole point is that it spans
-						     servers. It belongs here: the ring around the avatar
-						     says there is another server involved, and this says
-						     which one, to the reader who asked. -->
+						<!-- Where this account lives; the ring around the avatar
+						     says another server is involved, this says which. -->
 						<span
 							v-if="origin.instance"
 							class="account-hover-card__instance"
@@ -155,16 +151,9 @@ import { useAccountStore } from '../store/account.js'
 import { useServerData } from '../composables/useServerData.js'
 
 /**
- * A display name with its custom emoji as inline images — what DisplayName.js
- * does, defined here instead of imported.
- *
- * MessageContent.js renders the mentions this card hangs off, so it imports
- * this file; importing DisplayName.js back would close the cycle
- * MessageContent → AccountHoverCard → DisplayName → MessageContent through a
- * module that reads its import while its own body runs (`components: {}`),
- * which is exactly the shape that breaks. `emojifyPlain` is a hoisted
- * function declaration and is only called from a render, so the remaining
- * cycle has nothing to observe half-built.
+ * A display name with its custom emoji, as DisplayName.js renders it.
+ * Defined here because MessageContent.js imports this file, and importing
+ * DisplayName.js back would close an import cycle that breaks at load time.
  */
 const AccountDisplayName = {
 	name: 'AccountDisplayName',
@@ -183,42 +172,25 @@ const AccountDisplayName = {
 	},
 }
 
-/**
- * Long enough that a pointer crossing a mention on its way somewhere else
- * never opens anything, short enough that a deliberate hover feels answered.
- */
+/** Long enough that a pointer crossing a mention opens nothing. */
 export const OPEN_DELAY = 350
 
-/**
- * Short grace period on the way out, so the pointer can travel the gap
- * between the mention and the card without the card disappearing under it.
- */
+/** Grace period so the pointer can cross the gap between mention and card. */
 export const CLOSE_DELAY = 200
 
-/**
- * How many profile metadata rows the card shows. Mastodon's own ceiling, and
- * the point past which a preview stops being one.
- */
+/** How many profile metadata rows the card shows, Mastodon's own ceiling. */
 const MAX_FIELDS = 4
 
 /**
- * Fetches in flight or already answered, by handle.
- *
- * The store is the cache — its `getAccount` is consulted before anything is
- * dispatched. This map only covers the window between dispatching and the
- * answer arriving (two cards for the same person opened in the same second),
- * and the case the store cannot answer at all: `getAccount` resolves handles
- * through `accountIdMap`, which keys local accounts as `user@host`, so a bare
- * local handle would otherwise be re-fetched on every hover.
+ * Fetches in flight or already answered, by handle. The store is the cache;
+ * this covers fetches still on their way and bare local handles, which the
+ * store's `accountIdMap` keys as `user@host` and so cannot answer.
  *
  * @type {Map<string, Promise<object|undefined>>}
  */
 const pending = new Map()
 
-/**
- * Forget everything fetched so far. Only for tests — each one gets a fresh
- * store, and a module-level cache would otherwise outlive it.
- */
+/** Forget everything fetched so far; for tests, which each get a fresh store. */
 export function resetAccountCache() {
 	pending.clear()
 }
@@ -241,10 +213,7 @@ export default {
 			required: true,
 		},
 
-		/**
-		 * What is already known about this account (a status carries its
-		 * author in full), shown while the fetch is on its way.
-		 */
+		/** What is already known about this account, shown while the fetch is on its way. */
 		fallback: {
 			type: /** @type {import('vue').PropType<Partial<import('../types/Mastodon.js').Account>|null>} */ (Object),
 			default: null,
@@ -297,11 +266,8 @@ export default {
 		},
 
 		/**
-		 * Whether this account can be looked up at all.
-		 *
-		 * A public page has nobody logged in and no lookup endpoint to ask, so
-		 * it is better served by what the page already carried than by a card
-		 * that stays a skeleton forever.
+		 * Whether this account can be looked up at all: a public page has
+		 * nobody logged in and shows only what the page carried.
 		 *
 		 * @return {boolean}
 		 */
@@ -320,12 +286,9 @@ export default {
 		},
 
 		/**
-		 * Which server this account is on, and the colour that server is drawn
-		 * in everywhere else — the ring around its avatars, most visibly.
-		 *
-		 * `instance` is '' for a local account, and the row is then absent:
-		 * everything here is on this server, and naming it would be noise on
-		 * every card a reader opens.
+		 * Which server this account is on, and that server's colour (the
+		 * avatar ring). `instance` is '' for a local account, and the row is
+		 * then absent.
 		 *
 		 * @return {{instance: string, colour: string, local: boolean}}
 		 */
@@ -339,10 +302,7 @@ export default {
 		},
 
 		/**
-		 * The profile's own metadata rows — a website, a pronoun, whatever the
-		 * account chose to put there. Four of them, which is Mastodon's own
-		 * ceiling, so a profile that carries more cannot turn the card into a
-		 * page.
+		 * The profile's own metadata rows, at most `MAX_FIELDS`.
 		 *
 		 * @return {Array<{name: string, text: string, href: string, verified: boolean, verifiedAt: string}>}
 		 */
@@ -351,10 +311,8 @@ export default {
 		},
 
 		/**
-		 * What is true of the account rather than about it: that it follows
-		 * the reader, that it is automated, that following it is a request
-		 * rather than an act. Each is a thing somebody deciding whether to
-		 * follow would want to know before they open the profile.
+		 * Facts about the account: it follows the reader, it is automated,
+		 * following it needs approval.
 		 *
 		 * @return {string[]}
 		 */
@@ -377,8 +335,7 @@ export default {
 		},
 
 		/**
-		 * When the account joined, to the month: the day is noise at this size
-		 * and the year alone reads as an estimate.
+		 * When the account joined, to the month.
 		 *
 		 * @return {string} empty when the entity carried no date
 		 */
@@ -400,17 +357,15 @@ export default {
 
 		/**
 		 * @return {number|null} how much the account has posted, or null when
-		 * the entity did not say — a card built from what a status carried has
-		 * the counts, one built from a bare mention may not
+		 * the entity did not say
 		 */
 		statusesCount() {
 			return this.account?.statuses_count ?? null
 		},
 
 		/**
-		 * @return {boolean} whether the numbers are known at all — a card built
-		 * from what a status carried may have none, and "0 followers" would be
-		 * a lie rather than a gap
+		 * @return {boolean} whether the numbers are known at all, so a missing
+		 * count does not show as "0 followers"
 		 */
 		hasCounts() {
 			return this.account?.followers_count !== undefined || this.account?.following_count !== undefined
@@ -427,8 +382,8 @@ export default {
 		},
 
 		/**
-		 * Whether this account follows the reader — shown only when the answer
-		 * is already in the store. Worth a badge, never worth a request.
+		 * Whether this account follows the reader, only when the store already
+		 * knows; never worth a request.
 		 *
 		 * @return {boolean}
 		 */
@@ -453,9 +408,7 @@ export default {
 		nextcloudUserOf,
 
 		/**
-		 * A pointer arrived. Touch never opens the card: a tap on a mention
-		 * is a request to follow the link, and a card in the way of it is a
-		 * card the reader cannot get rid of.
+		 * Touch never opens the card: a tap on a mention follows the link.
 		 *
 		 * @param {PointerEvent} event - the pointerenter
 		 */
@@ -474,18 +427,15 @@ export default {
 			this.scheduleClose()
 		},
 
-		/**
-		 * A press is on its way, so the focus that follows it is not a reader
-		 * arriving by keyboard — it is a tap or a click on the link.
-		 */
+		/** The focus that follows a press is a click on the link, not keyboard navigation. */
 		onPointerDown() {
 			this.suppressFocusOpen(0)
 		},
 
 		/**
-		 * Browsers follow a tap with a synthetic mouse enter; cancelling here
-		 * covers the ones that do not report a pointer type. The synthetic
-		 * focus can trail the tap by a few hundred milliseconds.
+		 * Covers browsers that follow a tap with a synthetic mouse enter
+		 * without a pointer type; the synthetic focus can trail by a few
+		 * hundred milliseconds.
 		 */
 		onTouchStart() {
 			this.clearTimers()
@@ -494,12 +444,9 @@ export default {
 		},
 
 		/**
-		 * Ignore the focus a press is about to hand the link.
-		 *
-		 * The focus event follows the press synchronously, so the flag is
-		 * dropped again on the next turn of the loop: Safari does not focus a
-		 * link on click at all, and a flag left standing there would make the
-		 * card unreachable by keyboard for the rest of the page's life.
+		 * Ignore the focus a press is about to hand the link. The flag is
+		 * dropped again shortly after, because Safari does not focus a link on
+		 * click and a flag left standing would block keyboard access.
 		 *
 		 * @param {number} ms - how long the press may still claim the focus
 		 */
@@ -514,10 +461,7 @@ export default {
 			}, ms)
 		},
 
-		/**
-		 * Keyboard focus is deliberate: no delay, and no request until now.
-		 * Focus taken by a press is not — that reader is following the link.
-		 */
+		/** Keyboard focus opens at once; focus taken by a press does not open. */
 		onFocusIn() {
 			if (this.focusFromPointer) {
 				return
@@ -609,11 +553,7 @@ export default {
 			this.stopListeningForEscape()
 		},
 
-		/**
-		 * Escape dismisses the card wherever the focus happens to be — on the
-		 * mention, inside the card, or nowhere at all because the reader is
-		 * using a pointer.
-		 */
+		/** Escape dismisses the card wherever the focus is. */
 		listenForEscape() {
 			if (this.escapeListener) {
 				return
@@ -634,8 +574,7 @@ export default {
 		},
 
 		/**
-		 * Ask for the account, once. Called from open() and nowhere else: a
-		 * pointer that never rests on a mention costs nothing.
+		 * Ask for the account, once; only open() calls this.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -689,8 +628,7 @@ export default {
 	line-height: 1.5;
 	color: var(--color-main-text);
 
-	/* rises into place rather than appearing, in the vocabulary of the
-	   timeline entries */
+	/* rises into place, like the timeline entries */
 	animation: account-hover-card-rise var(--social-motion-base) var(--social-ease);
 
 	&__head {
@@ -720,8 +658,7 @@ export default {
 		text-overflow: ellipsis;
 	}
 
-	/* the hostname, in that host's own colour: the same one the ring around
-	   the avatar is drawn in, so the card answers the question the ring asks */
+	/* the hostname, in the same colour as the avatar ring */
 	&__instance {
 		align-self: flex-start;
 		max-width: 100%;
@@ -763,8 +700,7 @@ export default {
 
 	&__fields {
 		margin: 8px 0 0;
-		/* the server pads every `dl`, `dt` and `dd` for the settings pages, and
-		   at this size that padding is three times the text it surrounds */
+		/* the server pads every `dl`, `dt` and `dd` for the settings pages */
 		padding: 8px 0 0;
 		border-top: 1px solid var(--color-border);
 	}
@@ -775,8 +711,7 @@ export default {
 		font-size: 12px;
 		line-height: 1.45;
 
-		/* one line each: a field is a label, and a profile that wrote an essay
-		   into one must not push the counts off the card */
+		/* one line each, so a long field cannot push the counts off the card */
 		dt,
 		dd {
 			margin: 0;
@@ -808,8 +743,7 @@ export default {
 
 	&__bio {
 		margin: 8px 0 0;
-		/* three lines of bio: enough to recognise somebody, never enough to
-		   cover what the reader was reading */
+		/* three lines of bio, enough to recognise somebody */
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;

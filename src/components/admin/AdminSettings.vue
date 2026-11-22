@@ -205,9 +205,8 @@ const NOTHING = {
 	reviewFirstPost: true,
 	autospam: true,
 	/**
-	 * For you, or null where this instance does not offer it — the
-	 * card and its section are drawn only when the server sends it
-	 * (`InterestService::adminSettings()`).
+	 * For you, or null where this instance does not offer it
+	 * (`InterestService::adminSettings()`); its card and section need it.
 	 *
 	 * @type {{enabled: boolean, learningDefault: boolean, halfLife: number, threshold: number, cap: number, window: number}|null}
 	 */
@@ -254,21 +253,13 @@ const NOTHING = {
 }
 
 /**
- * Administration → Aloha Social.
+ * Administration → Aloha Social: six groups of sections, one shown at a time,
+ * with a search across all of them; Overview lists what is waiting. A section
+ * a delegate is not sent the data for is left out, and so is an empty group.
+ * Each section keeps its id, so `#reports` and similar links open its group.
  *
- * The sections are in six groups by what an administrator came to do, and one
- * group is shown at a time, with a search across all of them. Overview opens
- * first and lists what is waiting, each line a link to the section that deals
- * with it. A section a delegate is not sent the data for drops out of its
- * group, and a group with nothing left in it is not listed.
- *
- * Each section keeps its id, so `#reports` and the other old links open the
- * group the section is in.
- *
- * Nothing here uses `v-html`, and nothing below it does either. Half of what
- * these tables draw — a handle, an instance name, the comment on a report — is
- * a string another server sent, and this is the page whose buttons delete
- * accounts. Vue escapes interpolation; `v-html` is the one way to lose that.
+ * No `v-html` here or below: much of what these tables draw is text another
+ * server sent, on the page whose buttons delete accounts.
  */
 export default {
 	name: 'AdminSettings',
@@ -500,8 +491,8 @@ export default {
 					group: 'moderation',
 					icon: 'IconMedia',
 					component: 'MediaBlocksSection',
-					title: t('social', 'Refused pictures'),
-					lede: t('social', 'Files this server will not store, wherever they come from, so a removed picture cannot simply be posted again.'),
+					title: t('social', 'Refused photos'),
+					lede: t('social', 'Files this server will not store, wherever they come from, so a removed photo cannot simply be posted again.'),
 					keywords: t('social', 'image file checksum hash block'),
 				},
 				...(state.external
@@ -826,7 +817,7 @@ export default {
 
 	updated() {
 		this.scrollToPending()
-		// the sections of another group were not there to be watched before
+		// another group's sections may have just been drawn
 		this.watch()
 	},
 
@@ -939,10 +930,7 @@ export default {
 		},
 
 		/**
-		 * The access list after a block list was applied.
-		 *
-		 * The two sections read the same list, so the one above has to be told
-		 * rather than left showing what it read when the page opened.
+		 * The access list after a block list was applied; both sections read it.
 		 *
 		 * @param {string[]|undefined} list the addresses now on it
 		 * @param {object[]|undefined} blocks each entry with its tier and reasons
@@ -980,9 +968,8 @@ export default {
 @use '../../styles/layout.scss' as layout;
 
 /**
- * The sections arrive one after another rather than all at once, when the
- * page opens and when another group is opened. The delay is capped, and the
- * whole thing is off for a reader who asked for less movement.
+ * The sections arrive one after another, with a capped delay, and not at all
+ * for a reader who asked for less movement.
  */
 @keyframes section-arrive {
 	from { opacity: 0; transform: translateY(10px); }
@@ -996,19 +983,14 @@ export default {
 	}
 }
 
-// Deliberately not scoped: the table below is the same table in four of the
-// sections, and a moderator reading a page of reports should not have to learn
-// a second layout halfway down it.
+// Not scoped: four sections share this table layout.
 .social-admin {
 	max-width: 1120px;
 	margin-inline: auto;
 	padding-inline: calc(var(--default-grid-baseline) * 4);
 	padding-block: calc(var(--default-grid-baseline) * 6);
-	// Nextcloud puts its navigation toggle over the top left corner of the
-	// settings content, where the heading would otherwise be. The same
-	// offset as the app's Settings page: opening a group scrolls this
-	// element to the top of the column, and the margin the settings
-	// frame gives it goes with the scroll
+	// clear of Nextcloud's navigation toggle over the top left corner, the
+	// same offset as the app's Settings page
 	padding-block-start: calc(var(--default-grid-baseline) * 12);
 
 	&__header {
@@ -1171,8 +1153,8 @@ export default {
 			padding: calc(var(--default-grid-baseline) * 2);
 			border-block-end: 1px solid var(--color-border);
 			vertical-align: top;
-			// an actor id is a URL, and one long one used to widen the table
-			// until the decision buttons were off the side of the page
+			// an actor id is a URL, and a long one would push the decision
+			// buttons off the page
 			overflow-wrap: anywhere;
 		}
 	}

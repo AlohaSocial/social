@@ -30,18 +30,10 @@ use Throwable;
 /**
  * The channels an account publishes videos under.
  *
- * A channel is what a video belongs to everywhere but here: PeerTube resolves
- * one by looking for a `Group` in a video's `attributedTo` and refuses the
- * video outright when there is none. This app makes one for an account the
- * first time it posts a video, so nobody has to know the word — these routes
- * are for the person who does and wants a second one, or a better name on the
- * first.
- *
- * Client-API routes: reading them asks for `read:accounts`, and making or
- * changing one for `write:accounts`, the scope that changes the profile. A
- * channel is an actor on this instance like the profile is — an address other
- * servers will follow and cache — so a token that may not edit the profile may
- * not mint one either.
+ * PeerTube requires a `Group` in a video's `attributedTo`, so a channel is
+ * made automatically with an account's first video; these routes add or
+ * rename one. `read:accounts` to read, `write:accounts` to change, as a
+ * channel is an actor like the profile.
  */
 class ChannelController extends ClientApiController {
 	public function __construct(
@@ -67,10 +59,8 @@ class ChannelController extends ClientApiController {
 	}
 
 	/**
-	 * Makes one.
-	 *
-	 * The handle is an address on this instance and cannot be changed
-	 * afterwards, which is why it is asked for separately from the name.
+	 * Makes one. The handle cannot be changed afterwards, so it is asked for
+	 * separately from the name.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -100,10 +90,8 @@ class ChannelController extends ClientApiController {
 	}
 
 	/**
-	 * The three routes differ by the scope they ask for and one call, and
-	 * answer the same shape: the channels the caller now has, so a client that
-	 * has just changed one does not have to ask again to find out what it
-	 * changed.
+	 * Runs one of the three routes and answers the caller's channels as they now
+	 * are.
 	 *
 	 * @param string[] $scopes
 	 * @param callable(): array $action
@@ -116,8 +104,7 @@ class ChannelController extends ClientApiController {
 		} catch (ClientNotFoundException|InsufficientScopeException $e) {
 			return $this->error($e);
 		} catch (InvalidResourceException $e) {
-			// what is refused here is a handle that is taken or is not one, and
-			// the message says which — the whole of the help there is
+			// A taken or invalid handle; the message says which.
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (Throwable $e) {
 			$this->logger->warning('a channel request failed', [

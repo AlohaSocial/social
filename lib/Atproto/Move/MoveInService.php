@@ -48,23 +48,12 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Moving a Bluesky account here (§13.1), driven from here: the person names
- * their Bluesky account and its password, and this server signs in to the
- * old PDS as them and does what a migration tool would.
- *
- * The password is the account's own, not an app password: a PDS signs a
- * change of the DID only for a full session. It is used to sign in when the
- * move starts and not kept; the session is, sealed, while the move runs.
- *
- * A background job copies the repository — checked against the DID's
- * signing key, written here byte for byte under a commit signed with a key
- * made for the account here — the blobs and the preferences. Then the old
- * PDS e-mails the person a code; with it, it signs the operation that
- * points the DID here, and the account takes the DID: the one this server
- * had made for it is retired. Last, the account is switched off on the old
- * PDS, its follows become follows here — only now, so a move called off
- * leaves none behind — its posts posts in its timeline here and its lists
- * its lists here.
+ * Moves a Bluesky account here (§13.1): this server signs in to the old PDS
+ * with the account's own password, as a PDS signs a DID change only for a
+ * full session, and does what a migration tool would. The password is not
+ * kept; the session is, sealed, while the move runs. Follows are taken over
+ * only after the old account is switched off, so a move called off leaves
+ * none behind.
  */
 class MoveInService {
 	/** the most blobs one run of the copy asks the old PDS for */
@@ -262,10 +251,9 @@ class MoveInService {
 	}
 
 	/**
-	 * The person's move, written as called off unless it may not be, with
-	 * the old server's refresh token it held; null when the job moved it on
-	 * between the read and the write — to the identity, say — so it is
-	 * looked at again.
+	 * Marks the person's move as called off, unless it may not be, and returns
+	 * it with the old server's refresh token; null when the job moved it on
+	 * between the read and the write, so it is looked at again.
 	 *
 	 * @return array{move: Move, refresh: string}|null
 	 * @throws MoveErrorException
@@ -629,12 +617,10 @@ class MoveInService {
 	}
 
 	/**
-	 * The old PDS signs the operation that points the DID here, and the
-	 * account takes it. The rotation keys are the person's own first, then
-	 * this server's (`RotationKeys`); the old server's are dropped. A DID
-	 * the directory already points here, with the key made for the move,
-	 * is taken as it is: the job that sent the operation stopped before
-	 * the account took it.
+	 * The old PDS signs the operation that points the DID here, and the account
+	 * takes it, with the person's rotation keys first and this server's after
+	 * (`RotationKeys`). A DID the directory already points here with the move's
+	 * key is taken as it is: an earlier run stopped after sending the operation.
 	 *
 	 * @throws AtprotoException
 	 */
@@ -739,14 +725,10 @@ class MoveInService {
 	}
 
 	/**
-	 * The handle a DID moving here keeps: one on a domain of the person's
-	 * own, not under a domain the old server gives handles under
-	 * (`describeServer`'s `availableUserDomains`, its own host, or Bluesky's
-	 * and Bridgy Fed's), that names the DID as any custom handle must
-	 * (HandleVerifier); '' when the handle is the old server's to give, is
-	 * under this server's host, is another account's here, or does not
-	 * name the DID — the directory says what the DID's owner wrote there,
-	 * not that the domain is theirs.
+	 * The handle a DID moving here keeps: one on a domain of the person's own
+	 * that names the DID (HandleVerifier); '' when it is under a domain the
+	 * old server or this server gives handles under, is another account's
+	 * here, or does not name the DID.
 	 *
 	 * @param array $state the DID's state in the directory
 	 * @param string $own the handle the account has here now

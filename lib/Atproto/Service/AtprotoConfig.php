@@ -41,9 +41,9 @@ class AtprotoConfig {
 	}
 
 	/**
-	 * The PDS endpoint named in every DID document: this instance's origin.
-	 * `https` on any real instance; a development server on plain `http`
-	 * is still named truthfully, which is what the interop job relies on.
+	 * The PDS endpoint named in every DID document: this instance's origin,
+	 * plain `http` included on a development server (the interop job relies
+	 * on it).
 	 *
 	 * @throws SocialAppConfigException
 	 */

@@ -18,25 +18,14 @@ use OCA\Social\Model\Client\FilterStatus;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The keyword filters of an account, and the keywords of each.
- *
- * Every read here takes the owner's actor id and compares it in SQL. That is
- * the whole of the access control on filters: nothing in this class can return
- * a filter, or a keyword of a filter, that belongs to somebody else, so no
- * caller has to remember to check.
+ * The keyword filters of an account, and the keywords of each. Every read
+ * compares the owner's actor id in SQL, which is the whole access control.
  */
 class FiltersRequest extends FiltersRequestBuilder {
 	/**
-	 * Runs writes that are one change as one change.
-	 *
-	 * A filter and its keywords are written one row at a time, and a keyword
-	 * that names another filter is refused halfway through — so the title had
-	 * already been changed by the time the request answered 404, and a client
-	 * retrying what it was told had failed was retrying against state that had
-	 * partly moved.
-	 *
-	 * Re-entrant, so a caller that wraps a sequence of these and a method that
-	 * wraps its own writes do not open a transaction inside a transaction.
+	 * Runs writes that are one change as one change, so a keyword refused
+	 * halfway through leaves nothing changed. Re-entrant: nested calls do not
+	 * open a nested transaction.
 	 *
 	 * @param callable():mixed $work the writes
 	 *
@@ -116,9 +105,8 @@ class FiltersRequest extends FiltersRequestBuilder {
 	/**
 	 * One filter of one account, keywords included.
 	 *
-	 * @throws ItemNotFoundException there is no such filter *of this account*,
-	 *                               which is also the answer for one that
-	 *                               belongs to somebody else
+	 * @throws ItemNotFoundException there is no such filter of this account,
+	 *                               including one of somebody else's
 	 */
 	public function getById(int $id, string $actorId): Filter {
 		$qb = $this->getFiltersSelectSql();
@@ -136,9 +124,7 @@ class FiltersRequest extends FiltersRequestBuilder {
 		$filter = $this->parseFiltersSelectSql($data)->setActorId($actorId);
 		$keywords = $this->keywordsOf([$filter->getId()]);
 		$filter->setKeywords($keywords[$filter->getId()] ?? []);
-		// both halves, as `withKeywords()` fills them for a list: a filter read
-		// on its own carried no statuses, so the route that lists them answered
-		// an empty list for a filter that had some
+		// Both halves, as `withKeywords()` fills them for a list.
 		$statuses = $this->statusesOf([$filter->getId()]);
 		$filter->setStatuses($statuses[$filter->getId()] ?? []);
 
@@ -155,11 +141,8 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	/**
-	 * The filters that still apply, as of `$now`.
-	 *
-	 * The expiry is a predicate of the read and not a row that something
-	 * deletes: a filter stops applying the second it expires, on an instance
-	 * with no working cron as much as on one with.
+	 * The filters that still apply, as of `$now`. Expiry is a predicate of the
+	 * read, so it works without a cron.
 	 *
 	 * @return Filter[]
 	 */
@@ -194,8 +177,7 @@ class FiltersRequest extends FiltersRequestBuilder {
 		);
 
 		if ($qb->executeStatement() === 0) {
-			// somebody else's filter, or none: its keywords are not this
-			// caller's to delete either
+			// Somebody else's filter, or none.
 			return;
 		}
 
@@ -204,8 +186,7 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	/**
-	 * Everything an account leaves behind here when it is deleted. Called from
-	 * the account-deletion path, like every other deleteRelatedId().
+	 * Everything an account leaves behind here when it is deleted.
 	 */
 	public function deleteRelatedId(string $actorId): void {
 		$this->transactional(function () use ($actorId): void {
@@ -267,9 +248,8 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	public function deleteKeyword(int $id, string $actorId): void {
-		// the ownership of a keyword is its filter's, and a DELETE cannot join:
-		// the row is read under the join first, and nothing is deleted when
-		// that read finds nothing
+		// A keyword belongs to its filter's owner and a DELETE cannot join, so the
+		// row is read under the join first.
 		$keyword = $this->getKeywordById($id, $actorId);
 
 		$qb = $this->getKeywordsDeleteSql();
@@ -286,8 +266,7 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	/**
-	 * The keywords of a set of filters, in one query rather than one per
-	 * filter: a timeline read asks for every filter of the viewer at once.
+	 * The keywords of a set of filters, in one query.
 	 *
 	 * @param int[] $filterIds
 	 *
@@ -316,10 +295,8 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	/**
-	 * Adds one post to a filter.
-	 *
-	 * The caller has already checked that the filter is the account's; the id
-	 * of the row is what a client deletes the entry by afterwards.
+	 * Adds one post to a filter; the caller has checked ownership. The row id is
+	 * what a client deletes the entry by.
 	 */
 	public function saveStatus(FilterStatus $status): int {
 		$qb = $this->getStatusesInsertSql();
@@ -353,8 +330,7 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	public function deleteStatus(int $id, string $actorId): void {
-		// as with a keyword: the ownership is the filter's, a DELETE cannot
-		// join, so the row is read under the join first
+		// As with a keyword: read under the join first.
 		$status = $this->getStatusById($id, $actorId);
 
 		$qb = $this->getStatusesDeleteSql();
@@ -371,8 +347,7 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	/**
-	 * The posts a set of filters covers, in one query rather than one per
-	 * filter: a timeline read asks for every filter of the viewer at once.
+	 * The posts a set of filters covers, in one query.
 	 *
 	 * @param int[] $filterIds
 	 *
@@ -449,13 +424,8 @@ class FiltersRequest extends FiltersRequestBuilder {
 	}
 
 	/**
-	 * A timestamp as the date columns here hold one.
-	 *
-	 * Every other date in this schema is written from `new DateTime('now')`,
-	 * which carries the server's timezone, and DBAL formats a DateTime in
-	 * whatever zone the object has. A `DateTime('@…')` is always UTC, so an
-	 * expiry built from a timestamp would be stored hours away from the `now`
-	 * it is compared with on any instance that is not on UTC.
+	 * A timestamp as the date columns here hold one: in the server's timezone,
+	 * like the `now` it is compared with, since a `DateTime('@…')` is UTC.
 	 */
 	private function dateTime(int $timestamp): ?DateTime {
 		if ($timestamp === 0) {

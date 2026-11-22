@@ -42,10 +42,8 @@ import { accountAvatarUrl } from '../utils/accountAvatar.js'
 const POLL_MS = 60 * 1000
 
 /**
- * The longest wait between two asks while they keep failing. Each failure
- * doubles the wait up to this, so a server that is down for a restart is
- * asked again soon and one that is down for the night is not asked every
- * minute of it.
+ * The longest wait between two asks while they keep failing; each failure
+ * doubles the wait up to this.
  */
 const MAX_BACKOFF_MS = 16 * POLL_MS
 
@@ -71,7 +69,7 @@ export default {
 		return {
 			notifications: [],
 			showMoreUrl: generateUrl('/apps/social/timeline/notifications'),
-			showMoreText: t('social', 'Aloha Social notifications'),
+			showMoreText: t('social', 'Aloha Social activities'),
 			/** the timeout of the next ask, while polling */
 			timer: null,
 			/** whether the widget asks on a timer, for want of notify_push */
@@ -102,9 +100,9 @@ export default {
 		/** @return {string} */
 		emptyContentMessage() {
 			if (this.state === 'error') {
-				return t('social', 'Error getting Aloha Social notifications')
+				return t('social', 'Could not load Aloha Social activities')
 			} else if (this.state === 'ok') {
-				return t('social', 'No Aloha Social notifications!')
+				return t('social', 'No Aloha Social activities')
 			}
 			return ''
 		},
@@ -125,10 +123,8 @@ export default {
 	},
 
 	mounted() {
-		// with notify_push the server says when something arrived; without it
-		// a slow poll keeps the tile current without hammering the instance
-		// the next ask is timed from the end of the one before, which is still
-		// in flight here, so it is the answer to that one that schedules it
+		// with notify_push the server says when something arrived; without it a
+		// slow poll keeps the tile current, each ask scheduled by the answer to the last
 		this.polling = !onTimelinePush(this.fetchNotifications, [PUSH_NOTIFICATION])
 	},
 
@@ -171,15 +167,13 @@ export default {
 					this.state = 'error'
 				}
 			} catch (error) {
-				// a failed ask is not the end of the widget: the next one may
-				// well succeed, and says so by putting the state back. Only the
-				// first failure of a run is worth a toast.
+				// the next ask may well succeed; only the first failure of a run gets a toast
 				const first = this.failures === 0
 				this.failures += 1
 				this.state = 'error'
 				if (error.response?.status && error.response.status >= 400) {
 					if (first) {
-						showError(t('social', 'Failed to get Aloha Social notifications'))
+						showError(t('social', 'Could not load Aloha Social activities'))
 					}
 				} else {
 					logger.error('Failed to get the Social notifications', { error })
@@ -196,9 +190,8 @@ export default {
 				this.notifications = newNotifications.slice(0, MAX_ITEMS)
 				return
 			}
-			// the API returns notifications newest first; prepend only the ones
-			// we have not seen yet, identified by their id. The cut keeps a tab
-			// left open for days from accumulating every notification it saw.
+			// newest first: prepend only the ids not seen yet, and cut the list so a
+			// tab left open for days does not keep everything
 			const knownIds = new Set(this.notifications.map((n) => n.id))
 			const toAdd = newNotifications.filter((n) => !knownIds.has(n.id))
 			if (toAdd.length > 0) {

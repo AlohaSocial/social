@@ -23,11 +23,9 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * Who liked, reposted or quoted a post on Bluesky, for a post that is there
- * — read from there, or written here and published: as the AppView lists
- * them (`getLikes`, `getRepostedBy`, `getQuotes`). Each account is the one
- * cached here, or is cached as it is found; each quoting post is stored as
- * any Bluesky post is.
+ * Who liked, reposted or quoted a post that is on Bluesky, as the AppView
+ * lists them (`getLikes`, `getRepostedBy`, `getQuotes`). Accounts are cached
+ * as they are found; quoting posts are stored as any Bluesky post is.
  */
 class BlueskyInteractionSource implements InteractionSource {
 	private const QUOTE_CURSOR = 'social.atproto.quotes.cursor';
@@ -82,9 +80,8 @@ class BlueskyInteractionSource implements InteractionSource {
 			if (!Syntax::isDid($did) || !is_string($profile['handle'] ?? null) || trim($profile['handle']) === '') {
 				throw new UnexpectedValueException('Bluesky reaction response contains an incomplete actor');
 			}
-			// Keep the valid identity even if caching its profile fails. The
-			// interaction service can then queue a separate actor resolution
-			// instead of silently dropping this reaction from the list.
+			// Keep the identity even when caching its profile fails, so the
+			// interaction service can queue an actor resolution.
 			$ids[] = BlueskyIds::actorId($did);
 			try {
 				$cached = $this->actors->cached($did);
@@ -92,9 +89,8 @@ class BlueskyInteractionSource implements InteractionSource {
 				if ($cached === null) {
 					$this->actors->store($this->mapper->person($profile));
 				} elseif (!$cached->isLocal() && $avatarUrl !== '') {
-					// Reaction views carry an avatar but not a full profile. Refresh
-					// that image on the cached actor without replacing its richer
-					// description, banner, PDS details or moderation state.
+					// Reaction views carry only an avatar: refresh that without replacing the
+					// cached actor's fuller profile.
 					$cachedAvatar = $cached->getIcon();
 					if ($cachedAvatar === null || $cachedAvatar->getUrl() !== $avatarUrl) {
 						$mapped = $this->mapper->person($profile);
@@ -168,10 +164,8 @@ class BlueskyInteractionSource implements InteractionSource {
 			$this->durableCache->setShared(self::QUOTE_CURSOR, $key, $next, self::QUOTE_CURSOR_KEPT);
 			$seen[$next] = true;
 			$cursor = $next;
-			// A reader opening a post needs its first page now. The rest can be
-			// fetched by FillInteractions; spending the whole interactive budget
-			// walking a long quote history delays the page and still cannot finish
-			// before the three-second network deadline.
+			// An open post needs only its first page now; FillInteractions fetches the
+			// rest, since a long quote history cannot finish within the deadline.
 			if ($timeout !== null) {
 				return $stored;
 			}

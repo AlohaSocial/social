@@ -71,9 +71,7 @@
 			</NcButton>
 		</div>
 		<template v-else>
-			<!-- announced only to the eye: a drag is not something a screen reader
-			     is in the middle of, and the pill must never take the drop it
-			     announces, hence pointer-events: none -->
+			<!-- for the eye only; pointer-events: none so the pill never takes the drop -->
 			<div v-if="draggingFiles" class="new-post__drop-hint" aria-hidden="true">
 				<span>{{ t('social', 'Drop to attach') }}</span>
 			</div>
@@ -88,9 +86,7 @@
 				class="hidden-visually"
 				@change="handleFileChange($event)">
 			<div v-if="!compactOptions || closable" class="new-post-author">
-				<!-- the reader's own face, and `disableMenu` because a card about
-				     yourself, over the box you are typing in, is nobody's idea of
-				     a preview -->
+				<!-- `disableMenu`: no profile card for yourself over your own box -->
 				<NcAvatar
 					v-if="!compactOptions"
 					:url="ownAvatarUrl"
@@ -99,12 +95,8 @@
 					:disableMenu="true"
 					:disableTooltip="true"
 					:size="32" />
-				<!-- The way out. The box opens on a click and closes again when the
-				     reader clicks elsewhere — but only while it holds nothing worth
-				     keeping, so as soon as a word is typed the only way back to a
-				     one-line box was to delete that word by hand. Nothing is thrown
-				     away here: what is in the box stays in it, and is put back from
-				     the draft after a reload. -->
+				<!-- Collapses the box at any time; what is in it stays, and comes
+				     back from the draft after a reload. -->
 				<NcButton
 					v-if="closable"
 					variant="tertiary"
@@ -155,7 +147,6 @@
 				class="new-post-form"
 				:class="{ 'new-post-form--with-media': hasAttachments }"
 				@submit.prevent>
-				<!-- A video has its own name and details on other servers. -->
 				<VideoMetadataEditor
 					v-if="!editItem && isVideoPost"
 					v-model:title="videoTitle"
@@ -183,9 +174,8 @@
 					@paste="handlePaste"
 					@tribute-replaced="updatePostFromTribute" />
 
-				<!-- under the box, as Mastodon and Bluesky have them: above it, four
-				     pictures and their descriptions pushed the box off a phone's
-				     screen. In the DOM too, so the tab order follows the eye -->
+				<!-- under the box, as on Mastodon and Bluesky, so photos do not push
+				     it off a phone's screen; the DOM order matches the tab order -->
 				<PreviewGrid
 					:uploading="uploading"
 					:uploadProgress="uploadProgress"
@@ -199,8 +189,7 @@
 					@commitFocus="commitFocus"
 					@filter="applyFilter" />
 
-				<!-- /dice, /flip and /pick are played when the post goes out; this
-				     says so while one is in the box, and shows the roll itself -->
+				<!-- /dice, /flip and /pick are played when the post goes out -->
 				<div
 					v-if="rolling.length > 0"
 					class="composer-roll"
@@ -247,8 +236,7 @@
 					@close="showGifs = false"
 					@chosen="attachGif" />
 
-				<!-- what the server will publish, once the writer asks to see it;
-				     under the box, above everything the post is being given -->
+				<!-- what the server will publish, on request -->
 				<ComposerPreview
 					v-if="showPreview"
 					:text="statusText"
@@ -275,9 +263,7 @@
 					:attempted="eventAttempted"
 					:reachesBluesky="reachesBluesky" />
 
-				<!-- When the post goes out, if not now. The picker is most of a
-				     date library and arrives when the clock is pressed, not with
-				     every composer; until then this block is not here at all. -->
+				<!-- the date picker is large and loads only when the clock is pressed -->
 				<SchedulePicker v-if="scheduling" v-model="scheduledAt">
 					<NcButton
 						variant="tertiary"
@@ -291,10 +277,8 @@
 					</NcButton>
 				</SchedulePicker>
 
-				<!-- A panel, and so above the toolbar with the others rather than
-				     inside it: the toolbar row is `max-height: 120px; overflow:
-				     hidden` for its collapse, which cut the picker off — the
-				     country box under the suggestions was simply not there. -->
+				<!-- above the toolbar, not in it: the toolbar's collapse
+				     (`max-height`, `overflow: hidden`) would clip the picker -->
 				<PlacePicker
 					v-if="placing"
 					:place="place"
@@ -394,10 +378,8 @@
 					</NcButton>
 					<div v-if="!compactOptions || moreOptionsOpen" class="composer-advanced-options">
 						<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Post options') }}</span>
-						<!-- the author's own word that this was made with AI. It is a
-					     hashtag in the text rather than a field of its own, so the
-					     button reads its state off the words: typing the tag by
-					     hand lights it, and pressing it writes or removes the tag -->
+						<!-- the AI mark is a hashtag in the text: the button reads
+						     its state off the words, and writes or removes the tag -->
 						<NcButton
 							:title="t('social', 'Made with AI')"
 							variant="tertiary"
@@ -411,16 +393,16 @@
 							<span v-if="compactOptions">{{ t('social', 'Made with AI') }}</span>
 						</NcButton>
 						<NcButton
-							:title="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
+							:title="showGifs ? t('social', 'Close the GIF library') : t('social', 'Add from the GIF library')"
 							variant="tertiary"
-							:aria-label="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
+							:aria-label="showGifs ? t('social', 'Close the GIF library') : t('social', 'Add from the GIF library')"
 							:aria-pressed="showGifs"
 							:disabled="attachmentsFull"
 							@click.prevent="showGifs = !showGifs">
 							<template #icon>
 								<FileGifBox :size="22" decorative title="" />
 							</template>
-							<span v-if="compactOptions">{{ t('social', 'Add from the picture library') }}</span>
+							<span v-if="compactOptions">{{ t('social', 'Add from the GIF library') }}</span>
 						</NcButton>
 
 						<NcButton
@@ -434,8 +416,7 @@
 							</template>
 							<span v-if="compactOptions">{{ showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post') }}</span>
 						</NcButton>
-						<!-- a short post, drawn big on colour; only offered while the
-					     post is short enough to look good that way -->
+						<!-- a short post, drawn big on colour; offered only while it is short -->
 						<NcButton
 							v-if="!editItem && canBeCard"
 							:title="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
@@ -508,9 +489,7 @@
 						</NcButton>
 
 						<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Publishing settings') }}</span>
-						<!-- who is speaking, when the writer is in a team that has an
-					     account. Absent on every instance that has none, which is
-					     most of them, rather than a control that always says "me" -->
+						<!-- who is speaking, only when the writer is in a team that has an account -->
 						<select
 							v-if="!editItem && teams.length"
 							v-model="postAs"
@@ -548,8 +527,7 @@
 						:style="{ '--char-progress': charProgress }"
 						:title="charactersLeftLabel">
 						<span v-if="charsLeft <= 50" class="char-ring__count" aria-hidden="true">{{ charsLeft }}</span>
-						<!-- the ring is a colour and an arc; this is the same news in words,
-						     announced only once it is worth interrupting for -->
+						<!-- the ring's state in words, announced once it is worth interrupting for -->
 						<span class="hidden-visually" role="status">
 							{{ charsLeft <= 50 ? charactersLeftLabel : '' }}
 						</span>
@@ -572,8 +550,7 @@
 						:disabled="!canPost || loading"
 						@click="createPost" />
 				</div>
-				<!-- Social's own limit stays the counter's; this is the other
-				     network's, said once it matters and not before -->
+				<!-- Social's own limit is the counter's; this is Bluesky's -->
 				<p
 					v-if="blueskyHint"
 					class="composer-bluesky-hint"
@@ -582,8 +559,7 @@
 					{{ t('social', 'A long post may be split into a thread on Bluesky to fit its post limits.') }}
 				</p>
 			</form>
-			<!-- the way to a 24-hour short on the one line the composer is at rest; open,
-			     the same button is in the toolbar above -->
+			<!-- New short on the collapsed line; when open, the button is in the toolbar -->
 			<NcButton
 				v-if="offerShort && !expanded"
 				class="new-post__short"
@@ -596,9 +572,8 @@
 				</template>
 			</NcButton>
 		</template>
-		<!-- Escape on a box with words in it: what is in the box is kept
-		     either way, and the question is only so that a key pressed to
-		     dismiss something else does not fold the composer away mid-sentence -->
+		<!-- Escape on a box with words in it: the words are kept either way;
+		     this guards against folding the composer away by accident -->
 		<NcDialog
 			v-model:open="confirmingClose"
 			:name="t('social', 'Close the composer?')"
@@ -607,8 +582,8 @@
 				{{ t('social', 'What you have written is kept, and is back in the box the next time you open it.') }}
 			</p>
 		</NcDialog>
-		<!-- everything else in the box is in the draft and comes back; an
-		     upload still on its way has no id to keep yet -->
+		<!-- the draft keeps everything but an upload still on its way, which
+		     has no id yet -->
 		<ConfirmDialog
 			:open="confirmingLeave"
 			:name="t('social', 'Leave while an attachment is uploading?')"
@@ -693,19 +668,13 @@ import { useCurrentUser } from '../../composables/useCurrentUser.js'
 import { useServerData } from '../../composables/useServerData.js'
 import { userKey } from '../../utils/browserStore.js'
 
-/*
- * The two limits -- characters per post, attachments per post -- used to be
- * constants here; they are the server's, read from the instance entity into
- * the instance store, and appear below as `maxLength` and `maxAttachments`.
- */
-
 /** Reserve room for the full-post link and details that Social adds on publish. */
 const BLUESKY_WARNING_GRAPHEMES = 160
 const BLUESKY_WARNING_BYTES = 2800
 
 /**
- * How many characters a person sees, which is how Bluesky counts: a flag or
- * a family emoji is one, not the four to seven code points behind it.
+ * How many characters a person sees, as Bluesky counts: a flag or a family
+ * emoji is one.
  *
  * @param {string} text what would be sent
  * @return {number}
@@ -719,14 +688,8 @@ function graphemes(text) {
 }
 
 /**
- * The content warnings worth one press.
- *
- * Not a taxonomy and not a moderation policy — the box is still there and
- * still takes anything. These are the handful that come up often enough that
- * typing them again is friction, and having them written the same way every
- * time is what makes a warning filterable by the people who filter on them.
- *
- * Translated, because a warning is read by the people on this instance.
+ * The content warnings offered as one press, written the same way every time
+ * so they can be filtered on. The box still takes anything.
  */
 function contentWarningPresets() {
 	return [
@@ -740,12 +703,8 @@ function contentWarningPresets() {
 }
 
 /**
- * The shared picture library, fetched when somebody first asks for it.
- *
- * Same reason as the emoji and date pickers: it brings `NcTextField` with it, and
- * that pulls `@nextcloud/vue`'s l10n chunk — half a megabyte — into whatever
- * chunk it lands in. Statically imported here it landed in the app's initial
- * bundle and nearly doubled it, for a panel most readers never open.
+ * The shared GIF library, loaded on first use: it pulls in `NcTextField` and
+ * with it half a megabyte of `@nextcloud/vue` l10n.
  */
 let gifPicker = null
 const gifPickerModule = () => (gifPicker ??= import('./GifPicker.vue'))
@@ -828,11 +787,7 @@ export default {
 			default: undefined,
 		},
 
-		/**
-		 * Opened already, for the places where writing a post is the whole
-		 * reason the composer is on screen — the New post dialog, say, where
-		 * asking for another click would be asking twice.
-		 */
+		/** Opened already, e.g. in the New post dialog. */
 		startExpanded: {
 			type: Boolean,
 			default: false,
@@ -845,13 +800,9 @@ export default {
 		},
 
 		/**
-		 * The post this composer replies to by default — what a composer
-		 * anchored under a post on its own page is for.
-		 *
-		 * It is a default and not a fixed target: pressing reply on another
-		 * post in the same thread retargets this composer like any other, and
-		 * sending or closing that reply comes back here rather than leaving
-		 * the box pointed at a post further down the page.
+		 * The post this composer replies to by default, for a composer under a
+		 * post on its own page. Replying to another post retargets it; sending
+		 * or closing that reply comes back here.
 		 */
 		inReplyTo: {
 			type: /** @type {import('vue').PropType<object|null>} */ (Object),
@@ -859,10 +810,8 @@ export default {
 		},
 
 		/**
-		 * Files to attach as soon as the composer is up: what "Share to
-		 * Social" in the Files app hands over. Paths in the reader's own
-		 * folder, the same the picker produces; attached through the same
-		 * code, so the ceiling, the progress and a refusal look the same.
+		 * Paths in the reader's folder to attach on mount, from "Share to
+		 * Social" in Files; attached like files from the picker.
 		 */
 		initialPaths: {
 			type: /** @type {import('vue').PropType<string[]>} */ (Array),
@@ -870,40 +819,30 @@ export default {
 		},
 
 		/**
-		 * Files to attach as soon as the composer is up: what a picker
-		 * opened before the composer handed over, as "Upload a video" on
-		 * the Videos page does. Attached through the same code as a drop.
+		 * Files to attach on mount, from a picker opened before the composer
+		 * ("Upload a video" on the Videos page); attached like a drop.
 		 */
 		initialFiles: {
 			type: /** @type {import('vue').PropType<File[]>} */ (Array),
 			default: () => [],
 		},
 
-		/** Initial context is available before the lazy dialog editor mounts. */
+		/** The post being edited, available before the lazy dialog editor mounts. */
 		editItem: { type: Object, default: null },
 		editSaving: { type: Boolean, default: false },
 		editMaxLength: { type: Number, default: null },
 		initialQuote: { type: Object, default: null },
 		initialDraft: { type: Object, default: null },
 		initialDraftContext: { type: String, default: '' },
-		initialRedraft: { type: Object, default: null },
 		showReplyContext: { type: Boolean, default: false },
 		listenForIntents: { type: Boolean, default: true },
 
 		/**
-		 * Where floating-vue teleports the emoji picker popper. The inline
-		 * composer keeps it in the themed app root (`#content`): inside the
-		 * toolbar row (`.options`, `max-height` + `overflow: hidden`) an
-		 * un-teleported popper would be cut off. The composer in the "New
-		 * post" dialog instead has to stay inside the modal mask: anything
-		 * teleported out (to `#content`, to `body`) lands behind the dimmed
-		 * mask and outside the focus trap, so the picker shows behind the
-		 * popup and takes no clicks. Callers in a modal pass the overlay wrapper
-		 * (not `.modal-composer`): the dialog's content panel has `overflow: auto`,
-		 * which clips a 420px picker when it opens above the toolbar. The overlay
-		 * wrapper stays inside the mask and focus layer without clipping it.
+		 * Where floating-vue teleports the emoji picker. Inline, `#content`, so
+		 * the toolbar's `overflow: hidden` does not clip it. In a modal, the
+		 * overlay wrapper: outside the mask the picker sits behind it and the
+		 * focus trap, and `.modal-composer` scrolls and would clip it.
 		 */
-
 		emojiPickerContainer: {
 			type: String,
 			default: '#content',
@@ -917,13 +856,11 @@ export default {
 		// a self-registered external user has no Files to attach from
 		const hasFiles = computed(() => !serverData.value?.externalMedia)
 
-		// what a click into the box opens up; the composer is also expanded
-		// by anything it already holds — see expanded()
+		// what a click into the box opens; anything in it also keeps it open,
+		// see expanded()
 		const openedByHand = ref(props.startExpanded)
-		// and what the close button shuts again. It has to be a state of its
-		// own rather than the absence of `openedByHand`, because a box with a
-		// word in it is expanded by the word: without this there was no way to
-		// close one except by deleting what was in it.
+		// what the close button shuts: a box with words in it is otherwise
+		// held open by the words
 		const closedByHand = ref(false)
 		const expand = () => {
 			closedByHand.value = false
@@ -941,8 +878,8 @@ export default {
 			closedByHand,
 			expand,
 			...useComposerAttachments({ expand, root: () => instance?.proxy?.$el }),
-			// set in mounted(); here rather than in data() so that the
-			// library's own object is not wrapped in a reactive proxy
+			// set in mounted(), not in data(), so the library's object is not
+			// wrapped in a reactive proxy
 			tribute: null,
 			tributeTarget: null,
 			idempotency: idempotencyKeeper(),
@@ -971,36 +908,24 @@ export default {
 			rolling: [],
 			/** whether the dice have come to rest */
 			rollLanded: false,
-			// a reply goes where the post it answers went, which is also what
-			// the reply flow does when a composer is retargeted by hand
-			// the audience, in order of who gets to say: whoever opened this
-			// composer, the post being answered, the account's own default,
-			// the last one the reader used, and failing all of those the
-			// narrow choice rather than the public one
+			// whoever opened the composer, then the post being answered, the
+			// account default, the last one used, and otherwise the narrow choice
 			visibility: this.defaultVisibility
 				|| this.inReplyTo?.visibility
 				|| useAccountStore().defaultPostVisibility
 				|| rememberedVisibility()
 				|| 'followers',
 
-			/**
-			 * Whether the audience above has been settled by somebody rather
-			 * than merely defaulted to, so that an account default arriving
-			 * late leaves it alone.
-			 */
+			/** Whether somebody chose the audience, so a late account default leaves it alone. */
 			visibilityChosen: Boolean(this.defaultVisibility || this.inReplyTo?.visibility),
 
-			// what the last post went out in, else what Nextcloud is set to:
-			// the server would guess the same, but a guess the poster can see
-			// is one they can correct
+			// the last post's language, else Nextcloud's, so the poster can see
+			// and correct it
 			language: rememberedLanguage() || defaultLanguage(),
 			/**
 			 * The team accounts this account may post as, and which of them
-			 * this post is being written as ('' for themselves).
-			 *
-			 * Empty on every instance with no team accounts, which is most of
-			 * them, and the control is absent rather than a picker that only
-			 * ever says "me".
+			 * this post is being written as ('' for themselves). Empty, and the
+			 * control absent, on instances without team accounts.
 			 */
 			teams: [],
 			postAs: '',
@@ -1059,7 +984,6 @@ export default {
 			// unmounted() removes only these and not other components' listeners
 			onComposerReply: null,
 			onComposerQuote: null,
-			onComposerRedraft: null,
 			onComposerFocus: null,
 			onComposerPublished: null,
 			handedOffDraft: null,
@@ -1117,18 +1041,10 @@ export default {
 		},
 
 		/**
-		 * The reader's own face, addressed directly rather than by account name.
-		 *
-		 * `NcAvatar` given a `user` keeps a per-account note in browser storage
-		 * saying whether that account has a picture, and on every later render it
-		 * trusts the note instead of the image: one failed load, from a restart
-		 * or a deploy, and the note says no picture for as long as the browser
-		 * keeps it -- in this browser only, which is why it looks like the
-		 * picture simply went. Given a `url` it validates the image each time and
-		 * falls back to the initials when it truly cannot be had.
-		 *
-		 * It also avoids the malformed address that path builds for your own
-		 * account: the component appends its cache-buster with a second `?`.
+		 * The reader's own avatar by URL rather than `user`: with a `user`,
+		 * `NcAvatar` caches one failed load in browser storage and then shows
+		 * initials for good, and it builds a malformed URL for your own
+		 * account (a second `?`).
 		 *
 		 * @return {string} the avatar of the account writing this post
 		 */
@@ -1142,8 +1058,8 @@ export default {
 		},
 
 		/**
-		 * What the box asks for. With a picture, the words are its caption.
-		 * A post of its own is asked for by first name.
+		 * What the box asks for: with photos, a caption; otherwise a prompt by
+		 * first name.
 		 *
 		 * @return {string}
 		 */
@@ -1177,18 +1093,13 @@ export default {
 
 		/**
 		 * Which draft this box is writing: a reply to one post, a quote of
-		 * one, or a post of its own. A reply opened over a half-written post
-		 * used to take its place on disk, and sending either threw the
-		 * other away.
+		 * one, or a post of its own, each kept separately.
 		 *
 		 * @return {string} '' for a post of its own
 		 */
 		draftContext() {
-			if (this.initialRedraft !== null) {
-				return `redraft.${this.initialRedraft.id}`
-			}
-			// a re-draft opened from the Drafts list stays that draft when the
-			// post it answers or quotes is put back beside it
+			// a re-draft from Drafts keeps its own context when its reply or
+			// quote target is restored
 			if (this.initialDraftContext.startsWith('redraft.')) {
 				return this.initialDraftContext
 			}
@@ -1203,11 +1114,8 @@ export default {
 		},
 
 		/**
-		 * Whether the post being replied to is the one this composer is
-		 * anchored under. The header saying who is being replied to, with the
-		 * post quoted inside it, is then a copy of what is directly above the
-		 * box — and the button for closing it would leave a reply box replying
-		 * to nothing.
+		 * Whether the reply target is the post this composer is anchored
+		 * under; the reply header would then repeat what is right above.
 		 *
 		 * @return {boolean}
 		 */
@@ -1245,16 +1153,13 @@ export default {
 			if (this.editSaving) {
 				return false
 			}
-			// an upload that has not answered yet is worth waiting for; one
-			// that failed used to leave `data: undefined`, which passed this
-			// check and then threw on `preview.data.id` before the try block
+			// wait for uploads that have not answered yet
 			if (this.hasPendingUploads) {
 				return false
 			}
 
-			// an attachment a draft came back with may be gone from the
-			// server, and a picture whose file is still being fetched would
-			// go out without its filter
+			// a restored attachment may be gone from the server, and a photo
+			// still being fetched would go out without its filter
 			if (this.checkingMedia) {
 				return false
 			}
@@ -1305,10 +1210,8 @@ export default {
 		},
 
 		/**
-		 * A composer with nothing in it is a placeholder and a portrait; the
-		 * eight controls underneath it are answers to a question nobody has
-		 * asked yet. It opens on a click, and stays open for as long as it holds
-		 * anything that would be lost by closing it.
+		 * Collapsed until clicked; stays open while it holds anything that
+		 * closing would hide.
 		 *
 		 * @return {boolean}
 		 */
@@ -1317,16 +1220,14 @@ export default {
 				return false
 			}
 			if (this.closedByHand) {
-				// what was written is still in the box and still on disk; it is
-				// simply not on screen until the reader asks for it again
+				// what was written stays in the box and the draft, just hidden
 				return false
 			}
 
 			return this.openedByHand
 				|| this.loading
-				// the post it is anchored under is not a reply in progress: a
-				// box under every post would otherwise be open on every post,
-				// which is the one thing a box that is always there must not be
+				// the anchor post is not a reply in progress, or every post's
+				// box would be open
 				|| (this.replyTo !== null && !this.anchoredReply)
 				|| this.quoteOf !== null
 				|| this.showPoll
@@ -1338,11 +1239,8 @@ export default {
 		},
 
 		/**
-		 * Whether there is anything to close it *to*.
-		 *
-		 * Not in the New post dialog, where writing a post is the whole reason
-		 * the composer is on screen and the dialog has its own way out; and not
-		 * while it is collapsed already.
+		 * Whether there is anything to close it to: not in the New post
+		 * dialog, which has its own way out, nor while already collapsed.
 		 *
 		 * @return {boolean}
 		 */
@@ -1372,10 +1270,8 @@ export default {
 		},
 
 		/**
-		 * Whether the post is short enough, and plain enough, to be a card: a
-		 * few words and nothing else. A picture already has its own look, a
-		 * poll has its own shape, and three paragraphs on a gradient are a
-		 * poster nobody reads.
+		 * Whether the post is a few plain words, short enough for a card: no
+		 * photos, no poll.
 		 *
 		 * @return {boolean}
 		 */
@@ -1405,12 +1301,7 @@ export default {
 			return commandsIn(this.statusText)
 		},
 
-		/**
-		 * Measured on what is sent, not on the markup that produces it. A
-		 * mention pill from a reply is ~200 characters of HTML and every line
-		 * break adds a <div>, so counting innerHTML burned half the allowance
-		 * before a word was typed.
-		 */
+		/** Measured on the text sent, not the markup: a mention pill alone is ~200 characters of HTML. */
 		statusIsTooLong() {
 			return this.statusLength > this.maxLength
 		},
@@ -1443,8 +1334,7 @@ export default {
 
 		/**
 		 * Whether a public post from this account goes to Bluesky: the server
-		 * offers it, and the account has an identity there that is in use.
-		 * Only then is there anything to say about the audiences that do not.
+		 * offers it and the account's Bluesky identity is in use.
 		 *
 		 * @return {boolean}
 		 */
@@ -1469,8 +1359,7 @@ export default {
 				text: this.statusText,
 				spoilerText: this.showWarning ? this.spoilerText : '',
 				visibility: this.visibility,
-				// who it was being written as, so a reload does not quietly
-				// turn a team post back into a personal one
+				// so a reload does not turn a team post back into a personal one
 				postAs: this.postAs || this.pendingPostAs,
 				media: this.draftMedia,
 				poll: this.showPoll ? poll : null,
@@ -1481,8 +1370,7 @@ export default {
 				place: this.placing ? this.place : null,
 				video: Object.values(video).some((value) => value !== '') ? video : null,
 				card: this.asCard ? this.cardGradientId : '',
-				// a re-draft is the one draft whose context does not say what
-				// it answers or quotes
+				// a re-draft's context does not say what it answers
 				inReplyToId: this.draftContext.startsWith('redraft.') ? String(this.replyTo?.id ?? '') : '',
 				quoteId: this.draftContext.startsWith('redraft.') ? String(this.quoteOf?.id ?? '') : '',
 			}
@@ -1521,9 +1409,8 @@ export default {
 		},
 
 		/**
-		 * Another post's page, in the same component: the router reuses this
-		 * view, so without this the box would still be replying to the post
-		 * the reader has navigated away from.
+		 * The router reuses this view for another post's page, so the reply
+		 * target follows it.
 		 *
 		 * @param {object|null} post the post to reply to now
 		 */
@@ -1531,14 +1418,12 @@ export default {
 			this.replyTo = post
 		},
 
-		// everything in the box but the words, which are kept as they are
-		// typed (updateStatusContent)
+		// everything but the words, which updateStatusContent saves as typed
 		draft: 'rememberDraft',
 
 		/**
-		 * The words stay in the box when it is pointed at another post, or
-		 * back at none, so the draft on disk moves with them rather than
-		 * staying behind as a copy that would come back on the next visit.
+		 * The words stay in the box when it is retargeted, so the stored
+		 * draft moves with them instead of coming back on the next visit.
 		 *
 		 * @param {string} _now the context being written now
 		 * @param {string} before the one just left
@@ -1552,11 +1437,9 @@ export default {
 		},
 
 		/**
-		 * `verify_credentials` can land after a composer is already on screen
-		 * — the timeline draws one as the page opens — and the account's
-		 * default audience only comes with it. A composer nobody has spoken
-		 * for takes it; one that was opened as a reply, or whose audience the
-		 * reader has already named, keeps what it has.
+		 * The account's default audience arrives with `verify_credentials`,
+		 * possibly after the composer is up. It applies only if nobody chose
+		 * an audience and this is not a reply.
 		 *
 		 * @param {string} visibility the account's default, '' until it comes
 		 */
@@ -1567,10 +1450,9 @@ export default {
 		},
 
 		/**
-		 * The full composer this box handed its draft to has closed without
-		 * publishing it. What was written there is newer than what this box
-		 * still shows, and pressing Expand or typing here would otherwise
-		 * write the older words over it.
+		 * The full composer this box handed its draft to closed without
+		 * publishing; its words are newer than this box's, so they are
+		 * reloaded before anything here overwrites them.
 		 *
 		 * @param {boolean} open whether the full composer is open
 		 */
@@ -1582,22 +1464,18 @@ export default {
 	},
 
 	mounted() {
-		// the counter and the attachment ceiling are the server's numbers;
-		// answered from the first call on this page, whoever made it
+		// the counter and the attachment ceiling are the server's numbers
 		this.instanceStore.load()
 		this.loadTeams()
 
-		// tributejs is a plain DOM library, not a component: it attaches to the
-		// contenteditable and appends its menu to the body, which the unscoped
-		// .tribute-container rule at the end of this file styles.
+		// tributejs attaches to the contenteditable and appends its menu to
+		// the body, styled by the unscoped .tribute-container rule below
 		this.tribute = new Tribute(this.tributeOptions)
-		// Kept, because $refs is cleared before unmounted() runs and detach() rejects
-		// anything that is not a node.
+		// kept: $refs is cleared before unmounted(), and detach() needs a node
 		this.tributeTarget = this.inputElement()
 		this.tribute.attach(this.tributeTarget)
 
-		// Keep the handler so unmounted() removes only this one and not the
-		// listeners other components registered for the same event.
+		// kept so unmounted() removes only this handler
 		this.onComposerReply = (data) => {
 			if (this.oneLine) {
 				if (this.draftContext === `reply.${data.id}`) {
@@ -1606,42 +1484,29 @@ export default {
 				return
 			}
 			this.replyTo = data
-			// everyone in the conversation, not only whoever wrote the post
-			// being answered: a reply that named one of three people reached
-			// one of three people
+			// mention everyone in the conversation, not only the author
 			this.prefillMessageWithMentions(participantsOf(data, this.username, this.hostname))
 			// a resumed draft of this reply keeps the audience it was given
 			if (this.resumedAudienceFor !== `reply.${data.id}`) {
 				this.visibility = data.visibility
 				this.visibilityChosen = true
 			}
-			// somebody pressed reply, which is a request to write one — including
-			// on the post this box is anchored under, where the target does not
-			// change and the box opening is the whole of the answer. Through
-			// expand(), so that it also undoes a close by hand.
+			// opens the box even when the target is unchanged (the anchor
+			// post); through expand(), so it also undoes a close by hand
 			this.expand()
-			// and the caret goes into it, after the mentions: left on the Reply
-			// button, the first words typed went nowhere
+			// caret after the mentions, so typing goes into the box
 			this.$nextTick(() => this.focusInput({ atEnd: true }))
 		}
 		if (this.listenForIntents || this.oneLine) {
 			eventBus.on('composer-reply', this.onComposerReply)
 		}
 
-		// a quote carries no mention and does not take the quoted post's
-		// visibility: it is addressed by whoever writes it, not by whoever
-		// is being quoted
+		// a quote adds no mention and does not take the quoted post's visibility
 		this.onComposerQuote = (data) => {
 			this.quoteOf = data
 		}
 		if (this.listenForIntents) {
 			eventBus.on('composer-quote', this.onComposerQuote)
-		}
-
-		// a post that was just deleted, coming back to be written again
-		this.onComposerRedraft = (post) => this.redraft(post)
-		if (this.listenForIntents) {
-			eventBus.on('composer-redraft', this.onComposerRedraft)
 		}
 
 		// the shortcuts help offers "n" to write a post; this is what answers it
@@ -1663,9 +1528,7 @@ export default {
 		}
 		eventBus.on('composer-published', this.onComposerPublished)
 
-		// before the mention prefill, which declines to overwrite a non-empty
-		// composer: whatever the last attempt left is what the reader wants back
-		const existingDraft = this.editItem ? null : loadDraft(this.draftContext)
+		// before the mention prefill, which does not overwrite a non-empty box
 		if (this.editItem) {
 			this.restoreEdit()
 		} else {
@@ -1678,16 +1541,12 @@ export default {
 				this.onComposerReply(this.inReplyTo)
 			}
 		}
-		if (this.initialRedraft !== null && existingDraft === null) {
-			this.redraft(this.initialRedraft)
-		}
 
 		if (this.initialMention !== null) {
 			this.prefillMessageWithMention(this.initialMention)
 		}
 
-		// somebody arrived here from Files with pictures in hand: open, and
-		// start attaching them before they have to do anything
+		// "Share to Social" from Files: open and start attaching
 		const paths = this.initialPaths.filter((path) => typeof path === 'string' && path !== '' && path !== '/')
 		if (paths.length > 0) {
 			this.expand()
@@ -1698,15 +1557,13 @@ export default {
 			this.attachFiles(this.initialFiles)
 		}
 
-		// a click anywhere else closes it again, which focusout cannot do on its
-		// own: the emoji picker is rendered outside this element, so following it
-		// with the caret looks exactly like leaving
+		// focusout alone cannot do this: the emoji picker is rendered outside
+		// this element, so using it looks like leaving
 		this.onOutsideInteraction = (event) => this.collapseIfIdle(event)
 		document.addEventListener('pointerdown', this.onOutsideInteraction)
 		document.addEventListener('focusin', this.onOutsideInteraction)
 
-		// the draft keeps everything else; what it cannot keep is asked about
-		// before the page is left, and only then
+		// the draft keeps everything else; only a pending upload is asked about
 		this.onBeforeUnload = (event) => {
 			if (this.wouldLoseOnLeave || this.loading) {
 				event.preventDefault()
@@ -1724,15 +1581,13 @@ export default {
 		document.removeEventListener('focusin', this.onOutsideInteraction)
 		window.removeEventListener('beforeunload', this.onBeforeUnload)
 		this.stopLeaveGuard?.()
-		// a navigation still waiting on the question is not held up by a
-		// composer that is gone
+		// release a navigation still waiting on the question
 		this.resolveLeave?.(true)
 		if (this.tribute && this.tributeTarget) {
 			this.tribute.detach(this.tributeTarget)
 		}
 		eventBus.off('composer-reply', this.onComposerReply)
 		eventBus.off('composer-quote', this.onComposerQuote)
-		eventBus.off('composer-redraft', this.onComposerRedraft)
 		eventBus.off('shortcut:compose', this.onComposerFocus)
 		eventBus.off('composer-published', this.onComposerPublished)
 	},
@@ -1818,14 +1673,9 @@ export default {
 		},
 
 		/**
-		 * Everything the reader put in, gone — the text, the attachments and
-		 * their previews, the poll, the warning, the schedule, the place, and
-		 * the copy on disk.
-		 *
-		 * One method rather than two lists, because it is run in two places
-		 * that must agree: after a post has been sent, and when the reader
-		 * closes the box on one that has not. A field added to the composer and
-		 * to only one of those lists is a field that survives posting.
+		 * Empties everything the reader put in: text, attachments, poll,
+		 * warning, schedule, place and the stored draft. Used both after
+		 * sending and on closing, so the two cannot disagree.
 		 */
 		clearComposer() {
 			if (this.inputElement() !== undefined) {
@@ -1859,24 +1709,8 @@ export default {
 		},
 
 		/**
-		 * The close button: back to a line of placeholder, with everything
-		 * still in the box.
-		 *
-		 * **Nothing is thrown away.** What was typed stays in the box and stays
-		 * in the draft on disk, so opening it again — a click, a reply, the
-		 * compose shortcut, or the next visit to the page — puts the reader
-		 * back where they were. A half-written post is not something to ask
-		 * somebody about at the moment they are trying to get it out of their
-		 * way; it is something to still be there when they come back.
-		 *
-		 * Clicking elsewhere collapses an idle composer and may do no more than
-		 * that, because a stray click must not close a box somebody is writing
-		 * in. This is that click made deliberate.
-		 */
-		/**
-		 * A click or the caret anywhere in the box opens it. Not the box's own
-		 * edge, which is where focus is parked after a post so that the box
-		 * can fold away without the reader being dropped onto the page body.
+		 * A click or the caret in the box opens it; not the box's own edge,
+		 * where focus is parked after a post.
 		 *
 		 * @param {FocusEvent} event where the focus landed
 		 */
@@ -1903,10 +1737,8 @@ export default {
 				this.closeAndLeave()
 				return
 			}
-			// the caret leaves the box before the dialog opens: the dialog's
-			// focus trap gives the focus back to whatever had it, and back in
-			// the box it would open the box again after Close. Cancel puts
-			// the caret back itself
+			// blur first: the dialog's focus trap would give focus back to the
+			// box and reopen it after Close; Cancel restores the caret itself
 			this.inputElement()?.blur()
 			this.confirmingClose = true
 		},
@@ -1917,22 +1749,21 @@ export default {
 			this.$el.focus?.()
 		},
 
+		/** The close button: collapses the box, keeping the words in it and in the draft. */
 		close() {
 			this.closedByHand = true
 			this.openedByHand = false
 
 			if (this.inReplyTo === null && this.statusIsEmpty) {
-				// the sidebar's box is shown by the store rather than by this
-				// component; an empty one closes all the way, a written one
-				// stays where the reader can get back to it
+				// the sidebar's box is shown by the store: an empty one closes
+				// all the way, a written one stays reachable
 				this.timelineStore.setComposerDisplayStatus(false)
 			}
 		},
 
 		/**
-		 * Fills the warning box in from the presets, or empties it when the
-		 * one already chosen is pressed again — the same press undoing itself
-		 * is what the pressed state promises.
+		 * Fills the warning box from a preset, or empties it when the chosen
+		 * one is pressed again.
 		 *
 		 * @param {string} preset the warning that was pressed
 		 */
@@ -1941,39 +1772,31 @@ export default {
 		},
 
 		/**
-		 * Fetches the emoji picker and opens it, which is what the button the
-		 * reader actually pressed would have done if it had been there.
-		 *
-		 * The import is awaited rather than left to `defineAsyncComponent`, so
-		 * the picker is mounted by the time the click is passed on to it; doing
-		 * it the other way round put the click into a component that did not
-		 * exist yet and the reader had to press twice.
+		 * Fetches the emoji picker and passes it the click that asked for it.
+		 * Awaited, not `defineAsyncComponent`, so the picker is mounted before
+		 * the click reaches it.
 		 */
 		async loadEmojiPicker() {
 			if (this.emojiPickerLoading) {
 				return
 			}
 
-			// the button stays where it is until the picker is really there:
-			// swapping it out first left an empty space for as long as the
-			// chunk took, which on a busy connection is seconds
+			// the button stays until the picker is there, so no gap shows
+			// while the chunk loads
 			this.emojiPickerLoading = true
 			try {
 				await emojiPickerModule()
 				this.emojiPickerLoaded = true
 			} catch (error) {
-				// Keep the lightweight button mounted. The import service clears a
-				// rejected promise, so another press retries the chunk request.
+				// the import service clears a rejected promise, so another press retries
 				logger.error('Could not load the emoji picker', { error })
 				return
 			} finally {
 				this.emojiPickerLoading = false
 			}
 
-			// and the click the reader already made is passed on to the picker,
-			// which is now mounted, rather than being spent on fetching it. A
-			// frame after the tick: the popover binds its trigger on mount and
-			// a click in the same tick lands before the listener does
+			// pass the click on a frame after the tick: the popover binds its
+			// trigger on mount
 			await this.$nextTick()
 			await new Promise((resolve) => window.requestAnimationFrame(resolve))
 			const button = /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.emojiButton)
@@ -1993,9 +1816,8 @@ export default {
 				return
 			}
 
-			// the emoji picker, the two menus and the date picker's calendar
-			// are teleported out of this element; using one of them is not
-			// leaving the composer
+			// the emoji picker, the menus and the date picker are teleported out
+			// of this element; using them is not leaving the composer
 			if (target instanceof Element && target.closest('.v-popper__popper, .modal-mask, .dp__menu') !== null) {
 				return
 			}
@@ -2073,11 +1895,8 @@ export default {
 		},
 
 		/**
-		 * The team accounts this account may post as.
-		 *
-		 * Asked of the server rather than remembered: membership of a group is
-		 * a live fact, and a composer that offered a team somebody had left
-		 * would be offering a post the server is about to refuse.
+		 * The team accounts this account may post as, asked fresh because
+		 * membership can change.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -2094,8 +1913,7 @@ export default {
 					this.postAs = this.pendingPostAs
 				}
 			} catch (error) {
-				// an instance with none answers this too; a composer without
-				// the control is the composer it has always been
+				// an instance with none answers this too; the control just stays absent
 				logger.debug('could not load the team accounts', { error })
 			} finally {
 				this.pendingPostAs = ''
@@ -2127,8 +1945,7 @@ export default {
 			const stored = this.handedOffStored
 			this.handedOffDraft = null
 			const draft = loadDraft(this.draftContext)
-			// without browser storage the full composer kept nothing, and the
-			// words handed to it are the only copy left
+			// without browser storage, the words handed over are the only copy
 			if (draft === null && !stored) {
 				return
 			}
@@ -2169,17 +1986,15 @@ export default {
 				this.showWarning = true
 				this.spoilerText = draft.spoilerText
 			}
-			// a draft written by another version can name a visibility this one
-			// does not have, and VisibilitySelect renders `.text` off the entry
-			// it looks up: an unknown id took the whole composer down
+			// a draft from another version may name an unknown visibility,
+			// which VisibilitySelect cannot render
 			if (isKnownVisibility(draft.visibility) && this.defaultVisibility === undefined) {
 				this.visibility = draft.visibility
 				this.visibilityChosen = true
 				this.resumedAudienceFor = this.draftContext
 			}
-			// checked against the teams once they are known (loadTeams): a
-			// draft can outlive leaving one, and a handle the server would
-			// refuse is worse than a draft that opens as yourself
+			// checked once the teams are known (loadTeams): the writer may have
+			// left the team since
 			this.pendingPostAs = draft.postAs
 			if (isLanguageCode(draft.language)) {
 				this.language = draft.language
@@ -2201,8 +2016,8 @@ export default {
 				this.eventLocation = draft.event.location
 			}
 			if (draft.scheduledAt !== '') {
-				// a time that has come too close in the meantime is shown as
-				// such by the picker, and Post waits until it is moved
+				// a time that has come too close is flagged by the picker, and
+				// Post waits until it is moved
 				this.scheduling = true
 				this.scheduledAt = new Date(draft.scheduledAt)
 				this.loadSchedulePicker()
@@ -2232,11 +2047,8 @@ export default {
 		},
 
 		/**
-		 * Points a re-draft at the post it answered and the post it quoted, so
-		 * it goes out as the reply or the quote it was rather than as a post
-		 * of its own. A post not in hand is asked for; when it is gone or
-		 * cannot be asked for, the composer shows no reply or quote and the
-		 * re-draft goes out on its own.
+		 * Points a re-draft at the post it answered and the post it quoted,
+		 * fetching them if needed; one that is gone is dropped.
 		 *
 		 * @param {string} inReplyToId the post it answered, '' for none
 		 * @param {string} quoteId the post it quoted, '' for none
@@ -2287,11 +2099,9 @@ export default {
 		},
 
 		/**
-		 * The answer to the question confirmLeave() asked.
-		 *
-		 * Leave closes the dialog and then confirms, in the same tick, so a
-		 * no is held until the tick is over; Cancel, Escape and the close
-		 * button come with the no alone.
+		 * The answer to the question confirmLeave() asked. Leave closes the
+		 * dialog and confirms in the same tick, so a no is held until the tick
+		 * is over.
 		 *
 		 * @param {boolean} leave whether to go
 		 */
@@ -2315,55 +2125,6 @@ export default {
 		},
 
 		/**
-		 * Fills the composer from a post that has just been deleted.
-		 *
-		 * Everything the post carried that this box can hold: the words, the
-		 * content warning, the audience, the language and the pictures. The
-		 * pictures are the uploads the server still holds — deleting a post
-		 * removes the post, not the media rows behind it — so they are put
-		 * back by id rather than uploaded again, which is what makes this
-		 * different from copying the text out by hand.
-		 *
-		 * A poll is not carried. Its votes belong to the post that was
-		 * deleted, and a new poll with the old options and no votes is a
-		 * different thing wearing its clothes; whoever wants one adds it here.
-		 *
-		 * Whatever is already in the box wins. A re-draft arrives from a menu
-		 * two clicks away, and overwriting half-written words with an old post
-		 * is not a correction anybody asked for.
-		 *
-		 * @param {object} post the post as the timeline held it
-		 */
-		redraft(post) {
-			this.expand()
-
-			if (this.statusIsEmpty && this.inputElement() !== undefined) {
-				this.inputElement().innerText = htmlToPlainText(post.content || '')
-				this.updateStatusContent()
-			}
-
-			const warning = (post.spoiler_text || '').trim()
-			if (warning !== '') {
-				this.showWarning = true
-				this.spoilerText = warning
-			}
-
-			if (isKnownVisibility(post.visibility)) {
-				this.visibility = post.visibility
-				this.visibilityChosen = true
-			}
-
-			if (isLanguageCode(post.language || '')) {
-				this.language = post.language
-			}
-
-			this.restoreMedia(post.media_attachments ?? [])
-			this.restoreRedraftTargets(post.in_reply_to_id ?? '', '', post.quote?.quoted_status ?? null)
-
-			this.focusInput()
-		},
-
-		/**
 		 * The reader naming an audience for this post, which settles it.
 		 *
 		 * @param {string} visibility the id they picked
@@ -2378,9 +2139,8 @@ export default {
 		},
 
 		/**
-		 * Attaches a picture from the instance's shared library. The picker
-		 * stays open — choosing two is a normal thing to want — and the
-		 * ceiling closes it instead.
+		 * Attaches a GIF from the instance's shared library. The picker stays
+		 * open for more until the attachment ceiling closes it.
 		 *
 		 * @param {{slug: string, title: string}} gif the one that was chosen
 		 */
@@ -2472,16 +2232,15 @@ export default {
 				return
 			}
 
-			// filters are baked in here, once, and the filtered copies take
-			// the place of the uploads before their ids are read below
+			// filters are baked in once, and the filtered copies replace the
+			// uploads before their ids are read
 			this.loading = true
 			if (!(await this.bakeFilters())) {
 				this.loading = false
 				return
 			}
 
-			// the games are played before anything is sent, so the result is
-			// part of the post and every server shows the same one
+			// games are played before sending, so every server shows the same result
 			const played = resolveCommands(this.plainText())
 			if (played.results.length > 0) {
 				this.loading = true
@@ -2493,8 +2252,7 @@ export default {
 			const statusData = statusPayload({
 				text: status,
 				warning,
-				// only uploads the server actually took: a failed one used to
-				// be read as `preview.data.id` and threw a TypeError here
+				// only uploads the server took
 				mediaIds: this.mediaIds,
 				inReplyToId: this.replyTo?.id,
 				quoteId: this.quoteOf?.id,
@@ -2541,9 +2299,8 @@ export default {
 			try {
 				this.loading = true
 				await this.saveDescriptions()
-				// `post` resolves with the created status and rejects when the
-				// server said no; clearing in a `finally` used to throw the
-				// text away on every failure, offline included
+				// `post` rejects when the server refuses; the text is cleared
+				// only after it resolves
 				created = await this.timelineStore.post(statusData, {
 					idempotencyKey: this.idempotency.keyFor(statusData),
 				})
@@ -2552,8 +2309,7 @@ export default {
 			}
 
 			if (created === undefined) {
-				// the store has already said what went wrong; the draft is
-				// still on disk and still in the box
+				// the store has reported the error; the draft is kept
 				this.rememberDraft()
 				return
 			}
@@ -2564,24 +2320,19 @@ export default {
 
 			this.replyTo = this.inReplyTo
 			this.quoteOf = null
-			// back to a line, as it was before the reader clicked into it; an
-			// open and empty box over the first posts read as if nothing had
-			// happened. The focus goes with it: left on the box it would open
-			// again, and dropped it lands on the page body
+			// back to one line; focus is parked on the edge, since on the box
+			// it would reopen it
 			this.openedByHand = this.startExpanded
 			this.clearComposer()
 			if (!this.startExpanded) {
 				this.$el.focus?.()
 			}
-			// the sidebar's modal has no other way of knowing: it cleared the
-			// box and stayed open, which reads as if nothing had happened
+			// tells the sidebar's modal to close
 			this.$emit('posted')
 			eventBus.emit('composer-published', { context: publishedContext })
 
 			if (wasScheduled) {
-				// nothing is on any timeline yet, so there is nothing to
-				// refresh and no post to celebrate; what there is to say is
-				// when it will be — the answer is a ScheduledStatus, not a Status
+				// a ScheduledStatus, not a Status: nothing to refresh or celebrate
 				showSuccess(t('social', 'Scheduled for {date}', {
 					date: fullDateTime(created.scheduled_at ?? statusData.scheduled_at),
 				}))
@@ -2591,14 +2342,11 @@ export default {
 			}
 
 			if (created.held_for_review === true) {
-				// there is nothing on any timeline to refresh and nothing to
-				// celebrate: the post is in the review queue, and the store has
-				// already said so
+				// in the review queue, which the store has already said
 				return
 			}
 
-			// heard, felt and seen: the box answers, and the post makes an
-			// entrance at the top of the timeline instead of simply being there
+			// sound, haptics, and an entrance at the top of the timeline
 			feel('post')
 			this.justPosted = true
 			window.setTimeout(() => {
@@ -2607,9 +2355,8 @@ export default {
 			if (created?.id) {
 				this.timelineStore.markArrived(created.id)
 			}
-			// a ranked list has no top for the post to arrive at, and asking it
-			// for its first page again would replace the cursor the reader is
-			// paging with
+			// a ranked list has no top to arrive at, and reloading it would
+			// reset the reader's cursor
 			if (!isRanked({ type: this.timelineStore.type, params: this.timelineStore.params })) {
 				this.timelineStore.refreshTimeline()
 			}
@@ -2626,8 +2373,7 @@ export default {
 		 *
 		 * @param {string} words what the card says
 		 * @return {Promise<string|null>} the attachment's id, or null when it
-		 *         could not be drawn or uploaded -- the post then does not go
-		 *         out, rather than going out without the card it was meant to be
+		 *         failed; the post then does not go out
 		 */
 		async uploadCard(words) {
 			this.loading = true
@@ -2648,10 +2394,8 @@ export default {
 		},
 
 		/**
-		 * Plays the games in a post where the writer can watch: each one
-		 * tumbles through what it could land on for half a second and then
-		 * lands on what it did. The result was decided before the tumble
-		 * started; this is only the showing of it.
+		 * Shows the games tumbling for half a second before landing on the
+		 * results, which are already decided.
 		 *
 		 * @param {Array<{ kind: string, result: string }>} results what was played
 		 * @return {Promise<void>}
@@ -2678,11 +2422,7 @@ export default {
 			this.rolling = []
 		},
 
-		/**
-		 * Presses or releases the pin. Releasing it drops the place as well:
-		 * a pin that is not pressed says the post has no place, and it should
-		 * mean it.
-		 */
+		/** Presses or releases the pin; releasing it drops the place as well. */
 		togglePlace() {
 			this.placing = !this.placing
 			if (!this.placing) {
@@ -2692,8 +2432,7 @@ export default {
 
 		/**
 		 * Presses or releases the clock. Pressing it fetches the picker and
-		 * proposes an hour from now, rounded to the picker's step, so there is
-		 * a time to move rather than a blank to fill.
+		 * proposes an hour from now, rounded to the picker's step.
 		 */
 		async toggleSchedule() {
 			if (this.scheduling) {
@@ -2719,8 +2458,7 @@ export default {
 				await datePickerModule()
 				this.schedulePickerLoaded = true
 			} catch (error) {
-				// the module's onError has logged it; without a picker there is
-				// no way to choose a time, so the post goes out now after all
+				// onError has logged it; without a picker the post goes out now
 				logger.debug('The date picker is not available', { error })
 				this.scheduling = false
 				this.scheduledAt = null
@@ -2737,9 +2475,8 @@ export default {
 		},
 
 		/**
-		 * Writes the mark for a post made with AI into the words, or takes it
-		 * out, the way a restored draft fills the box: the text is set and
-		 * read back, so the draft on disk and the preview follow.
+		 * Writes the AI mark into the words or takes it out, setting and
+		 * reading back the text so the draft and preview follow.
 		 */
 		toggleAiMark() {
 			const text = this.plainText()
@@ -2778,9 +2515,7 @@ export default {
 
 		closeReply() {
 			this.replyTo = this.inReplyTo
-			// an anchored composer is part of the page rather than something
-			// opened over it: there is nothing to close it back to, so it
-			// closes itself instead
+			// an anchored composer has nothing to close back to, so it collapses
 			if (this.inReplyTo === null) {
 				this.timelineStore.setComposerDisplayStatus(false)
 
@@ -2791,8 +2526,7 @@ export default {
 		},
 
 		removeQuote() {
-			// only the quote goes, unlike closeReply(): the message is the
-			// reader's own and taking the embed back is no reason to lose it
+			// only the quote goes, unlike closeReply(): the message is kept
 			this.quoteOf = null
 		},
 
@@ -2800,11 +2534,8 @@ export default {
 }
 
 /**
- * The visibility the last post went out with.
- *
- * Reading localStorage throws outright in a private window and where site
- * data is blocked, and an unguarded read here took the whole composer down
- * with it.
+ * The visibility the last post went out with; reading localStorage can throw
+ * in a private window.
  *
  * @return {string} the remembered visibility, or '' when there is none
  */
@@ -2830,8 +2561,7 @@ function rememberedVisibility() {
 	margin-block: 10px;
 }
 
-// one duration and one curve for the whole opening, so the parts of it arrive
-// together rather than each on its own schedule
+// one duration and curve for the whole opening, so its parts arrive together
 $composer-ease: var(--social-ease);
 $composer-duration: var(--social-motion-base);
 
@@ -2841,9 +2571,7 @@ $composer-duration: var(--social-motion-base);
 	border-radius: var(--border-radius-large, 12px);
 	padding: 18px;
 	margin: calc(var(--default-grid-baseline) * 3) auto;
-	// the full column, where the list only fills it inside its own gutter: the
-	// box you write in reaches a little past the posts it will join on both
-	// sides, so it reads as the thing that makes them rather than one of them
+	// the full column, a little wider than the posts inside the list's gutter
 	max-width: var(--social-column);
 	position: sticky;
 	top: 0;
@@ -2855,8 +2583,7 @@ $composer-duration: var(--social-motion-base);
 		background-color $composer-duration $composer-ease,
 		box-shadow $composer-duration $composer-ease;
 
-	// lifted, not outlined: the box the caret is in draws the ring, and two
-	// nested rings around the same caret is one too many
+	// lifted, not outlined: the box with the caret draws the ring already
 	&:focus-within {
 		box-shadow: var(--social-elevation-raised);
 	}
@@ -2918,9 +2645,8 @@ $composer-duration: var(--social-motion-base);
 	color: var(--color-text-maxcontrast);
 }
 
-// Closed: a portrait and a line to write on. Everything else is still in the
-// document — it is measured, not removed, so the opening can be animated — but
-// it is out of the tab order and out of the accessibility tree until it is.
+// Collapsed: everything else stays in the document (measured, so the opening
+// can be animated) but out of the tab order and accessibility tree.
 .new-post--collapsed {
 	display: flex;
 	align-items: center;
@@ -2955,10 +2681,8 @@ $composer-duration: var(--social-motion-base);
 	}
 }
 
-// A file is being dragged over the card: the whole thing is the target, said
-// with a tint and the primary border it already uses for focus, plus one pill
-// naming what will happen. No dashes, no bounce — it is an invitation, not an
-// alarm, and it borrows the composer's own duration and curve.
+// A file dragged over the card: a tint, the focus border and one pill
+// naming what will happen.
 .new-post--drop-target {
 	border-color: var(--color-primary-element);
 	background: var(--color-primary-element-light, var(--color-background-hover));
@@ -2976,8 +2700,7 @@ $composer-duration: var(--social-motion-base);
 	align-items: center;
 	justify-content: center;
 	border-radius: inherit;
-	// it must never take the drop it is announcing, and it must not turn the
-	// card into a storm of dragenter/dragleave by sitting under the pointer
+	// must never take the drop, nor cause dragenter/dragleave churn under the pointer
 	pointer-events: none;
 
 	span {
@@ -3005,7 +2728,7 @@ $composer-duration: var(--social-motion-base);
 }
 
 .new-post--refused {
-	// 400ms, the same span REFUSAL_DURATION in useComposerAttachments keeps the class on for
+	// matches REFUSAL_DURATION in useComposerAttachments
 	animation: composer-refused var(--social-motion-slow) $composer-ease;
 }
 
@@ -3031,7 +2754,7 @@ $composer-duration: var(--social-motion-base);
 	border-bottom: 1px solid var(--color-border);
 	margin-bottom: 10px;
 
-	// pushed to the far end of the row, where a close button is looked for
+	// at the far end of the row
 	&__close {
 		margin-inline-start: auto;
 	}
@@ -3158,9 +2881,8 @@ $composer-duration: var(--social-motion-base);
 	}
 }
 
-// With a picture the words are its caption, so the box gives up the height it
-// was holding for a post that has no picture, and the pictures under it stay
-// within reach of the thumb that is typing.
+// With photos the words are a caption: the box gives up height so the photos
+// stay within reach of the thumb.
 .new-post-form--with-media {
 	:deep(.upload-form) {
 		margin-top: 10px;
@@ -3180,12 +2902,7 @@ $composer-duration: var(--social-motion-base);
 .options {
 	display: flex;
 	align-items: center;
-	// the row has grown a control at a time -- attachments, files, a warning,
-	// a picture library, a preview, a poll, a clock, emoji, a language, an
-	// audience -- and the last thing in it is the button that sends the post.
-	// Left in one line they all shrink together and the button loses its
-	// words: "Post to followers" became "P". The icons wrap instead, and the
-	// button keeps the width its label needs.
+	// the icons wrap rather than squeezing the Post button's label
 	flex-wrap: wrap;
 	gap: 4px 8px;
 	margin-top: 10px;
@@ -3263,21 +2980,15 @@ $composer-duration: var(--social-motion-base);
 	flex-grow: 1;
 }
 
-/*
- * Whatever else has to give, the button that sends the post does not: it
- * keeps its width, and when the icons above it wrap it stays at the end of
- * the row rather than starting a new one on the left.
- */
+/* the Post button keeps its width and stays at the end of the row when the icons wrap */
 .options > :last-child {
 	flex-shrink: 0;
 	margin-inline-start: auto;
 }
 
 /*
- * A phone. Seven controls and a Post button do not fit one row of 358px, and
- * the row used to end with half the button off the screen. The row wraps: the
- * spacer goes, the visibility menu shows its icon only, and Post keeps the
- * end of whatever row it lands on.
+ * Phone: the row wraps, the spacer goes, the visibility menu shows its icon
+ * only, and Post stays at the end of its row.
  */
 @include layout.below(layout.$phone) {
 	.options {
@@ -3400,7 +3111,6 @@ $composer-duration: var(--social-motion-base);
 	text-align: start;
 }
 
-/* the allowance as a ring that fills, rather than a limit you discover */
 .composer-alt-warning {
 	align-self: center;
 	padding: 2px 8px;
@@ -3411,6 +3121,7 @@ $composer-duration: var(--social-motion-base);
 	font-weight: 600;
 }
 
+/* the allowance as a ring that fills, rather than a limit you discover */
 .char-ring {
 	position: relative;
 	width: 24px;
@@ -3463,9 +3174,8 @@ $composer-duration: var(--social-motion-base);
 }
 
 /*
- * The box answers a post that went out: a quick bright sweep across it, in the
- * primary colour, the way a stamp lands. A pseudo-element so the composer's
- * own layout and elevation are left alone.
+ * A quick bright sweep across the box when a post goes out, as a
+ * pseudo-element so layout and elevation are untouched.
  */
 @keyframes new-post-sent {
 	0% { opacity: 0; transform: translateX(-100%); }

@@ -17,8 +17,7 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_report.rules`: the instance rules a reporter said were broken, as a
- * JSON list of `{id, text}` taken when the report was filed. Rows filed before
- * it have none.
+ * JSON list of `{id, text}` taken when the report was filed.
  */
 class Version1000Date20261108400001 extends SimpleMigrationStep {
 	/**

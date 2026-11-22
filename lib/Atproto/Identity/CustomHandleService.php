@@ -19,13 +19,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A handle on a domain the person owns (§4.2): checked before it is used,
- * written into the DID document, and checked again every day after, so a
- * record that went away shows as broken in the settings rather than only
- * on Bluesky. One that fails CLEAR_AFTER checks in a row is dropped: the
- * domain is no longer the person's to show, and this server stops
- * answering it for them. The assigned `alice.<host>` handle keeps
- * resolving to the DID throughout, an alias the document does not list.
+ * A handle on a domain the person owns (§4.2): checked before use, written
+ * into the DID document, and rechecked daily so a broken record shows in the
+ * settings. After CLEAR_AFTER failed checks in a row it is dropped. The
+ * assigned `alice.<host>` handle keeps resolving to the DID throughout.
  */
 class CustomHandleService {
 	/** how often a custom handle is checked again */

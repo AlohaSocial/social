@@ -75,8 +75,7 @@
 				</div>
 			</header>
 
-			<!-- taking posts out: the same squares, each with a button on it,
-			     rather than a second list nobody would recognise -->
+			<!-- taking posts out: the same squares, each with a button on it -->
 			<ul v-if="managing && posts.length" class="collection__manage">
 				<li v-for="post in posts" :key="post.id" class="collection__manage-cell">
 					<img
@@ -184,13 +183,8 @@ import { latestLoad } from '../utils/latestLoad.js'
 const PAGE = 40
 
 /**
- * One collection: its posts as a grid, and for the owner the three things
- * they can do to it.
- *
- * The grid is the profile's own, so a collection looks like the profile it
- * was made from. Removing posts turns the same squares into squares with a
- * button on each: the owner takes posts out where they see them, not in a
- * list of titles a picture does not have.
+ * One collection: its posts in the profile's own grid, and for the owner the
+ * three things they can do to it.
  */
 export default {
 	name: 'CollectionPage',

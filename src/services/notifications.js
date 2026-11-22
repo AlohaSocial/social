@@ -7,9 +7,8 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { isNewerId } from '../utils/snowflake.js'
 
 /**
- * Every notification type the server can serve. The filters below are
- * expressed as what to leave *out*, which is the parameter the API takes
- * (`exclude_types`), so a filter is this list minus what it keeps.
+ * Every notification type the server can serve. The API takes filters as
+ * `exclude_types`, so a filter is this list minus what it keeps.
  */
 export const NOTIFICATION_TYPES = [
 	'mention',
@@ -33,8 +32,8 @@ export const NOTIFICATION_TYPES = [
 ]
 
 /**
- * The filters the notifications page offers, in the order it offers them, and
- * the types each one keeps. `all` keeps everything and sends nothing.
+ * The filters Activities offers, in order, and the types each one keeps.
+ * `all` keeps everything and sends nothing.
  */
 export const NOTIFICATION_FILTERS = {
 	all: NOTIFICATION_TYPES,
@@ -63,10 +62,8 @@ export function excludeTypesFor(filter) {
 }
 
 /**
- * The filter the reader last chose, or `all`.
- *
- * Reading localStorage throws in a private window and wherever site data is
- * blocked; a filter the browser cannot remember is simply `all` again.
+ * The filter the reader last chose, or `all` when the browser cannot
+ * remember it (localStorage throws in private windows).
  *
  * @return {string} a key of NOTIFICATION_FILTERS
  */
@@ -87,14 +84,11 @@ export function rememberFilter(filter) {
 	try {
 		window.localStorage.setItem(FILTER_KEY, filter)
 	} catch {
-		// nothing to do about it: the page keeps the filter for as long as
-		// it is open, and next time starts at `all`
+		// the filter then lasts only while the page is open
 	}
 }
 
-/**
- * How many faces a grouped card shows before it says "and N others".
- */
+/** How many faces a grouped card shows before it says "and N others". */
 export const GROUP_FACES = 5
 
 /**
@@ -114,37 +108,18 @@ function groupKey(notification) {
 }
 
 /**
- * One row of the notifications page: a Notification, or several folded into
- * one card.
- *
- * A card keeps the shape of the newest member it stands for and adds the two
- * fields that make it a group — everybody in it, and every row it covers, so
- * that marking it read covers all of them. A single notification is returned
- * untouched and simply has neither.
+ * One row of Activities: a Notification, or several folded into one card
+ * that also carries `accounts` (everybody in it) and `ids` (every row it
+ * covers, so marking it read covers all of them).
  *
  * @typedef {import("../types/Mastodon").Notification & {accounts?: import("../types/Mastodon").Account[], ids?: string[], nid?: string}} NotificationCard
  */
 
 /**
- * Folds the same reaction into one card.
- *
- * Twelve favourites of one post were twelve cards quoting the same post twelve
- * times, which is a page of the same thing. Every favourite or boost of one
- * status, and every follow, becomes a single card that names the first few
- * people and counts the rest.
- *
- * Across the page rather than only consecutive runs: the folding used to stop
- * at the first notification of another kind, which on any real page is
- * immediately -- twelve likes of one post arrive interleaved with everything
- * else that happened, so the page showed twelve cards anyway. The card keeps
- * the place of its *newest* member, so nothing moves above something that
- * happened after it; what is folded into it is only ever older.
- *
- * A grouped card keeps the shape of a Notification -- `id`, `type`,
- * `created_at`, `account`, `status` are those of the newest member -- and adds
- * `accounts`, everyone in it, and `ids`, every row it stands for, so that
- * marking the card read can cover all of them. One member on its own is
- * returned as it came, untouched.
+ * Folds every favourite or boost of one status, and every follow, into one
+ * card across the whole page, not only consecutive runs. The card takes the
+ * place and fields of its newest member, so nothing moves above something
+ * newer; a lone member is returned untouched.
  *
  * @param {import("../types/Mastodon").Notification[]} entries newest first
  * @return {NotificationCard[]} the cards, newest first
@@ -193,18 +168,11 @@ export function groupNotifications(entries) {
 }
 
 /**
- * The newest row id a card stands for.
+ * The newest row id a card stands for: the read marker is "up to", so a
+ * grouped card must report the newest of its `ids`.
  *
- * A Notification carries the row id as `id`, a string; a status carries the
- * same number again as `nid`. A grouped card carries `ids`, everyone it
- * folded in — and the read marker is "up to", so a card that stands for nine
- * favourites has to report the newest of the nine or eight of them stay
- * unread for ever.
- *
- * Carried as a string and compared as a BigInt, never as a Number: see
- * `utils/snowflake.js`. A marker set from a rounded id sits *behind* the
- * notification it was meant to cover, so the badge came back however often the
- * reader cleared it.
+ * Compared as a BigInt, never as a Number (see `utils/snowflake.js`): a
+ * rounded id would set the marker behind the notification it should cover.
  *
  * @param {NotificationCard} card a notification, or a card from groupNotifications()
  * @return {string} the id, '0' when there is none to read
@@ -264,10 +232,8 @@ function groupedSummary(notification) {
 }
 
 /**
- * A direct message reaches the bell as the mention it carries: Mastodon has
- * no notification kind of its own for one, and the status says `direct`.
- * Activities shows it as a private message rather than as a mention beside
- * the public ones.
+ * Whether this is a direct message: Mastodon delivers one as a mention whose
+ * status is `direct`, and Activities shows it as a private message.
  *
  * @param {import("../types/Mastodon").Notification} notification a notification
  * @return {boolean}
@@ -278,8 +244,7 @@ export function isDirectMessage(notification) {
 
 /**
  * @param {import("../types/Mastodon").Notification} notification a notification,
- * or a card from groupNotifications() — which carries the extra `accounts`
- * this reads, and is otherwise shaped exactly like one
+ * or a card from groupNotifications() with its extra `accounts`
  * @return {string}
  */
 export function notificationSummary(notification) {
@@ -315,9 +280,9 @@ export function notificationSummary(notification) {
 		case 'severed_relationships':
 			return t('social', 'Some of your follows were removed because a server was blocked')
 		case 'story:react':
-			return t('social', '{account} reacted to your story', { account })
+			return t('social', '{account} reacted to your short', { account })
 		case 'story:comment':
-			return t('social', '{account} replied to your story', { account })
+			return t('social', '{account} replied to your short', { account })
 		case 'tagged':
 			return t('social', '{account} tagged you in a photo', { account })
 		case 'admin.sign_up':
@@ -340,9 +305,8 @@ export function notificationSummary(notification) {
 }
 
 /**
- * Where a card falls on the calendar: today, the six days before it, or
- * longer ago. Days are the reader's local days, so a like at 23:50 is not
- * "today" ten minutes later. A date that cannot be read counts as long ago.
+ * Where a card falls on the reader's local calendar: today, the six days
+ * before, or earlier. An unreadable date counts as earlier.
  *
  * @param {string|undefined} createdAt when it happened, as the API sends it
  * @param {Date} now the moment the page is drawn
@@ -364,13 +328,8 @@ export function dayOf(createdAt, now = new Date()) {
 }
 
 /**
- * The headings over the notifications page, by the index of the card each
- * one stands above.
- *
- * The unread cards at the top keep the one "New" heading the sidebar badge
- * points at; below them the cards are under the day they arrived: Today,
- * This week, Earlier. A heading is only drawn where the run changes, and the
- * cards are newest first, so each appears at most once.
+ * The headings over Activities, by the index of the card each stands above:
+ * "New" over the unread cards at the top, then Today, This week, Earlier.
  *
  * @param {NotificationCard[]} cards the cards, newest first
  * @param {number} newCount how many cards at the top are under "New"; 0 for none

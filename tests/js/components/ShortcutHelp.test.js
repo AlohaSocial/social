@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 import ShortcutHelp from '../../../src/components/ShortcutHelp.vue'
 import { PLAYER_SHORTCUTS, SHORTCUTS } from '../../../src/services/shortcuts.js'
@@ -25,6 +26,10 @@ function mountHelp(open) {
 }
 
 describe('the ? dialog', () => {
+	beforeEach(() => {
+		setActivePinia(createPinia())
+	})
+
 	it('stays out of the page until it is asked for', () => {
 		expect(mountHelp(false).findComponent(NcModal).exists()).toBe(false)
 	})
@@ -34,6 +39,11 @@ describe('the ? dialog', () => {
 
 		expect(wrapper.findComponent(NcModal).props('name')).toBe('Keyboard shortcuts')
 		expect(wrapper.findAll('.shortcut-list__row')).toHaveLength(SHORTCUTS.length + PLAYER_SHORTCUTS.length)
+	})
+
+	/** The switch lived in Settings; it is where the shortcuts are listed now. */
+	it('offers the switch that turns them off, above the list', () => {
+		expect(mountHelp(true).text()).toContain('Use keyboard shortcuts')
 	})
 
 	it('tells the page when it is dismissed', () => {

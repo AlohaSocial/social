@@ -30,9 +30,8 @@ class AcceptInterface extends AbstractActivityPubInterface implements IActivityP
 	 */
 	#[\Override]
 	public function processIncomingRequest(ACore $item): void {
-		// An Accept whose `object` is a link used to be dropped, which left the
-		// follow pending forever: no posts arrive, and a later unfollow sends an
-		// Undo for a follow the peer thinks it granted.
+		// an Accept whose `object` is only a link is resolved too, or the follow
+		// would stay pending for ever
 		try {
 			$object = $this->objectResolver->resolve($item);
 		} catch (ItemNotFoundException $e) {
@@ -45,10 +44,8 @@ class AcceptInterface extends AbstractActivityPubInterface implements IActivityP
 			return;
 		}
 
-		// A follow request is answered by the account it was addressed to and by
-		// nobody else. The interface below checks the host of that account,
-		// which on a shared server is every account on it — so any of them
-		// could accept a request meant for a neighbour.
+		// a follow request is answered only by the account it was addressed
+		// to; the check below is only by host, which a shared server shares
 		if ($object instanceof Follow) {
 			$item->checkActor($object->getObjectId(), $item->getActorId());
 		}

@@ -23,12 +23,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * The picture of a link card (§8.3), as the blob an external embed's
- * `thumb` names. The picture is the page's own preview image, which the
- * reader's browser otherwise loads from the page's server: here it is
- * fetched once, as any remote document is — through the same guards and
- * size limits — kept as a cached document, and made to fit what Bluesky
- * takes for a card.
+ * The image of a link card (§8.3), as the blob an external embed's `thumb`
+ * names: fetched once through the usual remote-document guards, cached, and
+ * resized to what Bluesky accepts.
  */
 class CardThumbnail {
 	/** what the lexicon lets an external card's thumbnail weigh */

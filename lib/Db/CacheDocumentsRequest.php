@@ -20,9 +20,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 
 	/**
 	 * How many uncached documents one page of the background prefetch reads
-	 * (`RemoteMediaPrefetcher::prefetchPending()`). Each one is an outbound
-	 * HTTP request, so this bounds the cron slot rather than the work: what is
-	 * left over is the next run's.
+	 * (`RemoteMediaPrefetcher::prefetchPending()`). Each is an outbound HTTP
+	 * request, so this bounds the cron slot; the rest is the next run's.
 	 */
 	public const CACHE_BATCH = 50;
 
@@ -72,7 +71,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Insert cache about an Actor in database.
+	 * Writes a cached document back.
 	 */
 	public function update(Document $document): void {
 		$qb = $this->getCacheDocumentsUpdateSql();
@@ -117,12 +116,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Writes a poster frame back: the copy it was stored under, and the `meta`
-	 * blob the duration and the dimensions ride in.
-	 *
-	 * Its own statement rather than `update()`, which rewrites `creation` --
-	 * making a still for a two-year-old video would date the video to today --
-	 * and which does not touch `meta` at all.
+	 * Writes a poster frame back: the copy it was stored under and the `meta`
+	 * blob. Not `update()`, which rewrites `creation` and leaves `meta` alone.
 	 */
 	public function updatePoster(Document $document): void {
 		$qb = $this->getCacheDocumentsUpdateSql();
@@ -162,10 +157,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Writes a type that was worked out after the row was written.
-	 *
-	 * Its own statement rather than `update()`, which rewrites `creation` --
-	 * recording what a two-year-old picture is would date it to today.
+	 * Writes a type that was worked out after the row was written. Not
+	 * `update()`, which would rewrite `creation` to today.
 	 */
 	public function updateMediaType(Document $document): void {
 		$qb = $this->getCacheDocumentsUpdateSql();
@@ -177,10 +170,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Stored documents whose type was never recorded.
-	 *
-	 * Only rows that hold bytes: the type is read back from the file, and the
-	 * three sentinels (`avatar`, `header`, a streamed pointer) name no file.
+	 * Stored documents whose type was never recorded. Only rows that hold
+	 * bytes, since the type is read from the file.
 	 *
 	 * @return Document[]
 	 */
@@ -236,9 +227,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb->set('size', $qb->createNamedParameter($document->getSizeBytes(), IQueryBuilder::PARAM_INT));
 		$qb->set('description', $qb->createNamedParameter($document->getDescription()));
 		$qb->set('error', $qb->createNamedParameter($document->getError()));
-		// The mime type is sniffed from the downloaded bytes and this is the only
-		// write that runs afterwards; without it the row keeps the empty type it
-		// was created with and the copy is served with no Content-Type at all.
+		// the mime type is sniffed from the downloaded bytes, and this is the
+		// only write after that
 		$qb->set('mime_type', $qb->createNamedParameter($document->getMimeType()));
 		$qb->set('media_type', $qb->createNamedParameter($document->getMediaType()));
 		// read off the downloaded bytes, like the mime, and stripped from them
@@ -254,12 +244,6 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * @param string $url
-	 *
-	 * @return Document
-	 * @throws CacheDocumentDoesNotExistException
-	 */
-	/**
 	 * The document row behind a served copy, by the uuid `/media/{uuid}` exposes.
 	 *
 	 * @throws CacheDocumentDoesNotExistException
@@ -274,11 +258,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The document row by its own key.
-	 *
-	 * The one lookup a streamed document has: it holds no copy, so there is no
-	 * uuid to find it by, and its ActivityPub id is somebody else's url --
-	 * which is exactly what a media route must not accept from a caller.
+	 * The document row by its own key: the only lookup a streamed document
+	 * has, since it holds no copy and its ActivityPub id is a remote URL a
+	 * media route must not accept.
 	 *
 	 * @throws CacheDocumentDoesNotExistException
 	 */
@@ -301,14 +283,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 
 	/**
 	 * The document a media uuid belongs to, whether the uuid names its full
-	 * copy or its resized one.
-	 *
-	 * A preview link carries the resized uuid, so a lookup that knew only
-	 * about `local_copy` could never serve one.
-	 *
-	 * Two indexed lookups rather than one `OR`, which no database answers
-	 * from two separate indexes reliably: the full copy first, as most links
-	 * name it.
+	 * copy or its resized one (as a preview link does). Two indexed lookups
+	 * rather than one `OR`, the full copy first.
 	 *
 	 * @throws CacheDocumentDoesNotExistException
 	 */
@@ -404,12 +380,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The document row for an id.
-	 *
-	 * Unless `$public` is set this is an unscoped lookup: a document id names any
-	 * row in the table, so anything that takes the id from a request must decide
-	 * for itself whether the caller may see the result — see
-	 * `DocumentService::getFromCacheAsViewer()`.
+	 * The document row for an id. Unless `$public` is set this is unscoped,
+	 * so a caller taking the id from a request must check visibility itself
+	 * (see `DocumentService::getFromCacheAsViewer()`).
 	 *
 	 * @return Document
 	 * @throws CacheDocumentDoesNotExistException
@@ -465,13 +438,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * How many stored copies an account has of its own files, by media type.
-	 *
-	 * One grouped count rather than a walk: the caller is an export size
-	 * estimate, which runs before anything is read and must not cost a query per
-	 * file. `account` is only ever set on what this instance stored for a local
-	 * user -- an upload from the composer and a profile banner -- so this counts
-	 * the user's own media and nothing federated.
+	 * How many stored copies an account has of its own files, by media type,
+	 * in one grouped count for the export size estimate. `account` is only
+	 * set on a local user's own uploads, so nothing federated is counted.
 	 *
 	 * @return array<string, int> media type => how many rows
 	 */
@@ -501,9 +470,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 
 	/**
 	 * How many bytes of media, of any type, one account has uploaded here.
-	 *
-	 * The same stored `size` the video quota reads, and for the same reason;
-	 * streamed rows are somebody else's bytes and are left out.
+	 * Streamed rows are somebody else's bytes and are left out.
 	 */
 	public function localBytesOf(string $account): int {
 		return $this->localBytesByAccount([$account])[$account] ?? 0;
@@ -544,16 +511,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * How many bytes of video one account is holding here.
-	 *
-	 * The stored `size`, not a walk of the files: this is asked on every video
-	 * upload, and a `stat` per row would make the quota cost more than the
-	 * thing it guards. A row written before that column existed carries 0 and
-	 * is invisible here until the usage cron has been past it, which is the
-	 * honest trade — see `MediaUsageService`, which fills them in as it walks.
-	 *
-	 * Streamed rows are excluded: those are somebody else's bytes on somebody
-	 * else's server.
+	 * How many bytes of video one account is holding here, from the stored
+	 * `size` rather than a `stat` per file, since this runs on every upload.
+	 * Rows not yet sized count 0 until `MediaUsageService` fills them in.
+	 * Streamed rows are excluded.
 	 */
 	public function videoBytesOf(string $account): int {
 		if ($account === '') {
@@ -577,11 +538,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Every account holding video here, most first.
-	 *
-	 * What an administrator actually wants to know when the disk is filling:
-	 * who has the four hundred gigabytes. One query rather than one per
-	 * account, and capped, because the answer is a page and not a report.
+	 * Every account holding video here, most first, in one capped query.
 	 *
 	 * @return array<array{account: string, bytes: int, files: int}>
 	 */
@@ -615,11 +572,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Records how big a stored file turned out to be.
-	 *
-	 * For the rows written before there was a column to put it in: the usage
-	 * walk is already stat-ing every one of them, so it fills them in as it
-	 * goes and the quota becomes accurate after one pass rather than never.
+	 * Records how big a stored file is, for rows written without a size; the
+	 * usage walk fills them in as it goes.
 	 */
 	public function setSize(int|string $nid, int $size): void {
 		$qb = $this->getQueryBuilder();
@@ -631,14 +585,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The documents waiting to be fetched, newest first, at most `$limit` of them.
-	 *
-	 * Capped because each row is an outbound HTTP request inside a cron slot;
-	 * what is left over is the next run's. Newest first because the newest
-	 * posts are the ones somebody is about to look at. `local_copy_prim` is
-	 * the indexed key of `local_copy` (the copy name itself is unindexed
-	 * text) and is empty exactly when the copy name is. `$before` pages on:
-	 * only documents older than that nid.
+	 * The documents waiting to be fetched, newest first, at most `$limit` of
+	 * them, since each is an outbound request inside a cron slot.
+	 * `local_copy_prim` is the indexed key of `local_copy` and is empty exactly
+	 * when the copy name is. `$before` pages on: only documents older than that nid.
 	 *
 	 * @return Document[]
 	 */
@@ -686,17 +636,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Videos stored here that have no poster frame.
-	 *
-	 * `resized_copy` is where a video's poster lives (see
-	 * `CacheDocumentService::saveMediaFromTemp()`), so an empty one on a video
-	 * with a `local_copy` means the file is here and the still was never made:
-	 * an upload from before posters existed, or one made while the server had
-	 * no ffmpeg. Both are fixable after the fact, which is what
-	 * `occ social:media:posters` does.
-	 *
-	 * Keyset by `nid` rather than an offset: the rows being read are the rows
-	 * being updated, so a paging query would walk past the ones it just fixed.
+	 * Videos stored here that have no poster frame: a `local_copy` with an
+	 * empty `resized_copy`, which is where a video's poster lives. Fixed by
+	 * `occ social:media:posters`. Keyset by `nid`, since the rows read are the
+	 * rows being updated.
 	 *
 	 * @param int $limit how many to return
 	 * @param int|string $after only documents past this nid
@@ -710,9 +653,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 
 		$qb->andWhere($expr->like($alias . '.media_type', $qb->createNamedParameter('video/%')));
 		$qb->andWhere($expr->neq($alias . '.local_copy', $qb->createNamedParameter('')));
-		// a streamed document has no bytes here to take a frame from: its
-		// `local_copy` is the marker `stream`, not a uuid, and its poster is
-		// the origin's own thumbnail or nothing
+		// a streamed document has no bytes here to take a frame from
 		$qb->andWhere($expr->neq($alias . '.local_copy', $qb->createNamedParameter(Document::COPY_STREAMED)));
 		$qb->limitToDBFieldEmpty('resized_copy');
 		$qb->andWhere($expr->gt($alias . '.nid', $qb->createNamedParameter($after)));
@@ -836,15 +777,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Local videos that have not been through the transcoder yet.
-	 *
-	 * Narrowed to the ones with bytes here to convert: a streamed document's
-	 * `local_copy` is the marker rather than a uuid, and a video on another
-	 * server is not this instance's to re-encode — `account` names the local
-	 * uploader and is empty on every row cached from a peer, which is also how
-	 * the quota queries tell the two apart. Ordered and paged by `nid` so that
-	 * a job which converts one file per run works through them without ever
-	 * reading the same page twice.
+	 * Local videos that have not been through the transcoder yet: rows with
+	 * bytes here and an `account` (empty on rows cached from a peer). Paged
+	 * by `nid`.
 	 *
 	 * @return Document[]
 	 */
@@ -857,10 +792,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb->andWhere($expr->neq($alias . '.account', $qb->createNamedParameter('')));
 		$qb->andWhere($expr->neq($alias . '.local_copy', $qb->createNamedParameter('')));
 		$qb->andWhere($expr->neq($alias . '.local_copy', $qb->createNamedParameter(Document::COPY_STREAMED)));
-		// a row written before this column existed is 0, which is the right
-		// answer for both of the things it might be: a video that needs
-		// converting, and one that is already an MP4 and will be marked as not
-		// needing it the first time it is read
+		// 0 is right for both things an unmarked row can be: a video needing
+		// conversion, and an MP4 that is marked as not needing it when read
 		$qb->andWhere($expr->orX(
 			$expr->eq($alias . '.transcoded', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)),
 			$expr->isNull($alias . '.transcoded')
@@ -880,21 +813,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * Records what became of one video.
-	 *
-	 * Written whatever the outcome, including "not worth converting" and
-	 * "tried and failed": a job that only recorded its successes would read
-	 * the same unconvertible file on every run for ever.
-	 */
-	/**
-	 * Local videos that have not been up the ladder yet.
-	 *
-	 * Narrowed the same way the transcoder's candidates are — bytes here, not
-	 * a streamed marker — and to `video/mp4`, because a ladder is built from
-	 * the format everything decodes and a `.mov` should go through the
-	 * transcoder first. On an instance with the transcoder off, that means a
-	 * non-MP4 upload never gets a ladder, which is the honest answer: there is
-	 * no ladder to build from a file this server has decided not to touch.
+	 * Local videos that have not been up the ladder yet: narrowed as the
+	 * transcoder's candidates are, and to `video/mp4`, since a ladder is
+	 * built from the format everything decodes. With the transcoder off, a
+	 * non-MP4 upload gets no ladder.
 	 *
 	 * @return Document[]
 	 */
@@ -934,6 +856,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$qb->executeStatement();
 	}
 
+	/**
+	 * Records what became of one video, including "not worth converting" and
+	 * "failed", so the job does not retry the same file on every run.
+	 */
 	public function setTranscoded(int|string $nid, int $state): void {
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_CACHE_DOCUMENTS)
@@ -944,12 +870,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The converted file takes the place of the original.
-	 *
-	 * The things that change together, in one statement: what the file is,
-	 * where it is, how big the video now is, and that whatever ladder was
-	 * built from the old bytes is void. Apart they would be a window in which
-	 * a document said `video/quicktime` about an MP4.
+	 * The converted file takes the place of the original. Type, location, size
+	 * and the ladder state change in one statement, so the row never describes
+	 * the old file with the new bytes.
 	 */
 	public function replaceVideo(int|string $nid, string $localCopy, string $mediaType): void {
 		$qb = $this->getQueryBuilder();
@@ -959,9 +882,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->set('media_type', $qb->createNamedParameter($mediaType))
 			->set('mime_type', $qb->createNamedParameter($mediaType))
 			->set('transcoded', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
-			// the bytes have changed, so any ladder built from them is of a
-			// video that no longer exists: back to nought, and the ladder job
-			// rebuilds it and throws the old rungs away as it goes
+			// the bytes have changed, so the ladder job rebuilds the ladder
 			->set('laddered', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
 			->where($qb->expr()->eq('nid', $qb->createNamedParameter($nid)));
 
@@ -1005,12 +926,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The documents attached to one parent — for an actor, its avatar (and a
-	 * header, where one was stored as a document).
-	 *
-	 * Read before `deleteByParent()` by the caller that also owns the files:
-	 * the row knows the file's name and the delete forgets it, so a delete
-	 * that does not read first leaves the bytes in appdata for good.
+	 * The documents attached to one parent: for an actor, its avatar (and a
+	 * header, where one was stored as a document). Read before
+	 * `deleteByParent()`, since the delete forgets the file names.
 	 *
 	 * @return Document[]
 	 */
@@ -1029,18 +947,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * One page of every document row, with what `occ social:media:usage`
-	 * needs to tell them apart, keyed by `nid` so the next page starts after
-	 * the last row of this one.
-	 *
-	 * The join answers "is the parent a cached actor" — which is what makes
-	 * a row an avatar rather than an attachment — and whether that actor is
-	 * one of ours, without hydrating either side.
-	 *
-	 * `media_type` and `size` are here for the same walk's second job: filling
-	 * in the size of a video row written before there was a column to put it
-	 * in, which is what makes the per-account quota accurate after one pass
-	 * rather than never. Two columns off a row already being read.
+	 * One page of every document row for `occ social:media:usage`, keyed by
+	 * `nid`. The join says whether the parent is a cached actor (an avatar)
+	 * and whether that actor is local; `media_type` and `size` let the same
+	 * walk fill in missing sizes.
 	 *
 	 * @return list<array{nid: string, id: string, url: string, account: string, local_copy: string, resized_copy: string, media_type: string, size: int, actor_local: ?bool}>
 	 */
@@ -1067,8 +977,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 				'local_copy' => (string)($data['local_copy'] ?? ''),
 				'resized_copy' => (string)($data['resized_copy'] ?? ''),
 				'media_type' => (string)($data['media_type'] ?? ''),
-				// what the row *says* it is, which for a row written before
-				// there was a column to say it in is 0
+				// 0 on a row not yet sized
 				'size' => (int)($data['size'] ?? 0),
 				// NULL when the parent is not a cached actor; the boolean column
 				// comes back as an int on MySQL and as a bool on PostgreSQL
@@ -1081,15 +990,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The documents whose parent is gone, oldest rows first.
-	 *
-	 * A `parent_id` names one of three things — a post, a cached actor or a
-	 * story — so "no row in any of the three" is the one safe reading of
-	 * "nothing can refer to this file any more". The joins are all on indexed
-	 * `_prim` columns.
-	 *
-	 * Rows with no parent are not candidates: an upload is made before its
-	 * post exists and is never given one; see `getUnattachedUploads()`.
+	 * The documents whose parent is gone, oldest rows first. A `parent_id`
+	 * names a post, a cached actor or a short, so no row in any of the three
+	 * means nothing refers to the file. Rows with no parent are uploads; see
+	 * `getUnattachedUploads()`.
 	 *
 	 * @param int $afterNid where the page starts: after the last row of the
 	 *                      one before, so a row that would not go is not read
@@ -1133,15 +1037,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
-	 * The uploads of people here that nothing has taken up, oldest first.
-	 *
-	 * An upload is made before the post it is for, and has no parent; what
-	 * ties it to a post is `social_stream_media`, and what ties it to a
-	 * Bluesky record is `social_atproto_blob`. An upload in neither, older
-	 * than `$olderThanDays`, is one a post was never made with. A scheduled
-	 * post names its uploads in its parameters, which the caller checks.
-	 * Banners, story pictures and imported attachments carry a parent and
-	 * are not candidates.
+	 * The uploads of people here that nothing has taken up, oldest first: no
+	 * parent, not in `social_stream_media` or `social_atproto_blob`, and older
+	 * than `$olderThanDays`. A scheduled post's uploads are checked by the
+	 * caller. Banners, short photos and imported attachments have a parent.
 	 *
 	 * @param int $afterNid where the page starts: after the last row of the
 	 *                      one before
@@ -1185,16 +1084,10 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 
 	/**
 	 * One page of the cached copies of other servers' media, oldest copy
-	 * first, for the media cache purge (`MediaPurgeService::purgeCache()`).
-	 *
-	 * A row is in it while it holds a copy that can be fetched again: `cached`
-	 * is set (a copy was written and not purged since), nobody here uploaded
-	 * it (`account` is empty), it names the file at its origin, and it is not
-	 * marked as refused. Keyset on (`cached`, `nid`), so a dry run, which
-	 * changes nothing, still moves forward.
-	 *
-	 * `actor` is the parent's key when the parent is a cached actor, which is
-	 * what makes the row that actor's avatar or header.
+	 * first, for `MediaPurgeService::purgeCache()`: `cached` is set, `account`
+	 * is empty, the origin URL is known and the row is not refused. Keyset on
+	 * (`cached`, `nid`), so a dry run still moves forward. `actor` says the
+	 * row is a cached actor's avatar or header.
 	 *
 	 * @param string $afterCached the `cached` of the last row of the previous
 	 *                            page, '' for the first page

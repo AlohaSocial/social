@@ -8,13 +8,8 @@
 			{{ t('social', 'Loading your account …') }}
 		</p>
 		<template v-else>
-			<!--
-				Not a field. The display name belongs to the Nextcloud account
-				and the actor copies it, so editing it here was a remote
-				control for a setting that lives somewhere else -- one that
-				silently did nothing on the accounts whose backend owns the
-				name, which is every LDAP or SAML instance.
-			-->
+			<!-- not a field: the display name belongs to the Nextcloud account,
+			     whose backend (LDAP, SAML) may own it -->
 			<p class="account-settings__name">
 				{{ t('social', 'You post as {name}.', { name: displayName }) }}
 				<a class="account-settings__link" :href="personalSettings">
@@ -22,16 +17,7 @@
 				</a>
 			</p>
 
-			<!-- the settings that shape how others reach the account; each is
-			     one sentence about what it does, since the Mastodon names
-			     (locked, discoverable, indexable) mean nothing to anybody -->
-			<NcCheckboxRadioSwitch
-				v-model="draft.locked"
-				type="switch"
-				class="account-settings__switch"
-				:description="t('social', 'Somebody who wants to follow you asks first, and waits under Follow requests until you answer.')">
-				{{ t('social', 'Approve who follows you') }}
-			</NcCheckboxRadioSwitch>
+			<!-- each switch says what it does; the Mastodon names (discoverable, indexable) mean little to readers -->
 
 			<NcCheckboxRadioSwitch
 				v-model="draft.discoverable"
@@ -65,8 +51,7 @@
 				{{ t('social', 'This is an automated account') }}
 			</NcCheckboxRadioSwitch>
 
-			<!-- the same four audiences the composer offers, in its words, so
-			     what is chosen here is what its button will say -->
+			<!-- the composer's four audiences, in its words -->
 			<NcSelect
 				v-model="draft.privacy"
 				class="account-settings__privacy"
@@ -103,18 +88,12 @@ import visibilitiesInfo from './Visibility/VisibilitiesInfos.js'
 import VisibilityIcon from './Visibility/VisibilityIcon.vue'
 
 /**
- * The account as a form: the settings `update_credentials` takes that are
- * about the account rather than the profile. The name, the four flags, the
- * hidden follower lists and the default audience are here; the bio, the banner and the metadata fields stay
- * in the profile's own editor, because they are what a visitor reads and are
- * edited where they are seen.
+ * The account settings `update_credentials` takes: the four switches and the
+ * default audience. The bio, banner and metadata fields are edited in the
+ * profile's own editor.
  *
- * Each change is saved as it is made, like every other setting on the page;
- * a Save button here alone was a form that looked saved and was not. Only
- * what changed is sent. The route writes only the fields it was given, and a
- * form that sent everything back would re-save a display name into a backend
- * that owns it (LDAP, say) and be refused for a switch it did not mean to
- * touch.
+ * Each change is saved as it is made, and only what changed is sent, since the
+ * route writes every field it is given.
  */
 export default {
 	name: 'AccountSettings',
@@ -129,7 +108,6 @@ export default {
 		return {
 			visibilities: visibilitiesInfo,
 			draft: {
-				locked: false,
 				discoverable: false,
 				indexable: false,
 				hideCollections: false,
@@ -180,7 +158,7 @@ export default {
 			}
 			const changes = {}
 			const stored = this.credentials
-			for (const flag of ['locked', 'discoverable', 'indexable', 'bot']) {
+			for (const flag of ['discoverable', 'indexable', 'bot']) {
 				if (this.draft[flag] !== Boolean(stored[flag])) {
 					changes[flag] = this.draft[flag]
 				}
@@ -211,10 +189,8 @@ export default {
 			},
 		},
 
-		// the form follows the store: what the server holds is the truth the
-		// draft starts from. Not while a save is on its way: its answer is
-		// the server's copy from before any change made since, and taking it
-		// would throw that change away.
+		// the draft follows the store, except while a save is on its way: its
+		// answer predates any change made since and would throw that away
 		credentials: {
 			immediate: true,
 			handler(credentials) {
@@ -240,7 +216,6 @@ export default {
 		reset(credentials) {
 			const privacy = this.accountStore.defaultPostVisibility || 'public'
 			this.draft = {
-				locked: Boolean(credentials.locked),
 				discoverable: Boolean(credentials.discoverable),
 				indexable: Boolean(credentials.indexable),
 				hideCollections: Boolean(credentials.source?.hide_collections),

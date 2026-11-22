@@ -16,18 +16,13 @@ use OCP\Util;
 use Throwable;
 
 /**
- * The fields and files of a multipart body that PHP left unparsed.
+ * The fields and files of a multipart body PHP did not parse: PHP fills
+ * `$_POST` and `$_FILES` only for POST, but Mastodon clients send
+ * `PATCH update_credentials` as multipart when an image is included.
  *
- * PHP fills `$_POST` and `$_FILES` for a POST only. Mastodon clients send
- * `PATCH /api/v1/accounts/update_credentials` as multipart whenever a picture
- * is included, so that body reached the controller unread: every field was
- * missed, the picture was never seen, and the client got a 200 over an
- * unchanged profile.
- *
- * PHP 8.4 parses such a body on request with `request_parse_body()`. PHP 8.3
- * has nothing for it, so there the body is taken apart here, and the files
- * written for it are remembered so that `isUpload()` can vouch for them the
- * way `is_uploaded_file()` vouches for PHP's own.
+ * PHP 8.4 parses it with `request_parse_body()`; on 8.3 it is taken apart
+ * here, and the files written are remembered so `isUpload()` can vouch for
+ * them as `is_uploaded_file()` does for PHP's own.
  */
 class MultipartBodyService {
 	/** @var list<string> the temporary files `parse()` wrote in this request */
@@ -40,11 +35,9 @@ class MultipartBodyService {
 
 	/**
 	 * The request's multipart fields and files, or null when there is nothing
-	 * to parse here: the body is not multipart, or it is a POST, which PHP has
-	 * already put into `$_POST` and `$_FILES`.
-	 *
-	 * Has to run before anything reads `php://input`: `request_parse_body()`
-	 * finds an empty body after that, and says nothing.
+	 * to parse: the body is not multipart, or it is a POST PHP already parsed.
+	 * Must run before anything reads `php://input`, after which
+	 * `request_parse_body()` silently sees an empty body.
 	 *
 	 * @return array{fields: array, files: array<string, array>}|null
 	 * @throws InvalidActionException the body is multipart and cannot be read

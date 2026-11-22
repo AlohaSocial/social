@@ -48,13 +48,11 @@ class ConfigController extends Controller {
 	/**
 	 * Confirms the address every id is built from, on the first setup only.
 	 *
-	 * Administrators only (no `NoAdminRequired`). Once stored it is refused
-	 * with 409: changing it breaks every federated id, and only
-	 * `occ social:reset --uri=…` may do that, because it deletes them too.
-	 * An address with a problem `CloudAddressRules` names is refused with 422
-	 * unless `allowUnsafe` says the administrator accepts it, which a test
-	 * instance on http or localhost needs; an address that is not a URL at all
-	 * is refused either way.
+	 * Administrators only. Once stored it is refused with 409: changing it
+	 * breaks every federated id, which only `occ social:reset --uri=…` may do.
+	 * An address `CloudAddressRules` objects to is refused with 422 unless
+	 * `allowUnsafe` is set (test instances on http or localhost); a non-URL is
+	 * always refused.
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/config/cloudAddress')]
 	public function setCloudAddress(string $cloudAddress, bool $allowUnsafe = false): DataResponse {

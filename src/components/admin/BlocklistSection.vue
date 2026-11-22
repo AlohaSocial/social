@@ -33,9 +33,7 @@
 
 		<ServerError v-if="fileError" :error="fileError" />
 
-		<!-- The number in front of an administrator before they agree is the
-		     whole point: a file from somebody else naming two hundred servers
-		     is not a thing to apply and then read. -->
+		<!-- the count is shown before the administrator agrees to apply the file -->
 		<div v-if="preview" class="blocklist__preview">
 			<p>
 				<strong>{{ n('social', '%n server would be blocked', '%n servers would be blocked', preview.blocked) }}</strong>
@@ -112,10 +110,8 @@ const SHOWN = 25
 const MAX_BYTES = 8 * 1024 * 1024
 
 /**
- * Block lists: one uploaded by hand, and the ones this instance follows.
- *
- * Both halves are the same code on the server, so a list imported here and the
- * same list subscribed to cannot turn out to have been read differently.
+ * Block lists: one uploaded by hand, and the ones this instance follows. The
+ * server reads both with the same code.
  */
 export default {
 	name: 'BlocklistSection',
@@ -159,11 +155,8 @@ export default {
 		},
 
 		/**
-		 * Reads the chosen file and asks the server what it says.
-		 *
-		 * The file is read here and its text posted, rather than uploaded as a
-		 * form: what the server needs is the text, and this keeps the size
-		 * limit on both sides of the request.
+		 * Reads the chosen file and posts its text for the server to read, which
+		 * keeps the size limit on both sides of the request.
 		 *
 		 * @param {Event} event the file input's change
 		 */
@@ -237,9 +230,8 @@ export default {
 				})
 				this.sources = data.sources ?? []
 				if (enabled) {
-					// the source as the server has it now: the one handed in
-					// is the row from before the switch, still marked off, and
-					// checking it would only ask what it would do
+					// the source as the server has it now: the one handed in is still
+					// marked off, and checking it would only ask what it would do
 					await this.check(this.sources.find((one) => one.id === source.id) ?? { ...source, enabled })
 				}
 			} catch (error) {

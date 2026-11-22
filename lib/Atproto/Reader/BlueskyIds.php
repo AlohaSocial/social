@@ -12,11 +12,9 @@ namespace OCA\Social\Atproto\Reader;
 use OCA\Social\Atproto\Protocol\Syntax;
 
 /**
- * The ids Bluesky things carry here. Every id in this app is an https URL —
- * `id_prim`, the import validation and the origin checks all say so — and
- * an `at://` URI is none, so a Bluesky account is `https://bsky.app/profile/<did>`
- * and a post `https://bsky.app/profile/<did>/post/<rkey>`: the addresses
- * the Bluesky web app answers for them, by DID so a handle change moves
+ * The ids Bluesky things carry here. Every id in this app is an https URL, so
+ * an account is `https://bsky.app/profile/<did>` and a post
+ * `https://bsky.app/profile/<did>/post/<rkey>`, by DID so a handle change moves
  * nothing. The `at://` URI travels in `details.atproto`.
  */
 final class BlueskyIds {

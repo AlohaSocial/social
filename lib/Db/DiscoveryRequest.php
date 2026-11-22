@@ -14,20 +14,14 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * Who this instance is willing to point at: the profile directory, and the
- * accounts suggested to somebody who is looking for people to follow.
+ * The profile directory and the suggestions of whom to follow, read from
+ * data the app already keeps; nothing is scored. A suggestion is somebody
+ * the people you follow follow, by how many do; the directory is everybody
+ * who opted in, by how recently they posted.
  *
- * Both are reads of data the app already keeps — the opt-in flag on
- * `social_actor`, the follow graph, and when each account last posted. Nothing
- * here scores anything: a suggestion is "somebody the people you follow
- * follow", ordered by how many of them do, and the directory is "everybody who
- * asked to be listed", ordered by how recently they posted.
- *
- * Every method that orders by activity orders by `MAX(s.nid)` and not by
- * `MAX(s.published_time)`. `nid` rises with insertion, so it says the same
- * thing; it is an integer, so `COALESCE(…, 0)` gives an account that has never
- * posted a real value and sorts it last on every platform, where a NULL date
- * sorts first on PostgreSQL and last on MySQL.
+ * Activity is ordered by `MAX(s.nid)`, not `MAX(s.published_time)`: nid rises
+ * with insertion, and `COALESCE(…, 0)` sorts never-posted accounts last on
+ * every platform, where a NULL date sorts differently on PostgreSQL and MySQL.
  */
 class DiscoveryRequest extends DiscoveryRequestBuilder {
 	/** Newest account first. */
@@ -36,12 +30,8 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 	public const ORDER_ACTIVE = 'active';
 
 	/**
-	 * The page of the directory, as `id_prim`s in the order they are to be
-	 * shown.
-	 *
-	 * Only accounts that opted in: the `discoverable` flag is a predicate of
-	 * the statement, so an account that did not opt in is not a row that was
-	 * read and then dropped.
+	 * The page of the directory, as `id_prim`s in display order; only accounts
+	 * that opted in.
 	 *
 	 * @return string[]
 	 */
@@ -62,17 +52,9 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 	}
 
 	/**
-	 * The accounts followed by the accounts the viewer follows, most-followed
-	 * first.
-	 *
-	 * Two hops over `social_follow` and nothing else: this is the follow graph
-	 * the app already has, read as "people you are one step away from". The
-	 * count is how many of the viewer's own follows follow each candidate,
-	 * which is the only ranking here and is a fact rather than a score.
-	 *
-	 * The viewer's own follows and the viewer themselves are excluded in the
-	 * statement, so they never occupy a slot in the page that is then thrown
-	 * away by the caller.
+	 * The accounts followed by the accounts the viewer follows, by how many of
+	 * them do. The viewer and their own follows are excluded in the statement, so
+	 * they take no slot in the page.
 	 *
 	 * @return string[]
 	 */
@@ -111,13 +93,8 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 	}
 
 	/**
-	 * Local accounts that opted in to being listed, most recently active
-	 * first.
-	 *
-	 * What the suggestions fall back to when the follow graph has nothing to
-	 * say — a new account follows nobody, so it has no friends of friends, and
-	 * an empty suggestion list is what a client draws as "nobody to follow
-	 * here".
+	 * Local accounts that opted in to being listed, most recently active first:
+	 * the fallback when the follow graph suggests nobody, as for a new account.
 	 *
 	 * @return string[]
 	 */
@@ -126,12 +103,8 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 	}
 
 	/**
-	 * The accounts the viewer follows, accepted or not.
-	 *
-	 * Pending requests are included here on purpose, unlike in the graph walk
-	 * above: this list is used to *exclude*, and suggesting somebody whose
-	 * answer you are waiting on is as wrong as suggesting somebody you already
-	 * follow.
+	 * The accounts the viewer follows, pending requests included, since this
+	 * list excludes.
 	 *
 	 * @return string[]
 	 */
@@ -148,11 +121,7 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 
 	/**
 	 * The accounts the viewer has blocked or muted, and the accounts that have
-	 * blocked the viewer.
-	 *
-	 * All three directions, because all three are accounts this instance must
-	 * not put in front of them: one they chose not to see, and one that chose
-	 * not to be seen by them.
+	 * blocked the viewer: none of them may be suggested.
 	 *
 	 * @param string[] $types ActorRelation::TYPE_* values
 	 *
@@ -177,13 +146,9 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 	}
 
 	/**
-	 * The Account entities of accounts already decided on, in the order they
-	 * were decided.
-	 *
-	 * The order is restored here rather than asked of the database: the second
-	 * query has no way to express "in the order of that `IN` list" portably,
-	 * and an account whose cache row is missing simply drops out of the page
-	 * instead of arriving half-filled.
+	 * The Account entities of accounts already decided on, in that order,
+	 * restored here since `IN` keeps no order portably. An account without a
+	 * cache row drops out.
 	 *
 	 * @param string[] $prims
 	 *
@@ -215,10 +180,6 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 	 * The cached profiles of a set of accounts, in whatever order the database
 	 * returns them.
 	 *
-	 * Separate from the ordering above for the same reason the timelines split
-	 * their two queries: this half is the statement, and the half above is
-	 * what the page is made of.
-	 *
 	 * @param string[] $prims
 	 *
 	 * @return Person[]
@@ -234,10 +195,7 @@ class DiscoveryRequest extends DiscoveryRequestBuilder {
 
 	/**
 	 * Orders a statement by when the account last posted in public, newest
-	 * first, with accounts that never have at the end.
-	 *
-	 * The join is left, not inner: an account that has opted in to the
-	 * directory and not yet posted still belongs in it.
+	 * first, accounts that never have at the end; a left join, so they stay.
 	 */
 	private function orderByLastStatus(SocialQueryBuilder $qb, string $actorColumn): void {
 		$expr = $qb->expr();

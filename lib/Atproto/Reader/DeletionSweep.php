@@ -15,15 +15,12 @@ use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 
 /**
- * Notices posts deleted on Bluesky (§9.5). Bluesky has no `Delete` this
- * app is sent, and a deleted post simply stops appearing, so stored Bluesky
- * posts are asked about a page at a time with `getPosts`. Two cursors share
- * a run: a fast one over the posts published in the last RECENT_WINDOW,
- * several pages within a time budget, where deletions are most likely and
- * most visible, and a slow one, one page a run, over the whole history.
- * Each slow cycle snapshots its highest NID so a steady stream of new posts
- * cannot keep moving the end ahead of the cursor and starve old checks. An
- * instance with no Bluesky post at all is not asked again for an hour.
+ * Notices posts deleted on Bluesky (§9.5), which sends no `Delete`: stored
+ * Bluesky posts are asked about a page at a time with `getPosts`. A fast
+ * cursor covers the last RECENT_WINDOW, several pages per run within a time
+ * budget; a slow one covers the whole history, one page per run, up to a NID
+ * snapshotted per cycle so new posts cannot starve old checks. An instance
+ * with no Bluesky post is not asked again for an hour.
  */
 class DeletionSweep {
 	public const PAGE = 25;

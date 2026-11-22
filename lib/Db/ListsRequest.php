@@ -21,29 +21,20 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  * Mastodon's lists: a group of accounts, made by one account, with a timeline
  * of its own.
  *
- * A list belongs to exactly one account, and every read and every write here
- * carries the owner's prim as a predicate of the statement itself rather than
- * checking it after the row has been read. That is the difference between a
- * list somebody else cannot *see* and a list somebody else cannot *reach*: a
- * `WHERE id = ?` that is filtered afterwards has already handed the row to the
- * wrong caller by the time the check runs, and one forgotten `if` anywhere
- * above would be enough. There is no method here that takes a list id without
- * an owner.
+ * Every read and write carries the owner's prim in the statement itself, so a
+ * list of somebody else's is never even read; no method takes a list id
+ * without an owner.
  */
 class ListsRequest extends ListsRequestBuilder {
 	/** The width of `social_list.title`, which is Mastodon's own. */
 	public const MAX_TITLE_LENGTH = 255;
 
 	/**
-	 * A title as this app stores one, from whatever the client sent.
-	 *
-	 * Returns '' for a title that is not one — Mastodon answers "Title can't
-	 * be blank" with a 422, and so does the controller, rather than storing a
-	 * list the user cannot tell apart from any other blank one.
+	 * A title as this app stores one, or '' for a blank title, which the
+	 * controller refuses with a 422 as Mastodon does.
 	 */
 	public static function normaliseTitle(string $title): string {
-		// characters, not bytes: the column is VARCHAR(255), and cutting a
-		// multi-byte title with substr() would store half a character
+		// Characters, not bytes: the column is VARCHAR(255).
 		return mb_substr(trim($title), 0, self::MAX_TITLE_LENGTH, 'UTF-8');
 	}
 
@@ -70,10 +61,8 @@ class ListsRequest extends ListsRequestBuilder {
 	/**
 	 * The one list the owner named.
 	 *
-	 * @throws ItemNotFoundException a list that is not there and a list that
-	 *                               is somebody else's are the same answer, as
-	 *                               they are on Mastodon: telling the two
-	 *                               apart would say whether an id exists
+	 * @throws ItemNotFoundException missing or somebody else's, the same answer
+	 *                               as on Mastodon
 	 */
 	public function getOwnedById(string $actorId, int $id): MastodonList {
 		$qb = $this->getListsSelectSql();
@@ -92,11 +81,8 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * Every list the account owns, oldest first — the order Mastodon returns
-	 * them in, and the order a client draws its sidebar in.
-	 *
-	 * Not paged: `GET /api/v1/lists` takes no cursor on Mastodon either, and
-	 * an account has as many lists as it made by hand.
+	 * Every list the account owns, oldest first as in Mastodon; unpaged, as
+	 * `GET /api/v1/lists` is.
 	 *
 	 * @return MastodonList[]
 	 */
@@ -139,11 +125,8 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * The lists of one owner that a given account is in — what
-	 * `GET /api/v1/accounts/{id}/lists` answers.
-	 *
-	 * Scoped to the asking account's own lists: which lists a stranger has put
-	 * somebody in is not something either of them may read.
+	 * The lists of one owner that a given account is in, for
+	 * `GET /api/v1/accounts/{id}/lists`; only the owner's own lists.
 	 *
 	 * @return MastodonList[]
 	 */
@@ -270,13 +253,8 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * Deletes the list and, with it, its membership rows.
-	 *
-	 * The members go first: a crash between the two statements then leaves
-	 * rows belonging to a list that still exists, which is harmless, rather
-	 * than rows belonging to a list that does not — those would be invisible
-	 * to every route here and would be handed to whichever list next took the
-	 * same autoincrement id.
+	 * Deletes the list and its membership rows, members first, so a crash leaves
+	 * no rows for a later list reusing the same autoincrement id.
 	 */
 	public function delete(MastodonList $list): void {
 		$this->deleteMembersOf($list);
@@ -291,18 +269,15 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * Every list an account owns, and their memberships.
-	 *
-	 * A list is private to whoever made it, so it has nobody to outlive: this
-	 * is what makes the lists go when the account does.
+	 * Deletes every list an account owns, and their memberships, when the
+	 * account goes.
 	 */
 	public function deleteRelatedId(string $actorId): void {
 		foreach ($this->getByActor($actorId) as $list) {
 			$this->delete($list);
 		}
 
-		// membership of somebody else's list: the account is gone, so it is
-		// not in anybody's list any more either
+		// The account is gone, so it leaves every other list too.
 		$qb = $this->getListMembersDeleteSql();
 		$qb->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
 		$qb->executeStatement();
@@ -318,10 +293,8 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * Idempotent: adding an account that is already in the list changes
-	 * nothing and is not an error. Mastodon answers `{}` to both, and a client
-	 * that lost the answer and retried must not get a failure for a request
-	 * that succeeded.
+	 * Idempotent: adding an account already in the list is not an error, as in
+	 * Mastodon, so a retry succeeds.
 	 */
 	public function addMember(MastodonList $list, string $memberId): void {
 		$qb = $this->getListMembersInsertSql();
@@ -359,13 +332,8 @@ class ListsRequest extends ListsRequestBuilder {
 
 	/**
 	 * One page of the list's members, newest addition first, paged on the
-	 * membership row id — an account can be removed from a list and added
-	 * again, so its own id does not move in one direction and cannot page.
-	 *
-	 * `$limit` arrives already bounded — Mastodon's documented `limit=0`,
-	 * "all accounts without pagination", is turned into a real ceiling by the
-	 * controller, because the page is built in memory and one request may not
-	 * be made to read an unbounded number of rows.
+	 * membership row id since an account can be removed and re-added. `$limit`
+	 * is already bounded by the controller.
 	 *
 	 * @return array<array{id: int, actorId: string}>
 	 */
@@ -398,13 +366,8 @@ class ListsRequest extends ListsRequestBuilder {
 
 	/**
 	 * The list's timeline: the home timeline narrowed to the list's members.
-	 *
-	 * Narrowed, not widened. Every filter the home timeline applies applies
-	 * here unchanged — the viewer's visibility, blocks, mutes, hidden actors
-	 * and duplicate boosts — and the membership join can only take posts away,
-	 * so a list can never show its owner a post that their home timeline would
-	 * not have shown them. That is the property that matters: a list is a view
-	 * of what you already follow, not a second way of reading somebody.
+	 * Every home timeline filter applies and the membership join only removes
+	 * posts, so a list never shows what the home timeline would not.
 	 *
 	 * @return Stream[]
 	 */
@@ -416,8 +379,7 @@ class ListsRequest extends ListsRequestBuilder {
 
 		$posts = $this->streamsByNids($nids, $options);
 		if ($options->isInverted()) {
-			// the page was asked for upwards and read upwards; it is handed
-			// back newest first, as every other timeline is
+			// Read upwards, handed back newest first like every timeline.
 			$posts = array_reverse($posts);
 		}
 
@@ -425,9 +387,8 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * Which posts belong on the page, decided over one column, as the home
-	 * timeline decides its own — see StreamRequest::getTimelineHome(), which
-	 * explains why the page and the rows are two queries.
+	 * Which posts belong on the page, decided over one column as the home
+	 * timeline does (see StreamRequest::getTimelineHome()).
 	 *
 	 * @return string[]
 	 */
@@ -435,9 +396,8 @@ class ListsRequest extends ListsRequestBuilder {
 		$page = $this->getStreamNidsSelectSql();
 		$expr = $page->expr();
 
-		// the narrowing, and the only thing here the home timeline does not do:
-		// an inner join on (list_id, actor_id_prim), which is the unique index
-		// of social_list_member read left to right
+		// The narrowing: an inner join on (list_id, actor_id_prim), the unique index
+		// of social_list_member read left to right.
 		$page->innerJoin(
 			's', self::TABLE_LIST_MEMBERS, 'lm',
 			$expr->andX(
@@ -460,12 +420,10 @@ class ListsRequest extends ListsRequestBuilder {
 			$page->limitToNews();
 		}
 		$page->limitToViewer('sd', 'f', false);
-		// as on the home timeline: an account whose boosts the reader turned
-		// off is here to be read, not to be a relay
+		// As on the home timeline: boosts the reader turned off are hidden.
 		$page->filterHiddenBoosts();
-		// a filter, not a join: it constrains on the follow's type. The actor's
-		// columns are left out, as on every page-selection query — this one
-		// projects nids.
+		// A filter on the follow's type, not a join; actor columns are left out as
+		// this query only selects nids.
 		$this->timelineHomeLinkCacheActor($page, 'ca', 'f', false);
 		$page->filterDuplicate();
 
@@ -473,11 +431,8 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
-	 * The rows of a page that has already been decided, in its order.
-	 *
-	 * The same shape as StreamRequest's own reader and deliberately not a call
-	 * into it: that method is private to the stream timelines, and this class
-	 * does not own StreamRequest.
+	 * The rows of a page that has already been decided, in its order; the same
+	 * shape as StreamRequest's private reader.
 	 *
 	 * @param string[] $nids
 	 *
@@ -490,8 +445,7 @@ class ListsRequest extends ListsRequestBuilder {
 		);
 		$qb->orderBy('s.nid', $options->isInverted() ? 'asc' : 'desc');
 
-		// the author, for the row; the follows table stays out of this query
-		// because the page has already decided what belongs in it
+		// The author, for the row; the page is already decided, so no follows join.
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
 		$qb->leftJoinStreamAction('sa');
 		$qb->leftJoinObjectStatus();

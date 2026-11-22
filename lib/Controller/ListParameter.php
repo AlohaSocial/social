@@ -10,11 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 /**
- * A list parameter as a client sends it: `name[]=a&name[]=b`, or one
- * `name=a` without the brackets, which PHP hands over as a string. A route
- * parameter typed `array` alone turns the second into a TypeError raised by
- * the dispatcher before the route's own error handling, so these take
- * `array|string` and read it through `listParam()`.
+ * A list parameter as a client sends it: `name[]=a&name[]=b`, or one `name=a`,
+ * which PHP hands over as a string. A parameter typed `array` alone makes the
+ * second a TypeError in the dispatcher, so these take `array|string` and read
+ * it through `listParam()`.
  */
 trait ListParameter {
 	/**

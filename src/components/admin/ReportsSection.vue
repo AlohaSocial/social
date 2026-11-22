@@ -18,8 +18,7 @@
 			@moderate="askModerate"
 			@takedown="askTakedown" />
 
-		<!-- the count belongs to the table; the empty state above already says
-		     there is nothing, and the old page said both at once -->
+		<!-- only with rows: the empty state above already says there are none -->
 		<p v-if="open.length > 0" class="social-admin__actions">
 			<span class="social-admin__hint">
 				{{ n('social', '%n open report.', '%n open reports.', openTotal) }}
@@ -32,9 +31,8 @@
 			</NcButton>
 		</p>
 
-		<!-- not loaded with the page: on an instance that has been moderated
-		     for a year the resolved reports are most of the table and none of
-		     what anybody came here for -->
+		<!-- resolved reports load only when the fold is opened: they can be
+		     many and are rarely what a moderator is looking for -->
 		<details v-if="resolvedTotal > 0" class="reports__fold" @toggle="onFold">
 			<summary class="reports__summary">
 				<IconChevronRight class="reports__chevron" :size="20" />
@@ -154,10 +152,8 @@ export default {
 		 * @return {Promise<void>} once the rows are in the table
 		 */
 		async loadReports(resolved) {
-			// the page is claimed before the request rather than after it: two
-			// clicks on "Show more" while the first is in flight would
-			// otherwise both ask for the same page and the table would hold
-			// each row twice
+			// claim the page before the request, so two quick clicks on
+			// "Show more" do not fetch the same page twice
 			const next = (resolved ? this.resolvedPage : this.openPage) + 1
 			if (resolved) {
 				this.resolvedPage = next
@@ -207,11 +203,8 @@ export default {
 		},
 
 		/**
-		 * Resolves a report, or reopens one.
-		 *
-		 * The row stays in the table it is in. Moving it to the other one would
-		 * renumber the pages under the cursor of whoever is working through
-		 * them; the next load puts it where it belongs.
+		 * Resolves a report, or reopens one. The row stays in its table so the
+		 * pages are not renumbered under the moderator.
 		 *
 		 * @param {object} report the row that was acted on
 		 * @return {Promise<void>}
@@ -272,8 +265,7 @@ export default {
 		},
 
 		/**
-		 * Takes one reported post down: the lightest thing a moderator can do
-		 * about a report, and the one the panel could not do at all.
+		 * Takes one reported post down, the lightest action on a report.
 		 *
 		 * @param {object} target the post to remove
 		 * @param {string} target.statusId the post
@@ -309,8 +301,7 @@ export default {
 .reports__fold {
 	margin-block-start: calc(var(--default-grid-baseline) * 3);
 
-	// the browser's own disclosure triangle is the one thing on this page that
-	// belongs to no design system; the row below it is a Nextcloud control
+	// replace the browser's disclosure triangle with a Nextcloud-style row
 	.reports__summary {
 		display: flex;
 		align-items: center;

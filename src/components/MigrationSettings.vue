@@ -143,7 +143,7 @@
 						v-model="movePosts"
 						class="migration__move-in-switch"
 						:disabled="!moveAccount.posts.readable || moveStarting">
-						{{ t('social', 'Bring its public posts over, with their pictures') }}
+						{{ t('social', 'Bring its public posts over, with their photos') }}
 					</NcCheckboxRadioSwitch>
 					<NcButton
 						variant="primary"
@@ -267,7 +267,7 @@
 					{{ t('social', 'Bring your posts with you') }}
 				</h4>
 				<p>
-					{{ t('social', 'Upload the export from your old server and the posts in it are written here as yours, dated when you wrote them, with their pictures. Nothing is sent to your followers.') }}
+					{{ t('social', 'Upload the export from your old server and the posts in it are written here as yours, dated when you wrote them, with their photos. Nothing is sent to your followers.') }}
 				</p>
 				<details class="migration__how">
 					<summary>{{ t('social', 'How this works') }}</summary>
@@ -275,17 +275,17 @@
 						{{ t('social', 'Nothing is sent to anybody: your followers do not get years of posts in one afternoon, because nothing here is published again. Boosts and direct messages are left out, and a reply keeps the post it answers where the file holds both. Importing the same file twice changes nothing the second time.') }}
 					</p>
 					<p>
-						{{ t('social', 'Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their pictures and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are.') }}
+						{{ t('social', 'Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their photos and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are.') }}
 					</p>
 					<p>
 						{{ t('social', 'An archive too large for a browser to upload can be imported by an administrator with occ social:account:import-posts.') }}
 					</p>
 				</details>
 				<NcCheckboxRadioSwitch v-model="fetchMedia" type="switch" class="migration__media-switch">
-					{{ t('social', 'Fetch the pictures from the old server') }}
+					{{ t('social', 'Fetch the photos from the old server') }}
 				</NcCheckboxRadioSwitch>
 				<p class="migration__note">
-					{{ t('social', 'An archive usually holds the files themselves and they are used as they are. A file that only lists where its pictures are — Pixelfed writes one — needs them fetched, which tells that server the import is happening and only works while it is still running.') }}
+					{{ t('social', 'An archive usually holds the files themselves and they are used as they are. A file that only lists where its photos are — Pixelfed writes one — needs them fetched, which tells that server the import is happening and only works while it is still running.') }}
 				</p>
 				<input
 					ref="posts"
@@ -458,7 +458,7 @@
 					{{ t('social', 'Export your data') }}
 				</h4>
 				<p>
-					{{ t('social', 'A zip file holding your profile, the people you follow, your followers, the accounts you block and mute, your bookmarks and likes, and every post you have written — with the pictures and videos on those posts, and your profile banner, as files inside the archive rather than as links back to this server.') }}
+					{{ t('social', 'A zip file holding your profile, the people you follow, your followers, the accounts you block and mute, your bookmarks and likes, and every post you have written — with the photos and videos on those posts, and your profile banner, as files inside the archive rather than as links back to this server.') }}
 				</p>
 				<details class="migration__how">
 					<summary>{{ t('social', 'How this works') }}</summary>
@@ -514,12 +514,11 @@
 				<details class="migration__how">
 					<summary>{{ t('social', 'How this works') }}</summary>
 					<p>
-						{{ t('social', 'Posts in the archive are listed rather than published again, so importing cannot flood the timelines of people who follow you. Their pictures are put back on the posts this server still has, and your banner is restored.') }}
+						{{ t('social', 'Posts in the archive are listed rather than published again, so importing cannot flood the timelines of people who follow you. Their photos are put back on the posts this server still has, and your banner is restored.') }}
 					</p>
 				</details>
-				<!-- each file input here is opened by the button after it, which is
-				     the control a keyboard and a screen reader reach; the input
-				     itself is kept out of both, or it is an unnamed "Browse…" -->
+				<!-- each file input is opened by the button after it, which is what
+				     keyboards and screen readers reach; the input is hidden from both -->
 				<input
 					ref="archive"
 					type="file"
@@ -653,15 +652,10 @@ import logger from '../services/logger.js'
 const CHOICES = ['bring', 'copy', 'leave']
 
 /**
- * Taking your account out, and bringing one in: the body of the Migration
- * page. The heading and the sentence under it belong to the page, so they
- * live in `views/Migration.vue` rather than being repeated here.
- *
- * It opens with three choices, each showing only its own steps: bringing an
- * account here, keeping a copy, and leaving this server. `#bring`, `#copy`
- * and `#leave` open one of them; without a hash the page opens on whatever
- * is under way (an import, a move to finish, a move away), or on the choices
- * alone.
+ * The Migration section of Settings: bringing an account here, keeping a
+ * copy, and leaving this server, each showing only its own steps. `#bring`,
+ * `#copy` and `#leave` open one; without a hash the section opens on whatever
+ * is under way, or on the choices alone.
  */
 export default {
 	name: 'MigrationSettings',
@@ -697,7 +691,7 @@ export default {
 			importing: false,
 			followsBusy: false,
 			postsBusy: false,
-			/** whether a picture named only by its address may be fetched from the old server */
+			/** whether media named only by its address may be fetched from the old server */
 			fetchMedia: true,
 			/** @type {string[]} what the last import reported */
 			importLog: [],
@@ -766,10 +760,8 @@ export default {
 		},
 
 		/**
-		 * The lists of accounts that can be downloaded one at a time.
-		 *
-		 * Named here rather than in the loop so the labels are translated
-		 * strings in the source and not something built out of a route name.
+		 * The lists of accounts that can be downloaded one at a time, named
+		 * here so the labels are translatable strings in the source.
 		 *
 		 * @return {Array<{name: string, label: string}>}
 		 */
@@ -901,8 +893,8 @@ export default {
 		},
 
 		/**
-		 * Where a move finished from here stands — asked when the page opens,
-		 * which is where the old server sends the person back to.
+		 * Where a move finished from here stands, asked on open because the old
+		 * server sends the person back to this page.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -916,8 +908,8 @@ export default {
 		},
 
 		/**
-		 * Has the old server — this app too — move the followers here: the
-		 * person is sent there to log in and agree, and comes back to this page.
+		 * Has the old server move the followers here: the person is sent there
+		 * to log in and agree, and comes back to this page.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -944,9 +936,8 @@ export default {
 		},
 
 		/**
-		 * Runs the copy again for the account a finished move came from, posts
-		 * only: what was written there since comes over, what is here already
-		 * is left alone by the import itself.
+		 * Runs the posts-only copy again for the account a finished move came
+		 * from; posts already here are left alone.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -1079,12 +1070,8 @@ export default {
 		},
 
 		/**
-		 * The accounts this one also answers to.
-		 *
-		 * Read on mount rather than handed over with the page: the section is
-		 * below the fold of a settings page most people never open, and a
-		 * request that costs nothing until then is cheaper than state on every
-		 * page load.
+		 * The accounts this one also answers to, read on mount rather than
+		 * sent with every page load.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -1140,11 +1127,9 @@ export default {
 		},
 
 		/**
-		 * The archive is built on the server and handed over as a blob, then
-		 * saved through a link this code makes and clicks: the route needs the
-		 * session, so a plain `window.open` of it would work, but an error
-		 * would then replace the page with a JSON body instead of being caught
-		 * here and said out loud.
+		 * Fetches the archive as a blob and saves it through a generated link,
+		 * so an error is caught and shown instead of replacing the page with
+		 * a JSON body.
 		 */
 		async exportArchive() {
 			this.exporting = true
@@ -1215,13 +1200,8 @@ export default {
 		},
 
 		/**
-		 * @param {Event} event the file input's change
-		 */
-		/**
-		 * Queues the export: the server keeps the file and writes the posts in
-		 * the background, where a long history is hours of work rather than a
-		 * request against the web server's timeout. The list above shows where
-		 * it has got to.
+		 * Queues the posts import, which the server runs in the background;
+		 * the list above shows its progress.
 		 *
 		 * @param {Event} event the file input's change
 		 * @return {Promise<void>}
@@ -1236,12 +1216,8 @@ export default {
 		},
 
 		/**
-		 * One list of accounts, saved as the CSV the server writes.
-		 *
-		 * Fetched as a blob and saved through a link this code makes, the same
-		 * way the archive is: the route needs the session, so opening it in a
-		 * tab would work — and an error would then replace the page with a
-		 * JSON body instead of being caught here and said out loud.
+		 * One list of accounts, saved as the CSV the server writes, fetched
+		 * as a blob like the archive.
 		 *
 		 * @param {string} kind which list: following, followers, blocks, mutes or lists
 		 * @return {Promise<void>}
@@ -1393,11 +1369,9 @@ export default {
 		},
 
 		/**
-		 * What could not be done, by name, with the reason — the first few.
-		 *
-		 * The server keeps them under three keys, one per importer: `failed`
-		 * for the account lists, `failures` for the follows of a move-in and
-		 * `post_failures` for its posts.
+		 * The first few failures, with their reasons. The server keeps them
+		 * under `failed` (account lists), `failures` (a move-in's follows)
+		 * or `post_failures` (its posts).
 		 *
 		 * @param {object} job the import as the server lists it
 		 * @return {Array<[string, string]>} what, and why
@@ -1702,9 +1676,7 @@ export default {
 	min-width: 220px;
 }
 
-/* the longest label on the page: a button sizes itself to its text and
-   never wraps it, so on a phone, or in a longer language, it ran past the
-   card and the page scrolled sideways */
+/* the longest label on the page: allowed to wrap so it stays inside the card */
 .migration__move-out-button {
 	max-width: 100%;
 

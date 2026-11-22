@@ -21,11 +21,6 @@ use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
 
-/**
- * Class ContactsMenuProvider
- *
- * @package OCA\Social\Providers
- */
 class ContactsMenuProvider implements IProvider {
 	public function __construct(
 		private IActionFactory $actionFactory,

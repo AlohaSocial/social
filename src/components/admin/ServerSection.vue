@@ -25,7 +25,7 @@
 					type="number"
 					min="1"
 					max="10240"
-					:label="t('social', 'Largest picture or file (MB)')" />
+					:label="t('social', 'Largest photo or file (MB)')" />
 				<NcTextField
 					v-model="form.maxVideoSize"
 					class="server__number"
@@ -42,7 +42,7 @@
 					type="number"
 					min="0"
 					max="16384"
-					:label="t('social', 'Shrink pictures to (pixels)')"
+					:label="t('social', 'Shrink photos to (pixels)')"
 					:helperText="t('social', '0 keeps every upload exactly as it arrived, which is the default. A ceiling saves disk and bandwidth.')" />
 				<NcTextField
 					v-model="form.imageQuality"
@@ -58,10 +58,8 @@
 				{{ t('social', 'Videos') }}
 			</h4>
 
-			<!-- the one thing that decides whether a video posted here plays
-			     anywhere else: Pixelfed's default accepts video/mp4 and
-			     nothing else, so a .mov straight off a phone is dropped by its
-			     inbox without a word to anybody -->
+			<!-- decides whether a video posted here plays elsewhere: Pixelfed
+			     accepts only video/mp4 by default, so a phone's .mov is dropped -->
 			<NcCheckboxRadioSwitch v-model="form.videoTranscode" type="switch">
 				{{ t('social', 'Convert videos to MP4 in the background') }}
 			</NcCheckboxRadioSwitch>
@@ -184,13 +182,9 @@ import { errorOf } from '../../utils/serverError.js'
 import { showError, showSuccess } from '../../services/toast.js'
 
 /**
- * The limits this instance holds uploads and peers to. What it says about
- * itself is the About this server card's.
- *
- * Rendered for an administrator and not for a delegate: what it holds is
- * administration rather than moderation, and its endpoint refuses anybody who
- * is not an administrator anyway. The parent decides that — the settings are
- * simply not in the initial state of a delegate.
+ * The limits this instance holds uploads and peers to; what it says about
+ * itself is in the About this server card. Administrators only: a delegate's
+ * initial state has no settings, and the endpoint refuses them anyway.
  */
 export default {
 	name: 'ServerSection',
@@ -270,11 +264,8 @@ export default {
 		t,
 
 		/**
-		 * Writes the whole card, or none of it.
-		 *
-		 * The endpoint validates every field and writes all or nothing, so what
-		 * is reported here is what stands: a card that saved six of its eight
-		 * fields would leave an administrator guessing which.
+		 * Writes the whole card, or none of it, as the endpoint validates every
+		 * field before writing.
 		 *
 		 * @return {Promise<boolean>} whether it was taken
 		 */
@@ -308,9 +299,9 @@ export default {
 				// thing that tells the administrator what to change
 				this.saved = false
 				const reason = errorOf(error, t('social', 'Could not save the server settings'), {
-					max_size: t('social', 'Largest picture or file (MB)'),
+					max_size: t('social', 'Largest photo or file (MB)'),
 					max_video_size: t('social', 'Largest video (MB)'),
-					image_max_edge: t('social', 'Shrink pictures to (pixels)'),
+					image_max_edge: t('social', 'Shrink photos to (pixels)'),
 					image_quality: t('social', 'Stored at quality'),
 					video_max_height: t('social', 'Shrink videos to (pixels tall)'),
 					video_ladder_heights: t('social', 'Sizes to write (pixels tall, comma-separated)'),
@@ -335,9 +326,8 @@ export default {
 	display: flex;
 	flex-direction: column;
 	gap: calc(var(--default-grid-baseline) * 2);
-	// stretch, not flex-start: a field sized to its own content is a field
-	// whose floating label is cut off in the middle of a word, and the
-	// longest label here is longer than the number it sits above
+	// stretch: a field sized to its content cuts off its floating label, and
+	// the labels are longer than the numbers
 	align-items: stretch;
 	max-width: 600px;
 

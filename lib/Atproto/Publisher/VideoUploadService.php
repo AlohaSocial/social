@@ -29,17 +29,11 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A local post's video, made into a Bluesky video (D11).
- *
- * Bluesky's apps play what its video service made of a video, so a video is
- * not simply a blob in the post: it is sent to the video service in the
- * account's name, the service makes its stream and stores the result here
- * with `uploadBlob` (a token the account signed for exactly that, see
- * `ServiceAuthGrant`), and the post goes to Bluesky once the job is done,
- * naming that blob. That takes minutes, so the post waits in
- * `social_atproto_video` and a background job moves it on. A video the
- * service will not take, refuses or does not finish in time leaves the post
- * to go out as it did before: text and a link to the post here.
+ * A local post's video, made into a Bluesky video (D11). The video is sent to
+ * Bluesky's video service in the account's name, which stores the result here
+ * with `uploadBlob` (see `ServiceAuthGrant`); the post waits in
+ * `social_atproto_video` until then. A video the service refuses or does not
+ * finish in time leaves the post to go out with a link to the post here.
  */
 class VideoUploadService {
 	/** what the video service is sent; Bluesky's apps send these */

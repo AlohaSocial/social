@@ -22,13 +22,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * A Bluesky account's block of a local one (`app.bsky.graph.block`): a
- * public record in the blocker's repository that nothing delivers here.
- * The AppView says it to the blocked account alone, as `viewer.blockedBy`
- * on the blocker's profile, so it is asked as the local account
- * (`app.bsky.actor.getProfiles`), and taken from any answer read as one.
- * A block by the author of a thread's first post keeps a reply anywhere in
- * the thread out, as every AppView holds it.
+ * A Bluesky account's block of a local one (`app.bsky.graph.block`). Nothing
+ * delivers it here and the AppView tells only the blocked account (as
+ * `viewer.blockedBy`), so it is read from answers given to the local account.
+ * A block by a thread's root author keeps replies anywhere in the thread out.
  */
 class BlueskyBlockedBy implements BlockedBySource {
 	public const PROFILES = 'app.bsky.actor.getProfiles';

@@ -1,9 +1,4 @@
-// The widths this app changes its mind at, and the idioms that go with them.
-// They were each invented where they were first needed — 500, 600, 800, 1024
-// and 1100 — so a rule written in one component could not line up with a rule
-// in another, and nothing said which of them meant the same thing. Four names
-// cover every one of those cases.
-// A component takes what it needs:
+// The app's breakpoints and the idioms that go with them. Usage:
 //     @use '../styles/layout.scss' as layout;
 //     @include layout.below(layout.$phone) { … }
 //     @include layout.from(layout.$wide) { … }
@@ -12,9 +7,7 @@
 /// buttons is as wide as the screen.
 $phone: 600px;
 
-/// Where a label beside an icon stops fitting in a row of several. A switcher
-/// with three options reaches this before one with two does, so the narrower
-/// crowding is `$phone` and this is for the crowded ones.
+/// Where a label beside an icon stops fitting in a row of several buttons.
 $crowded: 800px;
 
 /// Nextcloud's own: `#app-navigation` folds away under it, and the app's
@@ -43,13 +36,8 @@ $wide: 1100px;
 	}
 }
 
-/// Takes something out of the picture while leaving it in the page.
-///
-/// For a label whose icon says the same thing once there is no room for both:
-/// `display: none` would take it from a screen reader too, and that is the one
-/// reader the icon does not speak to. Written out three times in two
-/// components before this, at two different widths and in two slightly
-/// different ways.
+/// Hides something visually but keeps it for screen readers, e.g. a label
+/// beside an icon once there is no room for both.
 @mixin visually-hidden {
 	position: absolute;
 	width: 1px;

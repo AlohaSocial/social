@@ -6,12 +6,8 @@
 import { APP_NAME } from './appName.js'
 
 /**
- * The weekly recap as a picture somebody can post.
- *
- * Square, because that is what every client on the network crops a single
- * picture to anyway; drawn on a canvas in the theme's own accent, so the card
- * looks like the instance it came from. The words on it are the recap's own
- * sentences, already translated — the picture says nothing the card did not.
+ * The weekly recap as a square picture somebody can post, drawn in the
+ * theme's accent with the recap's own translated sentences.
  */
 
 /** Width and height of the picture, in pixels. */

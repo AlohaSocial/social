@@ -32,18 +32,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Keeps self-registered external users inside the Social app.
  *
- * Registered as a global middleware, so it sees the controllers of every app
- * and of core, and checks `ExternalScope` before any of them runs. Hiding a
- * menu entry is not a boundary; this is. A page is answered with a redirect
- * to Social, anything else with 403. Personal settings are allowed for the
- * sections in `ExternalScope::SETTINGS_SECTIONS`, and the navigation of that
- * page lists only those.
- *
- * Core's profile page is sent to the Social profile for everybody when the
- * profile is an external user's: an external user has no Nextcloud profile to
- * show, and a link to one from inside Social should still land somewhere.
- *
- * WebDAV is not a controller; `ExternalDavGuard` covers it.
+ * A global middleware, so it checks `ExternalScope` before any app's or
+ * core's controller runs: pages redirect to Social, anything else gets 403.
+ * Personal settings allow the sections in `ExternalScope::SETTINGS_SECTIONS`
+ * only. Core's profile page of an external user redirects to the Social
+ * profile for everybody. WebDAV is covered by `ExternalDavGuard`.
  */
 class ExternalScopeMiddleware extends Middleware {
 	public function __construct(
@@ -137,12 +130,9 @@ class ExternalScopeMiddleware extends Middleware {
 	}
 
 	/**
-	 * The personal settings navigation, down to the sections an external
-	 * user may open.
-	 *
-	 * The page provided its own list when the controller ran; this one is
-	 * provided after it, under the same key, and is the one the page reads.
-	 * The shape is the one `CommonSettingsTrait::formatSections()` writes.
+	 * The personal settings navigation, reduced to the sections an external
+	 * user may open. Provided after the controller's under the same key, in
+	 * the shape `CommonSettingsTrait::formatSections()` writes, so it wins.
 	 */
 	private function provideSettingsSections(string $current): void {
 		$sections = [];

@@ -42,15 +42,12 @@ class ActorService {
 	 *
 	 * @throws ItemAlreadyExistsException
 	 */
-	public function cacheLocalActor(Person $actor, bool $preserveProfileLayout = true) {
+	public function cacheLocalActor(Person $actor) {
 		$actor->setLocal(true);
 		$cached = null;
 		try {
 			$cached = $this->cacheActorsRequest->getFromId($actor->getId());
 			$this->carryVerifiedFields($actor, $cached);
-			if ($preserveProfileLayout) {
-				$actor->setProfileLayout($cached->getProfileLayout());
-			}
 		} catch (CacheActorDoesNotExistException $e) {
 			// The first published copy has no previous fields to preserve.
 		}
@@ -65,23 +62,13 @@ class ActorService {
 	}
 
 	/**
-	 * Keeps the verified-link verdicts the cached copy already holds.
+	 * Keeps the verified-link verdicts the cached copy already holds, since
+	 * `update()` writes `details` whole and a rebuilt local actor would
+	 * otherwise lose `fields_verified` until the next `Cron\Cache` pass.
 	 *
-	 * `update()` writes `details` whole, and a local actor is rebuilt from the
-	 * `actors` row, which has no details column: everything
-	 * `AccountService::cacheLocalActorByUsername()` puts back is the two counts
-	 * it has just recomputed. So every write to a profile — a new bio, one
-	 * flag, one edited field — erased `fields_verified` along with it, and the
-	 * ticks left the profile until the next `Cron\Cache` pass re-fetched every
-	 * linked page. For those minutes the profile told each visitor that an
-	 * account had never proved a link it had proved.
-	 *
-	 * `fields_checked` is deliberately not carried: dropping it is what makes
-	 * the next pass look again at once instead of waiting out
-	 * `ProfileLinkVerifier::RECHECK_SECONDS`, which is what a value that has
-	 * just been edited needs. A verdict whose value is no longer among the
-	 * fields is dropped here rather than lying in wait for the day somebody
-	 * types that value again.
+	 * `fields_checked` is not carried, so edited fields are checked again at
+	 * once rather than after `ProfileLinkVerifier::RECHECK_SECONDS`. Verdicts
+	 * for values no longer among the fields are dropped.
 	 */
 	private function carryVerifiedFields(Person $actor, Person $cached): void {
 		$verified = $cached->getDetailsAll()[Details::FIELDS_VERIFIED] ?? [];

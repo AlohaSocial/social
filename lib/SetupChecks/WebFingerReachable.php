@@ -17,16 +17,9 @@ use OCP\SetupCheck\SetupResult;
 use Throwable;
 
 /**
- * Whether `/.well-known/webfinger` answers for an account of this instance.
- *
- * Until this, the only place the probe ran was the app's own first screen,
- * for whoever happened to be an administrator and to open Social. An
- * administrator who never does — most of them — found out that nobody could
- * follow anyone here when a user asked. Administration → Overview is where
- * they already look for what is wrong with the server.
- *
- * The probe needs a real account to ask about, so it takes the oldest live
- * one rather than the administrator's own, which may not exist.
+ * Whether `/.well-known/webfinger` answers for an account of this instance,
+ * shown in Administration → Overview where administrators look. It asks
+ * about the oldest live account, as the administrator may have none.
  */
 class WebFingerReachable implements ISetupCheck {
 	public const DOC = Docs::ADMIN_GUIDE . '#webfinger-does-not-answer';

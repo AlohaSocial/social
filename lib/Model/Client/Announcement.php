@@ -16,36 +16,18 @@ use OCA\Social\Tools\DbTime;
  * Mastodon's Announcement entity: the instance-wide notice an admin posts and
  * every account is shown once.
  *
- * What is stored is the text the admin typed; `content` is HTML, so the text
- * is escaped and its line breaks turned into markup when the entity is built.
- * A client renders `content` as HTML, so a stray `<` in a notice about an XML
- * config file must not become a tag.
- *
- * `mentions`, `statuses`, `tags` and `emojis` are always empty here — an
- * announcement is plain text and nothing is parsed out of it — but all four
- * are sent, because Mastodon documents them as non-optional and a client that
- * declares them so cannot decode the entity without them. `read` is the one
- * Mastodon marks optional, and it is always sent too: every reader of this
- * entity is an authenticated account, which is the condition Mastodon sends it
- * under.
- *
- * `reactions` was in that list until there was a route to write one. It is the
- * only thing an account can say back about an instance-wide notice, and
- * without it the only thing anybody could do with one was put it away.
- *
- * `startsAt`/`endsAt` are timestamps and `0` means "no such bound", not 1970:
- * `isActiveAt()` is what every reader compares with, so the two cannot be
- * confused. Mastodon treats the pair as display metadata beside a separate
- * `published` flag; here the pair is what decides whether the announcement is
- * served at all — see AnnouncementsRequest.
+ * The stored text is escaped and its line breaks turned into markup, as
+ * `content` is HTML. `mentions`, `statuses`, `tags` and `emojis` are always
+ * empty but always sent, as Mastodon documents them as non-optional, and so
+ * is `read`. `startsAt`/`endsAt` are timestamps with `0` for no bound; unlike
+ * Mastodon, they decide whether the announcement is served at all (see
+ * AnnouncementsRequest).
  */
 class Announcement implements JsonSerializable {
 	/**
-	 * The longest notice an admin may post.
-	 *
-	 * `social_announcement.content` is a TEXT column, which holds 64 KiB on
-	 * MySQL; the ceiling is here so that a paste that would not fit is refused
-	 * whole rather than stored cut in half.
+	 * The longest notice an admin may post: `social_announcement.content` is a
+	 * TEXT column (64 KiB on MySQL), so a paste that would not fit is refused
+	 * whole rather than stored cut.
 	 */
 	public const MAX_TEXT = 10000;
 
@@ -148,14 +130,9 @@ class Announcement implements JsonSerializable {
 	}
 
 	/**
-	 * Whether the announcement applies at that moment.
-	 *
-	 * An announcement with no bounds applies for good; one with a range
-	 * applies from its start up to but not including its end, so an
-	 * announcement ending at noon and one starting at noon do not both show at
-	 * noon. Nothing runs to make this happen: an expiry a cron has to act on
-	 * keeps being shown on an instance whose cron is broken, which is where a
-	 * stale notice does the most harm.
+	 * Whether the announcement applies at that moment: always without bounds,
+	 * otherwise from its start up to but not including its end. Computed on
+	 * read, so no cron has to expire it.
 	 */
 	public function isActiveAt(?int $now = null): bool {
 		$now ??= time();
@@ -243,11 +220,8 @@ class Announcement implements JsonSerializable {
 	/**
 	 * Mastodon's `Reaction`, most-reacted first and alphabetical within a tie,
 	 * so a client redrawing the same announcement does not reshuffle it.
-	 *
-	 * `url` and `static_url` belong to a custom emoji and are absent for a
-	 * Unicode one — Mastodon omits them rather than sending null, and a client
-	 * reads their presence as "this is a picture, not a character". This app
-	 * fills them in from what it publishes, in AnnouncementService.
+	 * `url` and `static_url` are omitted for a Unicode emoji, as Mastodon
+	 * does; AnnouncementService fills them for a custom one.
 	 *
 	 * @return array[]
 	 */

@@ -6,14 +6,11 @@
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 
 /**
- * What each code of an error says to the person, with what they can do next:
- * the codes of the Bluesky routes (Atproto-Compatibility §13.5: a move, the
- * handle, an app password), of the Migration routes and of the other routes
- * whose refusal is advice (API.md, Migration error codes and Other refusal
- * codes). The server's own sentence is English and names the step that
- * failed, so it is kept for the details. A sentence that needs a number or a
- * name — a limit, the field refused — reads it from the answer beside the
- * code.
+ * What each error code says to the person, with what they can do next: the
+ * codes of the Bluesky routes (Atproto-Compatibility §13.5), of the Migration
+ * routes and of the other routes whose refusal is advice (API.md). The
+ * server's own English sentence is kept for the details; a sentence that
+ * needs a number or a name reads it from the answer beside the code.
  *
  * @type {Record<string, (said: Record<string, string|number>) => string>}
  */
@@ -46,7 +43,7 @@ const SENTENCES = {
 	'move-switching': () => t('social', 'Your account is being pointed at the new server right now. Wait a moment: the move then goes on or stops.'),
 	'move-past-switch': () => t('social', 'Your account already points at the new server, so the move can no longer be called off. Use "Try again" to finish it.'),
 	'move-called-off': () => t('social', 'The move was called off.'),
-	'blobs-missing': () => t('social', 'Some pictures or videos did not arrive. Copy them again, or go on without them.'),
+	'blobs-missing': () => t('social', 'Some photos or videos did not arrive. Copy them again, or go on without them.'),
 	'repo-incomplete': () => t('social', 'Your posts did not all arrive on the other server. Copy them again.'),
 	'no-decision-pending': () => t('social', 'The move is not waiting for a decision any more. Reload the page to see where it stands.'),
 	'announce-invalid': () => t('social', 'This server does not know that way of saying where your account went. Reload the page and choose again.'),
@@ -74,7 +71,7 @@ const SENTENCES = {
 	'code-expired': () => t('social', 'That code is too old. Ask for a new one.'),
 	'repo-unavailable': () => t('social', 'The old server did not hand over your posts. Try again later.'),
 	'repo-too-large': () => t('social', 'Your account is larger than this server takes. Ask your administrator about it.'),
-	'blob-too-large': () => t('social', 'A picture or video is larger than this server takes. Go on without it.'),
+	'blob-too-large': () => t('social', 'A photo or video is larger than this server takes. Go on without it.'),
 	'repo-invalid': () => t('social', 'What the old server handed over is not your account. Ask the people who run that server.'),
 	'operation-mismatch': () => t('social', 'The old server confirmed something other than what was asked. Try again, and tell your administrator if it happens again.'),
 	'nothing-to-republish': () => t('social', 'There are no posts waiting to be published again.'),
@@ -177,10 +174,8 @@ export function errorSentence(code, said = {}, labels = {}) {
  * Why a request was refused, from the error axios threw.
  *
  * A route that sends no code, or one this page does not know, gets the
- * fallback: a sentence about what the person was doing, in their language.
- * What the server said is kept for the details: `message` where the answer
- * has one — the framework's own, and the routes whose `error` is a fixed
- * "request failed" — and `error` otherwise.
+ * fallback. The server's words are kept for the details: `message` where the
+ * answer has one, `error` otherwise.
  *
  * @param {object} error what axios threw
  * @param {string} fallback what to say when the code is none this page knows
@@ -199,8 +194,8 @@ export function errorOf(error, fallback, labels = {}) {
 
 /**
  * Why a background job failed, from the code and sentence it kept: an import
- * on the Migration page, or a move finished from here. A job kept before it
- * had a code says so in general terms, with what it kept for the details.
+ * in Settings → Migration, or a move finished from here. A job without a code
+ * is explained in general terms.
  *
  * @param {{code?: string, error?: string}|null|undefined} failure what the server kept
  * @param {string} fallback the code to explain when there is none this page knows

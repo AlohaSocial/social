@@ -19,12 +19,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * XRPC calls to another PDS, the one an account moves to or from: JSON in
- * and out, or bytes in (a repository, a blob). The other PDS is the person's
- * choice and gets the same care as any address a user types: https, and
- * every request goes out through `CurlService`, with its refusal of local
- * addresses — unless the server is one set up to talk to local ones, as a
- * development network is.
+ * XRPC calls to the other PDS of a move. That PDS is the person's choice, so
+ * it gets the care of any user-typed address: https only, and requests go
+ * through `CurlService`, which refuses local addresses.
  */
 class PdsClient {
 	/** what a JSON call is given to answer, in seconds: some are waited for in a request */
@@ -187,10 +184,9 @@ class PdsClient {
 
 	/**
 	 * Why a PDS was not reached: `pds-blocked` for an instance this server
-	 * does not federate with, `pds-unreachable` for anything else. An
-	 * address this server does not send requests to is not reached either,
-	 * and said no differently: the person must not learn which hosts
-	 * resolve to local addresses. What went wrong is logged, not said.
+	 * does not federate with, `pds-unreachable` for anything else, including
+	 * a local address, so the person cannot probe which hosts resolve locally.
+	 * Details are logged, not shown.
 	 */
 	private function unreachable(string $pds, Throwable $e): MoveFailure {
 		$this->logger->info('PDS not reached', ['pds' => $pds, 'exception' => $e]);

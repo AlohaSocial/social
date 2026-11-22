@@ -85,13 +85,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	private array $emojis = [];
 	private bool $bot = false;
 	/**
-	 * Who this actor belongs to, as ActivityPub's `attributedTo`.
-	 *
-	 * Empty for an ordinary account, which belongs to nobody but itself. A
-	 * **channel** names its owner here, and has to: PeerTube fetches a video's
-	 * channel and then looks for a `Person` in the channel's own `attributedTo`,
-	 * refusing the video with *"Cannot find account attributed to video
-	 * channel"* when there is none.
+	 * Who this actor belongs to, as ActivityPub's `attributedTo`; empty for
+	 * an ordinary account. A channel must name its owner here, or PeerTube
+	 * refuses its videos ("Cannot find account attributed to video channel").
 	 *
 	 * @var array<int, array{type: string, id: string}>
 	 */
@@ -256,8 +252,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The banner, or `''`. A local account's stored header that is its own
-	 * Nextcloud avatar is no banner: it is what the header used to fall back
-	 * to, and the cached copy kept it as if it were one.
+	 * Nextcloud avatar is not a banner.
 	 */
 	public function getHeader(): string {
 		if ($this->hasOwnAvatarAsHeader()) {
@@ -577,12 +572,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The type this actor is served as, for the column that stores it.
-	 *
-	 * `''` for the two the `bot` flag already decides between, so a row means
-	 * "decide as before" unless something deliberately said otherwise — which
-	 * is what every row written before `actor_type` existed means, and what an
-	 * ordinary account goes on meaning.
+	 * The type this actor is served as, for the column that stores it: `''`
+	 * when the `bot` flag decides between `Person` and `Service`, as for an
+	 * ordinary account.
 	 */
 	/**
 	 * `attributedTo` as a list of typed references, however the document wrote
@@ -677,10 +669,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	public function setBot(bool $bot): self {
 		$this->bot = $bot;
 
-		// The flag and the actor type are one fact. A peer reads `type`, a
-		// client reads `bot`, and an account marked automated here that went on
-		// serving `Person` would have told the two of them different things.
-		// Only ever between these two: an `Application` stays an `Application`.
+		// The flag and the actor type are one fact: peers read `type`, clients
+		// `bot`. Only between these two; an `Application` stays one.
 		if ($this->getType() === self::TYPE || $this->getType() === Service::TYPE) {
 			$this->setType($bot ? Service::TYPE : self::TYPE);
 		}
@@ -908,19 +898,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The names a profile field goes by when it holds somebody's pronouns, and
-	 * when it holds a link for supporting them.
-	 *
-	 * Neither is a field of its own here, and deliberately so. A pronoun row
-	 * is what Mastodon, GoToSocial and Akkoma users already write, it already
-	 * federates as a `PropertyValue`, and a new property that only this app
-	 * understood would be a pronoun nobody else could read. What this app adds
-	 * is *recognising* the row it is in — drawing it beside the name rather
-	 * than in a table at the bottom, which is where it belongs and where every
-	 * other network puts it.
-	 *
-	 * Matched case- and accent-insensitively against the handful of spellings
-	 * people actually use, in the languages this app is translated into most.
+	 * The names a profile field goes by when it holds somebody's pronouns, or
+	 * a link for supporting them. These stay ordinary `PropertyValue` rows,
+	 * as other servers write and read them; this app only recognises them to
+	 * draw them beside the name. Matched case- and accent-insensitively.
 	 */
 	private const PRONOUN_NAMES = [
 		'pronouns', 'pronoun', 'pronomen', 'pronoms', 'pronombres', 'pronomi',
@@ -939,11 +920,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	];
 
 	/**
-	 * The account's pronouns, or `''`.
-	 *
-	 * Short by construction — anything past a handful of characters is a
-	 * sentence somebody wrote in the wrong row, and drawing it beside the name
-	 * would push the name off the line.
+	 * The account's pronouns, or `''`; anything longer than a few characters
+	 * is not shown, as it would push the name off the line.
 	 */
 	public function getPronouns(): string {
 		$value = $this->fieldNamed(self::PRONOUN_NAMES);
@@ -952,12 +930,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Where to support this account, or `''`.
-	 *
-	 * Only an `https://` address, and only from the account's own profile:
-	 * this is drawn as a button, and a button is a stronger invitation than a
-	 * row in a table — so it may not be `javascript:`, a bare word, or
-	 * anything a reader would not expect to be a link.
+	 * Where to support this account, or `''`: only an `https://` address from
+	 * the account's own profile, as it is drawn as a button.
 	 */
 	public function getSupportLink(): string {
 		$value = $this->fieldNamed(self::SUPPORT_NAMES);
@@ -987,10 +961,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The fields with the pronoun row and the website row set to these, as a
-	 * Bluesky app saving the profile says them: a row already there is
-	 * rewritten in place, a new one added while there is room for it, and
-	 * one given as `''` taken away. `null` leaves that row as it is.
+	 * The fields with the pronoun and website rows set as a Bluesky app saves
+	 * the profile: an existing row rewritten in place, a new one added while
+	 * there is room, `''` removing it, `null` leaving it alone.
 	 *
 	 * @param array[] $fields [['name' => string, 'value' => string], …]
 	 * @return array[]
@@ -1076,13 +1049,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * A local field's value as the HTML `PropertyValue.value` is on the wire.
-	 *
-	 * A local value is stored as it was typed, and every peer renders `value`
-	 * as HTML: a `<` or `&` went out as markup, and an address was plain text
-	 * on Mastodon, which verifies a field only from a link in it. An address
-	 * on its own becomes a link with `rel="me"`, which is what Mastodon's own
-	 * fields carry; everything else is escaped.
+	 * A local field's value as HTML for `PropertyValue.value`, which peers
+	 * render as HTML: a lone address becomes a `rel="me"` link (Mastodon
+	 * verifies fields only from links), everything else is escaped.
 	 */
 	private static function fieldValueAsHtml(string $value): string {
 		$escaped = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -1095,14 +1064,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The value as typed, from what `fieldValueAsHtml()` made of it.
-	 *
-	 * A local actor's cached copy keeps its own served document as `source`,
-	 * and the fields are read back out of it, already rendered: served from
-	 * there they were rendered a second time, and every peer showed the
-	 * markup of the first rendering as text. Only a value that renders back
-	 * to exactly what is stored is decoded; anything else (a row written
-	 * before values were rendered) is the typed value already.
+	 * The value as typed, from what `fieldValueAsHtml()` made of it, since a
+	 * local actor's cached copy reads its fields back from its served
+	 * document. Only a value that renders back to exactly what is stored is
+	 * decoded; anything else is the typed value already.
 	 */
 	private static function fieldValueFromHtml(string $value): string {
 		$typed = html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML401, 'UTF-8');
@@ -1169,10 +1134,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			->setFeatured($this->validate(ACore::AS_URL, 'featured', $data, ''))
 			->setAlsoKnownAs(self::listOf('alsoKnownAs', $data))
 			->setMovedTo($this->validate(ACore::AS_URL, 'movedTo', $data, ''));
-		// A key that says whose it is has to say this actor. A document handing
-		// over somebody else's `owner` is a key takeover written out in full:
-		// what is stored against an actor is the key requests from it are then
-		// verified with.
+		// A key that names an owner must name this actor; anything else would
+		// be a key takeover.
 		$keyOwner = $this->get('publicKey.owner', $data, '');
 		if ($keyOwner !== '' && $keyOwner !== $this->getId()) {
 			throw new InvalidOriginException(
@@ -1180,10 +1143,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			);
 		}
 
-		// `account` is not an ActivityPub field: the handle is whatever the
-		// actor's own `preferredUsername` and the host of its id say it is.
-		// Read off the document, it let any server claim a handle on any other
-		// — and it is what `getFromAccount()` answers with.
+		// `account` is not an ActivityPub field: the handle comes from the
+		// actor's own `preferredUsername` and the host of its id, so no server
+		// can claim a handle on another
 		$this->setAccount($this->canonicalAccount());
 
 		$this->setLocked($this->getBool('manuallyApprovesFollowers', $data, false));
@@ -1212,13 +1174,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * What the banner is, for the `mediaType` of the actor's `image`.
-	 *
-	 * GoToSocial stores the declared type, so `image/jpeg` for every banner —
-	 * what this used to say — was a wrong statement about each PNG and WebP.
-	 * A remote banner keeps the type its own document gave; a local one is
-	 * served from `/media/{uuid}.{subtype}`, which names it. Anything else is
-	 * left unstated rather than guessed.
+	 * The banner's `mediaType` for the actor's `image`: a remote banner keeps
+	 * its declared type, a local one is named by its `/media/{uuid}.{subtype}`
+	 * address; anything else is left unstated (GoToSocial stores what is
+	 * declared).
 	 */
 	private function headerMediaType(): string {
 		if ($this->headerMediaType !== '') {
@@ -1235,14 +1194,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The one picture to keep out of an `icon` or `image`.
-	 *
-	 * Mastodon sends one `Image`; PeerTube sends a list of them, one per size,
-	 * for an account's avatar and a channel's banner alike. Handed the whole
-	 * list, `Image::import()` found no `type` and the picture was dropped, so
-	 * every PeerTube account arrived without an avatar. The largest is taken,
-	 * as `PeerTubeService::thumbnail()` does for a video's poster: they are
-	 * the same picture, and the others are its thumbnails.
+	 * The one image to keep out of an `icon` or `image`. Mastodon sends one
+	 * `Image`, PeerTube a list of sizes; the largest is taken, as
+	 * `PeerTubeService::thumbnail()` does for a video's poster.
 	 *
 	 * @param array<array-key, mixed> $data
 	 *
@@ -1328,20 +1282,11 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The three counters, laid over what `details` says.
-	 *
-	 * They live in their own columns so that one can be moved without
-	 * recomputing the other two, while the JSON stays what is read — so every
-	 * path that turns a row into an actor has to lay one over the other, and
-	 * doing it here is what makes that true of all of them. It used to be done
-	 * in one of the two query builders that parse this row, and that one did
-	 * not select the columns: the overlay never had anything to lay on, and
-	 * every profile showed the JSON until the cron's recount rewrote it — a
-	 * post count that did not move when you posted.
-	 *
-	 * `-1` is "never counted" and leaves the JSON alone, which is what a row
-	 * written before the columns existed carries. A row without the columns at
-	 * all — the local actor table, which has none — is left alone too.
+	 * The three counters, laid over what `details` says. They have their own
+	 * columns so one can move without recomputing the others, so every path
+	 * that turns a row into an actor must overlay them; doing it here covers
+	 * all of them. `-1` means never counted and leaves the JSON alone, as does
+	 * a row without the columns (the local actor table).
 	 */
 	private function overlayStoredCounts(array $data): void {
 		if (!array_key_exists('count_followers', $data) || (int)$data['count_followers'] < 0) {
@@ -1363,16 +1308,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	public function importFromDatabase(array $data) {
 		parent::importFromDatabase($data);
 
-		// The parent flattens `summary` the way a plain-text field arriving
-		// from the wire has to be flattened. A stored bio is not arriving from
-		// anywhere: it is the text the user typed, and everything that renders
-		// it escapes it (`bioAsHtml()`), so flattening it again protects
-		// nothing and destroys plenty — `strip_tags()` reads a bare `<` as the
-		// start of a tag and eats the rest of the line, so a bio saying
-		// `Maths: a<b and b>c` came back out of the database as `Maths: ac`.
-		// A cached remote actor's column holds HTML, but nothing renders
-		// `getSummary()` for one: remote bios are read from `description`,
-		// which the sanitising pass below still produces.
+		// A stored local bio is the typed plain text and is escaped wherever it
+		// is rendered (`bioAsHtml()`), so it is not flattened again:
+		// `strip_tags()` would turn `a<b and b>c` into `ac`. Remote bios are
+		// read from `description`, which the sanitising pass below produces.
 		$this->setSummary((string)($data['summary'] ?? ''));
 
 		// the columns of a local actor row; a cache row has none of them and
@@ -1388,7 +1327,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 		$source = json_decode($this->getSource(), true);
 		if (is_array($source)) {
-			$this->setProfileLayout(['default_tab' => $source['profileDefaultTab'] ?? 'posts', 'tabs' => $source['profileTabs'] ?? ProfileLayout::TABS]);
+			// a local profile always opens on Posts with every tab
+			if (!$this->isLocal()) {
+				$this->setProfileLayout(['default_tab' => $source['profileDefaultTab'] ?? 'posts', 'tabs' => $source['profileTabs'] ?? ProfileLayout::TABS]);
+			}
 			$banner = self::largestImage($source, 'image');
 			$image = $this->validate(self::AS_URL, 'url', $banner, '');
 			if ($image !== '') {
@@ -1396,11 +1338,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				$this->headerMediaType = $this->validate(self::AS_STRING, 'mediaType', $banner, '');
 			}
 			$this->setAlsoKnownAs(self::listOf('alsoKnownAs', $source));
-			// Whose a channel is. The cached copy is what every read of an
-			// actor is served from and it has no column for this, so it comes
-			// back out of the source document the same way `alsoKnownAs` does —
-			// without it the `Group` was served with no owner, which is the
-			// second thing PeerTube refuses a video for.
+			// Whose a channel is, read from the source document as the cached
+			// copy has no column for it; PeerTube refuses videos of a `Group`
+			// without an owner.
 			$this->setAttributedToActors($this->attributedToFrom($source));
 			$this->setMovedTo($this->validate(self::AS_URL, 'movedTo', $source, $this->getMovedTo()));
 			$this->setLocked($this->getBool('manuallyApprovesFollowers', $source, $this->isLocked()));
@@ -1420,22 +1360,17 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			$this->setFields($fields);
 		}
 
-		// A cached remote row keeps the actor type it was served as, which is
-		// the only thing that ever said the account is automated. A local row
-		// has the flag itself, because nothing else stores it: the type this
-		// app serves *is* the flag, so reading it back off the type would be
-		// circular.
+		// A cached remote row knows it is automated only from its actor type;
+		// a local row has the flag itself, as the served type is derived from it.
 		if (array_key_exists('bot', $data)) {
 			$this->setBot($this->getInt('bot', $data, 0) === 1);
 		} else {
 			$this->setBot(in_array($this->getType(), self::BOT_TYPES, true));
 		}
 
-		// A local actor that is something other than a person: a channel is a
-		// `Group`, which is the one thing PeerTube will look for when it asks
-		// which channel a video belongs to. Read *after* the bot flag, because
-		// `setBot()` moves the type between Person and Service and would
-		// otherwise overwrite this one.
+		// A local actor that is not a person (a channel is a `Group`, which
+		// PeerTube looks for). Read after the bot flag, as `setBot()` moves the
+		// type between Person and Service.
 		$actorType = $this->get('actor_type', $data, '');
 		if ($actorType !== '') {
 			$this->setType($actorType);
@@ -1510,19 +1445,11 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	 * @return array
 	 */
 	/**
-	 * The bio of a local actor as HTML.
-	 *
-	 * A local bio is stored as the plain text the user typed (see
-	 * `AccountService::setSummary()`), because that is the only form a client
-	 * can put back in an edit box. `summary` on the wire and `note` on the
-	 * client API are HTML everywhere else in the Fediverse, though — Mastodon
-	 * renders both, and this app's own profile card hands `note` to `v-html` —
-	 * so the stored text is rendered here: a blank line starts a paragraph, a
-	 * single newline is a `<br />`, and everything else is escaped, which is
-	 * what a bio reading `bees & goats` needs to survive the trip.
-	 *
-	 * A remote bio never goes through this: it arrived as HTML and was
-	 * sanitized on import, and is passed on as it is.
+	 * The bio of a local actor as HTML. It is stored as typed plain text
+	 * (`AccountService::setSummary()`) so clients can edit it, but `summary`
+	 * and `note` are HTML everywhere: a blank line starts a paragraph, a
+	 * newline is `<br />`, everything else is escaped. Remote bios are
+	 * sanitised on import and passed on as they are.
 	 */
 	private function bioAsHtml(): string {
 		$plain = trim(str_replace(["\r\n", "\r"], "\n", $this->getSummary()));
@@ -1571,9 +1498,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		}
 
 		$data['manuallyApprovesFollowers'] = $this->isLocked();
-		// Both default to false on the receiving side (Mastodon), so an actor
-		// that omits them is never listed in a directory, suggested, or
-		// full-text searched: they have to be said out loud to opt in.
+		// Both default to false on the receiving side (Mastodon), so they must
+		// be stated to opt in.
 		$data['discoverable'] = $this->isDiscoverable();
 		$data['indexable'] = $this->isIndexable();
 		if ($this->shouldPublishProfileLayout()) {
@@ -1585,9 +1511,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			$data['featured'] = $this->getFeatured();
 		}
 
-		// Whose this is. Only a channel sets it, and a channel must: PeerTube
-		// fetches the `Group` a video names and refuses the video outright
-		// unless a `Person` is attributed here.
+		// Whose this is. Only a channel sets it, and must: PeerTube refuses a
+		// video whose `Group` attributes no `Person`.
 		if ($this->getAttributedToActors() !== []) {
 			$data['attributedTo'] = $this->getAttributedToActors();
 		}
@@ -1645,15 +1570,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The `source` half of Mastodon's CredentialAccount: an account's own
-	 * editable copy of its settings.
-	 *
-	 * Deliberately *not* part of `exportAsLocal()`. It used to be, so every
-	 * Account entity this app emitted carried it — somebody else's profile,
-	 * a search result, a page of followers, an anonymous read — and with it
-	 * `follow_requests_count`, which is nobody's business but the account's
-	 * own. Mastodon puts `source` on exactly two routes, and so does this:
-	 * `verify_credentials` and `update_credentials`, which are the two that
-	 * know they are answering the account itself.
+	 * editable copy of its settings. Not part of `exportAsLocal()`, as it
+	 * carries private data such as `follow_requests_count`; as on Mastodon,
+	 * only `verify_credentials` and `update_credentials` include it.
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -1673,12 +1592,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The banner an account without one is given on the client API: a plain
-	 * picture of the right shape, as Mastodon's `missing.png`, and a PNG like
-	 * it, because clients that decode only raster images draw nothing for an
-	 * SVG. Never the avatar -- a client draws the header where a header goes,
-	 * and a face stretched across the top of a profile with an empty circle
-	 * under it is what that looked like.
+	 * The banner of an account without one on the client API: a plain image of
+	 * the right shape, as Mastodon's `missing.png`, as a PNG because some
+	 * clients cannot draw an SVG. Never the avatar.
 	 */
 	public function placeholderHeader(IURLGenerator $urlGenerator): string {
 		return $urlGenerator->getAbsoluteURL(
@@ -1702,10 +1618,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Where this app serves the Nextcloud avatar of a local account: by the
-	 * username, never by the login, which need not be the username and which
-	 * Nextcloud's own avatar route names (`AvatarController`). The version is
-	 * the avatar's, so the address changes with the picture.
+	 * Where this app serves a local account's Nextcloud avatar: by username,
+	 * never by login, which Nextcloud's own route (`AvatarController`) would
+	 * expose. The avatar's version is in the address.
 	 */
 	public static function localAvatarUrl(IURLGenerator $urlGenerator, string $username, ?int $version = null): string {
 		$parameters = ['username' => $username, 'size' => 128];
@@ -1717,11 +1632,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The address the icon is published at.
-	 *
-	 * A local account's avatar is always this app's avatar route of the
-	 * username, with the version the stored address carries: an icon stored
-	 * with Nextcloud's own avatar route would otherwise publish the login.
+	 * The address the icon is published at; for a local account always this
+	 * app's avatar route of the username, so the login is never published.
 	 */
 	private function iconUrl(Document $icon, IURLGenerator $urlGenerator): string {
 		if (!$this->isLocal() || $icon->getLocalCopy() !== Document::COPY_LOCAL_AVATAR
@@ -1807,11 +1719,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				'discoverable' => $this->isDiscoverable(),
 				'indexable' => $this->isIndexable(),
 				'profile_layout' => $this->getProfileLayout(),
-				// Mastodon's own flag for "this is not a person". It was
-				// hardcoded false, which was true until channels existed: a
-				// PeerTube channel and one of ours are both `Group`s, and a
-				// client that is told otherwise offers "Follow" where the thing
-				// on the screen is something you subscribe to.
+				// Mastodon's flag for "this is not a person": a channel is a
+				// `Group`, which clients should offer to subscribe to, not follow.
 				'group' => $this->getType() === Group::TYPE,
 				'created_at' => gmdate('Y-m-d\TH:i:s', $this->getCreation()) . '.000Z',
 				'note' => $this->isLocal() ? $this->bioAsHtml() : $this->getDescription(),
@@ -1840,11 +1749,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				'roles' => [],
 				'emojis' => $this->getEmojis(),
 				'fields' => $fields,
-				// the two rows this app draws rather than tabulates: beside the
-				// name, and as a button. Sent as their own keys so a client
-				// does not have to know which spellings of "Pronouns" to look
-				// for, and left in `fields` as well, because that is what every
-				// other network reads
+				// the pronoun and support rows as their own keys, so a client
+				// need not know the spellings; still left in `fields` for other
+				// networks
 				'pronouns' => $this->getPronouns(),
 				'support_link' => $this->getSupportLink(),
 				// a local account's Bluesky handle and DID, attached by the
@@ -1873,11 +1780,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's `last_status_at` is a calendar date (`YYYY-MM-DD`), never a
-	 * time: a client shows it as it comes, and Tusky put a full timestamp in
-	 * the profile header. A stored value that carries a time -- written
-	 * before the detail was a date -- is cut to its date; one that is not a
-	 * date at all, or empty, is null.
+	 * Mastodon's `last_status_at` is a date (`YYYY-MM-DD`), never a time, as
+	 * clients show it verbatim. A stored value with a time is cut to its date;
+	 * anything that is not a date is null.
 	 */
 	public static function lastStatusDate(string $stored): ?string {
 		if (preg_match('/^\d{4}-\d{2}-\d{2}/', $stored, $date) !== 1) {
@@ -1888,14 +1793,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The Nextcloud user a local account belongs to, or null: for a remote
-	 * account, a team account or a channel, which have none, and where this
-	 * reader is not to be told.
-	 *
-	 * The username is chosen when the account is made and need not be the
-	 * user id. Somebody signed in to this Nextcloud is told it; a visitor is
-	 * told it only where it is the username anyway, so an account named apart
-	 * from its login does not give the login away.
+	 * The Nextcloud user a local account belongs to, or null for a remote
+	 * account, team account or channel, or when this reader may not know it.
+	 * Signed-in users are told; visitors only when it equals the username, so
+	 * an account named apart from its login does not reveal the login.
 	 */
 	public function nextcloudUser(): ?string {
 		$userId = $this->localUserId();
@@ -1924,14 +1825,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The Nextcloud user of a local username, asked once per process: the
-	 * cached copy the client is handed does not carry it, and a page of
-	 * posts names the same few authors over and over.
-	 *
-	 * Every local account read from the database without its user since the
-	 * last lookup is asked in the same query (see importFromDatabase()), so a
-	 * page of posts by twenty authors costs one query rather than twenty. A
-	 * username nobody holds is remembered as ''.
+	 * The Nextcloud user of a local username, cached per process. Every local
+	 * account read without its user since the last lookup is resolved in the
+	 * same query (see importFromDatabase()), so a page by twenty authors costs
+	 * one query. An unknown username is remembered as ''.
 	 */
 	private static function userIdOf(string $username): string {
 		if (!array_key_exists($username, self::$userIds)) {
@@ -1975,11 +1872,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The `moved` account entity: what a client shows as the "has moved"
-	 * banner and follows through to. The cached target when it is known; a
-	 * stub derived from the id otherwise, complete in shape so a client that
-	 * expects a full Account entity does not choke on it. Never chains: a
-	 * target that itself moved on is not followed.
+	 * The `moved` account entity behind the "has moved" banner: the cached
+	 * target when known, otherwise a full-shaped stub derived from the id.
+	 * Never follows a target that moved on again.
 	 */
 	private function exportMovedAccount(): array {
 		$target = $this->movedToActor;

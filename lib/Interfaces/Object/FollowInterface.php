@@ -46,11 +46,6 @@ use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
 
-/**
- * Class FollowInterface
- *
- * @package OCA\Social\Interfaces\Object
- */
 class FollowInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(
 		private FollowsRequest $followsRequest,
@@ -112,20 +107,13 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	public function confirmFollowRequest(Follow $follow): void {
-		// Record the acceptance here first. Delivering the Accept used to come
-		// first, and everything below it — the accepted flag, the follower
-		// count, the notification — was skipped when that delivery threw. A
-		// peer that was briefly unreachable therefore left the row pending for
-		// ever, with nothing to retry it, and for a follower on this very
-		// instance the delivery is dropped as our own (see
-		// ActivityService::isOurs()), so a local follow could never be
-		// accepted at all. Whether the Accept reaches the other server is a
-		// question for the delivery queue, not for whether this server
-		// considers the follow accepted.
+		// Record the acceptance before delivering the Accept: a failed delivery
+		// must not leave the row pending for ever, and for a local follower the
+		// delivery is dropped as our own (ActivityService::isOurs()). Delivery is
+		// the queue's business.
 		try {
-			// Only the copy that marks the row counts and notifies: a
-			// redelivery overlapping the first one reaches here with the row
-			// pending too, and hears the Accept again without counting twice.
+			// Only the copy that marks the row counts and notifies, so an overlapping
+			// redelivery does not count twice.
 			if ($this->followsRequest->accepted($follow)) {
 				// the followed account has one follower more; the three counters
 				// are not recomputed for it — see `AccountService::bumpActorCount()`
@@ -178,15 +166,10 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * Process an incoming Follow activity (remote user wants to follow a local user).
-	 *
-	 * Flow:
-	 *  1. Verify the Follow actor's origin matches the request origin.
-	 *  2. Check if we already have this follow in DB.
-	 *  3a. If new: save it, accept it, send Accept activity back.
-	 *  3b. If existing but not yet accepted: (re-)send Accept.
-	 *      IMPORTANT: The embedded Follow's id differs from our local db id
-	 *      (remote uses their own id), so match by actor+object pair.
+	 * An incoming Follow of a local account: stored and accepted, or left
+	 * pending for a locked account. A known follow is matched by actor and
+	 * object, since the remote id differs from ours, and an unlocked account
+	 * sends the Accept again.
 	 *
 	 * @throws InvalidOriginException
 	 * @throws InvalidResourceException
@@ -248,9 +231,8 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 		}
 
 		if ($knownFollow->isAccepted()) {
-			// the follower asks again for a follow this side already
-			// counts: its own record is pending, or gone. It hears the
-			// Accept again, and nothing here changes.
+			// the follower asks again for a follow this side already counts: it hears
+			// the Accept again, and nothing here changes
 			$this->sendAccept($follow);
 		} else {
 			$actor = $this->cacheActorService->getFromId($follow->getObjectId());
@@ -263,18 +245,10 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * Handle activities wrapping a Follow (Accept, Reject, Undo).
-	 *
-	 * This is called when an Accept/Reject/Undo activity targeting a Follow arrives.
-	 *
-	 * For Accept(ourFollow): remote accepted our follow → mark accepted in DB.
-	 *   origin check: the Accept comes from the followed actor's server, and
-	 *   $item->getObjectId() is the followed actor → host must match origin.
-	 *
-	 * For Reject(ourFollow): remote rejected our follow → delete from DB,
-	 *   and move the counts back the way an Undo does.
-	 *
-	 * For Undo(theirFollow): remote unfollowed us → delete from DB.
+	 * Activities wrapping a Follow: Accept and Reject of our follow, from the
+	 * followed actor's server (its host must match the origin), mark it accepted
+	 * or delete it; Undo of theirs deletes it. Counts move back as the stored
+	 * row says.
 	 *
 	 * @param ACore $activity The wrapping activity (Accept/Reject/Undo)
 	 * @param ACore $item The Follow object inside the activity
@@ -287,10 +261,9 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 		if ($activity->getType() === Undo::TYPE) {
 			$activity->checkOrigin($item->getId());
 			$activity->checkOrigin($item->getActorId());
-			// The stored row decides both what is removed and whether the
-			// count moves: the Accept moved it up, so only an accepted row
-			// that is actually removed moves it down. The activity carries
-			// what the sender wrote, which is not where this is recorded.
+			// The stored row, not what the sender wrote, decides what is removed and
+			// whether the count moves: only an accepted row that is removed moves it
+			// down.
 			$stored = $this->storedFollow($item, true);
 			if ($stored !== null) {
 				$this->followsRequest->delete($stored);
@@ -304,11 +277,9 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 
 		if ($activity->getType() === Reject::TYPE) {
 			$activity->checkOrigin($item->getObjectId());
-			// As for an Undo, the stored row decides what moves back: the
-			// follower's own count moved when the row was written, the
-			// followed account's when it was accepted. The origin check
-			// vouches for the followed account the Reject names, so the
-			// stored follow has to be of that account, as an Accept's is.
+			// As for an Undo, the stored row decides what moves back. The origin
+			// check vouches for the followed account the Reject names, so the stored
+			// follow has to be of that account.
 			$stored = $this->storedFollow($item);
 			if ($stored !== null) {
 				$this->followsRequest->delete($stored);

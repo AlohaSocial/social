@@ -20,9 +20,7 @@
 			:style="imageStyle"
 			draggable="false"
 			@load="reset">
-		<!-- the controls are here rather than left to the gesture: a pointer
-		     that is not a finger has no pinch, and a zoom nobody can find is
-		     not a feature -->
+		<!-- the controls are for pointers without a pinch -->
 		<div class="zoomable__controls">
 			<button
 				type="button"
@@ -73,25 +71,18 @@ const DOUBLE_TAP_SCALE = 2.5
 
 /**
  * How far a finger has to travel across an un-zoomed image before it counts as
- * a swipe to the next picture rather than a press that wandered.
+ * a swipe to the next photo.
  */
 const SWIPE_THRESHOLD = 60
 
 /**
- * One picture in the lightbox, which can be zoomed into and moved around.
+ * One photo in the lightbox, which can be zoomed into and moved around, and
+ * swiped to page.
  *
- * The viewer could already page between pictures, but only by pressing a
- * control: on a phone — where most of these are looked at — the gesture
- * everybody tries first is a swipe, and a picture that does not zoom is a
- * picture whose detail cannot be seen at all on a small screen.
- *
- * Gestures are pointer events rather than touch events, so a mouse drag pans
- * and a trackpad or wheel zooms by the same code that handles a finger. Pinch
- * needs two pointers and has no mouse equivalent, which is why the controls in
- * the corner exist: every gesture here has something to press instead.
- *
- * Paging is emitted, not done: which pictures there are and which one is
- * showing belongs to the viewer around this one.
+ * Gestures are pointer events, so a mouse drag pans and a wheel or trackpad
+ * zooms by the same code as a finger; the controls in the corner stand in for
+ * the pinch. Paging is emitted: the viewer around this one owns which photo
+ * is showing.
  */
 export default {
 	name: 'ZoomableImage',
@@ -118,8 +109,8 @@ export default {
 
 	emits: ['previous', 'next'],
 
-	// Returned from setup() rather than data() so that none of it is made
-	// reactive: it changes on every pointermove and nothing renders from it.
+	// from setup() rather than data() so none of it is reactive: it changes on
+	// every pointermove and nothing renders from it
 	setup() {
 		return {
 			/**
@@ -163,8 +154,7 @@ export default {
 	},
 
 	watch: {
-		// a new picture is looked at from the beginning, not at whatever zoom
-		// and corner the last one was left in
+		// a new photo starts unzoomed
 		src() {
 			this.reset()
 		},
@@ -209,11 +199,8 @@ export default {
 				this.pinch = { distance: this.pinchDistance(), scale: this.scale }
 			}
 
-			// keeps the moves coming once the pointer has left the picture,
-			// which is where a pan towards the edge ends up. It throws for a
-			// pointer that is already gone by the time this runs, and a
-			// capture that could not be taken is not worth failing the gesture
-			// over — the drag simply ends at the edge instead of following.
+			// keeps the moves coming once the pointer has left the photo; it throws for
+			// a pointer that is already gone, and the drag then ends at the edge
 			try {
 				/** @type {Element|null} */ (event.target)?.setPointerCapture?.(event.pointerId)
 			} catch {
@@ -270,9 +257,8 @@ export default {
 			const dx = event.clientX - start.x
 			const dy = event.clientY - start.y
 
-			// across, not down: a vertical drag on a picture is a page scroll
-			// that happened to start here
-			// in a right-to-left page the next picture comes in from the left
+			// across, not down: a vertical drag is a page scroll. In a right-to-left
+			// page the next photo comes in from the left
 			if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
 				const towardsStart = document.documentElement?.dir === 'rtl' ? dx < 0 : dx > 0
 				this.$emit(towardsStart ? 'previous' : 'next')
@@ -314,11 +300,7 @@ export default {
 		},
 
 		/**
-		 * Keeps the picture over its frame.
-		 *
-		 * Without this a pan can push the whole picture off the screen and
-		 * leave the reader with an empty lightbox and no way back but the
-		 * reset button.
+		 * Keeps the photo over its frame, so a pan cannot leave the lightbox empty.
 		 */
 		clamp() {
 			const frame = /** @type {HTMLElement|undefined} */ (this.$refs.frame)
@@ -363,10 +345,8 @@ export default {
 	max-width: 100%;
 	max-height: 100%;
 	object-fit: contain;
-	/* a pan follows the finger, so it must not be animated; only the steps
-	   from the controls and the double press are worth easing, and those set
-	   the same property, so the transition is kept short enough not to lag a
-	   drag noticeably */
+	/* a pan follows the finger, so the transition for the steps from the
+	   controls and the double press is kept short enough not to lag a drag */
 	transition: transform var(--social-motion-fast) var(--social-ease);
 	transform-origin: center center;
 	user-select: none;

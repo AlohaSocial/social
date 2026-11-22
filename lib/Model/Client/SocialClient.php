@@ -15,11 +15,6 @@ use JsonSerializable;
 use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class ClientApp
- *
- * @package OCA\Social\Model\Client
- */
 class SocialClient implements IQueryRow, JsonSerializable {
 	use TArrayTools;
 
@@ -44,9 +39,8 @@ class SocialClient implements IQueryRow, JsonSerializable {
 	private string $token = '';
 	private int $creation = -1;
 	/**
-	 * When *this account* authorized the app, which is a different date from
-	 * when the app registered itself on the instance. 0 where the row did not
-	 * come from `social_client_auth` at all.
+	 * When this account authorized the app, not when the app registered itself
+	 * on the instance; 0 where the row did not come from `social_client_auth`.
 	 */
 	private int $authCreation = 0;
 	/**
@@ -58,9 +52,6 @@ class SocialClient implements IQueryRow, JsonSerializable {
 	private int $tokenCreation = 0;
 	/** How many times the authorization was refreshed. */
 	private int $refreshCount = 0;
-
-	//	/** @var array */
-	//	private $tokenScopes = [];
 
 	public function __construct() {
 	}
@@ -304,9 +295,9 @@ class SocialClient implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The `redirect_uri` the authorization code was issued for, '' on a row
-	 * written before it was recorded. RFC 6749 §4.1.3: the token exchange has
-	 * to present the same one.
+	 * The `redirect_uri` the authorization code was issued for, '' where none
+	 * was recorded. RFC 6749 §4.1.3: the token exchange has to present the same
+	 * one.
 	 */
 	public function getAuthRedirectUri(): string {
 		return $this->authRedirectUri;
@@ -353,24 +344,6 @@ class SocialClient implements IQueryRow, JsonSerializable {
 
 		return $this;
 	}
-
-	//	/**
-	//	 * @return array
-	//	 */
-	//	public function getTokenScopes(): array {
-	//		return $this->tokenScopes;
-	//	}
-	//
-	//	/**
-	//	 * @param array $scopes
-	//	 *
-	//	 * @return SocialClient
-	//	 */
-	//	public function setTokenScopes(array $scopes): self {
-	//		$this->tokenScopes = $scopes;
-	//
-	//		return $this;
-	//	}
 
 	/**
 	 * @return int
@@ -459,16 +432,14 @@ class SocialClient implements IQueryRow, JsonSerializable {
 		$this->setAuthCodeChallengeMethod($this->get('auth_code_challenge_method', $data));
 		$this->setAuthRedirectUri($this->get('auth_redirect_uri', $data));
 		$this->setToken($this->get('token', $data));
-		// the row in social_client_auth this came from, when it came from one:
-		// what revoking and touching a single authorization address
+		// the social_client_auth row this came from, which revoking and touching
+		// a single authorization address
 		$this->setAuthId($this->getInt('auth_id', $data));
 
 		$date = new DateTime($this->get('last_update', $data, ''));
 		$this->setLastUpdate($date->getTimestamp());
-		// `creation` is a DATE column, so the row hands over something like
-		// '2026-09-10 11:22:33'. Casting that to an int gave 2026 — a timestamp
-		// in January 1970 — which is what OAuth's token response reported as
-		// `created_at`.
+		// `creation` is a DATE column ('2026-09-10 11:22:33'), which an int cast
+		// would read as 2026
 		$this->setCreation($this->timestamp($this->get('creation', $data, '')));
 		// the authorization's own date, where the read joined one in
 		$this->setAuthCreation($this->timestamp($this->get('auth_creation', $data, '')));

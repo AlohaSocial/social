@@ -41,13 +41,8 @@ class LinkPreviewService {
 	}
 
 	/**
-	 * The first link in a post's content, or '' when it carries none.
-	 *
-	 * The question itself is `Stream::firstLinkIn()`, because the News timeline
-	 * asks it too and a migration asks it of raw rows. It is still offered here,
-	 * under the name the rest of this service and its tests use: this is the
-	 * class that decides what is worth previewing, and it decides by asking
-	 * that.
+	 * The first link in a post's content, or '' when it carries none; the
+	 * check is `Stream::firstLinkIn()`, shared with the News timeline.
 	 */
 	public function extractUrl(string $content): string {
 		return Stream::firstLinkIn($content);
@@ -55,12 +50,9 @@ class LinkPreviewService {
 
 	/**
 	 * Reads the page a post links to and stores the card. Returns false when
-	 * there is nothing worth showing — no link, an unreadable page, or a page
-	 * that says nothing about itself — and for a post that is not public or
-	 * unlisted. A followers-only or direct post can carry a private or
-	 * single-use link (a share, a meeting, a password reset) that a fetch
-	 * would expose or use up, and a stranger's direct message must not make
-	 * this server fetch a URL of their choosing.
+	 * there is nothing worth showing, and for a post that is not public or
+	 * unlisted: a private post's link may be private or single-use, and a
+	 * stranger's direct message must not make this server fetch a URL.
 	 */
 	public function generate(Stream $post): bool {
 		if (!$post->isOpenToAnyone()) {
@@ -222,13 +214,8 @@ class LinkPreviewService {
 	}
 
 	/**
-	 * One attribute of one tag, as it was written.
-	 *
-	 * The closing quote has to be the opening one. Accepting either — which is
-	 * what a character class of both does — ends the value at the first
-	 * apostrophe inside a double-quoted attribute, so `content="Don't miss
-	 * this"` was read as `Don` and every headline with an apostrophe in it was
-	 * truncated at it.
+	 * One attribute of one tag, as it was written. The closing quote must
+	 * match the opening one, so `content="Don't miss this"` is read whole.
 	 *
 	 * @param string $names the attribute names to accept, as a regex alternation
 	 *

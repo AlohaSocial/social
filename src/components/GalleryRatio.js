@@ -4,28 +4,13 @@
  */
 
 /**
- * The shape of the box a picture is given before it has loaded.
- *
- * The space has to be reserved from the metadata alone: a timeline that lets
- * every image size itself jumps under the reader's thumb as each one arrives.
- *
- * The box is the shape the media actually is. There used to be a floor of 3:4
- * and a ceiling of 16:9 here, and anything outside them was reshaped to fit: a
- * 9:16 short -- which is what a phone records, and what the comment beside the
- * floor claimed to allow -- was given a 3:4 box and had its top and bottom cut
- * off by the `cover` the frame is drawn with. A tall frame still must not take
- * over a timeline, so `GalleryMedia` caps how tall one may be *drawn*. That
- * bounds the frame without reshaping the picture: what will not fit is made
- * smaller, never cropped.
+ * The shape of the box a picture is given before it has loaded, reserved from
+ * the metadata so the timeline does not jump as images arrive. The box is the
+ * media's own shape; `GalleryMedia` caps how tall a frame is drawn, so a tall
+ * picture is made smaller, never cropped.
  */
 
-/**
- * What an attachment that never reported its size is given.
- *
- * Only a picture whose dimensions are unknown gets a shape it did not ask
- * for. Everything else keeps its own: a short shot on a phone is 9:16, and
- * it is shown 9:16.
- */
+/** What an attachment that never reported its size is given. */
 export const DEFAULT_RATIO = 4 / 3
 
 /**

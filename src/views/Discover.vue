@@ -6,9 +6,7 @@
 	<div class="discover">
 		<PageHeader :title="t('social', 'Discover')" hideTitle />
 
-		<!-- the same control the timelines and a profile are switched with:
-		     four lists of one screen, chosen while reading rather than
-		     navigated to -->
+		<!-- four lists on one screen, switched in place like the timelines -->
 		<TimelineSwitcher
 			besideToggle
 			:options="tabs"
@@ -16,8 +14,7 @@
 			:label="t('social', 'What to discover')"
 			@update:value="select" />
 
-		<!-- above the counted lists, because it is the answer to "what is here"
-		     that a visitor can act on: curated, and saying so -->
+		<!-- curated, so it comes above the counted lists -->
 		<DiscoverCategories />
 
 		<div v-if="error" class="discover__error" role="alert">
@@ -46,8 +43,7 @@
 			</NcEmptyContent>
 		</template>
 
-		<!-- the hashtags tab loads, ranks and follows on its own: which stretch
-		     of time it means is a question only this list has -->
+		<!-- the hashtags tab loads, ranks and follows on its own, with its own time window -->
 		<template v-else-if="active === 'tags'">
 			<TrendingHashtags />
 			<BlueskyTrends v-if="bluesky" />
@@ -72,9 +68,8 @@
 					:canFollow="!visitor"
 					:followMembers="followPackMembers"
 					:followMember="followPackMember">
-					<!-- a pack that quietly shrinks looks like one somebody wrote
-					     badly; say which handles could not be reached, and why it
-					     is worth trying again -->
+					<!-- name the handles that could not be reached, so the pack
+					     does not seem to have quietly shrunk -->
 					<div v-if="openPack.unresolved && openPack.unresolved.length" class="discover__unresolved">
 						<p>
 							{{ unresolvedNotice }}
@@ -125,13 +120,22 @@
 		</template>
 
 		<template v-else>
-			<!--
-				Three lists of people, each answering a different question, and
-				before this they were stacked with nothing between them: a
-				search box, a heading, and a bare grid. A reader could not tell
-				why somebody was in one list rather than another, which is the
-				only thing that makes a list of strangers worth reading.
-			-->
+			<!-- where the administrators let people invite others to register -->
+			<p v-if="invitesOffered" class="discover__invite">
+				<NcButton variant="secondary" @click="inviting = true">
+					<template #icon>
+						<IconEmailPlus :size="20" />
+					</template>
+					{{ t('social', 'Invite people') }}
+				</NcButton>
+			</p>
+			<SettingsDialog
+				v-if="inviting"
+				:title="t('social', 'Invite people')"
+				:description="t('social', 'A link somebody without an account can use to register on this server. Each link works once and for a week.')"
+				@close="inviting = false">
+				<InviteSettings />
+			</SettingsDialog>
 			<section class="discover__section">
 				<h2 class="discover__section-title">
 					{{ t('social', 'Your island and its neighbours') }}
@@ -239,33 +243,30 @@ import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isHandleOf } from '../utils/accountLocality.js'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import IconEmailPlus from 'vue-material-design-icons/EmailPlusOutline.vue'
+import { defineAsyncComponent } from 'vue'
+import SettingsDialog from '../components/SettingsDialog.vue'
 import axios from '@nextcloud/axios'
 import logger from '../services/logger.js'
 import { generateUrl } from '@nextcloud/router'
 import { n, t } from '@nextcloud/l10n'
 
 /**
- * Discover: who to follow, and what is being looked at.
+ * Discover: who to follow, and what is being looked at. People comes first,
+ * since an empty timeline's question is "whom to follow?", and starter packs
+ * give a human answer where suggestions have none yet.
  *
- * People comes first, because it is the question somebody opening this page
- * actually has. A timeline is empty until you follow somebody, and "who?" is
- * unanswerable from a graph you are not yet part of -- which is what the starter
- * packs are for: a human answer where the suggestion engine structurally has
- * none.
- *
- * Every one of these was already answered by the server and none of them was
- * reachable from the interface -- the whole discovery backend existed and there
- * was no page that asked it anything. This is that page.
- *
- * Each tab is loaded when it is first opened and then kept, so flicking between
- * them does not re-ask. A failure is its own state with a retry, rather than an
- * empty list that cannot be told apart from "there is nothing here".
+ * Each tab is loaded when first opened and then kept; a failure gets its own
+ * state with a retry, distinct from an empty list.
  */
 export default {
 	name: 'Discover',
 
 	components: {
 		PageHeader,
+		IconEmailPlus,
+		InviteSettings: defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InviteSettings.vue')),
+		SettingsDialog,
 		AccountMultipleOutline,
 		BlueskySuggestions,
 		BlueskyTrends,
@@ -288,22 +289,20 @@ export default {
 	},
 
 	setup() {
-		// the same follow-by-handle the search and the suggestions use: these
-		// rows carry a handle and no relationship, which is precisely what
-		// `FollowButton` cannot draw
+		// these rows carry a handle and no relationship, which `FollowButton`
+		// cannot draw
 		return useFollowByHandle()
 	},
 
 	data() {
 		return {
-			active: 'accounts',
+			// People needs an account: its suggestions and directories are the reader's own
+			active: useSettingsStore().getServerData?.public === true ? 'posts' : 'accounts',
 			loading: false,
 			error: null,
 			/**
-			 * Which tab's answer is still wanted. `loading` and `error` are one
-			 * pair shared by every tab, so a request left in flight by a reader
-			 * moving on would otherwise put its spinner or its message over the
-			 * tab they moved to.
+			 * Which tab's request is still wanted. `loading` and `error` are
+			 * shared by every tab, so a stale request must not set them.
 			 */
 			asked: 0,
 			posts: [],
@@ -317,6 +316,7 @@ export default {
 			failedPack: '',
 			/** which tabs have been asked for, so a second visit does not re-ask */
 			loaded: [],
+			inviting: false,
 		}
 	},
 
@@ -324,6 +324,11 @@ export default {
 		/** @return {string} the heading over the accounts the open pack could not resolve */
 		unresolvedNotice() {
 			return n('social', 'One account could not be reached from this server:', '%n accounts could not be reached from this server:', this.openPack?.unresolved?.length ?? 0)
+		},
+
+		/** @return {boolean} whether the administrators let people invite others to register */
+		invitesOffered() {
+			return useSettingsStore().getServerData?.externalInvites === true
 		},
 
 		/** @return {boolean} whether the reader is signed out, and so cannot follow */
@@ -339,8 +344,8 @@ export default {
 		},
 
 		/**
-		 * The open pack as `StarterPackDetail` draws one: a member is keyed
-		 * by account id, which is what the relationships are kept under.
+		 * The open pack as `StarterPackDetail` draws one, members keyed by
+		 * account id as the relationships are.
 		 *
 		 * @return {object}
 		 */
@@ -374,9 +379,7 @@ export default {
 		},
 
 		/**
-		 * Pictures and Videos are one grid asked two questions, so the template
-		 * reads whichever list the tab on screen stands for rather than naming
-		 * one of them.
+		 * Photos and Videos share one grid; this is the list for the tab on screen.
 		 *
 		 * @return {object[]} the posts to draw
 		 */
@@ -388,19 +391,17 @@ export default {
 		emptyMediaDescription() {
 			return (this.active === 'videos')
 				? t('social', 'Videos people are watching will appear here.')
-				: t('social', 'Pictures people are looking at will appear here.')
+				: t('social', 'Photos people are looking at will appear here.')
 		},
 
 		tabs() {
-			// no `to` on any of them: the switcher pushes a route where an
-			// option has one and hands the pick back where it does not, and
-			// which of these four is on screen is this page's own state
+			// no `to`: which of these is on screen is this page's own state
 			return [
-				// `short` is what a phone shows instead of the icons, which
-				// alone do not say which list is which
-				{ value: 'accounts', label: t('social', 'People'), short: t('social', 'People'), icon: AccountMultipleOutline },
+				// `short` is what a phone shows, as the icons alone do not say
+				// which list is which
+				...(this.visitor ? [] : [{ value: 'accounts', label: t('social', 'People'), short: t('social', 'People'), icon: AccountMultipleOutline }]),
 				{ value: 'packs', label: t('social', 'Starter packs'), short: t('social', 'Packs'), icon: PackageVariantClosed },
-				{ value: 'posts', label: t('social', 'Pictures'), short: t('social', 'Photos'), icon: ImageMultiple },
+				{ value: 'posts', label: t('social', 'Photos'), short: t('social', 'Photos'), icon: ImageMultiple },
 				{ value: 'videos', label: t('social', 'Videos'), short: t('social', 'Videos'), icon: PlayBoxMultiple },
 				{ value: 'tags', label: t('social', 'Hashtags'), short: t('social', 'Tags'), icon: Pound },
 			]
@@ -449,8 +450,7 @@ export default {
 			try {
 				if (tab === 'posts') {
 					// `media` is this app's own parameter: without it the route
-					// answers with every post that has an attachment, which is
-					// Pixelfed's meaning of it and would put the same video in
+					// returns every post with an attachment, putting videos in
 					// both grids
 					this.posts = await this.get('api/v2/discover/posts?media=image')
 				} else if (tab === 'videos') {
@@ -458,8 +458,7 @@ export default {
 				} else if (tab === 'packs') {
 					this.packs = await this.get('api/v1/starter_packs')
 				} else {
-					// the account, with where the suggestion came from kept on
-					// it: a colleague is worth saying so
+					// the account keeps where the suggestion came from
 					this.accounts = await this.get('api/v2/suggestions')
 						.then((suggestions) => suggestions
 							.map((suggestion) => suggestion.account
@@ -477,8 +476,7 @@ export default {
 					this.error = t('social', 'Could not load this. The server may be busy.')
 				}
 			} finally {
-				// the newer request owns the spinner; turning it off here would
-				// say the tab on screen had finished loading when it has not
+				// a newer request owns the spinner
 				if (generation === this.asked) {
 					this.loading = false
 				}
@@ -486,12 +484,8 @@ export default {
 		},
 
 		/**
-		 * Opens one pack, which is where the handles are resolved.
-		 *
-		 * The index deliberately resolves nobody — turning a handle into a
-		 * profile is a WebFinger lookup and an actor fetch against somebody
-		 * else's server, so the cost is paid here, when a pack is actually
-		 * opened, rather than on the way past.
+		 * Opens one pack and resolves its handles. The index resolves nobody,
+		 * since each handle costs a WebFinger lookup and an actor fetch.
 		 *
 		 * @param {string} slug the pack's id
 		 */
@@ -502,8 +496,8 @@ export default {
 			this.asked += 1
 			const generation = this.asked
 			const opening = this.openPack?.id !== slug
-			// shown at once so the name and description are on screen while the
-			// accounts are still being fetched
+			// shown at once so the name and description appear while the
+			// accounts are fetched
 			this.openPack = this.packs.find((pack) => pack.id === slug) ?? null
 			if (opening) {
 				this.$nextTick(() => /** @type {{focusHeading: () => void}|undefined} */ (this.$refs.pack)?.focusHeading())
@@ -516,14 +510,13 @@ export default {
 
 				this.openPack = data
 				if (!this.visitor) {
-					// whom the reader follows already; the store says so itself
-					// when it cannot tell
+					// whom the reader already follows
 					await useAccountStore().fetchAccountRelationshipInfo((data.accounts ?? []).map((account) => account.id))
 				}
 			} catch (error) {
 				logger.error('Could not open the starter pack', { error, slug })
-				// a pack the reader has already closed, or left for another
-				// one, must not take the open one off the screen
+				// a pack the reader has already closed or left must not replace
+				// the open one
 				if (generation === this.asked) {
 					this.error = t('social', 'Could not open this pack. The server may be busy.')
 					this.failedPack = slug
@@ -554,18 +547,8 @@ export default {
 		},
 
 		/**
-		 * Whether a suggestion came from a profile on this Nextcloud. Mastodon
-		 * calls that source `featured`; see Suggestion::SOURCE_COLLEAGUES.
-		 *
-		 * @param {object} account the suggested account, with its `sources`
-		 * @return {boolean}
-		 */
-		/**
-		 * Follows somebody from the list of accounts this server knows.
-		 *
-		 * By handle, like every other list of people on this page: these rows
-		 * are accounts the server has met rather than accounts the reader has
-		 * a relationship with, so there is nothing for `FollowButton` to read.
+		 * Follows somebody from the list of accounts this server knows, by
+		 * handle: these rows carry no relationship for `FollowButton` to read.
 		 *
 		 * @param {object} account the row's account
 		 * @return {Promise<void>} when the request has settled
@@ -579,11 +562,9 @@ export default {
 		},
 
 		/**
-		 * Follows everyone in the open pack who can be reached.
-		 *
-		 * The server skips whoever it cannot reach rather than failing the lot,
-		 * and answers with the handles it followed; the members asked for and
-		 * not among them are the ones that failed.
+		 * Follows everyone in the open pack who can be reached. The server
+		 * skips whoever it cannot reach and answers with the handles it
+		 * followed; the rest failed.
 		 *
 		 * @param {object[]} members whom to follow, as `StarterPackDetail` names them
 		 * @param {boolean} feeds unused: these packs carry no feeds
@@ -639,15 +620,10 @@ export default {
 		padding: calc(var(--default-grid-baseline) * 4);
 	}
 
-	/*
-	 * The pack list had markup and no rules at all: a `<button>` with three
-	 * spans in it, which the browser drew as one centred, bold, accent-coloured
-	 * line — name, description and count run together — and which read as a
-	 * page that had failed to load rather than as a list of packs.
-	 */
-	/* three lists of people, each with a heading that says which question it
-	   answers: stacked without them, a reader cannot tell why somebody is in
-	   one list rather than another */
+	&__invite {
+		margin: 0 0 16px;
+	}
+
 	&__section {
 		padding-block-end: calc(var(--default-grid-baseline) * 4);
 		border-block-end: 1px solid var(--color-border);
@@ -676,8 +652,7 @@ export default {
 	&__people {
 		list-style: none;
 		display: grid;
-		/* one column on a phone, two where there is room: a person's row needs
-		   about thirty characters before the handle starts truncating */
+		/* a person's row needs about 320px before the handle truncates */
 		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 		gap: var(--default-grid-baseline);
 	}
@@ -695,8 +670,7 @@ export default {
 		gap: var(--default-grid-baseline);
 		width: 100%;
 		height: 100%;
-		/* a button in a card's clothing: the defaults it arrives with are for a
-		   word on a control, not for a paragraph in a tile */
+		/* a button styled as a tile */
 		text-align: start;
 		font-size: inherit;
 		font-weight: normal;
@@ -769,8 +743,6 @@ export default {
 	}
 }
 
-/* the one thing on this page that moves, and a reader may have asked for
-   nothing to */
 @media (prefers-reduced-motion: reduce) {
 	.discover__pack-card {
 		transition: none;

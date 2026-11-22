@@ -91,12 +91,9 @@ import { showError, showSuccess } from '../../services/toast.js'
 import { errorOf } from '../../utils/serverError.js'
 
 /**
- * The server's own GIF library, which the composer's GIF picker offers
- * everybody before the animated emoji.
- *
- * The upload goes to a route that hands the file to the same service
- * `occ social:gif` calls, so what is refused here is exactly what the
- * command refuses.
+ * The server's own GIF library, which the composer's GIF picker offers before
+ * the animated emoji. Uploads go through the same service as `occ social:gif`,
+ * so they are refused alike.
  */
 export default {
 	name: 'GifSection',

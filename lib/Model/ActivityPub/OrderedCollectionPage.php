@@ -27,15 +27,11 @@ class OrderedCollectionPage extends ACore implements JsonSerializable {
 
 	/**
 	 * One page of a collection by number: the items, a back-reference to the
-	 * collection they belong to, and the neighbours a consumer walks.
+	 * collection, and the neighbours a consumer walks.
 	 *
-	 * `next` is present exactly when the page came back full — the only thing
-	 * that can be known here without counting the whole collection again — so a
-	 * consumer stops at the first page that is not. With `$nextCursor` it
-	 * points at a cursor page (see after()) rather than at the next number:
-	 * a numbered page is an offset, which reads and discards every item before
-	 * it, and a consumer following `next` from page one would pay that on
-	 * every page after it.
+	 * `next` is present exactly when the page came back full, the only thing
+	 * known without counting. With `$nextCursor` it points at a cursor page (see
+	 * after()), since a numbered page is an offset that rereads all before it.
 	 *
 	 * @param string[]|array[] $items
 	 * @param string $cursorName the query parameter a cursor travels in

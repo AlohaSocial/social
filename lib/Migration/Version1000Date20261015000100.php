@@ -16,16 +16,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_starter_pack`: the starter packs other servers publish, read in
- * to be offered here: the collections of the fediverse (FEP-7aa9,
- * Mastodon's Collections) and Bluesky's suggested starter packs, told apart
- * by `origin`.
- *
- * One row per collection, unique on the hash of its id, which is how a
- * collection read again replaces itself, and on its slug, which is the path
- * segment the starter-pack routes take. `members` is the JSON list of the
- * actor ids whose inclusion was verified, in the curator's order; a pack has
- * at most a few dozen, and nothing queries into it.
+ * `social_starter_pack`: starter packs read from other servers, both
+ * fediverse collections (FEP-7aa9) and Bluesky's, told apart by `origin`.
+ * Unique on the hash of its id (so a re-read replaces it) and on its slug
+ * (the route segment). `members` is the JSON list of verified actor ids, in
+ * the curator's order.
  */
 class Version1000Date20261015000100 extends SimpleMigrationStep {
 	/**

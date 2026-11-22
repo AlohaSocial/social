@@ -14,19 +14,13 @@ use OCA\Social\Model\Gif;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The instance's own GIF library.
- *
- * Small by nature, like the custom emoji next door: an instance has tens of
- * these and the picker reads the whole set, so there is one reader that
- * returns all of them and the searching happens above.
+ * The instance's own GIF library. Small, so one reader returns the whole set
+ * and searching happens above.
  */
 class GifRequest extends CoreRequestBuilder {
 	/**
-	 * Stores one, replacing whatever the slug named before.
-	 *
-	 * Insert first and update on conflict, the way an emoji is saved: the slug
-	 * is unique, and an admin re-adding a picture under a name already in use
-	 * means to replace it rather than to be told it exists.
+	 * Stores one, replacing whatever the slug named before (insert, update on
+	 * conflict), as an admin re-adding a name means to replace it.
 	 */
 	public function save(Gif $gif): void {
 		$qb = $this->getQueryBuilder();

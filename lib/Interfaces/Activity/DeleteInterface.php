@@ -37,13 +37,10 @@ class DeleteInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
-	 * Whether `$objectId` was deleted by `$actorId` before it arrived here.
-	 *
-	 * A Delete can overtake the Create it undoes — separate queues, a retry
-	 * of the Create landing last — and storing the late Create put back a
-	 * post its author had already taken down, for good. The Delete that found
-	 * nothing is remembered for a while, and a Create of the same object by
-	 * the same actor in that time is dropped.
+	 * Whether `$objectId` was deleted by `$actorId` before it arrived here. A
+	 * Delete can overtake its Create, so a Delete that found nothing is
+	 * remembered for a while and a Create of the same object by the same actor
+	 * in that time is dropped.
 	 */
 	public static function deletedBeforeArrival(?DurableCache $durableCache, string $objectId, string $actorId): bool {
 		return $durableCache !== null && $actorId !== '' && $objectId !== ''
@@ -111,19 +108,16 @@ class DeleteInterface extends AbstractActivityPubInterface implements IActivityP
 				continue;
 			}
 
-			// The origin check stops at the host. A post is removed only on its
-			// author's word — Mastodon looks a deleted status up by uri *and*
-			// account — or any user of the author's server could take it down.
-			// A story goes the same way: on its author's word, not on that of
-			// anybody whose server can reach this one.
+			// The origin check stops at the host: a post or story is removed only on
+			// its author's word, as Mastodon matches a deleted status by uri and
+			// account, or any user of the author's server could take it down.
 			if (($object instanceof Story || $object instanceof Stream)
 				&& !$this->runsAuthor($actorId, $object->getAttributedTo())) {
 				$activity->checkActor($object->getAttributedTo(), $actorId);
 			}
 
-			// An actor is deleted by itself alone. Nothing else is, which is
-			// why the host-wide origin check let any account on a server
-			// remove any of its neighbours from here.
+			// An actor is deleted only by itself, or any account on a server could
+			// remove its neighbours from here.
 			if ($object instanceof Person) {
 				$activity->checkActor($object->getId(), $actorId);
 			}

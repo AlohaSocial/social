@@ -269,7 +269,7 @@ class RecordMapperTest extends TestCase {
 
 		$this->assertSame('app.bsky.embed.gallery', $record['embed']['$type']);
 		$this->assertCount(10, $record['embed']['items']);
-		$this->assertStringContainsString('+1 more picture', $record['text']);
+		$this->assertStringContainsString('+1 more photo', $record['text']);
 		$this->lexicon->validateRecord($record);
 	}
 

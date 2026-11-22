@@ -19,12 +19,9 @@ use Throwable;
 
 /**
  * Which accounts a starter pack may offer: none this instance's moderation
- * has acted on. A pack is a recommendation made to somebody looking for
- * their first follows, so an account silenced or suspended here, one on a
- * server this instance blocks or silences, and a Bluesky account blocked
- * here or limited by Bluesky's moderation is left out of it — when a pack
- * is read in, and again when it is served and followed, since a decision
- * may come after the pack was read.
+ * has acted on (silenced or suspended accounts, blocked or silenced servers,
+ * Bluesky accounts blocked here or limited by Bluesky's moderation). Checked
+ * when a pack is read in and again when it is served and followed.
  */
 class StarterPackModeration {
 	public function __construct(

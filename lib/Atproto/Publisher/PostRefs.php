@@ -21,11 +21,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Where a post is on Bluesky, for a record that points at it — a reply, a
- * quote, a like, a repost. A local post that was published is its record;
- * a Bluesky post read here carries its URI and CID; anything else is not
- * on Bluesky. A reply also needs its thread's root, which is the parent's
- * own root when the parent is a reply.
+ * Where a post is on Bluesky, for a record that points at it (a reply,
+ * quote, like or repost): a published local post's record, or the URI and
+ * CID stored with a Bluesky post read here. A reply also needs its thread's
+ * root.
  */
 class PostRefs {
 	public function __construct(

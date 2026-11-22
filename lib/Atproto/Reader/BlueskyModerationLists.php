@@ -23,12 +23,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Bluesky's lists, to mute or block everybody on one: named by their
- * bsky.app link (`/profile/<handle>/lists/<rkey>`) or `at://` address, read
- * from the AppView (`getList`), each account cached as it is found. A
- * subscription is told to Bluesky where it lives: a mute list is muted at
- * the AppView (`muteActorList`, private, so a Bluesky app signed in here
- * hides the same accounts), and a block list is published as an
+ * Bluesky lists to mute or block everybody on one, named by their bsky.app
+ * link or `at://` address and read from the AppView (`getList`). A mute list
+ * is muted at the AppView (`muteActorList`); a block list is published as an
  * `app.bsky.graph.listblock` record only when the person publishes their
  * blocks (`BlueskyBlocks`), as a Bluesky block is public.
  */

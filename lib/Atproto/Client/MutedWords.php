@@ -18,12 +18,10 @@ use OCA\Social\Service\TimelineRevisionService;
 use OCP\AppFramework\Utility\ITimeFactory;
 
 /**
- * A Bluesky app's muted words, which are this person's filters here: the
- * app reads every keyword of the filters that apply as its muted words, and
- * what it adds, changes or takes away is done to those filters. A word the
- * app adds goes into a filter of its own, which hides what it matches
- * everywhere; one with an expiry into one that expires then. A muted
- * hashtag is the keyword `#tag`.
+ * A Bluesky app's muted words, mapped onto this person's filters: the app
+ * reads the keywords of the filters that apply, and its changes are made to
+ * those filters. Words it adds go into a filter of its own; a muted hashtag is
+ * the keyword `#tag`.
  */
 class MutedWords {
 	public const PREF = 'app.bsky.actor.defs#mutedWordsPref';

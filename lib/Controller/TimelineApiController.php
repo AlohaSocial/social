@@ -115,12 +115,9 @@ class TimelineApiController extends MastodonApiController {
 			'since_id' => $since_id
 		]);
 		try {
-			// Mastodon's public timeline is readable without a token, and a
-			// client asks for it before it has one — to show the reader what is
-			// here before they log in. Every other timeline is about somebody,
-			// so it still needs a viewer. A token that *was* presented still has
-			// to be a good one: a client whose token has been revoked has to
-			// learn that, not quietly get the anonymous view instead.
+			// The public timeline is readable without a token, as in Mastodon; every
+			// other one needs a viewer. A token that is presented must still be valid,
+			// so a revoked one is refused rather than given the anonymous view.
 			$public = strtolower($timeline) === ProbeOptions::PUBLIC;
 			$this->initViewer($this->bearer !== '' || !$public, $public);
 			$this->logger->debug('[' . static::class . '] Viewer initialized', [
@@ -140,12 +137,9 @@ class TimelineApiController extends MastodonApiController {
 				throw new UnknownProbeException('unknown timeline');
 			}
 
-			// A client polls this every thirty seconds and the answer is
-			// almost always the one it already holds. The newest id the viewer
-			// can see changes exactly when that stops being true, and costs one
-			// index-only probe — see `notModified()`. Only the head of the home
-			// timeline is worth tagging: a page reached with `max_id` is
-			// historical and a client asks for it once.
+			// Clients poll this every thirty seconds; the newest visible id is a cheap
+			// index-only probe (`notModified()`). Only the head of the home timeline is
+			// tagged: a `max_id` page is asked for once.
 			if ($timeline === ProbeOptions::HOME && (string)$max_id === '0' && (string)$min_id === '0') {
 				if ($this->viewer !== null) {
 					$this->activeHomeFeedRefresh->wakeFollowedFeeds($this->viewer);
@@ -480,10 +474,8 @@ class TimelineApiController extends MastodonApiController {
 				->setExcludeTypes($exclude_types)
 				->setAccountId($account_id);
 
-			// A notification whose sub-type Mastodon has no name for would
-			// serialise as `"type": ""`, which a client with a closed enum
-			// cannot decode — and one undecodable entry loses the whole page.
-			// It is dropped instead: there is nothing a client could show for it.
+			// A notification sub-type Mastodon has no name for would serialise as
+			// `"type": ""`, which breaks a client with a closed enum, so it is dropped.
 			$page = $this->streamService->getTimeline($options);
 			$posts = array_values(
 				array_filter(
@@ -493,15 +485,10 @@ class TimelineApiController extends MastodonApiController {
 				)
 			);
 
-			// paged() is told what the query returned, not what survived the
-			// filter: a page shortened here says nothing about whether older
-			// notifications exist, and a client that pages on the `Link` header
-			// stopped there with the rest of the list still in the database.
-			// and then what the notification policy holds back — Mastodon
-			// 4.3's `filter` and `drop`, which are about the *sender* rather
-			// than about the notification. An account that has not touched the
-			// policy pays nothing for this: partition() answers at once when
-			// every one of the five questions is `accept`.
+			// paged() gets what the query returned, not what the filters left: a
+			// shortened page says nothing about whether older notifications exist.
+			// The notification policy (Mastodon 4.3's `filter` and `drop`) holds back
+			// by sender; partition() answers at once when every answer is `accept`.
 			return $this->paged(
 				$this->filterService->applyToNotifications(
 					$this->notificationPolicyService->partition($this->viewer, $posts)['shown'],
@@ -516,13 +503,11 @@ class TimelineApiController extends MastodonApiController {
 	}
 
 	/**
-	 * How many notifications have arrived since the reader last looked.
-	 *
-	 * The sidebar badge asks for this; a client that keeps markers gets the
-	 * same answer from the same place. Only what the list shows counts: not
-	 * what the notification policy holds, nor a muted thread's. Notifications
-	 * released by accepting a request count even behind the marker, until the
-	 * reader next sets it (`NotificationInboxService::unreadCount()`).
+	 * How many notifications have arrived since the reader last looked, for
+	 * the Activities badge and for clients that keep markers. Only what the
+	 * list shows counts; notifications released by accepting a request count
+	 * even behind the marker until it is next set
+	 * (`NotificationInboxService::unreadCount()`).
 	 *
 	 * @return Response
 	 */
@@ -550,11 +535,8 @@ class TimelineApiController extends MastodonApiController {
 	// --- where somebody stopped watching ----------------------------------
 
 	/**
-	 * The videos the reader was in the middle of, newest first.
-	 *
-	 * Neither the ones they barely started nor the ones they finished: a row
-	 * that offers back a video somebody watched to the end is a row nobody
-	 * presses twice.
+	 * The videos the reader was in the middle of, newest first: neither the
+	 * barely started nor the finished ones.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]

@@ -35,10 +35,8 @@ const URL = '/apps/social/api/v1/social/direct_messages'
 const VALUES = ['all', 'following', 'none']
 
 /**
- * Who may send the reader direct messages: everybody, the people they
- * follow, or nobody. A message from anybody else does not notify them and
- * waits among their requests; the same setting is "Private mentions you
- * didn't ask for" under who may reach them, seen from this side.
+ * Who may send the reader direct messages: everybody, the people they follow,
+ * or nobody. Other messages wait among their requests without notifying them.
  */
 export default {
 	name: 'DirectMessagesSettings',

@@ -14,21 +14,11 @@ use OCA\Social\Db\ServerBlockRequest;
 use OCA\Social\Model\Client\AdminDomainBlock;
 
 /**
- * Reading a published block list, and applying it.
+ * Reading a published block list, and applying it, for `occ social:fediverse
+ * import`, the admin page upload and subscriptions alike, so they all agree.
  *
- * Three things use this: `occ social:fediverse import`, the upload on the
- * admin page, and the subscriptions that fetch a list on a timer. They read
- * the same formats, refuse the same rows and report the same counts, because
- * an admin who imports a file by hand and one who subscribes to it should not
- * discover that the two disagreed.
- *
- * Nothing here decides policy. What the list says is applied as the list says
- * it: a row marked `suspend` blocks the instance and a row marked `silence`
- * silences it. Reading a column and ignoring it would be worse than not
- * reading it — a silence is a decision to keep a server out of the public
- * timelines, and applying it as a block deletes everything this one holds of
- * it instead. Thirty of mastodon.social's two hundred and seventy-six entries
- * are silences; they are not the majority, and they are not nothing.
+ * Rows are applied as the list says: `suspend` blocks, `silence` silences.
+ * Treating a silence as a block would delete everything held of that server.
  */
 class BlocklistImportService {
 	/** A Mastodon-style CSV export: `#domain,#severity,…` or one domain a line. */
@@ -44,12 +34,8 @@ class BlocklistImportService {
 	public const SEVERITY_NOOP = 'noop';
 
 	/**
-	 * The biggest list worth reading, in bytes.
-	 *
-	 * Ten thousand hostnames is a few hundred kilobytes, and a published list
-	 * with its comment column is well inside this. The cap is here rather than
-	 * only on the number of domains because the count is reached by parsing
-	 * the whole thing first.
+	 * The biggest list worth reading, in bytes: well above any published list,
+	 * and checked before parsing, as the domain count is only known after.
 	 */
 	public const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -148,11 +134,9 @@ class BlocklistImportService {
 	}
 
 	/**
-	 * Applies what a list says, or counts what applying it would do.
-	 *
-	 * The public reasons a list gives are recorded for the domains this
-	 * import blocks or silences, and for no other: a domain that was listed
-	 * already keeps the reasons a moderator gave it here.
+	 * Applies what a list says, or counts what applying it would do. Public
+	 * reasons are recorded only for domains this import newly blocks or
+	 * silences; already listed ones keep the moderators' reasons.
 	 *
 	 * @param array<string, string> $entries domain => severity, as parse() returns
 	 * @param bool $dryRun whether to count without changing anything
@@ -167,9 +151,8 @@ class BlocklistImportService {
 			throw new InvalidArgumentException('a block list cannot be imported into an allow list');
 		}
 
-		// both lists read once and looked up in memory, and each written once
-		// at the end: asking FediverseService per domain decoded the whole list
-		// for every entry of a list that is a couple of thousand long
+		// both lists read once and looked up in memory, each written once at
+		// the end, rather than a FediverseService round trip per domain
 		$silencedHosts = $this->fediverseService->silencedHosts();
 		$listedHosts = $this->fediverseService->exactlyListedHosts();
 
@@ -228,18 +211,10 @@ class BlocklistImportService {
 	}
 
 	/**
-	 * Whether a row names a host this list can sensibly hold.
-	 *
-	 * At least two labels, because an entry covers itself *and everything
-	 * under it* — `FediverseService::isListed()` matches a suffix — so a
-	 * single-label row in a published list refuses a whole top-level domain.
-	 * `com` in a reviewed CSV would block every `.com` server this instance
-	 * has ever met and queue a purge for each; `localhost` and `intranet` get
-	 * in the same way.
-	 *
-	 * Two labels is not a public-suffix check: `co.uk` still passes, and no
-	 * list of suffixes ships with this app. Reading a list before applying it
-	 * is what the preview is for.
+	 * Whether a row names a host this list can sensibly hold: at least two
+	 * labels, since `FediverseService::isListed()` matches suffixes and `com`
+	 * would block every `.com` server. Not a public-suffix check (`co.uk`
+	 * passes); the preview is for reviewing a list before applying it.
 	 */
 	public function isImportableDomain(string $domain): bool {
 		if ($domain === '' || strlen($domain) > 253 || !str_contains($domain, '.')) {
@@ -328,8 +303,7 @@ class BlocklistImportService {
 
 			$domain = trim((string)($row[$columns['domain']] ?? ''));
 
-			// a list with no severity column is a list of blocks, which is
-			// what a bare one-domain-per-line file has always meant here
+			// without a severity column, a row is a block
 			$severity = ($columns['severity'] !== null && array_key_exists($columns['severity'], $row))
 				? $this->severityOf(trim((string)$row[$columns['severity']]))
 				: self::SEVERITY_SUSPEND;
@@ -375,11 +349,8 @@ class BlocklistImportService {
 	}
 
 	/**
-	 * What a list's word for a decision means here.
-	 *
-	 * Mastodon writes `suspend`, `silence` and `noop`; a column that says
-	 * something else, or nothing, is read as a block — which is what a list
-	 * with no severity column has always meant.
+	 * What a list's word for a decision means here: Mastodon's `suspend`,
+	 * `silence` and `noop`; anything else, or nothing, is a block.
 	 */
 	private function severityOf(string $severity): string {
 		return match (strtolower(trim($severity))) {

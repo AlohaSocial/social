@@ -18,12 +18,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Writes the system address book card of a user who was just promoted from
- * external to local.
- *
- * External users are kept out of the system address book. The promotion
- * happens in a request that still knows the user on the backend it came
- * from, so the card is written here, in a request that sees the new one.
+ * Writes the system address book card of a user just promoted from external
+ * to local. The promotion's request still sees the user on the old backend,
+ * so the card is written here.
  */
 class ExternalPromoted extends QueuedJob {
 	public function __construct(

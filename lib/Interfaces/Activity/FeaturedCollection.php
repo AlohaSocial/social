@@ -29,17 +29,10 @@ use OCA\Social\Service\SignatureService;
 use Psr\Log\LoggerInterface;
 
 /**
- * A remote account pinning and unpinning its own posts.
- *
- * A pin is not federated as an activity of its own: what travels is
- * `Add`/`Remove` naming the actor's `featured` collection as `target`. Both
- * used to be no-ops here — they returned unless `object` had arrived as an
- * embedded object (Mastodon sends a bare URI), and even then delegated to
- * `NoteInterface::activity()`, which only knows Create/Delete/Update. So
- * pinned posts were outbound-only: a remote profile never showed one.
- *
- * The pin is stored the way a local pin is (a `Pin` row in the actions table),
- * so `PinService` reads local and remote pins alike.
+ * A remote account pinning and unpinning its own posts: `Add`/`Remove` with
+ * the actor's `featured` collection as `target` (Mastodon sends `object` as a
+ * bare URI). Stored as a `Pin` row like a local pin, so `PinService` reads
+ * both alike.
  */
 class FeaturedCollection {
 	/**
@@ -60,17 +53,10 @@ class FeaturedCollection {
 	}
 
 	/**
-	 * Reads what the actor has pinned right now, from its `featured`
-	 * collection, and makes our pins match: an `Add`/`Remove` is applied when
-	 * it arrives, but nothing ever asked for the pins an account already had
-	 * when this instance first saw it, so a remote profile showed none until
-	 * the account pinned something new.
-	 *
-	 * The collection embeds the posts (Mastodon does) or names them; a post
-	 * this instance does not hold yet is stored from the embedded object when
-	 * the actor wrote it, and skipped when it is only a name -- the next
-	 * refresh finds it if it has arrived by then. Pins that are no longer in
-	 * the collection are taken down.
+	 * Reads the actor's current `featured` collection and makes our pins
+	 * match, so pins made before this instance saw the account show too.
+	 * Posts not held yet are stored from embedded objects the actor wrote;
+	 * bare references are skipped until a later refresh.
 	 *
 	 * @return int how many pins stand afterwards
 	 */

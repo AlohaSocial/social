@@ -64,12 +64,8 @@ import { showError, showSuccess } from '../services/toast.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 
 /**
- * An author's control over who quotes one of their posts.
- *
- * Two halves that are deliberately separate. The policy decides what happens
- * to requests that arrive **from now on**: a quote somebody has already posted
- * and other people have read is not undone by a switch being flipped. Taking
- * one back is the list, which says what it will do and tells the other server.
+ * An author's control over who quotes one of their posts. The policy applies
+ * only to future requests; existing quotes are revoked one by one from the list.
  */
 export default {
 	name: 'QuoteControlDialog',
@@ -165,8 +161,7 @@ export default {
 				showSuccess(t('social', 'Saved'))
 			} catch (error) {
 				logger.error('could not set a quote policy', { error })
-				// back to what the server still holds: a radio showing a choice
-				// that was not saved is worse than one that never moved
+				// back to what the server still holds
 				this.policy = previous
 				showError(t('social', 'Could not change who may quote this'))
 			} finally {

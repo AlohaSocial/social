@@ -21,20 +21,13 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_stream.short_kind`: whether a post is a short video, in a column an
- * index can be put on.
+ * index can be put on, since the video's length and shape are in JSON
+ * (`Stream::shortKindOf()`). `(short_kind, nid)` reads the newest shorts as a
+ * descending range.
  *
- * `only_short` asks how long a post's video runs and how it is shaped, which
- * is in the attachment's meta inside a JSON text column — nothing a database
- * can be asked on the read, and on a timeline where one post in a thousand is
- * a short, a filter applied to a page after it was chosen comes back empty.
- * So the answer is written with the post (`Stream::shortKindOf()`) and
- * `(short_kind, nid)` reads "the newest twenty shorts" as a descending range.
- *
- * NULL is "not looked at", and only a post that is not a video is left so:
- * the backfill below reads the posts whose `media_kind` is `video`, through
- * `social_s_mk`, and writes `short` or `''` on each. Every other post is not a
- * short either way, and reading all of them to write `''` would be ten million
- * row rewrites for nothing. Run again, it finds no video left unread.
+ * NULL is "not looked at", left only on posts that are not videos: the
+ * backfill reads `media_kind` `video` posts through `social_s_mk` and writes
+ * `short` or `''`. Run again, it finds no video left unread.
  *
  * @see Stream::shortKindOf()
  */

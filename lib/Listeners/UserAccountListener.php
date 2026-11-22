@@ -50,13 +50,8 @@ class UserAccountListener implements IEventListener {
 		$userId = $event->getUser()->getUID();
 
 		try {
-			// the handle is the actor's own, which is not always the user id:
-			// an id that is not a valid handle — an address, an id with a
-			// space or a trailing dot, a non-latin one — or one that collided
-			// with a handle already taken got a derived one, and looking the
-			// actor up by user id was the only way to find it. Looked up by
-			// the id instead, the profile of exactly those accounts was never
-			// republished, here or to the fediverse.
+			// look up by the actor's handle, which differs from the user id
+			// when the id is not a valid handle or collided with a taken one
 			$actor = $this->actorsRequest->getFromUserId($userId);
 		} catch (ActorDoesNotExistException $e) {
 			// the user never opened Social; there is nothing of theirs to update

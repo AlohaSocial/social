@@ -12,11 +12,6 @@ namespace OCA\Social\Db;
 use OCA\Social\Model\Client\Announcement;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class AnnouncementsRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class AnnouncementsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 

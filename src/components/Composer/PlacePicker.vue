@@ -6,11 +6,8 @@
 	<div class="place-picker">
 		<div class="place-picker__head">
 			<span class="place-picker__title">{{ t('social', 'Place') }}</span>
-			<!-- the pin in the toolbar also closes this, and it is a row
-			     further down and a thing to work out; the way out of a panel
-			     belongs on the panel. Unlike "Remove the place" below, which
-			     clears the choice and leaves the search open, this puts the
-			     panel away — and a post with no pin pressed has no place. -->
+			<!-- puts the panel away, and a post with the pin off has no place;
+			     "Remove the place" below clears the choice and keeps the search -->
 			<NcButton
 				variant="tertiary"
 				class="place-picker__close"
@@ -56,9 +53,8 @@
 						{{ label(candidate) }}
 					</button>
 				</li>
-				<!-- a name nobody here has posted from yet: the poster names
-				     it outright, and it becomes a place the moment the post is
-				     published — nothing is looked up anywhere -->
+				<!-- a new name: it becomes a place when the post is published,
+				     nothing is looked up -->
 				<li class="place-picker__new">
 					<NcTextField
 						v-model="country"
@@ -98,18 +94,12 @@ import logger from '../../services/logger.js'
 const DEBOUNCE = 250
 
 /**
- * Says where a post was taken.
+ * Says where a post was taken: a place people here have posted from, or a new
+ * name (and country). Nothing is geocoded, so the location is never sent to a
+ * map service.
  *
- * Two ways to name a place, and no third: pick one this instance already
- * knows — the search is over the places people here have posted from — or
- * type a name (and a country, if you like) and it becomes a place when the
- * post goes out. **Nothing here geocodes anything.** Sending somebody's
- * location to a map service at the moment they are deciding whether to
- * publish it is the failure the Exif stripping exists to prevent.
- *
- * The chosen place is emitted as `{ id }` for a known one or
- * `{ name, country }` for a new one, which is what `POST /api/v1/statuses`
- * takes as `place_id` or `place_name` and `place_country`.
+ * Emits `{ id }` for a known place or `{ name, country }` for a new one, which
+ * `POST /api/v1/statuses` takes as `place_id` or `place_name` and `place_country`.
  */
 export default {
 	name: 'PlacePicker',
@@ -143,8 +133,7 @@ export default {
 	},
 
 	mounted() {
-		// the picker opens because the button was pressed; the field is what
-		// the press was for
+		// the button was pressed to search, so the field gets the focus
 		this.$nextTick(() => /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.search)?.$el?.querySelector('input')?.focus())
 	},
 

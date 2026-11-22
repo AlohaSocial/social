@@ -9,10 +9,8 @@ const PLACEHOLDER = /\/img\/header-missing\.(svg|png)(\?.*)?$/
 /**
  * The banner to draw for an account, or '' when it has none.
  *
- * The server always answers a URL in `header`, as Mastodon does; an account
- * without a banner gets a placeholder picture, and `header_default: true`
- * says so. The web client has its own way of showing "no banner" and does
- * not draw that picture.
+ * The server always sends a `header` URL, as Mastodon does, with a placeholder
+ * for accounts without one; the web client does not draw the placeholder.
  *
  * @param {{header?: string, header_default?: boolean}|null|undefined} account the account entity
  * @return {string} the banner URL, or ''

@@ -17,28 +17,15 @@ use OCA\Social\Model\Client\FeaturedTag;
 use OCP\IURLGenerator;
 
 /**
- * The hashtags an account pins to its profile.
- *
- * A featured tag is a claim an account makes about itself — "this is what I
- * post about" — so the only thing stored is the claim. The numbers beside it
- * (`statuses_count`, `last_status_at`) are counted from the posts when the
- * entity is built, so they cannot disagree with the tag timeline a visitor
- * gets by clicking it.
- *
- * The instance advertises a ceiling as `configuration.accounts
- * .max_featured_tags`, and this is where it is enforced. The advertisement
- * lives in `InstanceService`, which reports `MAX_FEATURED_TAGS` below — a `0`
- * there is how a client is told the feature does not exist, and every
- * Mastodon client would hide its editor regardless of what these routes
- * answer.
+ * The hashtags an account pins to its profile. Only the claim is stored; the
+ * counts (`statuses_count`, `last_status_at`) come from the posts when the
+ * entity is built. The ceiling is enforced here and advertised by
+ * `InstanceService` as `configuration.accounts.max_featured_tags`.
  */
 class FeaturedTagService {
 	/**
-	 * How many tags one account may feature.
-	 *
-	 * The number `InstanceService` must advertise as
-	 * `configuration.accounts.max_featured_tags`. It is Mastodon's own limit,
-	 * so a client that pre-checks against it behaves here as it does there.
+	 * How many tags one account may feature: Mastodon's own limit, which
+	 * `InstanceService` advertises.
 	 */
 	public const MAX_FEATURED_TAGS = 10;
 
@@ -122,13 +109,7 @@ class FeaturedTagService {
 
 	/**
 	 * The tags an account posts with most and has not featured, as Tag
-	 * entities.
-	 *
-	 * Built by `HashtagService::tagEntity()` rather than here, so a Tag from
-	 * this route and a Tag from the trends or the tag lookup cannot mean
-	 * different things. `following` is left out: this is a list of the asking
-	 * account's own tags, and whether they follow their own hashtag is not
-	 * what the route is about.
+	 * entities built by `HashtagService::tagEntity()`, without `following`.
 	 *
 	 * @return array[]
 	 */

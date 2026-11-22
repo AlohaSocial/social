@@ -11,11 +11,6 @@ namespace OCA\Social\Model\ActivityPub\Actor;
 
 use JsonSerializable;
 
-/**
- * Class Group
- *
- * @package OCA\Social\Model\ActivityPub
- */
 class Group extends Person implements JsonSerializable {
 	public const TYPE = 'Group';
 }

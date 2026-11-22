@@ -194,15 +194,15 @@ test.describe('Aloha Social, in a browser', () => {
 	 * The one thing that cannot be undone closes its group, and a link to a
 	 * section opens the group it is in.
 	 */
-	test('the settings page ends Apps and account with the deletion', async ({ page }) => {
+	test('the settings page ends Account and privacy with the deletion', async ({ page }) => {
 		await openApp(page, '/settings#delete')
 		const headings = page.locator('.settings__section-heading')
 		await expect(page.locator('#delete')).toBeVisible()
 
 		expect((await headings.allInnerTexts()).at(-1)).toBe('Delete your Aloha Social account')
 
-		await page.locator('.settings__group-title', { hasText: /^Help$/ }).click()
-		await expect(headings.filter({ hasText: /^Keyboard shortcuts$/ })).toBeVisible()
+		await page.locator('.settings__group-title', { hasText: /^Reading$/ }).click()
+		await expect(headings.filter({ hasText: /^Sensitive media$/ })).toBeVisible()
 	})
 
 	test('Discover has its sections', async ({ page }) => {

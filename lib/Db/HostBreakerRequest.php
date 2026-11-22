@@ -12,20 +12,13 @@ namespace OCA\Social\Db;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * The delivery circuit breaker's state, one row per failing host.
- *
- * In the database rather than a cache that may not exist: without a memcache
- * the cache held nothing, and every delivery pass paid a full timeout per
- * dead peer to find out again what the last pass already knew. See
- * `HostBreaker::openUntil()` for how it is read.
+ * The delivery circuit breaker's state, one row per failing host, in the
+ * database as a memcache may not exist. See `HostBreaker::openUntil()`.
  */
 class HostBreakerRequest extends CoreRequestBuilder {
 	/**
 	 * The hosts that failed since `$since`, with when each is worth asking
-	 * again and how many failures in a row it has.
-	 *
-	 * One query per drain rather than one per row: a pass looks every row's
-	 * host up in this before it spends a timeout on it.
+	 * again and how many failures in a row it has; read once per drain.
 	 *
 	 * @return array<string, array{strikes: int, open_until: int, last_failure: int}> host => state
 	 */

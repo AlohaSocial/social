@@ -22,9 +22,8 @@
 			:isLiked="isLiked"
 			@open="getSinglePostTimeline" />
 
-		<!-- who is in the picture, when the poster named anybody. Names rather
-		     than boxes drawn over the image: what is stored is a fact about the
-		     post, and a rectangle is a thing no client of this network draws -->
+		<!-- who is in the photo, when the poster named anybody: names, not
+		     boxes drawn over the image -->
 		<p v-if="taggedPeople.length" class="post-tagged">
 			<IconAccountBoxMultiple :size="14" />
 			<span class="post-tagged__with">{{ t('social', 'With') }}</span>
@@ -37,8 +36,7 @@
 				:to="isLocalAccount(person) ? undefined : { name: 'profile', params: { account: person.acct } }">
 				{{ person.display_name || person.username }}<span v-if="index < taggedPeople.length - 1">,</span>
 			</component>
-			<!-- the whole remedy for being in somebody else's photograph:
-			     leaving it, which needs nobody's permission -->
+			<!-- anybody named in a photo can take their name off it -->
 			<NcButton
 				v-if="isTagged"
 				variant="tertiary-no-background"
@@ -50,18 +48,10 @@
 		</p>
 
 		<!--
-		  A filter the reader wrote themselves matched this post. Same shape as
-		  the content warning below, and for the same reason: the body is not in
-		  the page until it is asked for, so a word somebody filtered cannot be
-		  read by accident on the way past.
-
-		  Only `warn` filters reach this. A `hide` filter is applied by the
-		  server, which never sends the status at all.
-
-		  Lifting it falls through to the branches below rather than rendering
-		  the body here, so a post carrying both a filter and a content warning
-		  is still covered by the warning afterwards — the author's cover is not
-		  the reader's to lift.
+		  A `warn` filter of the reader's own matched this post (`hide` filters
+		  are applied by the server). Like a content warning, the body is not
+		  rendered until asked for. Lifting it falls through to the branches
+		  below, so a content warning still covers the post afterwards.
 		-->
 		<div v-if="filterCovers" class="post-filtered">
 			<p class="post-filtered__reason">
@@ -74,12 +64,7 @@
 				{{ t('social', 'Show anyway') }}
 			</NcButton>
 		</div>
-		<!--
-		  A content warning covers the post, not only its text: the pictures,
-		  the poll and the link preview used to be siblings rendered
-		  unconditionally, so the one thing the feature exists to prevent
-		  happened anyway.
-		-->
+		<!-- a content warning covers the whole post, media, poll and link preview included -->
 		<div v-else-if="hasSpoiler" class="post-warning">
 			<p class="post-warning__text" dir="auto">
 				{{ item.spoiler_text }}
@@ -95,9 +80,8 @@
 			</div>
 		</div>
 		<!--
-		  A post carrying pictures is read pictures first: they lead at the
-		  width of the card and the text reads as their caption. A warned post
-		  is not, because its cover has to come before anything it covers.
+		  A post with photos leads with them at the width of the card, the text
+		  as their caption; not under a content warning, which has to come first.
 		-->
 		<template v-else-if="mediaLeads">
 			<PostAttachment
@@ -127,10 +111,8 @@
 		<div v-else-if="item.content" class="post-message">
 			<MessageContent :item="displayedItem" />
 		</div>
-		<!-- a translation is somebody else's words put through a machine, and
-		     a reader is entitled to know that is what they are reading. Not
-		     under a post a filter is covering: there is no body there to have
-		     been translated -->
+		<!-- says the reader is reading a machine translation; not under a
+		     filter cover, where there is no body -->
 		<p v-if="translation !== null && !filterCovers" class="post-translated">
 			{{ translatedFrom === ''
 				? t('social', 'Translated by {provider}', { provider: translation.provider || t('social', 'this server') })
@@ -156,12 +138,10 @@
 				:attachments="item.media_attachments || []" />
 			<PostCard v-if="showCard" :card="item.card" />
 		</template>
-		<!-- not when there is a content warning: that already renders a
-		     "Show more" for the very same flag, so a post with both offered
-		     two buttons for one reveal. No aria-expanded either — this
-		     control is gone the moment it would have to say "true". And not
-		     when the media leads, which shows this same reveal in the place
-		     the pictures will take. -->
+		<!-- not with a content warning, which has its own "Show more" for the
+		     same flag, nor when the media leads, which shows this reveal in
+		     place of the photos. No aria-expanded: the control is gone once
+		     it would be true. -->
 		<div v-else-if="!hasSpoiler && !mediaLeads && !filterCovers" class="post-sensitive">
 			<NcButton
 				v-if="mediaRevealable"
@@ -176,11 +156,8 @@
 				{{ t('social', 'Sensitive media, hidden by your settings') }}
 			</span>
 		</div>
-		<!-- One row across the foot of the card: the reactions somebody left,
-		     then the counts and the controls at the far end. They were two
-		     rows while the second one was revealed by the pointer and had to
-		     live in the padding; now that the counts are always drawn there is
-		     no reason for the card to carry the height of both. -->
+		<!-- one row across the foot of the card: the reactions, then the
+		     counts and controls at the far end -->
 		<div
 			v-if="$route && $route.params.type !== 'notifications' && type !== 'direct'"
 			class="post-footer">
@@ -191,9 +168,8 @@
 				:canReact="!serverData.public"
 				:offerAdd="false"
 				@update:modelValue="onReactionsChanged" />
-			<!-- The counts are always here; the controls arrive with the
-			     pointer. Nothing widens and nothing moves — see the stylesheet
-			     for what is at rest and what is revealed. -->
+			<!-- the counts are always shown; the controls arrive with the
+			     pointer, without anything moving (see the stylesheet) -->
 			<div
 				v-if="!serverData.public"
 				class="post-actions-reveal"
@@ -220,11 +196,9 @@
 						@manageReplies="managingReplies = true"
 						@hideReply="hideReply"
 						@tagPeople="taggingPeople = true"
-						@delete="askToDelete(false)"
-						@redraft="askToDelete(true)"
+						@delete="showDeleteDialog = true"
 						@translate="toggleTranslation"
 						@delivery="showDeliveryDialog = true"
-						@bookmark="toggleBookmark"
 						@react="askForReaction"
 						@muteConversation="toggleConversationMute"
 						@collect="showCollectionDialog = true"
@@ -235,9 +209,33 @@
 						@block="showBlockDialog = true"
 						@report="showReportDialog = true" />
 					<div class="post-actions__groups">
+						<div class="post-action-group">
+							<NcButton
+								:title="item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark')"
+								:aria-label="item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark')"
+								:aria-pressed="item.bookmarked ? 'true' : 'false'"
+								variant="tertiary"
+								@click="toggleBookmark">
+								<template #icon>
+									<Bookmark v-if="item.bookmarked" :size="20" fillColor="var(--color-primary)" />
+									<BookmarkOutline v-else :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<div v-if="postLink !== ''" class="post-action-group">
+							<NcButton
+								:title="t('social', 'Share')"
+								:aria-label="t('social', 'Share')"
+								variant="tertiary"
+								@click="share">
+								<template #icon>
+									<ShareVariantOutline :size="20" />
+								</template>
+							</NcButton>
+						</div>
 						<!-- the same three controls on every post, so nothing moves
-						     from one post to the next: one that cannot be used
-						     here is there, disabled, and says why -->
+						     between posts; one that cannot be used is disabled and
+						     says why -->
 						<div
 							class="post-action-group"
 							:class="{ 'post-action-group--refused': refused === 'boost' }"
@@ -262,11 +260,7 @@
 							:title="refusedBecause.like || undefined">
 							<template v-if="celebrate === 'like'">
 								<span class="post-action__burst" aria-hidden="true" />
-								<!-- a plumeria opening rather than one ring: a ring
-								     says "pressed", a flower says "yes". The petals
-								     are the author's colour, which is the same
-								     colour their avatar, their story ring and
-								     their messages are. -->
+								<!-- a plumeria opening, in the author's colour -->
 								<span
 									v-for="petal in PETALS"
 									:key="petal"
@@ -275,8 +269,7 @@
 									aria-hidden="true" />
 							</template>
 							<!-- one button whose label changes, not two swapped by v-if:
-							     unmounting the button someone just pressed drops their focus
-							     to the body and loses their place in the timeline -->
+							     unmounting the pressed button would drop the focus -->
 							<NcButton
 								:disabled="!canLike && !isLiked"
 								:title="refusedBecause.like || (isLiked ? t('social', 'Undo Like') : t('social', 'Like — hold for a reaction'))"
@@ -361,16 +354,13 @@
 			v-if="showDeliveryDialog"
 			v-model:open="showDeliveryDialog"
 			:statusId="item.id" />
-		<!-- deleting is irreversible and federates: it is not something to
-		     do on the first click of a menu item sitting under "Edit" -->
+		<!-- deleting is irreversible and federates, so it asks first -->
 		<NcDialog
 			v-model:open="showDeleteDialog"
-			:name="deleteToRedraft ? t('social', 'Delete and write it again?') : t('social', 'Delete this post?')"
+			:name="t('social', 'Delete this post?')"
 			:buttons="deleteButtons">
 			<p class="delete-hint">
-				{{ deleteToRedraft
-					? t('social', 'The post is removed everywhere it reached, and its words, pictures and content warning are put back in the composer. What you post next is a new post: the boosts, likes and replies this one collected stay with it and are gone.')
-					: t('social', 'The post is removed from this server and a deletion is sent to every server that received it. This cannot be undone.') }}
+				{{ t('social', 'The post is removed from this server and a deletion is sent to every server that received it. This cannot be undone.') }}
 			</p>
 		</NcDialog>
 	</article>
@@ -393,7 +383,10 @@ import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess, showUndo } from '../services/toast.js'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import Reply from 'vue-material-design-icons/Reply.vue'
+import Bookmark from 'vue-material-design-icons/Bookmark.vue'
+import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Heart from 'vue-material-design-icons/Heart.vue'
+import ShareVariantOutline from 'vue-material-design-icons/ShareVariantOutline.vue'
 import HeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import eventBus from '../services/eventBus.js'
 import { accountStyle } from '../services/accountColour.js'
@@ -420,19 +413,12 @@ import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 import { defineAsyncComponent } from 'vue'
 
-// opened from the menu of one's own post, and only then fetched
+// the dialogs below are loaded only when a post first opens one
 const DeliveryDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./DeliveryDialog.vue'))
-// The mute dialog is the same one the profile opens, and it is worth nothing
-// until somebody asks for it: the post menu is on every post on the page.
 const MuteDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./MuteDialog.vue'))
 const ReportDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ReportDialog.vue'))
-// fetched with the other dialogs a post rarely opens, for the same reason
 const CollectionPickerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./CollectionPickerDialog.vue'))
-// and the same for naming the people in a photograph, which is a thing an
-// author does once per post and no reader ever does
 const TagPeopleDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./TagPeopleDialog.vue'))
-// same chunk, and for the same reason: a dialog nobody opens until they ask for
-// it, which brings framework form controls with it
 const QuoteControlDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./QuoteControlDialog.vue'))
 const ReplyControlDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ReplyControlDialog.vue'))
 
@@ -442,7 +428,10 @@ const HOLD_MS = 450
 export default {
 	name: 'TimelinePost',
 	components: {
+		Bookmark,
+		BookmarkOutline,
 		DeliveryDialog,
+		ShareVariantOutline,
 		IconAccountBoxMultiple,
 		TimelineEventCard,
 		TimelinePostHeader,
@@ -548,8 +537,6 @@ export default {
 			taggingPeople: false,
 			managingQuotes: false,
 			managingReplies: false,
-			/** whether the delete on screen is the first half of a re-draft */
-			deleteToRedraft: false,
 			/** the Translation entity once it has arrived, null before */
 			translation: null,
 			/** whether the provider is working on it right now */
@@ -581,7 +568,7 @@ export default {
 
 		/**
 		 * Whether this is the post the reader has just published, so it
-		 * arrives at the top of the timeline rather than simply being there.
+		 * arrives at the top of the timeline.
 		 *
 		 * @return {boolean}
 		 */
@@ -589,19 +576,10 @@ export default {
 			return this.timelineStore.arrivedId !== '' && this.timelineStore.arrivedId === String(this.item?.id ?? '')
 		},
 
-		/** @return {number} what the server accepts in one status, as the composer shows it */
-
 		/**
-		 * Where this post lives, or `null` when the reader is already there.
-		 *
-		 * A post in a timeline is a link to itself: a press anywhere on it
-		 * that is not a link or a button opens it with its replies, and its
-		 * pictures and videos open from there. The post whose page this is
-		 * behaves the other way round — the picture opens full size, the video
-		 * plays — because that is what the reader came for.
-		 *
-		 * A reply on that page is another post, so it links to its own page
-		 * like any other.
+		 * Where this post lives, or `null` on the post's own page. In a
+		 * timeline a press on the post opens it with its replies; on its own
+		 * page the photo opens full size and the video plays instead.
 		 *
 		 * @return {object|null}
 		 */
@@ -634,9 +612,7 @@ export default {
 
 		/**
 		 * @return {boolean} whether a keyword filter of the reader's own covers
-		 * the post. Only `warn` filters reach a client — a status a `hide`
-		 * filter matched is never sent — so anything matched is covered here
-		 * rather than dropped.
+		 * the post; only `warn` filters reach a client
 		 */
 		filterCovers() {
 			return !this.filterLifted && matchedFilters(this.item).length > 0
@@ -663,10 +639,8 @@ export default {
 		},
 
 		/**
-		 * What this reader has asked for, or what the instance does for
-		 * somebody who has not asked. PeerTube's three NSFW policies, under
-		 * the names Mastodon's `reading:expand:media` already uses for the
-		 * same three states.
+		 * The reader's NSFW media policy, or the instance default: PeerTube's
+		 * three policies under Mastodon's `reading:expand:media` names.
 		 *
 		 * @return {string} 'show_all', 'default' or 'hide_all'
 		 */
@@ -677,15 +651,9 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether the media sits behind a reveal. A warning
-		 * covers the whole post; `sensitive` on its own covers only the media,
-		 * which is what Mastodon shows for a post flagged without a warning.
-		 *
-		 * A content warning is **not** subject to the policy: the policy is
-		 * about media somebody marked sensitive, and a warning is an author
-		 * saying something about the whole post in their own words. A reader
-		 * who asked to see sensitive media has not asked to be shown past
-		 * every warning anybody writes.
+		 * @return {boolean} whether the media sits behind a reveal: a content
+		 * warning covers it whatever the policy, `sensitive` alone follows
+		 * the reader's NSFW policy
 		 */
 		hasGatedMedia() {
 			if (this.hasSpoiler) {
@@ -698,10 +666,8 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether there is a button to lift the cover.
-		 * Under `hide_all` there is not: opening the post itself is what it
-		 * takes, which is the difference between that policy and the covered
-		 * one. A content warning keeps its own reveal either way.
+		 * @return {boolean} whether there is a button to lift the cover; under
+		 * `hide_all` only opening the post shows the media
 		 */
 		mediaRevealable() {
 			return this.hasSpoiler || this.nsfwPolicy !== 'hide_all'
@@ -713,10 +679,8 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether the post is laid out around its pictures.
-		 * Not while it is being edited, where the text is the thing being
-		 * worked on, and not under a content warning, which owns the top of
-		 * the post until the reader lifts it.
+		 * @return {boolean} whether the post is laid out around its photos:
+		 * not while it is being edited, and not under a content warning
 		 */
 		mediaLeads() {
 			return this.hasAttachments && !this.hasSpoiler
@@ -732,12 +696,12 @@ export default {
 			return !this.hasAttachments && Boolean(this.item.card?.title)
 		},
 
-		/** @return {boolean} whether there is a picture to name anybody in */
+		/** @return {boolean} whether there is a photo to name anybody in */
 		hasPictures() {
 			return (this.item.media_attachments ?? []).length > 0
 		},
 
-		/** @return {Array} the people the poster named in this post's pictures */
+		/** @return {Array} the people the poster named in this post's photos */
 		taggedPeople() {
 			return this.item.tagged_people ?? []
 		},
@@ -749,18 +713,16 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether the author allows replies to this post.
-		 * True unless their server said otherwise: most servers publish no
-		 * policy at all, and a post with none is a post anybody may answer.
+		 * @return {boolean} whether the author allows replies to this post;
+		 * a post with no published policy may be answered by anybody
 		 */
 		canReply() {
 			return allowedByAuthor(this.item, 'reply')
 		},
 
 		/**
-		 * @return {boolean} whether this post may be boosted — public or
-		 * unlisted, which is what the server grants, and not refused by the
-		 * author's own policy.
+		 * @return {boolean} whether this post may be boosted: public or
+		 * unlisted, and not refused by the author's policy
 		 */
 		canBoost() {
 			return isShareable(this.item) && allowedByAuthor(this.item, 'boost')
@@ -797,13 +759,8 @@ export default {
 		},
 
 		/**
-		 * The post as it is shown: the translation when one has been asked for
-		 * and arrived, the post itself otherwise.
-		 *
-		 * A copy rather than a write into the store's object: the translation
-		 * belongs to this reader looking at this card, and writing it into the
-		 * status would put it on every other card showing the same post and
-		 * leave it there after a refresh.
+		 * The post as shown: a copy carrying the translation once it has
+		 * arrived, so it stays on this card and out of the store.
 		 *
 		 * @return {object}
 		 */
@@ -820,13 +777,8 @@ export default {
 		},
 
 		/**
-		 * Whether to offer a translation: only where the server has a provider,
-		 * and only for a post written in another language than the reader's.
-		 *
-		 * A post with no language is not offered either. The server stores what
-		 * the author declared and nothing else — guessing here would offer to
-		 * translate English into English for every post that arrived without a
-		 * `contentMap`.
+		 * Whether to offer a translation: the server has a provider and the
+		 * post declares a language other than the reader's.
 		 *
 		 * @return {boolean}
 		 */
@@ -844,6 +796,11 @@ export default {
 			return code === '' || code === 'und' ? '' : languageName(code)
 		},
 
+		/** @return {string} the post's own address, '' when it has none */
+		postLink() {
+			return String(this.item.url || this.item.uri || '')
+		},
+
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		deleteButtons() {
 			return [
@@ -854,7 +811,7 @@ export default {
 					},
 				},
 				{
-					label: this.deleteToRedraft ? t('social', 'Delete & re-draft') : t('social', 'Delete'),
+					label: t('social', 'Delete'),
 					variant: 'error',
 					callback: () => this.remove(),
 				},
@@ -865,9 +822,8 @@ export default {
 		 * @return {boolean}
 		 */
 		hasAttachments() {
-			// a post read straight off the composer has no `media_attachments`
-			// at all until the server answers, so the list is defaulted rather
-			// than assumed
+			// a post fresh from the composer has no `media_attachments` until
+			// the server answers
 			return (this.item.media_attachments || []).length > 0
 		},
 
@@ -879,13 +835,7 @@ export default {
 		},
 
 		/**
-		 * @return {boolean}
-		 */
-		/**
-		 * The card's own colour, which everything inside it can use.
-		 *
-		 * The author's, not the reader's: a post is the author speaking, and the
-		 * petals a like opens are theirs. See services/accountColour.js.
+		 * The card's colour, the author's (see services/accountColour.js).
 		 *
 		 * @return {object} a style binding carrying `--account-hue`
 		 */
@@ -935,17 +885,15 @@ export default {
 	},
 
 	watch: {
-		// a closed dialog's focus trap gives the focus back to the menu item
-		// that opened it, which the menu has taken away by then; the menu's
-		// button is what is still there
+		// a closed dialog returns focus to the menu item that opened it, which
+		// is gone by then, so the menu's button takes it
 		dialogOpen(open) {
 			if (!open) {
 				this.$nextTick(() => returnFocusTo(this.menuOpener))
 			}
 		},
 
-		// a vote cast elsewhere (or reloaded from the server) has to reach the
-		// copy this component renders, or navigating back shows the poll unvoted
+		// a vote cast elsewhere has to reach this copy of the poll
 		'item.poll': function(poll) {
 			this.localPoll = poll ?? null
 		},
@@ -1042,11 +990,8 @@ export default {
 		},
 
 		/**
-		 * Puts the post away, or brings it back.
-		 *
-		 * The row leaves the timeline it is in as soon as the server agrees:
-		 * the post is out of every list this server builds, and the list the
-		 * reader is looking at is one of them.
+		 * Archives the post, or brings it back. It leaves the current
+		 * timeline as soon as the server agrees.
 		 *
 		 * @return {Promise<void>}
 		 */
@@ -1076,10 +1021,8 @@ export default {
 		},
 
 		/**
-		 * The reaction bar came back from the server after a press. It goes to
-		 * the store rather than onto this card, so the same post shown twice —
-		 * a thread and the timeline behind it — cannot end up with two
-		 * different bars.
+		 * Puts the reaction bar the server returned into the store, so every
+		 * card showing the same post agrees.
 		 *
 		 * @param {Array<{name: string, count: number, me: boolean}>} reactions the bar
 		 */
@@ -1119,29 +1062,8 @@ export default {
 		},
 
 		/**
-		 * @function getSinglePostTimeline
-		 * @description Opens the conversation the post belongs to.
-		 *
-		 * Remote posts used to return here with a logger.warn, which made the
-		 * timestamp — the only affordance for opening a thread — silently dead
-		 * on the Global and Federated timelines. The server serves the context
-		 * of any status it has (`/api/v1/statuses/{nid}/context`), local or not.
-		 */
-		/**
-		 * A press somewhere on the post that was not meant for something else.
-		 *
-		 * The whole card opens the post, the way a row in a list opens the
-		 * thing it stands for.
-		 *
-		 * Everything interactive inside a post keeps its press: a mention, a
-		 * hashtag, a link somebody wrote, the action buttons, the poll, the
-		 * author's name, the media — which has a handler of its own that routes
-		 * to the same place anyway. What is left is the body of the card, and
-		 * pressing that opens the post.
-		 *
-		 * A selection is left alone as well: dragging across a post to copy a
-		 * sentence ends in a click, and navigating away from what somebody has
-		 * just highlighted is the worst possible answer to it.
+		 * A press on the card opens the post, unless it was meant for something
+		 * interactive inside it or ends a text selection.
 		 *
 		 * @param {MouseEvent} event the press
 		 */
@@ -1158,8 +1080,7 @@ export default {
 			if (this.postRoute === null || event.defaultPrevented || event.button !== 0) {
 				return
 			}
-			// a modified click is the reader asking for a tab or a window, and
-			// the card is not a link, so there is nothing to hand them
+			// a modified click asks for a tab, and the card is not a link
 			if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 				return
 			}
@@ -1175,11 +1096,8 @@ export default {
 
 		/**
 		 * Whether a press was meant for something interactive inside the post.
-		 *
-		 * Read from the path the event took, not from where its target sits
-		 * now: pressing the heart swaps its outline icon for the filled one
-		 * while the click is still bubbling, and asking the detached icon
-		 * whether it is in a button says no -- so a like opened the post too.
+		 * Read from the event's path, because the heart swaps its icon while
+		 * the click is still bubbling and a detached target is in no button.
 		 *
 		 * @param {MouseEvent} event the press
 		 * @return {boolean}
@@ -1221,9 +1139,8 @@ export default {
 		},
 
 		/**
-		 * Blocks the author, once the dialog has agreed. The store takes their
-		 * posts out of every timeline, this one included, so there is nothing
-		 * left here to say afterwards.
+		 * Blocks the author, once the dialog has agreed; the store takes their
+		 * posts out of every timeline.
 		 */
 		async blockAuthor() {
 			const relationship = await this.accountStore.blockAccount({ id: this.item.account.id })
@@ -1308,48 +1225,15 @@ export default {
 			eventBus.emit('composer-edit', { edit: this.item, opener: this.menuOpener })
 		},
 
-		/**
-		 * Opens the confirmation. Deleting federates and cannot be undone, so
-		 * neither half of this happens on the first click of a menu item.
-		 *
-		 * @param {boolean} redraft whether the words come back in the composer
-		 */
-		askToDelete(redraft) {
-			this.deleteToRedraft = redraft
-			this.showDeleteDialog = true
-		},
-
-		/**
-		 * Deletes the post, and — for a re-draft — hands its words, pictures
-		 * and warning to the composer.
-		 *
-		 * The composer is filled *after* the delete rather than before: a
-		 * delete the server refuses leaves the post where it is, and a
-		 * composer already holding its words would invite somebody to post it
-		 * twice.
-		 */
+		/** Deletes the post here and everywhere it was delivered. */
 		async remove() {
 			this.showDeleteDialog = false
-			const redraft = this.deleteToRedraft
-			this.deleteToRedraft = false
-
-			// the post as it stands, kept before the store forgets it
-			const draft = redraft ? this.item : null
-
-			const deleted = await this.timelineStore.postDelete(this.item)
-
-			if (deleted === true && draft !== null) {
-				this.timelineStore.setComposerDisplayStatus(true)
-				eventBus.emit('composer-redraft', draft)
-			}
+			await this.timelineStore.postDelete(this.item)
 		},
 
 		/**
 		 * Asks the server to translate the post, or puts the original back.
-		 *
-		 * Asked once per card: the answer is kept here, so pressing "Show
-		 * original" and then "Translate" again costs nothing and does not send
-		 * the same text through a provider twice.
+		 * The translation is kept on the card, so it is asked for once.
 		 */
 		async toggleTranslation() {
 			if (this.translation !== null) {
@@ -1367,8 +1251,7 @@ export default {
 				const { data } = await axios.post(generateUrl('/apps/social/api/v1/statuses/{id}/translate', { id: this.item.id }))
 				this.translation = data
 			} catch (error) {
-				// 503 is the server saying it has no translation provider,
-				// which is a different thing from the request failing
+				// 503: the server has no translation provider
 				if (error?.response?.status === 503) {
 					showError(t('social', 'This server cannot translate posts yet'))
 				} else {
@@ -1381,14 +1264,30 @@ export default {
 		},
 
 		/**
-		 * A vote is cast on the component's own copy of the poll; the store
-		 * holds the one every other view reads, so it hears about it too.
+		 * Tells the store about a vote cast on this component's copy of the poll.
 		 *
 		 * @param {object} poll the poll as the server returned it after voting
 		 */
 		updatePoll(poll) {
 			this.localPoll = poll
 			this.timelineStore.updateStatusPoll({ statusId: this.item.id, poll })
+		},
+
+		/** Hands the post's address to the system share sheet on touch devices, or copies it. */
+		async share() {
+			const url = this.postLink
+			try {
+				if (typeof navigator.share === 'function' && window.matchMedia?.('(pointer: coarse)').matches) {
+					await navigator.share({ url })
+					return
+				}
+				await navigator.clipboard.writeText(url)
+				showSuccess(t('social', 'Link copied'))
+			} catch (error) {
+				if (error?.name !== 'AbortError') {
+					showError(t('social', 'Could not copy — select the address and copy it yourself'))
+				}
+			}
 		},
 
 		toggleBookmark() {
@@ -1404,8 +1303,7 @@ export default {
 		},
 
 		async like() {
-			// a press that turned into a hold has already done something; liking
-			// as well would be two answers to one gesture
+			// a hold has already acted; this click must not also like
 			if (this.held) {
 				this.held = false
 
@@ -1415,15 +1313,7 @@ export default {
 			await this.act('like', undo ? 'postUnlike' : 'postLike', !undo)
 		},
 
-		/**
-		 * Holding the heart asks which kind of yes.
-		 *
-		 * A like says "yes" and a reaction says which kind, and the reactions
-		 * were behind a button of their own at the other end of the card. Under
-		 * the thumb that is already on the heart is where every messaging app
-		 * puts them, and the right mouse button does the same thing with a
-		 * pointer.
-		 */
+		/** Holding the heart (or the right mouse button) offers the reactions. */
 		startHold() {
 			this.endHold()
 			this.holdTimer = window.setTimeout(() => {
@@ -1441,34 +1331,26 @@ export default {
 			}
 		},
 
-		/**
-		 * Opens the one emoji picker the page has; see ReactionPicker for why it
-		 * is asked for over the bus rather than imported here.
-		 */
+		/** Opens the reaction bar's emoji picker. */
 		askForReaction() {
 			if (this.serverData.public) {
 				return
 			}
 
-			// the bar below owns what a reaction does -- the request, the
-			// counts it answers with, the failure -- so this asks it to open
-			// its own picker rather than sending anything itself
+			// the reaction bar owns the request, the counts and the failure
 			/** @type {{askForPicker?: () => void}|undefined} */ (this.$refs.reactionBar)?.askForPicker?.()
 		},
 
 		/**
-		 * Both actions are applied optimistically and rolled back by the store
-		 * when the server refuses — which used to happen invisibly. Confirming
-		 * one animation and refusing the other makes the difference legible.
+		 * Applies like or boost optimistically; the store rolls it back if the
+		 * server refuses, and the button shows the refusal.
 		 *
 		 * @param {string} name 'like' or 'boost', the class hook
 		 * @param {string} action the store action to dispatch
 		 * @param {boolean} celebrating whether this is the doing, not the undoing
 		 */
 		async act(name, action, celebrating) {
-			// a second press while the first is on its way: ignored rather
-			// than sent, or the two raced for one button and whichever answer
-			// came last was the state
+			// ignore a second press while the first is on its way
 			if (this.acting.has(name)) {
 				return
 			}

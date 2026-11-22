@@ -27,26 +27,17 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  */
 trait StreamSearch {
 	/**
-	 * Full-text search over the statuses the viewer is allowed to see: their
-	 * own posts, public/unlisted content, and what is addressed to them.
+	 * Full-text search over the statuses the viewer may see: their own posts,
+	 * public/unlisted content, and what is addressed to them.
 	 *
-	 * Words, looked up in `social_search_term`: every word of the query must
-	 * be in the post, and the last one may be the beginning of a word, so a
-	 * search typed a letter at a time finds as it goes. Newest first, by nid.
+	 * Every word of the query must be in the post (`social_search_term`), the
+	 * last one possibly as a prefix, newest first by nid. Candidates come in
+	 * nid order and visibility filters them, so a page is read in up to
+	 * SEARCH_ROUNDS rounds. Until `Cron\SearchIndex` has indexed every post,
+	 * older posts are found by `scanContent()`.
 	 *
-	 * The index hands over candidates in nid order and the viewer's
-	 * visibility decides which are answers, so a page is read in rounds: a
-	 * round that the visibility emptied is followed by the candidates below
-	 * its last one, up to SEARCH_ROUNDS of them.
-	 *
-	 * Until `Cron\SearchIndex` has put every stored post in the index the
-	 * older posts are not in it, and the search keeps the scan it had before
-	 * — see `scanContent()`.
-	 *
-	 * `$authorId` narrows the answers to one account's posts, still within
-	 * what the viewer may see. `$offset` skips that many answers, up to
-	 * SEARCH_MAX_OFFSET; `$maxId` and `$minId` bound the status nid, leaving
-	 * the newest-first order as it is.
+	 * `$authorId` narrows to one account's posts. `$offset` skips that many
+	 * answers, up to SEARCH_MAX_OFFSET; `$maxId` and `$minId` bound the nid.
 	 *
 	 * @return Stream[]
 	 */
@@ -78,9 +69,8 @@ trait StreamSearch {
 			return $this->scanContent($term, $limit, $offset, $authorId, $maxId, $minId);
 		}
 
-		// a lone prefix is read through its head, and a head as common as
-		// `the` is nearly every post: it is bounded the way the scan was. A
-		// whole word is not
+		// a lone prefix as common as `the` matches nearly every post, so it
+		// is bounded like the scan; a whole word is not
 		$since = ($whole === []) ? $this->searchWindowStart() : 0;
 		$sinceNid = ($since > 0) ? Nid::fromPublishedTime($since, 0, self::NID_LIMIT) : '0';
 		$authorPrim = ($authorId === '') ? '' : $this->getQueryBuilder()->prim($authorId);
@@ -145,15 +135,9 @@ trait StreamSearch {
 
 	/**
 	 * The posts a search decided on, in the order it decided on them.
-	 *
-	 * Which posts the viewer may see is asked over the nid alone, and the
-	 * posts are read here afterwards, by primary key. Asked as one query, the
-	 * viewer's recipient join pairs every candidate with every account the
-	 * viewer follows, and the `DISTINCT` it needs then sorts that product
-	 * with every column of the post, its author and its actions attached:
-	 * 30,000 rows of 1.5 KB, spilled to disk, for a page of twenty — 0.6 s
-	 * on PostgreSQL for an account following 300 others, whatever the size of
-	 * the instance.
+	 * Visibility is asked over the nid alone and the posts read afterwards by
+	 * primary key; as one query, the `DISTINCT` over the follow join sorted
+	 * every full row (0.6 s on PostgreSQL for an account following 300).
 	 *
 	 * @param list<string> $nids
 	 *
@@ -172,11 +156,8 @@ trait StreamSearch {
 	}
 
 	/**
-	 * The search as it was before the word index: a case-insensitive
-	 * substring match on the stored markup, bounded to the recent past.
-	 *
-	 * What a search does while `Cron\SearchIndex` has not yet reached the
-	 * newest post, and only then.
+	 * A case-insensitive substring match on the stored markup, bounded to the
+	 * recent past, used while `Cron\SearchIndex` has not reached the newest post.
 	 *
 	 * @return Stream[]
 	 */
@@ -216,18 +197,9 @@ trait StreamSearch {
 		$qb->orderBy('s.published_time', 'desc');
 		$qb->setMaxResults($window);
 
-		// The window is what keeps this from being a full scan. `content
-		// ILIKE '%term%'` cannot use an index — a leading wildcard never
-		// can — so without a bound the database reads every post the instance
-		// has ever stored, joined to seven other tables, on every search. At
-		// ten million rows that is a table scan per keystroke, and the rate
-		// limit is the only thing between it and the CPU.
-		//
-		// `published_time` is indexed and is what the result is ordered by, so
-		// a range on it is both the narrowing and the ordering. Searching the
-		// recent past and saying so is a different promise from searching
-		// everything and timing out; the word index, once complete, is what
-		// lets `searchContent()` promise more.
+		// The window keeps this from being a full scan: `ILIKE '%term%'`
+		// cannot use an index. `published_time` is indexed and is the order,
+		// so the range both narrows and orders.
 		$since = $this->searchWindowStart();
 		if ($since > 0) {
 			$qb->andWhere($expr->gt(
@@ -240,14 +212,9 @@ trait StreamSearch {
 	}
 
 	/**
-	 * The posts whose *text* carries the term.
-	 *
-	 * `content` is stored as markup, so the `LIKE` above matches the markup as
-	 * well as the words: `span`, `href`, `class` and `http` each answered with
-	 * very nearly every post the instance holds, and a search for any of them
-	 * was a page of unrelated posts. The database cannot be asked to ignore
-	 * the tags without a column to search, so the rows it offers are
-	 * candidates and the flattened text decides which of them are answers.
+	 * The posts whose text, not markup, carries the term: the `LIKE` above
+	 * also matches tags and attributes (`span`, `href`), so the flattened
+	 * text decides.
 	 *
 	 * @param Stream[] $posts
 	 *
@@ -265,13 +232,8 @@ trait StreamSearch {
 
 	/**
 	 * How far back a content search looks, as a timestamp, or 0 for "all of
-	 * it".
-	 *
-	 * An administrator can widen it — an instance with a hundred thousand
-	 * posts can afford to search all of them, and one with ten million cannot.
-	 * The default is a year, which covers what anybody is actually looking for
-	 * and bounds the scan at roughly the instance's yearly output rather than
-	 * its whole history.
+	 * it". Configurable by an administrator; the default is a year, bounding
+	 * the scan at about a year's output.
 	 */
 	private function searchWindowStart(): int {
 		$days = $this->configService->getAppValueInt(ConfigService::SOCIAL_SEARCH_WINDOW_DAYS);

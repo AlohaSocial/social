@@ -17,15 +17,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Widens `social_hashtag.hashtag` from 63 to 127 characters on instances that
- * created it at 63.
- *
- * The trends cron counts tags from `social_stream_tag` (127 characters) and
- * writes them here; a tag between the two widths fails with "value too long"
- * on PostgreSQL and on MySQL in strict mode, and that ends the whole trends
- * pass. The squashed schema creates the column at 127 but only adds missing
- * columns to a table that exists, so an instance that created the table at 63
- * (0.24 and earlier) keeps 63 through the squash.
+ * Widens `social_hashtag.hashtag` from 63 to 127 characters, matching
+ * `social_stream_tag`, so a long tag does not fail the trends pass. The
+ * squashed schema only adds missing columns, so instances that created the
+ * table at 63 need this.
  */
 class Version1000Date20261009500100 extends SimpleMigrationStep {
 	/**

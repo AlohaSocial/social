@@ -8,9 +8,7 @@
 			{{ isNew ? t('social', 'New filter') : t('social', 'Editing “{title}”', { title: filter.title }) }}
 		</h4>
 
-		<!-- An expired filter is still a row in the list and still opens here.
-		     Saving it writes whatever the expiry box says, so a filter the
-		     reader thinks is over would quietly start again without this. -->
+		<!-- Saving an expired filter applies the expiry below and starts it again. -->
 		<NcNoteCard v-if="wasExpired" type="warning">
 			{{ t('social', 'This filter has expired and is not doing anything. Saving it starts it again for as long as the expiry below says.') }}
 		</NcNoteCard>
@@ -28,7 +26,7 @@
 				{{ t('social', 'Words to look for') }}
 			</legend>
 			<p class="filter-form__hint">
-				{{ t('social', 'A post is filtered if any one of these appears in it: in the text, in the content warning, in the description of a picture or in the options of a poll. A boost is read as the post it boosts. Upper and lower case never matter.') }}
+				{{ t('social', 'A post is filtered if any one of these appears in it: in the text, in the content warning, in the description of a photo or in the options of a poll. A boost is read as the post it boosts. Upper and lower case never matter.') }}
 			</p>
 
 			<div v-for="(entry, index) in keywords" :key="entry.key" class="filter-form__keyword">
@@ -122,9 +120,7 @@
 			:searchable="false"
 			label="label" />
 
-		<!-- Said rather than merely refused: the server answers 422 for each of
-		     these, in English a translator never saw, and a disabled button on
-		     its own gives the reader nothing to act on. -->
+		<!-- Says what is missing; the server's 422 for these is untranslated. -->
 		<NcNoteCard v-if="problems.length > 0" type="info">
 			<p v-for="problem in problems" :key="problem">
 				{{ problem }}
@@ -162,17 +158,10 @@ import { fullDateTime } from '../utils/relativeTime.js'
 let nextKey = 0
 
 /**
- * The form behind one keyword filter, new or existing.
- *
- * It emits the body of the request rather than sending it: `FiltersSettings`
- * is where the routes are spelled, and it has to redraw the list afterwards
- * either way.
- *
- * The shape it emits is Mastodon's v2 one, which is what this app stores.
- * `keywords_attributes` edits the words in place — an entry with an `id`
- * changes that word, one with `_destroy` drops it, one without an id adds it —
- * so a word the reader never touched keeps its own id and does not come back
- * as a new row on the next read.
+ * The form behind one keyword filter, new or existing. It emits a Mastodon v2
+ * request body for `FiltersSettings` to send. `keywords_attributes` edits words
+ * in place: with an `id` it changes that word, with `_destroy` it drops it, and
+ * without an id it adds one.
  */
 export default {
 	name: 'FilterForm',
@@ -244,12 +233,8 @@ export default {
 		},
 
 		/**
-		 * The durations on offer.
-		 *
-		 * A filter that is still counting down gets one more, selected: an
-		 * update that does not name `expires_in` leaves the expiry untouched,
-		 * and without somewhere to say so, opening a filter to fix a typo
-		 * would restart its week.
+		 * The durations on offer. A filter still counting down also gets a
+		 * preselected "keep" option, so editing it does not restart the expiry.
 		 *
 		 * @return {Array<{id: string, seconds: (number|null), label: string}>} the options
 		 */
@@ -328,9 +313,8 @@ export default {
 		},
 
 		/**
-		 * Takes a row out. An existing word is remembered rather than
-		 * forgotten: the update has to name it to remove it, and dropping it
-		 * from this list alone would leave it filtering.
+		 * Takes a row out. An existing word is remembered, since the update
+		 * must name it to remove it.
 		 *
 		 * @param {number} index which row
 		 */
@@ -349,8 +333,7 @@ export default {
 
 			const payload = {
 				title: this.title.trim(),
-				// in the server's own order, which is the order it stores and
-				// answers with
+				// in the server's own order
 				context: this.contexts.filter(({ id }) => this.chosen[id]).map(({ id }) => id),
 				filter_action: this.action,
 				keywords_attributes: [
@@ -363,9 +346,7 @@ export default {
 				],
 			}
 
-			// `expires_in` is left out only to mean "leave the expiry alone",
-			// which is what "keep" is; an empty string is how the API is told
-			// that the filter should stop expiring at all
+			// omitting `expires_in` keeps the expiry; an empty string removes it
 			if (this.expiry?.id !== 'keep') {
 				payload.expires_in = this.expiry?.seconds ?? ''
 			}

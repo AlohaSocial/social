@@ -87,14 +87,8 @@ import { showError } from '../../services/toast.js'
 import { errorOf } from '../../utils/serverError.js'
 
 /**
- * Keeping something out of what is trending.
- *
- * What is rejected is shown as one list whatever kind it is, because the
- * question a moderator has is "what am I keeping out of Explore" and not "what
- * hashtags am I keeping out of Explore". Rejecting is offered against the live
- * trending list, which is where a moderator will be looking when they need it,
- * and by typing, which is how a link or a post gets kept out — neither of those
- * has a list here to click.
+ * Keeping things out of what is trending. Rejected items of every kind are one
+ * list; rejecting works from the live trending list or by typing a link or post.
  */
 export default {
 	name: 'TrendsSection',

@@ -262,11 +262,10 @@ class Post implements JsonSerializable {
 	}
 
 	/**
-	 * The post's visibility, normalised into this app's own vocabulary. Every
-	 * creation path funnels through here — the web UI already speaks it, while
-	 * a Mastodon client says `private` for followers-only — so this is the one
-	 * place that has to get it right. An unrecognised value becomes `direct`
-	 * rather than public; see `Stream::visibilityFromClient()`.
+	 * The post's visibility, normalised into this app's vocabulary for every
+	 * creation path (a Mastodon client says `private` for followers-only). An
+	 * unrecognised value becomes `direct`, not public; see
+	 * `Stream::visibilityFromClient()`.
 	 *
 	 * @param string $type
 	 *

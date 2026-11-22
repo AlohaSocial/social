@@ -14,20 +14,10 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Tools\IQueryRow;
 
 /**
- * `Dislike`, which PeerTube sends and Mastodon has never had.
- *
- * Every PeerTube video carries a like count and a dislike count, and both
- * federate. Arriving here the second one was an activity with no model at all:
- * logged as an unknown type and dropped, so a video whose dislikes an author
- * cared about showed none of them however many it had.
- *
- * Stored the way a `Like` is — a row in `social_action` keyed by (actor,
- * object, type) — because it is the same kind of fact about the same kind of
- * pair, and counted onto the post as `dislikes`.
- *
- * **It never notifies.** A like tells an author somebody liked them; a dislike
- * arriving as a notification would be a way to needle somebody, one activity at
- * a time, from anywhere.
+ * `Dislike`, which PeerTube sends for its videos' dislike counts. Stored like
+ * a `Like`, a row in `social_action` keyed by (actor, object, type), and
+ * counted onto the post as `dislikes`. It never notifies: that would let
+ * anybody needle an author one activity at a time.
  */
 class Dislike extends ACore implements JsonSerializable, IQueryRow {
 	public const TYPE = 'Dislike';

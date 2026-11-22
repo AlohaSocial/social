@@ -1013,14 +1013,10 @@ class CoreRequestBuilder {
 	public const BLOCKED_DOMAINS_IN_A_QUERY = 100;
 
 	/**
-	 * The instances each viewer has blocked, read once per request.
-	 *
-	 * The domain-block filter compares these as constants rather than joining
-	 * the table on every row (see
-	 * `DomainBlocksRequestBuilder::filterDomainBlocked()`), so every filtered
-	 * query needs the list. A request reads several timelines — a page, its
-	 * thread, a notification poll — and the list cannot change between them
-	 * except through this process, which clears the memo when it does.
+	 * The instances each viewer has blocked, read once per request: the
+	 * domain-block filter compares them as constants
+	 * (`DomainBlocksRequestBuilder::filterDomainBlocked()`), and this process
+	 * clears the memo when it changes them.
 	 *
 	 * @var array<string, string[]> viewer id_prim => domains
 	 */
@@ -1062,12 +1058,9 @@ class CoreRequestBuilder {
 	}
 
 	/**
-	 * Whether every `social_stream` row carries the host of its author yet.
-	 *
-	 * A flag `Cron\StreamAuthorHosts` sets when its backfill reaches the end
-	 * of the table, read once per request builder: until it is set, the
-	 * filters on `author_host` keep matching the rows it has not reached by
-	 * their actor id instead.
+	 * Whether every `social_stream` row has its author's host: a flag
+	 * `Cron\StreamAuthorHosts` sets at the end of its backfill. Until then the
+	 * `author_host` filters also match by actor id.
 	 */
 	protected function authorHostsAreFilled(): bool {
 		$this->authorHostsFilled ??= $this->configService->getAppValueBool(
@@ -1138,9 +1131,8 @@ class CoreRequestBuilder {
 			}
 			$cursor->closeCursor();
 		} catch (Exception $e) {
-			// a read that cannot see the block table must not take the
-			// timeline with it; the filter then adds nothing, which is what it
-			// did for every account before this table existed
+			// a read that cannot see the block table must not fail the timeline;
+			// the filter then adds nothing
 			$this->miscService->log('could not read the blocked instances: ' . $e->getMessage(), 1);
 		}
 
@@ -1197,16 +1189,10 @@ class CoreRequestBuilder {
 	public const INSERT_IGNORE_CHUNK = 500;
 
 	/**
-	 * Inserts rows that may already be there, in one statement per chunk.
-	 *
-	 * `IDBConnection::insertIgnoreConflict()` takes one row, and a caller
-	 * writing several inside a transaction paid a round trip per row while it
-	 * held the locks. The three databases this app supports each have a
-	 * multi-row form of the same statement — the one `insertIgnoreConflict()`
-	 * itself issues for a single row — so that is used; anything else falls
-	 * back to it row by row.
-	 *
-	 * Every row must carry the same columns, in the same order.
+	 * Inserts rows that may already be there, one statement per chunk, in the
+	 * multi-row form of what `IDBConnection::insertIgnoreConflict()` issues for
+	 * one row; other databases fall back to it row by row. Every row must
+	 * carry the same columns, in the same order.
 	 *
 	 * @param string $table without the prefix
 	 * @param list<array<string, int|string>> $rows column => value
@@ -1262,13 +1248,9 @@ class CoreRequestBuilder {
 	}
 
 	/**
-	 * Reads what follows for nobody in particular.
-	 *
-	 * The request object outlives one read — it is a service — so a reader set
-	 * for an earlier query is still set for the next one. A path that has to
-	 * answer as the anonymous internet does (a collection read by a signed-out
-	 * visitor, which must only ever show public posts) says so rather than
-	 * hoping nothing before it set a viewer.
+	 * Reads what follows for nobody in particular. The request object is a
+	 * service and keeps a viewer set for an earlier query, so a read that must
+	 * answer as a signed-out visitor says so.
 	 */
 	public function resetViewer(): void {
 		$this->viewer = null;
@@ -1295,16 +1277,9 @@ class CoreRequestBuilder {
 	}
 
 	/**
-	 * Limit the request to an id, matched on its indexed `_prim` column.
-	 *
-	 * A `_prim` column holds the md5 of the id, so it is already
-	 * case-normalised and is matched case-sensitively: wrapping it in LOWER()
-	 * — which is what limitToIdString() does to the unindexed TEXT column —
-	 * makes the index unusable, and these are the hottest lookups in the app.
-	 *
-	 * An id that is not an http(s) uri has no prim form (prim() returns '');
-	 * that falls back to the plain column, so no caller can silently start
-	 * matching nothing at all.
+	 * Limit the request to an id, matched on its indexed `_prim` column (the
+	 * md5 of the id) without LOWER(), so the index is used. An id that is not
+	 * an http(s) uri has no prim and is matched on the plain column.
 	 */
 	protected function limitToIdPrimString(
 		SocialQueryBuilder $qb, string $id, string $field = 'id_prim', string $fallback = 'id',
@@ -1320,13 +1295,9 @@ class CoreRequestBuilder {
 	}
 
 	/**
-	 * Limit a queue drain to the rows that are actually due: the retry backoff
-	 * and the give-up threshold, in SQL (see `Backoff::limitToDue()`).
-	 *
-	 * Both queues used to take the oldest N rows and then drop most of them in
-	 * PHP on exactly these two conditions, which means the rows of one dead
-	 * instance permanently occupy the window and nothing behind them is ever
-	 * delivered.
+	 * Limit a queue drain to the rows that are due, the retry backoff and the
+	 * give-up threshold applied in SQL (`Backoff::limitToDue()`), so the rows of
+	 * one dead instance cannot fill the window and hold up everything behind.
 	 */
 	protected function limitToQueueDue(IExtendedQueryBuilder $qb, Backoff $backoff): void {
 		$pf = ($qb->getType() === IExtendedQueryBuilder::SELECT) ? $this->defaultSelectAlias . '.' : '';
@@ -1337,13 +1308,9 @@ class CoreRequestBuilder {
 	//
 
 	/**
-	 * The cached actor a row names, as a LEFT JOIN on the prim columns.
-	 *
-	 * The id columns themselves carry no index and a `LOWER()` over them would
-	 * defeat one anyway, so matching on them was a scan of every cached actor
-	 * for each row of the page. A prim is the md5 of the id exactly as it was
-	 * written, which makes this an exact match where the old join folded case:
-	 * an id is a URI, and two that differ in case name different resources.
+	 * The cached actor a row names, as a LEFT JOIN on the prim columns, as the
+	 * id columns have no index. A prim is the md5 of the id as written, so the
+	 * match is case-sensitive: two URIs that differ in case are different.
 	 *
 	 * @param string $fieldActorId the id column of the row, whose `_prim`
 	 *                             sibling is what is compared

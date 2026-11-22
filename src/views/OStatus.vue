@@ -71,11 +71,8 @@ import { useServerData } from '../composables/useServerData.js'
 import { nextcloudUserOf } from '../utils/accountLocality.js'
 
 /**
- * Whether an address is one a browser may be sent to.
- *
- * The remote server names where to continue, and the reader is sent there
- * wholesale: anything but a web address — `javascript:`, `data:` — would run
- * or render here instead of taking them anywhere.
+ * Whether an address is a web address a browser may be sent to. The remote
+ * server chooses it, and a `javascript:` or `data:` address would run here.
  *
  * @param {unknown} value what the server answered
  * @return {boolean}
@@ -107,10 +104,8 @@ export default {
 			remote: '',
 			account: {},
 			/**
-			 * The signed-in reader. This page is public, so the reader is not
-			 * the page's user: the server puts whoever is signed in into the
-			 * initial state, and the handle is built from that rather than
-			 * from @nextcloud/auth.
+			 * The signed-in reader, from the initial state: this page is public, so
+			 * @nextcloud/auth does not have them.
 			 *
 			 * @type {{uid?: string, displayName?: string}}
 			 */
@@ -131,8 +126,7 @@ export default {
 		},
 
 		/**
-		 * The face of the local account to follow, once it has been looked
-		 * up: its Nextcloud user's, which its username need not be, or the
+		 * The face of the local account to follow: its Nextcloud user's, or the
 		 * picture the server gave where this visitor is not told the user.
 		 *
 		 * @return {{user: string}|{url: string|undefined}}

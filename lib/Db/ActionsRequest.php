@@ -16,11 +16,6 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
-/**
- * Class ActionsRequest
- *
- * @package OCA\Social\Db
- */
 class ActionsRequest extends ActionsRequestBuilder {
 	use TArrayTools;
 
@@ -28,13 +23,10 @@ class ActionsRequest extends ActionsRequestBuilder {
 	public const VOTE_OPTION = '#option-';
 
 	/**
-	 * Inserts an action, unless a row with its id or its (actor, object,
-	 * type) is already there.
-	 *
-	 * The inbox looks an action up before it writes it, and a redelivery
-	 * that overlaps the first copy passes that lookup too; the database
-	 * skips the second insert rather than failing it — a failed statement
-	 * would abort the surrounding transaction on PostgreSQL.
+	 * Inserts an action, unless a row with its id or its (actor, object, type)
+	 * is already there. A redelivery can pass the inbox's lookup too, and the
+	 * database skips the duplicate rather than failing, which would abort the
+	 * transaction on PostgreSQL.
 	 *
 	 * @return bool whether the row was written: false when it was already there
 	 */
@@ -55,10 +47,8 @@ class ActionsRequest extends ActionsRequestBuilder {
 	}
 
 	/**
-	 * The action a URI names — a Like, a Block, a pin.
-	 *
-	 * Only a peer that sends the object of an `Undo` as a bare link needs
-	 * this: the id is then all there is to go on.
+	 * The action a URI names (a Like, a Block, a pin), for a peer that sends the
+	 * object of an `Undo` as a bare link.
 	 *
 	 * @throws ActionDoesNotExistException
 	 */
@@ -138,9 +128,8 @@ class ActionsRequest extends ActionsRequestBuilder {
 		$this->limitToPrim($qb, 'actor_id_prim', $actorId);
 		$qb->limitToType($type);
 		$qb->orderBy('a.creation', 'desc');
-		// `creation` is a DATETIME: the actions taken within one second of each
-		// other have no order of their own, and the cut above would keep a
-		// different one of them each time. The primary key breaks the tie.
+		// `creation` is a DATETIME, so actions within one second have no order of
+		// their own: the primary key breaks the tie, keeping the cut stable.
 		$qb->addOrderBy('a.id_prim', 'desc');
 
 		return $this->getActionsFromRequest($qb);
@@ -148,11 +137,8 @@ class ActionsRequest extends ActionsRequestBuilder {
 
 	/**
 	 * Who did one thing to one post, newest first: the rows behind Mastodon's
-	 * `favourited_by` and `reblogged_by`.
-	 *
-	 * The actor of each row is joined in, because the answer is a page of
-	 * accounts rather than of actions — a row whose actor this instance has
-	 * never cached has nothing to show and is left out by the caller.
+	 * `favourited_by` and `reblogged_by`. The actor of each row is joined in; the
+	 * caller leaves out rows whose actor was never cached.
 	 *
 	 * @return ACore[]
 	 */
@@ -162,9 +148,8 @@ class ActionsRequest extends ActionsRequestBuilder {
 		$qb->limitToType($type);
 		$this->leftJoinCacheActors($qb, 'actor_id');
 		$qb->orderBy('a.creation', 'desc');
-		// without this the likes made within one second of each other are in
-		// no particular order, and the cut by the limit keeps a different one
-		// of them each time
+		// the primary key orders likes made within one second, keeping the cut
+		// stable
 		$qb->addOrderBy('a.id_prim', 'desc');
 		if ($limit > 0) {
 			$qb->setMaxResults($limit);
@@ -202,10 +187,8 @@ class ActionsRequest extends ActionsRequestBuilder {
 	}
 
 	/**
-	 * The poll a vote was cast in, or '' for any other action.
-	 *
-	 * A vote is a `Vote` action whose object is the poll's id with an option
-	 * suffix of this app's own making; the poll is what is left without it.
+	 * The poll a vote was cast in, or '' for any other action: a `Vote`'s object
+	 * is the poll's id with this app's option suffix.
 	 */
 	public static function pollOfVote(string $type, string $objectId): string {
 		if ($type !== 'Vote') {
@@ -218,11 +201,8 @@ class ActionsRequest extends ActionsRequestBuilder {
 	}
 
 	/**
-	 * Who voted in each of several polls, in one query.
-	 *
-	 * Matched on `poll_prim`, the poll a vote row was written for, which is
-	 * indexed: the closed-poll sweep asks this for every poll it announces,
-	 * and the vote rows are a few among every like and boost in the table.
+	 * Who voted in each of several polls, in one query, matched on the indexed
+	 * `poll_prim` since the closed-poll sweep asks this for every poll.
 	 *
 	 * @param string[] $pollIds
 	 * @param int $limit the most voters read per poll, on average

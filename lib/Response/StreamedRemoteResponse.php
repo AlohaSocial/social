@@ -15,19 +15,11 @@ use OCP\AppFramework\Http\IOutput;
 use OCP\AppFramework\Http\Response;
 
 /**
- * Bytes from another server, passed on as they arrive.
- *
- * Not `StreamResponse`, which takes a path and calls `readfile()` on it: there
- * is no file here and there is deliberately never going to be one. The body is
- * an open socket to the instance that holds the video, and what this does is
- * copy it to the client in fixed-size pieces, so a two-hour talk costs the
- * chunk size in memory rather than its own length.
- *
- * The reason it exists at all is that a `<video>` cannot be pointed at the
- * origin directly: the page's content security policy says `media-src 'self'`,
- * and widening it would also mean every reader who presses play announcing
- * themselves to a server they have never heard of. Proxying keeps both
- * promises, and costs this instance the bandwidth.
+ * Bytes from another server, copied to the client in fixed-size pieces as
+ * they arrive, so a long video costs one chunk of memory. Not
+ * `StreamResponse`, which reads a file. Proxying is needed because the CSP
+ * says `media-src 'self'`, and it keeps readers from announcing themselves to
+ * the origin.
  *
  * @template-extends Response<Http::STATUS_*, array<string, mixed>>
  */
@@ -55,10 +47,7 @@ class StreamedRemoteResponse extends Response implements ICallbackResponse {
 
 	#[\Override]
 	public function callback(IOutput $output): void {
-		// Whatever the server was buffering for us is in the way: with output
-		// buffering on, the whole video would be assembled in memory before a
-		// byte of it reached anybody, which is the one thing this class exists
-		// to avoid.
+		// Drop output buffers, or the whole video would be assembled in memory.
 		while (ob_get_level() > 0) {
 			ob_end_flush();
 		}
@@ -72,9 +61,7 @@ class StreamedRemoteResponse extends Response implements ICallbackResponse {
 
 			$output->setOutput($chunk);
 
-			// the reader closed the tab, or skipped ahead: there is nobody to
-			// send the rest of the file to, and the origin should stop sending
-			// it to us
+			// The reader went away: stop reading from the origin.
 			if (connection_aborted() !== 0) {
 				break;
 			}

@@ -66,17 +66,6 @@ describe('settings store', () => {
 		expect(store.hidesCounts).toBe(false)
 	})
 
-	it('hides standalone replies only when the server preference is on', () => {
-		const store = useSettingsStore()
-		expect(store.hidesRepliesInFeeds).toBe(false)
-
-		store.setServerData({ hideRepliesInFeeds: true })
-		expect(store.hidesRepliesInFeeds).toBe(true)
-
-		store.setServerDataEntry({ key: 'hideRepliesInFeeds', value: false })
-		expect(store.hidesRepliesInFeeds).toBe(false)
-	})
-
 	it('has the keyboard shortcuts on unless the page says they are off', () => {
 		const store = useSettingsStore()
 		expect(store.shortcutsEnabled).toBe(true)

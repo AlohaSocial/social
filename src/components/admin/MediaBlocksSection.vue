@@ -86,11 +86,8 @@ import { showError } from '../../services/toast.js'
 import { errorOf } from '../../utils/serverError.js'
 
 /**
- * The files this instance refuses.
- *
- * The count is the column worth having: a list with no evidence is one nobody
- * dares remove anything from a year later, and "turned away 41 times" and
- * "never" are different decisions to review.
+ * The files this instance refuses, each with how often it was turned away,
+ * so a block can be reviewed on evidence.
  */
 export default {
 	name: 'MediaBlocksSection',
@@ -209,12 +206,8 @@ export default {
 		},
 
 		/**
-		 * Allows one file again.
-		 *
-		 * The row is taken out of the list on screen rather than the list
-		 * being replaced by the first page the server answers with: the row
-		 * may be on a later page, and whoever removed it is still reading
-		 * there.
+		 * Allows one file again. The row is taken out of the list on screen, as it
+		 * may be on a later page the admin is still reading.
 		 *
 		 * @param {object} block the row to remove
 		 * @return {Promise<void>}

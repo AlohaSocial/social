@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import Timeline from '../../../src/views/Timeline.vue'
 import TimelineSwitcher from '../../../src/components/TimelineSwitcher.vue'
-import { dismissInfoCard } from '../../../src/services/infoCards.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
@@ -47,10 +46,8 @@ function mountTimeline(route, serverData = {}) {
 				FirstRun: stub('FirstRun'),
 				TimelineList: { name: 'TimelineList', props: ['type', 'display', 'listTitle'], template: '<ul class="timeline-list-stub" />' },
 				OnThisDay: stub('OnThisDay'),
-				WeeklyRecap: stub('WeeklyRecap'),
 				ShortsBar: stub('ShortsBar'),
 				InterestsNotice: stub('InterestsNotice', 'section'),
-				InterestsLearningBanner: stub('InterestsLearningBanner'),
 				RouterLink: RouterLinkStub,
 			},
 		},
@@ -121,25 +118,6 @@ describe('For you on the timeline page', () => {
 			expect(wrapper.findComponent(TimelineSwitcher).props('value')).toBe('interests')
 			expect(wrapper.find('h1').text()).toBe('For you')
 			expect(wrapper.find('.timeline-list-stub').exists()).toBe(true)
-		})
-	})
-
-	describe('the still-learning note', () => {
-		it('is only over For you', () => {
-			dismissInfoCard('feed-help-v1:interests')
-			expect(mountTimeline({ params: { type: 'interests' } }, { interests: ON }).find('.InterestsLearningBanner-stub').exists()).toBe(true)
-			expect(mountTimeline({}, { interests: ON }).find('.InterestsLearningBanner-stub').exists()).toBe(false)
-		})
-
-		it('waits until the feed\'s own explanation is put away: one card at a time', async () => {
-			const wrapper = mountTimeline({ params: { type: 'interests' } }, { interests: ON })
-			expect(wrapper.find('.timeline-scope-description').exists()).toBe(true)
-			expect(wrapper.find('.InterestsLearningBanner-stub').exists()).toBe(false)
-
-			await wrapper.find('.timeline-scope-description button').trigger('click')
-
-			expect(wrapper.find('.timeline-scope-description').exists()).toBe(false)
-			expect(wrapper.find('.InterestsLearningBanner-stub').exists()).toBe(true)
 		})
 	})
 

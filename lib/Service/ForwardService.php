@@ -24,16 +24,10 @@ use Psr\Log\LoggerInterface;
 /**
  * Inbox forwarding, ActivityPub §7.1.2.
  *
- * When someone replies to a local post, their server delivers the reply to us
- * — and to nobody else here. Our own followers never follow the stranger who
- * replied, so without this the conversation under a local post is visible to
- * the author and to no one else: everybody sees a different, shorter thread.
- *
- * So a reply to a local post is passed on to that post's followers, unchanged.
- * Unchanged is the whole point: the activity carries its author's linked-data
- * signature, and every server that receives it from us can check that
- * signature against the original author's key rather than having to take our
- * word for it. An activity we cannot pass on intact is not passed on at all.
+ * A reply to a local post is delivered only to us, and our followers do not
+ * follow the replier, so it is passed on to that post's followers unchanged:
+ * the activity carries its author's linked-data signature, which every
+ * receiver can check. An activity we cannot pass on intact is not passed on.
  */
 class ForwardService {
 	/**
@@ -59,9 +53,8 @@ class ForwardService {
 
 	/**
 	 * Passes an incoming reply on to the followers of the local post it
-	 * replies to. Every reason not to forward is a silent return: this runs on
-	 * the inbox path, where the delivery has already been accepted and nothing
-	 * we decide here should turn it into a failure for the sender.
+	 * replies to. Every reason not to forward is a silent return, since the
+	 * delivery has already been accepted.
 	 */
 	public function forwardReply(ACore $activity, Stream $note): void {
 		if ($note->getInReplyTo() === '') {
@@ -131,10 +124,8 @@ class ForwardService {
 
 	/**
 	 * Whether this is the first time we are asked to forward this activity.
-	 *
-	 * The durable answer is that a re-delivery finds the note already stored
-	 * and never reaches this service; this closes the window where two copies
-	 * arrive at once and neither has been written yet.
+	 * A re-delivery normally finds the note stored and never gets here; this
+	 * covers two copies arriving at once.
 	 */
 	private function firstSighting(string $activityId): bool {
 		if ($activityId === '') {

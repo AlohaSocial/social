@@ -207,17 +207,9 @@
 
 <script>
 /**
- * The way in from X, Instagram, TikTok and YouTube.
- *
- * Five steps, and the order is what the page is for: the posts first because
- * that is what people are afraid of losing, then the people — the step that
- * decides whether the account is opened a second time — then somewhere to
- * find more, and last the announcement, which is the only thing here that
- * reaches back to the network being left.
- *
- * Every step says plainly what it cannot do. Three of the four networks
- * federate nothing, so no follower comes along from any of them, and a wizard
- * that implied otherwise would be found out on the first day.
+ * The way in from X, Instagram, TikTok and YouTube: posts, then people, then
+ * feeds, then an announcement for the old network. Each step says plainly what
+ * it cannot do, since none of these networks brings followers along.
  */
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
@@ -291,7 +283,7 @@ export default {
 					tint: '#222',
 					readsPosts: true,
 					readsPeople: false,
-					how: t('social', 'Settings → Your account → Download an archive of your data, and wait for the mail. Your posts and their pictures are in it. The accounts you followed are in it only as numbers, so there is nobody in that file to look up — and nothing on X federates, so no follower can come with you.'),
+					how: t('social', 'Settings → Your account → Download an archive of your data, and wait for the mail. Your posts and their photos are in it. The accounts you followed are in it only as numbers, so there is nobody in that file to look up — and nothing on X federates, so no follower can come with you.'),
 				},
 				{
 					id: 'instagram',
@@ -331,9 +323,8 @@ export default {
 		},
 
 		/**
-		 * Whether there is an account to name. Before the answer arrives the
-		 * card says `@you` and the words are empty, and neither is worth
-		 * saving or copying.
+		 * Whether there is an account to name; until the answer arrives the
+		 * card says `@you` and is not worth saving or copying.
 		 *
 		 * @return {boolean}
 		 */
@@ -343,8 +334,7 @@ export default {
 	},
 
 	watch: {
-		// a reader who picks a network before the answer lands would otherwise
-		// keep the card drawn without their name on it
+		// redraw once the answer lands, in case a network was picked before it
 		announcement() {
 			this.$nextTick(() => this.drawCard())
 		},
@@ -379,8 +369,7 @@ export default {
 		},
 
 		/**
-		 * @param {string} id the network picked. What was read and found for
-		 *        another one belongs to that one's archive, not this.
+		 * @param {string} id the network picked; switching clears what was found for the previous one
 		 */
 		choose(id) {
 			if (id !== this.network) {
@@ -463,10 +452,8 @@ export default {
 		},
 
 		/**
-		 * One batch of lookups. The server decides how many it will do, so the
-		 * cursor moves by what it says it checked rather than by a number
-		 * agreed here — the two drifting apart is how a loop like this ends up
-		 * asking about the same names forever.
+		 * One batch of lookups. The cursor moves by what the server says it
+		 * checked, so the two cannot drift apart and loop forever.
 		 */
 		async probeMore() {
 			this.busy = 'probe'
@@ -496,9 +483,8 @@ export default {
 		},
 
 		/**
-		 * Follows the ticked accounts through the same endpoint a Mastodon
-		 * export goes through, by handing it the same CSV — one follow request
-		 * per account, which is what a follow is.
+		 * Follows the ticked accounts by handing the Mastodon import endpoint
+		 * the same CSV a Mastodon export would.
 		 */
 		async followSelected() {
 			this.busy = 'follow'
@@ -525,13 +511,8 @@ export default {
 		},
 
 		/**
-		 * The card, drawn rather than fetched: it names an account on this
-		 * server and nothing else, so there is nothing for a server to render
-		 * that a canvas cannot.
-		 *
-		 * No `ctx.filter` anywhere in here — Safari does not have it and
-		 * assigning it fails silently, which would leave one browser drawing a
-		 * subtly different card with no error to go on.
+		 * Draws the card on a canvas. No `ctx.filter`: Safari does not support
+		 * it and ignores the assignment silently.
 		 */
 		drawCard() {
 			const canvas = /** @type {HTMLCanvasElement|undefined} */ (this.$refs.card)
@@ -571,9 +552,8 @@ export default {
 		},
 
 		/**
-		 * One line of text shrunk until it fits, because a handle and a URL are
-		 * both as long as somebody's server name makes them and a card with the
-		 * address running off the side is the one thing it must not do.
+		 * One line of text, shrunk until it fits: handles and URLs can be
+		 * arbitrarily long.
 		 *
 		 * @param {CanvasRenderingContext2D} ctx the card being drawn on
 		 * @param {string} text the line to draw
@@ -609,7 +589,7 @@ export default {
 			try {
 				await navigator.clipboard.writeText(this.announcement.text)
 				this.copied = true
-				// so the button goes back to saying what it does, not what it once did
+				// reset the button label after a moment
 				window.clearTimeout(this.copiedTimer)
 				this.copiedTimer = window.setTimeout(() => {
 					this.copied = false

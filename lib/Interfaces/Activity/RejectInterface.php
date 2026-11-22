@@ -30,8 +30,7 @@ class RejectInterface extends AbstractActivityPubInterface implements IActivityP
 	 */
 	#[\Override]
 	public function processIncomingRequest(ACore $item): void {
-		// see AcceptInterface: a link rather than an embedded object is normal
-		// outside Mastodon, and used to be dropped
+		// See AcceptInterface: `object` may be a link rather than embedded.
 		try {
 			$object = $this->objectResolver->resolve($item);
 		} catch (ItemNotFoundException $e) {
@@ -44,10 +43,8 @@ class RejectInterface extends AbstractActivityPubInterface implements IActivityP
 			return;
 		}
 
-		// A follow request is answered by the account it was addressed to and by
-		// nobody else. The interface below checks the host of that account,
-		// which on a shared server is every account on it — so any of them
-		// could reject a request meant for a neighbour.
+		// Only the account a follow request was addressed to may reject it; the
+		// interface below checks only the host.
 		if ($object instanceof Follow) {
 			$item->checkActor($object->getObjectId(), $item->getActorId());
 		}

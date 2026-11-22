@@ -24,12 +24,10 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Following from here the people a Bluesky account follows, without moving
- * it: its follow records are public, so they are read from its PDS
- * (`com.atproto.repo.listRecords`, no password), and each account it
- * follows is followed from the person's account here through the ordinary
- * follow path, in the background as an import (`bluesky_follows`). Only a
- * whole move brings the followers along.
+ * Follows from here everyone a Bluesky account follows, without moving it:
+ * its public follow records are read from its PDS (no password) and followed
+ * in the background as a `bluesky_follows` import. Only a whole move brings
+ * the followers along.
  */
 class FollowFrom {
 	/** the most follows one run takes over */

@@ -27,29 +27,22 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * For you: what a reader lingers on, turned into the hashtags their feed
- * is made of.
+ * For you: what a reader lingers on, turned into the hashtags their feed is
+ * made of. This handles whose interests they are, whether learning is
+ * allowed, and storage; the arithmetic is `InterestScorer`'s.
  *
- * Everything that reads or writes a reader's interests goes through here — the
- * signals the web interface sends while they scroll, the likes, boosts,
- * replies and bookmarks that happen wherever they happen, and every change
- * they make on the settings page. The arithmetic is `InterestScorer`'s; this is
- * the part that knows whose interests they are, whether it is allowed to learn
- * at all, and where the rows live.
- *
- * Nothing learned here leaves the server or is shown to anyone but the reader.
- * The signals themselves are folded into the scores as they arrive and are not
- * kept; what is kept for a day is only which post already counted, so reading
- * the same post twice does not count twice.
+ * Nothing learned leaves the server or is shown to anyone but the reader.
+ * Signals are folded into scores on arrival and not kept; only which post
+ * already counted is kept for a day.
  */
 class InterestService {
 	/** What the web interface may report. */
 	public const KINDS = ['dwell', 'skip', 'open', 'media', 'link', 'mute'];
 	public const CONTEXTS = ['home', 'local', 'federated', 'tag', 'explore', 'detail', 'interests', 'photos', 'videos', 'shorts', 'reels'];
 	/**
-	 * Where a dwell is time spent watching the video rather than time the post
-	 * was on screen: the Shorts stack, which reports what its player played.
-	 * `reels` is what older bundles still send for it, and counts the same.
+	 * Where a dwell is time spent watching the video rather than time on
+	 * screen: the Shorts stack, which reports what its player played. `reels`
+	 * is accepted as an alias.
 	 */
 	public const WATCH_CONTEXTS = ['shorts', 'reels'];
 	public const MAX_EVENTS = 100;
@@ -167,17 +160,23 @@ class InterestService {
 	 * The reader's own switches, with the administrator's default filled in
 	 * for somebody who never touched theirs.
 	 *
-	 * @return array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool}
+	 * `active` is the one answer a client needs: whether anything this reader
+	 * does is learned from right now. Learning that comes only from the
+	 * administrator's default starts once the reader has seen the notice that
+	 * says what is learned; a reader who switched learning on chose it.
+	 *
+	 * @return array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool, active: bool}
 	 */
 	public function settingsFor(string $userId): array {
 		$learning = $this->userValue($userId, self::KEY_LEARNING);
-		if ($learning === '') {
+		$chosen = $learning !== '';
+		if (!$chosen) {
 			$learning = $this->configService->getAppValueBool(ConfigService::SOCIAL_INTERESTS_DEFAULT) ? '1' : '0';
 		}
 
 		$languages = json_decode($this->userValue($userId, self::KEY_LANGUAGES), true);
 
-		return [
+		$settings = [
 			'enabled' => $this->isEnabled(),
 			'learning' => $learning === '1',
 			'paused' => $this->userValue($userId, self::KEY_PAUSED_AT) !== '',
@@ -185,6 +184,11 @@ class InterestService {
 			'languages' => is_array($languages) ? array_values(array_filter($languages, 'is_string')) : [],
 			'noticeAcknowledged' => $this->userValue($userId, self::KEY_NOTICE) === '1',
 		];
+		$settings['active'] = $settings['enabled'] && $settings['learning']
+			&& !$settings['paused'] && !$settings['instancePaused']
+			&& ($chosen || $settings['noticeAcknowledged']);
+
+		return $settings;
 	}
 
 	/**
@@ -207,17 +211,13 @@ class InterestService {
 			return false;
 		}
 
-		$settings = $this->settingsFor($userId);
-
-		return $settings['enabled'] && $settings['learning'] && !$settings['paused'] && !$settings['instancePaused'];
+		return $this->settingsFor($userId)['active'];
 	}
 
 	/**
-	 * Saves whichever of the reader's switches the request names.
-	 *
-	 * Resuming after a pause moves every score's clock on by the length of the
-	 * pause, so the list comes back as it was left rather than a pause's worth
-	 * of decay weaker.
+	 * Saves whichever of the reader's switches the request names. Resuming
+	 * after a pause shifts every score's clock by the pause, so nothing decays
+	 * meanwhile.
 	 *
 	 * @param array{learning?: mixed, paused?: mixed, languages?: mixed, noticeAcknowledged?: mixed} $patch
 	 *
@@ -277,11 +277,9 @@ class InterestService {
 	}
 
 	/**
-	 * Learns from what the web interface saw the reader do.
-	 *
-	 * The events name posts by id and nothing else: the hashtags are read here,
-	 * from the posts as the reader may see them, so a client can neither teach
-	 * a tag no post carried nor learn the tags of a post it may not read.
+	 * Learns from what the web interface saw the reader do. Events name posts
+	 * only; hashtags are read here from posts the reader may see, so a client
+	 * can neither invent tags nor learn those of hidden posts.
 	 *
 	 * @param array<array-key, mixed> $events
 	 */
@@ -330,15 +328,13 @@ class InterestService {
 				? $this->videoDurationMs($post, $event['context'] === 'shorts')
 				: 0;
 			if ($videoMs > 0) {
-				// a video is watched rather than read: how long it runs is
-				// what it takes, and the reader's reading pace says nothing
-				// about it and is left alone
+				// a video's reading time is its length; the reader's reading
+				// pace is left alone
 				$signal = $scorer->classifyWatch($event['ms'], $scorer->expectedWatchMs($videoMs));
 			} elseif ($event['kind'] === 'dwell') {
-				// Time on screen is passive: it may mean reading, an interruption,
-				// or a post the reader has not scrolled past yet. Do not turn it into
-				// a positive hashtag score; the feed already records explicit actions
-				// and the Shorts player reports measured playback separately.
+				// Time on screen is passive (reading, an interruption, or not yet
+				// scrolled past), so it is not a positive score; explicit actions
+				// and Shorts playback are recorded separately.
 				$signal = 0.0;
 			} else {
 				$signal = match ($event['kind']) {
@@ -359,11 +355,9 @@ class InterestService {
 	}
 
 	/**
-	 * Learns from a like, a boost, a reply or a bookmark.
-	 *
-	 * Called from where each of them happens, so it counts from a Mastodon app
-	 * as much as from the web. It never throws: a feed that could not learn is
-	 * a lesser feed, and a boost that failed because of it would be a bug.
+	 * Learns from a like, a boost, a reply or a bookmark, from wherever it
+	 * happens, Mastodon apps included. Never throws, so it cannot fail the
+	 * action itself.
 	 */
 	public function recordAction(Person $actor, Stream $post, string $action): void {
 		try {
@@ -401,9 +395,9 @@ class InterestService {
 	}
 
 	/**
-	 * Takes it back: the post may be shown again and what it cost is returned.
-	 * Only after a "less like this" that is still on record, so repeating the
-	 * undo cannot be used to pump a tag up.
+	 * Undoes "less like this": the post may be shown again and its cost is
+	 * returned. Only while the "less like this" is on record, so repeated
+	 * undos cannot pump a tag up.
 	 *
 	 * @throws ItemNotFoundException
 	 */
@@ -607,8 +601,8 @@ class InterestService {
 		}
 
 		if (count($rows) > self::MAX_ROWS) {
-			// Legacy reader-selected rows are ordinary stale profile data now;
-			// they must not be kept forever or crowd learned rows out of the cap.
+			// reader-selected rows age like any other, so they cannot crowd
+			// learned rows out of the cap
 			$faint = $rows;
 			uasort($faint, static fn (Interest $a, Interest $b): int
 				=> abs($scorer->current($a, $now)) <=> abs($scorer->current($b, $now)));

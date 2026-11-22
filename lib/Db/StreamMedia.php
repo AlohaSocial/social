@@ -17,24 +17,15 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
  * The attachment copies a post stores and the `social_stream_media` links
- * from this instance's own posts to the documents they carry.
- *
- * A trait used by `StreamRequest` for the reason `StreamTimelines` gives: it
- * separates the file, not the object.
+ * from this instance's own posts to the documents they carry. A trait of
+ * `StreamRequest`, as `StreamTimelines` is.
  */
 trait StreamMedia {
 	/**
-	 * The posts that carry a stored attachment copy, a page at a time.
-	 *
-	 * A post keeps its own copy of its attachments (`save()` writes
-	 * `asLocal()` into the `attachments` column), so anything that changes a
-	 * *document* after the fact -- a poster frame made for a video that was
-	 * stored before posters existed -- never reaches the post that shows it.
-	 * `occ social:media:posters` walks these and rewrites the copies.
-	 *
-	 * Only the id and the blob are read: rebuilding a whole `Stream` with its
-	 * joins, for every post with a picture on the instance, would be a great
-	 * deal of work to reach one column.
+	 * The posts that carry a stored attachment copy, a page at a time, for
+	 * `occ social:media:posters`: a post keeps its own copy of its attachments,
+	 * so a later change to a document (a new poster frame) must be written into
+	 * it. Only the id and the blob are read.
 	 *
 	 * @return array<array{nid: string, id: string, attachments: string}>
 	 */
@@ -96,9 +87,9 @@ trait StreamMedia {
 
 		$qb->executeStatement();
 
-		// a rewrite that swaps a document — an archive restoring a picture
-		// as a new upload — moves the post's links with it; one that only
-		// rebuilds the same documents' copies leaves them alone
+		// a rewrite that swaps a document (an archive restoring a picture as a
+		// new upload) moves the post's links with it; one that only rebuilds the
+		// same documents' copies leaves them alone
 		$nids = self::documentNidsOf($attachments);
 		if ($nids !== $this->linkedMedia($id)) {
 			$this->linkMedia($id, $nids, true);
@@ -174,15 +165,10 @@ trait StreamMedia {
 	}
 
 	/**
-	 * Rebuilds the attachment copy of $document on every post of this
-	 * instance that carries it.
-	 *
-	 * An upload is not tied to its post by `parent_id` the way a fetched
-	 * attachment is — it is uploaded before the post exists — so the posts
-	 * are found through `social_stream_media`, which links each of this
-	 * instance's own posts to the documents it carries, by the document's
-	 * nid. Only this instance's own posts: a remote post names the origin's
-	 * file, not ours.
+	 * Rebuilds the attachment copy of $document on every local post that
+	 * carries it. Uploads precede their post and have no `parent_id`, so the
+	 * posts are found through `social_stream_media`; remote posts name the
+	 * origin's file and are skipped.
 	 *
 	 * @return int how many posts were rewritten
 	 */
@@ -295,9 +281,8 @@ trait StreamMedia {
 			$qb->executeStatement();
 		}
 
-		// asked to skip a row that is already there rather than to fail on
-		// it: this runs inside the transaction that stores the post, and
-		// PostgreSQL aborts a transaction on any failed statement
+		// skips an existing row rather than failing: this runs inside the post's
+		// transaction, which PostgreSQL aborts on any failed statement
 		foreach ($nids as $nid) {
 			$this->dbConnection->insertIgnoreConflict(
 				self::TABLE_STREAM_MEDIA,
@@ -333,15 +318,8 @@ trait StreamMedia {
 
 	/**
 	 * The post's stored attachment copies with the one for $document rebuilt
-	 * from it.
-	 *
-	 * The copies are the client format `save()` writes, keyed by the
-	 * document's nid, not cache rows: read back as `Document`s they matched
-	 * nothing, and the whole list was written out again in the ActivityPub
-	 * shape, without ids, previews or alt text. The picture the cron had just
-	 * fetched kept its empty link, and every other picture on the post lost
-	 * its preview with it. The copies that are not this document's are kept
-	 * exactly as stored.
+	 * from it. The copies are in the client format `save()` writes, keyed by the
+	 * document's nid; the others are kept exactly as stored.
 	 *
 	 * @return array<mixed>
 	 */

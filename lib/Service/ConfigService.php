@@ -33,26 +33,21 @@ class ConfigService {
 	public const SOCIAL_ADDRESS = 'social_address';
 
 	/**
-	 * Whether the client API answered at the domain root the last time it was
-	 * probed: '1', '0', or unset where nothing has asked yet.
-	 *
-	 * Written down rather than only cached because the discovery document is
-	 * built from it, and that is a route any client may call -- see
-	 * `CheckService::clientApiRootIsKnownGood()`.
+	 * Whether the client API answered at the domain root when last probed: '1',
+	 * '0', or unset. Stored because the discovery document, a public route, is
+	 * built from it (`CheckService::clientApiRootIsKnownGood()`).
 	 */
 	public const CLIENT_API_ROOT = 'client_api_root';
 
 	/**
-	 * Whether the last root probe came back with addresses in the scheme it was
-	 * asked over: '1', '0', or unset where nothing has asked yet. A proxy that
-	 * drops the scheme leaves every absolute URL saying `http` on an `https`
-	 * site — see `CheckService::answeredInScheme()`.
+	 * Whether the last root probe answered in the scheme it was asked over: '1',
+	 * '0', or unset. See `CheckService::answeredInScheme()`.
 	 */
 	public const CLIENT_API_SCHEME = 'client_api_scheme';
 
 	public const SOCIAL_SERVICE = 'service';
 	public const SOCIAL_MAX_SIZE = 'max_size';
-	/** The ceiling for a video, which is not the ceiling for a picture. */
+	/** The size limit for a video, separate from the one for a photo. */
 	public const SOCIAL_MAX_VIDEO_SIZE = 'max_video_size';
 	/** Whether a post that is a video is federated as a `Video` object. */
 	public const SOCIAL_PUBLISH_VIDEO = 'publish_video_objects';
@@ -88,100 +83,76 @@ class ConfigService {
 	public const SOCIAL_NOTIFICATION_RETENTION_DAYS = 'notification_retention_days';
 
 	/**
-	 * How far the retention walk has judged the old remote posts today:
-	 * `day|creation|id_prim`, written by `StreamPruneService` after each
-	 * chunk. A run carries on from it; the first run of a new day starts
-	 * again from the oldest row.
+	 * How far today's retention walk over old remote posts got, as
+	 * `day|creation|id_prim`; the first run of a new day starts from the oldest row.
 	 */
 	public const SOCIAL_RETENTION_CHECKED = 'retention_checked';
 
 	/**
-	 * Days to keep a cached remote actor nobody here refers to any more —
-	 * not followed, not following, no post stored, no relation pending — before
-	 * the cache cron evicts it with its avatar; 0 disables the sweep.
+	 * Days to keep a cached remote actor nobody here refers to before the cache
+	 * cron evicts it with its avatar; 0 disables the sweep.
 	 */
 	public const SOCIAL_CACHE_ACTOR_DAYS = 'cache_actor_days';
 
 	/**
-	 * Days an OAuth access token lives from the moment it was issued,
-	 * however much it is used, until its client has refreshed it once; 0 lets
-	 * a token in use live for ever. Use keeps a token from ageing out inside
-	 * this, never past it.
+	 * Days an OAuth access token lives from issue until its client refreshes it
+	 * once, however much it is used; 0 lets a token in use live for ever.
 	 */
 	public const SOCIAL_TOKEN_MAX_DAYS = 'token_max_days';
 
 	/**
-	 * Days an OAuth authorization may go unused — no request with its access
-	 * token, no refresh — before it is removed; at least 1.
+	 * Days an OAuth authorization may go unused (no request, no refresh) before
+	 * it is removed; at least 1.
 	 */
 	public const SOCIAL_TOKEN_IDLE_DAYS = 'token_idle_days';
 
 	/**
-	 * Hours an access token issued by a refresh lives. A client that has
-	 * refreshed once has shown it can refresh again; 0 counts such a token's
-	 * lifetime by `token_max_days` like any other.
+	 * Hours an access token issued by a refresh lives; 0 counts its lifetime by
+	 * `token_max_days` like any other.
 	 */
 	public const SOCIAL_REFRESHED_TOKEN_HOURS = 'refreshed_token_hours';
 
 	/**
-	 * Which of `Cron\Cache`'s steps the next pass begins with — bookkeeping,
-	 * not a setting. Written by the job when it runs out of its budget, so the
-	 * steps at the end of the list are not the ones that never run.
+	 * Which of `Cron\Cache`'s steps the next pass begins with (bookkeeping), so
+	 * the steps at the end still run when a pass runs out of budget.
 	 */
 	public const SOCIAL_CACHE_CRON_START = 'cache_cron_start';
 
 	/**
-	 * The nid of the last stored video `Cron\VideoPosters` looked at for a
-	 * poster frame — bookkeeping, not a setting. A video it could not make
-	 * one of is behind it and not tried again; `occ social:media:posters`
-	 * tries every video that still has none.
+	 * The nid of the last stored video `Cron\VideoPosters` looked at for a poster
+	 * frame (bookkeeping). `occ social:media:posters` retries every video without one.
 	 */
 	public const SOCIAL_POSTER_CURSOR = 'poster_backfill_cursor';
 
 	/**
-	 * The nid of the last cached actor icon `AvatarThumbnailBackfill` gave a
-	 * thumbnail, or `done` once it has been through them all — bookkeeping,
-	 * not a setting.
+	 * The nid of the last cached actor icon `AvatarThumbnailBackfill` handled, or
+	 * `done` once finished (bookkeeping).
 	 */
 	public const SOCIAL_AVATAR_THUMB_CURSOR = 'avatar_thumb_cursor';
 
 	/**
 	 * Instances whose accounts are silenced rather than blocked: out of the
 	 * public and global timelines, still readable by whoever follows them.
-	 *
-	 * The middle tier a domain block did not have. Without it the only answer
-	 * to an instance that is a nuisance rather than a menace was to cut it off
-	 * entirely, which also cuts off the local users who deliberately follow
-	 * somebody there.
 	 */
 	public const SOCIAL_SILENCED_LIST = 'silenced_list';
 
 	/**
-	 * The published block lists this instance subscribes to, as JSON.
-	 *
-	 * One object per source: its id, where it is fetched from, which format it
-	 * is in, whether it is on, and what the last run did. Empty until an admin
-	 * turns one on — a server's moderation is its own, and adopting somebody
-	 * else's is a decision that has to be made rather than inherited.
+	 * The published block lists this instance subscribes to, as JSON: one object
+	 * per source with its id, URL, format, enabled state and last run. Empty
+	 * until an admin turns one on.
 	 */
 	public const SOCIAL_BLOCKLIST_SOURCES = 'blocklist_sources';
 
 	/**
-	 * Whether an ActivityPub GET must be signed to be answered.
-	 *
-	 * Mastodon's secure mode. Off by default, and deliberately: turning it on
-	 * makes this instance invisible to every peer that does not sign its
-	 * fetches, which is a decision about who an instance federates with rather
-	 * than something to arrive at by upgrading.
+	 * Whether an ActivityPub GET must be signed to be answered (Mastodon's secure
+	 * mode). Off by default: it hides this instance from peers that do not sign
+	 * their fetches.
 	 */
 	public const SOCIAL_SECURE_MODE = 'secure_mode';
 
 	/**
-	 * Whether `/api/v1/instance/domain_blocks` publishes the deny list.
-	 *
-	 * Off by default. Mastodon publishes the list so somebody choosing a
-	 * server can see who it will not talk to; whether *this* server wants that
-	 * read by anybody is a disclosure decision its admin makes, not a default.
+	 * Whether `/api/v1/instance/domain_blocks` publishes the deny list. Off by
+	 * default; publishing it is the admin's disclosure decision.
 	 */
 	public const SOCIAL_PUBLISH_BLOCKS = 'publish_blocks';
 
@@ -196,33 +167,19 @@ class ConfigService {
 
 	/**
 	 * How far the closed-poll sweep has got, as a timestamp.
-	 *
-	 * A poll closes by its end time passing, so nothing happens at the moment
-	 * it does and something has to look. This is where that look left off.
 	 */
 	public const SOCIAL_POLLS_SWEPT = 'polls_swept';
 
 	/**
 	 * Whether the first post of an account that has published nothing here yet
-	 * is held for a moderator.
-	 *
-	 * **Off by default**, and it was on until it was clear what that meant: an
-	 * account on this server is a Nextcloud account that an administrator
-	 * provisioned, and holding its first post made every new person's first
-	 * five minutes look broken — the composer closed, the post did not appear,
-	 * and the only place it existed was a panel their administrator had not
-	 * opened yet. The end-to-end suite failed on exactly that, twice per run,
-	 * on a clean install. An instance that hands out accounts to strangers
-	 * turns it on; the spam rules (`autospam`) stay on for everybody.
+	 * is held for a moderator. Off by default: accounts here are provisioned by
+	 * an administrator, and holding their first post makes it look lost.
 	 */
 	public const SOCIAL_REVIEW_FIRST_POST = 'review_first_post';
 
 	/**
-	 * Whether a post that trips the spam rules waits for a moderator.
-	 *
-	 * On by default, and a very short list of rules — see `PostReviewService`.
-	 * What this is not is a filter: nothing is ever refused by it, only put in
-	 * front of a person.
+	 * Whether a post that trips the spam rules (`PostReviewService`) waits for a
+	 * moderator. On by default; nothing is refused, only queued for review.
 	 */
 	public const SOCIAL_AUTOSPAM = 'autospam';
 
@@ -234,146 +191,86 @@ class ConfigService {
 	public const SOCIAL_AI_TAGS = 'ai_tags';
 
 	/**
-	 * Whether the composer offers the 881 animated emoji.
-	 *
-	 * On by default. What ships is the list, not the pictures — see
-	 * `GifPackService` for why, and for what the instance fetches and when.
-	 * An administrator who wants nothing fetched sets this to 0 and is left
-	 * with whatever they added with `occ social:gif add`.
+	 * Whether the composer offers the 881 animated emoji. Only the list ships;
+	 * see `GifPackService` for what is fetched. 0 leaves only the ones added
+	 * with `occ social:gif add`.
 	 */
 	public const SOCIAL_GIF_PACK = 'gif_pack';
 
 	/**
-	 * Whether this instance offers stories.
-	 *
-	 * On by default. A story is a picture or a video that is gone in a day,
-	 * and an instance that would rather not carry something it cannot show a
-	 * moderator afterwards turns the whole thing off here: the bar goes from
-	 * the timeline, and nothing new is taken.
+	 * Whether this instance offers shorts (`stories` in the code): photos or
+	 * videos that are gone in a day. Off hides the bar and refuses new ones.
 	 */
 	public const SOCIAL_STORIES = 'stories';
 
 	/**
-	 * Whether the Photos, Videos and News timelines are offered.
-	 *
-	 * All on by default. Each is the same stream of posts read through one
-	 * filter -- pictures or videos -- and an instance
-	 * that does not want a section in the sidebar turns that one off. The
-	 * posts are not touched: a video posted while Videos was off is still a
-	 * video, and shows up again the moment it is turned back on.
+	 * Whether the Photos, Videos and News timelines are offered. Each is a filter
+	 * over the same posts, so turning one off hides it without touching posts.
 	 */
 	public const SOCIAL_SECTION_PHOTOS = 'section_photos';
 	public const SOCIAL_SECTION_VIDEOS = 'section_videos';
 
 	/**
 	 * Which Nextcloud groups become Social lists, as a JSON array of group ids.
-	 *
-	 * Empty by default, which is no groups at all. Every group a person is in
-	 * used to become a list of theirs, which on an instance whose groups are
-	 * departments is useful and on one whose groups are licence pools is a
-	 * sidebar full of noise -- and it tells everybody in a group who else is
-	 * in it, which is not the administrator's to give away by default. So:
-	 * nothing until somebody chooses.
+	 * Empty by default: a group list reveals the group's members, which is the
+	 * administrator's choice to make.
 	 */
 	public const SOCIAL_GROUP_LISTS = 'group_lists';
 
 	/**
 	 * How many posts an account must have published here before its posts stop
-	 * being held.
-	 *
-	 * `1` — hold the first one only — is the default and is what "first-post
-	 * review" means. An instance that has had trouble can ask for more, and an
-	 * account that has had that many posts approved is one a person has
-	 * already looked at that many times.
+	 * being held. The default `1` holds the first one only.
 	 */
 	public const SOCIAL_REVIEW_POSTS = 'review_posts';
 
 	/**
-	 * The longest edge a stored picture may have, in pixels; 0 keeps every
-	 * upload exactly as it arrived.
-	 *
-	 * Off by default, because this app's promise has been that nothing loses a
-	 * generation of quality: the metadata is stripped losslessly and a picture
-	 * is re-encoded only when it has to be. An instance where storage costs
-	 * money, or whose people post straight from a 48-megapixel phone, wants
-	 * the other trade, and until now had no way to ask for it.
+	 * The longest edge a stored photo may have, in pixels; 0 (the default) keeps
+	 * every upload as it arrived, re-encoded only when it has to be.
 	 */
 	public const SOCIAL_IMAGE_MAX_EDGE = 'image_max_edge';
 
 	/**
-	 * The JPEG quality a re-encoded picture is stored at. Only consulted when
-	 * `image_max_edge` is set, because otherwise nothing is re-encoded.
+	 * The JPEG quality a re-encoded photo is stored at; only used when
+	 * `image_max_edge` is set.
 	 */
 	public const SOCIAL_IMAGE_QUALITY = 'image_quality';
 
 	/**
-	 * Whether stored videos are re-encoded to H.264 in an MP4.
-	 *
-	 * On by default, and it only does anything where ffmpeg is installed. The
-	 * trade is a lossy re-encode of somebody's file against that file being
-	 * seen at all: **Pixelfed's default `media_types` accepts `video/mp4` and
-	 * nothing else**, so every `video/quicktime` posted from here, which is
-	 * every video straight off an iPhone, is dropped by its inbox without a
-	 * word to anybody, and HEVC plays in Safari alone. The converted file
-	 * replaces the original.
-	 *
-	 * The work is done by a background job, never during an upload: converting
-	 * a video is minutes rather than the seconds a poster frame takes.
+	 * Whether stored videos are re-encoded to H.264 in an MP4 by a background
+	 * job, where ffmpeg is installed. Pixelfed's default `media_types` accepts
+	 * only `video/mp4`, so iPhone `video/quicktime` is otherwise dropped by its
+	 * inbox. The converted file replaces the original.
 	 */
 	public const SOCIAL_VIDEO_TRANSCODE = 'video_transcode';
 
 	/**
-	 * The tallest a converted video is written. Only consulted when
-	 * `video_transcode` is on, because otherwise nothing is re-encoded.
+	 * The tallest a converted video is written; only used when `video_transcode`
+	 * is on.
 	 */
 	public const SOCIAL_VIDEO_MAX_HEIGHT = 'video_max_height';
 
 	/**
-	 * Whether a stored video is also written at a ladder of smaller heights,
-	 * as HLS.
-	 *
-	 * A different question from `video_transcode`, which is about a video
-	 * being *playable at all* elsewhere. This is about it being watchable on a
-	 * connection that cannot carry the original: the same video two or three
-	 * more times, smaller, and a playlist that lets a player move between
-	 * them. Off by default, because it is several encodes per video on
-	 * somebody's server.
+	 * Whether a stored video is also written as HLS at a ladder of smaller
+	 * heights, for slow connections. Off by default: it costs several encodes
+	 * per video.
 	 */
 	public const SOCIAL_VIDEO_LADDER = 'video_ladder';
 
 	/**
-	 * Which heights, as a comma-separated list. Rungs at or above a video's
-	 * own height are skipped rather than upscaled, so this is a ceiling on
-	 * what may be written and not a promise about what will be.
+	 * Which heights, comma-separated. Rungs at or above a video's own height are
+	 * skipped rather than upscaled.
 	 */
 	public const SOCIAL_VIDEO_LADDER_HEIGHTS = 'video_ladder_heights';
 
 	/**
-	 * How many megabytes of video one account may keep here, `0` for no
-	 * limit.
-	 *
-	 * A different question from `max_video_size`, which is a ceiling on one
-	 * file: that one is about a single request, this one about a year of
-	 * them. Off by default, because an instance that has been running without
-	 * a quota and acquires one on upgrade would start refusing uploads from
-	 * exactly the accounts that use it most.
+	 * How many megabytes of video one account may keep here, `0` for no limit.
+	 * Off by default so existing heavy users are not suddenly refused.
 	 */
 	public const SOCIAL_VIDEO_QUOTA = 'video_quota';
 
 	/**
-	 * What this instance does with a post somebody marked sensitive, for
-	 * readers who have not chosen for themselves: `show_all`, `default`
-	 * (covered, one press away) or `hide_all`. PeerTube's three NSFW policies
-	 * under Mastodon's names for them — see `SensitiveMediaService`.
-	 */
-	/**
-	 * Where the local-account refresh walk got to, as an `id_prim`.
-	 *
-	 * Bookkeeping rather than a setting. The walk used to read every local
-	 * account into memory on every cron pass; it pages now, and this is what
-	 * makes the next pass carry on rather than start again. `''` is "begin at
-	 * the top", which is also what it is set back to when the walk reaches the
-	 * end.
+	 * Where the local-account refresh walk got to, as an `id_prim`
+	 * (bookkeeping); `''` starts at the top again.
 	 */
 	public const SOCIAL_LOCAL_ACTOR_CURSOR = 'local_actor_cursor';
 
@@ -384,80 +281,55 @@ class ConfigService {
 	public const SOCIAL_PROFILE_LINK_CURSOR = 'profile_link_cursor';
 
 	/**
-	 * How far back a content search looks, in days; `0` searches everything.
-	 *
-	 * `content ILIKE '%term%'` cannot use an index — a leading wildcard never
-	 * can — so an unbounded search reads every post the instance has ever
-	 * stored, joined to seven other tables, on every keystroke. At ten million
-	 * rows that is a table scan the rate limit is the only defence against.
-	 * A year covers what anybody is looking for; an instance small enough to
-	 * search all of it can say so.
-	 */
-	/**
-	 * Whether every recipient row carries its post's sort key yet.
-	 *
-	 * Set by `Version1000Date20260917000001` when its backfill finishes, and
-	 * read on every home timeline to decide whether the fast page query may be
-	 * used. A *flag*, because the obvious check — "is there a row with a zero
-	 * nid" — has no index to answer it and is a full scan of the largest table
-	 * this app has: measured at 427 ms on 800,000 rows, on every request, which
-	 * would have made the thing it guards slower than what it replaced.
+	 * Whether every recipient row carries its post's sort key yet; set by
+	 * `Version1000Date20260917000001` and read on every home timeline to choose
+	 * the fast page query. A flag because checking for a zero nid is a full scan.
 	 */
 	public const SOCIAL_DEST_NID_FILLED = 'dest_nid_filled';
 
 	/**
-	 * Whether every `social_stream` row carries a value in `archived`.
-	 *
-	 * Set by `Version1000Date20261013100500` once no row is left with NULL
-	 * there. Until then every list of posts has to admit a NULL beside a 0,
-	 * and that `OR` is the kind of predicate a planner estimates badly.
+	 * Whether every `social_stream` row carries a value in `archived`; set by
+	 * `Version1000Date20261013100500`. Until then post lists must also admit NULL.
 	 */
 	public const SOCIAL_STREAM_ARCHIVED_FILLED = 'stream_archived_filled';
 
 	/**
-	 * Whether every `social_stream` row carries a value in `media_kind`.
-	 *
-	 * `Version1000Date20260917000003` fills the column; this is set by
-	 * `Version1000Date20261013100500` once it finds no row without one. Until
-	 * then the media filters keep the `OR` that judges a row by its
-	 * attachments, which is what kept them from being answered by the
-	 * `(media_kind, nid)` index.
+	 * Whether every `social_stream` row carries a value in `media_kind`; set by
+	 * `Version1000Date20261013100500`. Until then the media filters also judge a
+	 * row by its attachments, which the `(media_kind, nid)` index cannot answer.
 	 */
 	public const SOCIAL_STREAM_MEDIA_KIND_FILLED = 'stream_media_kind_filled';
 
 	/**
-	 * Whether every post carries the host of its author in `author_host` yet.
-	 *
-	 * Set by `Cron\StreamAuthorHosts` when its backfill reaches the end of
-	 * the table. Until then the domain-block and silenced-instance filters
-	 * also match a row with no host by its actor id, which is the slow form
-	 * the column replaces; a flag rather than a check for NULL rows for the
-	 * reason `dest_nid_filled` gives.
+	 * Whether every post carries its author's host in `author_host` yet; set by
+	 * `Cron\StreamAuthorHosts`. Until then the domain filters also match a row
+	 * with no host by its actor id.
 	 */
 	public const SOCIAL_STREAM_AUTHOR_HOSTS_FILLED = 'stream_author_hosts_filled';
 
+	/**
+	 * How far back a content search looks, in days; `0` searches everything.
+	 * `content ILIKE '%term%'` cannot use an index, so an unbounded search scans
+	 * every stored post.
+	 */
 	public const SOCIAL_SEARCH_WINDOW_DAYS = 'search_window_days';
 
+	/**
+	 * What this instance does with a post somebody marked sensitive, for
+	 * readers who have not chosen for themselves: `show_all`, `default`
+	 * (covered, one press away) or `hide_all`. PeerTube's three NSFW policies
+	 * under Mastodon's names for them — see `SensitiveMediaService`.
+	 */
 	public const SOCIAL_NSFW_POLICY = 'nsfw_policy';
 
 	/**
-	 * Whether a post with a video on it waits for a moderator.
-	 *
-	 * The review queue already holds a first post and a post the spam rules
-	 * do not like; this is the third rule, and the one an instance that hosts
-	 * video wants: a video is minutes of somebody's attention and a great deal
-	 * of somebody else's disk, and an instance may reasonably want to see one
-	 * before it is published. Off by default.
+	 * Whether a post with a video on it waits for a moderator. Off by default.
 	 */
 	public const SOCIAL_REVIEW_VIDEOS = 'review_videos';
 
 	/**
-	 * The last measurement of how much disk this app is using, as JSON, with
-	 * the moment it was taken.
-	 *
-	 * Bookkeeping rather than a setting: the walk is a `stat` per file and
-	 * belongs in the cron, so the administration page reads what the cron left
-	 * here and says when it was measured. See `MediaUsageService`.
+	 * The last measurement of this app's disk use, as JSON with its time
+	 * (bookkeeping, written by the cron). See `MediaUsageService`.
 	 */
 	public const SOCIAL_MEDIA_USAGE = 'media_usage';
 
@@ -482,16 +354,13 @@ class ConfigService {
 	public const SOCIAL_MEDIA_CACHE_PURGED = 'media_cache_purged';
 
 	/**
-	 * The secret a story's fetch capability is derived from, generated the
-	 * first time a story is published. See `getStorySecret()`.
+	 * The secret a short's fetch capability is derived from. See `getStorySecret()`.
 	 */
 	public const SOCIAL_STORY_SECRET = 'story_secret';
 
 	/**
-	 * Per account, not per instance: the Pixelfed app's own switches, kept
-	 * here because that app keeps them on its server so a reinstall finds the
-	 * app as it was left. Written and read by `PixelfedService`, and
-	 * interpreted by nothing here.
+	 * Per account: the Pixelfed app's own switches, stored so a reinstall finds
+	 * them again. Read and written by `PixelfedService` only.
 	 */
 	public const APP_SETTINGS = 'app_settings';
 
@@ -499,10 +368,8 @@ class ConfigService {
 	public const SOCIAL_EXTENDED_DESCRIPTION = 'extended_description';
 
 	/**
-	 * Who to write to about this instance: Mastodon's `instance.email`.
-	 *
-	 * Read by every client on its first request and shown on the server's
-	 * about page; empty until an administrator fills it in.
+	 * Who to write to about this instance: Mastodon's `instance.email`; empty
+	 * until an administrator fills it in.
 	 */
 	public const CONTACT_EMAIL = 'contact_email';
 	public const SOCIAL_CONTACT_ACCOUNT = 'contact_account';
@@ -519,14 +386,11 @@ class ConfigService {
 	/**
 	 * For you: the feed built from the hashtags a reader lingers on.
 	 *
-	 * `interests` switches the whole feature, and off means off: nothing is
-	 * learned, the feed and its settings are gone, and what was learned is
-	 * kept for the day it is switched back on. `interests_default` is what a
-	 * reader who never touched their own switch gets — off out of the box, so
-	 * learning from reading is opted into; what was learned before stays.
-	 * The other four tune the arithmetic: the half-life of a score in days,
-	 * the score a learned tag needs to be listed, how many are listed, and how
-	 * many days back the feed looks for posts.
+	 * `interests` switches the whole feature; off learns nothing and hides the
+	 * feed, keeping what was learned. `interests_default` is what a reader who
+	 * never chose gets (off). The other four are the score half-life in days,
+	 * the score a tag needs to be listed, how many are listed, and how many
+	 * days back the feed looks.
 	 */
 	public const SOCIAL_INTERESTS = 'interests';
 	public const SOCIAL_INTERESTS_DEFAULT = 'interests_default';
@@ -734,14 +598,9 @@ class ConfigService {
 	public const DEFAULT_REQUEST_TIMEOUT = 10;
 
 	/**
-	 * Seconds allowed for reaching a peer — DNS, TCP and TLS — when nobody
-	 * asks for anything else; never more than the request's own timeout.
-	 *
-	 * A live peer is reached in well under a second, and what takes longer is
-	 * almost always a host that is gone. Allowing it the whole read timeout
-	 * made every dead host cost ten seconds, or thirty from the queue, before
-	 * the breaker could hear about it; a slow peer that is there still gets
-	 * the full timeout to answer once connected.
+	 * Seconds allowed for reaching a peer (DNS, TCP, TLS) unless asked otherwise;
+	 * never more than the request's own timeout. Kept short so a dead host fails
+	 * fast; a connected slow peer still gets the full timeout.
 	 */
 	public const DEFAULT_CONNECT_TIMEOUT = 4;
 
@@ -776,7 +635,6 @@ class ConfigService {
 	}
 
 	/**
-	 * /**
 	 * Get a value by key
 	 *
 	 * @param string $key
@@ -818,9 +676,7 @@ class ConfigService {
 	}
 
 	/**
-	 * A switch, read the way this app reads every other one: anything but the
-	 * literal `0` is on, so an admin who writes `false`, `no` or `off` does not
-	 * silently get the opposite of what they meant.
+	 * A switch: anything but the literal `0` is on.
 	 */
 	public function getAppValueBool(string $key): bool {
 		return !in_array(strtolower(trim((string)$this->getAppValue($key))), ['0', 'false', 'no', 'off', ''], true);
@@ -839,14 +695,9 @@ class ConfigService {
 	}
 
 	/**
-	 * A value Nextcloud loads only when it is asked for, rather than on
-	 * every request: for bookkeeping too large to be worth that, such as the
-	 * JSON of a measurement (`SOCIAL_MEDIA_USAGE`). Nextcloud warns about any
-	 * value over 128 bytes that is not stored this way.
-	 *
-	 * A value an earlier version stored the other way is not returned by a
-	 * lazy read, so it is moved over first; after that, the check reads only
-	 * what every request has loaded already.
+	 * A value Nextcloud loads only on request, for bookkeeping too large to load
+	 * on every request (Nextcloud warns above 128 bytes). A value stored non-lazy
+	 * is migrated first, since a lazy read does not return it.
 	 */
 	public function getLazyAppValue(string $key): string {
 		$this->moveToLazy($key);
@@ -899,10 +750,8 @@ class ConfigService {
 			}
 		}
 
-		// A request authenticated by a bearer token has no Nextcloud session,
-		// so there is no user to read a per-user value for unless the caller
-		// names one. The backend takes a string and fatals on null, which
-		// turned every such read into a 500 for OAuth clients.
+		// A bearer-token request has no session user, and the backend fatals on a
+		// null user id.
 		if ($userId === '') {
 			return (string)$defaultValue;
 		}
@@ -913,15 +762,9 @@ class ConfigService {
 	/**
 	 * A user setting another app owns, as the number it holds.
 	 *
-	 * Nextcloud 32 gave stored settings a type, and reading one back as
-	 * anything else throws. Which type a value has is the owning app's
-	 * business and changes between versions — the avatar app's `version` is a
-	 * number on a current server and was text on an older one — so this asks
-	 * for the number, and falls back to reading the text and converting it.
-	 *
-	 * Without it, reading that one value threw out of `createActor()`, so
-	 * making an account answered 500, and every request that needed an actor —
-	 * which is all of them — answered 401 after it.
+	 * Nextcloud 32 throws when a typed value is read as another type, and the
+	 * owning app may store it as text or int (the avatar app's `version`), so
+	 * this falls back to reading the text and converting it.
 	 *
 	 * @param string $key the setting
 	 * @param string $userId whose
@@ -971,9 +814,8 @@ class ConfigService {
 	}
 
 	/**
-	 * Drops what this process holds of a user's settings, so the next read
-	 * comes from the database. A long-running process needs it to see a
-	 * value another process wrote: `IUserConfig` keeps every value it loaded.
+	 * Drops this process's cached settings of a user, so a long-running process
+	 * sees values another process wrote.
 	 */
 	public function forgetUserValues(string $userId): void {
 		if ($userId !== '') {
@@ -1044,10 +886,8 @@ class ConfigService {
 	}
 
 	/**
-	 * Whether outbound requests may reach the instance's own network.
-	 *
-	 * The standard Nextcloud setting, off by default; the single switch every
-	 * outbound path consults before contacting a local address.
+	 * Whether outbound requests may reach the instance's own network (the
+	 * standard Nextcloud setting, off by default).
 	 */
 	public function isLocalNetworkAllowed(): bool {
 		return $this->config->getSystemValueBool('allow_local_remote_servers', false);
@@ -1055,9 +895,7 @@ class ConfigService {
 
 	/**
 	 * The configured host as a peer addresses it: the hostname, plus the port
-	 * when the cloud URL names one that is not its scheme's default. It is
-	 * what a peer puts in `Host` and signs, so an instance on `:8443` has to
-	 * verify against `example.org:8443` and not `example.org`.
+	 * when it is not the scheme's default. Peers sign `Host`, so `:8443` matters.
 	 *
 	 * @throws SocialAppConfigException
 	 */
@@ -1095,9 +933,8 @@ class ConfigService {
 		$url = $this->getCloudUrl();
 		$host = parse_url($url, PHP_URL_HOST);
 
-		// parse_url() answers null for a URL with no host and false for one it
-		// cannot parse at all; the declared string return then made either a
-		// TypeError, thrown from whichever caller happened to be first.
+		// parse_url() returns null for a URL with no host and false for one it
+		// cannot parse.
 		if (!is_string($host) || $host === '') {
 			throw new SocialAppConfigException(
 				'the configured cloud address has no host: ' . $url
@@ -1185,12 +1022,8 @@ class ConfigService {
 	}
 
 	/**
-	 * What `social_url` should be for the stored `cloud_url`: that address
-	 * with the app's route path after it, or '' while there is none.
-	 *
-	 * The path is read off the route rather than written out, and taken from
-	 * `/apps/` on, so the web root and `index.php` come from `cloud_url`
-	 * alone and the two cannot disagree about either.
+	 * What `social_url` should be for the stored `cloud_url`: that address with
+	 * the app's route path from `/apps/` on, or '' while there is none.
 	 */
 	public function derivedSocialUrl(): string {
 		$cloudUrl = $this->getAppValue(self::CLOUD_URL);
@@ -1206,13 +1039,8 @@ class ConfigService {
 	}
 
 	/**
-	 * The secret the story capabilities are derived from, made the first time
-	 * one is needed.
-	 *
-	 * Generated rather than configured: nobody should have to set this, and an
-	 * instance that has never published a story does not need one. Changing it
-	 * invalidates every capability at once, which is the only revocation this
-	 * needs — a story lives a day.
+	 * The secret the short capabilities are derived from, generated on first use.
+	 * Changing it revokes every capability at once.
 	 */
 	public function getStorySecret(): string {
 		$secret = $this->getAppValue(self::SOCIAL_STORY_SECRET);
@@ -1225,14 +1053,9 @@ class ConfigService {
 	}
 
 	/**
-	 * Stores the app's own base URL, which every id is minted from.
-	 *
-	 * Without an argument it is derived from `cloud_url`, and nothing is
-	 * stored while that is not set. It used to be the absolute URL of the
-	 * request that happened to find it empty — the host and scheme that
-	 * request arrived with — so an instance first opened through an internal
-	 * name, or behind a proxy that does not pass the scheme on, federated
-	 * every id under that address for good while `cloud_url` was right.
+	 * Stores the app's own base URL, which every id is minted from. Without an
+	 * argument it is derived from `cloud_url`, and nothing is stored while that
+	 * is not set.
 	 *
 	 * @param string $url
 	 */
@@ -1263,11 +1086,8 @@ class ConfigService {
 
 		$id = $this->getSocialUrl() . $path;
 		if ($generateId === true) {
-			// The random half comes from the system's random source rather than
-			// from crc32(uniqid()): uniqid() is the clock, and its checksum left
-			// roughly a million candidates per second to enumerate offline. Same
-			// shape as before — the timestamp followed by ten digits — so ids
-			// already stored stay valid.
+			// random_int() for the random half; the timestamp-plus-ten-digits shape keeps
+			// stored ids valid.
 			$id .= time() . str_pad((string)random_int(0, 9999999999), 10, '0', STR_PAD_LEFT);
 		}
 
@@ -1276,13 +1096,8 @@ class ConfigService {
 
 	/**
 	 * Runs $action with every federation request it makes bounded to $timeout
-	 * seconds instead of the default.
-	 *
-	 * Work that happens before a caller is authenticated must not be able to
-	 * hold a PHP worker for the full federation timeout — a few dozen
-	 * concurrent requests naming a host that never answers would otherwise take
-	 * the whole instance down, not just this app. The override lasts exactly as
-	 * long as the call.
+	 * seconds, so work done before authentication cannot hold a PHP worker for
+	 * the full federation timeout.
 	 *
 	 * @return mixed whatever $action returns
 	 */
@@ -1301,13 +1116,8 @@ class ConfigService {
 
 	/**
 	 * The transport options every federation request goes out with, as
-	 * `OCP\Http\Client\IClient` takes them: how long it may take, whether the
-	 * peer's certificate has to check out, and whether it may be on this
-	 * instance's own network.
-	 *
-	 * Federation reaches arbitrary public hosts, but must not be pointed at the
-	 * instance's own network. Local targets are permitted only where the admin
-	 * has opted in through the standard Nextcloud setting (default off).
+	 * `OCP\Http\Client\IClient` takes them: timeout, certificate verification,
+	 * and whether local network targets are allowed (admin opt-in only).
 	 *
 	 * @param int $timeout what the caller asks for; a bounded call
 	 *                     (withRequestTimeout()) overrides it
@@ -1336,11 +1146,8 @@ class ConfigService {
 	}
 
 	/**
-	 * The ActivityPub content negotiation a federation request carries: what
-	 * this app is willing to read back, and what it is sending.
-	 *
-	 * WebFinger, host-meta and cached media are not ActivityPub and ask for
-	 * none of it — those callers pass `json_headers: false`.
+	 * The ActivityPub content negotiation headers a federation request carries.
+	 * WebFinger, host-meta and cached media pass `json_headers: false`.
 	 *
 	 * @return array<string, string>
 	 */

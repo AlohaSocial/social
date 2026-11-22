@@ -17,16 +17,12 @@ use OCA\Social\Exceptions\InvalidResourceException;
 /**
  * When a Nextcloud user is told about what happened to their Social account.
  *
- * `instant` is what every account had before this existed: a bell entry the
- * moment something happens. `digest` holds the bell back and rings it once at
- * each of up to four local times a day with a count of what came in. The
- * in-app notification rows are untouched either way — they are the hold, and
- * `/api/v1/notifications` reads them as it always did.
- *
- * Two kinds of news may skip the hold, each on its own switch: a direct
- * message, and a mention from an account the reader follows. Quiet hours are
- * the third knob and apply in both modes: inside the window nothing but a
- * pass-through is raised, and a digest is raised when the window ends.
+ * `instant` raises a bell entry the moment something happens; `digest` holds
+ * it and rings once at each of up to four local times a day with a count. The
+ * in-app notification rows are the same either way. A direct message and a
+ * mention from a followed account may each skip the hold. Quiet hours apply
+ * in both modes: inside the window only pass-throughs are raised, and a
+ * digest is raised when it ends.
  */
 class NotificationDelivery implements JsonSerializable {
 	public const MODE_INSTANT = 'instant';
@@ -63,10 +59,9 @@ class NotificationDelivery implements JsonSerializable {
 	private string $quietTo = '';
 
 	/**
-	 * The setting as it was stored. A key the stored copy lacks keeps its
-	 * default, and a key that no longer validates — a hand-edited value, or
-	 * one written by an older version — is reset rather than refused, because
-	 * nobody is there to answer a 422 to.
+	 * The setting as it was stored. A missing key keeps its default, and one
+	 * that no longer validates is reset rather than refused, since nobody is
+	 * there to answer a 422 to.
 	 *
 	 * @param array<string, mixed> $data
 	 */
@@ -226,12 +221,8 @@ class NotificationDelivery implements JsonSerializable {
 	}
 
 	/**
-	 * The one decision the bell asks: is this notification held for a digest,
-	 * or raised now?
-	 *
-	 * Held when the mode is digest or the moment is inside the quiet window,
-	 * unless the news is of a kind the reader lets through. Instant mode
-	 * outside quiet hours holds nothing, whatever the switches say.
+	 * Whether this notification is held for a digest or raised now: held in
+	 * digest mode or inside the quiet window, unless the news passes through.
 	 */
 	public function holds(string $subject, bool $actorFollowed, DateTimeImmutable $now, DateTimeZone $zone): bool {
 		if (!$this->isDigest() && !$this->isQuietAt($now, $zone)) {
@@ -243,15 +234,10 @@ class NotificationDelivery implements JsonSerializable {
 
 	/**
 	 * The next moment a digest is due, strictly after `$after`, in the
-	 * reader's zone: the earliest of the digest times (in digest mode, and
-	 * leaving out any that fall inside the quiet window — nothing is raised
-	 * in there) and the end of the quiet window (whenever there is one).
-	 *
-	 * Each candidate is built on the local date of `$after` and on the day
-	 * after it, so a time earlier in the day than `$after` rolls over to
-	 * tomorrow and a clock change in between is the zone's business: the
-	 * candidate is "08:00 local on that date", however many hours away that
-	 * is. Null when nothing is scheduled.
+	 * reader's zone: the earliest digest time (in digest mode, outside the
+	 * quiet window) or the end of the quiet window. Candidates are built on
+	 * the local date of `$after` and the next day, so clock changes are the
+	 * zone's business. Null when nothing is scheduled.
 	 */
 	public function nextDigestAfter(DateTimeImmutable $after, DateTimeZone $zone): ?DateTimeImmutable {
 		$candidates = [];

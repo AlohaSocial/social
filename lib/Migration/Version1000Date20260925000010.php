@@ -16,16 +16,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Where `DurableCache` keeps its entries on an instance with no memcache.
- *
- * Short-lived state — a rate-limit counter, a signature already accepted —
- * that the app used to keep in `createDistributed()` alone, which on such an
- * instance is a cache that forgets every write. One row per key, with the
- * moment it stops counting; `Cron\Cache` deletes what has expired.
- *
- * A file of its own rather than a few lines in the squashed migration: the
- * squash is already recorded as run on every instance that has upgraded, so a
- * table added there would exist on fresh installs only.
+ * Where `DurableCache` keeps its entries on an instance with no memcache,
+ * where `createDistributed()` forgets every write: short-lived state such as
+ * rate-limit counters and accepted signatures, one row per key with its
+ * expiry; `Cron\Cache` deletes what has expired. A step of its own, since the
+ * squash is already recorded as run on upgraded instances.
  */
 class Version1000Date20260925000010 extends SimpleMigrationStep {
 	/**

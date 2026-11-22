@@ -7,22 +7,16 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 
 /**
- * Posts made with AI: the mark an author puts on their own, and the one
- * setting a reader has about everybody else's.
- *
- * On the wire the author's mark is a hashtag, `#AIgenerated`, because a tag
- * is the one thing every server already carries and every reader can already
- * see. The server holds one boolean per account — whether to hide such posts
- * — and answers the whole of it to every read and every change.
+ * Posts made with AI: the `#AIgenerated` hashtag an author puts on their own
+ * (a tag federates everywhere), and the reader's one setting to hide such posts.
  */
 
 /** The hashtag, without its `#`, in the case it is written with. */
 export const AI_MARK_TAG = 'AIgenerated'
 
 /**
- * The mark as a whole hashtag, any case: not the tail of a longer word, not
- * followed by more tag characters, and not the fragment of an entity. The
- * character classes are the ones `linkify.js` recognises a hashtag by.
+ * The mark as a whole hashtag, any case, not part of a longer word or an
+ * entity. The character classes match how `linkify.js` recognises a hashtag.
  */
 const MARK = /(?<![\p{L}\p{N}_&#])#aigenerated(?![\p{L}\p{N}_])/iu
 

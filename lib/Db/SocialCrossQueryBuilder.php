@@ -28,14 +28,11 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	private bool $narrowStreamRead = false;
 
 	/**
-	 * Reads the posts of this query without what a client-format export of
-	 * them never uses: a post's `source` (the whole wire object, read for the
-	 * types in `Stream::TYPES_READING_SOURCE` and for a row `source_digest`
-	 * has not reached yet) and its authors' `public_key`, which only their
-	 * ActivityPub export carries. The posts come back marked
-	 * (`Stream::isSourceOmitted()`), so none of them can be written back.
-	 *
-	 * Set before the joins are added, which read it.
+	 * Reads the posts of this query without what a client-format export never
+	 * uses: a post's `source` (read for `Stream::TYPES_READING_SOURCE` and for a
+	 * row `source_digest` has not reached yet) and its authors' `public_key`.
+	 * The posts come back marked (`Stream::isSourceOmitted()`), so none of them
+	 * can be written back. Set before the joins are added, which read it.
 	 */
 	public function setNarrowStreamRead(bool $narrow): void {
 		$this->narrowStreamRead = $narrow;
@@ -97,12 +94,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	}
 
 	/**
-	 * The viewer's accepted follows as a LEFT JOIN. A plain `FROM social_follow`
-	 * next to the stream table is a cartesian product: with an *empty* follow
-	 * table it collapses every row — so on a fresh instance even the public and
-	 * hashtag timelines came back empty until somebody followed someone. Bound
-	 * as a join, an OR-branch that does not use the follows (public, DM) is
-	 * unaffected by whether any exist.
+	 * The viewer's accepted follows as a LEFT JOIN: a plain `FROM social_follow`
+	 * beside the stream table is a cartesian product, and an empty follow table
+	 * would empty even the public and hashtag timelines.
 	 */
 	public function leftJoinFollowing(string $alias = 'f'): void {
 		if ($this->getType() !== self::SELECT || !$this->hasViewer()) {
@@ -139,17 +133,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	}
 
 	/**
-	 * The cached actor, joined but not selected.
-	 *
-	 * A query that only wants to *constrain* on the author — which is what
-	 * every page-selection query does, since it ends up projecting a list of
-	 * nids — pays for the twenty columns `linkToCacheActors()` appends,
-	 * `source`, `details`, `summary` and `public_key` among them. Those go
-	 * through the `SELECT DISTINCT` the recipient join forces, so the database
-	 * sorts or hashes several kilobytes a row to deduplicate integers.
-	 *
-	 * Measured on the home timeline of an instance with 22,000 posts: 94.5 ms
-	 * with the columns, 56.2 ms without them, everything else equal.
+	 * The cached actor, joined but not selected, for a query that only
+	 * constrains on the author: the twenty columns `linkToCacheActors()`
+	 * appends would go through the `SELECT DISTINCT` the recipient join forces.
 	 *
 	 * @param string $alias the alias to join under
 	 * @param string $link what the actor's `id_prim` is compared with
@@ -218,9 +204,8 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 			->selectAlias($pf . '.creation', 'ca_creation')
 			->selectAlias($pf . '.local', 'ca_local')
 			// the counters the increments move, laid over `details` by
-			// `Person::importFromDatabase()`; an author beside a post is read
-			// through here, so without them a profile opened from a timeline
-			// showed a different number from the same profile opened directly
+			// `Person::importFromDatabase()`, so an author read beside a post shows
+			// the same numbers as their profile
 			->selectAlias($pf . '.count_followers', 'ca_count_followers')
 			->selectAlias($pf . '.count_following', 'ca_count_following')
 			->selectAlias($pf . '.count_posts', 'ca_count_posts');
@@ -232,12 +217,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	}
 
 	/**
-	 * The joined post a row is about: the status of a notification.
-	 *
-	 * A poll is read as one, because its options, counts and end time are
-	 * parsed out of the stored document by `Question` alone; as a plain
-	 * `Stream` it was served with `poll: null`, and the notification that a
-	 * poll has ended reached clients without its results.
+	 * The joined post a row is about: the status of a notification. A poll is
+	 * read as a `Question`, which alone parses its options, counts and end
+	 * time, so a poll-ended notification carries the results.
 	 *
 	 * @param array $data
 	 * @param string $prefix
@@ -302,9 +284,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 		try {
 			$icon = $this->parseLeftJoinCacheDocuments($data, $prefix);
 			$actor->setIcon($icon);
-			// the address of the picture is built per row from the joined
-			// document: the thumbnail where one has been made, the full copy
-			// until then, and nothing at all while it is still being fetched
+			// the photo's address is built per row from the joined document: the
+			// thumbnail where one has been made, the full copy until then, and
+			// nothing while it is still being fetched
 			$uuid = ($icon->getResizedCopy() === '') ? $icon->getLocalCopy() : $icon->getResizedCopy();
 			if ($uuid !== '') {
 				$actor->setAvatar(
@@ -381,15 +363,11 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	}
 
 	/**
-	 * The status a row points at — the post a boost repeats, the post a
-	 * notification is about — joined so it can be exported alongside.
-	 *
-	 * The object is joined only when the viewer may see it: a boost carries
-	 * the audience of the booster, not of the post, so a remote Announce of a
-	 * followers-only status would otherwise hand that status to everyone the
-	 * booster reaches. When the viewer is not entitled to it the `os_` columns
-	 * come back empty, which reads as "no object": the row stays, its content
-	 * does not.
+	 * The status a row points at (the post a boost repeats, the post a
+	 * notification is about), joined so it can be exported alongside, and only
+	 * when the viewer may see it: a boost carries the booster's audience, not
+	 * the post's. Otherwise the `os_` columns come back empty, read as "no
+	 * object".
 	 *
 	 * @param string $alias
 	 */
@@ -457,22 +435,16 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	}
 
 	/**
-	 * The rule limitToViewer() applies to the rows of a request, expressed
-	 * against another alias: addressed to the public collection (public and
-	 * unlisted), written by the viewer, addressed to the viewer, or written by
-	 * an account the viewer follows.
-	 *
-	 * Correlated EXISTS rather than joins: the dest and follow tables are
-	 * already in the request under their own aliases, and a second FROM entry
-	 * for either is a cartesian product (see leftJoinFollowing()) — and a join
-	 * condition cannot be moved to the WHERE without dropping the whole row.
+	 * The rule limitToViewer() applies, expressed against another alias:
+	 * addressed to the public collection, written by or addressed to the
+	 * viewer, or written by an account the viewer follows. Correlated EXISTS,
+	 * as the dest and follow tables are already in the request and a second
+	 * FROM entry for either is a cartesian product.
 	 */
 	private function exprVisibleToViewer(string $alias): ICompositeExpression {
 		$dest = $this->getTableName(CoreRequestBuilder::TABLE_STREAM_DEST);
-		// These stay `IParameter` objects rather than strings: the expression
-		// builder passes a parameter through untouched and quotes a string as a
-		// column name, so `eq()` on the cast form asks the database for a column
-		// called `:dcValue5`. Only the raw SQL fragments below take the string.
+		// `IParameter` objects, not strings: the expression builder quotes a
+		// string as a column name. Only the raw SQL fragments below take the string.
 		$recipient = $this->createNamedParameter('recipient');
 		$public = $this->createNamedParameter($this->prim(Stream::CONTEXT_PUBLIC));
 
@@ -716,15 +688,9 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 	 * A recipient row of the post that is the followers collection of an
 	 * account `$actorId` follows, the follow accepted: the condition of
 	 * exprInnerJoinStreamDestFollowing() with the follow probed by a correlated
-	 * `EXISTS` instead of joined.
-	 *
-	 * For a request where the follow is one way among others for a post to
-	 * qualify — public, addressed to the viewer — joined, the follows repeat
-	 * every candidate row once per account the viewer follows before the
-	 * other branches are tested: a hashtag page of 1,250 posts, read by a
-	 * viewer following 300 accounts, went through 1.1 million rows on MySQL to
-	 * be deduplicated back to 1,250. Probed, it is one index lookup per
-	 * recipient row, and the follows table is not in the request.
+	 * `EXISTS` instead of joined. Where the follow is one of several ways for a
+	 * post to qualify, a join would repeat every candidate row per followed
+	 * account; the probe is one index lookup per recipient row.
 	 *
 	 * @param string $aliasFollowing the alias of `social_follow` inside the probe
 	 * @param string $alias the stream alias, the default select alias when ''

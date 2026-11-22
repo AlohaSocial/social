@@ -33,9 +33,7 @@
 					<span v-if="app.signed_in">
 						{{ t('social', 'Signed in {when}', { when: when(app.created_at) }) }}
 					</span>
-					<!-- the browser came back and the app never asked for its
-					     token: it is not a sign-in, and saying "signed in"
-					     about it would be untrue -->
+					<!-- the app never fetched its token, so this was not a sign-in -->
 					<span v-else>
 						{{ t('social', 'Asked for access {when} and never used it', { when: when(app.created_at) }) }}
 					</span>
@@ -88,16 +86,8 @@ import { showError, showSuccess } from '../services/toast.js'
 import { fullDateTime } from '../utils/relativeTime.js'
 
 /**
- * The apps this account has signed in to, and the way to sign one out.
- *
- * Every authorization has been recorded since `social_client_auth` was split
- * out of the app registration; nothing showed it, and nothing could take one
- * back short of the app revoking its own token — which is no use at all when
- * the app is the phone you have just lost. This is the first page somebody
- * looks for then, and Mastodon keeps it in the same place.
- *
- * The token itself is never shown, because it is stored hashed and there is
- * nothing here that wants it.
+ * The apps this account has signed in to, and a way to sign one out, e.g. for
+ * a lost phone. The token is never shown: it is stored hashed.
  */
 export default {
 	name: 'AuthorizedApps',
@@ -152,9 +142,7 @@ export default {
 		 * @return {string} the date and time, or '' where there is none
 		 */
 		when(seconds) {
-			// seconds, not milliseconds: the row carries what the database
-			// column held, and reading it as milliseconds dated every app to
-			// January 1970
+			// the row carries seconds, as the database column holds them
 			return seconds > 0 ? fullDateTime(new Date(seconds * 1000)) : ''
 		},
 

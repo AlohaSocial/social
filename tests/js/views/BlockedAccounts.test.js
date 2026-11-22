@@ -116,7 +116,7 @@ describe('BlockedAccounts', () => {
 
 		expect(wrapper.find('#filters .filters-settings-stub').exists()).toBe(true)
 		expect(wrapper.findAll('h3').map((heading) => heading.text()))
-			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Posts made with AI', 'Filtered notifications'])
+			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Posts made with AI', 'Filtered activities'])
 	})
 
 	describe('Bluesky labelers', () => {
@@ -335,7 +335,7 @@ describe('BlockedAccounts', () => {
 			const { wrapper } = await mountView()
 
 			expect(wrapper.find('#ai-content .block-card__lede').text())
-				.toBe('Hides posts that are tagged as made with AI, that their author marked, or whose pictures say so in their metadata. It cannot recognise what nobody labelled.')
+				.toBe('Hides posts that are tagged as made with AI, that their author marked, or whose photos say so in their metadata. It cannot recognise what nobody labelled.')
 		})
 
 		it('starts off, and keeps the lists, when the server cannot answer for it', async () => {

@@ -13,9 +13,9 @@ use InvalidArgumentException;
 
 /**
  * The leaves of a repository's Merkle Search Tree, read from its blocks:
- * every record path with the CID of its record, in key order. What a CAR
- * file of another PDS holds, when a repository moves here; untrusted, so a
- * tree whose keys, read in order, do not strictly ascend is refused.
+ * every record path with its record's CID, in key order. The CAR comes from
+ * another PDS and is untrusted, so keys that do not strictly ascend are
+ * refused.
  */
 final class MstReader {
 	private const MAX_DEPTH = 64;

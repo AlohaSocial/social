@@ -248,10 +248,8 @@ class AttachmentMeta implements JsonSerializable {
 	}
 
 	/**
-	 * A size that states nothing is left out rather than sent: it serialises
-	 * as `[]`, a list where the entity has an object, and a client decoding
-	 * `meta.original` into a struct fails on it — and drops the attachment,
-	 * and the status it is on. An attachment with no copy here has no size.
+	 * A size that states nothing is left out: it would serialise as `[]`
+	 * where clients expect an object, and they would drop the status.
 	 */
 	private static function stated(?AttachmentMetaDim $dimension): ?AttachmentMetaDim {
 		return ($dimension === null || $dimension->jsonSerialize() === []) ? null : $dimension;

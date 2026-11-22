@@ -54,12 +54,9 @@ class FollowService {
 	use TArrayTools;
 
 	/**
-	 * The most followers one uncursored read (`getFollowers()`) answers with.
-	 * Mastodon's `/api/v1/accounts/{account}/followers` is the route with a
-	 * cursor; the legacy `/api/v1/current/followers` that this bounded was
-	 * retired with the rest of the superseded Custom Local API. The choice was
-	 * a bound or an account with fifty thousand followers loading all of them,
-	 * hydrated, into the memory of one request.
+	 * The most followers one uncursored read (`getFollowers()`) answers with, so
+	 * an account with fifty thousand followers is not loaded whole into one
+	 * request; `/api/v1/accounts/{account}/followers` is the route with a cursor.
 	 */
 	public const FOLLOWERS_PAGE = 500;
 
@@ -91,20 +88,11 @@ class FollowService {
 	}
 
 	/**
-	 * Refuses an account that is following faster than anybody follows.
-	 *
-	 * A compromised account, or one running a script, can fan out follows to
-	 * thousands of servers from this instance's address in a few minutes —
-	 * every one of them a signed request that this instance is answerable for,
-	 * and the shape of it is indistinguishable from a botnet warming up.
-	 * Nothing anywhere counted them.
-	 *
-	 * An hour rather than a day, because what this catches is a burst;
-	 * somebody importing a follow list from another server does it in bursts
-	 * too, which is why the number is high enough for one. Counted from the
-	 * rows, so it holds on an instance with no memcache, and checked before
-	 * the follow is created rather than before it is delivered — a row written
-	 * and then not sent is a follow that never completes and never retries.
+	 * Refuses an account that is following faster than anybody follows, as a
+	 * compromised or scripted account fanning out signed follows would. Counted
+	 * per hour from the rows, high enough for a follow-list import's bursts and
+	 * working without memcache, and checked before the row is created so no
+	 * follow is left unsent.
 	 *
 	 * @throws FollowLimitException
 	 */
@@ -161,14 +149,10 @@ class FollowService {
 	}
 
 	/**
-	 * A page of the viewer's pending follow requests, and where it sits.
-	 *
-	 * The cursors and the row count are the follow rows', not the accounts':
-	 * a request whose account can no longer be resolved is left off the page,
-	 * and the page after it still has to start behind it, and still has to
-	 * be offered when the page read as many rows as it was allowed to.
-	 * `first` and `last` are the cursors of the newest and the oldest row
-	 * read, '' on an empty page.
+	 * A page of the viewer's pending follow requests, and where it sits. Cursors
+	 * and the row count are the follow rows', not the accounts': a request whose
+	 * account cannot be resolved is left off but still moves the cursor. `first`
+	 * and `last` are the newest and oldest rows' cursors, '' on an empty page.
 	 *
 	 * @param string $maxId a cursor to read older requests from
 	 * @param string $minId a cursor to read newer requests from
@@ -270,11 +254,8 @@ class FollowService {
 	}
 
 	/**
-	 * Follows an account that has already been resolved.
-	 *
-	 * The half of `followAccount()` after the WebFinger lookup, on its own so
-	 * that a caller holding the actor already — an import that was handed
-	 * actor URLs rather than handles — does not resolve it a second time.
+	 * Follows an account that has already been resolved: `followAccount()` after
+	 * the WebFinger lookup, for callers holding the actor already.
 	 *
 	 * @return bool whether a follow was made: false when one already existed,
 	 *              which is what a client re-following to change a setting
@@ -298,10 +279,8 @@ class FollowService {
 		if (BlueskyActorService::isBluesky($remoteActor)) {
 			return $this->followBluesky($actor, $remoteActor);
 		}
-		// Nothing can be delivered to an actor that publishes no inbox:
-		// `addInstancePath()` drops the empty URI, `request()` answers
-		// "<request token not needed>", and the follow row sat pending for
-		// ever with a log line claiming the activity had been queued.
+		// nothing can be delivered to an actor that publishes no inbox, and the
+		// follow would stay pending for ever
 		if (!$remoteActor->isLocal() && $remoteActor->getInbox() === '') {
 			throw new InvalidResourceException(
 				$remoteActor->getId() . ' publishes no inbox, so a Follow cannot be delivered'
@@ -335,22 +314,10 @@ class FollowService {
 			]);
 
 			if ($remoteActor->isLocal()) {
-				// Both sides live in this database, and a delivery addressed to
-				// this instance is dropped before it is sent (see
-				// ActivityService::isOurs()) — the server would otherwise have
-				// to reach its own public address, which behind a reverse proxy
-				// or split-horizon DNS it often cannot. A post loses nothing by
-				// that, because its recipients are written into
-				// social_stream_dest when it is saved; a Follow has no such
-				// path, so the row stayed `accepted = 0` for ever, nobody's
-				// home timeline changed, and the follower saw a request that
-				// was never answered. Run what the inbox would have run, here.
-				//
-				// The origin has to be set first: that handler is the inbox's,
-				// and the inbox only ever sees activities that arrived over the
-				// wire with an origin already verified. This one was made here
-				// a moment ago, so say so — otherwise checkOrigin() compares
-				// the actor's host against an empty origin and refuses it.
+				// Both sides live here, and a delivery to this instance is dropped before
+				// it is sent (ActivityService::isOurs()), so run what the inbox would have
+				// run. The origin is set first, as the inbox handler expects a verified
+				// one.
 				$follow->setOrigin(
 					$this->configService->getCloudAuthority(),
 					SignatureService::ORIGIN_REQUEST,
@@ -381,14 +348,6 @@ class FollowService {
 	}
 
 	/**
-	 * A follow of a Bluesky account: accepted at once, since Bluesky has no
-	 * follow requests, written as a record in the local account's repository
-	 * and watched from then on. Nothing is delivered anywhere.
-	 *
-	 * @throws FollowSameAccountException
-	 * @throws InvalidResourceException when Bluesky is switched off
-	 */
-	/**
 	 * A follow of a Bluesky account that moved here with the person's
 	 * repository (§13.1): saved here, linked to the record that is there
 	 * already, nothing written to Bluesky.
@@ -399,6 +358,14 @@ class FollowService {
 		return $this->followBluesky($actor, $remoteActor, $did, $rkey);
 	}
 
+	/**
+	 * A follow of a Bluesky account: accepted at once, since Bluesky has no
+	 * follow requests, written as a record in the local account's repository
+	 * and watched from then on. Nothing is delivered anywhere.
+	 *
+	 * @throws FollowSameAccountException
+	 * @throws InvalidResourceException when Bluesky is switched off
+	 */
 	private function followBluesky(Person $actor, Person $remoteActor, string $adoptDid = '', string $adoptRkey = ''): bool {
 		if ($this->blueskyGraph === null) {
 			throw new InvalidResourceException('Bluesky is not available here');
@@ -460,10 +427,8 @@ class FollowService {
 			$this->followsRequest->delete($follow);
 			$this->timelineRevisionService->bumpForActor($actor->getId());
 			if ($follow->isAccepted()) {
-				// the account they left has one follower fewer. The Accept is
-				// what counted it up — locally handled or delivered, see
-				// FollowInterface::confirmFollowRequest() — so a follow that
-				// was never accepted must not count down.
+				// the account they left has one follower fewer, but only if the follow
+				// was accepted, which is what counted it up
 				$this->accountService->bumpActorCount(
 					$remoteActor->getId(), 'count_followers', -1
 				);
@@ -572,14 +537,8 @@ class FollowService {
 	}
 
 	/**
-	 * One page of the followers collection.
-	 *
-	 * The collection has always advertised `first` as `?page=1`, but nothing
-	 * read the parameter: `?page=1` returned the identical collection, whose
-	 * `first` pointed at itself. A consumer following `first` either looped or
-	 * gave up, so nobody could enumerate a local actor's followers — which is
-	 * how another instance discovers who to deliver to when its own record is
-	 * incomplete, and how account migration tools rebuild a follower list.
+	 * One page of the followers collection, which the collection's `first`
+	 * (`?page=1`) points at.
 	 */
 	public function getFollowersPage(Person $actor, int $page, string $before = ''): OrderedCollectionPage {
 		return $this->followPage(
@@ -697,16 +656,10 @@ class FollowService {
 	}
 
 	/**
-	 * @return Relationship[]
-	 */
-	/**
-	 * The people the viewer follows who also follow this account — the
-	 * "followed by X and 3 others you know" line on a profile.
-	 *
-	 * Answers nothing for the viewer's own profile, which is what Mastodon
-	 * does: everybody who follows you is somebody you know of. Nothing either
-	 * for an account that hides its followers, and nobody who hides whom they
-	 * follow is named as following it.
+	 * The people the viewer follows who also follow this account, for the
+	 * "followed by X and 3 others you know" line. Nothing for the viewer's own
+	 * profile, as on Mastodon, nor for an account that hides its followers; those
+	 * who hide whom they follow are not named.
 	 *
 	 * @return Person[]
 	 */
@@ -731,14 +684,13 @@ class FollowService {
 
 	/**
 	 * The viewer's relationship with each of the accounts named, by nid or by
-	 * actor id, for at most `RELATIONSHIPS_LIMIT` of them.
-	 *
-	 * Answered from the accounts this instance already holds, never fetched:
-	 * every account a client can name it learnt from this server, and a fetch
-	 * per id let one request pin a worker on hundreds of signed requests to
-	 * servers the caller chose. An id that names nothing held is left out.
+	 * actor id, for at most `RELATIONSHIPS_LIMIT` of them. Answered from the
+	 * accounts held here, never fetched, so a request cannot make this server
+	 * send hundreds of signed fetches; ids naming nothing held are left out.
 	 *
 	 * @param array<mixed> $ids
+	 *
+	 * @return Relationship[]
 	 */
 	public function getRelationships(array $ids): array {
 		$wanted = [];
@@ -782,13 +734,8 @@ class FollowService {
 	}
 
 	/**
-	 * Relationships for a whole page of accounts, in a fixed number of queries.
-	 *
-	 * Built one at a time, this was six round trips per account — the two
-	 * follow rows, the blocks and mutes, the note, and the mute's expiry — so a
-	 * client asking about a page of forty paid two hundred and forty. The same
-	 * five queries answer any number of accounts, because every one of them was
-	 * already a lookup on (viewer, account) and `IN` takes a list.
+	 * Relationships for a whole page of accounts, in a fixed number of queries:
+	 * every lookup is on (viewer, account), so `IN` answers them all.
 	 *
 	 * @param array<int|string, string> $actorNids actor id keyed by nid
 	 *
@@ -850,30 +797,17 @@ class FollowService {
 				$relationship->setMutingNotifications($relation->isNotifications());
 				break;
 			case AccountRelationService::TYPE_ENDORSE:
-				// the row is already in hand; reading it again would be a query
-				// for something this loop just read
 				$relationship->setEndorsed(true);
 				break;
 			case ActorRelation::TYPE_HIDE_REBLOGS:
-				// `showing_reblogs` was always true, so a client that had
-				// turned the boosts off was told they were on
 				$relationship->setShowingReblogs(false);
 				break;
 			case AccountRelationService::TYPE_NOTIFY:
-				// `notifying` was always false, so a client that had turned the
-				// bell on was told it was off and drew it that way
 				$relationship->setNotifying(true);
 				break;
 		}
 	}
 
-	/**
-	 * @param int|string $nid
-	 * @param string $viewerId
-	 * @param string $actorId
-	 *
-	 * @return Relationship
-	 */
 	/**
 	 * The viewer's relationship with one resolved actor. Unlike getRelationships()
 	 * this takes the Person directly, so it always returns an entry (the block/mute
@@ -884,12 +818,14 @@ class FollowService {
 	}
 
 	/**
-	 * One account's relationship with the viewer.
+	 * One account's relationship with the viewer, built by the page version's
+	 * code so the two cannot disagree.
 	 *
-	 * Built by the same code the page version uses, deliberately: two
-	 * implementations of "what is the relationship between these two" is two
-	 * places for the answer to differ, and the route that draws a follow button
-	 * and the route that draws a list of them have to agree.
+	 * @param int|string $nid
+	 * @param string $viewerId
+	 * @param string $actorId
+	 *
+	 * @return Relationship
 	 */
 	private function generateRelationship(int|string $nid, string $viewerId, string $actorId): Relationship {
 		return $this->generateRelationships($viewerId, [$nid => $actorId])[0] ?? new Relationship($nid);

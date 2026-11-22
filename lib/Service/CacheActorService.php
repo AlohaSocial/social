@@ -61,16 +61,10 @@ class CacheActorService {
 	public const MAX_BATCHES = 40;
 
 	/**
-	 * Actors already resolved during this request.
-	 *
-	 * A page of twenty posts asks for the same author several times over, and
-	 * each ask was a query. Not a cache — there is no lifetime and no
-	 * invalidation — but the same answer to the same question inside one
-	 * response, which is what makes it safe: nothing can change underneath it
-	 * that this request would have seen anyway.
-	 *
-	 * Held to MEMO_LIMIT entries, the least recently used going first, because
-	 * cron.php and `social:worker` are one "request" for as long as they run.
+	 * Actors already resolved during this request, as a page asks for the same
+	 * author several times. Not a cache: the same answer inside one response.
+	 * Held to MEMO_LIMIT entries, least recently used first out, because
+	 * cron.php and `social:worker` are one long "request".
 	 *
 	 * @var array<string, Person>
 	 */
@@ -159,12 +153,8 @@ class CacheActorService {
 			$id = substr($id, 0, $posAnchor);
 		}
 
-		// A page of twenty posts asks for the same author several times over —
-		// the author is joined for the row, but a mention, a boost, a quoted
-		// post and a tagged person each ask again by id, and every one of those
-		// was a query. Memoised per request, which is where the repetition is:
-		// this is not a cache with a lifetime, it is the same answer to the
-		// same question inside one response.
+		// memoised per request (see $memo): a mention, a boost, a quoted post
+		// and a tagged person each ask for the same author again by id
 		if (!$refresh && array_key_exists($id, $this->memo)) {
 			$actor = $this->memo[$id];
 			// moved to the end, so the eviction below takes the stalest
@@ -266,20 +256,11 @@ class CacheActorService {
 
 	/**
 	 * The actor a key belongs to, for a keyId that is not the actor's id with
-	 * the key in its fragment.
-	 *
-	 * GoToSocial publishes every key at a URL of its own
-	 * (`…/users/alice/main-key`) and answers it with a stub of the actor:
-	 * `publicKey.id` is the keyId, `publicKey.owner` the actor. A bare key
-	 * document (`id` the keyId, `owner` or `controller` the actor) says the
-	 * same. The stub only says where to look, so the binding is checked from
-	 * the other end: the owner has to be on the keyId's host, its own
-	 * document has to be served at the id the stub named, and that document
-	 * has to list this exact keyId among its keys (`publicKey`,
-	 * `assertionMethod`, `verificationMethod`). Only then is it the actor the
-	 * key belongs to — fetched through `getFromId()`, whose key a signature is
-	 * then verified with. A keyId that is itself the actor's id is the actor's
-	 * own document and needs no second look.
+	 * the key in its fragment, such as GoToSocial's `…/users/alice/main-key`
+	 * stub or a bare key document. The stub only says where to look, so the
+	 * owner must be on the keyId's host, its document must be served at that
+	 * id, and it must list this exact keyId among its keys (`publicKey`,
+	 * `assertionMethod`, `verificationMethod`).
 	 *
 	 * @throws InvalidOriginException the key names no owner, or one that does not claim it
 	 * @throws Exception anything `getFromId()` or the fetch raises
@@ -405,24 +386,14 @@ class CacheActorService {
 	}
 
 	/**
-	 * The actor a document fetched from `$id` stands for, or a refusal.
+	 * The actor a document fetched from `$id` stands for, or a refusal. The
+	 * row is keyed by the actor's own `id` and holds its public key, so the
+	 * document must be served as ActivityPub at the id it claims.
 	 *
-	 * The cached row is keyed by the actor's own `id`, so a document that
-	 * answers with somebody else's id would rewrite somebody else's row —
-	 * public key included, which is the key `SignatureService` then verifies
-	 * that account's requests with. Two things are therefore required, the
-	 * same two `CurlService::retrieveAccount()` and `StreamQueueService`
-	 * require: the document has to be served as ActivityPub, and the row has
-	 * to be written from a document served at the id it is keyed by.
-	 *
-	 * A document whose `id` is another URL of the same host is not that
-	 * document: Mastodon 4.5 answers `/users/<name>` with the actor whose id
-	 * is `/ap/users/<number>`. The actor is fetched from the id it claims and
-	 * has to answer with that id, served as ActivityPub; what came from the
-	 * other URL is dropped, and that URL is remembered as another address of
-	 * the actor, so the next lookup by it reads the row. An id on another
-	 * host is what a document claiming a stranger's id looks like from here,
-	 * and is refused.
+	 * A document whose `id` is another URL of the same host (Mastodon 4.5
+	 * answers `/users/<name>` with an actor whose id is `/ap/users/<number>`)
+	 * is fetched again from that id, and the URL asked is remembered as
+	 * another address of the actor. An id on another host is refused.
 	 *
 	 * @throws InvalidOriginException
 	 * @throws InvalidResourceException the claimed id serves no actor
@@ -484,13 +455,9 @@ class CacheActorService {
 	}
 
 	/**
-	 * Forgets the memoised actors.
-	 *
-	 * For the long-running processes — `social:worker`, `Cron\Queue` and
-	 * `Cron\Cache` — between batches: the memo is bounded, but an actor held
-	 * from an earlier batch would hide a key rotation or a profile change the
-	 * database has since seen. Every short-lived request throws the whole
-	 * object away instead.
+	 * Forgets the memoised actors, for the long-running processes
+	 * (`social:worker`, `Cron\Queue`, `Cron\Cache`) between batches, so a key
+	 * rotation or profile change is seen.
 	 */
 	public function forgetMemoised(): void {
 		$this->memo = [];
@@ -506,13 +473,7 @@ class CacheActorService {
 
 	/**
 	 * What is already known about a set of actors, in one query and without
-	 * touching the network.
-	 *
-	 * getFromId() resolves a miss by fetching the actor from its instance,
-	 * which is right for one actor on a path that can wait, and wrong for a
-	 * listing: a page of reports or of blocks would make one synchronous
-	 * federated request per row, and one unreachable instance would hang the
-	 * whole page for the curl timeout.
+	 * the network: a listing must not make a federated request per row.
 	 *
 	 * @param string[] $ids
 	 *
@@ -583,17 +544,9 @@ class CacheActorService {
 
 	/**
 	 * An account by whatever a client names it with: its numeric id, its
-	 * `name@host` (or a bare local name), or its actor URL.
-	 *
-	 * Mastodon's own routes take the numeric id, this app's `{account_id}`
-	 * paths were written for an actor URL, and a client that has an account
-	 * entity in hand has the numeric one. Rather than each route deciding,
-	 * they ask here.
-	 *
-	 * Nothing is fetched from elsewhere unless `$mayFetch` says so: a route
-	 * about accounts this server already holds, answered to anybody, is not a
-	 * reason to go and webfinger a name or fetch a URL. A signed-in viewer
-	 * naming a stranger is, and passes `true`.
+	 * `name@host` (or a bare local name), or its actor URL. Nothing is
+	 * fetched from elsewhere unless `$mayFetch` says so, as a signed-in viewer
+	 * naming a stranger does.
 	 *
 	 * @throws CacheActorDoesNotExistException
 	 */
@@ -728,14 +681,10 @@ class CacheActorService {
 	}
 
 	/**
-	 * Refreshes the cached remote actors that are due.
-	 *
-	 * Without a deadline, one batch of `CacheActorsRequest::SYNC_BATCH`, or
-	 * every due actor when forced — what `occ social:cache:refresh` asks for.
-	 * With one, batch after batch until the deadline: fifty a pass, 120
-	 * passes a day, is 6,000 refreshes a day, and a ten-day lifetime over
-	 * more than 60,000 cached actors was then never met — every actor was
-	 * overdue, and stale keys and avatars stayed stale for months.
+	 * Refreshes the cached remote actors that are due: without a deadline one
+	 * batch of `CacheActorsRequest::SYNC_BATCH`, or every due actor when forced
+	 * (`occ social:cache:refresh`); with one, batch after batch until the
+	 * deadline, as one batch a pass cannot keep up with a large cache.
 	 *
 	 * @param int $deadline when to stop taking actors, or 0 for one batch
 	 *
@@ -793,15 +742,10 @@ class CacheActorService {
 	}
 
 	/**
-	 * Fetches one cached remote actor again and records that it was tried.
-	 *
-	 * The record is the point. A failed refresh used to leave the row exactly
-	 * as it was, so it was due again on the next pass, and fifty rows on a
-	 * dead instance were the fifty the refresh selected every twelve minutes
-	 * for as long as the instance stayed dead — which for a dead instance is
-	 * for ever. Stamped, the row waits `CacheActorsRequest::syncWait()` and
-	 * after `SYNC_MAX_FAILURES` is left alone; the row itself, and everything
-	 * pointing at it, stays.
+	 * Fetches one cached remote actor again and records that it was tried, so
+	 * a failing row waits `CacheActorsRequest::syncWait()` and is left alone
+	 * after `SYNC_MAX_FAILURES` instead of being selected every pass; the row
+	 * itself stays.
 	 *
 	 * @return bool whether the actor could be fetched
 	 */
@@ -824,10 +768,9 @@ class CacheActorService {
 	}
 
 	/**
-	 * Resolved when first needed rather than injected: FeaturedCollection needs
-	 * StreamRequest, which needs StreamDestRequest, which needs this service —
-	 * a cycle the container refuses while constructing and is fine with once
-	 * everything exists. Null without a container, as in a unit test.
+	 * Resolved when first needed, not injected: FeaturedCollection needs
+	 * StreamRequest, which needs StreamDestRequest, which needs this service.
+	 * Null without a container, as in a unit test.
 	 */
 	private function featuredCollection(): ?FeaturedCollection {
 		$service = $this->container?->get(FeaturedCollection::class);

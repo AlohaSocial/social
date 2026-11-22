@@ -14,11 +14,6 @@ use OCA\Social\Model\StreamDest;
 use OCA\Social\Tools\Exceptions\RowNotFoundException;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class StreamDestRequestBuilder
- *
- * @package OCA\Social\Db
- */
 class StreamDestRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
@@ -33,7 +28,7 @@ class StreamDestRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Select request
 	 *
 	 * @return SocialQueryBuilder
 	 */
@@ -64,7 +59,7 @@ class StreamDestRequestBuilder extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Base of the Sql Select request for Shares
+	 * Base of the Sql Count request
 	 *
 	 * @return SocialQueryBuilder
 	 */

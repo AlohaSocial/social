@@ -3,11 +3,9 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- The code as the badge, the way Mastodon's composer wears it: the
-	     toolbar has room for two letters, and the language's name is on the
-	     title, in the accessible name and against every entry of the menu.
-	     `menuName` is deliberately not used — it would suppress the label and
-	     leave a screen reader announcing "DE". -->
+	<!-- The code as the badge, as in Mastodon's composer; the name is on the
+	     title and the accessible name. No `menuName`: it would replace the
+	     label and leave a screen reader announcing "DE". -->
 	<NcActions
 		variant="tertiary"
 		class="language-select"
@@ -66,10 +64,8 @@ export default {
 		},
 
 		/**
-		 * The languages on offer, named in the reader's language and sorted by
-		 * that name. The current one is always among them: a code remembered
-		 * from another version, or one the server put on a draft, must still
-		 * be something the reader can see and change.
+		 * The languages on offer, named in the reader's language and sorted. The
+		 * current one is always among them, even when it is not a known code.
 		 *
 		 * @return {Array<{code: string, name: string}>}
 		 */

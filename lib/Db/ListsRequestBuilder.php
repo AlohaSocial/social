@@ -13,15 +13,10 @@ use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 /**
- * Class ListsRequestBuilder
- *
- * Extends StreamRequestBuilder rather than CoreRequestBuilder because a list
- * has a timeline: the list timeline is the home timeline narrowed to the
- * list's members, and it is built out of the same stream helpers
+ * Extends StreamRequestBuilder because the list timeline is the home timeline
+ * narrowed to the list's members, built from the same stream helpers
  * (`getStreamNidsSelectSql()`, `timelineHomeLinkCacheActor()`,
- * `getStreamsFromRequest()`) rather than out of a copy of them.
- *
- * @package OCA\Social\Db
+ * `getStreamsFromRequest()`).
  */
 class ListsRequestBuilder extends StreamRequestBuilder {
 	use TArrayTools;

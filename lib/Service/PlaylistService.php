@@ -18,24 +18,13 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * PeerTube's playlists, as this app's collections.
+ * PeerTube's playlists, as this app's collections: an ordered set of
+ * somebody's own posts, with a title, a description and a visibility.
  *
- * They are the same thing: an ordered set of somebody's own posts, with a
- * title, a description and a visibility. PeerTube users organise everything
- * this way — a series, a course, "watch later" — and a channel's playlists are
- * half of what its page shows, so a Nextcloud that ingested the videos and
- * none of the playlists showed a channel's work as an undifferentiated pile.
- *
- * **Read-only, and deliberately.** A playlist that arrived from somewhere else
- * is somebody else's document: it is stored so it can be shown and it is
- * rebuilt from the wire whenever it changes there, and nothing here may add to
- * it or take from it. The one that goes *out* is the other direction — a
- * collection of ours, published as a `Playlist` on the channel that owns it.
- *
- * Only videos this instance already holds are put in one. A playlist naming
- * forty videos nobody here has ever seen is not a reason to fetch forty videos:
- * what arrives by following the channel is what the playlist shows, and it
- * fills in as the rest arrives.
+ * A received playlist is somebody else's document, stored for display and
+ * rebuilt from the wire when it changes; nothing here may edit it. Outbound,
+ * a collection of ours is published as a `Playlist` on its channel. Only
+ * videos this instance already holds are put in one; nothing is fetched for it.
  */
 class PlaylistService {
 	public const TYPE = 'Playlist';
@@ -54,12 +43,9 @@ class PlaylistService {
 
 	/**
 	 * A `Playlist` that arrived, as a collection of the channel that owns it.
-	 *
-	 * Rebuilt rather than merged: the document is the whole truth about the
-	 * playlist, and a video removed there has to go from here too. Matching an
-	 * existing one by title on the same owner is what makes a redelivery an
-	 * update instead of a duplicate — the wire gives a playlist an id, but this
-	 * app's collections are keyed by a local row.
+	 * Rebuilt rather than merged, since the document is the whole truth.
+	 * Matched by title on the same owner, since this app's collections are
+	 * keyed by a local row, so a redelivery updates rather than duplicates.
 	 *
 	 * @param array<string, mixed> $data the wire `Playlist`
 	 * @param string $ownerId the playlist's `attributedTo`
@@ -88,8 +74,7 @@ class PlaylistService {
 			$collection->setDescription(mb_substr(trim((string)($data['content'] ?? '')), 0, 500));
 			$this->collectionsRequest->update($collection);
 
-			// the document is the whole truth: anything no longer in it has
-			// been taken out there, and has to go from here too
+			// the document is the whole truth: what is no longer in it goes
 			$this->collectionsRequest->clearItems($collection);
 
 			foreach ($items as $position => $streamId) {
@@ -107,14 +92,10 @@ class PlaylistService {
 	}
 
 	/**
-	 * Whether the actor that sent a playlist may write the owner's collections.
-	 *
-	 * The collection is found and rebuilt by owner and title, so the owner is
-	 * the whole of what decides whose page a received playlist lands on — and
-	 * the origin check on the playlist's id says only which server sent it.
-	 * The owner has to be the actor itself or, the way PeerTube publishes
-	 * them, a channel on the actor's server that names the actor as its own.
-	 * A local actor's collections are only ever written by that actor, here.
+	 * Whether the actor that sent a playlist may write the owner's
+	 * collections. The owner decides whose page it lands on, so it must be the
+	 * actor or, as PeerTube publishes, a channel on the actor's server naming
+	 * the actor as its own. Local collections are written only locally.
 	 *
 	 * @throws InvalidOriginException
 	 */
@@ -144,10 +125,6 @@ class PlaylistService {
 
 	/**
 	 * The videos of a playlist that this instance actually holds, in order.
-	 *
-	 * A playlist naming forty videos nobody here has seen is not a reason to
-	 * fetch forty videos: what arrived by following the channel is what it
-	 * shows, and it fills in as the rest arrives.
 	 *
 	 * @param array<string, mixed> $data
 	 *
@@ -214,10 +191,8 @@ class PlaylistService {
 	}
 
 	/**
-	 * One of this instance's collections, as the `Playlist` PeerTube publishes.
-	 *
-	 * `attributedTo` is the channel rather than the account, the same way a
-	 * video's is: a playlist belongs to the thing a reader subscribes to.
+	 * One of this instance's collections, as the `Playlist` PeerTube publishes,
+	 * attributed to the channel as a video is.
 	 *
 	 * @param string[] $itemIds the posts in it, in order
 	 *

@@ -53,12 +53,9 @@ class CacheDocumentService {
 	public const AVATAR_THUMBNAIL = 128;
 
 	/**
-	 * Ceiling on the pixel count of an image this app will decode.
-	 *
-	 * A decoded image costs roughly four bytes a pixel in GD, so the size of
-	 * the file says nothing about the memory the decode needs: a 400 KB
-	 * 30000x30000 PNG wants about 3.6 GB. The dimensions are read from the
-	 * header before any decode happens, and anything past this is refused.
+	 * Ceiling on the pixel count of an image this app will decode, read from
+	 * the header first: GD needs about four bytes a pixel, so a 400 KB
+	 * 30000x30000 PNG wants about 3.6 GB.
 	 */
 	public const MAX_PIXELS = 50000000; // 50 MP, ~200 MB decoded
 
@@ -101,20 +98,11 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * Makes the poster a video should already have.
-	 *
-	 * Same frame, same JPEG, same `resized_copy` as an upload gets on its way
-	 * in -- see `saveMediaFromTemp()`, which this exists to apply after the
-	 * fact to the videos that were stored before there was any such thing, or
-	 * on a server that had no ffmpeg at the time. `occ social:media:posters`
-	 * is what calls it.
-	 *
-	 * ffmpeg wants a path and the stored copy is an `ISimpleFile`, so the
-	 * bytes go to a temporary file a chunk at a time: a video is the one thing
-	 * in this app that must never be read into a string.
-	 *
-	 * The document is written back only when a frame came out, so a video
-	 * ffmpeg cannot read is left exactly as it was and can be tried again.
+	 * Makes the poster a video should already have, as `saveMediaFromTemp()`
+	 * makes one on upload, for videos stored without one
+	 * (`occ social:media:posters`). The stored copy goes to a temporary file a
+	 * chunk at a time for ffmpeg; the document is written back only when a
+	 * frame came out, so a failure can be tried again.
 	 *
 	 * @return bool whether a poster was made
 	 */
@@ -163,9 +151,9 @@ class CacheDocumentService {
 			$meta->setDuration((float)$poster['duration']);
 		}
 		if ($poster['width'] > 0 && $poster['height'] > 0) {
-			// persisted here rather than left to `convertToMediaAttachment()`:
-			// the copy sizes it reads live only as long as the object does,
-			// and a backfilled poster has to survive the command that made it
+			// persisted here: the copy sizes `convertToMediaAttachment()` reads live
+			// only as long as the object, and a backfilled poster must outlast the
+			// command
 			$dimensions = new AttachmentMetaDim([$poster['width'], $poster['height']]);
 			$meta->setOriginal($dimensions);
 			$meta->setSmall($dimensions);
@@ -177,21 +165,18 @@ class CacheDocumentService {
 		return true;
 	}
 
-	/** the largest cover picture taken for a video, in bytes */
+	/** the largest cover image taken for a video, in bytes */
 	public const MAX_POSTER_BYTES = 10 * 1024 * 1024;
 
 	/**
-	 * Uses a picture the uploader chose as a video's poster, in place of the
-	 * frame ffmpeg picked -- Mastodon's `thumbnail` on a media upload, and the
-	 * cover a short is posted with.
-	 *
-	 * The picture goes through the same decode and resize every uploaded image
-	 * does, and comes out as a new JPEG, so nothing the camera wrote into the
-	 * original survives and a picture the server cannot read is refused rather
-	 * than stored. The poster it replaces is removed from appdata.
+	 * Uses an image the uploader chose as a video's poster instead of
+	 * ffmpeg's frame: Mastodon's `thumbnail` on a media upload, and a short's
+	 * cover. It is decoded and resized like any uploaded image into a new JPEG,
+	 * so no camera metadata survives and an unreadable one is refused; the
+	 * poster it replaces is removed.
 	 *
 	 * @param Document $document a video that has been stored
-	 * @param string $imagePath the uploaded picture
+	 * @param string $imagePath the uploaded image
 	 *
 	 * @return bool whether the cover was taken
 	 */
@@ -236,17 +221,10 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * A file on somebody else's server, fetched and then stored exactly as an
-	 * upload is.
-	 *
-	 * The bytes go to a temporary file rather than into a string so that this
-	 * ends in `saveFromTempToCache()` like every other way a file enters this
-	 * app. That is the whole point of the detour: the fetch path used to run
-	 * the mime allow-list and nothing else, so the moderator's list of refused
-	 * files did not cover federated pictures although it says it does, a
-	 * remote HEIC was stored unconverted and then failed to decode for ever,
-	 * and the only ceiling on the download was the one meant for ActivityPub
-	 * documents.
+	 * A file on somebody else's server, fetched to a temporary file and then
+	 * stored exactly as an upload is, through `saveFromTempToCache()`, so the
+	 * refused-files list, the HEIC conversion and the right size ceiling apply
+	 * to federated media too.
 	 *
 	 * @param string $mime filled with what the content turned out to be
 	 *
@@ -280,14 +258,11 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * Fetches a cached remote file again, into the names its row already has.
-	 *
-	 * For a copy the media cache purge took away (`MediaPurgeService::purgeCache()`)
-	 * or that went missing by other means. The names are kept because they
-	 * are what clients hold: `/media/{uuid}` links in every post and account
-	 * this instance has already served. A copy the new fetch does not produce
-	 * (a video poster on a server without ffmpeg) stays missing; one it
-	 * produces where the row had none gets a fresh name.
+	 * Fetches a cached remote file again, into the names its row already has,
+	 * for a copy the media cache purge removed (`MediaPurgeService::purgeCache()`)
+	 * or that went missing: clients hold `/media/{uuid}` links to those names.
+	 * A copy the new fetch does not produce stays missing; one the row had no
+	 * name for gets a fresh one.
 	 *
 	 * @throws CacheContentDecodeException
 	 * @throws CacheContentMimeTypeException
@@ -316,15 +291,9 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * The remote file, on disk, a chunk at a time.
-	 *
-	 * Read as a stream with a ceiling rather than into a string: a video is
-	 * the one thing here that must never be held whole, and the ceiling has to
-	 * be the one that applies to what the document says it is -- an attachment
-	 * cut off at the size meant for an ActivityPub document is how every
-	 * federated video ended up marked `ERROR_SIZE`. What the bytes actually
-	 * turn out to be is checked again by `filterSize()`, against the sniffed
-	 * type, which is the only one that decides what happens to them.
+	 * The remote file, on disk, a chunk at a time, with the ceiling for what
+	 * the document says it is (a video's, not an ActivityPub document's).
+	 * `filterSize()` checks again against the sniffed type.
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -386,9 +355,8 @@ class CacheDocumentService {
 
 	/**
 	 * Stores a file byte for byte for ATProto uploads and repository moves,
-	 * whose records name the hash of exactly these bytes.
-	 * The type, size and quota checks of any upload apply; nothing is
-	 * stripped or converted.
+	 * whose records name the hash of exactly these bytes. The type, size and
+	 * quota checks of any upload apply; nothing is stripped or converted.
 	 *
 	 * @throws CacheContentMimeTypeException
 	 * @throws CacheContentSizeException
@@ -437,16 +405,14 @@ class CacheDocumentService {
 		$content = fread($file, filesize($tmpPath));
 		fclose($file);
 
-		// First, because everything below it decodes: a phone photo carrying an
-		// Exif orientation is turned by decoding all of it, and a hundred
-		// megapixels under the size ceiling is a fatal error rather than a
-		// refusal.
+		// First, because everything below decodes: an Exif-rotated photo is
+		// turned by decoding all of it, and an oversized image is a fatal error
+		// rather than a refusal.
 		$this->assertWithinPixelLimit($content);
 
-		// What the picture says about where it came from is read off the bytes
-		// as they arrived, local upload and fetched attachment alike, because
-		// the XMP it is stated in is one of the blocks the conversion below
-		// removes. The row is the only place it survives.
+		// The provenance the image states is read off the bytes as they arrived,
+		// as the XMP it is in is removed by the conversion below; the row is the
+		// only place it survives.
 		$document->setAiSource(
 			Document::aiSourceFor($this->imageMetadataService->digitalSourceType($content, $mime))
 		);
@@ -461,9 +427,8 @@ class CacheDocumentService {
 
 		$filename = $this->generateFileFromContent($content, $this->restoring['local'] ?? '');
 		$document->setLocalCopy($filename);
-		// what the stored file weighs, recorded once here rather than measured
-		// on every serialisation: PeerTube drops a video link that carries no
-		// `size`, and the per-account quota asks the same question
+		// what the stored file weighs, recorded once: PeerTube drops a video
+		// link without `size`, and the per-account quota asks the same
 		$document->setSizeBytes(strlen($content));
 
 		$this->resizeImage($document, $content);
@@ -473,13 +438,9 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * The per-account video quota, applied before anything is written.
-	 *
-	 * Local uploads only. This one funnel carries both an upload and a
-	 * *fetched remote attachment*, and charging somebody's quota for a video
-	 * this instance chose to cache on their behalf would be a limit nobody
-	 * could explain — the bytes are there because a post they follow had a
-	 * video in it.
+	 * The per-account video quota, applied before anything is written, to
+	 * local uploads only: a remote attachment cached here must not count
+	 * against the person who follows its author.
 	 *
 	 * @throws CacheContentSizeException
 	 */
@@ -515,15 +476,10 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * How much of this instance's disk the server a picture came from may take.
-	 *
-	 * The twin of the per-account video quota, for the other direction: every
-	 * picture on a post somebody here follows is fetched and kept, and nothing
-	 * bounded that by where it came from. One server posting large images at a
-	 * high rate filled the disk of every instance following anybody on it.
-	 *
-	 * Refused before the bytes are written, and the bytes that are written are
-	 * counted, so the next fetch from that host knows about this one.
+	 * How much of this instance's disk the server an image came from may
+	 * take, so one server posting large images cannot fill the disk of every
+	 * instance following it. Refused before the bytes are written; what is
+	 * written is counted against the host.
 	 *
 	 * @throws CacheContentSizeException
 	 */
@@ -545,9 +501,7 @@ class CacheDocumentService {
 
 	/**
 	 * Charge a remote server only after its file has passed validation and
-	 * both cached copies (where applicable) have been written. A rejected or
-	 * unreadable attachment must not consume quota: otherwise repeated invalid
-	 * media could make the quota refuse later valid images without using disk.
+	 * its cached copies are written, so invalid media cannot use up the quota.
 	 */
 	private function recordDomainQuota(Document $document, int $size): void {
 		if ($document->isLocal()) {
@@ -561,24 +515,14 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * A picture a moderator has refused, wherever it came from.
-	 *
-	 * Checked on the bytes as they are written, which is the one place both
-	 * an upload and a fetched remote attachment pass through — a list that
-	 * only stopped local uploads would be a list that stops the one source a
-	 * moderator can already deal with by other means.
-	 *
-	 * The hash is of the file as it arrived, before the metadata is stripped
-	 * and before any conversion: two files that differ only in their Exif are
-	 * a different hash, and this is deliberately not clever. It answers "this
-	 * exact file, again" — which is what re-posting is — and it does not claim
-	 * to answer "a picture that looks like this one".
+	 * An image a moderator has refused, wherever it came from, checked on the
+	 * bytes as written, the one place uploads and fetched attachments both
+	 * pass. The hash is of the file as it arrived, so it matches "this exact
+	 * file, again", not a similar image.
 	 *
 	 * @throws CacheContentMimeTypeException the same refusal an unacceptable
-	 *                                       type gets: the caller has one way
-	 *                                       to say no to a file, and a second
-	 *                                       would be a second thing every
-	 *                                       caller had to catch
+	 *                                       type gets, so callers catch one
+	 *                                       exception
 	 */
 	private function filterBlockedMedia(string $tmpPath): void {
 		// false when the file cannot be read; a successful hash is always the
@@ -596,18 +540,10 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * The size ceiling, applied to what the content turned out to be.
-	 *
-	 * The request-time check (`MediaApiController::refuseOversized()`) can only go
-	 * on the type the *client* declared, and video is allowed to be far larger
-	 * than anything else — because it is copied to storage a chunk at a time
-	 * and never held in memory. A file that declared `video/mp4` to get past
-	 * that check and then sniffs as a PNG would be read whole by the image
-	 * path: two gigabytes of it, into memory, which is the one thing the
-	 * split exists to prevent.
-	 *
-	 * So the ceiling is applied again here, against the sniffed type, which is
-	 * the only one that decides what actually happens to the bytes.
+	 * The size ceiling, applied to the sniffed type: the request-time check
+	 * (`MediaApiController::refuseOversized()`) only knows the declared type,
+	 * and a file declared `video/mp4` that sniffs as a PNG would otherwise be
+	 * read whole by the image path.
 	 *
 	 * @throws CacheContentSizeException
 	 */
@@ -642,20 +578,8 @@ class CacheDocumentService {
 	/**
 	 * A video or a sound file: copied without ever being held whole, without
 	 * the metadata its container carries, and given a poster frame if the
-	 * server can make one.
-	 *
-	 * Images go the other way on purpose -- they are read into a string because
-	 * the metadata stripping, the HEIC conversion and the resize all work on
-	 * one -- and an image is a few megabytes. A video is not: `fread()` of a
-	 * two-gigabyte upload is two gigabytes of memory, and PHP's limit is the
-	 * only thing that ever stopped it. Nothing here needs the bytes, so nothing
-	 * here reads them.
-	 *
-	 * The poster is the *resized copy* of the video rather than a row of its
-	 * own. That is what `resized_copy` means -- the small image standing in for
-	 * the file -- and unlike a federated video's thumbnail, which is a document
-	 * on somebody else's server with a URL and a cache lifetime of its own,
-	 * this one is derived from bytes already here and has nothing else to be.
+	 * server can make one. The poster is the video's `resized_copy`, the small
+	 * image standing in for the file.
 	 */
 	private function saveMediaFromTemp(Document $document, string $tmpPath, string $mime): void {
 		$stripped = $this->videoTranscodeService->withoutMetadata($tmpPath, $mime);
@@ -684,11 +608,9 @@ class CacheDocumentService {
 			return;
 		}
 
-		// asked while the bytes are still on disk here: an MP4 that is already
-		// H.264 is recorded as needing nothing, so neither the post it goes out
-		// on nor the transcoder has to copy it back out of storage to find
-		// that out — and the post's delivery does not wait for a job that
-		// would do nothing
+		// asked while the bytes are still on disk: an MP4 already in H.264 is
+		// recorded as needing nothing, so neither delivery nor the transcoder
+		// has to read it back from storage
 		if ($this->videoTranscodeService->isEnabled()
 			&& !$this->videoTranscodeService->needsConversion($mime, $tmpPath)) {
 			$document->setTranscoded(VideoTranscodingWorker::NOT_NEEDED);
@@ -731,12 +653,9 @@ class CacheDocumentService {
 	 * @throws NotPermittedException
 	 */
 	/**
-	 * Puts a file on disk into app storage and says what it was stored under.
-	 *
-	 * The public face of `generateFileFromPath()`, for the transcoder: it has
-	 * a converted video in a temporary file and needs it where the original
-	 * was, and reading the whole thing into a string first is the one thing
-	 * that does not work for a video.
+	 * Puts a file on disk into app storage and says what it was stored under:
+	 * `generateFileFromPath()` for the transcoder, whose converted video must
+	 * not be read into a string.
 	 *
 	 * @return string the uuid it was stored under
 	 *
@@ -848,11 +767,9 @@ class CacheDocumentService {
 			'image/gif',
 			'image/png',
 			'image/webp',
-			// A browser cannot draw these two, but a phone produces them: HEIC
-			// is the iPhone camera default. They are accepted here and
-			// converted on the way in -- see ImageConversionService. Refusing
-			// them meant telling most of an iPhone's owners to convert their
-			// own photos before posting.
+			// A browser cannot draw these two, but phones produce them (HEIC is the
+			// iPhone camera default), so they are converted on the way in; see
+			// ImageConversionService.
 			'image/avif',
 			'image/heic',
 			'image/heif',
@@ -877,12 +794,10 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * The files a post may carry that are not media: what people on a
-	 * Nextcloud actually have to share. Stored as they are, served as
-	 * downloads, shown as a file card; on the wire an ActivityPub `Document`
-	 * with its mime, which Mastodon renders as an `unknown` attachment (a
-	 * link) and other Nextclouds render as a file. Nothing a browser would
-	 * execute: no HTML, no SVG, no scripts.
+	 * The files a post may carry that are not media. Stored as they are,
+	 * served as downloads, shown as a file card; on the wire a `Document`
+	 * with its mime, which Mastodon shows as an `unknown` attachment. Nothing
+	 * a browser would execute: no HTML, no SVG, no scripts.
 	 */
 	public const DOCUMENT_MIME_TYPES = [
 		'application/pdf',
@@ -899,20 +814,16 @@ class CacheDocumentService {
 		'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 	];
 
-	/** Whether a mime is one of the file kinds above rather than a picture, a video or a sound. */
+	/** Whether a mime is one of the file kinds above rather than an image, a video or a sound. */
 	public static function isDocumentMime(string $mime): bool {
 		return in_array($mime, self::DOCUMENT_MIME_TYPES, true);
 	}
 
 	/**
-	 * Builds the preview copy, and refuses to try on content that only claims
-	 * to be an image.
-	 *
-	 * The mime type is sniffed from magic bytes alone, so a PNG header followed
-	 * by garbage arrives here looking like a picture. Decoding it fails, and the
-	 * failure has to surface as an exception the caller can record against the
-	 * document: an unreported failure here used to escape as an `Error` and
-	 * abandon caching for every document queued behind this one.
+	 * Builds the preview copy, and refuses content that only claims to be an
+	 * image: the type is sniffed from magic bytes alone, and a failed decode
+	 * must surface as an exception the caller records against the document,
+	 * not an `Error` that stops caching for the documents queued behind it.
 	 *
 	 * @throws CacheContentDecodeException
 	 */
@@ -970,14 +881,10 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * Makes a cached actor icon's `resized_copy` the small thumbnail a new
-	 * icon is stored with, from the original already on disk.
-	 *
-	 * For the icons stored before thumbnails existed, whose resized copy is
-	 * the 800 px preview of the original. The thumbnail is written under the
-	 * name that copy already has, so every link to it keeps working; an icon
-	 * that had none gets a fresh name. An icon whose resized copy is already
-	 * no larger than the thumbnail is left alone.
+	 * Makes a cached actor icon's `resized_copy` the small thumbnail a new icon
+	 * is stored with, from the original on disk, for icons whose resized copy
+	 * is the 800 px preview. Written under the copy's existing name, so links
+	 * keep working; one already no larger is left alone.
 	 *
 	 * @return bool whether a thumbnail was written
 	 *
@@ -1041,14 +948,9 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * The pixel ceiling alone, for the point in the upload path that comes
-	 * before the conversion.
-	 *
-	 * Says nothing about a format whose header PHP cannot read: an HEIC
-	 * arrives here as what an iPhone wrote, which `getimagesizefromstring()`
-	 * does not know and which is a picture all the same. Whether such a file
-	 * is one at all is decided by `assertDecodable()`, after it has been
-	 * converted into something that can be drawn.
+	 * The pixel ceiling alone, before the conversion in the upload path. A
+	 * format PHP cannot read the header of, such as HEIC, passes; whether it is
+	 * an image at all is decided by `assertDecodable()` after conversion.
 	 *
 	 * @throws CacheContentDecodeException
 	 */
@@ -1089,10 +991,9 @@ class CacheDocumentService {
 		} catch (Exception $e) {
 		}
 
-		// The innermost `aa/bb/cc/dd` folder is named after this one file and
-		// holds nothing else, so left behind it is a filecache row per purged
-		// copy. The levels above it are kept: a listing here shows files only,
-		// so it cannot tell an empty folder above from one with folders in it.
+		// The innermost `aa/bb/cc/dd` folder holds only this file, so it goes
+		// too; the levels above are kept, as a listing here shows files only
+		// and cannot tell whether they are empty.
 		try {
 			if ($folder->getDirectoryListing() === []) {
 				$folder->delete();
@@ -1124,11 +1025,9 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * What a stored copy turns out to be, read back from its first bytes.
-	 *
-	 * For the rows that were written with no type at all: the file is the only
-	 * place the answer still exists. A header's worth is enough for libmagic
-	 * and is all that is read -- the file may be a video.
+	 * What a stored copy turns out to be, read from its first bytes, for rows
+	 * written without a type. Only a header's worth is read, as the file may
+	 * be a video.
 	 *
 	 * @return string '' when there is no file, or nothing could be made of it
 	 */
@@ -1199,14 +1098,10 @@ class CacheDocumentService {
 	 * @throws UnauthorizedFediverseException
 	 */
 	/**
-	 * Opens a streamed document's file at its origin, without storing any of it.
-	 *
-	 * The counterpart of `retrieveContent()` for the one kind of document that
-	 * is deliberately never copied here -- see `Document::COPY_STREAMED`. The
-	 * client's `Range` is forwarded so that seeking in a long video asks the
-	 * origin for the part that was seeked to, shortened to `STREAM_CHUNK`
-	 * bytes, and the origin's answer comes back untouched for the caller to
-	 * pass on.
+	 * Opens a streamed document's file at its origin, without storing any of
+	 * it (`Document::COPY_STREAMED`). The client's `Range` is forwarded,
+	 * shortened to `STREAM_CHUNK` bytes, so seeking asks the origin for that
+	 * part, and the answer comes back untouched for the caller to pass on.
 	 *
 	 * @param string $range the client's own `Range` header, or ''
 	 * @param int|null $max the most bytes taken without a range, the download
@@ -1274,12 +1169,8 @@ class CacheDocumentService {
 	}
 
 	/**
-	 * A remote file read whole, up to a ceiling.
-	 *
-	 * For the one thing this app fetches from a streamed document rather than
-	 * passing on: an HLS playlist, which is text, is kilobytes, and has to be
-	 * rewritten before a player sees it. The ceiling is what stops a server
-	 * that answers a `.m3u8` with a film from being read into memory.
+	 * A remote file read whole, up to a ceiling: an HLS playlist of a
+	 * streamed document, which has to be rewritten before a player sees it.
 	 *
 	 * @throws RequestServerException
 	 */
@@ -1316,10 +1207,8 @@ class CacheDocumentService {
 	 */
 	/**
 	 * The instance that named this file, which is not always the one serving
-	 * it: a post on `mastodon.xyz` carries pictures on `6-28.mastodon.xyz`,
-	 * and object storage or a CDN is common besides. The post's own address is
-	 * what says which instance published it; its author's stands in where an
-	 * attachment arrived without a parent.
+	 * it (a media subdomain, object storage, a CDN): the post's own address,
+	 * or its author's for an attachment without a parent.
 	 */
 	private static function referringHost(Document $document): string {
 		foreach ([$document->getParentId(), $document->getAccount(), $document->getId()] as $address) {

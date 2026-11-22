@@ -4,8 +4,7 @@
 -->
 <template>
 	<div class="first-post" :class="{ 'first-post--leaving': leaving }">
-		<!-- decoration, and nothing else: the sentence below is what a screen
-		     reader is told -->
+		<!-- decoration only: the sentence below is what a screen reader is told -->
 		<div v-if="!reducedMotion" class="first-post__confetti" aria-hidden="true">
 			<span
 				v-for="piece in pieces"
@@ -29,18 +28,6 @@
 
 <script>
 import BloomingFlower from './BloomingFlower.vue'
-
-/**
- * The one-time flourish for the first post a reader ever publishes here.
- *
- * It is decoration only: it is `pointer-events: none` from its root down, so
- * it never takes a click from the post appearing underneath it, it holds no
- * focus and contains nothing focusable, and it takes itself off screen after
- * a couple of seconds. Escape, or a click anywhere, ends it early.
- *
- * Whether it is shown at all is decided in the timeline store; this component
- * only exists while it is being shown.
- */
 
 /** How long the banner stays before it leaves on its own. */
 const VISIBLE_MS = 2600
@@ -82,6 +69,12 @@ function makePiece(id) {
 	}
 }
 
+/**
+ * The one-time flourish for a reader's milestones: the first post, the first
+ * follower, the hundredth post and a year here. It never takes a click or
+ * focus, leaves after a couple of seconds, and Escape or a click ends it
+ * early. The timeline store decides whether it is shown.
+ */
 export default {
 	name: 'FirstPostCelebration',
 
@@ -117,15 +110,8 @@ export default {
 	},
 
 	computed: {
-		/** @return {string} the one sentence this whole component says */
 		/**
 		 * What is being celebrated.
-		 *
-		 * The first post was the only moment this app marked, and it is the one
-		 * moment that by definition happens before anybody has any reason to
-		 * care. These are the others: the first person who chose to read you,
-		 * the hundredth thing you wrote, and the day you have been here a year.
-		 * Each is once, and each is over in two seconds.
 		 *
 		 * @return {string} the sentence
 		 */
@@ -158,8 +144,7 @@ export default {
 			this.announcement = this.message
 		})
 		this.hideTimer = window.setTimeout(this.dismiss, VISIBLE_MS)
-		// skippable, without ever standing in the way: these only listen, they
-		// do not preventDefault and they do not stop what the reader was doing
+		// these only listen: no preventDefault, nothing the reader was doing is stopped
 		window.addEventListener('keydown', this.onKeydown)
 		window.addEventListener('pointerdown', this.onPointerDown)
 	},

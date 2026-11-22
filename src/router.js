@@ -4,7 +4,7 @@
  */
 
 import { createRouter, createWebHistory } from 'vue-router'
-import { generateUrl } from '@nextcloud/router'
+import { generateUrl, getRootUrl } from '@nextcloud/router'
 import { loadState } from '@nextcloud/initial-state'
 
 import eventBus from './services/eventBus.js'
@@ -21,58 +21,56 @@ const ProfileCollections = () => import(/* webpackChunkName: "profile" */'./view
 const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/ProfileTagged.vue')
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
+const ProfileSaved = () => import(/* webpackChunkName: "profile" */'./views/ProfileSaved.vue')
+const ProfileDrafts = () => import(/* webpackChunkName: "profile" */'./views/ProfileDrafts.vue')
+const ProfileStatistics = () => import(/* webpackChunkName: "profile" */'./views/ProfileStatistics.vue')
 const StarterPack = () => import(/* webpackChunkName: "profile" */'./views/StarterPack.vue')
-const FollowRequests = () => import(/* webpackChunkName: "settings" */'./views/FollowRequests.vue')
-const BlockedAccounts = () => import(/* webpackChunkName: "settings" */'./views/BlockedAccounts.vue')
 const Discover = () => import('./views/Discover.vue')
-// Not in the `profile` chunk. Settings and Statistics are pages somebody goes
-// to on purpose, once in a while; a profile is what every avatar in every
-// timeline links to. Sharing a chunk meant opening a profile downloaded the
-// statistics engine -- Statistics.vue is the third-largest component in the
-// app -- and the settings page with it, before drawing a single post.
-const Migration = () => import(/* webpackChunkName: "migration" */'./views/Migration.vue')
+// Chunks of their own, not `profile`: every avatar links to a profile, which
+// must not download these pages with it.
 const SwitchWizard = () => import(/* webpackChunkName: "switch" */'./views/SwitchWizard.vue')
 const Settings = () => import(/* webpackChunkName: "settings" */'./views/Settings.vue')
-const Statistics = () => import(/* webpackChunkName: "statistics" */'./views/Statistics.vue')
 const About = () => import(/* webpackChunkName: "about" */'./views/About.vue')
 const Search = () => import('./components/Search.vue')
 const VideoShorts = () => import(/* webpackChunkName: "shorts" */'./views/VideoShorts.vue')
 const NotFound = () => import(/* webpackChunkName: "not-found" */'./views/NotFound.vue')
 
 /**
- * The path the app is actually served from, which is what the history base has
- * to be: vue-router can only strip a base that prefixes the current path, and
- * writes `base + path` into the address bar when it cannot.
- *
- * `generateUrl()` is the only thing that knows which of the two shapes this
- * instance uses — `/apps/social/` where mod_rewrite is working, and
- * `/index.php/apps/social/` where it is not. Building the base by hand from
- * the web root assumes the first and breaks the second: the address bar ends
- * up at `/nextcloud/apps/social/nextcloud/index.php/apps/social/`, and a
- * reload of that 404s.
- *
- * An instance with pretty URLs still answers at `/index.php/apps/social/`, and
- * links made without the web server, by cron and occ, point there; opened at
- * such a link the app takes that shape, or the page stays empty at
- * `/apps/social/index.php/apps/social/`.
+ * The path the app is served from, which vue-router needs as its history base:
+ * the one the address starts with (`/index.php/apps/social/` or
+ * `/apps/social/`), otherwise the one `generateUrl()` would build.
  *
  * @return {string} the base path, without a trailing slash
  */
 function getBase() {
-	const withIndex = generateUrl('/apps/social', {}, { noRewrite: true }).replace(/\/+$/, '')
 	const path = window.location.pathname
-	if (path === withIndex || path.startsWith(withIndex + '/')) {
-		return withIndex
+	const withIndex = generateUrl('/apps/social', {}, { noRewrite: true }).replace(/\/+$/, '')
+	const withoutIndex = getRootUrl().replace(/\/+$/, '') + '/apps/social'
+	for (const base of [withIndex, withoutIndex]) {
+		if (path === base || path.startsWith(base + '/')) {
+			return base
+		}
 	}
 
 	return generateUrl('/apps/social').replace(/\/+$/, '')
 }
 
 /**
- * A direct link to the private home feed must not make a visitor ask for it.
- * The page shell is public so visitors can read the public timeline; sending
- * them to the public local feed here prevents a predictable 401 from being
- * shown as a broken page.
+ * A page of the reader's own profile, where Favorites, Bookmarks and
+ * Statistics live; the home feed for a reader without an account.
+ *
+ * @param {string} name the profile route
+ * @param {object} query what the page is told besides
+ * @return {object} the route
+ */
+function ownProfile(name, query = {}) {
+	const account = loadState('social', 'currentAccount', null)?.acct
+	return account ? { name, params: { account }, query } : { name: 'timeline' }
+}
+
+/**
+ * Sends a visitor who asks for the private home feed to the public local feed,
+ * rather than showing a predictable 401 as a broken page.
  *
  * @param {object} to target route
  * @param {boolean} isPublic whether this page has no signed-in reader
@@ -91,10 +89,10 @@ export function redirectGuestHome(to, isPublic) {
 const SIGNED_IN_TIMELINES = ['notifications', 'direct', 'favourites', 'bookmarks', 'interests']
 
 /**
- * Whether a page is the signed-in reader's own: their settings, statistics,
- * moving their account, follow requests, blocks, and the timelines that are
- * theirs. The server sends a visitor who loads one of these to the login
- * itself; this answers for a navigation inside the page.
+ * Whether a page is the signed-in reader's own: settings, the switch wizard,
+ * their profile's saved posts, drafts and statistics, lists, and the timelines
+ * that are theirs. The server sends a visitor who loads one of these to the
+ * login itself; this answers for a navigation inside the page.
  *
  * @param {object} to target route
  * @return {boolean}
@@ -120,19 +118,14 @@ export function loginUrl(to, base) {
 }
 
 /**
- * How long a restored scroll offset waits for the page to be drawn before it is
- * applied anyway. Long enough for a list to come back from the store and for a
- * page of posts to arrive over a slow connection; short enough that a view that
- * never says anything still scrolls rather than staying where it was.
+ * How long a restored scroll offset waits for the page to be drawn before it
+ * is applied anyway.
  */
 const RENDER_TIMEOUT = 2000
 
 /**
  * Where the reader was in each view, by path, so Back can put them there.
- *
- * Bounded: the app has a handful of views and only the most recent few are
- * ever reachable with Back in one session, so an unbounded map would be a
- * leak for no benefit.
+ * Bounded, as only the most recent few views are reachable with Back.
  */
 const offsets = new Map()
 
@@ -181,14 +174,8 @@ const router = createRouter({
 	linkActiveClass: 'active',
 	/**
 	 * Where to be after a navigation: back where Back came from, at what the
-	 * address points to, and otherwise at the top.
-	 *
-	 * The offset Back remembers is waited for rather than returned outright.
-	 * Vue Router scrolls as soon as the route has changed, and at that moment
-	 * the timeline is one screen tall — the view has mounted but its posts have
-	 * not been drawn yet — so the browser clamped a four-page offset to the
-	 * bottom of what was there and the reader landed nowhere near where they
-	 * had been.
+	 * address points to, and otherwise at the top. Back's offset waits until
+	 * the view is drawn, or the browser would clamp it to a page not yet filled.
 	 *
 	 * @param {object} to the route being entered
 	 * @param {object} from the route being left
@@ -197,11 +184,8 @@ const router = createRouter({
 	 */
 	scrollBehavior(to, from, savedPosition) {
 		if (savedPosition) {
-			// `savedPosition` is the window's, and the window never scrolls
-			// here: Nextcloud gives the app a fixed viewport and the content
-			// column scrolls inside it. Restoring it therefore did nothing.
-			// What Back needs is the offset of that column, remembered when
-			// the reader left the view.
+			// the window never scrolls here (Nextcloud gives the app a fixed
+			// viewport), so restore the content column's remembered offset
 			return whenRendered().then(() => {
 				const column = scroller()
 				const top = offsets.get(to.fullPath) ?? 0
@@ -217,20 +201,8 @@ const router = createRouter({
 			return { el: to.hash, behavior: 'smooth' }
 		}
 
-		// `{ top: 0 }` is the window's, and the window never scrolls here for
-		// the same reason as above — so on a forward navigation the content
-		// column kept whatever offset the last page was read at.
-		//
-		// Nothing looked wrong going from one long page to another, because
-		// the offset was still inside the new page. Leaving a long page for a
-		// short one showed a screenful of nothing: the two pages share one
-		// grid cell, the outgoing one is still in it until its leave
-		// transition ends *and its replacement's chunk has arrived*, so the
-		// cell stays as tall as the page being left and the incoming page sits
-		// thousands of pixels above the viewport. It corrected itself the
-		// moment the old page unmounted and the browser clamped the offset —
-		// which on a first visit to a lazily loaded page is however long the
-		// download takes, and long enough to read as a broken layout.
+		// the content column, not the window, is what scrolls; left where it
+		// was, a short page would sit far above the viewport during the transition
 		const column = scroller()
 		if (column !== null) {
 			column.scrollTop = 0
@@ -241,15 +213,22 @@ const router = createRouter({
 	routes: [
 		{
 			path: '/',
-			// `/` is a private home feed for signed-in readers and the local
-			// public feed for visitors. This runs before Timeline mounts, so a
-			// guest never briefly asks for private posts or account-only data.
+			// `/` is the private home feed for signed-in readers and the local
+			// public feed for visitors, decided before Timeline mounts
 			redirect: () => /** @type {{public?: boolean}} */ (loadState('social', 'serverData', {})).public
 				? { name: 'timeline', params: { type: 'timeline' } }
 				: { name: 'timeline' },
 		},
-		// News was a timeline of its own and is gone; an address somebody
-		// kept for it opens their feed rather than an empty page
+		// Favorites and Bookmarks live on the reader's own profile; a News
+		// address opens the home feed
+		{
+			path: '/timeline/favourites',
+			redirect: () => ownProfile('profile.saved'),
+		},
+		{
+			path: '/timeline/bookmarks',
+			redirect: () => ownProfile('profile.saved', { list: 'bookmarks' }),
+		},
 		{
 			path: '/timeline/news',
 			redirect: { name: 'timeline', params: { type: 'home' } },
@@ -331,6 +310,30 @@ const router = createRouter({
 						details: ProfileCollections,
 					},
 				},
+				{
+					path: 'saved',
+					name: 'profile.saved',
+					components: {
+						details: ProfileSaved,
+					},
+					meta: { signedIn: true },
+				},
+				{
+					path: 'drafts',
+					name: 'profile.drafts',
+					components: {
+						details: ProfileDrafts,
+					},
+					meta: { signedIn: true },
+				},
+				{
+					path: 'statistics',
+					name: 'profile.statistics',
+					components: {
+						details: ProfileStatistics,
+					},
+					meta: { signedIn: true },
+				},
 			],
 		},
 		{
@@ -367,39 +370,23 @@ const router = createRouter({
 			name: 'discover',
 		},
 		{
+			// follow requests are at the top of Activities
 			path: '/follow_requests',
-			components: {
-				default: FollowRequests,
-			},
-			name: 'follow-requests',
-			meta: { signedIn: true },
+			redirect: { name: 'timeline', params: { type: 'notifications' } },
 		},
+		// Blocking and moving the account are sections of Settings; these
+		// addresses, and the parts of them a link names, open them there
 		{
 			path: '/blocked',
-			components: {
-				default: BlockedAccounts,
-			},
-			name: 'blocked-accounts',
-			meta: { signedIn: true },
+			redirect: (to) => ({ name: 'settings', hash: to.hash || '#blocked' }),
 		},
 		{
-			// The held senders are a card on the Blocking page now. The path
-			// stays so that a bookmark, or a link somebody was sent, lands
-			// where the thing they wanted actually is rather than on a 404.
 			path: '/filtered',
-			redirect: { name: 'blocked-accounts' },
+			redirect: { name: 'settings', hash: '#filtered-notifications' },
 		},
 		{
-			// A page of its own again. Exporting an archive, importing one and
-			// bringing a following list over from another network are each a
-			// job somebody sits down to do, not a setting changed in passing,
-			// and they were the twelfth section of a page of switches.
 			path: '/migration',
-			components: {
-				default: Migration,
-			},
-			name: 'migration',
-			meta: { signedIn: true },
+			redirect: (to) => ({ name: 'settings', hash: to.hash || '#migration' }),
 		},
 		{
 			path: '/settings',
@@ -410,32 +397,27 @@ const router = createRouter({
 			meta: { signedIn: true },
 		},
 		{
-			// the same videos as `/timeline/videos`, watched rather than
-			// chosen from. Its own route so that it can be left with Back,
-			// and so that a link to it is a link somebody can be sent.
+			// the same videos as `/timeline/videos`, watched one by one; a route
+			// of its own so it can be left with Back and linked to
 			path: '/shorts',
 			components: {
 				default: VideoShorts,
 			},
-			// no scope asked for is '', which the view resolves: For you for a
-			// reader it has learned about, My Feed otherwise. `account` is whose
-			// 24-hour shorts to start at, from a face in the Home bar.
-			// `start` is the post to start at, from the Videos page's Shorts shelf.
+			// no scope is '', which the view resolves: For you for a reader it
+			// has learned about, My Feed otherwise. `account` is whose 24-hour
+			// shorts to start at (a face in the Home bar); `start` is the post
+			// to start at (the Videos page's Shorts shelf).
 			props: { default: (route) => ({ scope: String(route.query.scope ?? ''), account: String(route.query.account ?? ''), start: String(route.query.start ?? '') }) },
 			name: 'shorts',
 		},
 		{
-			// the stack's earlier address: a bookmark or a link somebody was
-			// sent still lands on it, with the scope it asked for
+			// the stack's former address, kept for bookmarks and links
 			path: '/reels',
 			redirect: (to) => ({ name: 'shorts', query: to.query, hash: to.hash }),
 		},
 		{
-			// The way in from another network. A page rather than a section of
-			// Migration: it is a sequence somebody walks once, with their old
-			// account's export in a file manager beside them, and the rest of
-			// that page is machinery for people who already know what an
-			// export is.
+			// The way in from another network: a page rather than a section of
+			// Settings, as it is a sequence walked once with the old export at hand.
 			path: '/switch',
 			components: {
 				default: SwitchWizard,
@@ -445,11 +427,7 @@ const router = createRouter({
 		},
 		{
 			path: '/statistics',
-			components: {
-				default: Statistics,
-			},
-			name: 'statistics',
-			meta: { signedIn: true },
+			redirect: () => ownProfile('profile.statistics'),
 		},
 		{
 			// the server's rules, contact and legal links, for the people on it
@@ -458,7 +436,6 @@ const router = createRouter({
 				default: About,
 			},
 			name: 'about',
-			meta: { signedIn: true },
 		},
 		{
 			path: '/search/:term?',

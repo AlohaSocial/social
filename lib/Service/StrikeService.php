@@ -18,30 +18,17 @@ use OCP\Notification\IManager as INotificationManager;
 use Psr\Log\LoggerInterface;
 
 /**
- * What a moderator has decided about an account, kept after the fact, and the
- * warning that decides nothing.
+ * The record of what a moderator decided about an account, and the warning
+ * that decides nothing.
  *
- * The ladder went from doing nothing straight to taking an account out of the
- * timelines, with no step between and no record of either: `social_moderation`
- * holds one row an account, replaced by the next decision and deleted by a
- * lift, so the third silence in a month looked exactly like the first and
- * whoever lifted the last one took the only evidence it had ever happened.
+ * `social_moderation` holds only the current decision per account; strikes
+ * keep the history, so a third silence is not mistaken for a first. A
+ * warning is a strike that applies nothing. A local account is told through
+ * Nextcloud's notifications; for a remote one it is only a moderators' note,
+ * as no ActivityPub activity says "your user has been warned".
  *
- * A **warning** is a strike that applied nothing. It is the missing step: the
- * account is told what the problem is, the moderators can see it was told, and
- * nothing about what it can do here changes.
- *
- * The account is told through Nextcloud's notifications, which is the only way
- * this instance can reach anybody — and only reaches a **local** account. A
- * warning about a remote one is a note the moderators keep; telling its owner
- * means telling their instance, and there is no ActivityPub activity that
- * says "your user has been warned".
- *
- * Nothing here removes a strike. A lift says the decision no longer stands,
- * not that it was never taken, and a suspension that took the account's posts
- * and cached actor with it leaves the record of why — which is the difference
- * between a history and the `social_moderation` row it was reconstructed from.
- * `social:reset` and uninstalling empty the table; nothing else does.
+ * Nothing here removes a strike: a lift ends a decision, not its record.
+ * Only `social:reset` and uninstalling empty the table.
  */
 class StrikeService {
 	public function __construct(
@@ -73,8 +60,7 @@ class StrikeService {
 		);
 		$this->strikesRequest->save($strike);
 		$this->notify($strike);
-		// and again where a Mastodon client can see it: the bell above is
-		// Nextcloud's, which a client reading /api/v1/notifications cannot
+		// And where a Mastodon client can see it: the bell above is Nextcloud's.
 		$this->notificationService->onModerationWarning($actorId, $action, $text);
 
 		return $strike;
@@ -108,13 +94,8 @@ class StrikeService {
 	}
 
 	/**
-	 * Tells a local account what was decided about it.
-	 *
-	 * A decision nobody was told about is one the account can only discover by
-	 * noticing that its posts stopped appearing. Failure costs the
-	 * notification and nothing else — the decision has already been recorded
-	 * and applied, and a moderator waiting on a notification queue is a
-	 * moderator who cannot moderate.
+	 * Tells a local account what was decided about it. A failure costs only the
+	 * notification; the decision is already recorded and applied.
 	 */
 	private function notify(Strike $strike): void {
 		try {

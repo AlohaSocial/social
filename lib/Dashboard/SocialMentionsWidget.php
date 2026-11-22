@@ -12,9 +12,8 @@ namespace OCA\Social\Dashboard;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 
 /**
- * The posts that talk to the reader. Mentions are the one notification kind
- * that asks for an answer, so they get a tile of their own rather than being
- * mixed in with follows and favourites.
+ * The posts that talk to the reader: mentions ask for an answer, so they get
+ * a tile of their own.
  */
 class SocialMentionsWidget extends TimelineWidget {
 	#[\Override]
@@ -49,7 +48,7 @@ class SocialMentionsWidget extends TimelineWidget {
 
 	#[\Override]
 	protected function getButtonText(): string {
-		return $this->l10n->t('Open notifications');
+		return $this->l10n->t('Open Activities');
 	}
 
 	#[\Override]

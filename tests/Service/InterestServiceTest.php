@@ -95,6 +95,7 @@ class InterestServiceTest extends TestCase {
 			ConfigService::SOCIAL_INTERESTS_CAP => '30',
 			ConfigService::SOCIAL_INTERESTS_WINDOW => '7',
 		];
+		$this->user = ['interests_notice_ack' => '1'];
 	}
 
 	private function service(): InterestService {
@@ -423,6 +424,48 @@ class InterestServiceTest extends TestCase {
 
 		$this->user['interests_learning'] = '1';
 		$this->assertTrue($this->service()->settingsFor('alice')['learning']);
+	}
+
+	public function testTheAdministratorsDefaultLearnsOnlyOnceTheNoticeWasSeen(): void {
+		$this->post('1', ['cats']);
+		unset($this->user['interests_notice_ack']);
+
+		$service = $this->service();
+		$this->assertTrue($service->settingsFor('alice')['learning']);
+		$this->assertFalse($service->settingsFor('alice')['active']);
+		$this->assertFalse($service->isLearning('alice'));
+		$service->recordEvents($this->actor(), [['status_id' => '1', 'kind' => 'open']]);
+		$this->assertSame([], $this->rows);
+
+		$service->saveSettings($this->actor(), ['noticeAcknowledged' => true]);
+		$this->assertTrue($service->isLearning('alice'));
+	}
+
+	public function testAReaderWhoSwitchedLearningOnNeedsNoNotice(): void {
+		unset($this->user['interests_notice_ack']);
+		$this->user['interests_learning'] = '1';
+
+		$this->assertTrue($this->service()->settingsFor('alice')['active']);
+	}
+
+	public function testActiveIsFalseWhileOffPausedOrDisabled(): void {
+		$service = $this->service();
+		$this->assertTrue($service->settingsFor('alice')['active']);
+
+		$this->app[ConfigService::REC_LEARNING_PAUSED] = '1';
+		$this->assertFalse($service->settingsFor('alice')['active']);
+		unset($this->app[ConfigService::REC_LEARNING_PAUSED]);
+
+		$this->user['interests_paused_at'] = (string)self::NOW;
+		$this->assertFalse($service->settingsFor('alice')['active']);
+		$this->user['interests_paused_at'] = '';
+
+		$this->user['interests_learning'] = '0';
+		$this->assertFalse($service->settingsFor('alice')['active']);
+		$this->user['interests_learning'] = '1';
+
+		$this->app[ConfigService::SOCIAL_INTERESTS] = '0';
+		$this->assertFalse($service->settingsFor('alice')['active']);
 	}
 
 	public function testAReaderWhoNeverChoseLearnsNothingAndKeepsWhatWasLearned(): void {

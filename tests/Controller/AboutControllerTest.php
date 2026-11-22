@@ -16,7 +16,7 @@ use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 
 class AboutControllerTest extends TestCase {
-	public function testItAnswersWhatTheServiceSaysToSignedInUsersOnly(): void {
+	public function testItAnswersWhatTheServiceSaysToAnybody(): void {
 		$about = ['name' => 'Cloud', 'rules' => []];
 		$service = $this->createMock(AboutService::class);
 		$service->expects($this->once())->method('about')->willReturn($about);
@@ -24,6 +24,6 @@ class AboutControllerTest extends TestCase {
 		$response = (new AboutController($this->createStub(IRequest::class), $service))->info();
 
 		$this->assertSame($about, $response->getData());
-		$this->assertSame([], (new \ReflectionMethod(AboutController::class, 'info'))->getAttributes(PublicPage::class));
+		$this->assertCount(1, (new \ReflectionMethod(AboutController::class, 'info'))->getAttributes(PublicPage::class));
 	}
 }

@@ -13,23 +13,12 @@ use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 
 /**
- * `EmojiReact`: a Like with a particular emoji on it.
+ * `EmojiReact`: a Like with a particular emoji, from Misskey and implemented
+ * by Pleroma, Akkoma, Sharkey and others; Mastodon ignores it.
  *
- * Not part of the ActivityStreams vocabulary. It comes from Misskey and is
- * implemented by Pleroma, Akkoma, Iceshrimp, Sharkey and others, and is the
- * only thing on the wire that anybody sends for a reaction, so it is what this
- * app sends and accepts. Mastodon ignores an activity type it does not know,
- * so a reaction sent to a Mastodon peer is dropped there and costs nothing.
- *
- * The emoji rides in `content`, which is the one part the implementations all
- * agree on: a single unicode emoji, or a shortcode like `:blobcat:` for a
- * custom one, with the picture in a `tag` entry. This app reads the shortcode
- * and ignores the picture — see ReactionService for why — so a custom emoji
- * from a peer is kept as a text label rather than loaded from their server.
- *
- * A reaction with no `content` is the receiving implementation's problem to
- * name; Pleroma treats it as a plain Like. Here it is refused, because a
- * reaction bar has nothing to draw for it.
+ * The emoji is in `content`: a unicode emoji, or a `:shortcode:` for a custom
+ * one, which is kept as a text label rather than loaded from the peer (see
+ * ReactionService). A reaction without `content` is refused.
  */
 class EmojiReact extends ACore implements JsonSerializable {
 	public const TYPE = 'EmojiReact';

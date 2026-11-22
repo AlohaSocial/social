@@ -20,8 +20,7 @@
 			:ariaLabel="t('social', 'When to publish the post')"
 			@update:modelValue="$emit('update:modelValue', $event)" />
 		<NcLoadingIcon v-else :size="20" />
-		<!-- the server refuses anything sooner, so say so here, where
-		     the time can still be moved -->
+		<!-- the server refuses anything sooner -->
 		<span v-if="tooSoon" class="schedule-editor__hint" role="status">
 			{{ t('social', 'Pick a time at least five minutes from now.') }}
 		</span>
@@ -37,12 +36,9 @@ import logger from '../../services/logger.js'
 import { datePickerModule, earliestSchedule, isTooSoon } from '../../utils/schedule.js'
 
 /**
- * When a post goes out: the date picker, held to the rules the server holds a
- * publication time to, and the warning when the time picked breaks one.
- *
- * The composer's clock and Settings → Scheduled posts both pick a time with
- * it. What is around it — the button that drops the schedule, or the one that
- * saves a new time — is the caller's, in the default slot.
+ * When a post goes out: a date picker held to the server's rules for a
+ * publication time, used by the composer and Settings → Scheduled posts. The
+ * caller's buttons go in the default slot.
  */
 export default {
 	name: 'SchedulePicker',

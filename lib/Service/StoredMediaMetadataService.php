@@ -20,16 +20,12 @@ use Throwable;
 
 /**
  * Takes the container metadata off a video or sound file stored before
- * uploads lost it on the way in (see `CacheDocumentService::saveMediaFromTemp()`).
+ * uploads stripped it (see `CacheDocumentService::saveMediaFromTemp()`).
  *
- * The rewritten file is stored under a new uuid and the old one deleted,
- * as the transcoder does: a stored file is served as immutable by its uuid,
- * so bytes changed under the same name would leave the old ones in every
- * cache that holds them. The posts carrying it are pointed at the new copy.
- *
- * A file that is a blob in a Bluesky repository, or was handed to Bluesky's
- * video service, is left alone: its CID is the hash of the bytes, and
- * rewriting them would break the record that names it.
+ * The rewritten file gets a new uuid, as files are served immutable by uuid,
+ * and the posts carrying it are repointed. A blob in a Bluesky repository or
+ * handed to Bluesky's video service is left alone: its CID is the hash of
+ * its bytes.
  */
 class StoredMediaMetadataService {
 	public const STRIPPED = 'stripped';

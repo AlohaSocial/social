@@ -23,9 +23,8 @@
 			<div class="quoted-post__message">
 				<MessageContent :item="quotedStatus" />
 			</div>
-			<!-- a quote of a quote is rendered as this line and never as another
-			     card: the chain can be arbitrarily long, and two posts quoting
-			     each other would otherwise recurse until the stack gives out -->
+			<!-- a quote of a quote is this line, never another card, so a chain of
+			     quotes cannot recurse -->
 			<p v-if="quotedStatus.quote" class="quoted-post__deeper">
 				{{ t('social', 'The quoted post quotes another post.') }}
 			</p>
@@ -59,10 +58,9 @@ export default {
 
 	props: {
 		/**
-		 * The `quote` of a status: `{ state, quoted_status }`, or null when the
-		 * post quotes nothing. `quoted_status` is only ever filled in when the
-		 * quote was accepted and the reader is allowed to read the quoted post,
-		 * so every other combination has to read as an explanation.
+		 * The `quote` of a status: `{ state, quoted_status }`, or null. The post is
+		 * only filled in for an accepted quote the reader may read; anything else
+		 * reads as an explanation.
 		 */
 		quote: {
 			type: /** @type {import('vue').PropType<{state: string, quoted_status: ?object}>} */ (Object),
@@ -75,9 +73,8 @@ export default {
 		quotedStatus() {
 			const quoted = this.quote?.quoted_status ?? null
 
-			// an accepted quote whose post did not come with it is one the
-			// reader may not read; it is not an error and must not render half
-			// a card, so it falls through to the notice
+			// an accepted quote without its post is one the reader may not read, so it
+			// falls through to the notice
 			return this.quote?.state === 'accepted' && quoted?.account ? quoted : null
 		},
 
@@ -105,8 +102,7 @@ export default {
 
 		/**
 		 * @return {string} why there is no quoted post here. A state this
-		 * version does not know reads as unavailable rather than as an error:
-		 * the set is Mastodon's and it can grow.
+		 * version does not know reads as unavailable: the set is Mastodon's.
 		 */
 		notice() {
 			switch (this.quote.state) {
@@ -131,11 +127,7 @@ export default {
 <style scoped lang="scss">
 @use '../styles/embed.scss' as embed;
 
-/**
- * Somebody else's post inside this one: in the frame every embed has, and
- * ruled off at its start, so it cannot be read as something the author of
- * the outer post wrote.
- */
+/* somebody else's post, ruled off at its start so it is not read as the outer author's */
 .quoted-post {
 	@include embed.frame;
 	margin-inline: 0;

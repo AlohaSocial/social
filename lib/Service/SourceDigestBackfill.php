@@ -20,20 +20,14 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Gives the posts stored before `social_stream.source_digest` existed theirs
- * (`Stream::sourceDigestOf()`), so their reads stop decoding `source`.
+ * Gives older posts their `social_stream.source_digest`
+ * (`Stream::sourceDigestOf()`), so their reads stop decoding `source`; rows
+ * without one still read correctly. Walked once in pages by `nid` from a
+ * cursor in app config (`done` at the end); every write of `source` writes
+ * the digest.
  *
- * A row without one still reads correctly — out of `source`, as before — so
- * this is only ever catching up. The table is walked once, in pages by
- * `nid`, from a cursor kept in the app config (the last `nid` done, or `done`
- * once the walk passed the end); every write of `source` writes the digest,
- * so a walk that reached the end is finished for good.
- *
- * It waits for `BackfillStreamPostFields`: a row with a digest is read
- * without the fallback that fills the five post columns out of `source`, so
- * those columns have to be right before a row gets one. A fresh install never
- * runs that step and needs nothing from this either, since every row it
- * writes carries its digest.
+ * Waits for `BackfillStreamPostFields`, since a row with a digest is read
+ * without the fallback that fills the five post columns from `source`.
  */
 class SourceDigestBackfill {
 	public const BATCH = 500;

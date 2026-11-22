@@ -55,9 +55,8 @@ import { ownLists, partLabel, RULE_PARTS, ruleParts, withPart } from '../utils/r
 
 /**
  * An author's control over who may reply to one of their posts, here and on
- * Bluesky alike, from now on: anybody, nobody, or any of their followers,
- * the people they follow, the people the post mentions and the people on
- * one of their lists.
+ * Bluesky: anybody, nobody, or followers, followed accounts, mentioned
+ * accounts and members of one of their lists.
  */
 export default {
 	name: 'ReplyControlDialog',

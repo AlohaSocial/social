@@ -18,18 +18,10 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 /**
  * The instance's announcements, and which account has dismissed which.
  *
- * An announcement belongs to the instance rather than to an account, so there
- * is no owner to compare in SQL here and no access rule this class enforces:
- * who may write one is the admin requirement on the routes that do. The one
- * thing every read does carry is the window — `getActive()` compares the
- * bounds in the statement, so an announcement whose range has not opened or
- * has closed is a row the query never returns. Nothing deletes it: an
- * instance whose cron has stopped keeps showing a stale notice otherwise, and
- * a notice that outstays its window is the failure this feature has.
- *
- * A dismissal is one row per (account, announcement), so one account's read
- * state cannot be read off another's, and there is nothing per-account in the
- * announcement row itself to get that wrong with.
+ * Announcements belong to the instance, so there is no owner check here;
+ * the admin requirement is on the routes. `getActive()` applies the window
+ * in SQL so nothing has to delete expired ones. Dismissals are one row per
+ * (account, announcement).
  */
 class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	/**
@@ -65,9 +57,8 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * Every announcement there is, newest first — the administration list,
-	 * where one that has not started yet and one that has run out are both
-	 * things the admin has to be able to see and remove.
+	 * Every announcement there is, newest first, for the administration list,
+	 * including ones not started or expired.
 	 *
 	 * @return Announcement[]
 	 */
@@ -79,12 +70,8 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * The announcements that apply as of `$now`.
-	 *
-	 * The window is a predicate of this statement and not a row somebody
-	 * deletes, so an announcement starts and stops being served at the moment
-	 * it says it will, on an instance with no working cron as much as on one
-	 * with. A bound that was never set is NULL and matches either way.
+	 * The announcements that apply as of `$now`. The window is a predicate of
+	 * the statement, so it works without a cron; a NULL bound matches either way.
 	 *
 	 * @return Announcement[]
 	 */
@@ -134,8 +121,7 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * Removes the announcement and every dismissal of it: those rows have
-	 * nothing left to say about anything once it is gone.
+	 * Removes the announcement and every dismissal of it.
 	 *
 	 * @throws ItemNotFoundException there was no such announcement, so nothing
 	 *                               was removed
@@ -152,8 +138,7 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 		$qb->where($qb->expr()->eq('announcement_id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
 		$qb->executeStatement();
 
-		// and the reactions to it, for the same reason as the dismissals: the
-		// announcement is gone for everybody, read or not, reacted to or not
+		// And the reactions to it.
 		$reactions = $this->getReactionsDeleteSql();
 		$reactions->where($reactions->expr()->eq(
 			'announcement_id', $reactions->createNamedParameter($id, IQueryBuilder::PARAM_INT)
@@ -162,12 +147,9 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * Marks the announcement read by that account.
-	 *
-	 * Idempotent: dismissing twice is what a client does when two devices have
-	 * the same unread notice open, and the unique index on (account,
-	 * announcement) is what makes the second one a no-op rather than a second
-	 * row.
+	 * Marks the announcement read by that account. Idempotent through the
+	 * unique index on (account, announcement), as two devices may dismiss the
+	 * same notice.
 	 */
 	public function dismiss(int $announcementId, string $actorId): void {
 		$qb = $this->getReadsInsertSql();
@@ -179,13 +161,8 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * Which of those announcements that account has dismissed, in one query
-	 * rather than one per announcement: a client reads the whole active set at
-	 * once.
-	 *
-	 * The account is in the statement, so what comes back can only ever be
-	 * that account's own dismissals — one user's read state is not readable
-	 * through another's.
+	 * Which of those announcements that account has dismissed, in one query; the
+	 * account is in the statement, so only its own dismissals come back.
 	 *
 	 * @param int[] $announcementIds
 	 *
@@ -241,11 +218,7 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 
 	/**
 	 * How many of each reaction those announcements carry, and which of them
-	 * this account is among — in one query rather than one per announcement,
-	 * because a client reads the whole active set at once.
-	 *
-	 * The account is in the statement, so `me` can only ever describe the
-	 * account being answered.
+	 * this account is among (`me`), in one query.
 	 *
 	 * @param int[] $announcementIds
 	 *
@@ -307,8 +280,7 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * Everything an account leaves behind here when it is deleted. Called from
-	 * the account-deletion path, like every other deleteRelatedId(). The
+	 * Everything an account leaves behind here when it is deleted; the
 	 * announcements themselves are the instance's and stay.
 	 */
 	public function deleteRelatedId(string $actorId): void {
@@ -338,13 +310,8 @@ class AnnouncementsRequest extends AnnouncementsRequestBuilder {
 	}
 
 	/**
-	 * A timestamp as the date columns here hold one.
-	 *
-	 * Every other date in this schema is written from `new DateTime('now')`,
-	 * which carries the server's timezone, and DBAL formats a DateTime in
-	 * whatever zone the object has. A `DateTime('@…')` is always UTC, so a
-	 * window built from a timestamp would be stored hours away from the `now`
-	 * it is compared with on any instance that is not on UTC.
+	 * A timestamp as the date columns here hold one: in the server's timezone,
+	 * like the `now` it is compared with, since a `DateTime('@…')` is UTC.
 	 */
 	private function dateTime(int $timestamp): ?DateTime {
 		if ($timestamp === 0) {

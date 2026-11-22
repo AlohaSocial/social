@@ -56,8 +56,7 @@
 				class="short"
 				:class="{ 'short--day': entry.day }"
 				:data-index="index">
-				<!-- a 24-hour picture or text card is its own picture; pressing
-				     it holds its clock, as tapping a video pauses it -->
+				<!-- a 24-hour photo or text card: pressing it holds its clock -->
 				<button
 					v-if="entry.day && !entry.isVideo && entry.video.url"
 					type="button"
@@ -72,10 +71,9 @@
 						@load="onPosterMetadata($event, index)">
 				</button>
 				<p v-else-if="entry.day && !entry.isVideo" class="short__gone">
-					{{ t('social', 'The picture of this short is gone.') }}
+					{{ t('social', 'The photo of this short is gone.') }}
 				</p>
-				<!-- a still where the player is not: the one <video> below
-				     is over whichever slide is being watched -->
+				<!-- a still wherever the one <video> below is not -->
 				<img
 					v-else-if="entry.video.preview_url"
 					class="short__poster"
@@ -83,10 +81,9 @@
 					:alt="index === playing ? '' : (entry.video.description || entry.text)"
 					loading="lazy">
 
-				<!-- the hearts a like releases: one where a double tap landed,
-				     and a few rising up the edge, the way live video does it.
-				     Decoration only; the button below is what a screen reader
-				     is told about. -->
+				<!-- the hearts a like releases, one where a double tap landed and
+				     a few rising up the edge; decoration only, the button below
+				     is what a screen reader is told about -->
 				<div class="short__hearts" aria-hidden="true">
 					<svg
 						v-for="heart in heartsOn(index)"
@@ -152,7 +149,7 @@
 					</NcActionButton>
 				</NcActions>
 
-				<!-- the one control that is not a gesture: a pointer has no swipe -->
+				<!-- a pointer has no swipe -->
 				<button
 					v-if="entry.isVideo"
 					type="button"
@@ -162,7 +159,7 @@
 					<IconVolumeOff v-if="silent" :size="20" />
 					<IconVolumeHigh v-else :size="20" />
 				</button>
-				<!-- the browser would not start with sound: say where it is -->
+				<!-- the browser refused to start with sound -->
 				<span v-if="entry.isVideo && soundHeld && index === playing" class="short__sound-hint" aria-hidden="true">
 					{{ t('social', 'Tap for sound') }}
 				</span>
@@ -210,7 +207,7 @@
 						@click.stop="toggleCaption(entry)">
 						{{ expandedCaption === entry.key && !phone ? t('social', 'Show less') : t('social', 'Show more') }}
 					</button>
-					<!-- why For you put it here, as the chip over a post says it -->
+					<!-- why For you showed it, as the chip over a post says it -->
 					<p v-if="reasonOf(entry.status)" class="short__reason" :aria-label="reasonOf(entry.status).label">
 						{{ reasonOf(entry.status).text }}
 					</p>
@@ -222,13 +219,10 @@
 				</div>
 			</article>
 
-			<!-- one player for the whole stack, moved to the slide on screen and
-			     given its video. WebKit lets an element play with sound only
-			     once a gesture has allowed it, and a scroll is not a gesture:
-			     a new element per slide was refused the sound on every slide
-			     after the first. It stays, hidden, while a 24-hour picture is
-			     on screen, for the same reason. A kept short loops; a 24-hour
-			     one moves on when it ends. -->
+			<!-- one player for the whole stack, moved to the slide on screen:
+			     WebKit allows sound only on an element a gesture has unlocked,
+			     and a scroll is not a gesture. It stays, hidden, while a 24-hour
+			     photo is on screen for the same reason. -->
 			<video
 				v-if="current"
 				v-show="current.isVideo"
@@ -318,8 +312,7 @@
 			</p>
 		</div>
 
-		<!-- on a phone, the foot of the rail the like and sound buttons stand
-		     on: a swipe is the gesture, this is the same move for a press -->
+		<!-- on a phone, the button version of the swipe to the next short -->
 		<button
 			v-if="phone && current"
 			type="button"
@@ -331,8 +324,8 @@
 			<IconChevronDown :size="24" />
 		</button>
 
-		<!-- a phone's caption reads in a sheet from the foot of the player,
-		     rather than growing over the video it describes -->
+		<!-- on a phone, the caption reads in a sheet from the foot of the player
+		     so it does not cover the video -->
 		<template v-if="sheetEntry">
 			<div class="shorts__sheet-scrim" aria-hidden="true" @click="closeCaption" />
 			<section
@@ -380,45 +373,13 @@
 
 <script>
 /**
- * Videos one at a time, full height, the way the app people are leaving shows
- * them.
+ * Shorts one at a time, full height, playing as they scroll past.
  *
- * The Videos page is a grid, which is right for choosing and wrong for
- * watching: every video on it is a still until it is clicked, and the thing
- * somebody arriving from TikTok is used to is a stack that plays by itself as
- * it goes past. This is that stack, over the same timelines narrowed to
- * shorts — `only_short`, a single video of at most three minutes, upright or
- * square — so the stack, For you's Shorts scope and a client asking the API
- * share the server's one idea of what a short is.
- *
- * Four rules hold it together:
- *
- *  - **One plays at a time.** An IntersectionObserver decides which, and
- *    there is only one element to play it with; a dozen videos buffering
- *    behind the one on screen is a phone getting hot for nothing.
- *  - **Sound on, where the browser allows it.** Somebody who opens Shorts
- *    from the sidebar has pressed something to get here, and a browser
- *    counts that as leave to play with sound. Opened cold -- a pasted link,
- *    a reload -- the browser refuses, and the stack falls back to muted and
- *    says "Tap for sound" rather than showing a still. The reader's choice
- *    applies to every video, because it is a statement about this page
- *    rather than about one video; a refusal is not a choice, and the next
- *    video is asked with sound again (see useSoundAutoplay).
- *  - **One element.** A single <video> follows the slide on screen and the
- *    others show their poster, so the element a tap once allowed to play
- *    with sound keeps that leave for every video after it.
- *  - **The scroll does the work.** CSS scroll-snap rather than a transform per
- *    slide: it is the one thing that behaves the same under a finger, a
- *    trackpad, a wheel and a keyboard, and it keeps working when the
- *    JavaScript that observes it does not.
- *
- * Before the kept shorts come the 24-hour shorts of the people the reader
- * follows (the stories carousel), one person after another, those with
- * something unseen first and the reader's own last. `?account=` puts that
- * person first, which is how a face in the Home bar opens the stack at them.
- * A 24-hour short plays in the same stack: a video in the one player, ending
- * into the next slide; a picture or a text card for the seconds its poster
- * gave it. Its marks and its answers are DayShortPanel's.
+ * A scroll-snapped stack over the timelines narrowed to `only_short`. Only the
+ * slide on screen plays, in a single <video> that follows it, so the sound a
+ * gesture allowed carries over to every later video. The 24-hour shorts of
+ * followed accounts come first, one person after another; `?account=` puts
+ * that person first.
  */
 import axios from '@nextcloud/axios'
 import { getCurrentUser } from '@nextcloud/auth'
@@ -455,9 +416,8 @@ import { fetchRecommendationContext, recordRecommendationFeedback, undoRecommend
 import { showError, showUndo } from '../services/toast.js'
 
 /**
- * What a clip must have gathered — likes, boosts and views together — before
- * "Popular right now" or "Trending here" is said of it. Below this the slide
- * carries the author line alone.
+ * Likes, boosts and views a clip needs before "Popular right now" or
+ * "Trending here" is said of it.
  */
 const POPULARITY_FLOOR = 10
 import { oldestId } from '../utils/snowflake.js'
@@ -475,9 +435,8 @@ import ShortComposerDialog from '../components/ShortComposerDialog.vue'
 const LOOK_AHEAD = 3
 
 /**
- * How long a second tap may take to count as a double tap. A single tap waits
- * this long before it pauses, which is the price every app with double-tap to
- * like pays, and at this length nobody notices it.
+ * How long a second tap may take to count as a double tap; a single tap
+ * waits this long before it pauses.
  */
 export const DOUBLE_TAP_MS = 280
 
@@ -518,11 +477,9 @@ export default {
 
 	props: {
 		/**
-		 * Which circle of people: 'home' (the ones you follow), 'timeline'
-		 * (this instance) or 'federated' (everywhere) — the same three the
-		 * Videos page is read at, carried here so that leaving the grid for
-		 * the stack does not silently change what is in it — or 'interests',
-		 * For you narrowed to videos. '' is the default, see `watching`.
+		 * Which feed: 'home', 'timeline' (this instance), 'federated' or
+		 * 'interests' (For you narrowed to videos), as on the Videos page.
+		 * '' is the default, see `watching`.
 		 */
 		scope: {
 			type: String,
@@ -536,9 +493,8 @@ export default {
 		},
 
 		/**
-		 * Which post to start at, by id: a short chosen on the Videos page's
-		 * Shorts shelf. '' starts at the top; a post the first page does not
-		 * hold starts there too.
+		 * Which post to start at, by id; '' or a post the first page does not
+		 * hold starts at the top.
 		 */
 		start: {
 			type: String,
@@ -582,10 +538,8 @@ export default {
 			recommendationContexts: {},
 			recommendationContextLoading: {},
 			/**
-			 * Which scope the page in flight belongs to. A page the store
-			 * dropped because the scope changed under it comes back empty,
-			 * and read as the end of the new scope it left the stack black
-			 * for good.
+			 * Which scope the page in flight belongs to, so a page dropped by a
+			 * scope change is not read as the end of the new scope.
 			 */
 			generation: 0,
 			slides: [],
@@ -639,9 +593,8 @@ export default {
 		},
 
 		/**
-		 * The circles a reader can watch: the people they follow, this server,
-		 * everywhere. Somebody reading without a session follows nobody, so
-		 * they are offered the other two.
+		 * The feeds a reader can watch; a reader without a session follows
+		 * nobody and is not offered My Feed.
 		 *
 		 * @return {Array<{ value: string, label: string }>}
 		 */
@@ -651,8 +604,7 @@ export default {
 				{ value: 'timeline', label: t('social', 'Local') },
 				{ value: 'federated', label: t('social', 'Global') },
 			]
-			// For you, for a signed-in reader who has it: beside My Feed, as
-			// above the timeline
+			// For you sits beside My Feed, as above the timeline
 			if (this.hasForYou) {
 				all.splice(1, 0, { value: 'interests', label: t('social', 'For you') })
 			}
@@ -715,9 +667,8 @@ export default {
 		},
 
 		/**
-		 * One entry per video, not per post: a post with three videos on it is
-		 * three things to watch, and a stack that showed only the first would
-		 * be hiding two of them behind a grid tile nobody goes back to.
+		 * One entry per video, not per post, so every video of a post is
+		 * watched.
 		 *
 		 * @return {object[]} the video, the post it is on, and its words
 		 */
@@ -728,8 +679,7 @@ export default {
 				for (const media of status.media_attachments ?? []) {
 					if (media.type === 'video' || media.type === 'gifv') {
 						entries.push({
-							// one slide per video, so the post's id alone is
-							// shared by every slide of a post with several
+							// a post with several videos has several slides
 							key: status.id + ':' + media.id,
 							status,
 							video: media,
@@ -794,8 +744,7 @@ export default {
 	},
 
 	watch: {
-		// the query is the prop, and the router reuses this view when only
-		// the query changes, so a new scope has to switch the feed here
+		// the router reuses this view when only the query changes
 		watching() {
 			this.open()
 		},
@@ -864,9 +813,8 @@ export default {
 			}).catch((error) => logger.debug('Could not read For you learning settings for Shorts', { error }))
 		}
 
-		// `threshold: 0.6` rather than a bare intersection: two slides touch
-		// the viewport for most of a scroll, and whichever was observed last
-		// would win. A slide is the one being watched when most of it is there.
+		// A slide is the one being watched when most of it is visible; with a
+		// bare intersection two slides would match for most of a scroll.
 		this.observer = new IntersectionObserver(this.onVisible, { threshold: 0.6 })
 		this.measureTrackBounds()
 		if (typeof ResizeObserver === 'function') {
@@ -903,8 +851,7 @@ export default {
 	updated() {
 		// a 24-hour short taken out leaves its old place behind
 		this.slides.length = this.shorts.length
-		// slides arrive a page at a time, so each new one is taken under
-		// observation as it appears rather than all of them once at mount
+		// slides arrive a page at a time, so each is observed as it appears
 		for (const slide of this.slides) {
 			if (slide && !slide.dataset.observed) {
 				slide.dataset.observed = '1'
@@ -1197,12 +1144,10 @@ export default {
 		},
 
 		/**
-		 * One person after another: the one asked for first, then those with
-		 * something unseen, then those seen, then the reader's own. Each
-		 * person's shorts stay in the order the server gave them.
-		 *
-		 * Worked out when the list arrives and not as it is watched, or a
-		 * short marked seen would move under the reader.
+		 * The one asked for first, then people with something unseen, then
+		 * those seen, then the reader's own; each person's shorts keep the
+		 * server's order. Done once on arrival so a short marked seen does not
+		 * move under the reader.
 		 *
 		 * @param {object[]} shorts the carousel
 		 * @param {string} first whose to put first, by handle
@@ -1260,10 +1205,9 @@ export default {
 		},
 
 		/**
-		 * Why For you showed a slide, as the chip over a post says it — except
-		 * that popularity is only claimed of a clip that has some: For you
-		 * fills a short ranking with what is trending in the same kind, and
-		 * on a small server that is a clip nobody has touched yet.
+		 * Why For you showed a slide. Popularity is claimed only of a clip
+		 * that has some, since For you pads a short ranking with trending
+		 * clips nobody may have touched yet.
 		 *
 		 * @param {object} status a slide's post
 		 * @return {{text: string, label: string}|null} why For you showed it
@@ -1303,9 +1247,8 @@ export default {
 		},
 
 		/**
-		 * Whichever slide is mostly on screen becomes the one playing. There
-		 * is only one element to play it with, so a slide scrolled past stops
-		 * by losing it rather than being paused and left buffering.
+		 * Whichever slide is mostly on screen gets the one player; a slide
+		 * scrolled past stops by losing it.
 		 *
 		 * @param {IntersectionObserverEntry[]} entries what moved
 		 */
@@ -1326,9 +1269,8 @@ export default {
 		},
 
 		/**
-		 * Plays the slide once the player has moved to it and been given its
-		 * video. A new `src` starts from the first frame, so coming back to a
-		 * slide is the video again rather than its last second.
+		 * Plays the slide once the player has moved to it. A new `src` starts
+		 * from the first frame, so coming back to a slide replays the video.
 		 *
 		 * @param {number} index the slide on screen
 		 * @return {Promise<void>}
@@ -1346,8 +1288,7 @@ export default {
 				return
 			}
 
-			// a picture runs on its own clock; the hidden player must not go
-			// on with the video before it
+			// a photo runs on its own clock; the hidden player must not play on
 			if (!this.shorts[index]?.isVideo) {
 				this.playerSlideKey = ''
 				this.player()?.pause?.()
@@ -1362,8 +1303,11 @@ export default {
 			await this.playWithSound(player)
 		},
 
-		/** A kept short loops; a 24-hour one moves on. */
-		/** @param {Event} [event] the video that ended */
+		/**
+		 * A 24-hour short moves on when it ends.
+		 *
+		 * @param {Event} [event] the video that ended
+		 */
 		onEnded(event) {
 			const video = /** @type {HTMLVideoElement} */ (event?.target ?? this.player())
 			if (this.playerSlideKey !== this.currentKey || !this.isCurrentPlayerSource(video)) {
@@ -1457,8 +1401,8 @@ export default {
 		},
 
 		/**
-		 * One tap pauses; two tap-taps like. The first tap has to wait to see
-		 * whether a second follows, or a double tap would also pause and play.
+		 * One tap pauses, two like. The first tap waits to see whether a
+		 * second follows.
 		 *
 		 * @param {number} index the slide
 		 * @param {MouseEvent} event the tap, for where the heart goes
@@ -1491,10 +1435,8 @@ export default {
 		},
 
 		/**
-		 * A double tap likes, and never unlikes: it is the gesture for "I love
-		 * this", done again because it is fun, and taking the like back on the
-		 * second go would punish exactly that. The heart goes where the
-		 * finger was.
+		 * A double tap likes and never unlikes, so repeating it does not take
+		 * the like back. The heart goes where the finger was.
 		 *
 		 * @param {number} index the slide
 		 * @param {MouseEvent} event the second tap
@@ -1564,8 +1506,7 @@ export default {
 		},
 
 		/**
-		 * Puts one heart on screen and takes it off again when its animation
-		 * is over.
+		 * Puts one heart on screen and removes it when its animation is over.
 		 *
 		 * @param {number} index the slide
 		 * @param {object} heart what kind
@@ -1576,8 +1517,7 @@ export default {
 		 */
 		addHeart(index, { big, x = null, y = null, delay = 0 }) {
 			const id = ++heartSerial
-			// a little sideways drift, a tilt and a size each, so a handful of
-			// hearts reads as a handful and not as one heart drawn five times
+			// a random drift, tilt and size each, so the hearts do not look identical
 			const drift = Math.round((Math.random() - 0.5) * 60)
 			const tilt = Math.round((Math.random() - 0.5) * 30)
 			const size = big ? 96 : 26 + Math.round(Math.random() * 12)
@@ -1665,8 +1605,7 @@ export default {
 		},
 
 		/**
-		 * Up and down, and space for pause — a stack is reachable without a
-		 * finger or it is reachable by nobody using a keyboard.
+		 * Up and down to page and space to pause, for keyboard users.
 		 *
 		 * @param {KeyboardEvent} event the key
 		 */
@@ -1695,9 +1634,8 @@ export default {
 		},
 
 		/**
-		 * A fallback for the observer: a browser that does not fire it, or a
-		 * scroll that lands between two thresholds, still ends up with the
-		 * right slide playing.
+		 * Fallback for the observer, for a browser that does not fire it or a
+		 * scroll that lands between two thresholds.
 		 */
 		onScroll() {
 			const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
@@ -1713,11 +1651,8 @@ export default {
 		},
 
 		/**
-		 * The next page of videos, paged on the ids themselves.
-		 *
-		 * As strings end to end: an id here is a snowflake, and one rounded
-		 * through a Number either re-fetches the post it points at or skips
-		 * the rows between the two.
+		 * The next page of videos. Ids stay strings end to end: a snowflake id
+		 * rounded through a Number would re-fetch or skip posts.
 		 */
 		async load() {
 			if (this.loading || this.allLoaded) {

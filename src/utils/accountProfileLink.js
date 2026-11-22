@@ -6,13 +6,10 @@ import { generateUrl } from '@nextcloud/router'
 import { isLocalAccount, nextcloudUserOf } from './accountLocality.js'
 
 /**
- * The native Nextcloud profile URL for an account hosted on this instance.
- * Remote actors have no corresponding `/u/{uid}` page and return an empty
- * string so their caller can keep the Social/Fediverse profile destination.
- * A local account whose Nextcloud user the page was not told -- a team
- * account, or one named apart from its login, seen by a visitor -- links
- * its own profile page here instead: the `/u/` page is the user id's, and
- * the username is not it.
+ * The native Nextcloud profile URL (`/u/{uid}`) for an account hosted on this
+ * instance; '' for remote actors, so the caller keeps the Social profile. A
+ * local account whose Nextcloud user the page was not told links its own
+ * profile page instead, as the username need not be the user id.
  *
  * @param {Partial<import('../types/Mastodon.js').Account>} account a Mastodon-compatible account
  * @param {string|number|null} [statusId] optional Social status to focus

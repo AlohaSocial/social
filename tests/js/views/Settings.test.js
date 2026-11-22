@@ -6,19 +6,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Settings from '../../../src/views/Settings.vue'
-import MigrationSettings from '../../../src/components/MigrationSettings.vue'
 import ScheduledPosts from '../../../src/components/ScheduledPosts.vue'
-import ShortcutList from '../../../src/components/ShortcutList.vue'
-import ShortcutHelp from '../../../src/components/ShortcutHelp.vue'
-import { PLAYER_SHORTCUTS, SHORTCUTS } from '../../../src/services/shortcuts.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 
 // the scheduled list asks the server for its entries as soon as it is drawn
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn().mockResolvedValue({ data: [] }), delete: vi.fn() },
 }))
-
-const NcModalStub = { name: 'NcModal', template: '<div class="modal-stub"><slot /></div>' }
 
 // The two account sections are `defineAsyncComponent`s, so mounting the page
 // starts a dynamic import that outlives the test: vitest tears the
@@ -47,6 +41,10 @@ const asyncStubs = {
 	SensitiveMediaSettings: { name: 'SensitiveMediaSettings', template: '<section class="sensitive-media-settings-stub" />' },
 	// reads the Bluesky identity on mount
 	BlueskySettings: { name: 'BlueskySettings', template: '<section class="bluesky-settings-stub" />' },
+	// read the account, the blocks and the moves on mount
+	ContactSettings: { name: 'ContactSettings', template: '<section class="contact-settings-stub" />' },
+	BlockedAccounts: { name: 'BlockedAccounts', props: ['embedded'], template: '<section class="blocked-accounts-stub" />' },
+	MigrationSettings: { name: 'MigrationSettings', template: '<section class="migration-settings-stub" />' },
 }
 
 /**
@@ -94,9 +92,9 @@ describe('Settings', () => {
 
 		// the page's one h1, which is what a screen reader jumps to
 		expect(wrapper.find('h1').text()).toBe('Settings')
-		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Notifications', 'Your posts', 'Apps and account', 'Help'])
-		expect(wrapper.find('.settings__group-heading').text()).toBe('Profile and privacy')
-		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Public profile layout', 'Who may send you direct messages', 'Featured hashtags'])
+		expect(groupTitles(wrapper)).toEqual(['Account and privacy', 'Reading', 'Activities', 'Apps'])
+		expect(wrapper.find('.settings__group-heading').text()).toBe('Account and privacy')
+		expect(headings(wrapper)).toEqual(['Who can find you', 'Who can contact you', 'Blocked and muted', 'Moving your account', 'Delete your Aloha Social account'])
 	})
 
 	it('has every section in exactly one group, in the order they are read', async () => {
@@ -109,34 +107,22 @@ describe('Settings', () => {
 		}
 
 		expect(seen).toEqual([
-			'Who can find and follow you',
-			'Public profile layout',
-			'Who may send you direct messages',
-			'Featured hashtags',
-			'Lists',
+			'Who can find you',
+			'Who can contact you',
+			'Blocked and muted',
+			'Moving your account',
+			'Delete your Aloha Social account',
 			'Sensitive media',
 			'Likes and followers',
-			'Feed posts',
-			'Looking back',
-			'Sound and touch',
 			'When to tell you',
-			'Who may reach you',
-			'Drafts',
-			'Scheduled posts',
-			'Waiting for review',
-			'Archived posts',
-			'Replies in Files',
 			'Authorized apps',
-			'Delete your Aloha Social account',
-			'Introduction',
-			'Keyboard shortcuts',
+			'Replies in Files',
 		])
 	})
 
 	/** The deletion cannot be undone, so it comes last in its group, marked. */
 	it('marks the section that cannot be undone', async () => {
 		const wrapper = await mountSettings()
-		await openGroup(wrapper, 'Apps and account')
 
 		expect(wrapper.find('#delete').classes()).toContain('settings__section--danger')
 		expect(headings(wrapper).at(-1)).toBe('Delete your Aloha Social account')
@@ -150,52 +136,32 @@ describe('Settings', () => {
 		 * #notification-policy. A link opens the group the section is in.
 		 */
 		it.each([
-			['#scheduled', 'Your posts'],
-			['#notification-policy', 'Notifications'],
-			['#featured-tags', 'Profile and privacy'],
-			['#shortcuts', 'Help'],
-		])('%s opens %s', async (hash, group) => {
+			['#files-comments', 'Apps', '#files-comments'],
+			['#sensitive', 'Reading', '#sensitive'],
+			// the parts of a section open the section
+			['#notification-policy', 'Account and privacy', '#contact'],
+			['#direct-messages', 'Account and privacy', '#contact'],
+			['#filters', 'Account and privacy', '#blocked'],
+			['#bring', 'Account and privacy', '#migration'],
+		])('%s opens %s', async (hash, group, section) => {
 			const wrapper = await mountSettings({ hash })
 
 			expect(wrapper.find('.settings__group-heading').text()).toBe(group)
-			expect(wrapper.find(hash).exists()).toBe(true)
+			expect(wrapper.find(`section${section}`).exists()).toBe(true)
 		})
 
-		/**
-		 * `#notification-policy` was linked to from three pages while no
-		 * section carried it, so every one of them landed at the top.
-		 */
-		it('reaches who may reach you, which now has a section of its own', async () => {
-			const wrapper = await mountSettings({ hash: '#notification-policy' })
+		it('holds Blocking and moving the account, which were pages of their own', async () => {
+			const wrapper = await mountSettings({ hash: '#blocked' })
 
-			expect(wrapper.find('section.settings__section#notification-policy .notification-policy-settings-stub').exists()).toBe(true)
-			expect(wrapper.find('section.settings__section#notifications .notification-delivery-settings-stub').exists()).toBe(true)
-		})
-
-		/**
-		 * `#migration` is what has been linked to and bookmarked for as long
-		 * as it was a section here. Sent on rather than ignored: landing on a
-		 * settings page with nothing highlighted is the one answer that says
-		 * nothing.
-		 */
-		it('sends an old link to the migration section on to the page', async () => {
-			const replace = vi.fn()
-			mount(Settings, {
-				global: {
-					stubs: asyncStubs,
-					mocks: { $route: { hash: '#migration' }, $router: { replace } },
-				},
-			})
-			await flushPromises()
-
-			expect(replace).toHaveBeenCalledWith({ name: 'migration' })
+			expect(wrapper.findComponent({ name: 'BlockedAccounts' }).props('embedded')).toBe(true)
+			expect(wrapper.find('section.settings__section#migration .migration-settings-stub').exists()).toBe(true)
 		})
 	})
 
 	describe('the rail', () => {
 		it('lists the sections of the open group, pointing at each', async () => {
 			const wrapper = await mountSettings()
-			await openGroup(wrapper, 'Your posts')
+			await openGroup(wrapper, 'Apps')
 
 			const links = wrapper.findAll('.settings__toc-link')
 			expect(links.map((link) => link.text())).toEqual(headings(wrapper))
@@ -207,15 +173,15 @@ describe('Settings', () => {
 			const wrapper = await mountSettings()
 
 			expect(wrapper.findAll('.settings__group-link').map((link) => link.attributes('href')))
-				.toEqual(['#account', '#lists', '#notifications', '#drafts', '#apps', '#introduction'])
+				.toEqual(['#account', '#sensitive', '#notifications', '#apps'])
 		})
 
 		it('puts the group opened into the address', async () => {
 			const wrapper = await mountSettings()
-			await openGroup(wrapper, 'Help')
+			await openGroup(wrapper, 'Apps')
 
-			expect(wrapper.vm.$router.replace).toHaveBeenCalledWith({ hash: '#introduction' })
-			expect(wrapper.find('.settings__group-link--current .settings__group-title').text()).toBe('Help')
+			expect(wrapper.vm.$router.replace).toHaveBeenCalledWith({ hash: '#apps' })
+			expect(wrapper.find('.settings__group-link--current .settings__group-title').text()).toBe('Apps')
 		})
 
 		/**
@@ -226,14 +192,14 @@ describe('Settings', () => {
 		it('marks the last section whose heading has passed the top', async () => {
 			const wrapper = await mountSettings()
 
-			const tops = { account: -800, 'direct-messages': 40, 'featured-tags': 320 }
+			const tops = { account: -800, contact: 40, blocked: 320 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)
 			))
 
 			wrapper.vm.markCurrent()
-			expect(wrapper.vm.current).toBe('direct-messages')
+			expect(wrapper.vm.current).toBe('contact')
 
 			vi.restoreAllMocks()
 		})
@@ -245,9 +211,9 @@ describe('Settings', () => {
 		 */
 		it('marks the first section before any has passed the top', async () => {
 			const wrapper = await mountSettings()
-			wrapper.vm.current = 'featured-tags'
+			wrapper.vm.current = 'blocked'
 
-			const tops = { account: 150, 'direct-messages': 600, 'featured-tags': 900 }
+			const tops = { account: 150, contact: 600, blocked: 900 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)
@@ -264,21 +230,21 @@ describe('Settings', () => {
 		/** For the reader who knows what they want but not where it is. */
 		it('shows the sections of every group that match what was typed', async () => {
 			const wrapper = await mountSettings()
-			await wrapper.find('.settings__search input').setValue('phone')
+			await wrapper.find('.settings__search input').setValue('replies')
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual(['Sound and touch', 'Authorized apps'])
-			expect(wrapper.findAll('.settings__section-group').map((label) => label.text())).toEqual(['Reading', 'Apps and account'])
-			expect(wrapper.find('.settings__results').text()).toBe('2 settings match “phone”')
+			expect(headings(wrapper)).toEqual(['Likes and followers', 'Replies in Files'])
+			expect(wrapper.findAll('.settings__section-group').map((label) => label.text())).toEqual(['Reading', 'Apps'])
+			expect(wrapper.find('.settings__results').text()).toBe('2 settings match “replies”')
 			expect(wrapper.find('.settings__group-link--current').exists()).toBe(false)
 		})
 
 		it('needs every word, in any case and with or without accents', async () => {
 			const wrapper = await mountSettings()
-			await wrapper.find('.settings__search input').setValue('  SCHEDULED   later ')
+			await wrapper.find('.settings__search input').setValue('  SENSITIVE   médïa ')
 			await flushPromises()
 
-			expect(headings(wrapper)).toEqual(['Scheduled posts'])
+			expect(headings(wrapper)).toEqual(['Sensitive media'])
 		})
 
 		it('says so when nothing matches', async () => {
@@ -293,83 +259,19 @@ describe('Settings', () => {
 		it('goes back to the groups once a group is chosen', async () => {
 			const wrapper = await mountSettings()
 			await wrapper.find('.settings__search input').setValue('phone')
-			await openGroup(wrapper, 'Notifications')
+			await openGroup(wrapper, 'Activities')
 
 			expect(wrapper.vm.query).toBe('')
-			expect(headings(wrapper)).toEqual(['When to tell you', 'Who may reach you'])
-		})
-	})
-
-	describe('the shortcuts', () => {
-		it('shows every shortcut the app listens for', async () => {
-			const wrapper = await mountSettings({ hash: '#shortcuts' })
-			const rows = wrapper.findAll('.shortcut-list__row')
-
-			expect(rows).toHaveLength(SHORTCUTS.length + PLAYER_SHORTCUTS.length)
-			expect(rows[0].find('kbd').text()).toBe(SHORTCUTS[0].keys[0])
-			expect(rows[0].find('dd').text()).toBe(SHORTCUTS[0].label)
-		})
-
-		it('offers the switch that turns them off', async () => {
-			const wrapper = await mountSettings({ hash: '#shortcuts' })
-
-			expect(wrapper.find('#shortcuts').text()).toContain('Use keyboard shortcuts')
-		})
-
-		/** A shortcut with two keys is two keys, not "j/k" in one box. */
-		it('gives every key of a shortcut its own cap', async () => {
-			const wrapper = await mountSettings({ hash: '#shortcuts' })
-			const twoKeyed = SHORTCUTS.findIndex((shortcut) => shortcut.keys.length > 1)
-
-			expect(twoKeyed).toBeGreaterThan(-1)
-			expect(wrapper.findAll('.shortcut-list__row')[twoKeyed].findAll('kbd'))
-				.toHaveLength(SHORTCUTS[twoKeyed].keys.length)
-		})
-
-		it('says that the keys stop while you are typing', async () => {
-			const wrapper = await mountSettings({ hash: '#shortcuts' })
-
-			expect(wrapper.find('.shortcut-list__hint').text())
-				.toBe('Shortcuts are off while you are writing.')
-		})
-
-		/**
-		 * A shortcut is a promise about a keystroke, and the `?` dialog makes
-		 * the same one. They draw the same component so the two cannot drift
-		 * apart.
-		 */
-		it('draws the same list the ? dialog does', async () => {
-			const page = await mountSettings({ hash: '#shortcuts' })
-			const dialog = mount(ShortcutHelp, {
-				props: { open: true },
-				global: { stubs: { NcModal: NcModalStub } },
-			})
-
-			expect(page.findComponent(ShortcutList).exists()).toBe(true)
-			expect(dialog.findComponent(ShortcutList).exists()).toBe(true)
-			const rows = page.findAll('.shortcut-list__row').length
-			expect(dialog.findAll('.shortcut-list__row')).toHaveLength(rows)
+			expect(headings(wrapper)).toEqual(['When to tell you'])
 		})
 	})
 
 	/** A self-registered external user has no Files to read replies in. */
 	it('offers replies in Files only to somebody who has Files', async () => {
 		useSettingsStore().setServerData({ externalMedia: { quota: 10, used: 0 } })
-		const wrapper = await mountSettings({ hash: '#scheduled' })
+		const wrapper = await mountSettings({ hash: '#apps' })
 
 		expect(headings(wrapper)).not.toContain('Replies in Files')
-	})
-
-	/**
-	 * The introduction is shown once, after the setup screen; an account made
-	 * by an administrator never saw it, and nothing brought it back.
-	 */
-	it('offers the first-run introduction again', async () => {
-		const wrapper = await mountSettings({ hash: '#introduction' })
-
-		const button = wrapper.find('#introduction').findComponent({ name: 'NcButton' })
-		expect(button.text()).toBe('Show the introduction again')
-		expect(button.props('to')).toEqual({ name: 'timeline', query: { replay: '1' } })
 	})
 
 	/**
@@ -385,32 +287,11 @@ describe('Settings', () => {
 		expect(wrapper.find('.filters-settings-stub').exists()).toBe(false)
 	})
 
-	/**
-	 * A page of its own for a list that is usually empty would be a
-	 * navigation entry earning its place from nothing. The composer's clock
-	 * is where a post is scheduled; this is where one is moved or taken back.
-	 */
-	it('holds the posts waiting to go out, and says they can be moved', async () => {
+	/** Drafts, scheduled, held and archived posts are on the reader's profile now. */
+	it('holds no lists of posts', async () => {
 		const wrapper = await mountSettings({ hash: '#scheduled' })
 
-		expect(wrapper.findComponent(ScheduledPosts).exists()).toBe(true)
-		const lede = wrapper.find('#scheduled .settings__section-lede').text()
-		expect(lede).toContain('Move one to another time')
-		expect(lede).not.toContain('write it again')
-	})
-
-	/**
-	 * Migration is a page of its own, reached from the account menu: each of
-	 * its tools is a job somebody sits down to do, not a switch on a page of
-	 * switches.
-	 */
-	it('leaves the migration tools to their own page', async () => {
-		const wrapper = await mountSettings()
-		await wrapper.find('.settings__search input').setValue('e')
-		await flushPromises()
-
-		expect(wrapper.findComponent(MigrationSettings).exists()).toBe(false)
-		expect(groupTitles(wrapper)).not.toContain('Migration')
+		expect(wrapper.findComponent(ScheduledPosts).exists()).toBe(false)
 	})
 
 	/**
@@ -418,13 +299,13 @@ describe('Settings', () => {
 	 * controls together so readers do not mistake them for separate timelines.
 	 */
 	it('offers one For You settings section when either feed mode is available', async () => {
-		const off = await mountSettings({ hash: '#lists' })
+		const off = await mountSettings({ hash: '#sensitive' })
 		expect(off.find('#interests').exists()).toBe(false)
 
 		useSettingsStore().setServerData({ interests: { enabled: true, learning: true, paused: false } })
-		const on = await mountSettings({ hash: '#lists' })
+		const on = await mountSettings({ hash: '#sensitive' })
 
-		expect(headings(on)[0]).toBe('For You')
+		expect(headings(on)[0]).toBe('For you')
 		expect(on.find('#interests .for-you-settings-stub').exists()).toBe(true)
 	})
 
@@ -456,14 +337,14 @@ describe('Settings', () => {
 	 * The identity exists because this server offers one; on a server that
 	 * offers none, a section about it would describe somebody else's server.
 	 */
-	it('shows the Bluesky identity only where the server offers one, with the apps', async () => {
+	it('shows the Bluesky identity only where the server offers one, in a group of its own', async () => {
 		const off = await mountSettings({ hash: '#apps' })
 		expect(off.find('#bluesky').exists()).toBe(false)
 
 		useSettingsStore().setServerData({ bluesky: { enabled: true, host: 'cloud.example.org' } })
 		const on = await mountSettings({ hash: '#bluesky' })
 
-		expect(on.find('.settings__group-heading').text()).toBe('Apps and account')
+		expect(on.find('.settings__group-heading').text()).toBe('Bluesky')
 		expect(on.find('#bluesky .settings__section-lede').text()).toBe('This account is also reachable on Bluesky, because this server offers one.')
 		expect(on.find('#bluesky .bluesky-settings-stub').exists()).toBe(true)
 	})

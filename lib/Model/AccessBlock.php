@@ -13,18 +13,12 @@ use JsonSerializable;
 use OCA\Social\Tools\DbTime;
 
 /**
- * A block that is about an address rather than an account.
+ * A block on an address rather than an account:
  *
- * Two kinds, and they are enforced in different places because they mean
- * different things here:
- *
- * - `TYPE_IP` is Mastodon's `Admin::IpBlock`. Only `no_access` has a meaning
- *   on this instance — the other two severities police a sign-up flow that
- *   does not exist here, because an account is a Nextcloud account and the
- *   server, not this app, decides who gets one.
- * - `TYPE_EMAIL_DOMAIN` is Mastodon's `Admin::EmailDomainBlock`. There is no
- *   sign-up to refuse either, so what it refuses is the one thing this app
- *   does decide: whether a Nextcloud account gets a fediverse identity at all.
+ * - `TYPE_IP` is Mastodon's `Admin::IpBlock`; only `no_access` means anything,
+ *   as there is no sign-up flow here.
+ * - `TYPE_EMAIL_DOMAIN` is Mastodon's `Admin::EmailDomainBlock`; it refuses a
+ *   Nextcloud account a fediverse identity.
  */
 class AccessBlock implements JsonSerializable {
 	public const TYPE_IP = 'ip';
@@ -97,12 +91,8 @@ class AccessBlock implements JsonSerializable {
 
 	/**
 	 * Mastodon's `Admin::IpBlock` or `Admin::EmailDomainBlock`, whichever this
-	 * is.
-	 *
-	 * `history` on an email-domain block is Mastodon's count of sign-up
-	 * attempts it turned away. There is no sign-up here, so it is always
-	 * empty — sent rather than omitted, because a client that declares it
-	 * non-optional cannot decode the entity without it.
+	 * is. `history` is always empty, as there is no sign-up, but sent because
+	 * some clients require it.
 	 */
 	#[\Override]
 	public function jsonSerialize(): array {

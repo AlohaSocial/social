@@ -14,17 +14,10 @@ use OCA\Social\Model\StreamCard;
 
 /**
  * Mastodon's Trends::Link entity: a link preview with the counts that put it
- * in the list.
- *
- * A PreviewCard and nothing more, plus `history` — so the card half is the
- * app's own `StreamCard`, serialised by the one class that decides what a
- * preview looks like to a client. A second rendering of the same fields here
- * would let a trending link and the card on the post it came from disagree
- * about the same page.
- *
- * `history` carries a single bucket and `accounts` in it is always `0`, which
- * is the same shape and the same limitation `HashtagService::tagEntity()`
- * reports for a hashtag: this instance counts uses, not distinct accounts.
+ * in the list. The card half is the app's own `StreamCard`, so a trending
+ * link and the card on its post agree. `history` has a single bucket with
+ * `accounts` always `0`, as in `HashtagService::tagEntity()`: uses are
+ * counted, not distinct accounts.
  */
 class TrendingLink implements JsonSerializable {
 	public function __construct(

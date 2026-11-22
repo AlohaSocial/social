@@ -19,12 +19,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Reads the Bluesky AppView: the public one for anything anybody may see,
- * the authenticated one, as a local user, for what is theirs — their
- * notifications. Every call is one XRPC query; what comes back is the
- * decoded JSON, and a method the AppView does not have, a record it does
- * not know or a user it refuses are the exceptions below rather than a
- * silent empty answer.
+ * Reads the Bluesky AppView: publicly, or as a local user for what is theirs,
+ * such as notifications. A missing method, an unknown record or a refused
+ * user is thrown as the exceptions below, never answered empty.
  */
 class AppViewClient {
 	private const TIMEOUT = 20;

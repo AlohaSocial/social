@@ -4,13 +4,9 @@
  */
 
 /**
- * Loads of which only the newest may say anything.
- *
- * The router reuses a view when only a parameter changes, so the answer for
- * the account the reader just left can arrive after the one for the account
- * now on screen. Each load takes a ticket when it starts and asks, after
- * every await, whether it is still the newest; a load that is not leaves the
- * data, the error and the loading flag to the one that is.
+ * Loads of which only the newest may say anything: the router reuses a view
+ * when a parameter changes, so an older answer can arrive last. Each load
+ * takes a ticket and checks after every await whether it is still the newest.
  *
  * @return {{begin: () => (() => boolean), current: () => (() => boolean)}}
  */

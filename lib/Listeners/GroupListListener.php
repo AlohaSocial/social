@@ -21,11 +21,8 @@ use Throwable;
 
 /**
  * Keeps the group lists in step with the groups, the moment they change.
- *
- * Nothing here may fail the group operation: an administrator adding
- * somebody to a group is not doing anything to this app, and must not be
- * told that it went wrong because this app was. A failure is logged and the
- * cron's reconcile pass settles it.
+ * Never fails the group operation: a failure is logged and the cron's
+ * reconcile pass settles it.
  *
  * @template-implements IEventListener<\OCP\EventDispatcher\Event>
  */

@@ -12,11 +12,6 @@ namespace OCA\Social\Model;
 use JsonSerializable;
 use OCA\Social\Tools\Traits\TArrayTools;
 
-/**
- * Class InstancePath
- *
- * @package OCA\Social\Model
- */
 class InstancePath implements JsonSerializable {
 	use TArrayTools;
 

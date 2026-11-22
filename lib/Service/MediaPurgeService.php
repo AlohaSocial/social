@@ -18,15 +18,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Taking stored media away again.
- *
- * A document is two things: a row in `social_cache_doc`, and one or two files
- * in appdata that only that row knows the names of. Deleting the row first
- * leaves the files behind for good, which is why every caller has to read,
- * remove and only then delete — and why the sequence is here rather than
- * repeated at each caller. It used to be repeated: the remote-actor sweep did
- * it correctly and the `Delete` of a remote account did not, so every
- * federated account deletion left an avatar and a header in appdata.
+ * Taking stored media away again. A document is a row in `social_cache_doc`
+ * plus files in appdata that only the row names, so every caller must read,
+ * remove the files and only then delete the row; the sequence lives here.
  *
  * @psalm-type CachedRow = array{nid: string, id: string, local_copy: string, resized_copy: string, cached: string, actor: bool}
  */
@@ -66,26 +60,15 @@ class MediaPurgeService {
 	}
 
 	/**
-	 * Removes cached copies of other servers' media, oldest copy first.
+	 * Removes cached copies of other servers' media, oldest copy first. Only
+	 * what can be fetched again: rows nobody here uploaded, naming the origin
+	 * file, not refused, with an id that is not a local document's.
 	 *
-	 * Only what can be fetched again: rows nobody here uploaded, that name
-	 * the file at its origin, are not marked as refused, and whose id is not
-	 * one this instance gave its own documents. Local uploads, local avatars
-	 * and banners, the GIF pack and custom emoji are not rows of this kind or
-	 * not rows at all, and are never looked at.
-	 *
-	 * The files go through appdata, so Nextcloud's file cache stays right;
-	 * the row stays, names and all, with `cached` cleared. The names are in
-	 * every `/media/{uuid}` link already served, and `DocumentService` fetches
-	 * the file again under them when it is next asked for. A row whose files
-	 * were already gone is marked the same way and counted as such.
-	 *
-	 * A copy goes when any limit asks for it: `$all`, older than
-	 * `$olderThanDays`, or while the whole cache is over `$maxBytes`. The size
-	 * is the files' own, read from appdata, because a row's `size` covers
-	 * neither its preview nor the rows written before the column existed: one
-	 * pass adds the cache up, a second removes from the oldest end. Both read
-	 * a page at a time.
+	 * The files go through appdata; the row stays with `cached` cleared, since
+	 * its names are in links already served and `DocumentService` refetches
+	 * under them. A copy goes when `$all`, older than `$olderThanDays`, or
+	 * while the cache is over `$maxBytes`, measured from the files themselves
+	 * in a first pass, then trimmed from the oldest end, a page at a time.
 	 *
 	 * @param int $olderThanDays 0 for no age limit
 	 * @param int $maxBytes 0 for no size limit
@@ -348,11 +331,8 @@ class MediaPurgeService {
 	}
 
 	/**
-	 * One of an account's own documents, by the url it is served under.
-	 *
-	 * The account is checked here rather than by the caller: the only thing a
-	 * url identifies is a row, and a banner's url is the one handle its owner
-	 * has on it.
+	 * One of an account's own documents, by the url it is served under. The
+	 * account is checked here, since a url only identifies a row.
 	 */
 	public function purgeLocalByUrl(string $url, string $account): bool {
 		if ($url === '' || $account === '') {
@@ -395,21 +375,10 @@ class MediaPurgeService {
 	}
 
 	/**
-	 * The documents whose parent no longer exists.
-	 *
-	 * A row that names a parent names a post, a cached actor or a story, and
-	 * when none of the three is there any more nothing can ever refer to the
-	 * file again: the attachments of a post that was deleted or never stored,
-	 * the avatar of an actor evicted before this sweep existed, the picture of
-	 * a story whose day was up.
-	 *
-	 * Rows with *no* parent are left to `sweepUnattached()`: a local upload
-	 * never has one.
-	 *
-	 * Page after page of `$limit`, each read after the last row of the one
-	 * before, until a page comes back short or `$deadline` has passed: a
-	 * retention prune, a domain purge or an account deletion orphans far more
-	 * than one page a day, and one page a day never caught up.
+	 * The documents whose parent no longer exists: a post, cached actor or
+	 * short that is gone, so nothing can refer to the file again. Rows with no
+	 * parent are left to `sweepUnattached()`. Pages until one comes back short
+	 * or `$deadline` passes, since bulk deletions orphan far more than a page a day.
 	 *
 	 * @param int $deadline a timestamp past which no further page is read; 0
 	 *                      for one page
@@ -446,15 +415,12 @@ class MediaPurgeService {
 	}
 
 	/**
-	 * The uploads nothing was ever made with.
-	 *
-	 * `POST /api/v1/media` stores a file before there is a post to carry it,
-	 * and one never followed by a post stayed for good. An upload older than
-	 * `$days` that no post, Bluesky record or waiting post names goes; see
-	 * `CacheDocumentsRequest::getUnattachedUploads()`. `$days` should outlast
-	 * the composer's drafts, which keep their uploads for a week.
-	 *
-	 * Paged like `sweepOrphans()`.
+	 * The uploads nothing was ever made with: `POST /api/v1/media` stores a
+	 * file before its post, so an upload older than `$days` that no post,
+	 * Bluesky record or waiting post names goes (see
+	 * `CacheDocumentsRequest::getUnattachedUploads()`). `$days` should outlast
+	 * the composer's drafts, which keep uploads for a week. Paged like
+	 * `sweepOrphans()`.
 	 *
 	 * @param int $deadline a timestamp past which no further page is read; 0
 	 *                      for one page
@@ -494,11 +460,8 @@ class MediaPurgeService {
 	}
 
 	/**
-	 * The files, which only the row knows the names of.
-	 *
-	 * A file that cannot be removed is not a reason to keep the row: the row
-	 * is what makes the bytes reachable, and what is left on disk is what
-	 * `occ social:media:usage` reports.
+	 * The files, which only the row knows the names of. A file that cannot be
+	 * removed does not keep the row; `occ social:media:usage` reports leftovers.
 	 */
 	private function forgetFiles(Document $document): void {
 		try {

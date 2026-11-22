@@ -50,11 +50,6 @@ use OCP\Server;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-/**
- * Class Stream
- *
- * @package OCA\Social\Model\ActivityPub
- */
 class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/** Outbox imports store attachment rows for the media worker to download. */
 	private bool $deferAttachmentDownloads = false;
@@ -64,44 +59,26 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The six values `social_stream.media_kind` holds.
-	 *
-	 * The four `MediaAttachment` types this app stores, plus `''` for a post
-	 * carrying nothing and `mixed` for one carrying more than one kind — a post
-	 * with a photograph and a video is both, and a column has to choose.
-	 *
-	 * **Closed, and it has to be.** The column is seven characters wide, and
-	 * what fills it is read out of the stored attachment JSON — which was
-	 * written by older versions of this app and by every server it federates
-	 * with. `Document::convertToMediaAttachment()` has narrowed an attachment's
-	 * type to these four since "Files as attachments", but a row written before
-	 * that kept the whole first half of the MIME type, so a PDF attached in
-	 * 0.23.0 is stored as `"type":"application"` — eleven characters, and on
-	 * MySQL in strict mode an upgrade that ends in *Data too long for column
-	 * media_kind*.
+	 * The six values `social_stream.media_kind` holds: the four `MEDIA_KINDS`,
+	 * `''` for a post with no attachment and `mixed` for one with more than one
+	 * kind. Closed because the column is seven characters wide and is filled
+	 * from stored attachment JSON, which may hold any type a peer or an older
+	 * row wrote (`"type":"application"` for a PDF).
 	 */
 	public const MEDIA_KIND_NONE = '';
 	public const MEDIA_KIND_MIXED = 'mixed';
 
 	/**
 	 * The attachment types that are a kind of their own. Everything else is a
-	 * file a client cannot render, which is what `unknown` has meant since the
-	 * conversion learnt to say it.
+	 * file a client cannot render (`unknown`).
 	 */
 	public const MEDIA_KINDS = ['image', 'video', 'audio', 'gifv'];
 
 	/**
-	 * The three values `social_stream.news_kind` holds.
-	 *
-	 * `article` is a post that *is* an article: a `Article` or `Page` object,
-	 * which is what Plume, WriteFreely, Ghost and the WordPress plugin publish
-	 * and which arrives here as a `Note` carrying that word in `subtype` (see
-	 * `AP::NOTE_LIKE_TYPES`). `link` is a post that *points at* one — an
-	 * ordinary note whose text carries an external link, which is how most
-	 * news actually travels on the fediverse. `''` is neither.
-	 *
-	 * Two values rather than one because they are not the same thing and a
-	 * reader may well want only the first; the News timeline asks for both.
+	 * The three values `social_stream.news_kind` holds. `article` is a post
+	 * that is an article (an `Article` or `Page`, see `AP::NOTE_LIKE_TYPES`);
+	 * `link` is a note whose text carries an external link; `''` is neither.
+	 * The News timeline asks for both.
 	 */
 	public const NEWS_KIND_NONE = '';
 	public const NEWS_KIND_LINK = 'link';
@@ -112,9 +89,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The two values `social_stream.short_kind` holds once a post has been
-	 * looked at: `short` for a short video, `''` for anything else. NULL is
-	 * left on a post stored before the column existed that is not a video:
-	 * the backfill reads only the videos, and NULL is not a short either.
+	 * looked at: `short` for a short video, `''` for anything else. NULL stays
+	 * on an older post that is not a video, since the backfill reads only videos.
 	 *
 	 * @see self::shortKindOf()
 	 */
@@ -123,8 +99,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The longest a short may run, in seconds: the longest recording the
-	 * short composer offers (`RECORD_LIMITS` in `src/utils/shortVideo.js`),
-	 * and the three minutes YouTube allows a Short.
+	 * short composer offers (`RECORD_LIMITS` in `src/utils/shortVideo.js`).
 	 */
 	public const SHORT_MAX_SECONDS = 180;
 
@@ -156,8 +131,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * What is appended to a post's id to name the counts PeerTube keeps on a
-	 * video. It fetches both for every remote video it takes in, and a video
-	 * without them crashed it.
+	 * video. PeerTube fetches both for every remote video and fails without them.
 	 */
 	public const LIKES_PATH = '/likes';
 	public const DISLIKES_PATH = '/dislikes';
@@ -174,11 +148,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The states Mastodon's Quote entity can be in. A quote is `accepted` once
-	 * the quoted author's server has approved it — and, here, once the quoted
-	 * post is one this instance holds and the reader may see; `pending` while
-	 * the approval or the post itself is still being waited for; `rejected`
-	 * when the author refused and `revoked` when they took the approval back.
+	 * The states Mastodon's Quote entity can be in: `accepted` once the quoted
+	 * author approved it and the quoted post is held here and visible to the
+	 * reader, `pending` while either is awaited, `rejected` when refused and
+	 * `revoked` when the approval was withdrawn.
 	 */
 	public const QUOTE_ACCEPTED = 'accepted';
 	public const QUOTE_PENDING = 'pending';
@@ -186,18 +159,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const QUOTE_REVOKED = 'revoked';
 
 	/**
-	 * Who the author has said may quote this post, as Mastodon 4.5 names the
-	 * three choices its composer offers.
-	 *
-	 * `''` is the fourth state and the one almost every stored post is in:
-	 * nobody was ever asked, so the answer is the one this app gave before the
-	 * question existed — the visibility rule, public and unlisted posts being
-	 * quotable and nothing else.
-	 */
-	/**
-	 * The largest counter this app will repeat from another server: ten
-	 * million, which is some five orders of magnitude above the most-boosted
-	 * post the fediverse has produced.
+	 * The largest counter this app will repeat from another server, far above
+	 * any real post's count.
 	 */
 	public const REMOTE_COUNT_CEILING = 10000000;
 
@@ -233,6 +196,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		self::INTERACTION_LIKE => 'canLike',
 	];
 
+	/**
+	 * Who the author said may quote this post, as Mastodon 4.5 names the
+	 * choices. `''` means nobody was asked and the visibility rule decides:
+	 * public and unlisted posts are quotable.
+	 */
 	public const QUOTE_POLICY_PUBLIC = 'public';
 	public const QUOTE_POLICY_FOLLOWERS = 'followers';
 	public const QUOTE_POLICY_NOBODY = 'nobody';
@@ -273,19 +241,15 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const REPLY_REJECTED = 'rejected';
 
 	/**
-	 * How many attachments a single post may bring in. Twice what Mastodon
-	 * lets an author attach, so nothing real is ever cut.
+	 * How many attachments a single post may bring in: Pixelfed's album
+	 * ceiling, so a ten-photo album arrives whole.
 	 */
-	// Ten, which is Pixelfed's album ceiling: a ten-picture album federated
-	// from there used to arrive here two pictures short.
 	public const MAX_ATTACHMENTS = 10;
 
 	/**
-	 * Mastodon calls a followers-only post `private`; this app has always
-	 * called it `followers`. The two vocabularies have to be translated in
-	 * both directions: without it a client's followers-only post arrives as a
-	 * value this app does not know, and `StreamService::setRecipient()` used
-	 * to address exactly those to the public collection.
+	 * Mastodon calls a followers-only post `private`; this app calls it
+	 * `followers`. Both directions are translated, so a client's followers-only
+	 * post is never addressed to the public collection.
 	 */
 	private const CLIENT_VISIBILITIES = [
 		'public' => self::TYPE_PUBLIC,
@@ -297,9 +261,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * Translate a visibility as a client writes it into this app's own
-	 * vocabulary. Anything unrecognised becomes `direct` — the most
-	 * restrictive option. Guessing wrong in the other direction publishes
-	 * somebody's private post to the whole Fediverse.
+	 * vocabulary. Anything unrecognised becomes `direct`, the most restrictive
+	 * option, so a wrong guess never publishes a private post.
 	 */
 	public static function visibilityFromClient(string $visibility): string {
 		return self::CLIENT_VISIBILITIES[strtolower(trim($visibility))] ?? self::TYPE_DIRECT;
@@ -325,11 +288,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The hashtags on this item.
-	 *
-	 * Only a Note actually stores any — it overrides this — but the tags belong
-	 * to the exported status entity, which is built here, and `StreamRequest`
-	 * asks any Stream for them when it writes one.
+	 * The hashtags on this item. Only a Note stores any and overrides this;
+	 * `StreamRequest` asks any Stream for them when it writes one.
 	 *
 	 * @return string[]
 	 */
@@ -338,23 +298,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Translate this app's vocabulary back into what a client expects.
-	 *
-	 * An empty one is answered `public`. Mastodon's `Status` entity has four
-	 * legal visibilities and `''` is not among them, so a row written without
-	 * one -- an import, a seed, anything that reached `social_stream` by a
-	 * path that did not set it -- handed every client a value it could not
-	 * read. This one stopped offering Boost on the post, because the composer
-	 * and the timeline both ask whether the post is public before they offer
-	 * to republish it; a post with nine boosts on it was not boostable here.
-	 *
-	 * `public` rather than the cautious `direct` because this is a *label*,
-	 * not a permission: what may actually be read, forwarded or boosted is
-	 * decided against the stored value everywhere it matters --
-	 * `ForwardService::shouldForward()`, the visibility filter every timeline
-	 * query carries -- and none of that goes through here. Two other places
-	 * had already made the same call for the same reason: `PixelfedService`'s
-	 * scope mapping and `AccountService`'s default posting privacy.
+	 * Translate this app's vocabulary back into what a client expects. An
+	 * empty one is answered `public`: Mastodon's `Status` has no empty
+	 * visibility, and this is only a label, since forwarding, boosting and
+	 * reading are decided against the stored value.
 	 */
 	public static function visibilityForClient(string $visibility): string {
 		return match ($visibility) {
@@ -365,16 +312,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's notification type for each notification sub-type. Kept as one
-	 * map so the `types`/`exclude_types` API filter and the exported entity
-	 * cannot drift apart.
-	 */
-	/**
 	 * A notification this instance raises that is not an activity anybody
 	 * sent: a poll of yours closing, an account you asked about posting, a
-	 * moderator warning you, or a block cutting your follows. Mastodon
-	 * documents a type for each; there is no ActivityPub verb for any of them,
-	 * so the subtype is this app's own name for the event.
+	 * moderator warning you, or a block cutting your follows. There is no
+	 * ActivityPub verb for these, so the subtype is this app's own name.
 	 */
 	public const SUBTYPE_POLL = 'PollClosed';
 	public const SUBTYPE_STATUS = 'NewStatus';
@@ -382,21 +323,19 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const SUBTYPE_SEVERED = 'SeveredRelationships';
 
 	/**
-	 * Somebody answered one of your stories. Pixelfed's own two names, because
-	 * these arrive from Pixelfed and a client that knows them already draws
-	 * them the way their sender meant.
+	 * Somebody answered one of your shorts. Pixelfed's own two names, since
+	 * these arrive from Pixelfed and clients that know them draw them right.
 	 */
 	public const SUBTYPE_STORY_REACT = 'StoryReaction';
 	public const SUBTYPE_STORY_REPLY = 'StoryReply';
 
-	/** Somebody named you in a photograph. */
+	/** Somebody named you in a photo. */
 	public const SUBTYPE_PHOTO_TAG = 'PhotoTag';
 
 	/**
 	 * What only Bluesky tells: a like or a repost of your repost, Bluesky
-	 * verifying your account or no longer doing so, somebody joining Bluesky
-	 * with your starter pack. Typed `bluesky:…` for a client; one that does
-	 * not know a type leaves it out, as Mastodon's API asks.
+	 * verifying or unverifying your account, somebody joining with your
+	 * starter pack. A client that does not know a `bluesky:…` type leaves it out.
 	 */
 	public const SUBTYPE_BLUESKY_REPOST_LIKED = 'BlueskyRepostLiked';
 	public const SUBTYPE_BLUESKY_REPOST_REPOSTED = 'BlueskyRepostReposted';
@@ -404,6 +343,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const SUBTYPE_BLUESKY_UNVERIFIED = 'BlueskyUnverified';
 	public const SUBTYPE_BLUESKY_STARTER_PACK = 'BlueskyStarterPackJoined';
 
+	/**
+	 * Mastodon's notification type for each notification sub-type, shared by
+	 * the `types`/`exclude_types` filter and the exported entity.
+	 */
 	private const NOTIFICATION_TYPES = [
 		Like::TYPE => 'favourite',
 		Announce::TYPE => 'reblog',
@@ -426,11 +369,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	];
 
 	/**
-	 * The notification types Mastodon's API does not define: what only a
-	 * story, a photo tag or Bluesky tells. Served to the web app, and to a
-	 * client that names them in `types[]`; left out of every other client's
-	 * page, where a type outside the closed set is an "unknown notification"
-	 * row at best and a page that fails to decode at worst.
+	 * The notification types Mastodon's API does not define. Served to the web
+	 * app and to a client that names them in `types[]`; left out for every
+	 * other client, which may fail to decode an unknown type.
 	 */
 	public const FIRST_PARTY_NOTIFICATION_TYPES = [
 		'story:react',
@@ -475,60 +416,46 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private bool $sensitive = false;
 
 	/**
-	 * How many accounts have opened this post's own page.
-	 *
-	 * Not stored on the row and not federated: it is counted from
-	 * `social_stream_view` and put here for the author alone — see
-	 * `ViewCountService`. `null` on everybody else's copy, which is how the
-	 * client entity tells "nobody has read it" from "this is not yours to
-	 * know".
+	 * How many accounts have opened this post's own page, counted from
+	 * `social_stream_view` for the author alone (`ViewCountService`). `null`
+	 * on everybody else's copy.
 	 */
 	private ?int $viewCount = null;
 
 	/**
-	 * The people named in this post's pictures.
-	 *
-	 * Filled in by `MediaTagService` where a post is read for a client, and
-	 * empty otherwise — a post read for the wire carries its names as
-	 * `Mention` tags, which is where a peer looks for them.
+	 * The people named in this post's photos, filled in by `MediaTagService`
+	 * for a client read. A post read for the wire carries them as `Mention` tags.
 	 *
 	 * @var Person[]
 	 */
 	private array $taggedPeople = [];
 
 	/**
-	 * Why For you put this post in front of the reader: the hashtags it
-	 * matched and whether they were learned, followed, related or trending.
-	 * Null everywhere else, which is every other timeline.
+	 * Why For you showed this post: the hashtags it matched and why. Null on
+	 * every other timeline.
 	 *
-	 * @var array{tags: string[], reason: string}|null
+	 * @var array{tags: string[], reason: string, topics?: list<array{id: string, labels: array{en: string, de: string}}>, selection_stage?: string, explanation?: array<string, mixed>}|null
 	 */
-	/** @var array{tags: string[], reason: string, topics?: list<array{id: string, labels: array{en: string, de: string}}>, selection_stage?: string, explanation?: array<string, mixed>}|null */
 	private ?array $interest = null;
 
 	/** @var array{position: int, duration: int, updated_at: ?string}|null */
 	private ?array $watchProgress = null;
 
 	/**
-	 * How many times this video, posted here, was watched — the public number
-	 * `VideoViewService` keeps, put here by `attach()`. `null` where it was
-	 * not read: every post from elsewhere, and a post that is not a video.
+	 * How many times this video, posted here, was watched (`VideoViewService`).
+	 * `null` for posts from elsewhere and posts that are not videos.
 	 */
 	private ?int $localVideoViews = null;
 
 	/**
-	 * Whether the author has put this post away.
-	 *
-	 * Local and never federated: an archived post is still on every server
-	 * that received it, because taking it back from them is what `Delete` is
-	 * for and is a different decision. What archiving says is "not on my
-	 * profile here any more".
+	 * Whether the author archived this post. Local only: the post stays on
+	 * every server that received it; archiving only hides it from the profile here.
 	 */
 	private bool $archived = false;
 
 	/**
-	 * Where the post was taken, when its author said so. Zero is "nowhere",
-	 * which is what almost every post is: a place is never inferred.
+	 * Where the post was taken, when its author said so. Zero is "nowhere";
+	 * a place is never inferred.
 	 */
 	private int $placeId = 0;
 	private ?Place $place = null;
@@ -560,23 +487,15 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * The parents already looked up in this request, keyed by their
 	 * ActivityPub id: `{'https://…' => [status nid, author nid]}`.
 	 *
-	 * A timeline of replies to the same thread would otherwise ask the database
-	 * for the same parent once per reply.
-	 *
 	 * @var array<string, array{int, int}>
 	 */
 	private static array $replyParents = [];
 
 	/**
-	 * The quoted statuses already exported in this request, keyed by their
-	 * ActivityPub id **and the viewer it was resolved for**; `null` for one this
-	 * instance does not hold, or that the viewer may not see. A quote that goes
-	 * round tends to be quoted by several of the posts on one page.
-	 *
-	 * The viewer is half the key because the value is a filtered copy: one
-	 * request serves one reader under PHP-FPM, but a worker process or a queued
-	 * job exports timelines for several actors in a row, and a memo keyed by
-	 * post alone would hand the first reader's copy to the second.
+	 * The quoted statuses already exported, keyed by ActivityPub id and the
+	 * viewer they were resolved for; `null` for one not held or not visible to
+	 * that viewer. The viewer is part of the key because a worker exports
+	 * timelines for several actors in one process.
 	 *
 	 * @var array<string, ?array>
 	 */
@@ -589,9 +508,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private static array $authorCollections = [];
 
 	/**
-	 * How deep the export currently is inside a chain of quotes. A quote of a
-	 * quote of a quote is a lookup and a nested entity per level; Mastodon
-	 * stops after the first and so does this.
+	 * How deep the export is inside a chain of quotes. Like Mastodon, only the
+	 * first level is expanded.
 	 */
 	private static int $quoteDepth = 0;
 
@@ -665,8 +583,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The content warning. On ActivityPub this is the object's `summary`
-	 * (which is also the database column), so the two accessors share one field —
-	 * a remote CW survives the AP import and a local one survives the save.
+	 * (also the database column), so the two accessors share one field.
 	 *
 	 * @return string
 	 */
@@ -687,10 +604,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The language of the content as a BCP 47 tag, or an empty string when
-	 * nobody said. This used to default to `'en'`, so every local post
-	 * federated as English and every remote post was shown as English
-	 * whatever it was written in; an empty value is the honest answer and
-	 * becomes `null` in the client format, which Mastodon allows.
+	 * nobody said; empty becomes `null` in the client format.
 	 *
 	 * @return string
 	 */
@@ -713,13 +627,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * A language tag as this app is willing to federate it: a 2–3 letter
-	 * primary subtag, optionally a script and a region, cased the way BCP 47
-	 * does (`pt-BR`, `zh-Hant-TW`). Anything else — a language name, markup,
-	 * a variant this app does not understand — becomes an empty string, so
-	 * the caller's default applies. Loose on purpose: Mastodon's own list is
-	 * mostly ISO 639-1 with a handful of regional variants, and a stricter
-	 * check would need a registry that ages.
+	 * A language tag as this app will federate it: a 2–3 letter primary
+	 * subtag, optionally a script and a region, cased as BCP 47 does
+	 * (`pt-BR`, `zh-Hant-TW`). Anything else becomes an empty string. Loose on
+	 * purpose, so no registry is needed.
 	 */
 	public static function normalizeLanguage(string $language): string {
 		$language = str_replace('_', '-', trim($language));
@@ -740,12 +651,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * When the author last edited the post, as the ActivityPub `updated`
-	 * property; empty for a post that was never edited.
-	 *
-	 * Mastodon reads an `Update{Note}` without `updated` as an implicit
-	 * update — it refreshes poll counters and discards the content change —
-	 * so every edit has to carry one, and `published` has to stay what it
-	 * was: it is the creation time, and moving it is not an edit to anybody.
+	 * property; empty for a post never edited. Mastodon treats an
+	 * `Update{Note}` without `updated` as a counter refresh and drops the
+	 * content change, so every edit carries one and `published` stays as is.
 	 *
 	 * @return string
 	 */
@@ -760,17 +668,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The `updated` column of a stream row, as the ActivityPub property.
-	 *
-	 * The column is a datetime and holds UTC — `StreamRequest` converts before
-	 * it binds — so the instant survives, while the exact text a peer sent does
-	 * not: an `updated` of `2026-09-12T10:00:00+02:00` reads back as
-	 * `2026-09-12T08:00:00Z`. That is the same moment written the way this app
-	 * writes its own edits (`PostService::editPost()`), and nothing anywhere
-	 * compares the two as strings.
-	 *
-	 * Empty for a row with no edit time, which is `NULL` in the column and the
-	 * ordinary case: most posts are never edited.
+	 * The `updated` column of a stream row, as the ActivityPub property. The
+	 * column holds UTC, so the instant survives but not the peer's exact text.
+	 * Empty when the column is NULL (never edited).
 	 */
 	private static function updatedFromRow(string $stored): string {
 		if ($stored === '') {
@@ -830,12 +730,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The id of the post this one quotes, empty when it quotes none.
-	 *
-	 * FEP-044f calls this `quote`; Mastodon 4.5 emits that name and keeps
-	 * emitting the older `quoteUrl`/`_misskey_quote` aliases beside it, and
-	 * reads any of them. Only ever an id here: the quoted post is a row of its
-	 * own, fetched like a reply's parent, never a copy embedded in this one.
+	 * The id of the post this one quotes, empty when it quotes none. FEP-044f
+	 * calls this `quote`; Mastodon also reads and writes `quoteUrl` and
+	 * `_misskey_quote`. The quoted post is always a row of its own.
 	 */
 	public function getQuote(): string {
 		return $this->quote;
@@ -849,9 +746,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The quoted author's approval of this quote, as the URI their server
-	 * handed back in `Accept{QuoteRequest}`. Mastodon dereferences it before it
-	 * renders the quoted post inline, so a quote that has one is shown as a
-	 * card and one that has none is shown as a bare link.
+	 * returned in `Accept{QuoteRequest}`. Mastodon renders a quote without one
+	 * as a bare link.
 	 */
 	public function getQuoteAuthorization(): string {
 		return $this->quoteAuthorization;
@@ -864,12 +760,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Who may quote this post — one of QUOTE_POLICIES, or '' where the author
-	 * never said and the visibility rule decides.
-	 *
-	 * Only meaningful on a post of ours: somebody else's server says who may
-	 * quote theirs, and what it says arrives as `interactionPolicy` on their
-	 * document rather than here.
+	 * Who may quote this post: one of QUOTE_POLICIES, or '' where the author
+	 * never said and the visibility rule decides. Only meaningful on a local
+	 * post; a remote post's policy arrives as `interactionPolicy`.
 	 */
 	public function getQuotePolicy(): string {
 		return $this->quotePolicy;
@@ -882,11 +775,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The policy as it stands, with the default filled in.
-	 *
-	 * A post nobody was asked about keeps the answer this app gave before the
-	 * question existed: quotable if it was addressed to the public collection,
-	 * and not otherwise.
+	 * The policy with the default filled in: a post nobody was asked about is
+	 * quotable if it was addressed to the public collection.
 	 */
 	public function effectiveQuotePolicy(): string {
 		if ($this->quotePolicy !== '') {
@@ -914,31 +804,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * What a `Video` said beyond what a post can hold, or `[]` for every post
-	 * that is not one.
-	 *
-	 * @return array<string, mixed>
-	 */
-	/**
-	 * What kind of media a post carries, from the attachment list it was
-	 * stored with.
-	 *
-	 * Static, and taking the raw JSON, because the backfill migration asks the
-	 * same question of rows it reads straight out of the database without
-	 * building a `Stream` for each of ten million of them.
-	 *
-	 * A PeerTube `Video` counts as a video whether or not this instance found
-	 * a file in it a browser can play: its whole existence is the video, and it
-	 * arrives as a `Note` carrying `Video` in `subtype`. That is the same rule
-	 * `SocialLimitsQueryBuilder::limitToVideo()` applies, kept in step here
-	 * because the two must not come to disagree about what a video is.
-	 *
-	 * Only `MEDIA_KINDS` are kinds. An attachment of any other type is
-	 * skipped, exactly as `unknown` is — which is what this app already
-	 * decides for a PDF attached *today*, so an old row and a new one now
-	 * agree about the same file. Before this, the whole of whatever an older
-	 * version happened to store went into a seven-character column, and an
-	 * instance with a PDF in its history could not be upgraded at all.
+	 * What kind of media a post carries, from its stored attachment JSON.
+	 * Static and raw so the backfill migration can ask it of rows without
+	 * building a `Stream`. A PeerTube `Video` always counts as a video, the
+	 * same rule as `SocialLimitsQueryBuilder::limitToVideo()`. Types outside
+	 * `MEDIA_KINDS` are skipped.
 	 *
 	 * @param string $attachments the stored JSON list
 	 * @param string $subType the post's ActivityPub subtype
@@ -973,25 +843,16 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		}
 
 		// cast because `array_key_first()` is nullable and psalm cannot see
-		// that the two returns above have already dealt with an empty list
+		// that the returns above have already dealt with an empty list
 		return (string)array_key_first($kinds);
 	}
 
 	/**
-	 * Whether a post is a short video, from the attachment list it was stored
-	 * with: the one rule `only_short` filters on, the web app's Shorts stack
-	 * is filled by and `/api/v2/config` states.
-	 *
-	 * A short is a post whose only attachment is a `video` that runs for no
-	 * more than `SHORT_MAX_SECONDS` and is no wider than `SHORT_MAX_ASPECT`.
-	 * Both come from the attachment's `meta`: the duration from `duration`,
-	 * the shape from `original` (or the top level) `width` and `height`, or
-	 * `aspect` where no size is stated. A video whose meta does not say both
-	 * is not a short. For a remote video that is the case until this instance
-	 * has cached the file and measured it, which rewrites the stored copy
-	 * (`StreamMedia::updateAttachments()`) and asks again.
-	 *
-	 * Static and taking the raw JSON, for the backfill, as `mediaKindOf()`.
+	 * Whether a post is a short video, from its stored attachment JSON: the
+	 * rule `only_short`, the Shorts stack and `/api/v2/config` share. A short
+	 * has a single `video` attachment of at most `SHORT_MAX_SECONDS` and no
+	 * wider than `SHORT_MAX_ASPECT`, both read from its `meta`. A remote video
+	 * is not a short until it has been cached and measured.
 	 *
 	 * @param string $attachments the stored JSON list
 	 */
@@ -1036,26 +897,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether a post is news, and in which of the two senses.
-	 *
-	 * Static and taking the raw columns, for the same reason `mediaKindOf()`
-	 * is: the backfill migration asks this of rows it reads straight out of
-	 * the database without building a `Stream` for each of ten million of
-	 * them.
-	 *
-	 * The article half is the post's own type. The link half is "does the text
-	 * carry a link to somewhere else", which is exactly the question
-	 * `LinkPreviewService` asks before it fetches a preview — so it is asked
-	 * here by calling the same code (`firstLinkIn()`), and the News timeline
-	 * and the card under a post cannot come to disagree about whether a post
-	 * links anywhere.
-	 *
-	 * Deliberately *not* asked: whether a card was fetched successfully. Cards
-	 * are read from the linked page after the post is stored and may never
-	 * arrive — the page may be slow, private, or refuse this instance — and a
-	 * post that dropped out of the News timeline hours after being posted,
-	 * because somebody else's web server was down, would be worse than one
-	 * that is there without a picture.
+	 * Whether a post is news, and in which of the two senses. Static and raw
+	 * for the backfill migration, as `mediaKindOf()`. The link half calls
+	 * `firstLinkIn()`, the same check `LinkPreviewService` uses. Whether a card
+	 * was fetched is not asked, so a post does not drop out of News because a
+	 * linked site was down.
 	 *
 	 * @param string $content the post's stored content, markup and all
 	 * @param string $subType the post's ActivityPub subtype
@@ -1071,17 +917,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The first link in a post's content that points somewhere else, or '' when
-	 * it carries none.
-	 *
-	 * A mention and a hashtag are links too, so both are dropped whole before
-	 * anything is looked for: the class that says which is which sits on the
-	 * anchor (this app) or on a wrapping span (Mastodon).
-	 *
-	 * This lived in `LinkPreviewService`, which still asks it and is still the
-	 * only thing that *fetches* anything. It is here because two things now
-	 * need the answer and one of them is a migration reading raw rows, which
-	 * cannot build a service.
+	 * The first link in a post's content that points somewhere else, or ''.
+	 * Mentions and hashtags are dropped first: the class saying which is which
+	 * sits on the anchor (this app) or on a wrapping span (Mastodon). Static so
+	 * a migration reading raw rows can use it.
 	 */
 	public static function firstLinkIn(string $content): string {
 		if ($content === '') {
@@ -1120,13 +959,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * A link counts when it is a plain http(s) URL to a host. Everything
-	 * beyond that — local addresses, redirects to other protocols, oversized
-	 * bodies, blocked hosts — is `CurlService`'s job on the one path that
-	 * fetches the page.
-	 *
-	 * Public because `LinkPreviewService` asks the same of the picture a page
-	 * offers, which is a URL from the same untrusted source.
+	 * A link counts when it is a plain http(s) URL to a host. Everything else
+	 * (local addresses, redirects, blocked hosts) is `CurlService`'s job on the
+	 * path that fetches. Public for `LinkPreviewService`'s preview image check.
 	 */
 	public static function isExternalLink(string $url): bool {
 		$scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
@@ -1137,6 +972,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return (string)parse_url($url, PHP_URL_HOST) !== '';
 	}
 
+	/** What a `Video` said beyond what a post can hold, or `[]` for any other post. */
 	public function getVideoMeta(): array {
 		$meta = $this->getDetailsAll()[Details::VIDEO] ?? [];
 
@@ -1160,11 +996,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether this post is a video, in the sense the watch page means.
-	 *
-	 * Either it arrived as one — a `Video`, which leaves the metadata block
-	 * behind — or it carries a video as its only kind of attachment, which is
-	 * what an upload here produces.
+	 * Whether this post is a video: it arrived as a `Video`, or its only kind
+	 * of attachment is video.
 	 */
 	public function isVideo(): bool {
 		if ($this->getVideoMeta() !== []) {
@@ -1181,14 +1014,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The same few facts about every video, whatever it arrived as: what a
-	 * card in a grid of videos draws. A PeerTube `Video` says most of them
-	 * itself; an upload here or a video from Mastodon or Bluesky has only its
-	 * attachment and its words, and gets what those say and null for the rest.
-	 * Nothing is invented: a count nobody sent is null, not zero.
-	 *
-	 * Null for a post that is not a video (`isVideo()`). The channel is the
-	 * status's own `account`, and is not repeated here.
+	 * The facts a video card in a grid draws, the same for every video. Values
+	 * the source did not give are null, never invented. Null for a post that
+	 * is not a video; the channel is the status's own `account`.
 	 *
 	 * @return array{title: string, duration: ?int, thumbnail: ?string, views: ?int, live: bool, category: ?string, published: string}|null
 	 */
@@ -1242,12 +1070,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The video block as a client is handed it: what the post said about the
-	 * video, with this server's own count as `views` on a video posted here,
-	 * and each subtitle track pointed at this server
-	 * (`MediaApiController::mediaCaption()`) rather than at its origin — the
-	 * page may not load a track from another host, and a reader turning
-	 * subtitles on should not be announced to it either.
+	 * The video block as a client gets it, with this server's own count as
+	 * `views` on a local video and each subtitle track served from this server
+	 * (`MediaApiController::mediaCaption()`), since the page may not load one
+	 * from another host and the origin should not see who turns subtitles on.
 	 *
 	 * @return array<string, mixed>|null null for a post that is not a video
 	 */
@@ -1318,9 +1144,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * What the video is called: its own title, else the content warning —
-	 * the words the author chose to show before the rest — else the first
-	 * line of the post, as plain text. '' for a post with no words at all.
+	 * What the video is called: its own title, else the content warning, else
+	 * the first line of the post as plain text. '' for a post with no words.
 	 */
 	private function videoTitle(): string {
 		$title = trim((string)($this->getVideoMeta()['title'] ?? ''));
@@ -1407,10 +1232,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * A reply rule as it is kept: `everyone`, `nobody`, or a combination of
-	 * `followers`, `following`, `mentioned` and up to five `list:<id>`,
-	 * comma-separated, in that order — Bluesky's threadgate takes five rules
-	 * at most. Anything else is everybody.
+	 * A reply rule as it is kept: `everyone`, `nobody`, or a comma-separated
+	 * combination of `followers`, `following`, `mentioned` and up to five
+	 * `list:<id>` in that order (a Bluesky threadgate takes five rules at most).
+	 * Anything else is everybody.
 	 */
 	public static function normalizeReplyRule(string $rule): string {
 		$parts = array_values(array_unique(array_filter(array_map('trim', explode(',', strtolower($rule))))));
@@ -1450,9 +1275,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The replies in this post's thread that its author hid, by their ids,
-	 * the newest 300 — as many as a Bluesky threadgate lists. Kept on the
-	 * thread's first post.
+	 * The ids of the replies in this thread that its author hid, the newest
+	 * 300 (as many as a Bluesky threadgate lists). Kept on the thread's first post.
 	 *
 	 * @return list<string>
 	 */
@@ -1472,9 +1296,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether this reply is one its thread's author hid, and whether the
-	 * reader is that author and may hide or show it — said of the replies of
-	 * a conversation as it is read (`StreamService::getContextByNid()`),
+	 * Whether this reply was hidden by the thread's author and whether the
+	 * reader is that author, set by `StreamService::getContextByNid()`;
 	 * `null` everywhere else.
 	 */
 	public function setThreadVisibility(bool $hiddenByAuthor, bool $readerMayHide): self {
@@ -1558,9 +1381,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Has the attachments come from `$source` when they are first read: what
-	 * it answers, or what they would otherwise have been when it answers
-	 * nothing.
+	 * Takes the attachments from `$source` when they are first read, keeping
+	 * the stored ones when it returns nothing.
 	 *
 	 * @param \Closure(): MediaAttachment[] $source
 	 */
@@ -1622,9 +1444,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * A content warning is itself a statement that the body should not be
-	 * shown unasked, which is what `sensitive` means to a client — so a post
-	 * carrying one is sensitive whether or not the flag was set as well.
+	 * A post with a content warning is sensitive whether or not the flag was set.
 	 *
 	 * @return bool
 	 */
@@ -1633,9 +1453,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether the author pinned this post to their profile. Only the author
-	 * can pin, so the flag is a property of the post rather than of the
-	 * viewer; it is attached by PinService where a pin state is known.
+	 * Whether the author pinned this post to their profile; attached by
+	 * PinService where a pin state is known.
 	 */
 	public function isPinned(): bool {
 		return $this->pinned;
@@ -1648,9 +1467,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether the viewer has muted the conversation this post belongs to.
-	 * A property of the viewer, not of the post, so it is attached by the
-	 * read that knows who is reading.
+	 * Whether the viewer muted this post's conversation; attached by the read
+	 * that knows who is reading.
 	 */
 	public function isMutedConversation(): bool {
 		return $this->mutedConversation;
@@ -1663,9 +1481,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The link preview of this post. Cards are local, derived data attached
-	 * by LinkPreviewService where one is known — never part of the wire
-	 * object.
+	 * The link preview of this post: local data attached by LinkPreviewService,
+	 * never part of the wire object.
 	 */
 	public function getCard(): ?StreamCard {
 		return $this->card;
@@ -1697,10 +1514,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Only for the reader's own local post, which is the one case the answer
-	 * is anybody's to see: `VideoDeliveryHold::isHeld()` looks at the
-	 * attachments before it asks the queue, so a post without a video costs
-	 * no query at all.
+	 * Only for the reader's own local post. `VideoDeliveryHold::isHeld()` checks
+	 * the attachments before the queue, so a post without a video costs no query.
 	 */
 	private function lookupDeliveryHeld(): bool {
 		$author = $this->getAttributedTo();
@@ -1717,15 +1532,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The emoji reactions on this post: `{name, count, me}` each, most used
-	 * first. Locally owned custom emoji also carry their locally served `url`.
-	 *
-	 * Local, derived data attached by ReactionService the way a card is, and
-	 * never part of the wire object — an `EmojiReact` is its own activity, and
-	 * a peer counts the ones it has received itself.
-	 *
-	 * The key is always present, as an array: a client should never have to
-	 * tell "no reactions" from "this server does not do reactions", and a post
-	 * nobody has reacted to answers `[]`.
+	 * first; local custom emoji also carry their `url`. Attached by
+	 * ReactionService and never part of the wire object. Always an array, `[]`
+	 * when nobody reacted.
 	 *
 	 * @return list<array{name: string, count: int, me: bool, url?: string}>
 	 */
@@ -1765,10 +1574,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * How many people opened this post's own page.
-	 *
-	 * `null` on everybody else's copy: how many people read a post is the
-	 * author's business.
+	 * How many people opened this post's own page; `null` on every copy but
+	 * the author's.
 	 */
 	public function getViewCount(): ?int {
 		return $this->viewCount;
@@ -2008,8 +1815,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 		$this->setEmojis($this->extractEmojisFromTag($data));
 
-		// the post replied to may come embedded rather than by id — both are
-		// the vocabulary's — and read as a string the thread link was lost
+		// the post replied to may be embedded rather than given by id
 		$inReplyTo = $data['inReplyTo'] ?? '';
 		if (is_array($inReplyTo) && !array_is_list($inReplyTo)) {
 			$inReplyTo = $inReplyTo['id'] ?? '';
@@ -2021,9 +1827,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$this->setQuoteAuthorization($this->validate(self::AS_ID, 'quoteAuthorization', $data, ''));
 		$this->setQuotePolicy(self::quotePolicyOf($data));
 		$this->importInteractionPolicies($data);
-		// `social_stream` has no column for it, and `details` is the one thing
-		// on the row that survives the round trip and is already read back
-		// with it. Only stored when it says something the id does not.
+		// `social_stream` has no column for it, and `details` survives the round
+		// trip. Only stored when it differs from the id.
 		if ($this->getUrl() !== '' && $this->getUrl() !== $this->getId()) {
 			$this->setDetail(Details::PAGE, $this->getUrl());
 		}
@@ -2050,21 +1855,14 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$remoteReplies = self::statedCount($data, 'replies');
 		if ($remoteReplies !== null) {
 			$this->setDetailInt(Details::REPLIES, $remoteReplies);
-			// and the origin's own half of the pair, the way likes and shares
-			// keep theirs: `recountReplies()` adds this instance's replies to
-			// what the origin said, and with the origin's number never stored
-			// it added them to nothing — the total the origin had published
-			// was replaced by the count of the replies held here
+			// the origin's own count, which `recountReplies()` adds local replies to
 			$this->setDetailInt(Details::REMOTE_REPLIES, $remoteReplies);
 		}
 	}
 
 	/**
-	 * The three policies that are not about quoting, off the wire object.
-	 *
-	 * Only stored where the author said something: an empty `policies` blob on
-	 * every post from every server that publishes none would be a row larger
-	 * for no reason.
+	 * The three policies that are not about quoting, off the wire object. Only
+	 * stored where the author said something.
 	 *
 	 * @param array<string, mixed> $data
 	 */
@@ -2103,23 +1901,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * A counter another server states, where it states a believable one.
-	 *
-	 * `likes`, `shares` and `replies` arrive as collections with a
-	 * `totalItems`, and whatever is in there is what every reader on this
-	 * instance is shown — there is no way to verify it and no attempt to. That
-	 * is fine for a number that is roughly right and useless for one that is
-	 * not: a server that states four billion favourites is not describing a
-	 * post, it is writing in somebody else's timeline, and the figure sits in
-	 * the database until the post is deleted.
-	 *
-	 * So a count has to be a number, it has to be positive, and it has to be
-	 * small enough to be a count of something. The ceiling is far above
-	 * anything the fediverse has produced — the most-boosted post in its
-	 * history is five orders of magnitude below it — and deliberately not a
-	 * judgement about what is plausible for *this* post. What is over it is
-	 * refused rather than clamped: a number nobody can believe is worse than
-	 * no number, because clamping would state a figure this instance made up.
+	 * A counter another server states, where it states a believable one: a
+	 * positive number no larger than `REMOTE_COUNT_CEILING`. Anything over it
+	 * is refused rather than clamped, since a clamped figure would be made up.
 	 *
 	 * @param array<string, mixed> $data the wire object
 	 *
@@ -2142,9 +1926,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * sends nothing else. Empty when it declares none.
 	 */
 	private static function languageOf(array $data): string {
-		// a peer is free to send anything here, and some send `language` as an
-		// array; casting that to a string is a PHP warning and an empty
-		// language either way, so it is refused rather than cast
+		// some peers send `language` as an array, which is refused rather than cast
 		$declared = $data['language'] ?? '';
 		$language = self::normalizeLanguage(is_string($declared) ? $declared : '');
 		if ($language !== '') {
@@ -2175,12 +1957,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The attachments a post arrived with, each one stored and none of them
-	 * able to take the post down with it.
-	 *
-	 * Only read here: the rows are written and the files fetched when the
-	 * attachments are first asked for (`getAttachments()`), which for an inbox
-	 * request is after the sender has been held to the activity.
+	 * The attachments a post arrived with; none of them can take the post down.
+	 * Only read here: rows are written and files fetched on the first
+	 * `getAttachments()`, which for an inbox request is after the sender has
+	 * been held to the activity.
 	 */
 	public function importAttachments(array $list): void {
 		/** why each attachment that did not make it was left out */
@@ -2189,11 +1969,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$documents = [];
 		$seen = 0;
 		foreach ($list as $item) {
-			// A signed Create is authenticated, not trusted: a peer may list as
-			// many attachments as it likes. Real posts carry a handful
-			// (Mastodon allows four), so every entry counts against the
-			// ceiling, kept or not, and the rest of a list of fifty thousand is
-			// not read at all.
+			// A peer may list any number of attachments: every entry counts
+			// against the ceiling, kept or not, and the rest is not read.
 			if (++$seen > self::MAX_ATTACHMENTS) {
 				$dropped[] = ['reason' => 'over the ceiling', 'left out' => count($list) - self::MAX_ATTACHMENTS];
 				break;
@@ -2204,9 +1981,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 				continue;
 			}
 
-			// the type is checked before the entry is parsed: an attachment
-			// that is itself a post would otherwise import attachments of its
-			// own, and its own, before being left out
+			// the type is checked before parsing, so an attachment that is
+			// itself a post does not import attachments of its own
 			$type = $this->get('type', $item);
 			if ($type !== Document::TYPE && $type !== Image::TYPE) {
 				$dropped[] = ['reason' => 'not a document or image', 'type' => $type];
@@ -2217,9 +1993,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 				/** @var Document $attachment */
 				$attachment = AP::instance()->getItemFromData($item, $this);
 			} catch (Exception|\TypeError $e) {
-				// the exception for an unknown type carries no message, so the
-				// type the sender declared is what makes this line worth
-				// having at all
+				// the exception for an unknown type has no message, so log the
+				// declared type
 				$dropped[] = [
 					'reason' => 'unreadable',
 					'type' => $type,
@@ -2293,14 +2068,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 					$interface->save($attachment);
 				}
 			} catch (Throwable $e) {
-				// A post is not its attachments. Storing one means fetching a
-				// file from another server, which fails in every way a request
-				// can, and letting that out of here dropped the whole Create:
-				// the text, the thread it belongs to and the notification with
-				// it, over one picture. The attachment that could not be
-				// stored is left out and the post is kept -- but said out loud,
-				// because the post then shows fewer pictures than it has and
-				// nothing else anywhere says why.
+				// A failed attachment must not drop the whole post: it is left
+				// out and logged, since the post then shows fewer photos than
+				// it has.
 				$dropped[] = [
 					'reason' => 'could not be stored',
 					'url' => $attachment->getUrl(),
@@ -2312,10 +2082,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			$new[] = $attachment->convertToMediaAttachment($urlGenerator);
 		}
 
-		// A post that arrived with pictures and is stored with fewer is a
-		// thing readers report and nobody can diagnose: every way out of the
-		// loops above is silent, and the post keeps its own frozen copy of what
-		// survived, so there is nothing to go back to afterwards either.
+		// Log what was dropped: nothing else records why a post shows fewer
+		// photos than it arrived with.
 		if ($dropped !== []) {
 			$logger->warning('dropped attachments while importing a post', [
 				'status' => $this->getId(),
@@ -2365,16 +2133,12 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$this->setDetailsAll($this->getArray('details', $data, []));
 		$this->overlayCounters($data);
 
-		// Five fields that used to be read out of the stored wire object and
-		// nowhere else, because none of them had a column;
-		// Version1000Date20260912000007 gave each one its own, and the column
-		// is what is read now. The reasoning that put them in the JSON is kept
-		// below, at the fallback, because the fallback is still what a row
-		// written before that step is read through.
+		// These five fields have their own columns
+		// (Version1000Date20260912000007); the wire object is the fallback
+		// below for older rows.
 		//
 		// `tag`, the mentions and hashtags a post names: re-exported on every
-		// Update and every outbox entry, so a post that loses it tells its
-		// peers that the people it names are not named by it.
+		// Update and every outbox entry, so a post that loses it un-names them.
 		$this->setTags($this->validateArray(self::AS_TAGS, 'tags', $data, []));
 		// the language and the edit stamp, both rewritten by an Update — a
 		// remote edit through NoteInterface as much as a local one through
@@ -2398,13 +2162,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			if (is_array($sourceData)) {
 				$digest = $this->digestSource($sourceData);
 
-				// The fallback, for a row stored before the columns existed and
-				// not yet reached by the BackfillStreamPostFields repair step:
-				// the schema change lands during `occ upgrade` and the backfill
-				// runs after it, so an instance serves reads in between. Each
-				// field falls back on its own, because a post may legitimately
-				// have four of the five empty. A row with a digest has been
-				// through one of the two, so it needs none of this.
+				// Fallback for a row stored before the columns existed and not
+				// yet reached by the BackfillStreamPostFields repair step, which
+				// runs after `occ upgrade`. Each field falls back on its own; a
+				// row with a digest needs none of this.
 				if ($this->getTags() === []) {
 					$this->setTags($this->validateArray(self::AS_TAGS, 'tag', ['tag' => self::listOf('tag', $sourceData)], []));
 				}
@@ -2548,13 +2309,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The counter columns, laid over the keys of `details` they replaced —
-	 * which is where every reader of a count still asks for it.
-	 *
-	 * The JSON keys stop moving once the column exists, so the column wins
-	 * wherever the row has one. A column at zero adds no key the blob did not
-	 * have, which keeps a post nobody has interacted with reading exactly as
-	 * it did.
+	 * The counter columns, laid over the `details` keys every reader of a
+	 * count asks for. The column wins wherever the row has one; a column at
+	 * zero adds no key.
 	 */
 	private function overlayCounters(array $data): void {
 		$details = $this->getDetailsAll();
@@ -2594,16 +2351,6 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		} catch (Exception $e) {
 		}
 
-		//		"in_reply_to_id" => null,
-		//			"in_reply_to_account_id" => null,
-		//			'replies_count' => 0,
-		//			'reblogs_count' => 0,
-		//			'favourites_count' => 0,
-		//			'muted' => false,
-		//			'bookmarked' => false,
-		//			"reblog" => null,
-		//			'noindex' => false
-
 		$attachments = [];
 		foreach ($this->getArray('media_attachments', $data) as $dataAttachment) {
 			$attachment = new MediaAttachment();
@@ -2614,12 +2361,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 		$this->setMentions($this->getArray('mentions', $data));
 
-		// import from cache with new format !
 		$actor = new Person();
 		$actor->importFromLocal($this->getArray('account', $data));
 		$actor->setExportFormat(ACore::FORMAT_LOCAL);
 		$this->setActor($actor);
-		//		$this->setCompleteDetails(true);
 	}
 
 	/**
@@ -2631,13 +2376,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			parent::exportAsActivityPub(),
 			[
 				'content' => $this->getContent(),
-				// `attributedTo` is always set to a full actor URI (see
-				// PostService and PollService), so it is emitted as-is. It used
-				// to be prefixed with `urlSocial`, which produced a valid value
-				// only because nothing ever calls `setUrlSocial()` on a stream —
-				// that is done on Person rows alone. The day anything did, every
-				// outgoing post would have carried a doubled URL and remote
-				// thread resolution would have stopped working.
+				// `attributedTo` is always a full actor URI (see PostService
+				// and PollService), so it is emitted as-is.
 				'attributedTo' => $this->getAttributedTo(),
 				'inReplyTo' => $this->getInReplyTo(),
 				'sensitive' => $this->isSensitive(),
@@ -2659,12 +2399,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			$result['content'] = rtrim($result['content'] ?? '') . '<p><a href="' . $url . '">' . $url . '</a></p>';
 		}
 
-		// Bookkeeping this app keeps about a post — the counts it has seen, the
-		// last action taken on it, what it still has to fetch — carried in the
-		// document rather than beside it. No other implementation reads any of
-		// it, and taking it back out means knowing which of the callers that
-		// ask for complete details are reading it, so it stays until each of
-		// those has been walked.
+		// Local bookkeeping (counts seen, last action, pending fetches)
+		// carried in the document; no other implementation reads it.
 		if ($this->isCompleteDetails()) {
 			$result = array_merge(
 				$result,
@@ -2683,22 +2419,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The `replies` collection, which is how a peer discovers a thread.
-	 *
-	 * Everything else publishes one and reads it: a reply reaches the instances
-	 * that hold the post it answers and nowhere else, so a reader on a third
-	 * instance sees a post with no replies unless there is a collection to walk.
-	 * Without it, a conversation that starts here is a conversation only the
-	 * participants' own servers ever see whole.
-	 *
-	 * Only for a local post. A remote one's replies live on the server that
-	 * holds it, under an id of its choosing; naming a collection here that this
-	 * instance does not serve, under an id it does not own, would send every
-	 * reader to a 404.
-	 *
-	 * `first` is a URL rather than an inlined page: the page it names is the
-	 * one the route serves, and a page written out here would have to be
-	 * queried for during a model export that has no database.
+	 * The `replies` collection, which is how a peer discovers a thread: a
+	 * reply reaches only the servers holding the post it answers. Only for a
+	 * local post, since a remote one's replies live under its server's ids.
+	 * `first` is a URL because the export has no database to build a page.
 	 *
 	 * @return array<string, array<string, string>>
 	 */
@@ -2719,10 +2443,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * `contentMap`/`summaryMap`: the text keyed by its language, which is how
-	 * ActivityPub says what language a post is in and the only place Mastodon
-	 * looks. Nothing when the language is unknown — a wrong key is worse than
-	 * none — and no map for an empty text.
+	 * `contentMap`/`summaryMap`: the text keyed by its language, the only place
+	 * Mastodon looks for it. Nothing when the language is unknown, since a
+	 * wrong key is worse than none, and no map for an empty text.
 	 *
 	 * @return array<string, array<string, string>>
 	 */
@@ -2775,82 +2498,61 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 		$result = [
 			'local' => $this->isLocal(),
-			// the author's own; nobody else is ever handed an archived post,
-			// because no list this server builds contains one
+			// the author's own; no list this server builds contains an archived post
 			'archived' => $this->isArchived(),
-			// null on everybody else's copy: how many people read a post is
-			// the author's business
+			// null on every copy but the author's
 			'view_count' => $this->getViewCount(),
-			// who is in the picture. Pixelfed's `tagged_people`, and the same
-			// key, because its own app reads it
+			// Pixelfed's key, because its own app reads it
 			'tagged_people' => $this->getTaggedPeople(),
-			// what matched, on For you only; the web interface draws the
-			// "why am I seeing this" line from it
+			// on For you only, for the "why am I seeing this" line
 			'interest' => $this->getInterest(),
 			'content' => $this->getContent(),
 			'sensitive' => $this->isSensitive(),
 			'spoiler_text' => $this->getSpoilerText(),
 			'visibility' => self::visibilityForClient($this->getVisibility()),
-			// nullable in Mastodon's entity, and null is what "nobody said" is
+			// nullable in Mastodon's entity: null is "nobody said"
 			'language' => ($this->getLanguage() === '') ? null : $this->getLanguage(),
-			// null is "nowhere", which is what almost every post is: a place is
-			// never inferred, only stated
+			// null is "nowhere"; a place is never inferred
 			'place' => $this->getPlace(),
 			'in_reply_to_id' => $inReplyToId,
 			'in_reply_to_account_id' => $inReplyToAccountId,
 			'quote' => $this->exportQuoteAsLocal(),
-			// who may quote this one. Only on our own posts: somebody else's
-			// server decides who may quote theirs, and what it decided rides
-			// on their document as `interactionPolicy` rather than here
+			// only on our own posts: a remote post's policy is its server's
+			// `interactionPolicy`
 			'quote_approval' => $this->isLocal() ? $this->exportQuoteApproval() : null,
-			// who may reply to one of our own posts — an extension, as no
-			// Mastodon entity says it; null on anybody else's
+			// an extension, null on anybody else's post
 			'reply_policy' => $this->isLocal() ? $this->getReplyRule() : null,
 			// in a conversation: whether its author hid this reply, and
-			// whether the reader is that author — this app's own, null elsewhere
+			// whether the reader is that author; null elsewhere
 			'hidden_by_author' => $this->hiddenByAuthor,
 			'can_hide' => $this->readerMayHide,
 			// where a reply of ours stands with the server it was sent to, and
-			// whether replies here have to be approved at all. Null for the
-			// ordinary post, which is almost every post: a client that has to
-			// test for a key it will almost never see is a client that will
-			// get it wrong.
+			// whether replies here need approval; null for an ordinary post
 			'reply_approval' => $this->exportReplyApproval(),
-			// what the author's own server says may be done with this post, so
-			// a client can leave out a button rather than offer an action that
-			// will be refused. Absent on a local post, where the policy is
-			// this instance's to apply when the interaction arrives
+			// what the author's server allows, so a client can hide a button
+			// rather than offer an action that will be refused; absent on a
+			// local post
 			'interaction_policy' => $this->exportAllowedInteractions(),
-			// PeerTube's other counter. Null for everything that is not a
-			// video, which is almost every post: Mastodon has never had a
-			// dislike, and a key full of zeroes would invite a client to draw
-			// a button for one
+			// PeerTube's other counter; null for anything that is not a video,
+			// so no client draws a dislike button on a post
 			'dislikes_count' => $this->isVideo() ? $this->getDetailInt(Details::DISLIKES) : null,
-			// and whether this reader is one of them; null on anything that is
-			// not a video, for the same reason
+			// and whether this reader is one of them; null on non-videos
 			'disliked' => $this->isVideo() ? $disliked : null,
-			// what a video is, beyond being a post with a file on it: null for
-			// every post that is not one, which is almost all of them
+			// null for every post that is not a video
 			'video' => $this->exportVideoMeta(),
-			// Aloha Social's own: the same seven facts about every video,
-			// for a grid of them to draw — see `exportVideoCard()`. Null for
-			// every post that is not a video
+			// Aloha Social's own, see `exportVideoCard()`; null for non-videos
 			'video_card' => $this->exportVideoCard(),
-			// where the reader stopped in this video: only on "continue
-			// watching" (`/api/v1/videos/continue`) and on the video read on
-			// its own, null everywhere else
+			// only on "continue watching" (`/api/v1/videos/continue`) and on
+			// the video read on its own, null everywhere else
 			'watch_progress' => $this->getWatchProgress(),
 			'mentions' => $this->exportMentionsAsLocal(),
 			'emojis' => $this->getEmojis(),
 			'tags' => $this->exportTagsAsLocal(),
-			// Aloha Social's own: whether the post says it was made with AI
-			// — by one of its hashtags, or by a picture whose metadata stated
-			// so. A label the post carries, never a judgement about it; a
-			// client draws a quiet mark from it, and a reader who asked has
-			// such posts dropped before they get this far
+			// Aloha Social's own: whether the post says it was made with AI, by
+			// a hashtag or by a photo's metadata. A label, not a judgement.
 			'ai_generated' => $this->exportAiGenerated(),
-			// a post read from Bluesky: where it is there, and the labels on it
-			// with the labeler of each; null for every other post
+			// a post read from Bluesky: its location there and its labels with
+			// their labeler; null for every other post
 			'bluesky' => $this->exportBluesky(),
 			'replies_count' => $this->getDetailInt(Details::REPLIES),
 			'reblogs_count' => $this->getDetailInt(Details::BOOSTS),
@@ -2863,56 +2565,41 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			'bookmarked' => $bookmarked,
 			'pinned' => $this->isPinned(),
 			'card' => $this->card?->jsonSerialize(),
-			// Pleroma and Akkoma call this `emoji_reactions` and Misskey sends
-			// its own shape; `reactions` with `{name, count, me}` is what the
-			// Mastodon-family clients that support them read, and it is what
-			// this app's own frontend draws
+			// Pleroma and Akkoma call this `emoji_reactions` and Misskey has its
+			// own shape; `reactions` with `{name, count, me}` is what
+			// Mastodon-family clients and this app's frontend read
 			'reactions' => $this->getReactions(),
-			// null, not absent. A Question overwrites this with the real poll;
-			// every other status has to carry the key, because the entity's
-			// rule here is that a client never has to test for a missing one
+			// null, not absent: a Question overwrites it, and a client never has
+			// to test for a missing key
 			'poll' => null,
 			'uri' => $this->getId(),
-			// the three Mastodon always sends and this entity has no value
-			// for: which app wrote the post is not recorded, so `application`
-			// is null as on every remote post; `filtered` is empty until
-			// `FilterService` has looked at the page; `text` is the source,
-			// which only `/statuses/{id}/source` and a delete answer. Sent
-			// as constants rather than left out because masto.js types
-			// `filtered` as required and Elk and Phanpy read its length
+			// always sent by Mastodon: `application` is not recorded, `filtered`
+			// is filled by `FilterService`, `text` only by `/statuses/{id}/source`
+			// and a delete. Sent as constants because masto.js types `filtered`
+			// as required and Elk and Phanpy read its length.
 			'application' => null,
 			'filtered' => [],
 			'text' => null,
-			// the page a person can open, which is not always the id. Loops
-			// posts are `.../ap/users/1/video/3268…` with a `url` of
-			// `loops.video/v/i9co_4TqPk`, and Pixelfed and PeerTube do the
-			// same; sending the id here pointed "open original" at a JSON
-			// document. Mastodon's two fields mean two different things and
-			// this app had them meaning one.
+			// the page a person can open, which is not always the id: Loops,
+			// Pixelfed and PeerTube give an object a separate `url`
 			'url' => $this->pageUrl(),
 			'reblog' => null,
 			'media_attachments' => $this->getAttachments(),
-			// seconds, with the milliseconds Mastodon's shape asks for written
-			// as zero: `published_time` is what the row keeps, and the full
-			// string the sender wrote is kept beside it in `published`, so
-			// nothing is lost by this being the coarser of the two. Clients
-			// order a timeline by the snowflake `id`, not by this.
+			// whole seconds, as `published_time` keeps them; clients order a
+			// timeline by the snowflake `id`, not by this
 			'created_at' => gmdate('Y-m-d\TH:i:s', $this->getPublishedTime()) . '.000Z',
 			'edited_at' => $this->editedAt(),
 			'noindex' => false
 		];
 
 		// Aloha Social's own: `held` while the post's deliveries wait for its
-		// video to be converted, on the author's copy only. Absent everywhere
-		// else — including on the same post once it has gone out — because
-		// this is a transient state of one person's post, not a property of
-		// a status, and the one exception to the entity's no-missing-keys rule
+		// video to be converted, on the author's copy only. The one exception
+		// to the entity's no-missing-keys rule, because it is transient.
 		if ($this->isDeliveryHeld()) {
 			$result['delivery'] = 'held';
 		}
 		if ($this->getSubType() === 'Event') {
-			// Keep ordinary Mastodon Status entities unchanged. This extension
-			// appears only when the remote object actually is an Event.
+			// only when the remote object is an Event
 			$result['event'] = ActivityPubEvent::fromStream($this);
 		}
 		if (in_array($this->getSubType(), self::ARTICLE_SUBTYPES, true)) {
@@ -2931,17 +2618,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The parent of a reply, as the two numeric ids Mastodon addresses it by.
-	 *
-	 * These were hard-coded to null, and a reply with no `in_reply_to_id` is
-	 * not a reply: Elk and Phanpy render it as a fresh top-level post, and the
-	 * status handed back from `POST /statuses` lost the link the client needed
-	 * to slot it under the post being answered. The row only carries the
-	 * parent's ActivityPub id, so the numbers come from a lookup — memoised for
-	 * the request, since a thread's replies all name the same parent.
-	 *
-	 * A parent this instance has never seen has no numeric id here, and null is
-	 * then the honest answer.
+	 * The parent of a reply, as the two numeric ids Mastodon addresses it by;
+	 * without them clients show a reply as a top-level post. Looked up from
+	 * the parent's ActivityPub id and memoised for the request. Null for a
+	 * parent this instance has never seen.
 	 *
 	 * @return array{?string, ?string}
 	 */
@@ -2984,10 +2664,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The wire object as the `source` column keeps it: the ActivityPub
-	 * document, whatever format this copy was read in. A post read back for
-	 * an edit or a vote is read in the client format, and snapshotted as it
-	 * stood it stored the Mastodon entity in place of the document — which
-	 * has no `tag` to read the custom emoji from, and no `oneOf` for a poll.
+	 * document, whatever format this copy was read in. A copy read in the
+	 * client format must not be stored as is, since the Mastodon entity has
+	 * no `tag` for custom emoji and no `oneOf` for a poll.
 	 */
 	public function wireSource(): string {
 		$format = $this->getExportFormat();
@@ -3008,13 +2687,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The id of the quoted object, whichever of the four names a peer used for
-	 * it, and whether it arrived as a bare id, an embedded object or a Link.
-	 *
-	 * `quote` is FEP-044f and what Mastodon 4.5 reads first; `quoteUri` is
-	 * Fedibird's, `quoteUrl` Mastodon's own alias, `_misskey_quote` Misskey's.
-	 * Mastodon emits the last two beside `quote` to this day, and a server that
-	 * predates FEP-044f sends nothing else.
+	 * The id of the quoted object, whichever of the four names a peer used and
+	 * whether it is a bare id, an embedded object or a Link. `quote` is
+	 * FEP-044f, `quoteUri` Fedibird's, `quoteUrl` Mastodon's alias and
+	 * `_misskey_quote` Misskey's; older servers send only the aliases.
 	 */
 	private function quoteIdOf(array $data): string {
 		foreach (['quote', 'quoteUri', 'quoteUrl', '_misskey_quote'] as $key) {
@@ -3039,9 +2715,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The quote as it goes onto the wire: FEP-044f's `quote`, the two aliases
-	 * Mastodon still emits for readers that predate it, and the approval once
-	 * there is one. Nothing at all for a post that quotes nothing — the keys
-	 * are dropped by cleanArray().
+	 * Mastodon emits for older readers, and the approval once there is one.
+	 * Empty keys are dropped by cleanArray().
 	 *
 	 * @return array<string, string>
 	 */
@@ -3060,14 +2735,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Who may quote this post, for our own posts only — somebody else's server
-	 * says who may quote theirs.
-	 *
-	 * Mastodon 4.5 offers no quote button at all for a post that carries no
-	 * `interactionPolicy.canQuote`, so a post from here would be unquotable
-	 * however open it is. The policy mirrors what QuoteRequestInterface
-	 * actually answers: anyone, automatically, for a post addressed to the
-	 * public collection, and nobody but the author for anything narrower.
+	 * Who may quote this post, for our own posts only. Mastodon 4.5 offers no
+	 * quote button for a post without `interactionPolicy.canQuote`. Mirrors
+	 * what QuoteRequestInterface answers.
 	 *
 	 * @return array<string, array<string, array<string, string[]>>>
 	 */
@@ -3078,14 +2748,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 		$author = array_filter([$this->getAttributedTo()]);
 		$allowed = match ($this->effectiveQuotePolicy()) {
-			// the author is always allowed; naming them beside the collection
-			// is what lets a peer see that without special-casing it
+			// the author is always allowed; naming them lets a peer see that
 			self::QUOTE_POLICY_PUBLIC => array_merge([self::CONTEXT_PUBLIC], $author),
-			// the followers collection, which is the address FEP-044f expects
-			// here and the one a peer can dereference to check itself.
-			// Derived from the author's id rather than read off a hydrated
-			// actor — `ActorsRequestBuilder` mints it the same way, and a post
-			// read out of the database carries no actor object at all
+			// the followers collection, the address FEP-044f expects here.
+			// Derived from the author's id, as `ActorsRequestBuilder` does,
+			// because a post read from the database carries no actor object.
 			self::QUOTE_POLICY_FOLLOWERS => array_merge(
 				array_filter([$this->followersOfAuthor()]), $author
 			),
@@ -3102,10 +2769,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Who the author lets reply, as `interactionPolicy.canReply` says it —
-	 * GoToSocial's field, which it holds peers to: the author always, beside
-	 * the collection or the accounts the rule names. Null for everybody,
-	 * which is what a post saying nothing means.
+	 * Who the author lets reply, as GoToSocial's `interactionPolicy.canReply`:
+	 * the author always, beside the collection or the accounts the rule names.
+	 * Null for everybody.
 	 *
 	 * @return string[]|null
 	 */
@@ -3143,8 +2809,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * What a client needs to say "waiting to be approved" — or null, which is
-	 * almost every post.
+	 * What a client needs to say "waiting to be approved", or null.
 	 *
 	 * @return array{policy: string, state: string}|null
 	 */
@@ -3169,12 +2834,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/**
 	 * Mastodon's `quote_approval` on a status of ours: who is approved
 	 * automatically, who would have to be asked, and where the reader stands.
-	 *
-	 * `manual` is always empty, and honestly so: this app answers a
-	 * `QuoteRequest` in the moment it arrives and has no queue for an author to
-	 * work through, so every quote is either allowed or refused and none of
-	 * them waits. Saying otherwise would put a "requested" state in a client
-	 * that nothing here would ever resolve.
+	 * `manual` is always empty: a `QuoteRequest` is answered on arrival, so
+	 * no quote ever waits.
 	 *
 	 * @param string $viewerId the reader's actor id, or '' for nobody
 	 * @param bool $viewerFollows whether that reader follows the author
@@ -3186,9 +2847,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$automatic = ($policy === self::QUOTE_POLICY_NOBODY) ? [] : [$policy];
 
 		$viewerId ??= self::currentViewerId();
-		// the follow is only looked up where the answer turns on it, which is
-		// the `followers` policy and nothing else: a timeline of forty posts
-		// must not cost forty queries to say who may quote them
+		// the follow is only looked up for the `followers` policy, so a
+		// timeline does not cost a query per post
 		$viewerFollows ??= ($policy === self::QUOTE_POLICY_FOLLOWERS)
 			&& self::viewerFollows($viewerId, $this->getAttributedTo());
 
@@ -3201,11 +2861,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * What may be done with somebody else's post, in the shape a client reads.
-	 *
-	 * Null where there is nothing to say — a local post, or a remote one whose
-	 * server publishes no policies, which is most of them. A client that has
-	 * to test for a key it will almost never see is a client that gets it
-	 * wrong, so it is absent rather than full of `true`.
+	 * Null for a local post or a remote one whose server publishes no policies.
 	 *
 	 * @return array<string, bool>|null
 	 */
@@ -3225,9 +2881,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Who is reading, as the stream reads were scoped for — or '' where there
-	 * is nobody, which is also what a context with no container is (a model
-	 * exported in a unit test, or by a command that never opened one).
+	 * Who is reading, as the stream reads were scoped for, or '' where there
+	 * is nobody or no container (a unit test, a command).
 	 */
 	private static function currentViewerId(): string {
 		try {
@@ -3238,10 +2893,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether the reader follows an author, memoised for the request.
-	 *
-	 * One timeline is one author repeated, so without the memo a page of
-	 * somebody's followers-only posts would ask the same question forty times.
+	 * Whether the reader follows an author, memoised for the request, since a
+	 * timeline repeats the same authors.
 	 */
 	private static function viewerFollows(string $viewerId, string $authorId): bool {
 		if ($viewerId === '' || $authorId === '' || $viewerId === $authorId) {
@@ -3264,15 +2917,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether one account may quote this post without being asked.
-	 *
-	 * The author always may — quoting your own post is how a thread is picked
-	 * up later — and beyond that it is the policy: anybody, the people who
-	 * follow the author, or nobody.
-	 *
-	 * This is the rule `QuoteRequestInterface` applies when it answers, so a
-	 * client that reads `quote_approval.current_user` and a peer that sends a
-	 * `QuoteRequest` are told the same thing.
+	 * Whether one account may quote this post without being asked: the author
+	 * always, beyond that the policy. The same rule `QuoteRequestInterface`
+	 * applies, so `quote_approval.current_user` and a peer's `QuoteRequest`
+	 * get the same answer.
 	 */
 	public function mayBeQuotedBy(string $askerId, bool $askerFollows = false): bool {
 		if ($askerId !== '' && $askerId === $this->getAttributedTo()) {
@@ -3287,27 +2935,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether this post is open enough to be quoted: addressed to the public
-	 * collection, which `public` and `unlisted` both are. The same rule
-	 * `PinService::pin()` and `BoostService::create()` apply, and for the same
-	 * reason — a quote carries the audience of the quoter, so anything
-	 * narrower would be handed to readers the author never addressed.
-	 */
-	/**
-	 * The page a person can open for this post.
-	 *
-	 * Freshly imported it is on the object; read back out of the database it
-	 * is in `details`, because the table has no column for it. Falling back to
-	 * the id keeps every local post — whose id *is* its page — exactly as it
-	 * was.
-	 */
-	/**
 	 * The page of a post as `url`, which Mastodon always sends and Loops
 	 * needs: it keeps a remote video's address only when `url` is a string,
-	 * and every later interaction with the video names it by that address.
-	 * The table has no column for it, so a post written here went out with
-	 * none, Loops stored our videos without an address, and likes, comments
-	 * and edits on them failed there. A boost is not a page of its own.
+	 * and later interactions name the video by it. A boost is not a page of
+	 * its own.
 	 *
 	 * @return array{url?: string}
 	 */
@@ -3320,6 +2951,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return ($page === '') ? [] : ['url' => $page];
 	}
 
+	/**
+	 * The page a person can open for this post: on the object when freshly
+	 * imported, in `details` when read from the database, else the id.
+	 */
 	public function pageUrl(): string {
 		if ($this->getUrl() !== '') {
 			return $this->getUrl();
@@ -3338,12 +2973,14 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return in_array($this->getVisibility(), [self::TYPE_PUBLIC, self::TYPE_UNLISTED], true);
 	}
 
+	/**
+	 * Whether this post is open enough to be quoted: addressed to the public
+	 * collection, as `PinService::pin()` and `BoostService::create()` require,
+	 * since a quote carries it to the quoter's audience.
+	 */
 	public function isQuotable(): bool {
-		// what the author said, where they said anything. A remote post that
-		// carries `canQuote` has answered this question itself, and quoting it
-		// anyway means sending a request their server is going to refuse --
-		// after this instance has already shown the quote to the person who
-		// wrote it.
+		// a remote post whose `canQuote` says nobody would be refused by its
+		// server after the quote was already shown to its writer
 		if (!$this->isLocal() && $this->getQuotePolicy() === self::QUOTE_POLICY_NOBODY) {
 			return false;
 		}
@@ -3352,19 +2989,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Who the author says may quote their post, from `interactionPolicy`.
-	 *
-	 * GoToSocial defined the field, Mastodon 4.5 reads it, and Loops publishes
-	 * it on every video; FEP-044f is the same shape. Only `canQuote` is read
-	 * here, because it is the only one this app can act on without pretending
-	 * to know a remote server's follower list: `automaticApproval` naming the
-	 * public collection is "anyone", anything narrower is treated as "ask the
-	 * author", and an absent policy leaves the visibility rule to decide as
-	 * before.
-	 *
-	 * `manualApproval` is deliberately not "yes": it means the author's server
-	 * decides case by case, and this app has no way to wait for that answer
-	 * before showing a reader the quote they just wrote.
+	 * Who the author says may quote their post, from `interactionPolicy`
+	 * (GoToSocial, Mastodon 4.5, Loops, FEP-044f). Only `automaticApproval`
+	 * naming the public collection means anyone; anything narrower means ask
+	 * the author, and `manualApproval` is not a yes because this app cannot
+	 * wait for the answer. No policy leaves the visibility rule to decide.
 	 */
 	private static function quotePolicyOf(array $data): string {
 		return self::policyOf($data, 'canQuote');
@@ -3372,17 +3001,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * One clause of an `interactionPolicy`, as this app understands it.
-	 *
-	 * The same shape answers all four questions — may this be replied to,
-	 * boosted, liked, quoted — and only `canQuote` was ever read. The other
-	 * three were offered in the interface of every reader here and refused by
-	 * the author's server afterwards, which is the worst of both: the reader
-	 * is told their reply went out, and it did, and nothing ever shows it.
-	 *
 	 * `automaticApproval` naming the public collection is the only blanket
-	 * "yes", for the reason set out above `quotePolicyOf()`: `manualApproval`
-	 * means the author's server decides case by case, and nothing here can
-	 * wait for that answer. Whom a narrower list names is kept beside it
+	 * "yes" (see `quotePolicyOf()`); whom a narrower list names is kept
 	 * (`granteesOf()`) and decided per reader by `allowsInteraction()`.
 	 *
 	 * @param array<string, mixed> $data the wire object
@@ -3409,11 +3029,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * What the author allows, for an interaction other than quoting.
-	 *
-	 * Kept in `details` rather than in columns of their own: three more
-	 * columns on the largest table in the app, for three fields almost no post
-	 * carries and nothing queries by.
+	 * What the author allows, for an interaction other than quoting. Kept in
+	 * `details` because few posts carry it and nothing queries by it.
 	 *
 	 * @return string '' where the author said nothing, which is every post
 	 *                from a server that does not publish policies
@@ -3425,20 +3042,12 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Whether this instance should offer an interaction at all, to one reader.
-	 *
-	 * True where the author said nothing — which is every post from every
-	 * server that does not publish policies, and has to stay the default — and
-	 * true for anything local, where the policy is this instance's to apply
-	 * when the interaction arrives rather than something to refuse in advance.
-	 *
-	 * A policy narrower than public is still a "yes" for whom it names: the
-	 * reader by id, the author's followers collection when the reader follows
-	 * the author, the author's following collection when the author follows
-	 * the reader. GoToSocial writes every direct message's and followers-only
-	 * post's policy that way, and lets anybody a post mentions reply to it
-	 * whatever its policy says; it approves those interactions on its own
-	 * when they arrive.
+	 * Whether this instance should offer an interaction to one reader. True
+	 * where the author said nothing and for anything local, where the policy
+	 * is applied on arrival. A narrower policy is still a yes for whom it
+	 * names: the reader by id, the author's followers collection when the
+	 * reader follows, the following collection when the author follows the
+	 * reader (how GoToSocial writes followers-only and direct posts).
 	 *
 	 * @param string|null $viewerId the reader's actor id; the reader the
 	 *                              stream reads were scoped for when null
@@ -3495,13 +3104,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's Quote entity, or null for a post that quotes nothing.
-	 *
-	 * `accepted` with the quoted status inline is what a client renders as a
-	 * card. `pending` is the honest answer while the quoted post is still being
-	 * fetched — and the only answer for a post this reader may not see, which
-	 * is why the lookup runs as the viewer: a quote must not become a way of
-	 * reading somebody's followers-only post.
+	 * Mastodon's Quote entity, or null for a post that quotes nothing. The
+	 * lookup runs as the viewer, so a quote cannot be used to read somebody's
+	 * followers-only post.
 	 *
 	 * @return ?array{state: string, quoted_status: ?array}
 	 */
@@ -3515,22 +3120,15 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			return ['state' => $state, 'quoted_status' => null];
 		}
 
-		// What makes a quote accepted is the approval, not the lookup. The
-		// stamp is the quoted author's word that their post may be shown
-		// inside this one, and FEP-044f is explicit that a quote without one
-		// renders as a link. Holding the quoted post answers a different
-		// question — whether we *could* show it — and reading the state off
-		// that reported every quote as accepted the moment it was written,
-		// including ones the author went on to refuse.
-		// Bluesky asks nobody's permission to quote, so a quote made there or
-		// of a post there carries no stamp: it stands until it is detached
+		// The approval, not holding the quoted post, makes a quote accepted:
+		// FEP-044f renders a quote without one as a link. Bluesky asks nobody's
+		// permission, so a quote there or of a post there stands until detached.
 		if ($this->getQuoteAuthorization() === '' && !self::isBlueskyPost($this->getId()) && !self::isBlueskyPost($this->getQuote())) {
 			return ['state' => self::QUOTE_PENDING, 'quoted_status' => null];
 		}
 
-		// Approved, but the post may still be missing here or closed to this
-		// reader. That is not `pending`: pending says the author has not
-		// answered, and they have.
+		// Approved, but the post may be missing here or closed to this reader;
+		// still not `pending`, since the author has answered.
 		return ['state' => self::QUOTE_ACCEPTED, 'quoted_status' => $this->resolveQuoted()];
 	}
 
@@ -3563,20 +3161,6 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The hashtags as Mastodon's Tag entities.
-	 *
-	 * The app used to emit its own `hashtags: ["foo"]` alongside nothing a
-	 * client recognises, so a post's tags were invisible in every client and
-	 * there was nothing to tap through to the hashtag timeline.
-	 *
-	 * @return array<array{name: string, url: string}>
-	 */
-	/**
-	 * Whether this post is labelled as made with AI, against the instance's
-	 * tag set where the container can hand it out and the built-in defaults
-	 * where it cannot — a model exported outside a request.
-	 */
-	/**
 	 * @return array{uri: string, url: string, labels: list<array{src: string, val: string}>}|null
 	 */
 	private function exportBluesky(): ?array {
@@ -3599,6 +3183,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return str_starts_with($id, 'https://bsky.app/profile/') && str_contains($id, '/post/');
 	}
 
+	/**
+	 * Whether this post is labelled as made with AI, using the built-in
+	 * defaults where there is no container to ask.
+	 */
 	private function exportAiGenerated(): bool {
 		try {
 			return Server::get(AiContentService::class)->labelsPost($this);
@@ -3607,6 +3195,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		}
 	}
 
+	/** The hashtags as Mastodon's Tag entities. */
 	private function exportTagsAsLocal(): array {
 		$tags = [];
 		foreach ($this->getHashtags() as $hashtag) {
@@ -3632,11 +3221,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The mentions, with every id a string.
-	 *
-	 * An unresolvable mention is stored with an integer `0` for an id, and a
-	 * client that declares the field a string fails to decode the mention —
-	 * and with it the status carrying it.
+	 * The mentions, with every id a string: an unresolvable mention is stored
+	 * with an integer `0`, which a client typing the field as a string fails
+	 * to decode, and the whole status with it.
 	 */
 	private function exportMentionsAsLocal(): array {
 		return array_map(
@@ -3650,13 +3237,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * When this status was last edited, or null if it never was.
-	 *
-	 * The edit stamp is the ActivityPub `updated`, remote or local. Rows
-	 * edited before this app emitted one carry the edit differently: the
-	 * edit used to move `published` and leave `published_time` — which
-	 * `created_at` is built from — at the original, so for those the two
-	 * disagreeing is what says the post was edited.
+	 * When this status was last edited, or null if it never was: the
+	 * ActivityPub `updated`, or for older rows a `published` that differs from
+	 * `published_time`.
 	 */
 	private function editedAt(): ?string {
 		if ($this->getUpdated() !== '') {
@@ -3688,10 +3271,6 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Mastodon's name for a notification sub-type, or an empty string for a
-	 * sub-type Mastodon has no notification for.
-	 */
-	/**
 	 * The first-party notification types a third-party client did not ask
 	 * for, to be excluded from its page.
 	 *
@@ -3703,6 +3282,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return array_values(array_diff(self::FIRST_PARTY_NOTIFICATION_TYPES, $types));
 	}
 
+	/**
+	 * Mastodon's name for a notification sub-type, or an empty string for a
+	 * sub-type Mastodon has no notification for.
+	 */
 	public static function notificationTypeOfSubType(string $subType): string {
 		return self::NOTIFICATION_TYPES[$subType] ?? '';
 	}
@@ -3745,14 +3328,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public function jsonSerialize(): array {
 		$result = parent::jsonSerialize();
 
-		// `attachment` is the ActivityPub name for these; the client format
-		// already carries them as `media_attachments`, and a second copy under
-		// a key Mastodon does not define was only ever confusing.
+		// `attachment` is the ActivityPub name; the client format carries them
+		// as `media_attachments`
 		if ($this->getExportFormat() !== self::FORMAT_LOCAL) {
-			// as Documents, whatever format the attachments themselves are in:
-			// a post read back from the database has them hydrated in the local
-			// format, and served like that a peer got Mastodon's client entity
-			// under an ActivityPub key -- Pixelfed dropped every picture
+			// always as Documents: a post read from the database has them in
+			// the local format, which a peer cannot read
 			$result['attachment'] = array_map(
 				static fn (MediaAttachment|array $attachment): array => self::asWireDocument($attachment),
 				$this->getAttachments()
@@ -3778,20 +3358,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * The client format is a fixed key set, and nothing may be filtered out of
-	 * it.
-	 *
-	 * `Note::jsonSerialize()` runs its result through `cleanArray()`, which
-	 * drops every empty string and empty list. For an ActivityPub document that
-	 * is the intent — an absent property is simply absent. For a Mastodon
-	 * status entity it is silent data loss: a post with no content warning lost
-	 * `spoiler_text`, one with no attachments lost `media_attachments`, one
-	 * that is not a reply lost `in_reply_to_id`, and a client that declares
-	 * those keys non-optional — which Mastodon's own behaviour entitles it to —
-	 * failed to decode the status, and with it the page it arrived on.
-	 *
-	 * It went unnoticed because `ApiContractTest` asserted against
-	 * `exportAsLocal()`, which is not what a client receives.
+	 * The client format is a fixed key set: unlike an ActivityPub document,
+	 * nothing is dropped by `cleanArray()`, because clients treat Mastodon's
+	 * keys as required and fail to decode a status missing one.
 	 */
 	#[\Override]
 	protected function cleanArray(array &$arr) {

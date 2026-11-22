@@ -13,27 +13,14 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 
 /**
- * How much of this instance's disk one other server may occupy.
+ * How much of this instance's disk one other server may occupy, so one
+ * server posting large images fast cannot fill it.
  *
- * Every picture on a post somebody here follows is fetched and kept, and
- * nothing bounded that by where it came from: one server posting large images
- * at a high rate fills the disk of every instance that follows anybody on it,
- * and the retention sweep only catches up a day at a time and only for posts
- * old enough. An administrator found out from the disk.
- *
- * **Measured on a schedule, spent in the moment.** Walking the store to total
- * a domain's bytes is a `stat` per file and cannot happen on a fetch, so the
- * quota is read from the figure `MediaUsageService` takes on the cron, plus
- * what this instance has cached from that domain since. The stored figure is
- * up to a day old and the counter covers the day: together they are close
- * enough for a disk quota, and wrong in the direction of refusing early rather
- * than late.
- *
- * Without a memcache there is nothing to count the day in, so only the daily
- * figure applies — the quota still holds, a day at a time. **Off by default**:
- * an instance that has been federating for a year and acquires a quota on
- * upgrade would start refusing the pictures of the servers it talks to most,
- * which is not an upgrade note anybody reads in time.
+ * Totalling a domain's bytes is a `stat` per file, so the quota uses the
+ * figure `MediaUsageService` measures on the cron plus what was cached from
+ * the domain since (a day counter, which needs memcache). It errs towards
+ * refusing early. Off by default, so an upgrade does not start refusing the
+ * pictures of the servers an instance talks to most.
  */
 class RemoteMediaQuotaService {
 	/** No quota, which is the default: the only limit is the disk. */
@@ -90,12 +77,8 @@ class RemoteMediaQuotaService {
 	}
 
 	/**
-	 * Starts the day's counter again for a host the last measurement has now
-	 * accounted for.
-	 *
-	 * Called as the walk passes, because everything it counted is in the
-	 * figure it just wrote — leaving the counter would charge those bytes
-	 * twice and shrink the quota a little more with every pass.
+	 * Starts the day's counter again for a host the last measurement now
+	 * includes, so its bytes are not charged twice.
 	 */
 	public function forget(string $host): void {
 		$this->cache?->remove($this->key($host));
@@ -113,16 +96,10 @@ class RemoteMediaQuotaService {
 	}
 
 	/**
-	 * The host a cached document is charged to: the one its bytes came from,
-	 * which is what its `url` names.
-	 *
-	 * Not the host of its id. An attachment that arrives without an id of its
-	 * own -- Mastodon's and Nextcloud Social's both do -- is given one under
-	 * this instance's address (see `Document::import()`), so keyed by id every
-	 * such picture from every server was charged to this instance, as one
-	 * domain: with a quota set, once they added up to it, every remote picture
-	 * from anywhere was refused as too large. The id stands in only for a
-	 * document with no url.
+	 * The host a cached document is charged to: the one its `url` names. Not the
+	 * host of its id, since attachments without an id of their own (Mastodon's)
+	 * get one under this instance's address (`Document::import()`); the id is
+	 * used only for a document with no url.
 	 */
 	public static function chargedHost(string $url, string $id): string {
 		$host = self::host($url);
@@ -138,11 +115,9 @@ class RemoteMediaQuotaService {
 	}
 
 	/**
-	 * What the last measurement said this host was holding.
-	 *
-	 * Read out of the stored figure rather than from `MediaUsageService`: the
-	 * walk resets this service's day counters as it finishes, and a service
-	 * cannot be constructed by the thing it constructs.
+	 * What the last measurement said this host was holding, read from the
+	 * stored figure rather than `MediaUsageService`, which constructs this
+	 * service.
 	 */
 	private function measured(string $host): int {
 		$stored = $this->configService->getLazyAppValue(ConfigService::SOCIAL_MEDIA_USAGE);

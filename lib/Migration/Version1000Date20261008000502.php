@@ -20,17 +20,10 @@ use OCP\Migration\SimpleMigrationStep;
 
 /**
  * `social_stream_media`: which cached document each of this instance's own
- * posts carries, one row per (post, document).
- *
- * An upload is made before its post exists, so nothing on the document
- * names the post; when a video finished transcoding, the posts carrying it
- * were found by a `LIKE` on the `attachments` text of every local post with
- * a video. This table is that question answered by an index, both ways: the
- * posts of a document for the transcode, and the rows of a post for the
- * delete that clears them with it.
- *
- * The local posts that predate it are linked here from their stored
- * attachment copies, which are keyed by the document's nid.
+ * posts carries, one row per (post, document), indexed both ways for the
+ * transcoder and for deletion (an upload predates its post, so the document
+ * cannot name it). Existing local posts are linked from their stored
+ * attachment copies, keyed by the document's nid.
  */
 class Version1000Date20261008000502 extends SimpleMigrationStep {
 	/** Rows read per page: each carries its attachment copies. */
@@ -62,8 +55,7 @@ class Version1000Date20261008000502 extends SimpleMigrationStep {
 
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		// `*PREFIX*` is what the connection rewrites; there is no public API
-		// that hands the prefix over as a string
+		// The connection rewrites `*PREFIX*`; no public API returns the prefix.
 		$table = '*PREFIX*' . CoreRequestBuilder::TABLE_STREAM;
 
 		$after = '0';

@@ -20,9 +20,7 @@
 				<NcLoadingIcon :size="24" />
 				<span>{{ t('social', 'Loading …') }}</span>
 			</div>
-			<!-- a list that could not be fetched is not a list with nobody in it,
-		     and saying "No followers yet" for a server error tells the reader
-		     something about this account that is not true -->
+			<!-- a list that could not be fetched does not say "No followers yet" -->
 			<div v-else-if="filling && users.length === 0" class="loading-indicator" role="status">
 				<NcLoadingIcon :size="24" />
 				<span>{{ t('social', 'Loading the list from this account’s network…') }}</span>
@@ -40,7 +38,6 @@
 					{{ t('social', 'Try again') }}
 				</NcButton>
 			</div>
-			<!-- a finished list with nobody in it used to be a blank panel -->
 			<EmptyContent v-else-if="users.length === 0" :item="emptyState" />
 		</template>
 	</div>

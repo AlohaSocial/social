@@ -17,15 +17,11 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * `social_stream.source_digest`: what a read takes out of the stored wire
- * object beside the columns — the custom emoji and the totals the origin
- * stated — as a small JSON object (`Stream::sourceDigestOf()`), so a
- * timeline is read without `source`.
- *
- * NULL is "not digested yet" and reads `source` as before. Every write of
- * `source` writes it; the rows already there are digested in the background
- * (`SourceDigestBackfill`), which a table this size cannot afford during
- * `occ upgrade`.
+ * `social_stream.source_digest`: the custom emoji and totals a read needs
+ * from the wire object, as small JSON (`Stream::sourceDigestOf()`), so
+ * timelines are read without `source`. NULL means not digested yet and
+ * falls back to `source`; existing rows are filled in the background by
+ * `SourceDigestBackfill`, as `occ upgrade` cannot afford it.
  */
 class Version1000Date20261113200001 extends SimpleMigrationStep {
 	/**

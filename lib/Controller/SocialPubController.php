@@ -41,20 +41,10 @@ use OCP\IL10N;
 use OCP\IRequest;
 
 /**
- * The browser half of the `/@{username}` routes.
- *
- * `ActivityPubController` owns those urls and answers ActivityPub clients
- * itself; a request whose `Accept` header asks for HTML is handed here. Who is
- * asking decides what they get: a reader with a session gets the app, the same
- * page `NavigationController::navigate()` serves at `/`, since the client-side
- * router has a view for every one of these paths — a profile, its followers, a
- * post. Everybody else gets the public page, which has no navigation and no
- * reply box. This used to serve the public page to everybody, so a link to a
- * post or a profile landed a logged-in reader on a page with a "Get your own
- * free account" banner and a Follow button that started the remote-follow flow
- * for an account they could have followed with one click.
- *
- * @package OCA\Social\Controller
+ * The browser half of the `/@{username}` routes, which
+ * `ActivityPubController` hands a request asking for HTML. A reader with a
+ * session gets the app, whose router has a view for each of these paths;
+ * anybody else gets the public page.
  */
 class SocialPubController extends Controller {
 	use TNCDataResponse;
@@ -92,35 +82,22 @@ class SocialPubController extends Controller {
 	 */
 	private function renderPage(string $username): Response {
 		try {
-			// what this instance already knows, and nothing it would have to go
-			// and ask for: an anonymous page request is not a reason to
-			// webfinger whatever name is in the address. That lookup is also
-			// where an unknown name used to blow up — a name without a host is
-			// not a valid account to resolve, and the exception saying so was
-			// a 500 rather than the 404 it meant
+			// only what this instance already knows: an anonymous page request is no
+			// reason to WebFinger whatever name is in the address
 			$actor = $this->cacheActorService->getFromAccount($username, false);
 		} catch (CacheActorDoesNotExistException|ActorDoesNotExistException $e) {
-			// A remote profile need not already be in this instance's actor
-			// cache. Let the client resolve a well-formed federated handle
-			// through the rate-limited account-info API; nothing is
-			// WebFingered as part of this HTML request, whoever is asking.
-			//
-			// Whoever is asking: a guest got the page and somebody signed in
-			// got a 404 for the same handle, which is the wrong way round
-			// twice over — a reader with an account is the one who can follow
-			// what they find there.
+			// A remote profile need not be cached yet: the client resolves a
+			// well-formed federated handle through the rate-limited account-info API,
+			// for guests and signed-in readers alike; nothing is WebFingered here.
 			if ($this->isFederatedHandle($username)) {
 				return ($this->userId === null)
 					? $this->publicPage($username)
 					: $this->navigationController->navigate();
 			}
 
-			// both, because which one comes back depends on how far the lookup
-			// got: a name this server has no local actor for throws
-			// ActorDoesNotExistException from inside getFromLocalAccount(),
-			// and only a name that got as far as the remote cache throws the
-			// other. Catching one of the two left the bare local name — the
-			// common case, a mistyped handle — as a 500.
+			// both: a name with no local actor throws ActorDoesNotExistException from
+			// getFromLocalAccount(), and only one that reached the remote cache throws
+			// the other
 			return $this->notFound(
 				$this->l10n->t('Account not found'),
 				$this->l10n->t('There is no account named %s on this server.', [$username])
@@ -151,13 +128,9 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * Whether this names an account on another server well enough to try.
-	 *
-	 * The host needs a dot and may not carry a port. A fediverse handle never
-	 * has one — WebFinger is asked of the host — and accepting them turned
-	 * this route into a way for anybody at all to have the server render a
-	 * page for `someone@10.0.0.5:8080`, one host and port at a time. A host
-	 * with no dot at all (`localhost`, an intranet name) went the same way.
+	 * Whether this names an account on another server well enough to try. The
+	 * host needs a dot and no port, so this route cannot be used to probe
+	 * internal hosts like `localhost` or `10.0.0.5:8080`.
 	 */
 	private function isFederatedHandle(string $username): bool {
 		$handle = ltrim($username, '@');
@@ -166,9 +139,7 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * Return webpage content for human navigation.
-	 * Should return information about a Social account, based on username.
-	 *
+	 * An account's profile, for a browser.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -180,8 +151,7 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * Return webpage content for human navigation.
-	 * Should return followers of a Social account, based on username.
+	 * An account's followers, for a browser.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -193,13 +163,9 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * An account's collections, for a browser.
-	 *
-	 * Not an ActivityPub URL — a collection is local and federates nothing —
-	 * so unlike the followers page there is no JSON to answer first: the
-	 * client-side router owns the path, and this exists so that reloading or
-	 * bookmarking it is not a 404. A visitor gets the public page, like the
-	 * profile itself.
+	 * An account's collections, for a browser. Not an ActivityPub URL, since
+	 * collections are local; this exists so reloading or bookmarking the
+	 * client-side route is not a 404. A visitor gets the public page.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -209,8 +175,7 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * Return webpage content for human navigation.
-	 * Should return following of a Social account, based on username.
+	 * The accounts an account follows, for a browser.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -222,12 +187,9 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * A post, for a browser.
-	 *
-	 * The post is rendered into the page so that it shows before the app has
-	 * asked for anything, in the client format the app reads everywhere else.
-	 * A reader with a session gets the app around it; anybody else gets the
-	 * public page.
+	 * A post, for a browser, rendered into the page in the client format so it
+	 * shows before the app asks for anything. A reader with a session gets the
+	 * app around it; anybody else the public page.
 	 *
 	 * @throws UrlCloudException
 	 * @throws SocialAppConfigException
@@ -272,12 +234,10 @@ class SocialPubController extends Controller {
 			'setup' => false,
 		]);
 
-		// A TemplateResponse is private by default: Nextcloud redirects a
-		// visitor to /login while the page is loading, even though the public
-		// post was already resolved above. Serve the same app shell as the
-		// anonymous timeline route so a cold link and an in-app navigation have
-		// the same public access rules.
+		// A TemplateResponse is private by default, which would redirect a visitor
+		// to /login: serve the anonymous timeline's public app shell instead.
 		$page = new PublicTemplateResponse(Application::APP_ID, 'main');
+		$page->setHeaderTitle(Application::APP_NAME_DISPLAY);
 		$this->addOembedDiscovery($page, $post);
 
 		return $page;
@@ -400,16 +360,10 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * The post an address names: by the token in the post's own address
-	 * first, then by the numeric id the app itself links with.
-	 *
-	 * The app writes its links to a post with the id its client API uses,
-	 * which is not the token in the post's ActivityPub address. Opening one in
-	 * a new tab, reloading it, or following one somebody sent found nothing
-	 * here and the page said the post did not exist. Only for the browser
-	 * page: an ActivityPub request asks for a post by its address, and
-	 * answering a different identifier there would invent a second canonical
-	 * id for every post.
+	 * The post an address names: by the token in the post's own address first,
+	 * then by the numeric id the app links with. Only for the browser page: an
+	 * ActivityPub request asks by address, and answering another identifier
+	 * there would invent a second canonical id.
 	 *
 	 * @throws SocialAppConfigException
 	 */
@@ -432,13 +386,9 @@ class SocialPubController extends Controller {
 	}
 
 	/**
-	 * What an address that names nothing gets: a 404, and a page that says so.
-	 *
-	 * A reader with a session gets the app, whose views say "User not found"
-	 * and "This post is not available" themselves once they have asked; the
-	 * status code is still a 404 so that a browser, a crawler or a link
-	 * checker is told the truth. Everybody else gets a small guest page, since
-	 * the public page had nothing to show and nowhere to go.
+	 * What an address that names nothing gets: a 404, with the app for a reader
+	 * with a session (whose views say what is missing) and a small guest page for
+	 * anybody else.
 	 */
 	private function notFound(string $title, string $message): Response {
 		if ($this->userId !== null) {

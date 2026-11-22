@@ -19,17 +19,12 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
  * The word index behind the content search: one row per (word, post) in
- * `social_search_term`.
+ * `social_search_term`, so a word is an indexed equality on (term, nid) read
+ * newest first (see `StreamRequest::searchContent()`).
  *
- * A search used to be `content ILIKE '%term%'`, which no index can answer —
- * a leading wildcard never can — so every search read every post in its
- * window. A word is now an indexed equality on (term, nid), read newest-first
- * off the index and cut at the page; see `StreamRequest::searchContent()`.
- *
- * The rows are written with the post (`StreamRequest::save()`), rewritten
- * with it (`update()`) and deleted with it (`deleteRelatedTo()`), and the
- * posts stored before the table existed are added by `Cron\SearchIndex`.
- * Until that has reached the newest post, the search keeps its bounded scan.
+ * Rows are written, rewritten and deleted with the post (`StreamRequest`'s
+ * `save()`, `update()`, `deleteRelatedTo()`); older posts are added by
+ * `Cron\SearchIndex`, and until it is done the search keeps a bounded scan.
  */
 class SearchTermsRequest extends CoreRequestBuilder {
 	/** App setting: '1' once every stored post is in the index. */
@@ -48,10 +43,8 @@ class SearchTermsRequest extends CoreRequestBuilder {
 	public const TYPES = [Note::TYPE, Question::TYPE];
 
 	/**
-	 * Indexes a post that was just stored.
-	 *
-	 * Every row is new unless the post is being stored again, which the
-	 * unique (term, nid) index makes harmless.
+	 * Indexes a post that was just stored; storing it again is harmless thanks
+	 * to the unique (term, nid) index.
 	 *
 	 * @throws DBException
 	 */
@@ -67,11 +60,8 @@ class SearchTermsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Brings a post's rows in line with what it says now.
-	 *
-	 * Most updates of a post change a count or a quote and none of its words,
-	 * so the stored words are read and only the difference is written: an
-	 * update that changed no word writes nothing.
+	 * Brings a post's rows in line with what it says now, writing only the
+	 * difference, since most updates change no word.
 	 *
 	 * @throws DBException
 	 */
@@ -125,19 +115,14 @@ class SearchTermsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * The posts that hold every one of `$whole`, newest first: the candidates
-	 * of one page of a search, before the viewer's visibility is applied.
+	 * The posts that hold every one of `$whole`, newest first: one page's
+	 * candidates, before visibility is applied.
 	 *
-	 * The longest word drives — the rarest, as a rule — read off the
-	 * (term, nid) index in nid order and cut at `$limit`; each other word is
-	 * a point lookup on the same index. With no whole word, the prefix
-	 * drives instead, through its head: an equality on (head, nid), in nid
-	 * order, with the `LIKE` sifting the words of that head. A head as common
-	 * as `the` holds nearly every post, so those reads are bounded by
-	 * `$sinceNid`.
-	 *
-	 * A prefix next to whole words is not asked here; the caller checks it
-	 * against the few posts the whole words already narrowed to.
+	 * The longest (usually rarest) word drives, read off the (term, nid) index
+	 * and cut at `$limit`; each other word is a point lookup. Without a whole
+	 * word the prefix drives through its head, bounded by `$sinceNid` since a
+	 * head like `the` holds nearly every post. A prefix beside whole words is
+	 * checked by the caller.
 	 *
 	 * @param list<string> $whole normalised words, every one required
 	 * @param string $prefix a normalised word beginning, '' for none

@@ -18,21 +18,15 @@ use Throwable;
 /**
  * The hourly hashtag buckets the trend windows are counted from.
  *
- * `social_tag_hour` holds, for each hashtag and hour, how many public statuses
- * published in that hour carry it: the rows `countHashtagsInWindows()` used to
- * join and group over the whole ten-day window on every trends pass, counted
- * once per hour instead. Hourly, not daily: the narrowest window is an hour,
- * and the part of a window that does not cover a whole bucket is counted
- * exactly from the posts (`countHashtagsFromBuckets()`), which with daily
- * buckets would be up to a day of posts on every pass.
+ * `social_tag_hour` holds, per hashtag and hour, how many public statuses
+ * published in that hour carry it. Hourly because the narrowest window is an
+ * hour; the part of a window not covering a whole bucket is counted exactly
+ * from the posts (`countHashtagsFromBuckets()`).
  *
- * A bucket is recounted from the posts, never incremented, so it is exactly
- * what the join would say for its hour at the moment it was counted. An hour
- * is recounted (`settleTrendBuckets()`) when something in it may have changed:
- * a post stored since the last pass (found by `creation`, which is indexed),
- * or an hour marked in `social_tag_dirty` by a deletion or an edit, which can
- * change an hour long after its posts were stored. Only the hours of the
- * widest window and after are kept.
+ * A bucket is recounted from the posts, never incremented. An hour is
+ * recounted (`settleTrendBuckets()`) when a post was stored since the last
+ * pass (by the indexed `creation`) or when `social_tag_dirty` marks it after
+ * a deletion or edit. Only the widest window's hours and after are kept.
  *
  * A trait used by `StreamRequest` for the reason `StreamTimelines` gives: it
  * separates the file, not the object.
@@ -63,10 +57,8 @@ trait StreamTrendBuckets {
 
 	/**
 	 * The uses of hashtags that trends count, on `$qb`: the tag rows of public
-	 * statuses, which is the rule `HashtagsRequest::related()` counts by — a
-	 * tag used inside a followers-only thread or a direct message is not public
-	 * knowledge, and counting it published the tag, and its usage count,
-	 * through `/api/v1/trends/tags`, `tagHistory()` and search.
+	 * statuses, as `HashtagsRequest::related()` counts, so tags used in
+	 * followers-only or direct posts are never published through trends.
 	 */
 	private function trendTagUses(SocialQueryBuilder $qb): void {
 		$expr = $qb->expr();
@@ -394,10 +386,9 @@ trait StreamTrendBuckets {
 	}
 
 	/**
-	 * Each window counted off the buckets: the whole buckets from the first
-	 * hour that starts inside the window on, and the part of the window before
-	 * that hour exactly from the posts, so a window starts on its second as
-	 * the join it replaced started it.
+	 * Each window counted off the buckets: whole buckets from the first hour
+	 * starting inside the window, and the part before that hour exactly from
+	 * the posts, so a window starts on its second.
 	 *
 	 * @param array<string, int> $windows name => since, as a timestamp, none before `trendBucketFloor()`
 	 *

@@ -4,9 +4,7 @@
 -->
 <template>
 	<div>
-		<!-- What of an account to read, next to how to draw it: the same
-		     switcher the timelines carry, because it is the same shape of
-		     choice — one account seen three ways rather than three places. -->
+		<!-- the same switcher the timelines carry: one account seen three ways -->
 		<TimelineSwitcher
 			:options="kinds"
 			:value="kind"
@@ -17,9 +15,8 @@
 			:account="routeAccount"
 			:to="photosTab.to" />
 
-		<!-- pinned posts belong to the account, not to a kind of attachment:
-		     on Photos they would be whatever that account pinned, pictures or
-		     not, above a page that promised pictures -->
+		<!-- pinned posts only on Posts: on Photos they would be whatever the
+		     account pinned, photos or not -->
 		<ul v-if="pinned.length && kind === ''" class="profile-pinned">
 			<TimelineEntry
 				v-for="entry in pinned"
@@ -54,16 +51,12 @@ export default {
 		TimelineSwitcher,
 	},
 
-	props: { profileLayout: { type: Object, default: undefined } },
-
 	data() {
 		return {
 			pinnedIds: [],
 			/**
-			 * Which profile's pinned posts are being waited for. A reader
-			 * moving from one profile to another leaves the first request in
-			 * flight, and the answer to it is a list of somebody else's posts;
-			 * the same counter `TimelineList` keeps, for the same reason.
+			 * Which profile's pinned posts are awaited, so an answer for a profile
+			 * the reader has left is dropped (as `TimelineList` does).
 			 */
 			generation: 0,
 		}
@@ -77,13 +70,8 @@ export default {
 
 		...mapStores(useTimelineStore),
 		/**
-		 * Which of an account's posts are being read.
-		 *
-		 * The query rather than a route of its own, so a profile stays one
-		 * page: every link to `@alice` still names the same route, and the
-		 * `media` word is the API's own (`media_type`), not the tab's label.
-		 * It arrives from the address bar, so anything else is read as all of
-		 * them.
+		 * Which of an account's posts are read, from the `media` query (the API's
+		 * `media_type`), so a profile stays one route. Anything else means all.
 		 *
 		 * @return {string} '', 'image' or 'video'
 		 */
@@ -94,16 +82,7 @@ export default {
 		},
 
 		/**
-		 * How the tab is drawn, which is a property of the tab rather than a
-		 * choice on top of it.
-		 *
-		 * There used to be a grid/list switch here, remembered across
-		 * profiles. It could disagree with the tab: the grid kept only the
-		 * posts that carried a picture, so Posts showed sixteen of them as a
-		 * list and three as a grid, and nothing said where the other thirteen
-		 * had gone. Posts is what somebody wrote, which is a list; Photos and
-		 * Videos are what they showed, which is a grid. One question, one
-		 * answer.
+		 * How the tab is drawn: Posts as a list, Photos and Videos as a grid.
 		 *
 		 * @return {string} 'grid' or 'timeline'
 		 */
@@ -115,7 +94,7 @@ export default {
 		 * @return {object[]} the three tabs, for the switcher
 		 */
 		kinds() {
-			return profileKinds(this.routeAccount, this.profileLayout, this.kind)
+			return profileKinds(this.routeAccount)
 		},
 
 		/**
@@ -126,14 +105,8 @@ export default {
 		},
 
 		/**
-		 * The pinned posts, read back out of the store.
-		 *
-		 * They used to live in local component data, so every mutation in
-		 * store/timeline.js skipped them (each one is guarded by
-		 * `state.statuses[id] !== undefined`) and liking, boosting,
-		 * bookmarking or unpinning a pinned post was a UI no-op. A boosted
-		 * pinned post was worse: TimelineEntry looks its reblog up in the
-		 * store, found nothing, and rendered an empty card.
+		 * The pinned posts, read from the store so that likes, boosts and unpins
+		 * reach them.
 		 *
 		 * @return {object[]}
 		 */
@@ -146,9 +119,7 @@ export default {
 
 	watch: {
 		'$route.params.account': 'load',
-		// a tab is a different question asked of the server, not a filter of
-		// what is already on screen: the list is refetched, or Photos would
-		// show whatever of the last page happened to carry a picture
+		// a tab is a different query to the server, not a filter of what is on screen
 		kind: 'loadTimeline',
 	},
 

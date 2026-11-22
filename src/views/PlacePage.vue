@@ -29,7 +29,7 @@
 				</div>
 			</header>
 			<p class="place__hint">
-				{{ t('social', 'Public posts that were taken here, as their posters said. A place is never worked out from a picture — it is only ever what somebody chose to say.') }}
+				{{ t('social', 'Public posts that were taken here, as their posters said. A place is never worked out from a photo — it is only ever what somebody chose to say.') }}
 			</p>
 
 			<ProfileMediaGrid :posts="posts" :loading="loadingMore" />
@@ -70,12 +70,8 @@ import { latestLoad } from '../utils/latestLoad.js'
 const PAGE = 20
 
 /**
- * One place: the public posts taken there, as a grid.
- *
- * Pixelfed's place page. It is deliberately a page of what people said
- * about where they were and nothing more — no map, no geocoding, no
- * "nearby" — because the one thing this app promises about location is
- * that it never infers any.
+ * One place (as on Pixelfed): the public posts tagged with it, as a grid. No
+ * map or "nearby", because the app never infers location.
  */
 export default {
 	name: 'PlacePage',

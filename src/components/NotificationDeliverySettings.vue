@@ -27,60 +27,35 @@
 					value="digest"
 					:modelValue="draft.mode"
 					@update:modelValue="setMode">
-					{{ t('social', 'In a digest, at the times I choose') }}
+					{{ t('social', 'Once a day, in a summary') }}
 				</NcCheckboxRadioSwitch>
 			</fieldset>
 
 			<div v-if="isDigest" class="delivery-settings__group">
-				<ul class="delivery-settings__times">
-					<li v-for="(time, index) in draft.times" :key="index" class="delivery-settings__row">
-						<label :for="fieldId('time', index)" class="delivery-settings__label">
-							{{ t('social', 'Time {n}', { n: index + 1 }) }}
-						</label>
-						<input
-							:id="fieldId('time', index)"
-							class="delivery-settings__input"
-							type="time"
-							step="60"
-							required
-							:value="time"
-							@input="typeTime(index, $event)"
-							@blur="flushTimes">
-						<NcButton
-							v-if="draft.times.length > 1"
-							variant="tertiary"
-							:disabled="saving"
-							:aria-label="t('social', 'Remove time {n}', { n: index + 1 })"
-							@click="removeTime(index)">
-							<template #icon>
-								<IconClose :size="20" />
-							</template>
-						</NcButton>
-					</li>
-				</ul>
-				<NcButton
-					v-if="draft.times.length < maxTimes"
-					variant="tertiary"
-					:disabled="saving"
-					@click="addTime">
-					<template #icon>
-						<IconPlus :size="20" />
-					</template>
-					{{ t('social', 'Add a time') }}
-				</NcButton>
+				<div class="delivery-settings__row delivery-settings__daily">
+					<label :for="fieldId('time', 0)" class="delivery-settings__label">
+						{{ t('social', 'At') }}
+					</label>
+					<input
+						:id="fieldId('time', 0)"
+						class="delivery-settings__input"
+						type="time"
+						step="60"
+						required
+						:value="draft.times[0]"
+						@input="typeTime($event)"
+						@blur="flushTimes">
+				</div>
 				<p class="delivery-settings__hint">
-					{{ t('social', 'Phone and desktop get one summary per time, grouped by kind.') }}
+					{{ t('social', 'Phone and desktop get one summary, grouped by kind.') }}
 				</p>
 				<p v-if="timesError !== ''" class="delivery-settings__error" aria-live="polite">
 					{{ timesError }}
 				</p>
 			</div>
 
-			<!-- Only drawn while something is being held back, which is the
-			     only time an exception means anything: a digest, or quiet
-			     hours over an otherwise instant account. The state is kept
-			     either way, so turning the digest off and on again does not
-			     lose it. -->
+			<!-- only while something is held back (a digest, or quiet hours), the
+			     only time an exception means anything; the state is kept either way -->
 			<fieldset v-if="holdsAnything" class="delivery-settings__group">
 				<legend class="delivery-settings__legend">
 					{{ t('social', 'Still at once') }}
@@ -150,14 +125,10 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import debounce from 'debounce'
-import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import IconClose from 'vue-material-design-icons/Close.vue'
-import IconPlus from 'vue-material-design-icons/Plus.vue'
 import logger from '../services/logger.js'
 import {
 	DEFAULT_DELIVERY,
-	MAX_TIMES,
 	fetchNotificationDelivery,
 	isValidTime,
 	normaliseDelivery,
@@ -175,24 +146,19 @@ const QUIET_DEFAULT = Object.freeze({ from: '22:00', to: '07:00' })
 
 /**
  * When Aloha Social may interrupt: as things happen, or in a digest at the
- * times the reader picked, with direct messages and mentions from people they
- * follow allowed through, and quiet hours over the lot.
+ * times the reader picked, with exceptions let through, and quiet hours over
+ * the lot. Everything still lands in Activities; this is only about the bell,
+ * the phone and the mail.
  *
- * Everything still lands in the notifications page; this is only about the
- * bell, the phone and the mail. The server holds one object per account and
- * answers the whole of it to every change, so `state` is always what the
- * server last confirmed and `draft` is what the page shows. A switch moves
- * at once and is saved at once; a time field is saved after a short pause in
- * the typing, because a time arrives in pieces and each half-typed piece is
- * not a time the server would take.
+ * The server answers the whole settings object to every change, so `state` is
+ * what it last confirmed and `draft` is what the page shows. A switch is saved
+ * at once, a time field after a pause in typing, since a half-typed time is
+ * not one the server would take.
  */
 export default {
 	name: 'NotificationDeliverySettings',
 
 	components: {
-		IconClose,
-		IconPlus,
-		NcButton,
 		NcCheckboxRadioSwitch,
 	},
 
@@ -212,8 +178,7 @@ export default {
 			/** why the quiet hours are not being saved */
 			quietError: '',
 			/**
-			 * The debounced saves, made once in `created()`. Declared so they
-			 * are part of the instance rather than appearing on it.
+			 * The debounced saves, made once in `created()`.
 			 *
 			 * @type {((...args: unknown[]) => void) & {clear?: () => void, flush?: () => void}|null}
 			 */
@@ -234,10 +199,6 @@ export default {
 			return this.isDigest || this.quietOn
 		},
 
-		/** @return {number} */
-		maxTimes() {
-			return MAX_TIMES
-		},
 	},
 
 	created() {
@@ -337,45 +298,11 @@ export default {
 		},
 
 		/**
-		 * The one place a time is added, so what it is added as is decided
-		 * once: the hour after the latest one, so the new row does not sit on
-		 * top of an existing one and is saved straight away rather than
-		 * waiting to be typed.
-		 */
-		addTime() {
-			if (this.draft.times.length >= MAX_TIMES) {
-				return
-			}
-			const taken = sortTimes(this.draft.times)
-			const latest = taken.length > 0 ? Number(taken[taken.length - 1].slice(0, 2)) : 7
-			let hour = (latest + 1) % 24
-			while (taken.includes(`${String(hour).padStart(2, '0')}:00`)) {
-				hour = (hour + 1) % 24
-			}
-			const time = `${String(hour).padStart(2, '0')}:00`
-			this.draft.times = [...this.draft.times, time]
-			this.saveTimesDebounced?.clear?.()
-			this.save({ times: sortTimes(this.draft.times) })
-		},
-
-		/** @param {number} index the row to drop */
-		removeTime(index) {
-			if (this.draft.times.length <= 1) {
-				return
-			}
-			this.draft.times = this.draft.times.filter((_, position) => position !== index)
-			this.saveTimesDebounced?.clear?.()
-			this.timesError = ''
-			this.save({ times: sortTimes(this.draft.times) })
-		},
-
-		/**
-		 * @param {number} index the row being typed in
 		 * @param {Event} event the input event, whose target holds the time so far
 		 */
-		typeTime(index, event) {
+		typeTime(event) {
 			const value = /** @type {HTMLInputElement} */ (event.target).value
-			this.draft.times = this.draft.times.map((time, position) => (position === index ? value : time))
+			this.draft.times = [value]
 			this.saveTimesDebounced?.()
 		},
 
@@ -385,11 +312,8 @@ export default {
 		},
 
 		/**
-		 * Saves the times, once they are all times and all different.
-		 *
-		 * The refusal is written here rather than left to the server because
-		 * a half-typed field is not worth a round trip, and the way out of
-		 * "two are the same" is on this page.
+		 * Saves the times once they are all times and all different; the page
+		 * refuses a half-typed or repeated time itself rather than asking the server.
 		 */
 		saveTimes() {
 			if (!this.isDigest) {
@@ -414,9 +338,8 @@ export default {
 		},
 
 		/**
-		 * The switch: on starts the pair at a late evening and an early
-		 * morning, which is what most people mean by quiet hours and is saved
-		 * straight away; off clears both ends.
+		 * The switch: on starts quiet hours at QUIET_DEFAULT and saves at once;
+		 * off clears both ends.
 		 *
 		 * @param {boolean} on the new position
 		 */

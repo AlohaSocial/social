@@ -39,30 +39,19 @@ use OCA\Social\Tools\Model\CacheItem;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-/**
- * Class StreamQueueService
- *
- * @package OCA\Social\Service
- */
 class StreamQueueService {
 	/**
 	 * How much thread resolution one inbox delivery does before handing the
-	 * rest to the queue.
-	 *
-	 * A thread is walked by fetching its parents from the servers that hold
-	 * them, and this happens while an FPM worker is still held. A handful of
-	 * items and a couple of seconds covers the ordinary case — a reply whose
-	 * parent is one fetch away — without letting one slow peer hold a worker
-	 * for the length of a conversation.
+	 * rest to the queue: enough for a parent one fetch away, without letting
+	 * a slow peer hold an FPM worker for a whole conversation.
 	 */
 	private const INLINE_ITEMS = 5;
 	private const INLINE_SECONDS = 3;
 
 	/**
 	 * Detail stamped on every ancestor fetched for a reply: how many levels up
-	 * the climb already is. NoteInterface::save() stops queueing the next parent
-	 * once it reaches MAX_ANCESTOR_DEPTH, so a thread of a thousand messages
-	 * costs eight fetches, not a thousand. Mastodon bounds the same climb.
+	 * the climb already is. NoteInterface::save() stops queueing parents at
+	 * MAX_ANCESTOR_DEPTH, as Mastodon bounds the same climb.
 	 */
 	public const MAX_ANCESTOR_DEPTH = 8;
 
@@ -70,9 +59,8 @@ class StreamQueueService {
 	public const STALE_RUNNING_SECONDS = 3600;
 
 	/**
-	 * The breaker deliveries keep on dead hosts, consulted before a fetch: an
-	 * unreachable server cost a timeout for every parent and every post queued
-	 * against it, on every pass.
+	 * The breaker deliveries keep on dead hosts, consulted before a fetch so an
+	 * unreachable server does not cost a timeout per item on every pass.
 	 */
 	private HostBreaker $breaker;
 
@@ -104,12 +92,10 @@ class StreamQueueService {
 
 	/**
 	 * Queues a post to be fetched from the server that holds it, under the
-	 * token of the delivery that named it.
-	 *
-	 * This is how an activity nobody can vouch for is taken in: the body is
-	 * not stored, the object is asked for by its id and only what its own
-	 * server answers is kept (see `fetchFromOrigin()`). The column is 255
-	 * wide, and an id that does not fit is not queued.
+	 * token of the delivery that named it. This is how an activity nobody can
+	 * vouch for is taken in: only what the object's own server answers is
+	 * kept (see `fetchFromOrigin()`). An id wider than the 255-character
+	 * column is not queued.
 	 *
 	 * @return bool whether it was queued
 	 */
@@ -195,14 +181,9 @@ class StreamQueueService {
 				continue;
 			}
 
-			// Bounded, because this runs **inside the inbox request**, after
-			// the response has been flushed but while the PHP worker is still
-			// held. Each item can be an HTTP fetch of a parent post or an
-			// author from a server that may be slow or gone, so an unbounded
-			// walk spends the FPM pool waiting for other people's servers —
-			// and at a million users' worth of inbound traffic that is the
-			// pool. What is left stays queued; the cron and `social:worker`
-			// drain it, which is what that queue is for.
+			// bounded, because this runs inside the inbox request while the PHP
+			// worker is still held; the rest stays queued for the cron and
+			// `social:worker`
 			if ($done >= self::INLINE_ITEMS || time() >= $deadline) {
 				break;
 			}
@@ -213,16 +194,9 @@ class StreamQueueService {
 	}
 
 	/**
-	 * Resolves one queued item, whatever it costs.
-	 *
-	 * The item is marked `running` before the work starts, and only the
-	 * handlers below take it out of that state again. Anything they do not
-	 * catch — an ItemAlreadyExistsException from a parent that arrived
-	 * meanwhile, a database error, a misconfigured app — left the row
-	 * `running` for ever: unlike `social_request_queue` this table has a stale
-	 * reaper only since `reapStaleRunning()`, and nothing else ever looks at
-	 * a running row. It also took the rest of the batch with it, because the
-	 * loops that call this have no per-item handling of their own.
+	 * Resolves one queued item, whatever it costs. The item is marked
+	 * `running` first; anything the handlers do not catch is caught here so
+	 * the row is not left `running` and the rest of the batch goes on.
 	 *
 	 * @param StreamQueue $queue
 	 */
@@ -231,7 +205,6 @@ class StreamQueueService {
 			$openUntil = $this->breaker->openUntil(self::hostOf($queue->getStreamId()));
 			if ($openUntil > 0) {
 				// held back until the breaker closes, without spending a try
-				// on an attempt that was never made
 				$this->postponeCache($queue, $openUntil);
 
 				return;
@@ -305,10 +278,8 @@ class StreamQueueService {
 
 	/**
 	 * Fetches the files of a stored post's attachments
-	 * (`RemoteMediaPrefetcher::prefetchPost()`). The item is done when none
-	 * waits any more -- each stored, refused or forgotten -- and is asked
-	 * again by the queue while some do; once the queue gives up, the sweep in
-	 * `Cron\Cache` still finds them.
+	 * (`RemoteMediaPrefetcher::prefetchPost()`). Done when none waits any more;
+	 * once the queue gives up, the sweep in `Cron\Cache` still finds them.
 	 */
 	private function manageStreamQueueMedia(StreamQueue $queue): void {
 		if ($this->mediaPrefetcher === null) {
@@ -361,14 +332,10 @@ class StreamQueueService {
 	}
 
 	/**
-	 * Takes in a post as the server that holds it serves it.
-	 *
-	 * The document has to be the one asked for (its id is the URL) and a post,
-	 * and its author has to live on the same host — `NoteInterface` checks that
-	 * against the origin set here, which is the URL's host and nothing the
-	 * delivery said. It then goes through the inbox's own path as a `Create`
-	 * of its author, or as an `Update` when a copy is stored and the fetched
-	 * one says it was edited since; a copy that has not changed is left alone.
+	 * Takes in a post as the server that holds it serves it. Its id must be
+	 * the URL asked for and its author on the URL's host (`NoteInterface`
+	 * checks against the origin set here). It then goes through the inbox's
+	 * path as a `Create`, or as an `Update` when a stored copy is older.
 	 *
 	 * @throws InvalidOriginException
 	 * @throws InvalidResourceException
@@ -459,8 +426,8 @@ class StreamQueueService {
 					continue;
 				}
 				if ($stream->getType() === Note::TYPE) {
-					// a reply only needed its parent fetched; the parent is a row
-					// of its own now and nothing reads a copy out of the reply
+					// a reply only needed its parent fetched, which is now a row
+					// of its own
 					$cache->removeItem($item->getUrl());
 				} else {
 					$item->setStatus(StreamQueue::STATUS_SUCCESS);
@@ -477,9 +444,8 @@ class StreamQueueService {
 				|ItemUnknownException
 				|UnauthorizedFediverseException $e
 			) {
-				// the item itself is the problem — gone, not ours, too big, or a
-				// type this app has no model for — so asking again would ask the
-				// same question and get the same answer
+				// the item itself is the problem (gone, not ours, too big, an
+				// unknown type), so asking again would get the same answer
 				$this->logCacheError($item, $e);
 				$cache->removeItem($item->getUrl());
 			} catch (
@@ -487,9 +453,8 @@ class StreamQueueService {
 				|RequestResultNotJsonException
 				|RequestServerException $e
 			) {
-				// the other server is the problem, and it may not be tomorrow:
-				// counted against the item, which the queue retries until the
-				// count runs out
+				// the other server is the problem, which may pass: counted
+				// against the item, which the queue retries
 				$this->holdHost($item->getUrl(), $e);
 				$this->logCacheError($item, $e);
 				$item->incrementError();
@@ -511,11 +476,9 @@ class StreamQueueService {
 	}
 
 	/**
-	 * Fetches the object a cache item names, unless it is stored already: the
-	 * object of a boost, or the parent of a reply. Either way it is checked like
-	 * anything fetched — id equal to the URL asked for, origin the URL's host,
-	 * author on that host (NoteInterface::save()) — and saved through the same
-	 * interface an inbox delivery goes through.
+	 * Fetches the object a cache item names (a boost's object or a reply's
+	 * parent) unless it is stored already, checked like anything fetched and
+	 * saved through the same interface an inbox delivery goes through.
 	 *
 	 * @param Stream $stream the stream whose cache wants the item
 	 * @param CacheItem $item
@@ -600,9 +563,8 @@ class StreamQueueService {
 	}
 
 	/**
-	 * The replies that arrived before their parent did were stored without
-	 * bumping anything — there was no parent to bump. Counted now, the way
-	 * NoteInterface::updateDetails() counts them when the parent came first.
+	 * Counts the replies that arrived before their parent, as
+	 * NoteInterface::updateDetails() does when the parent came first.
 	 */
 	private function countStoredReplies(Stream $note): void {
 		$this->streamRequest->recount($note, Details::REPLIES);

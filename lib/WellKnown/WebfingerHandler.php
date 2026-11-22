@@ -140,20 +140,16 @@ class WebfingerHandler implements IHandler {
 			return new JrdResponse('', Http::STATUS_NOT_FOUND);
 		}
 
-		// ActivityPub profile. The links have to name the actor exactly as its own
-		// document does, so they come from the stored id rather than from the host
-		// this request happened to arrive under: on an instance reachable under two
-		// trusted domains, the request-derived href handed a remote server an actor
-		// id that disagreed with the document it then fetched.
+		// ActivityPub profile. The links name the actor exactly as its own
+		// document does, from the stored id rather than the request's host,
+		// which may be another trusted domain.
 		$href = $actor->getId();
 		if ($href === '') {
 			return new JrdResponse('', Http::STATUS_NOT_FOUND);
 		}
 
 		// The subject is the account's own handle, never the query echoed
-		// back: `acct:@maya@host`, `acct:Maya@host` and a bare `maya@host`
-		// all find this account, and a consumer that splits the answer on
-		// `@` read the first of them as a user with no name.
+		// back (`acct:@maya@host` would confuse consumers splitting on `@`).
 		try {
 			$address = $this->configService->getSocialAddress();
 			if ($address !== '' && $actor->getPreferredUsername() !== '') {
@@ -166,12 +162,8 @@ class WebfingerHandler implements IHandler {
 		$response->addAlias($href);
 		$response->addLink('self', 'application/activity+json', $href);
 
-		// The profile a remote reader is sent to has to be the *social* one:
-		// `rel=profile-page` is what a peer follows when somebody clicks the
-		// handle, and the Nextcloud user page has none of the account's posts
-		// on it — it is the profile of a Nextcloud user, not of a fediverse
-		// actor. The Nextcloud page stays an alias, which is what an alias is
-		// for: another name this account answers to.
+		// `rel=profile-page` is the Social profile, which a peer opens when
+		// somebody clicks the handle; the Nextcloud user page stays an alias.
 		$socialProfileUrl = $this->configService->getSocialUrl() . '@' . $actor->getPreferredUsername();
 		$nextcloudProfileUrl = $this->configService->getCloudUrl() . '/u/' . $actor->getPreferredUsername();
 		$response->addAlias($nextcloudProfileUrl);
@@ -201,13 +193,9 @@ class WebfingerHandler implements IHandler {
 
 	/**
 	 * The instance's own `Application` actor, answered for
-	 * `acct:<host>@<host>` — the handle Mastodon gives its own instance actor
-	 * and the one a peer holding a `keyId` from here will look up when it wants
-	 * to know what the signer is.
-	 *
-	 * It is answered before any local account is looked up, so a Nextcloud user
-	 * whose id happens to equal the instance host cannot take the name the
-	 * server signs under. Mastodon reserves the handle the same way.
+	 * `acct:<host>@<host>`, Mastodon's instance actor handle, which peers look
+	 * up for a `keyId` from here. Answered before any local account, so a
+	 * user named like the host cannot take it.
 	 *
 	 * @return IResponse|null null when the subject is somebody else's
 	 */
@@ -242,11 +230,8 @@ class WebfingerHandler implements IHandler {
 		$response = new JrdResponse();
 		$response->addHeader('Access-Control-Allow-Origin', '*');
 
-		// Every schema the controller serves, oldest first. Oldest first on
-		// purpose: a consumer that reads this properly takes the highest
-		// version it understands, and one that naively takes the first link
-		// gets 2.0, which is what it got before 2.1 was reachable. Nothing
-		// that reads this today is given something new to cope with.
+		// Every schema served, oldest first: proper consumers take the highest
+		// they understand, naive ones the first, which is 2.0.
 		foreach (OAuthController::NODEINFO_SCHEMAS as $schema) {
 			$response->addLink(
 				'http://nodeinfo.diaspora.software/ns/schema/' . $schema,

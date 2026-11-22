@@ -19,18 +19,8 @@
 			</template>
 		</NcTextField>
 
-		<!--
-			Which directories are being asked, and a way to ask just one.
-			Named rather than implied: whose directory a reader is searching is
-			not something to have to guess, and an instance's administrator
-			chose this list.
-
-			One control rather than a button per directory. Eight of them wrap
-			onto two lines above an empty result list, which is a lot of
-			furniture in front of a search box that has not been used yet — and
-			the question they answer ("where am I looking?") has one answer at
-			a time.
-		-->
+		<!-- which directories are asked, named because an administrator chose
+		     them; one menu rather than a button per directory -->
 		<div v-if="sources.length > 1" class="finder__where">
 			<span class="finder__where-label">{{ t('social', 'Looking in') }}</span>
 			<NcActions :menuName="chosenLabel" variant="tertiary">
@@ -75,11 +65,7 @@
 				</template>
 			</NcEmptyContent>
 
-			<!--
-				A server that did not answer is not a server with nobody on it,
-				and a reader about to try a different spelling is entitled to
-				know which of the two they are looking at.
-			-->
+			<!-- a server that did not answer is not one with nobody on it -->
 			<p v-if="quiet.length" class="finder__quiet">
 				{{ quietNotice }}
 			</p>
@@ -113,17 +99,10 @@ const DEBOUNCE = 400
 const MIN_LENGTH = 2
 
 /**
- * Finding somebody to follow when you do not know which server they are on.
- *
- * The app could already resolve a handle somebody had already given you, and
- * suggest people out of a follow graph a new account is not yet part of.
- * Neither answers "who is there" — which is what a directory is for, and what
- * this asks several of.
- *
- * Nothing is aggregated or stored here: the server asks the directories, drops
- * anybody on a domain this instance will not federate with, and answers. Each
- * source's outcome comes back with the results because a quiet server and an
- * empty one are different answers.
+ * Finding somebody to follow when you do not know which server they are on,
+ * by asking several directories. The server drops anybody on a domain this
+ * instance does not federate with and stores nothing; each source's outcome
+ * comes back too, since a quiet server and an empty one differ.
  */
 export default {
 	name: 'FediverseSearch',
@@ -153,10 +132,8 @@ export default {
 			reports: [],
 			loading: false,
 			/**
-			 * Which search is still wanted. A counter rather than the words,
-			 * because the words are not enough to tell two questions apart —
-			 * the same text asked of another directory is a different one, and
-			 * so is the same text asked again after a failure.
+			 * Which search is still wanted: a counter, as the same text asked of
+			 * another directory, or asked again, is a different search.
 			 */
 			searching: 0,
 			/** whether anything has been asked yet, so the empty state waits its turn */
@@ -176,8 +153,7 @@ export default {
 		},
 
 		/**
-		 * @return {string} how many directories that is, or why this one is on
-		 * the list — the question the row of chips used to answer by existing
+		 * @return {string} how many directories that is, or why this one is on the list
 		 */
 		whereWhy() {
 			if (this.chosen !== '') {
@@ -237,10 +213,6 @@ export default {
 		/**
 		 * Which directory answered for this person.
 		 *
-		 * The row's own reason for being on the page: with eight directories
-		 * asked at once, "who told us about this account" is the difference
-		 * between a name a reader recognises and one they do not.
-		 *
 		 * @param {object} account one result
 		 * @return {string}
 		 */
@@ -255,11 +227,8 @@ export default {
 		},
 
 		/**
-		 * Why a server is in this list, for the reader who wonders how their
-		 * Nextcloud came to be asking a stranger's server about people. The
-		 * three answers are different enough to be worth telling apart: one
-		 * an administrator chose, one this instance already talks to every
-		 * day, and one somebody else's list of servers suggested.
+		 * Why a server is in this list: an administrator chose it, this instance
+		 * federates with it, or another list of servers suggested it.
 		 *
 		 * @param {object} source the source as the server described it
 		 * @return {string} what to show when the name is pointed at
@@ -285,8 +254,7 @@ export default {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/directories'))
 				this.sources = Array.isArray(data) ? data : []
 			} catch (error) {
-				// the box still works; it simply cannot offer one directory at
-				// a time
+				// the box still works, only without choosing one directory
 				logger.debug('Could not read the directory list', { error })
 			}
 		},
@@ -332,9 +300,8 @@ export default {
 				clearTimeout(this.timer)
 			}
 
-			// the question is the words *and* the directory they are asked of:
-			// choosing another source with the same text starts a new search,
-			// and comparing only the text let the older one answer for it
+			// a search is the words and the directory together, so choosing
+			// another source with the same text starts a new one
 			const source = this.chosen
 			this.loading = true
 			this.searching += 1
@@ -370,9 +337,8 @@ export default {
 		},
 
 		/**
-		 * Where a row goes. Somebody this instance already holds has a profile
-		 * here; somebody it has never met has one on their own server, and
-		 * sending a reader there is honest about which of the two this is.
+		 * Where a row goes: the local profile for an account this instance
+		 * knows, otherwise the profile on its own server.
 		 *
 		 * @param {object} account one result
 		 * @return {object} what to bind on the link
@@ -413,10 +379,8 @@ export default {
 
 /*
  * "Looking in Everywhere · 10 directories" is one sentence with a control in
- * the middle of it, so it is set as one: the same size and baseline
- * throughout, with only the part somebody can press carrying the page's own
- * text colour. A button left at its own font size sits a couple of pixels
- * above the words either side of it and reads as a different thought.
+ * it, so it is set at one size and baseline; only the pressable part takes the
+ * page's text colour.
  */
 .finder__where {
 	display: flex;

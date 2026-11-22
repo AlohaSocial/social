@@ -139,11 +139,17 @@ describe('router', () => {
 		expect(route.matched[0].props.default).toBe(true)
 	})
 
-	it('resolves the blocked accounts route', () => {
-		const route = router.resolve('/blocked')
+	it.each([
+		['/blocked', '#blocked'],
+		['/blocked#filters', '#filters'],
+		['/filtered', '#filtered-notifications'],
+		['/migration', '#migration'],
+		['/migration#bring', '#bring'],
+	])('opens %s in Settings, at %s', async (path, hash) => {
+		await router.push(path)
 
-		expect(route.name).toBe('blocked-accounts')
-		expect(route.matched).toHaveLength(1)
+		expect(router.currentRoute.value.name).toBe('settings')
+		expect(router.currentRoute.value.hash).toBe(hash)
 	})
 
 	it('resolves the search route, with and without a term', () => {
@@ -341,11 +347,11 @@ describe('the page title', () => {
 	}, 10000)
 
 	it('leaves a page that names itself alone', async () => {
-		await router.push('/statistics')
+		await router.push('/about')
 		await router.push('/timeline/notifications')
 
 		// the view sets it once mounted; the router must not clear it on the way
-		expect(document.title).toBe('Statistics - Aloha - Nextcloud')
+		expect(document.title).toBe('About this server - Aloha - Nextcloud')
 	})
 })
 
@@ -419,16 +425,12 @@ describe('router navigation', () => {
 describe('the reader\'s own pages', () => {
 	const ownPages = [
 		'/settings',
-		'/statistics',
-		'/about',
-		'/migration',
 		'/switch',
-		'/follow_requests',
-		'/blocked',
 		'/timeline/notifications',
 		'/timeline/direct',
-		'/timeline/favourites',
-		'/timeline/bookmarks',
+		'/@alice/saved',
+		'/@alice/drafts',
+		'/@alice/statistics',
 		'/timeline/interests',
 		'/timeline/list/4',
 	]
@@ -438,6 +440,7 @@ describe('the reader\'s own pages', () => {
 		'/timeline/tags/nextcloud',
 		'/@alice',
 		'/@alice/12345',
+		'/about',
 		'/discover',
 		'/search/nextcloud',
 		'/shorts',
@@ -492,12 +495,12 @@ describe('the reader\'s own pages', () => {
 			expect(instance.currentRoute.value.path).toBe('/timeline/timeline')
 		})
 
-		it('follows the old address of the held senders to the Blocking page, and so to the login', async () => {
+		it('follows the old address of the held senders to Settings, and so to the login', async () => {
 			const instance = await routerFor(true)
 
 			await instance.push('/filtered')
 
-			expect(assign).toHaveBeenCalledWith('/index.php/login?redirect_url=' + encodeURIComponent('/index.php/apps/social/blocked'))
+			expect(assign).toHaveBeenCalledWith('/index.php/login?redirect_url=' + encodeURIComponent('/index.php/apps/social/settings#filtered-notifications'))
 		})
 
 		it('lets a visitor go on to a public page', async () => {
@@ -517,6 +520,33 @@ describe('the reader\'s own pages', () => {
 			expect(assign).not.toHaveBeenCalled()
 			expect(instance.currentRoute.value.name).toBe('settings')
 		})
+	})
+})
+
+describe('follow requests', () => {
+	it('sends the old Follow requests address to Activities, where they are now', async () => {
+		await router.push('/follow_requests')
+
+		expect(router.currentRoute.value.name).toBe('timeline')
+		expect(router.currentRoute.value.params.type).toBe('notifications')
+	})
+})
+
+describe('the pages that moved onto the reader\'s profile', () => {
+	it.each([
+		['/statistics', 'profile.statistics', {}],
+		['/timeline/favourites', 'profile.saved', {}],
+		['/timeline/bookmarks', 'profile.saved', { list: 'bookmarks' }],
+	])('sends %s to the profile', async (path, name, query) => {
+		globalThis.setInitialState('social', 'currentAccount', { acct: 'alice' })
+		vi.resetModules()
+		const { default: testRouter } = await import('../../src/router.js')
+		await testRouter.push(path)
+
+		expect(testRouter.currentRoute.value.name).toBe(name)
+		expect(testRouter.currentRoute.value.params.account).toBe('alice')
+		expect(testRouter.currentRoute.value.query).toEqual(query)
+		document.getElementById('initial-state-social-currentAccount')?.remove()
 	})
 })
 
@@ -571,6 +601,14 @@ describe('router base detection', () => {
 		window.history.replaceState({}, '', '/nextcloud/index.php/apps/social/@alice')
 
 		expect(await freshBase()).toBe('/nextcloud/index.php/apps/social')
+	})
+
+	it('drops index.php where the instance has no pretty urls but the app was opened without it', async () => {
+		// a link from an instance with pretty urls; the app showed its own 404
+		globalThis._oc_webroot = '/nextcloud'
+		window.history.replaceState({}, '', '/nextcloud/apps/social/timeline/timeline')
+
+		expect(await freshBase()).toBe('/nextcloud/apps/social')
 	})
 
 	it('takes the pretty shape when a path only looks like the other one', async () => {

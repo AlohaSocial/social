@@ -147,7 +147,7 @@ describe('CommandPalette', () => {
 				'Direct messages',
 				'My profile',
 				'Bookmarks',
-				'Liked posts',
+				'Favorites',
 				'Statistics',
 				'Settings',
 				'Lists',
@@ -171,7 +171,7 @@ describe('CommandPalette', () => {
 		it('narrows the list as the reader types, best match first', async () => {
 			await mountPalette()
 
-			await input().setValue('bkm')
+			await input().setValue('bookm')
 
 			expect(titles()).toEqual(['Bookmarks'])
 		})
@@ -192,11 +192,25 @@ describe('CommandPalette', () => {
 		it('opens a settings section by its address', async () => {
 			const { router } = await mountPalette()
 
+			await input().setValue('who can contact')
+			await wrapper.findAll('[role="option"]')[0].trigger('click')
+			await flushPromises()
+
+			expect(router.currentRoute.value.fullPath).toBe('/settings#contact')
+		})
+
+		it('opens the lists where they are edited, without leaving the page', async () => {
+			const { router } = await mountPalette()
+			const managed = vi.fn()
+			eventBus.on('lists:manage', managed)
+
 			await input().setValue('lists')
 			await wrapper.findAll('[role="option"]')[0].trigger('click')
 			await flushPromises()
 
-			expect(router.currentRoute.value.fullPath).toBe('/settings#lists')
+			expect(managed).toHaveBeenCalled()
+			expect(router.currentRoute.value.name).not.toBe('settings')
+			eventBus.off('lists:manage', managed)
 		})
 
 		it('takes the page back to its top when it is the page already open', async () => {

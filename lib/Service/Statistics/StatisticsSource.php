@@ -12,13 +12,9 @@ namespace OCA\Social\Service\Statistics;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 
 /**
- * What one network adds to the statistics page.
- *
- * The page counts from this server's rows, and most of what it counts reads
- * the same whatever network it came from. Two things do not: where an
- * account lives, which for a fediverse account is the host of its id and for
- * an account elsewhere is not, and where a post went, which the instance
- * paths of a post record only for the servers it was delivered to.
+ * What one network adds to the Statistics tab: where an account lives (for a
+ * fediverse account, the host of its id) and where a post went, which
+ * instance paths record only for servers it was delivered to.
  */
 interface StatisticsSource {
 	/**

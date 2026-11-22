@@ -4,9 +4,7 @@
 -->
 <template>
 	<div class="post-attachments">
-		<!-- multiple pictures are a set, not a stack of thumbnails: they are
-		     paged through one at a time instead of shrunk until nothing in them
-		     can be made out -->
+		<!-- several photos are paged through one at a time rather than shrunk -->
 		<GalleryCarousel
 			v-if="isCarousel"
 			ref="carousel"
@@ -27,14 +25,11 @@
 				@open="openMedia(index)" />
 		</div>
 		<div v-else class="attachments-container">
-			<!-- a frame around each one, so the ALT badge has something
-			     positioned to sit in the corner of and does not have to be
-			     nested inside the button it would otherwise be part of -->
+			<!-- a frame around each one, so the ALT badge has something positioned to
+			     sit in without being nested inside the button -->
 			<figure v-for="(item, index) in attachementsSlice" :key="index" class="attachment-frame">
-				<!-- an image is opened by pressing it, so it gets a button.
-				     Video and audio carry their own controls: nesting those
-				     inside a button is invalid, and they need no viewer to be
-				     watchable where they are -->
+				<!-- an image is opened by pressing it, so it gets a button; video and
+				     audio carry their own controls, which a button may not contain -->
 				<button
 					v-if="isPressable(item)"
 					ref="thumbnails"
@@ -79,9 +74,9 @@
 				<MediaAttachment :attachment="item" :interactive="true" :video="video" />
 			</li>
 		</ul>
-		<!-- the modal pages on the arrow keys in the reading direction, and on
-		     a swipe for a video; a picture's swipe is ZoomableImage's, which
-		     knows when the picture is zoomed and a drag is a pan -->
+		<!-- the modal pages on the arrow keys in the reading direction, and on a
+		     swipe for a video; a photo's swipe is ZoomableImage's, which knows
+		     when a drag is a pan -->
 		<NcModal
 			v-if="modal"
 			:name="currentLabel"
@@ -93,9 +88,8 @@
 			@previous="toPrevious"
 			@next="toNext">
 			<div ref="viewer" class="attachment__viewer">
-				<!-- `playsinline` here too: the lightbox *is* the full-screen
-				     view, and iOS taking it into its own player on top of that
-				     loses the description below and the paging either side -->
+				<!-- `playsinline` here too, or iOS takes the video into its own player
+				     and loses the description and the paging -->
 				<video
 					v-if="attachments[current].type === 'video'"
 					:src="attachments[current].url"
@@ -108,12 +102,9 @@
 					:src="attachments[current].url"
 					:aria-label="attachments[current].description || ''"
 					controls />
-				<!-- `description` is null for an attachment whose author gave it
-				     no alt text, and a null alt is no alt attribute at all.
-
-				     A picture in the lightbox can be zoomed into and swiped
-				     between; the modal's own controls still page it, and the
-				     swipe is emitted here so both go through the same step. -->
+				<!-- a null `description` leaves the alt attribute off. A photo's swipe is
+				     emitted here, so it pages through the same step as the modal's own
+				     controls. -->
 				<ZoomableImage
 					v-else
 					:src="attachments[current].url"
@@ -165,38 +156,26 @@ export default {
 		},
 
 		/**
-		 * Whether the media leads the post. The thumbnail grid stays for the
-		 * places where the text comes first, so nothing but a picture post
-		 * changes shape.
+		 * Whether the media leads the post; elsewhere the text comes first and
+		 * the thumbnail grid stays.
 		 */
 		mediaFirst: {
 			type: Boolean,
 			default: false,
 		},
 
-		/**
-		 * Where a press on the media goes, or `null` to open the viewer here.
-		 *
-		 * A post in a timeline is a link to itself: pressing its picture opens
-		 * the post, with its replies, and the picture opens full size from
-		 * there. Pressing it in the timeline used to open the viewer straight
-		 * away, which put the reader in a lightbox over a conversation they
-		 * had not seen.
-		 *
-		 * @type {import('vue').PropType<object|null>}
-		 */
-		/**
-		 * What the post said about the video beyond its file: the captions,
-		 * whether it is live. One `Video` object carries one set of those, so
-		 * it belongs to the post rather than to any one attachment.
-		 */
+		/** What the post said about the video beyond its file: its captions and whether it is live. */
 		video: {
 			type: /** @type {import('vue').PropType<object|null>} */ (Object),
 			default: null,
 		},
 
+		/**
+		 * Where a press on the media goes, or `null` to open the viewer here. In
+		 * a timeline the post is a link to itself, so its photo opens the post.
+		 */
 		to: {
-			type: Object,
+			type: /** @type {import('vue').PropType<object|null>} */ (Object),
 			default: null,
 		},
 	},
@@ -238,8 +217,7 @@ export default {
 
 		/**
 		 * @return {import('../types/Mastodon.js').MediaAttachment[]} what can be
-		 * drawn or played: pictures, video, audio. Everything the mosaic, the
-		 * carousel and the viewer work on.
+		 * drawn or played: photos, video, audio.
 		 */
 		media() {
 			return this.attachments.filter((item) => item?.type !== 'unknown')
@@ -286,15 +264,6 @@ export default {
 		t,
 		n,
 		/**
-		 * What opening this attachment will show. The author's own description
-		 * when there is one, because that is the only thing that says what the
-		 * picture actually is.
-		 *
-		 * @param {import('../types/Mastodon.js').MediaAttachment} attachment the media
-		 * @param {number} index its place in the post
-		 * @return {string} the button's accessible name
-		 */
-		/**
 		 * @param {import('../types/Mastodon.js').MediaAttachment} attachment the media
 		 * @return {boolean} whether pressing it should open the viewer
 		 */
@@ -311,6 +280,14 @@ export default {
 				&& attachment.description.trim() !== ''
 		},
 
+		/**
+		 * What opening this attachment will show: the author's own description
+		 * when there is one.
+		 *
+		 * @param {import('../types/Mastodon.js').MediaAttachment} attachment the media
+		 * @param {number} index its place in the post
+		 * @return {string} the button's accessible name
+		 */
 		openLabel(attachment, index) {
 			return attachment.description
 				? t('social', 'Open attachment: {description}', { description: attachment.description })
@@ -334,26 +311,8 @@ export default {
 		},
 
 		/**
-		 * The tapped thumbnail and the opened viewer share a name for the
-		 * length of the transition, so the browser grows one into the other
-		 * instead of the picture appearing from nowhere.
-		 *
-		 * @param {number} index which attachment was tapped
-		 */
-		/**
-		 * A press on one of the attachments.
-		 *
-		 * Either it opens the post — in a timeline, where the picture is a
-		 * link to the conversation it belongs to — or it opens the viewer,
-		 * which is what the post's own page does.
-		 *
-		 * @param {number} index which attachment was pressed
-		 */
-		/**
-		 * One picture back, and one on. The modal's own controls and a swipe
-		 * across the picture both land here, so paging cannot run off either
-		 * end however it was asked for — a swipe has no disabled state to stop
-		 * it the way the modal's buttons do.
+		 * One photo back, and one on. The modal's controls and a swipe both land
+		 * here, so paging cannot run off either end.
 		 */
 		toPrevious() {
 			if (this.current > 0) {
@@ -367,6 +326,12 @@ export default {
 			}
 		},
 
+		/**
+		 * A press on one of the attachments: opens the post in a timeline, or
+		 * the viewer on the post's own page.
+		 *
+		 * @param {number} index which attachment was pressed
+		 */
 		openMedia(index) {
 			if (this.to === null) {
 				return this.showModal(index)
@@ -375,6 +340,12 @@ export default {
 			this.$router.push(this.to)
 		},
 
+		/**
+		 * The tapped thumbnail and the opened viewer share a name for the
+		 * transition, so the browser grows one into the other.
+		 *
+		 * @param {number} index which attachment was tapped
+		 */
 		async showModal(index) {
 			await morph(this.frameAt(index), async () => {
 				this.current = index
@@ -443,8 +414,8 @@ export default {
 }
 
 /**
- * A picture post is read picture first, so the media gets the width of the
- * card and as much height as its own shape asks for, up to most of a screen.
+ * A photo post is read photo first: the media gets the card's width and the
+ * height its shape asks for, up to most of a screen.
  */
 .gallery-mosaic {
 	display: grid;

@@ -18,28 +18,17 @@ use Throwable;
 /**
  * Moving here from another server, starting from nothing but the old handle.
  *
- * Moving in used to be six steps across two servers and five files: an
- * alias to paste as an actor URL, four CSVs to download there and upload
- * here, an archive for the posts. The old server already publishes most of
- * what those files held — the `following` collection and the public
- * `outbox` of the account — and this app already fetches remote documents
- * with the origin checks a fetch needs. This reads them.
+ * The old server publishes the account's `following` collection and public
+ * `outbox`, and this reads them. `inspect()` says what the old account is and
+ * what can be read; `prepare()` sets the alias and returns what the run
+ * needs; `run()` is the background half, under `ImportQueueService`, following
+ * everyone the old account follows and writing its public posts here through
+ * the same `FollowService` and `PostImportService` paths the file imports use.
  *
- * `inspect()` says what the old account is and what can be read off it, so
- * the person sees who they are about to copy before anything happens.
- * `prepare()` sets the alias and returns what the run needs to know;
- * `run()` is the background half, under `ImportQueueService`: it follows
- * everyone the old account follows and writes its public posts here as the
- * new account's own, through the very same `FollowService` and
- * `PostImportService` paths the file imports use, so nothing is federated
- * that those did not federate.
- *
- * What it cannot do is move the followers: that is the old server's `Move`,
- * and the page says which menu to find it in once this has run. A server
- * that hides its collections (Mastodon's "hide your social graph", Pixelfed
- * always) answers with a count and no page; the CSV and the archive remain
- * for those, and `inspect()` says so rather than letting a run come back
- * empty.
+ * Followers move only with the old server's `Move`. A server that hides its
+ * collections (Mastodon's "hide your social graph", Pixelfed always) answers
+ * with a count and no page; the CSV and archive imports remain for those, and
+ * `inspect()` says so.
  */
 class MoveInService {
 	/** The most accounts one run follows; a bigger list is a different kind of account. */
@@ -88,10 +77,8 @@ class MoveInService {
 
 	/**
 	 * Names the old account as this one's alias and says what the run is for.
-	 *
-	 * The alias first and synchronously: it is what the old server will ask
-	 * for before it accepts a `Move` towards this account, and it federates
-	 * nothing, so there is no reason to make the person wait for it.
+	 * The alias is set synchronously: the old server checks it before accepting
+	 * a `Move`, and it federates nothing.
 	 *
 	 * @return array<string, mixed> the options the queued run reads
 	 * @throws InvalidResourceException when the handle names nobody, or names this account
@@ -209,12 +196,9 @@ class MoveInService {
 	}
 
 	/**
-	 * Every entry of a collection, page after page, up to $max of them.
-	 *
-	 * Follows `first` and then `next` the way every ActivityPub server
-	 * publishes them; a `first` that is a page already is read as one. Stops
-	 * at `$max` entries or `MAX_PAGES` pages, whichever comes first, because
-	 * a server that answers `next` for ever is a thing that exists.
+	 * Every entry of a collection, following `first` and `next` (a `first`
+	 * that is already a page is read as one), up to `$max` entries or
+	 * `MAX_PAGES` pages, since some servers answer `next` for ever.
 	 *
 	 * @return array<int, mixed> the entries as listed: ids, or objects
 	 */
@@ -248,8 +232,8 @@ class MoveInService {
 				$page = $this->curlService->retrieveObject($next);
 			}
 		} catch (Throwable $e) {
-			// what was read before the server stopped answering is kept: half
-			// of a following list is better than none, and the report says so
+			// what was read before the server stopped answering is kept, and
+			// the report says so
 			$this->logger->notice('[MoveInService] a collection could not be read to its end', [
 				'url' => $url, 'read' => count($entries), 'exception' => $e,
 			]);

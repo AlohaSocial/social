@@ -19,49 +19,23 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Relays: the fediverse's answer to an empty federated timeline.
+ * Relays: actors that rebroadcast the public posts of every subscribed
+ * instance, filling a small instance's federated timeline and spreading its
+ * own public posts.
  *
- * A small instance only ever sees what the people on it follow, so its
- * federated timeline is empty on the first day and thin for months — there is
- * nobody here yet to have found anybody out there, and nobody out there has
- * heard of this server either. A relay breaks that circle: an actor that
- * rebroadcasts the public posts of every instance subscribed to it. Subscribe
- * and the federated timeline fills with posts from servers nobody here
- * follows; deliver to it and this instance's own public posts reach people who
- * have never heard of it.
+ * The subscription belongs to the instance: `Follow{object: as:Public}`
+ * (what Mastodon and the relay software expect) is built by hand and signed
+ * by the instance actor, outside `social_request_queue`
+ * (`HttpSignatureService::signAsInstance()`).
  *
- * **The subscription belongs to the instance.** The `Follow` is signed by the
- * instance actor, not by a person: what comes back is for everybody's
- * federated timeline, and signing as a user would put one account's name on
- * every server's relay list. That also means it cannot go through
- * `social_request_queue`, which resolves its signing key from `social_actor` —
- * see `HttpSignatureService::signAsInstance()`.
- *
- * **What is sent.** `Follow{object: as:Public}`, which is what Mastodon sends
- * and what the relay software (`activityrelay`, `pub-relay`, Mastodon's own)
- * reads as "subscribe me". The document is built by hand rather than from the
- * `Follow` model because that model is shaped for a person following a person
- * — an inbox, a followers collection, a request token — and this is neither.
- *
- * **What comes back is not a boost.** A relay announces a post it does not
- * own, and storing that the way a boost is stored would put "relay.example
- * boosted this" in front of every post and hang the post off an actor nobody
- * follows. Mastodon treats a relayed `Announce` as a *pointer*: fetch the post
- * from the server that wrote it and store that. So does this — through
- * `SearchService::resolveStatus()`, which is the same fetch a reader pasting a
- * link gets, with the same guard that the document has to claim the address it
- * came from.
- *
- * **Only what a relay is allowed to say.** An `Announce` is taken from a relay
- * whose subscription this instance asked for and the relay accepted, and from
- * nobody else. Without that, any server could push posts into the federated
- * timeline by calling itself a relay.
+ * A relayed `Announce` is a pointer, not a boost: the post is fetched from
+ * its author's server via `SearchService::resolveStatus()`. Announces are
+ * taken only from relays this instance subscribed to and that accepted.
  */
 class RelayService {
 	/**
-	 * A relay is either there or it is not; the administrator is waiting on
-	 * the answer. The same timeout the report forwarder gives its own inline
-	 * delivery.
+	 * Seconds to wait for a relay while the administrator waits; the same as the
+	 * report forwarder's inline delivery.
 	 */
 	private const TIMEOUT = 5;
 
@@ -84,14 +58,9 @@ class RelayService {
 	/**
 	 * Subscribes to a relay.
 	 *
-	 * `$address` is the relay's actor — `https://relay.example/actor` is the
-	 * usual shape, and the one every relay's own front page prints. It is
-	 * fetched first, because what is wanted from it is its inbox and there is
-	 * no way to guess one: a relay that does not resolve is refused here
-	 * rather than recorded as a subscription that can never be answered.
-	 *
-	 * The row is written **before** the Follow goes out, so a relay that
-	 * answers instantly finds a row to mark accepted.
+	 * `$address` is the relay's actor (usually `https://relay.example/actor`),
+	 * fetched first for its inbox, so an unresolvable relay is refused. The row
+	 * is written before the Follow goes out, so an instant Accept finds it.
 	 *
 	 * @throws InvalidResourceException the address is not a relay this instance can reach
 	 */
@@ -125,12 +94,8 @@ class RelayService {
 	}
 
 	/**
-	 * Unsubscribes, and forgets the relay.
-	 *
-	 * The `Undo` is sent first and its failure does not stop the row going:
-	 * an administrator who has pressed this wants to stop taking posts from
-	 * that relay, and whether the relay heard is the relay's problem. Nothing
-	 * further is taken from it either way, because taking one in needs a row.
+	 * Unsubscribes and forgets the relay. A failed `Undo` does not keep the row:
+	 * without it nothing more is taken from the relay.
 	 */
 	public function unsubscribe(int $id): bool {
 		$relay = $this->relayRequest->getById($id);
@@ -150,12 +115,9 @@ class RelayService {
 	}
 
 	/**
-	 * Takes in an activity a relay sent, and says whether it was one.
-	 *
-	 * Called before the ordinary interfaces see it. Everything here is scoped
-	 * to an actor this instance has a subscription row for: an `Announce` from
-	 * a server calling itself a relay that nobody subscribed to is not a relay
-	 * activity and goes on to be handled — or refused — as what it is.
+	 * Takes in an activity a relay sent, and says whether it was one. Only
+	 * actors with a subscription row count as relays; anything else is handled
+	 * as what it is.
 	 *
 	 * @return bool whether this was a relay's activity and has been dealt with
 	 */
@@ -167,9 +129,8 @@ class RelayService {
 
 		switch ($activity->getType()) {
 			case 'Accept':
-				// the Accept has to name the Follow this instance sent, or any
-				// Accept from a server that happens to be a relay would enable
-				// a subscription nobody asked for
+				// The Accept must name our Follow, or any relay's Accept could enable a
+				// subscription nobody asked for.
 				if ($this->acceptsOurFollow($activity, $relay)) {
 					$this->relayRequest->setStatus($relay->getActorId(), Relay::STATUS_ACCEPTED);
 					$this->logger->info('a relay accepted the subscription', ['relay' => $relay->getActorId()]);
@@ -187,8 +148,7 @@ class RelayService {
 
 				return true;
 			case 'Undo':
-				// a relay dropping us: the row stays so an administrator can
-				// see what happened and subscribe again
+				// A relay dropping us: the row stays so an administrator can see it.
 				$this->relayRequest->setStatus(
 					$relay->getActorId(), Relay::STATUS_REJECTED, 'the relay ended the subscription'
 				);
@@ -209,13 +169,8 @@ class RelayService {
 	}
 
 	/**
-	 * A post a relay pointed at.
-	 *
-	 * Fetched from the server that wrote it rather than believed from the
-	 * relay: the relay is a directory, not a source, and the post it names has
-	 * to claim its own address before it is stored. A post this instance
-	 * already holds costs nothing — `resolveStatus()` answers from the
-	 * database first.
+	 * A post a relay pointed at, fetched from its author's server and required
+	 * to claim its own address; one already held costs nothing.
 	 */
 	private function announced(Relay $relay, string $objectId): void {
 		if ($objectId === '') {
@@ -223,9 +178,7 @@ class RelayService {
 		}
 
 		if (!$relay->isAccepted()) {
-			// a relay that has not accepted has not been subscribed to as far
-			// as this instance is concerned, and must not be able to put posts
-			// in front of anybody by announcing them
+			// A relay that has not accepted may not put posts in front of anybody.
 			$this->logger->info('ignoring an Announce from a relay that has not accepted', [
 				'relay' => $relay->getActorId(), 'object' => $objectId,
 			]);
@@ -249,9 +202,7 @@ class RelayService {
 			'id' => $relay->getFollowId(),
 			'type' => 'Follow',
 			'actor' => $this->instanceActorId(),
-			// what Mastodon sends and what every relay reads as "subscribe
-			// me": the relay is asked for everything public, not for the
-			// relay actor's own posts, of which it has none
+			// Asks the relay for everything public, as Mastodon does.
 			'object' => ACore::CONTEXT_PUBLIC,
 		];
 	}
@@ -285,8 +236,7 @@ class RelayService {
 				'timeout' => self::TIMEOUT,
 			]);
 		} catch (RequestResultNotJsonException $e) {
-			// an inbox answers 202 with an empty body, which is a success and
-			// not a document — every other delivery here reads it the same way
+			// An inbox answers 202 with an empty body, which is a success.
 		} catch (Throwable $e) {
 			$this->logger->warning('could not reach a relay', [
 				'relay' => $relay->getActorId(), 'inbox' => $inbox, 'exception' => $e,
@@ -301,13 +251,9 @@ class RelayService {
 	}
 
 	/**
-	 * Whether an `Accept` is an answer to the Follow this instance sent.
-	 *
-	 * A relay may answer with the Follow embedded or with its id alone, and
-	 * some answer with neither — an `Accept` with no object at all. The first
-	 * two are matched on the id; the third is taken, because a relay that
-	 * answers an unmatched Accept is answering the one thing this instance
-	 * ever sent it.
+	 * Whether an `Accept` answers the Follow this instance sent: matched on the
+	 * id when the Follow is embedded or named, and taken as such when the Accept
+	 * has no object at all.
 	 */
 	private function acceptsOurFollow(ACore $activity, Relay $relay): bool {
 		$objectId = $activity->getObjectId();
@@ -324,8 +270,7 @@ class RelayService {
 
 	/**
 	 * The id of the Follow, derived from the instance actor and the relay, so
-	 * that subscribing again after a rejection sends the same id rather than
-	 * accumulating ones no relay will ever answer.
+	 * resubscribing sends the same id.
 	 */
 	private function followId(string $actorId): string {
 		return $this->instanceActorId() . '#relay/' . substr(md5($actorId), 0, 12);

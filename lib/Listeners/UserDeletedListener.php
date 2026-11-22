@@ -21,13 +21,8 @@ use OCP\User\Events\UserDeletedEvent;
 use Psr\Log\LoggerInterface;
 
 /**
- * Takes the Fediverse account down with the Nextcloud account.
- *
- * Without this, deleting a user left everything they had here standing: the
- * actor still resolved over WebFinger, their posts stayed readable, and remote
- * servers went on delivering to an inbox whose owner no longer existed. An
- * administrator removing an account has no reason to suspect any of that, and
- * no reason to know that `occ social:account:delete` exists.
+ * Takes the Fediverse account down with the Nextcloud account, so the actor no
+ * longer resolves, its posts are gone and remote servers stop delivering to it.
  *
  * @template-implements IEventListener<\OCP\EventDispatcher\Event>
  */

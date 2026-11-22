@@ -16,18 +16,10 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * The imports an account asked for, worked through in the background.
- *
- * Every import used to run inside the request that uploaded the file: each
- * follow is a WebFinger lookup, an actor fetch and a delivery, so a few
- * hundred of them ran into the web server's timeout, and the rate limit that
- * protected the server from that meant a timed-out upload could not simply be
- * tried again. A row here is one upload, or one server to pull from, with
- * where the run got to and what it came to; `Cron\RunImport` works it off and
- * the Migration page watches the row.
- *
- * Indexed on (user, id): the page reads one account's rows newest first, and
- * "is one of this kind already under way" is the same index with a filter.
+ * The imports an account asked for, run in the background by
+ * `Cron\RunImport` since each follow costs several requests. A row is one
+ * upload or one server to pull from, with its progress, which the Migration
+ * section of Settings watches. Indexed on (user, id).
  */
 class Version1000Date20261004000002 extends SimpleMigrationStep {
 	/**

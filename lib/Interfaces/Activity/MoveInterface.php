@@ -77,18 +77,11 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * Carries an account's relationships over to the account it moved to:
-	 * who follows it, whom it follows, and the posts addressed to it or to its
-	 * collections.
-	 *
-	 * What the old account did stays its own — its posts, likes, boosts,
-	 * reactions and documents — as on Mastodon. Its server goes on editing and
-	 * deleting those as the old account, which only the stored author may do,
-	 * and an actor `Delete` of the old account removes them.
-	 *
-	 * One transaction: a Move that fails leaves nothing half done, so the
-	 * sender's retry starts from where the first attempt did, and a retry of
-	 * a Move that went through finds nothing left to move.
+	 * Carries an account's relationships over to the account it moved to: who
+	 * follows it, whom it follows, and the posts addressed to it or to its
+	 * collections. What the old account did (posts, likes, boosts, reactions,
+	 * documents) stays its own, as on Mastodon. One transaction, so a failed
+	 * Move leaves nothing half done for the sender's retry.
 	 */
 	public function moveAccount(Person $actor, Person $target): void {
 		// Collected before the rows are rewritten: afterwards they name the new
@@ -102,9 +95,9 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 
 			$this->updateStreamFromActor($actor, $target);
 
-			// The redirect a profile here shows is the cached actor's `movedTo`.
-			// Written from the Move, as Mastodon does, rather than fetched: the
-			// old server may serve the pre-move document for minutes yet.
+			// The redirect a profile here shows is the cached actor's `movedTo`,
+			// written from the Move as Mastodon does: the old server may serve the
+			// pre-move document for minutes yet.
 			$this->cacheActorsRequest->markMoved($actor->getId(), $target->getId());
 
 			$this->connection->commit();
@@ -118,12 +111,9 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 	}
 
 	/**
-	 * The accepted follows from a *local* actor towards the account that is
-	 * moving, of the actors that have not asked to follow the new one yet.
-	 *
-	 * Only local ones: a remote follower's own instance receives the same Move
-	 * and re-follows for itself. One that already follows the new account, or
-	 * asked to, keeps that follow and has nothing to send.
+	 * The accepted follows from a local actor towards the moving account, of
+	 * actors that have not asked to follow the new one yet. A remote
+	 * follower's own instance receives the same Move and re-follows itself.
 	 *
 	 * @return Follow[]
 	 */
@@ -147,16 +137,9 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 
 	/**
 	 * Follows the new account on behalf of everyone here who followed the old
-	 * one.
-	 *
-	 * Rewriting the rows was only half of a migration: they then said the local
-	 * user follows the new account while the new account's instance had never
-	 * heard of them, so no posts arrived and a later unfollow sent
-	 * `Undo{Follow}` for a follow that was never established. Mastodon
-	 * re-issues the Follow on receiving a Move; so does this.
-	 *
-	 * The follow keeps the id the local row already has, so the Accept that
-	 * comes back matches it and a later Undo names something the target knows.
+	 * one, as Mastodon does on receiving a Move, so the new account's instance
+	 * knows of the follow. The follow keeps the id of the local row, so the
+	 * Accept that comes back matches it and a later Undo names a known follow.
 	 *
 	 * @param Follow[] $follows
 	 */

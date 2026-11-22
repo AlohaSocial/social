@@ -64,20 +64,10 @@ trait StreamThreads {
 
 	/**
 	 * The public replies to a post, oldest first, for the `replies` collection
-	 * a peer walks to discover a thread.
-	 *
-	 * Public only. The collection is served to anybody who asks for it, and a
-	 * followers-only or direct reply is not theirs to read — not even as an id,
-	 * which is enough to fetch the reply itself from the instance that holds
-	 * it. This is the same audience test `getPublicByAuthor()` applies to an
-	 * outbox.
-	 *
-	 * Oldest first, because that is the order a thread is read in and the order
-	 * `OrderedCollectionPage` offsets are stable under: newest-first paging
-	 * renumbers every page as soon as somebody replies again. Ordered on the
-	 * nid, which is the publication time with a random suffix, so that a page
-	 * can start after the last one's final reply (`$after`) rather than read
-	 * and discard every reply before it.
+	 * a peer walks to discover a thread. Public only, as the collection is
+	 * served to anybody and an id is enough to fetch the reply. Oldest first so
+	 * pages stay stable as replies arrive, on the nid so a page starts after
+	 * the last one's final reply (`$after`).
 	 *
 	 * @param string $after the nid the page starts after, '' for none
 	 *
@@ -157,14 +147,10 @@ trait StreamThreads {
 	public const MAX_DESCENDANT_DEPTH = 20;
 
 	/**
-	 * The whole conversation under a post: its replies, the replies to those,
-	 * and so on — what `/statuses/{id}/context` calls the descendants. Used to
-	 * return the direct replies only, so a thread three messages deep showed as
-	 * one reply with nothing under it.
-	 *
-	 * Bounded in depth and in count (Mastodon bounds the same walk), filtered
-	 * for the viewer at every level, and returned depth first with siblings
-	 * oldest first, so each reply follows what it answers.
+	 * The whole conversation under a post, what `/statuses/{id}/context` calls
+	 * the descendants: bounded in depth and count as in Mastodon, filtered for
+	 * the viewer at every level, and returned depth first with siblings oldest
+	 * first, so each reply follows what it answers.
 	 *
 	 * @return Stream[]
 	 */
@@ -259,10 +245,8 @@ trait StreamThreads {
 		$page->addSelect('s.published_time');
 
 		$page->filterType(SocialAppNotification::TYPE);
-		// direct messages included, as `getStreamById()` and the ancestor walk
-		// both include them: a DM's recipient row is keyed on the viewer's own
-		// id, so without this the descendants of a direct thread could never
-		// match and a client was handed the ancestors and nothing else
+		// direct messages included, as in `getStreamById()` and the ancestor
+		// walk: a DM's recipient row is keyed on the viewer's own id
 		$page->limitToViewer('sd', 'f', true, true);
 		$page->limitToDBFieldArray(
 			'in_reply_to_prim',

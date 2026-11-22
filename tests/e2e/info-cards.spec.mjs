@@ -5,24 +5,20 @@
 import { expect, test } from '@playwright/test'
 import { APP, OTHER_PASSWORD, OTHER_USER, PASSWORD, USER, apiAs, ensureAccount, ensureUser, login, openApp, postStatus } from './helpers.mjs'
 
-test('feed explanations and profile activity are optional cards', async ({ page }) => {
+test('the feed is explained behind a (?), and profile activity is an optional card', async ({ page }) => {
 	const api = await apiAs(USER, PASSWORD)
 	await ensureAccount(api, USER)
 	const post = await postStatus(api, { status: `Information card check ${Date.now()}` })
-	// one one-time card at a time, and the learning notice goes first: put it
-	// away so the feed's own explanation is the one on screen. A 404 is a
+	// the learning notice would cover the feed: put it away. A 404 is a
 	// server without recommendations, where there is no notice to answer
 	await api.put(`${APP}/api/v1/interests/settings`, { data: { noticeAcknowledged: true } })
 	try {
 		await login(page)
 		await openApp(page)
-		const help = page.locator('.timeline-scope-description')
-		await expect(help).toBeVisible()
-		await help.getByRole('button', { name: 'Hide About this feed', exact: true }).click()
-		await expect(help).toHaveCount(0)
-		await page.reload()
 		await expect(page.getByRole('radiogroup', { name: 'Which posts to show', exact: true })).toBeVisible()
-		await expect(help).toHaveCount(0)
+		await page.getByRole('button', { name: 'About this feed', exact: true }).click()
+		await expect(page.getByText('Posts from the people and hashtags you follow, newest first.')).toBeVisible()
+		await page.keyboard.press('Escape')
 		await openApp(page, `/@${USER}?media=posts`)
 		const activity = page.locator('.profile-highlights.info-card')
 		await expect(activity).toBeVisible()

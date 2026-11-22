@@ -18,12 +18,8 @@ use OCP\IAppConfig;
 /**
  * What this server says about itself to the people on it: its rules, who to
  * contact, its privacy policy and legal notice, and the address an app signs
- * in with.
- *
- * Read from the settings that already hold each of them — the rules and the
- * contact from this app, the two links from Nextcloud's Theming — so the
- * About page, the Mastodon instance entity and the sign-up page cannot
- * disagree. The same facts decide whether the server is ready to be public.
+ * in with. Read from the settings that hold each (this app, Theming), so the
+ * About page, the Mastodon instance entity and the sign-up page agree.
  */
 class AboutService {
 	public const MISSING_CONTACT = 'contact';
@@ -69,13 +65,9 @@ class AboutService {
 
 	/**
 	 * What to type into a phone or desktop app to sign in here, '' where that
-	 * kind of app cannot.
-	 *
-	 * A Mastodon app is given a domain and asks `/api/v1/instance` at its
-	 * root, so the domain is offered only once the setup check has found the
-	 * client API answering there; the stored result is read, never probed,
-	 * because anybody signed in may ask. A Bluesky app is given the PDS, which
-	 * exists while Bluesky is switched on.
+	 * kind of app cannot. Mastodon apps get the domain only once the setup check
+	 * found the client API at the root (the stored result, never probed here);
+	 * Bluesky apps get the PDS while Bluesky is on.
 	 *
 	 * @return array{mastodon: string, bluesky: string}
 	 */
