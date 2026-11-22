@@ -11,7 +11,7 @@
 				:aria-label="t('social', 'About this feed')"
 				:title="t('social', 'About this feed')">
 				<template #icon>
-					<IconHelpCircleOutline :size="20" />
+					<IconHelpCircleOutline :size="18" />
 				</template>
 			</NcButton>
 		</template>
@@ -95,14 +95,18 @@ export default {
 </script>
 
 <style scoped lang="scss">
-/* a quiet hint beside the switcher, not a control that competes with it;
-   nested to outweigh NcButton's own tertiary colour */
+/* a quiet hint beside the switcher, not a control that competes with it:
+   faded to about 3:1 against the page, the least a control may have, and
+   whole again under the pointer or the keyboard. Nested to outweigh
+   NcButton's own tertiary colour */
 .feed-help .feed-help__trigger {
 	color: var(--color-text-maxcontrast);
+	opacity: 0.75;
 
 	&:hover,
 	&:focus-visible {
 		color: var(--color-main-text);
+		opacity: 1;
 	}
 }
 
