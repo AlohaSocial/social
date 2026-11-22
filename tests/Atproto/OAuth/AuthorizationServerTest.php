@@ -52,6 +52,8 @@ class AuthorizationServerTest extends TestCase {
 	private InMemoryOAuthRequest $store;
 	private Identity $alice;
 	private AuthorizationServer $server;
+	/** @var list<string> the permission sets resolved */
+	private array $expanded = [];
 	private PrivateKey $serviceKey;
 
 	protected function setUp(): void {
@@ -86,9 +88,14 @@ class AuthorizationServerTest extends TestCase {
 		$enabledUsers = $this->createStub(EnabledUserService::class);
 		$enabledUsers->method('isEnabled')->willReturnCallback(fn (string $userId): bool => $userId !== '' && !in_array($userId, $this->disabled, true));
 		$sets = $this->createMock(PermissionSets::class);
-		$sets->method('expand')->willReturnCallback(static fn (string $nsid, string $aud): ?array => $nsid === 'com.example.authBasic'
-			? [['resource' => 'rpc', 'lxm' => ['com.example.getThing'], 'aud' => $aud]]
-			: null);
+		$this->expanded = [];
+		$sets->method('expand')->willReturnCallback(function (string $nsid, string $aud): ?array {
+			$this->expanded[] = $nsid;
+
+			return $nsid === 'com.example.authBasic'
+				? [['resource' => 'rpc', 'lxm' => ['com.example.getThing'], 'aud' => $aud]]
+				: null;
+		});
 		$this->server = new AuthorizationServer(
 			$config, $this->store, new ClientMetadataService($curl, $cache),
 			new ClientAuthenticator($this->store, $curl, $time), new DpopVerifier($this->nonce, $this->store, $time),
@@ -413,6 +420,26 @@ class AuthorizationServerTest extends TestCase {
 				$this->assertSame('invalid_scope', $e->error, $scope);
 			}
 		}
+	}
+
+	public function testTooManyOrTooLongIncludesAreRefusedBeforeAnySetIsResolved(): void {
+		$many = 'atproto ' . implode(' ', array_map(static fn (int $i): string => 'include:com.example.set' . $i, range(1, AuthorizationServer::MAX_INCLUDES + 1)));
+		$long = 'atproto include:com.example.authBasic?aud=did:web:' . str_repeat('a', 1024);
+		foreach ([$many, $long] as $scope) {
+			$this->declared = $scope;
+			try {
+				$this->pushed(['scope' => $scope]);
+				$this->fail('taken: ' . $scope);
+			} catch (OAuthException $e) {
+				$this->assertSame('invalid_scope', $e->error);
+			}
+		}
+		$this->assertSame([], $this->expanded, 'nothing fetched for a request refused anyway');
+
+		$enough = 'atproto ' . implode(' ', array_map(static fn (int $i): string => 'include:com.example.authBasic?aud=did:web:s' . $i . '.example', range(1, AuthorizationServer::MAX_INCLUDES)));
+		$this->declared = $enough;
+		$this->pushed(['scope' => $enough]);
+		$this->assertCount(AuthorizationServer::MAX_INCLUDES, $this->expanded);
 	}
 
 	/**

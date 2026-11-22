@@ -804,6 +804,8 @@ class OAuthController extends Controller {
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
+	#[UserRateLimit(limit: 60, period: 60)]
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/token')]
 	public function token(

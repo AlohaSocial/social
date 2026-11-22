@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Identity\DnsLookup;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Move\PdsClient;
 use OCA\Social\Atproto\Protocol\Syntax;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use Psr\Log\LoggerInterface;
@@ -22,14 +23,18 @@ use Throwable;
  * The permission sets an `include:` scope names, by Lexicon resolution (the
  * NSID authority's `_lexicon` TXT record names the DID whose repository holds
  * the set). Only `repo` and `rpc` permissions within the set's own namespace
- * are taken. A set is cached a day, a failure five minutes.
+ * are taken. A set is cached a day, a failure five minutes. Sets are fetched
+ * for at most ten seconds of a request; after that, a set not cached yet
+ * cannot be had.
  */
 class PermissionSets {
 	public const KEPT = 86400;
 	private const FAILED_KEPT = 300;
+	private const BUDGET = 10;
 	private const SCHEMA = 'com.atproto.lexicon.schema';
 
 	private ?ICache $cache = null;
+	private ?int $deadline = null;
 
 	public function __construct(
 		private DnsLookup $dns,
@@ -37,6 +42,7 @@ class PermissionSets {
 		private PdsClient $pds,
 		private ICacheFactory $cacheFactory,
 		private LoggerInterface $logger,
+		private ITimeFactory $time,
 	) {
 	}
 
@@ -53,6 +59,10 @@ class PermissionSets {
 		$cached = $this->cache()->get($key);
 		if (is_array($cached)) {
 			return $cached['set'] ?? null;
+		}
+		$this->deadline ??= $this->time->getTime() + self::BUDGET;
+		if ($this->time->getTime() >= $this->deadline) {
+			return null;
 		}
 		$set = $this->fetch($nsid);
 		$this->cache()->set($key, ['set' => $set], $set === null ? self::FAILED_KEPT : self::KEPT);

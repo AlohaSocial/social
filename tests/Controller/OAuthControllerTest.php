@@ -1800,6 +1800,13 @@ class OAuthControllerTest extends TestCase {
 		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
 	}
 
+	public function testTheTokenEndpointIsRateLimitedForEveryCaller(): void {
+		$method = new \ReflectionMethod(OAuthController::class, 'token');
+
+		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class), 'a Bluesky app\'s client_id is fetched on every call');
+		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
+	}
+
 	// write:migration
 
 	private const MOVE_IN_CALLBACK = 'https://new.example/index.php/apps/social/migration/move-in/callback';

@@ -42,6 +42,8 @@ class AuthorizationServer {
 	public const ACCESS_LIFETIME = 900;
 	/** what the scopes of a session may come to, as stored */
 	private const MAX_SCOPE = 1024;
+	/** how many permission sets one request may include, each resolved over the network */
+	public const MAX_INCLUDES = 5;
 	private const REQUEST_LIFETIME = 300;
 	private const CODE_LIFETIME = 300;
 	/** an untrusted public client's session and each of its refresh tokens */
@@ -144,6 +146,13 @@ class AuthorizationServer {
 		if (array_diff($requested, $declared) !== []) {
 			throw new OAuthException('invalid_scope', 'The client did not declare every scope it asks for');
 		}
+		if (strlen(implode(' ', $requested)) > self::MAX_SCOPE) {
+			throw new OAuthException('invalid_scope', 'The scopes asked for are too long');
+		}
+		$includes = array_filter($requested, static fn (string $scope): bool => (Permissions::parse($scope)['resource'] ?? '') === 'include');
+		if (count($includes) > self::MAX_INCLUDES) {
+			throw new OAuthException('invalid_scope', 'At most ' . self::MAX_INCLUDES . ' permission sets may be included');
+		}
 		foreach ($requested as $scope) {
 			$parsed = Permissions::parse($scope);
 			if (!in_array($scope, self::SCOPES_LISTED, true) && $parsed === null) {
@@ -152,9 +161,6 @@ class AuthorizationServer {
 			if (($parsed['resource'] ?? '') === 'include' && $this->permissionSets->expand((string)$parsed['nsid'], (string)$parsed['aud']) === null) {
 				throw new OAuthException('invalid_scope', 'The permission set ' . $parsed['nsid'] . ' could not be resolved');
 			}
-		}
-		if (strlen(implode(' ', $requested)) > self::MAX_SCOPE) {
-			throw new OAuthException('invalid_scope', 'The scopes asked for are too long');
 		}
 		$responseMode = self::field($params, 'response_mode') ?: 'query';
 		if (!in_array($responseMode, ['query', 'fragment'], true)) {
