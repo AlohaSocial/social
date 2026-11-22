@@ -110,16 +110,9 @@
 	}
 
 	&__scopes {
-		display: flex;
 		grid-row: 1;
 		grid-column: 2;
-		flex-wrap: wrap;
-		width: fit-content;
 		max-width: 100%;
-		gap: 4px;
-		padding: 3px;
-		border-radius: var(--border-radius-pill, 999px);
-		background: var(--color-background-dark);
 	}
 
 	&__videos-link {
@@ -138,30 +131,6 @@
 		}
 	}
 
-	&__scope {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		min-block-size: 44px;
-		padding: 5px 12px;
-		border-radius: var(--border-radius-pill, 999px);
-		color: var(--color-text-lighter);
-		font-size: 13px;
-		font-weight: 600;
-		text-decoration: none;
-
-		&--current {
-			background: var(--color-main-background);
-			color: var(--color-main-text);
-			box-shadow: var(--social-elevation-resting);
-		}
-
-		&:focus-visible {
-			outline: 2px solid var(--color-primary-element);
-			outline-offset: 2px;
-		}
-	}
 }
 
 .short {
@@ -518,7 +487,6 @@
    and a border and the caption a solid canvas. */
 @media (forced-colors: active) {
 	.shorts__create,
-	.shorts__scopes,
 	.short__sound,
 	.short__sound-hint,
 	.short__recommendation-menu,
@@ -526,11 +494,6 @@
 		border: 1px solid ButtonText;
 		background: ButtonFace;
 		color: ButtonText;
-	}
-
-	.shorts__scope--current {
-		background: Highlight;
-		color: HighlightText;
 	}
 
 	.short__like--on,
@@ -583,35 +546,9 @@
 
 	.shorts__scopes {
 		order: 1;
-		flex: 1 1 auto;
-		flex-wrap: nowrap;
-		justify-content: center;
+		flex: 0 1 auto;
 		min-inline-size: 0;
 		margin-inline: auto;
-		padding: 0;
-		overflow-x: auto;
-		background: transparent;
-		scrollbar-width: none;
-	}
-
-	.shorts__scope {
-		flex: 0 0 auto;
-		min-block-size: 36px;
-		padding-inline: 8px;
-		background: transparent;
-		color: var(--social-on-dark-text-muted);
-		font-size: 14px;
-		text-shadow: 0 1px 2px var(--social-on-dark-shadow);
-
-		&--current {
-			background: var(--social-on-dark-tint);
-			color: var(--social-on-dark-text);
-			box-shadow: none;
-		}
-
-		&:focus-visible {
-			outline-color: var(--social-on-dark-text);
-		}
 	}
 
 	.shorts__track {
@@ -783,16 +720,10 @@
 }
 
 @media (forced-colors: active) {
-	.shorts--phone .shorts__next,
-	.shorts--phone .shorts__scope {
+	.shorts--phone .shorts__next {
 		border: 1px solid ButtonText;
 		background: ButtonFace;
 		color: ButtonText;
-	}
-
-	.shorts--phone .shorts__scope--current {
-		background: Highlight;
-		color: HighlightText;
 	}
 
 	.shorts--phone .shorts__sheet {
