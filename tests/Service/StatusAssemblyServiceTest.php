@@ -249,6 +249,30 @@ class StatusAssemblyServiceTest extends TestCase {
 	}
 
 	/**
+	 * A reply to a direct message is direct whatever was stored, and its
+	 * attachments are scoped as direct: scoped as public first, they stayed
+	 * world-readable, with public cache headers, after the post was made
+	 * direct.
+	 */
+	public function testAReplyToADirectMessageScopesItsMediaAsDirect(): void {
+		$parent = new Stream();
+		$parent->setId('https://cloud.example/apps/social/@bob/42');
+		$parent->setVisibility(Stream::TYPE_DIRECT);
+		$this->streamService->method('getStreamByNid')->with(42)->willReturn($parent);
+		$this->document(7, false);
+
+		$post = $this->service->fromParams($this->actor(), $this->params([
+			'text' => 'only for you',
+			'visibility' => Stream::TYPE_PUBLIC,
+			'in_reply_to_id' => '42',
+			'media_ids' => ['7'],
+		]));
+
+		$this->assertSame(Stream::TYPE_DIRECT, $post->getType());
+		$this->assertSame([[[7], 'alice', Stream::TYPE_DIRECT]], $this->resolved);
+	}
+
+	/**
 	 * The parent decides how wide a reply may go: without it a reply to a
 	 * direct message would be published to the author's default audience.
 	 */

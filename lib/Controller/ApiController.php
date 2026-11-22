@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\Client\Status;
@@ -27,7 +28,6 @@ use OCA\Social\Service\StreamService;
 use OCA\Social\Service\VapidService;
 use OCA\Social\Tools\Nid;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -117,7 +117,7 @@ class ApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/reports')]
 	public function reportNew(): DataResponse {
@@ -185,7 +185,7 @@ class ApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/search')]
 	public function search(
@@ -206,7 +206,7 @@ class ApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v2/search')]
 	public function searchV2(

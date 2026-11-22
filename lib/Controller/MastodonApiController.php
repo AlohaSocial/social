@@ -243,7 +243,7 @@ abstract class MastodonApiController extends Controller {
 	 */
 	protected function currentSession(): string {
 		if ($this->bearer !== '') {
-			$this->client = $this->clientService->getFromToken($this->bearer);
+			$this->client = $this->clientService->getFromTokenOfRequest($this->bearer);
 			$this->checkTokenScope();
 
 			if ($this->client->getAuthUserId() === '') {
@@ -430,6 +430,15 @@ abstract class MastodonApiController extends Controller {
 			strtoupper($this->request->getMethod()),
 			$this->statusAct((string)$this->request->getParam('act', ''))
 		);
+		// One timeline route serves the favourites too, which Mastodon puts
+		// behind their own scope; the path's value and the one the route is
+		// handed are both checked.
+		if ($name === 'timelines' && in_array(ProbeOptions::FAVOURITES, [
+			strtolower($this->routeParam('timeline')),
+			strtolower((string)$this->request->getParam('timeline', '')),
+		], true)) {
+			$accepted = self::ROUTE_SCOPES['favourites'];
+		}
 
 		foreach ($accepted as $scope) {
 			// A granular scope is satisfied by itself or the broad scope containing it.

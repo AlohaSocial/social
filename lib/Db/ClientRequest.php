@@ -68,9 +68,12 @@ class ClientRequest extends ClientRequestBuilder {
 	/**
 	 * Removes app registrations nobody ever authorized, older than `$before`:
 	 * `POST /api/v1/apps` is public and every call is a row. An app counts as
-	 * authorized once `last_update` moved off `creation`
-	 * (`ClientAuthRequest::authorize()`), so expired authorizations keep their
-	 * app, as `ClientAuthRequest::deprecate()` promises. Bounded per call.
+	 * authorized once an account consented and `last_update` moved off
+	 * `creation` (`ClientAuthRequest::authorize()`), so expired authorizations
+	 * keep their app, as `ClientAuthRequest::deprecate()` promises. An app
+	 * token does not count: its row keeps the app while the token lives, and
+	 * the app goes with the next sweep after the token went idle. Bounded per
+	 * call.
 	 *
 	 * @return int how many were removed
 	 */

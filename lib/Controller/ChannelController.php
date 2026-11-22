@@ -12,11 +12,11 @@ namespace OCA\Social\Controller;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InsufficientScopeException;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ClientService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -64,7 +64,7 @@ class ChannelController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 5, period: 3600)]
+	#[AnonymousRateLimit(limit: 5, period: 3600)]
 	#[UserRateLimit(limit: 5, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/channels')]
 	public function create(string $handle = '', string $name = '', string $description = ''): DataResponse {
@@ -79,7 +79,7 @@ class ChannelController extends ClientApiController {
 	/** Renames one, or changes what it says it is about. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/channels/{id}')]
 	public function update(int $id, string $name = '', string $description = ''): DataResponse {

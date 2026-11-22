@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use InvalidArgumentException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Filter;
@@ -22,7 +23,6 @@ use OCA\Social\Service\FilterService;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -102,7 +102,7 @@ class InterestsController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/interests/signals')]
 	public function signals(array|string $events = []): DataResponse {
@@ -163,7 +163,7 @@ class InterestsController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/timelines/interests')]
 	public function timeline(

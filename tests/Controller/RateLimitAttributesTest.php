@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\Route;
@@ -23,13 +24,34 @@ use ReflectionMethod;
  */
 class RateLimitAttributesTest extends TestCase {
 	/**
-	 * A route that limits only sessioned callers limits almost nobody here.
+	 * Nextcloud applies `AnonRateLimit` to every caller without a Nextcloud
+	 * session, and a client holding one of this app's OAuth tokens has none:
+	 * people posting through one address would use up each other's limit.
+	 * Routes declare `AnonymousRateLimit` instead, which
+	 * `ApiRateLimitMiddleware` applies through the same limiter to callers who
+	 * are neither signed in nor carry a valid token.
+	 */
+	public function testNoRouteUsesNextcloudsAnonymousLimit(): void {
+		$nextclouds = [];
+		$anonymous = 0;
+
+		foreach (self::routeMethods() as $method) {
+			if ($method->getAttributes(AnonRateLimit::class, ReflectionAttribute::IS_INSTANCEOF) !== []) {
+				$nextclouds[] = $method->getDeclaringClass()->getShortName() . '::' . $method->getName();
+			}
+			$anonymous += count($method->getAttributes(AnonymousRateLimit::class));
+		}
+
+		$this->assertSame([], $nextclouds, 'Nextcloud would hold a bearer token to these by its address');
+		// guards against a scan that silently found nothing to check
+		$this->assertGreaterThan(50, $anonymous);
+	}
+
+	/**
+	 * A route that limits only signed-in callers does not limit anybody else.
 	 *
-	 * Nextcloud applies `UserRateLimit` to a caller with a Nextcloud session
-	 * and `AnonRateLimit` to everyone else, and a client holding one of this
-	 * app's OAuth tokens has no session: Nextcloud counts it as anonymous. A
-	 * `PublicPage` route carrying only `UserRateLimit` therefore has no limit
-	 * at all for a token client, and the app's own default budget
+	 * A `PublicPage` route carrying only `UserRateLimit` has no limit at all
+	 * for a caller who is nobody, and the app's own default budget
 	 * (`RateLimitService::appliesDefaultTo()`) skips it too, because it
 	 * declares a limit of its own.
 	 *
@@ -50,14 +72,14 @@ class RateLimitAttributesTest extends TestCase {
 			}
 
 			$checked++;
-			if ($method->getAttributes(AnonRateLimit::class) === []) {
+			if ($method->getAttributes(AnonymousRateLimit::class) === []) {
 				$bare[] = $method->getDeclaringClass()->getShortName() . '::' . $method->getName();
 			}
 		}
 
 		// guards against a scan that silently found nothing to check
 		$this->assertGreaterThan(50, $checked);
-		$this->assertSame([], $bare, 'these routes are unthrottled for a bearer-token client');
+		$this->assertSame([], $bare, 'these routes are unthrottled for an anonymous caller');
 	}
 
 	/**

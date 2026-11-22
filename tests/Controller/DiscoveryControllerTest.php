@@ -278,7 +278,7 @@ class DiscoveryControllerTest extends TestCase {
 		$client->setAuthScopes($scopes);
 
 		$this->headers['Authorization'] = 'Bearer sometoken';
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 	}
 
 	private function anonymous(): void {

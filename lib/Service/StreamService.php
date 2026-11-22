@@ -627,36 +627,11 @@ class StreamService {
 			}
 		}
 
-		// the rest of the conversation, from wherever it lives, read in the
-		// background: from its first post, and from this one when that is
-		// deeper than one read goes. The Fediverse's first reply page is also
-		// read inline under a short timeout, like Bluesky's thread view.
 		$root = ($ancestors === []) ? $post : end($ancestors);
-		$this->threadService?->fillActivityPub($root);
-		$blueskyResult = $this->threadService?->fillBluesky($root, $this->viewer);
-		$blueskyRead = $blueskyResult === true;
-		$blueskyPending = $this->threadService !== null && $blueskyResult === null;
-		// A cached visible read may still have a deeper reply fill running, so
-		// keep telling the client to poll until that job writes its replies.
-		$blueskyFillPending = $blueskyRead && !$root->isLocal()
-			? ($this->remoteFetchQueue?->isThreadFillPending($root->getId()) ?? false)
-			: false;
-		// Bluesky is read inline so the usual replies are visible immediately.
-		// Queue a background fill on successful reads only when getPostThread
-		// reached its ten-level limit and left a deeper branch to continue.
-		$filling = $blueskyPending;
-		if (!$blueskyPending && (!$blueskyRead || $root->isLocal() || $blueskyFillPending || ($this->threadService?->hasPendingBlueskyReplies() ?? false))) {
-			$filling = $blueskyFillPending
-				|| ($this->remoteFetchQueue?->fillThread($root) ?? false)
-				|| ($this->remoteFetchQueue?->isThreadFillPending($root->getId()) ?? false);
-		}
-		// An inline read in progress will save the replies after this request
-		// read the database, so the client asks for the context again.
-		if (!$blueskyPending && $root !== $post && (!$blueskyRead || $post->isLocal())) {
-			$filling = ($this->remoteFetchQueue?->fillThread($post) ?? false)
-				|| ($this->remoteFetchQueue?->isThreadFillPending($post->getId()) ?? false)
-				|| $filling;
-		}
+		// Reading the rest of the thread from other servers is done for a
+		// signed-in reader only, as on the other routes that fetch remotely:
+		// an anonymous caller is answered from what is stored.
+		$filling = ($this->viewer !== null) && $this->fillThread($root, $post);
 
 		// the replies the thread's author hid: left out, or marked when the
 		// reader asks to see them; the author may hide or show any of them
@@ -694,6 +669,44 @@ class StreamService {
 		}
 
 		return $context;
+	}
+
+	/**
+	 * The rest of the conversation, from wherever it lives, read in the
+	 * background: from its first post, and from this one when that is deeper
+	 * than one read goes. The Fediverse's first reply page is also read inline
+	 * under a short timeout, like Bluesky's thread view.
+	 *
+	 * @return bool whether more of the thread is on its way
+	 */
+	private function fillThread(Stream $root, Stream $post): bool {
+		$this->threadService?->fillActivityPub($root);
+		$blueskyResult = $this->threadService?->fillBluesky($root, $this->viewer);
+		$blueskyRead = $blueskyResult === true;
+		$blueskyPending = $this->threadService !== null && $blueskyResult === null;
+		// A cached visible read may still have a deeper reply fill running, so
+		// keep telling the client to poll until that job writes its replies.
+		$blueskyFillPending = $blueskyRead && !$root->isLocal()
+			? ($this->remoteFetchQueue?->isThreadFillPending($root->getId()) ?? false)
+			: false;
+		// Bluesky is read inline so the usual replies are visible immediately.
+		// Queue a background fill on successful reads only when getPostThread
+		// reached its ten-level limit and left a deeper branch to continue.
+		$filling = $blueskyPending;
+		if (!$blueskyPending && (!$blueskyRead || $root->isLocal() || $blueskyFillPending || ($this->threadService?->hasPendingBlueskyReplies() ?? false))) {
+			$filling = $blueskyFillPending
+				|| ($this->remoteFetchQueue?->fillThread($root) ?? false)
+				|| ($this->remoteFetchQueue?->isThreadFillPending($root->getId()) ?? false);
+		}
+		// An inline read in progress will save the replies after this request
+		// read the database, so the client asks for the context again.
+		if (!$blueskyPending && $root !== $post && (!$blueskyRead || $post->isLocal())) {
+			$filling = ($this->remoteFetchQueue?->fillThread($post) ?? false)
+				|| ($this->remoteFetchQueue?->isThreadFillPending($post->getId()) ?? false)
+				|| $filling;
+		}
+
+		return $filling;
 	}
 
 	/**

@@ -26,6 +26,7 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\TranslationUnavailableException;
 use OCA\Social\Interfaces\IActivityPubInterface;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -100,7 +101,6 @@ use OCA\Social\Tests\Helper\RoutedRequest;
 use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
@@ -737,7 +737,7 @@ class ApiControllerTest extends TestCase {
 		$client->setAppName('Tusky')->setAppWebsite('https://tusky.app')->setAuthUserId('alice')
 			->setAppScopes(['read', 'write'])->setAppRedirectUris(['tusky://oauth']);
 		$client->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->userSession->method('getUser')->willReturn(null);
 
 		$account = $this->createStub(Person::class);
@@ -763,7 +763,7 @@ class ApiControllerTest extends TestCase {
 	private function bearerFor(array $scopes, string $uid = 'alice'): void {
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId($uid)->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 
 		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
@@ -867,6 +867,43 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertInsufficientScope(
 			$response, 'token scope does not allow this request (needs write:statuses)'
+		);
+	}
+
+	/**
+	 * The timeline route also serves the favourites, which Mastodon puts behind
+	 * `read:favourites`: a token for statuses alone does not read them.
+	 */
+	public function testTheFavouritesTimelineNeedsTheFavouritesScope(): void {
+		$this->route = 'social.TimelineApi.timelines';
+		$this->request->urlParams['timeline'] = 'favourites';
+		$this->bearerFor(['read:statuses']);
+		$this->streamService->expects($this->never())->method('getTimeline');
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->timelines('favourites'),
+			'token scope does not allow this request (needs read:favourites)'
+		);
+	}
+
+	public function testTheFavouritesTimelineIsReadWithTheFavouritesScope(): void {
+		$this->route = 'social.TimelineApi.timelines';
+		$this->request->urlParams['timeline'] = 'Favourites';
+		$this->bearerFor(['read:favourites']);
+		$this->captureTimelineOptions([]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer s3cret')->timelines('Favourites')->getStatus());
+	}
+
+	/** The other timelines stay behind `read:statuses`, as on Mastodon. */
+	public function testTheHomeTimelineStillNeedsTheStatusesScope(): void {
+		$this->route = 'social.TimelineApi.timelines';
+		$this->request->urlParams['timeline'] = 'home';
+		$this->bearerFor(['read:favourites']);
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->timelines('home'),
+			'token scope does not allow this request (needs read:statuses)'
 		);
 	}
 
@@ -1214,6 +1251,33 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('season finale', $created->getSpoilerText());
 	}
 
+	/** What was posted, a direct message perhaps, is not written to the log. */
+	public function testStatusNewLogsTheShapeOfThePostAndNotItsText(): void {
+		$this->route = 'social.StatusApi.statusNew';
+		$this->bearerFor(['read', 'write']);
+		$this->request->method('getParams')->willReturn([
+			'status' => '@bob the door code is 4711',
+			'visibility' => 'direct',
+		]);
+		$activity = $this->createMock(ACore::class);
+		$activity->method('getObjectId')->willReturn('https://cloud.example/apps/social/@alice/n1');
+		$this->postService->method('createPost')->willReturn($activity);
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
+		$logged = [];
+		$logger = $this->createStub(LoggerInterface::class);
+		$logger->method('debug')->willReturnCallback(function (string $message, array $context = []) use (&$logged): void {
+			$logged[] = [$message, $context];
+		});
+
+		$this->controllerWithHeaders('Bearer s3cret', [], $logger)->statusNew();
+
+		$this->assertContains(
+			['[' . \OCA\Social\Controller\StatusApiController::class . '] statusNew', ['length' => 26, 'visibility' => 'direct']],
+			$logged
+		);
+		$this->assertStringNotContainsString('4711', (string)json_encode($logged));
+	}
+
 	public function testABearerTokenIsScopedEvenWhenASessionExists(): void {
 		// the token's grant must not silently widen to the cookie's full access
 		$this->route = 'social.StatusApi.statusNew';
@@ -1241,7 +1305,7 @@ class ApiControllerTest extends TestCase {
 	 * filled the admin's nextcloud.log for every scanner that found the API.
 	 */
 	public function testAnInvalidTokenIsNotLoggedAsAServerError(): void {
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException());
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException());
 		$logger = $this->createMock(LoggerInterface::class);
 		$logger->expects($this->never())->method('error');
 		$logger->expects($this->never())->method('warning');
@@ -1266,7 +1330,7 @@ class ApiControllerTest extends TestCase {
 		$this->route = 'social.Api.verifyCredentials';
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('alice')->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 		$logger = $this->createMock(LoggerInterface::class);
 		$logger->expects($this->never())->method('error');
@@ -1279,13 +1343,13 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testNonBearerAuthorizationIsIgnored(): void {
-		$this->clientService->expects($this->never())->method('getFromToken');
+		$this->clientService->expects($this->never())->method('getFromTokenOfRequest');
 
 		$this->assertUnauthorized($this->controller('Basic abc')->appsCredentials());
 	}
 
 	public function testRevokedBearerTokenIsUnauthorized(): void {
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException());
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException());
 
 		$this->assertUnauthorized($this->controller('Bearer gone')->verifyCredentials());
 	}
@@ -1451,7 +1515,7 @@ class ApiControllerTest extends TestCase {
 		$this->route = 'social.Api.verifyCredentials';
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('gone')->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->accountService->method('getActorFromUserId')
 			->willThrowException(new ActorDoesNotExistException('no account for gone'));
 
@@ -4498,7 +4562,7 @@ class ApiControllerTest extends TestCase {
 	private function appToken(): void {
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('')->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->accountService->expects($this->never())->method('getActorFromUserId');
 	}
 
@@ -5209,7 +5273,7 @@ class ApiControllerTest extends TestCase {
 	public function testARevokedTokenOnThePublicTimelineStillSaysSo(): void {
 		// silently serving the anonymous view would leave the client believing
 		// its token is fine
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException());
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException());
 		$this->streamService->expects($this->never())->method('getTimeline');
 
 		$this->assertUnauthorized($this->controller('Bearer gone')->timelines('public'));
@@ -6598,7 +6662,7 @@ class ApiControllerTest extends TestCase {
 	public function testFilingAReportIsRateLimited(): void {
 		$method = new ReflectionMethod(ApiController::class, 'reportNew');
 
-		$this->assertNotSame([], $method->getAttributes(AnonRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(AnonymousRateLimit::class));
 		$this->assertNotSame([], $method->getAttributes(UserRateLimit::class));
 	}
 

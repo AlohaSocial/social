@@ -14,6 +14,7 @@ use OCA\Social\Exceptions\AccountNotSetUpException;
 use OCA\Social\Exceptions\AccountSuspendedException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\MoveErrorException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ImportJob;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ClientService;
@@ -25,7 +26,6 @@ use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCA\Social\Service\SwitchService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -86,7 +86,7 @@ class MigrationController extends ClientApiController {
 	/** The account's own Social data, as a zip file. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 6, period: 3600)]
+	#[AnonymousRateLimit(limit: 6, period: 3600)]
 	#[UserRateLimit(limit: 6, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/export')]
 	public function export(): Response {
@@ -131,7 +131,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 6, period: 3600)]
+	#[AnonymousRateLimit(limit: 6, period: 3600)]
 	#[UserRateLimit(limit: 6, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/import')]
 	public function import(): DataResponse {
@@ -172,7 +172,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/follows')]
 	public function importFollows(): DataResponse {
@@ -186,7 +186,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move-in/inspect')]
 	public function moveInInspect(string $handle = ''): DataResponse {
@@ -210,7 +210,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 3600)]
+	#[AnonymousRateLimit(limit: 10, period: 3600)]
 	#[UserRateLimit(limit: 10, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move-in')]
 	public function moveIn(string $handle = '', string $follows = '1', string $posts = '1', string $fetch_media = '1'): DataResponse {
@@ -246,7 +246,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 3600)]
+	#[AnonymousRateLimit(limit: 10, period: 3600)]
 	#[UserRateLimit(limit: 10, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move-in/finish')]
 	public function moveInFinishStart(string $handle = '', string $bluesky = BlueskyAfterMoveOut::DEACTIVATE): DataResponse {
@@ -482,7 +482,7 @@ class MigrationController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/blocks')]
 	public function importBlocks(): DataResponse {
@@ -492,7 +492,7 @@ class MigrationController extends ClientApiController {
 	/** The posts an export bookmarked — Mastodon's `bookmarks.csv`, one address a line. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/bookmarks')]
 	public function importBookmarks(): DataResponse {
@@ -502,7 +502,7 @@ class MigrationController extends ClientApiController {
 	/** The servers an export blocks — Mastodon's `blocked_domains.csv`, one domain a line. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/domain_blocks')]
 	public function importDomainBlocks(): DataResponse {
@@ -512,7 +512,7 @@ class MigrationController extends ClientApiController {
 	/** The accounts an export mutes — Mastodon's `muted_accounts.csv`. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/mutes')]
 	public function importMutes(): DataResponse {
@@ -526,7 +526,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/lists')]
 	public function importLists(): DataResponse {
@@ -540,7 +540,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/export/{kind}')]
 	public function exportCsv(string $kind): Response {
@@ -654,7 +654,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 3600)]
+	#[AnonymousRateLimit(limit: 10, period: 3600)]
 	#[UserRateLimit(limit: 10, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/video')]
 	public function importVideo(string $url = '', string $fetch_media = '1'): DataResponse {
@@ -685,7 +685,7 @@ class MigrationController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/posts')]
 	public function importPosts(): DataResponse {

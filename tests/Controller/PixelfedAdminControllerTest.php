@@ -57,7 +57,7 @@ class PixelfedAdminControllerTest extends TestCase {
 			->willReturnCallback(fn (): ?IUser => $this->signedIn ? $user : null);
 
 		$this->clientService = $this->createStub(ClientService::class);
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willReturnCallback(function (string $token): SocialClient {
 				if ($token !== 'token') {
 					throw new ClientNotFoundException('unknown token');

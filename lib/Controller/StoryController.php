@@ -9,13 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\Client\Story;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\StoryService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -80,7 +80,7 @@ class StoryController extends ClientApiController {
 	/** Posts one of the viewer's own uploads as a story. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/stories')]
 	public function add(
@@ -119,7 +119,7 @@ class StoryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/stories/{id}/seen', requirements: ['id' => '\\d+'])]
 	public function seen(int $id): DataResponse {

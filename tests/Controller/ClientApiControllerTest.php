@@ -77,7 +77,7 @@ class ClientApiControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->with('t')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('t')->willReturn($client);
 	}
 
 	public static function scopeCases(): array {
@@ -153,7 +153,7 @@ class ClientApiControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('newcomer');
 		$client->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('t')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('t')->willReturn($client);
 
 		$response = $this->controller('Bearer t')->probe(['read']);
 
@@ -165,7 +165,7 @@ class ClientApiControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('');
 		$client->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('t')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('t')->willReturn($client);
 
 		$response = $this->controller('Bearer t')->probe(['read']);
 

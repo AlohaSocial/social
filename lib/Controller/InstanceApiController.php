@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -31,7 +32,6 @@ use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TranslationService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -182,7 +182,7 @@ class InstanceApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/oembed')]
 	public function oembed(string $url = '', string $format = 'json'): DataResponse {
 		try {
@@ -263,7 +263,7 @@ class InstanceApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 10, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/instance/peers')]
 	public function instancePeers(): DataResponse {
 		try {
@@ -280,7 +280,7 @@ class InstanceApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 10, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/instance/activity')]
 	public function instanceActivity(): DataResponse {
 		try {

@@ -16,11 +16,16 @@ use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Controller\StatusApiController;
+use OCA\Social\Exceptions\ClientNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
+use OCA\Social\Model\Client\SocialClient;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RateLimitService;
 use OCA\Social\Tests\Helper\FrozenClock;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
+use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
+use OCP\AppFramework\Http\DataResponse;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IRequest;
@@ -31,6 +36,15 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+
+/** A route whose limits an administrator overwrites, named as Nextcloud names it. */
+class OverwrittenController extends Controller {
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
+	public function limited(): DataResponse {
+		return new DataResponse([]);
+	}
+}
 
 /**
  * The budget every API request is counted against.
@@ -51,10 +65,17 @@ class RateLimitServiceTest extends TestCase {
 
 	/** the app values, as an administrator would have set them */
 	private array $appValues = [];
+	/** config.php, as far as it is read */
+	private array $systemValues = [];
 	/** what the cache holds, and whether there is one at all */
 	private array $held = [];
 	private bool $distributed = true;
 	private bool $local = true;
+	/** the Authorization header the request carries */
+	private string $authorization = '';
+	/** @var array<string, string> the account each valid token acts for */
+	private array $tokens = [];
+	private int $tokenLookups = 0;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -62,6 +83,9 @@ class RateLimitServiceTest extends TestCase {
 
 		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getRemoteAddress')->willReturn('198.51.100.7');
+		$this->request->method('getHeader')->willReturnCallback(
+			fn (string $name): string => ($name === 'Authorization') ? $this->authorization : ''
+		);
 
 		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')->willReturn(null);
@@ -69,6 +93,8 @@ class RateLimitServiceTest extends TestCase {
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => (string)($this->appValues[$key] ?? ''));
+		$this->configService->method('getSystemValue')
+			->willReturnCallback(fn (string $key): mixed => $this->systemValues[$key] ?? '');
 
 		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(
@@ -94,9 +120,25 @@ class RateLimitServiceTest extends TestCase {
 	}
 
 	private function build(): RateLimitService {
+		$clients = $this->createStub(ClientService::class);
+		$clients->method('getFromTokenOfRequest')->willReturnCallback(function (string $token): SocialClient {
+			$this->tokenLookups++;
+			if (!array_key_exists($token, $this->tokens)) {
+				throw new ClientNotFoundException();
+			}
+
+			return (new SocialClient())->setAuthUserId($this->tokens[$token]);
+		});
+
 		return new RateLimitService(
-			$this->request, $this->userSession, $this->cacheFactory, $this->configService, $this->clock
+			$this->request, $this->userSession, $this->cacheFactory, $this->configService, $this->clock, $clients
 		);
+	}
+
+	/** A request with a bearer token and no session, as every Mastodon app sends. */
+	private function withToken(string $token): void {
+		$this->authorization = 'Bearer ' . $token;
+		$this->service = $this->build();
 	}
 
 	private function signedInAs(string $uid): void {
@@ -121,6 +163,129 @@ class RateLimitServiceTest extends TestCase {
 
 		$this->signedInAs('alice');
 		$this->assertSame([900, 300], $this->service->defaultBudget());
+	}
+
+	/**
+	 * A Mastodon app signs in with a token and never has a session: it is an
+	 * account all the same, with the account's budget, not the address's.
+	 */
+	public function testABearerTokenGetsTheAccountBudget(): void {
+		$this->appValues = [
+			ConfigService::SOCIAL_RATE_LIMIT_USER => '900',
+			ConfigService::SOCIAL_RATE_LIMIT_ANON => '300',
+			ConfigService::SOCIAL_RATE_LIMIT_WINDOW => '300',
+		];
+		$this->tokens = ['t-alice' => 'alice'];
+
+		$this->withToken('t-alice');
+
+		$this->assertTrue($this->service->signedIn());
+		$this->assertSame([900, 300], $this->service->defaultBudget());
+	}
+
+	/**
+	 * Two people behind one address (a household, a mobile carrier's NAT)
+	 * spend two budgets, and the token's budget is the session's.
+	 */
+	public function testABearerTokenIsCountedAsItsAccountNotItsAddress(): void {
+		$this->tokens = ['t-alice' => 'alice', 't-bob' => 'bob'];
+		$this->service->count(RateLimitService::BUCKET_API, 300);
+
+		$this->withToken('t-alice');
+		$this->assertSame(1, $this->service->count(RateLimitService::BUCKET_API, 300));
+		$this->assertSame(2, $this->service->count(RateLimitService::BUCKET_API, 300));
+
+		$this->withToken('t-bob');
+		$this->assertSame(1, $this->service->count(RateLimitService::BUCKET_API, 300));
+
+		$this->authorization = '';
+		$this->signedInAs('alice');
+		$this->assertSame(3, $this->service->count(RateLimitService::BUCKET_API, 300), 'one account, one budget');
+	}
+
+	/** A made-up token, and an app token acting for nobody, are the address. */
+	public function testATokenThatNamesNobodyIsTheAddress(): void {
+		$this->tokens = ['t-app' => ''];
+		$this->service->count(RateLimitService::BUCKET_API, 300);
+
+		$this->withToken('made-up');
+		$this->assertFalse($this->service->signedIn());
+		$this->assertSame(2, $this->service->count(RateLimitService::BUCKET_API, 300));
+
+		$this->withToken('t-app');
+		$this->assertFalse($this->service->signedIn());
+		$this->assertSame(3, $this->service->count(RateLimitService::BUCKET_API, 300));
+	}
+
+	public function testTheTokenIsLookedUpOncePerRequest(): void {
+		$this->tokens = ['t-alice' => 'alice'];
+		$this->withToken('t-alice');
+
+		$this->service->defaultBudget();
+		$this->service->count(RateLimitService::BUCKET_API, 300);
+		$this->service->used(RateLimitService::BUCKET_API, 300);
+
+		$this->assertSame(1, $this->tokenLookups);
+	}
+
+	/**
+	 * Nextcloud's limiter knows only the session and treats a token as
+	 * anonymous, so a route's own per-account limit is the app's to count
+	 * for a token, and only for a token.
+	 */
+	public function testARoutesOwnLimitIsCountedForATokenOnly(): void {
+		$this->tokens = ['t-alice' => 'alice'];
+		$api = $this->createPartialMock(StatusApiController::class, []);
+
+		$this->assertNull($this->service->tokenRouteBudget($api, 'statusNew'), 'nobody');
+
+		$this->withToken('t-alice');
+		$this->assertSame([30, 60], $this->service->tokenRouteBudget($api, 'statusNew'));
+		$this->assertNull(
+			$this->service->tokenRouteBudget($this->createPartialMock(AccountApiController::class, []), 'verifyCredentials'),
+			'a route without a limit of its own has the default'
+		);
+
+		$this->signedInAs('alice');
+		$this->assertNull($this->service->tokenRouteBudget($api, 'statusNew'), 'a session is Nextcloud\'s to count');
+	}
+
+	/**
+	 * The anonymous limit is for callers who are nobody: an account, by its
+	 * session or its token, has the route's own per-account limit.
+	 */
+	public function testTheAnonymousLimitIsForCallersWhoAreNobody(): void {
+		$this->tokens = ['t-alice' => 'alice'];
+		$api = $this->createPartialMock(StatusApiController::class, []);
+
+		$this->assertSame([30, 60], $this->service->anonRouteBudget($api, 'statusNew'));
+
+		$this->withToken('made-up');
+		$this->assertSame([30, 60], $this->service->anonRouteBudget($api, 'statusNew'), 'a token that names nobody');
+
+		$this->withToken('t-alice');
+		$this->assertNull($this->service->anonRouteBudget($api, 'statusNew'));
+
+		$this->authorization = '';
+		$this->signedInAs('alice');
+		$this->assertNull($this->service->anonRouteBudget($api, 'statusNew'));
+		$this->assertNull(
+			$this->service->anonRouteBudget($this->createPartialMock(AccountApiController::class, []), 'verifyCredentials'),
+			'a route without a limit of its own'
+		);
+	}
+
+	/** What an administrator set in `ratelimit_overwrite` holds, as it did for Nextcloud's attribute. */
+	public function testAnAdministratorsOverwriteOfTheAnonymousLimitHolds(): void {
+		$controller = new OverwrittenController('social', $this->request);
+		$this->systemValues['ratelimit_overwrite'] = [
+			'social.overwritten.limited' => ['anon' => ['limit' => 5, 'period' => 10]],
+		];
+
+		$this->assertSame([5, 10], $this->service->anonRouteBudget($controller, 'limited'));
+
+		$this->systemValues['ratelimit_overwrite']['social.overwritten.limited']['anon']['limit'] = 0;
+		$this->assertSame([30, 60], $this->service->anonRouteBudget($controller, 'limited'), 'an invalid overwrite is ignored');
 	}
 
 	/**
@@ -303,7 +468,7 @@ class RateLimitServiceTest extends TestCase {
 		$this->assertNotEmpty(
 			array_merge(
 				$statusNew->getAttributes(UserRateLimit::class),
-				$statusNew->getAttributes(AnonRateLimit::class)
+				$statusNew->getAttributes(AnonymousRateLimit::class)
 			),
 			'the fixture above still declares a limit of its own'
 		);
@@ -313,7 +478,7 @@ class RateLimitServiceTest extends TestCase {
 			[],
 			array_merge(
 				$verify->getAttributes(UserRateLimit::class),
-				$verify->getAttributes(AnonRateLimit::class)
+				$verify->getAttributes(AnonymousRateLimit::class)
 			),
 			'and the one it contrasts with still declares none'
 		);

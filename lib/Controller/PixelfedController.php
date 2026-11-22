@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\Db\DiscoverCategoriesRequest;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\Client\StoryInteraction;
 use OCA\Social\Service\AccountService;
@@ -27,7 +28,6 @@ use OCA\Social\Service\SuggestionService;
 use OCA\Social\Service\TeamService;
 use OCA\Social\Service\TrendService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -215,7 +215,7 @@ class PixelfedController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/stories/seen')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/stories/seen', postfix: 'pf')]
@@ -265,7 +265,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.2/stories/react')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/stories/react', postfix: 'pf')]
@@ -290,7 +290,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.2/stories/comment')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/stories/comment', postfix: 'pf')]
@@ -316,7 +316,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/compose/tag')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/compose/tag', postfix: 'pf')]
@@ -338,7 +338,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/compose/tag/untagme')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/compose/tag/untagme', postfix: 'pf')]
@@ -491,7 +491,7 @@ class PixelfedController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/report')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/report', postfix: 'pf')]
@@ -705,7 +705,7 @@ class PixelfedController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/direct/thread/send')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/direct/thread/send', postfix: 'pf')]

@@ -10,8 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Controller\MediaApiController;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\Object\Document;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\Files\SimpleFS\ISimpleFile;
@@ -74,7 +74,7 @@ class MediaApiControllerTest extends TestCase {
 					continue;
 				}
 
-				if (!$this->has($method, AnonRateLimit::class) || !$this->has($method, UserRateLimit::class)) {
+				if (!$this->has($method, AnonymousRateLimit::class) || !$this->has($method, UserRateLimit::class)) {
 					$bare[] = $method . ' (' . $url . ')';
 				}
 			}
@@ -103,7 +103,7 @@ class MediaApiControllerTest extends TestCase {
 					continue;
 				}
 
-				if (!$this->has($method, AnonRateLimit::class) || !$this->has($method, UserRateLimit::class)) {
+				if (!$this->has($method, AnonymousRateLimit::class) || !$this->has($method, UserRateLimit::class)) {
 					$bare[] = $verb . ' ' . $url;
 				}
 			}

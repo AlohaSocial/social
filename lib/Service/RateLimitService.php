@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\AppInfo\Application;
 use OCA\Social\Controller\ActivityPubController;
 use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\LocalController;
@@ -16,9 +17,9 @@ use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\NavigationController;
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Controller\SocialPubController;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Security\ClientAddress;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
@@ -63,12 +64,16 @@ class RateLimitService {
 		LocalController::class => ['globalActorAvatar'],
 	];
 
+	/** The account a bearer token on this request acts for: '' for none, null before it is looked up. */
+	private ?string $tokenUser = null;
+
 	public function __construct(
 		private IRequest $request,
 		private IUserSession $userSession,
 		private ICacheFactory $cacheFactory,
 		private ConfigService $configService,
 		private ?ITimeFactory $timeFactory = null,
+		private ?ClientService $clientService = null,
 	) {
 	}
 
@@ -114,8 +119,8 @@ class RateLimitService {
 
 	/**
 	 * Whether the app's default budget governs this route: not where the route
-	 * declares its own limit, which Nextcloud counts, and not for traffic that
-	 * is not a client pacing itself.
+	 * declares its own limit, and not for traffic that is not a client pacing
+	 * itself.
 	 */
 	public function appliesDefaultTo(Controller $controller, string $methodName): bool {
 		foreach (self::EXEMPT_CONTROLLERS as $class) {
@@ -133,7 +138,97 @@ class RateLimitService {
 		return !$this->declaresItsOwn($controller, $methodName);
 	}
 
-	/** Whether Nextcloud is already counting this route. */
+	/**
+	 * The `UserRateLimit` of a route called with a bearer token and no
+	 * session. Nextcloud's limiter decides by the session alone, so it never
+	 * applies that limit to a token, and the app counts it instead (bucket
+	 * `routeBucket()`).
+	 *
+	 * @return array{0: int, 1: int}|null limit and period, or null when the
+	 *                                    route or the caller has none
+	 */
+	public function tokenRouteBudget(Controller $controller, string $methodName): ?array {
+		if ($this->userSession->getUser() !== null || $this->tokenUser() === '') {
+			return null;
+		}
+
+		foreach (self::EXEMPT_CONTROLLERS as $class) {
+			if ($controller instanceof $class) {
+				return null;
+			}
+		}
+
+		try {
+			$attributes = (new ReflectionMethod($controller, $methodName))->getAttributes(UserRateLimit::class);
+		} catch (Throwable $e) {
+			return null;
+		}
+		if ($attributes === []) {
+			return null;
+		}
+
+		$limit = $attributes[0]->newInstance();
+
+		return [$limit->getLimit(), $limit->getPeriod()];
+	}
+
+	/**
+	 * The `AnonymousRateLimit` a route holds this caller to, as Nextcloud
+	 * applies its `AnonRateLimit`: to a caller who is not an account, and to
+	 * everybody on a route without a `UserRateLimit`. An account is a session
+	 * or a valid bearer token, so a Mastodon app is held to the route's
+	 * per-account limit instead (`tokenRouteBudget()`). An administrator's
+	 * `ratelimit_overwrite` for the route is honoured, as Nextcloud honours it.
+	 *
+	 * @return array{0: int, 1: int}|null limit and period, or null when the
+	 *                                    route has none for this caller
+	 */
+	public function anonRouteBudget(Controller $controller, string $methodName): ?array {
+		try {
+			$method = new ReflectionMethod($controller, $methodName);
+		} catch (Throwable $e) {
+			return null;
+		}
+
+		$attributes = $method->getAttributes(AnonymousRateLimit::class);
+		if ($attributes === []
+			|| ($method->getAttributes(UserRateLimit::class) !== [] && $this->signedIn())) {
+			return null;
+		}
+
+		$limit = $attributes[0]->newInstance();
+
+		return $this->anonOverwrite($controller, $methodName) ?? [$limit->getLimit(), $limit->getPeriod()];
+	}
+
+	/**
+	 * The `anon` entry of `ratelimit_overwrite` in config.php for a route,
+	 * keyed and checked as Nextcloud's `RateLimitingMiddleware` does.
+	 *
+	 * @return array{0: int, 1: int}|null
+	 */
+	private function anonOverwrite(Controller $controller, string $methodName): ?array {
+		$overwrites = $this->configService->getSystemValue('ratelimit_overwrite');
+		if (!is_array($overwrites)) {
+			return null;
+		}
+
+		$name = substr($controller::class, strrpos($controller::class, '\\') + 1);
+		$key = strtolower(Application::APP_ID . '.' . substr($name, 0, -strlen('Controller')) . '.' . $methodName);
+		$anon = $overwrites[$key]['anon'] ?? null;
+		if (!is_array($anon) || (int)($anon['limit'] ?? 0) < 1 || (int)($anon['period'] ?? 0) < 1) {
+			return null;
+		}
+
+		return [(int)$anon['limit'], (int)$anon['period']];
+	}
+
+	/** The bucket a route's own limit is counted in. */
+	public static function routeBucket(Controller $controller, string $methodName): string {
+		return $controller::class . '/' . $methodName;
+	}
+
+	/** Whether the route declares a limit of its own. */
 	private function declaresItsOwn(Controller $controller, string $methodName): bool {
 		try {
 			$method = new ReflectionMethod($controller, $methodName);
@@ -143,7 +238,7 @@ class RateLimitService {
 		}
 
 		return $method->getAttributes(UserRateLimit::class) !== []
-			|| $method->getAttributes(AnonRateLimit::class) !== [];
+			|| $method->getAttributes(AnonymousRateLimit::class) !== [];
 	}
 
 	/** What the count of a bucket stands at, without adding to it. */
@@ -165,8 +260,34 @@ class RateLimitService {
 		return (intdiv($this->now(), $period) + 1) * $period;
 	}
 
+	/** Whether the caller is an account: by its session, or by a bearer token. */
 	public function signedIn(): bool {
-		return $this->userSession->getUser() !== null;
+		return $this->userSession->getUser() !== null || $this->tokenUser() !== '';
+	}
+
+	/**
+	 * The account a valid bearer token on this request acts for, or '' for
+	 * none, an app token's nobody included. Looked up once per request,
+	 * through the lookup the controller then reuses.
+	 */
+	private function tokenUser(): string {
+		if ($this->tokenUser !== null) {
+			return $this->tokenUser;
+		}
+
+		$this->tokenUser = '';
+		$header = trim($this->request->getHeader('Authorization'));
+		if ($this->clientService === null || stripos($header, 'bearer ') !== 0) {
+			return $this->tokenUser;
+		}
+
+		try {
+			$this->tokenUser = $this->clientService->getFromTokenOfRequest(trim(substr($header, 7)))->getAuthUserId();
+		} catch (Throwable $e) {
+			// a stale or made-up token is spent from the address's budget
+		}
+
+		return $this->tokenUser;
 	}
 
 	/**
@@ -188,13 +309,18 @@ class RateLimitService {
 	}
 
 	/**
-	 * Who the budget belongs to: the signed-in account, else the address,
-	 * an IPv6 one by its /64 (`ClientAddress`).
+	 * Who the budget belongs to: the signed-in account, else the account of
+	 * the bearer token, else the address, an IPv6 one by its /64
+	 * (`ClientAddress`).
 	 */
 	private function identity(): string {
 		$user = $this->userSession->getUser();
 		if ($user !== null) {
 			return 'u:' . $user->getUID();
+		}
+
+		if ($this->tokenUser() !== '') {
+			return 'u:' . $this->tokenUser();
 		}
 
 		return 'a:' . ClientAddress::bucket($this->request->getRemoteAddress());

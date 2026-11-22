@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\RetrieveAccountFormatException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CurlService;
@@ -20,7 +21,6 @@ use OCA\Social\Tools\Exceptions\ArrayNotFoundException;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TNCDataResponse;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -149,7 +149,7 @@ class OStatusController extends Controller {
 	 * and making a WebFinger lookup to a host the caller names, so it is rate
 	 * limited.
 	 */
-	#[AnonRateLimit(limit: 10, period: 300)]
+	#[AnonymousRateLimit(limit: 10, period: 300)]
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[PublicPage]

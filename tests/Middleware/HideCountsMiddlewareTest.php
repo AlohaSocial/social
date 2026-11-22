@@ -41,7 +41,7 @@ class HideCountsMiddlewareTest extends TestCase {
 		))->strip($data));
 
 		$clients = $this->createStub(ClientService::class);
-		$clients->method('getFromToken')->willReturnCallback(static function (string $token): SocialClient {
+		$clients->method('getFromTokenOfRequest')->willReturnCallback(static function (string $token): SocialClient {
 			if ($token !== 'bobs-token') {
 				throw new \OCA\Social\Exceptions\ClientNotFoundException();
 			}

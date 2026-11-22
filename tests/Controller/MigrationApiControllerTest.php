@@ -67,7 +67,7 @@ class MigrationApiControllerTest extends TestCase {
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes($scopes);
 		$client->setAuthRedirectUri($redirectUri);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 	}
 
 	private function moved(): Person {
