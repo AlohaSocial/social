@@ -98,6 +98,24 @@ class UnifiedSearchProviderTest extends TestCase {
 		$this->assertSame('https://remote.example/notes/9', $second['resourceUrl'], 'remote statuses link to their origin');
 	}
 
+	public function testAStatusBehindAContentWarningShowsTheWarningOnly(): void {
+		$warned = new Note();
+		$warned->setId('https://remote.example/notes/10');
+		$warned->setContent('<p>the fox dies at the end</p>');
+		$warned->setSummary('Spoilers');
+		$warned->setSensitive(true);
+		$warned->setLocal(false);
+
+		$this->searchService->method('searchStreamContent')->with('fox')->willReturn([$warned]);
+
+		$entries = $this->provider->search($this->user(), $this->query('fox'))->jsonSerialize()['entries'];
+
+		$this->assertCount(1, $entries);
+		$title = $entries[0]->jsonSerialize()['title'];
+		$this->assertStringStartsWith('Content warning:', $title);
+		$this->assertStringNotContainsString('fox', $title);
+	}
+
 	/** @return IUser&MockObject */
 	private function user(): IUser {
 		$user = $this->createMock(IUser::class);

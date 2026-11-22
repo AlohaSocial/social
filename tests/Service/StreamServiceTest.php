@@ -1021,6 +1021,32 @@ class StreamServiceTest extends TestCase {
 		$this->service->getStreamByNid(42);
 	}
 
+	/**
+	 * `/@{username}/{nid}` used to serve any post by its nid, whatever name
+	 * stood in front of it, so a page could show alice's post as bob's.
+	 */
+	public function testAPostByNidHasToBeUnderItsAuthorsName(): void {
+		$local = $this->note('https://social.example/@alice/1');
+		$local->setAttributedTo(self::ACTOR_ID);
+		$remote = $this->note('https://remote.example/users/bob/statuses/1');
+		$remote->setAttributedTo('https://remote.example/users/bob');
+		$remote->setActor((new Person())->setAccount('bob@remote.example'));
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnCallback(fn (int|string $nid): Stream => ($nid === 1) ? $local : $remote);
+
+		$this->assertSame($local, $this->service->getStreamByNidUnder('alice', 1));
+		$this->assertSame($local, $this->service->getStreamByNidUnder('Alice', 1));
+		$this->assertSame($remote, $this->service->getStreamByNidUnder('bob@remote.example', 2));
+
+		foreach ([['bob', 1], ['alice@remote.example', 1], ['bob', 2], ['alice', 2]] as [$username, $nid]) {
+			try {
+				$this->service->getStreamByNidUnder($username, $nid);
+				$this->fail($username . '/' . $nid . ' should not name the post');
+			} catch (StreamNotFoundException) {
+			}
+		}
+	}
+
 	public function testUpdateStreamDelegates(): void {
 		$note = $this->note('https://social.example/@alice/1');
 		$this->streamRequest->expects($this->once())->method('update')->with($this->identicalTo($note), false);

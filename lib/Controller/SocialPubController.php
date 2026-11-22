@@ -361,7 +361,7 @@ class SocialPubController extends Controller {
 
 	/**
 	 * The post an address names: by the token in the post's own address first,
-	 * then by the numeric id the app links with. Only for the browser page: an
+	 * then by the numeric id the app links with, under its author's name. Only for the browser page: an
 	 * ActivityPub request asks by address, and answering another identifier
 	 * there would invent a second canonical id.
 	 *
@@ -379,7 +379,7 @@ class SocialPubController extends Controller {
 		}
 
 		try {
-			return $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($token));
+			return $this->streamService->getStreamByNidUnder($username, \OCA\Social\Tools\Nid::fromStorage($token));
 		} catch (Exception $e) {
 			return null;
 		}

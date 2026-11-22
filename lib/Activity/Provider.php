@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Activity;
 
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Reference\PostReferenceProvider;
 use OCP\Activity\Exceptions\UnknownActivityException;
 use OCP\Activity\IEvent;
 use OCP\Activity\IManager;
@@ -58,6 +59,9 @@ class Provider implements IProvider {
 			->setIcon($this->iconFor($event->getSubject()));
 
 		$excerpt = (string)($parameters['excerpt'] ?? '');
+		if ($excerpt !== '' && ($parameters['warned'] ?? false) === true) {
+			$excerpt = PostReferenceProvider::warning($l10n, $excerpt);
+		}
 		if ($excerpt !== '') {
 			$event->setParsedMessage($excerpt)->setRichMessage($excerpt, []);
 		}

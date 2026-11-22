@@ -704,6 +704,25 @@ class StreamService {
 		return $this->streamRequest->getStreamByNid($nid, $asViewer);
 	}
 
+	/**
+	 * The post a page address `/@{username}/{nid}` names. The nid alone would
+	 * serve any post under any name, so the name has to be the author's as the
+	 * app writes it: the username of a local author, `user@host` otherwise.
+	 *
+	 * @throws StreamNotFoundException
+	 * @throws SocialAppConfigException
+	 */
+	public function getStreamByNidUnder(string $username, int|string $nid, bool $asViewer = true): Stream {
+		$post = $this->getStreamByNid($nid, $asViewer);
+		$username = strtolower($username);
+		if (strtolower($post->getAttributedTo()) === strtolower($this->configService->getSocialUrl() . '@' . $username)
+			|| ($post->hasActor() && strtolower($post->getActor()->getAccount()) === $username)) {
+			return $post;
+		}
+
+		throw new StreamNotFoundException('the post is not by ' . $username);
+	}
+
 	public function updateStream(Stream $stream, bool $generateDest = false): void {
 		$this->streamRequest->update($stream, $generateDest);
 	}

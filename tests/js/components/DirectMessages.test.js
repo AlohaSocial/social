@@ -730,6 +730,26 @@ describe('DirectMessages', () => {
 		}, { headers: { 'Idempotency-Key': expect.any(String) } })
 	})
 
+	// The reader is alice here; alice on another server is somebody else and
+	// must be the one the reply goes to, and the one the chat is named after.
+	it('replies to a peer whose username on another server is the same as the reader\'s', async () => {
+		const otherAlice = { id: 'https://remote.example/users/alice', acct: 'alice@remote.example', username: 'alice', display_name: 'Other Alice' }
+		const self = { id: `${window.location.origin}/users/alice`, acct: 'alice', username: 'alice', display_name: 'Alice' }
+		get.mockResolvedValueOnce({ data: [{ ...structuredClone(conversation), accounts: [self, otherAlice] }] })
+		const wrapper = mountMessages('10')
+		await flushPromises()
+		expect(wrapper.find('.direct-messages__list').text()).toContain('Other Alice')
+		wrapper.vm.messageText = 'Hello namesake'
+
+		await wrapper.vm.sendMessage()
+
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', {
+			status: '@alice@remote.example Hello namesake',
+			visibility: 'direct',
+			in_reply_to_id: '11',
+		}, { headers: { 'Idempotency-Key': expect.any(String) } })
+	})
+
 	it('ignores a recipient left over after leaving the new-message panel', async () => {
 		const wrapper = mountMessages('10')
 		await flushPromises()

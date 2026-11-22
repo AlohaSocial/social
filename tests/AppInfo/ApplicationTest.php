@@ -36,6 +36,7 @@ use OCA\Social\Listeners\ExternalUserStatusListener;
 use OCA\Social\Listeners\FileCommentsListener;
 use OCA\Social\Listeners\FilesScriptsListener;
 use OCA\Social\Listeners\GroupListListener;
+use OCA\Social\Listeners\PostReferenceListener;
 use OCA\Social\Listeners\ProfileSectionListener;
 use OCA\Social\Listeners\UserAccountListener;
 use OCA\Social\Listeners\UserDeletedListener;
@@ -110,10 +111,16 @@ class ApplicationTest extends TestCase {
 		$listeners = [];
 		$all = [];
 		$priorities = [];
-		$context->expects($this->exactly(26))->method('registerEventListener')
-			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$all, &$priorities): void {
+		$references = [];
+		$context->expects($this->exactly(28))->method('registerEventListener')
+			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$all, &$references, &$priorities): void {
 				if ($listener === FileCommentsListener::class) {
 					$all[] = $event;
+
+					return;
+				}
+				if ($listener === PostReferenceListener::class) {
+					$references[] = $event;
 
 					return;
 				}
@@ -171,6 +178,8 @@ class ApplicationTest extends TestCase {
 			CommentUpdatedEvent::class,
 			CommentDeletedEvent::class,
 		], $all);
+		// a link preview of an edited or deleted post is not served from the cache
+		$this->assertSame([PostEditedEvent::class, PostDeletedEvent::class], $references);
 		// ahead of Files, which copies the skeleton on the same event
 		$this->assertSame(ExternalFirstLoginListener::PRIORITY, $priorities[UserFirstTimeLoggedInEvent::class]);
 		$this->assertGreaterThan(0, ExternalFirstLoginListener::PRIORITY);
