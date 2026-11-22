@@ -168,7 +168,7 @@ class PixelfedAdminController extends AdminApiControllerBase {
 			$this->initAdmin(['admin:write']);
 
 			return new DataResponse(
-				$this->pixelfedAdminService->handleAutospam($id, $action), Http::STATUS_OK
+				$this->pixelfedAdminService->handleAutospam($id, $action, $this->userId), Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
 			return $this->error($e);

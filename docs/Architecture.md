@@ -959,7 +959,7 @@ moderates themselves: every write about an account or one of its posts —
 `ModerationController`'s decide/lift, forced-sensitive, the takedown of a post
 and the approval or refusal of a held one, the Mastodon admin API's `action`, `unsilence`,
 `unsuspend`, `unsensitive` and `DELETE`, and the Pixelfed admin app's user
-actions — first asks `AdminApiService::assertMayActOn()`, which refuses (403) an
+actions and its approval or refusal of a held post — first asks `AdminApiService::assertMayActOn()`, which refuses (403) an
 action on the caller's own account, and an action on a Nextcloud administrator's
 account unless the caller is one too. A remote account has no Nextcloud user
 behind it and is never refused there.
