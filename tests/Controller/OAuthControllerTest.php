@@ -1823,7 +1823,7 @@ class OAuthControllerTest extends TestCase {
 	public function testTheTokenEndpointIsRateLimitedForEveryCaller(): void {
 		$method = new \ReflectionMethod(OAuthController::class, 'token');
 
-		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class), 'a Bluesky app\'s client_id is fetched on every call');
+		$this->assertNotSame([], $method->getAttributes(\OCA\Social\Middleware\AnonymousRateLimit::class), 'a Bluesky app\'s client_id is fetched on every call');
 		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
 	}
 
