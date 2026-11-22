@@ -39,6 +39,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheDocumentService;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
@@ -75,6 +76,7 @@ class LocalController extends Controller {
 
 	private ?string $userId = null;
 	private ?Person $viewer = null;
+	private ?bool $mayAskOtherServers = null;
 
 	public function __construct(
 		IRequest $request,
@@ -96,6 +98,7 @@ class LocalController extends Controller {
 		private ?BlueskySearch $blueskySearch = null,
 		private ?\OCA\Social\Atproto\Profile\ProfileLinks $profileLinks = null,
 		private ?\OCA\Social\Service\HiddenCollectionsService $hiddenCollections = null,
+		private ?ClientService $clientService = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -783,13 +786,32 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * Whether this request may have other servers asked on its behalf: one
-	 * the web app sent with its request token, or one with a bearer token.
-	 * Neither can be forged by a link or a page on another site.
+	 * Whether this request may have other servers asked on its behalf: one a
+	 * signed-in reader's web app sent with its request token, or one with a
+	 * client's bearer token that is still valid. A link or a page on another
+	 * site can forge neither, and an anonymous script holds neither.
 	 */
 	private function mayAskOtherServers(): bool {
-		return $this->request->passesCSRFCheck()
-			|| str_starts_with($this->request->getHeader('Authorization'), 'Bearer ');
+		if ($this->mayAskOtherServers !== null) {
+			return $this->mayAskOtherServers;
+		}
+
+		if ($this->userId !== null && $this->request->passesCSRFCheck()) {
+			return $this->mayAskOtherServers = true;
+		}
+
+		$header = trim($this->request->getHeader('Authorization'));
+		if ($this->clientService === null || stripos($header, 'bearer ') !== 0) {
+			return $this->mayAskOtherServers = false;
+		}
+
+		try {
+			$this->clientService->getFromToken(trim(substr($header, 7)));
+
+			return $this->mayAskOtherServers = true;
+		} catch (Exception $e) {
+			return $this->mayAskOtherServers = false;
+		}
 	}
 
 	/**
