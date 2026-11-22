@@ -34,6 +34,21 @@ describe('isAllowedUrl', () => {
 		expect(isAllowedUrl('java\nscript:alert(1)')).toBe(false)
 	})
 
+	// a browser resolves these against the page, so they point at this server
+	test('rejects http(s) links without a host', () => {
+		expect(isAllowedUrl('https:/index.php/logout')).toBe(false)
+		expect(isAllowedUrl('https:evil')).toBe(false)
+		expect(isAllowedUrl('http:evil.example')).toBe(false)
+		expect(isAllowedUrl('https:///')).toBe(false)
+		expect(isAllowedUrl('https://')).toBe(false)
+		expect(isAllowedUrl('https:/\\example.org/x')).toBe(true)
+		expect(isAllowedUrl('https://alice@example.org/x')).toBe(true)
+	})
+
+	test('drops an http(s) href without a host', () => {
+		expect(sanitizeHtml('<a href="https:/index.php/logout">x</a>')).not.toContain('href')
+	})
+
 	test('rejects empty and missing values', () => {
 		expect(isAllowedUrl('')).toBe(false)
 		expect(isAllowedUrl(undefined)).toBe(false)

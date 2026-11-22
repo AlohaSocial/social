@@ -17,6 +17,7 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\UrlCloudException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Security\HtmlSanitizer;
@@ -27,7 +28,6 @@ use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Traits\TNCDataResponse;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -256,7 +256,7 @@ class SocialPubController extends Controller {
 	/** A minimal, public-only document that can be framed by an external site. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/@{username}/{token}/embed')]
 	public function embedPost(string $username, string $token): Response {
 		try {
@@ -361,7 +361,7 @@ class SocialPubController extends Controller {
 
 	/**
 	 * The post an address names: by the token in the post's own address first,
-	 * then by the numeric id the app links with. Only for the browser page: an
+	 * then by the numeric id the app links with, under its author's name. Only for the browser page: an
 	 * ActivityPub request asks by address, and answering another identifier
 	 * there would invent a second canonical id.
 	 *
@@ -379,7 +379,7 @@ class SocialPubController extends Controller {
 		}
 
 		try {
-			return $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($token));
+			return $this->streamService->getStreamByNidUnder($username, \OCA\Social\Tools\Nid::fromStorage($token));
 		} catch (Exception $e) {
 			return null;
 		}

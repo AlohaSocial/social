@@ -60,7 +60,7 @@ class ServiceAuth {
 	/**
 	 * Who a token says signed it, unchecked: the DID whose key to check it with.
 	 */
-	public function issuer(string $token): string {
+	public function issuer(#[\SensitiveParameter] string $token): string {
 		$claims = self::decode($token)[1] ?? [];
 
 		return is_string($claims['iss'] ?? null) ? $claims['iss'] : '';
@@ -71,7 +71,7 @@ class ServiceAuth {
 	 * for $method, unexpired, and presented for the first time. Either form
 	 * of S is taken, as a JOSE signature may come in either.
 	 */
-	public function verify(string $token, PublicKey $key, string $audience, string $method): bool {
+	public function verify(#[\SensitiveParameter] string $token, PublicKey $key, string $audience, string $method): bool {
 		$decoded = self::decode($token);
 		if ($decoded === null) {
 			return false;
@@ -113,7 +113,7 @@ class ServiceAuth {
 	/**
 	 * @return array{0: array, 1: array, 2: string, 3: string}|null header, claims, the signed part and the signature
 	 */
-	private static function decode(string $token): ?array {
+	private static function decode(#[\SensitiveParameter] string $token): ?array {
 		$parts = explode('.', trim($token));
 		if (count($parts) !== 3) {
 			return null;

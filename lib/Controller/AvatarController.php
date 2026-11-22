@@ -9,10 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Service\AvatarService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -55,7 +55,7 @@ class AvatarController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[UserRateLimit(limit: 3000, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/avatar/{username}/{size}', requirements: ['size' => '\d+'])]
 	public function avatar(string $username, int $size): Response {

@@ -11,8 +11,12 @@ namespace OCA\Social\Tests\Middleware;
 
 use OCA\Social\Controller\ActivityPubController;
 use OCA\Social\Controller\NavigationController;
+use OCA\Social\Exceptions\ClientNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Middleware\ApiRateLimitMiddleware;
 use OCA\Social\Middleware\RateLimitedException;
+use OCA\Social\Model\Client\SocialClient;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RateLimitService;
 use OCP\AppFramework\Controller;
@@ -25,6 +29,7 @@ use OCP\ICacheFactory;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use OCP\Security\RateLimiting\ILimiter;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -38,6 +43,17 @@ class BudgetedController extends Controller {
 	}
 
 	public function unlimited(): DataResponse {
+		return new DataResponse([]);
+	}
+
+	#[UserRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 4, period: 120)]
+	public function both(): DataResponse {
+		return new DataResponse([]);
+	}
+
+	#[AnonymousRateLimit(limit: 6, period: 60)]
+	public function anonOnly(): DataResponse {
 		return new DataResponse([]);
 	}
 }
@@ -56,7 +72,11 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	private IRequest|Stub $request;
 	private ApiRateLimitMiddleware $middleware;
 	private BudgetedController $controller;
+	/** @var list<array{string, int, int, string}> what Nextcloud's limiter was asked to count */
+	private array $anonRequests = [];
 
+	/** the Authorization header the request carries */
+	private string $authorization = '';
 	/** @var array<string, mixed> the counter */
 	private array $store = [];
 	/** @var array<string, string> the app's rate-limit values */
@@ -77,6 +97,9 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getRemoteAddress')->willReturn('203.0.113.7');
 		$this->request->method('getId')->willReturn('test-request');
+		$this->request->method('getHeader')->willReturnCallback(
+			fn (string $name): string => ($name === 'Authorization') ? $this->authorization : ''
+		);
 		\OC::$server->register(IRequest::class, $this->request);
 
 		$cache = $this->createStub(ICache::class);
@@ -93,7 +116,18 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 
 		$this->userSession = $this->createStub(IUserSession::class);
 		$this->controller = new BudgetedController('social', $this->request);
-		$this->middleware = new ApiRateLimitMiddleware($this->service($this->cacheFactory));
+		$this->middleware = $this->middleware($this->service($this->cacheFactory));
+	}
+
+	private function middleware(RateLimitService $service): ApiRateLimitMiddleware {
+		$limiter = $this->createStub(ILimiter::class);
+		$limiter->method('registerAnonRequest')->willReturnCallback(
+			function (string $identifier, int $limit, int $period, string $ip): void {
+				$this->anonRequests[] = [$identifier, $limit, $period, $ip];
+			}
+		);
+
+		return new ApiRateLimitMiddleware($service, $limiter, $this->request);
 	}
 
 	private function service(ICacheFactory|MockObject $cacheFactory): RateLimitService {
@@ -101,7 +135,16 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 		$configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
 
-		return new RateLimitService($this->request, $this->userSession, $cacheFactory, $configService);
+		$clients = $this->createStub(ClientService::class);
+		$clients->method('getFromTokenOfRequest')->willReturnCallback(static function (string $token): SocialClient {
+			if (!str_starts_with($token, 't-')) {
+				throw new ClientNotFoundException();
+			}
+
+			return (new SocialClient())->setAuthUserId(substr($token, 2));
+		});
+
+		return new RateLimitService($this->request, $this->userSession, $cacheFactory, $configService, null, $clients);
 	}
 
 	private function signedInAs(string $uid): void {
@@ -185,6 +228,83 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	}
 
 	/**
+	 * Nextcloud's limiter sees no session on a bearer-token request and
+	 * never applies a route's per-account limit to it, so the app does.
+	 */
+	public function testARoutesOwnLimitHoldsForABearerToken(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->authorization = 'Bearer t-alice';
+
+		$this->callTimes(3, 'limited');
+
+		$this->expectException(RateLimitedException::class);
+		$this->middleware->beforeController($this->controller, 'limited');
+	}
+
+	/** And the token spends its account's budget for the rest of the API. */
+	public function testABearerTokenHasTheAccountBudget(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->authorization = 'Bearer t-alice';
+		$this->callTimes(5);
+
+		$this->authorization = '';
+		$this->middleware = $this->middleware($this->service($this->cacheFactory));
+		$this->callTimes(2);
+
+		$this->expectException(RateLimitedException::class);
+		$this->middleware->beforeController($this->controller, 'unlimited');
+	}
+
+	/**
+	 * Somebody who is nobody is held to the route's anonymous limit, by
+	 * Nextcloud's own limiter under the name Nextcloud gives the route, so the
+	 * count and the refusal are what they were with `AnonRateLimit`.
+	 */
+	public function testAnAnonymousCallerIsHeldToTheRoutesAnonymousLimit(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+
+		$this->callTimes(1, 'both');
+
+		$this->assertSame([[BudgetedController::class . '::both', 4, 120, '203.0.113.7']], $this->anonRequests);
+	}
+
+	/** A token that names nobody, or nobody known, is anonymous too. */
+	public function testAnInvalidTokenIsHeldToTheAnonymousLimit(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->authorization = 'Bearer made-up';
+
+		$this->callTimes(1, 'both');
+
+		$this->assertCount(1, $this->anonRequests);
+	}
+
+	/**
+	 * An account, by its session or its token, is held to the route's
+	 * per-account limit and not to the address's, so people behind one
+	 * address do not use up each other's posts.
+	 */
+	public function testAnAccountIsNotHeldToTheAnonymousLimitWhereTheRouteHasItsOwn(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->authorization = 'Bearer t-alice';
+		$this->callTimes(3, 'both');
+
+		$this->authorization = '';
+		$this->signedInAs('bob');
+		$this->callTimes(3, 'both');
+
+		$this->assertSame([], $this->anonRequests);
+	}
+
+	/** As Nextcloud does, a route with only an anonymous limit holds everybody to it. */
+	public function testARouteWithOnlyAnAnonymousLimitHoldsEverybodyToIt(): void {
+		$this->signedInAs('alice');
+
+		$this->callTimes(1, 'anonOnly');
+
+		$this->assertSame([[BudgetedController::class . '::anonOnly', 6, 60, '203.0.113.7']], $this->anonRequests);
+	}
+
+	/**
 	 * Deliveries arrive in bursts from a handful of addresses, and one busy
 	 * peer would exhaust an address budget for every other peer behind the
 	 * same relay. The inbox is limited per origin host instead.
@@ -229,7 +349,7 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('isAvailable')->willReturn(false);
 		$cacheFactory->method('isLocalCacheAvailable')->willReturn(false);
-		$middleware = new ApiRateLimitMiddleware($this->service($cacheFactory));
+		$middleware = $this->middleware($this->service($cacheFactory));
 		$this->signedInAs('alice');
 
 		for ($i = 0; $i < 50; $i++) {

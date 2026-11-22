@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use OCA\Social\Atproto\Crypto\PublicKey;
 use OCA\Social\Atproto\Protocol\Car;
 use OCA\Social\Atproto\Protocol\Commit;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\MstReader;
 use OCA\Social\Exceptions\AtprotoException;
 
@@ -20,7 +21,7 @@ use OCA\Social\Exceptions\AtprotoException;
  * A repository as another PDS exports it (`getRepo`), checked before any of
  * it is kept: every block hashes to its CID, the commit is the account's and
  * signed with the key its DID document names, and every record the tree
- * names is in the file.
+ * names is in the file and is a record: DAG-CBOR, a map with a `$type`.
  */
 final class RepoArchive {
 	/** the largest repository taken, however it arrives */
@@ -50,6 +51,14 @@ final class RepoArchive {
 				$bytes = $decoded['blocks'][$cid->toString()] ?? null;
 				if ($bytes === null) {
 					throw new InvalidArgumentException('Record ' . $path . ' is missing from the archive');
+				}
+				try {
+					$value = DagCbor::decode($bytes);
+				} catch (InvalidArgumentException) {
+					$value = null;
+				}
+				if (!is_array($value) || !is_string($value['$type'] ?? null)) {
+					throw new InvalidArgumentException('Record ' . $path . ' is not a record');
 				}
 				$records[$path] = $bytes;
 			}

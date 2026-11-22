@@ -218,6 +218,13 @@ class LenientImportTest extends TestCase {
 		$this->assertInstanceOf(Note::class, $unsafe);
 		$this->assertSame('<h2>A headline</h2><p><a href="https://news.example/story" rel="nofollow noopener noreferrer" target="_blank">story</a></p>', $linked->getContent());
 		$this->assertSame('<h2>A headline</h2><p>body</p>', $unsafe->getContent());
+
+		// a browser reads `https:/…` as a path on this server
+		$hostless = AP::instance()->getItemFromData($this->lemmyPage([
+			'attachment' => ['type' => 'Link', 'href' => 'https:/index.php/logout'],
+		]));
+		$this->assertInstanceOf(Note::class, $hostless);
+		$this->assertSame('<h2>A headline</h2><p>body</p>', $hostless->getContent());
 	}
 	public function testADisplayNameWithALessThanSignIsKeptWhole(): void {
 		$this->assertSame('Alice <3 cats & dogs', $this->actor(['name' => 'Alice <3 cats & dogs'])->getName());

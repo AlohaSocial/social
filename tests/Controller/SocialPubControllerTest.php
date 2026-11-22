@@ -407,8 +407,8 @@ class SocialPubControllerTest extends TestCase {
 		$this->anonymous();
 		$post = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamById')->willThrowException(new StreamNotFoundException());
-		$this->streamService->expects($this->once())->method('getStreamByNid')
-			->with(1789250751711653456)->willReturn($post);
+		$this->streamService->expects($this->once())->method('getStreamByNidUnder')
+			->with('alice', 1789250751711653456)->willReturn($post);
 
 		$this->controller(null)->displayPost('alice', '1789250751711653456');
 
@@ -418,7 +418,7 @@ class SocialPubControllerTest extends TestCase {
 	public function testATokenThatIsNotANumberIsNotLookedUpAsOne(): void {
 		$this->anonymous();
 		$this->streamService->method('getStreamById')->willThrowException(new StreamNotFoundException());
-		$this->streamService->expects($this->never())->method('getStreamByNid');
+		$this->streamService->expects($this->never())->method('getStreamByNidUnder');
 
 		$this->controller(null)->displayPost('alice', 'abc123');
 	}
@@ -430,7 +430,7 @@ class SocialPubControllerTest extends TestCase {
 	public function testAnUnknownPostIsANotFoundPageForAVisitor(): void {
 		$this->anonymous();
 		$this->streamService->method('getStreamById')->willThrowException(new StreamNotFoundException());
-		$this->streamService->method('getStreamByNid')->willThrowException(new StreamNotFoundException());
+		$this->streamService->method('getStreamByNidUnder')->willThrowException(new StreamNotFoundException());
 
 		$response = $this->controller(null)->displayPost('alice', '404404404');
 

@@ -91,7 +91,7 @@ abstract class AdminApiControllerBase extends Controller {
 	protected function currentSession(): string {
 		if ($this->bearer !== '') {
 			try {
-				$this->client = $this->clientService->getFromToken($this->bearer);
+				$this->client = $this->clientService->getFromTokenOfRequest($this->bearer);
 			} catch (Exception $e) {
 				// a stale or made-up token is ordinary internet noise
 				$this->logger->debug('[' . static::class . '] unusable bearer token', [

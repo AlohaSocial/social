@@ -68,7 +68,7 @@
 				<router-link
 					v-if="!notificationIsAboutAnAccount && notification.status"
 					:to="{ name: 'single-post', params: {
-						account: item.account.acct,
+						account: notification.status.account?.acct ?? item.account.acct,
 						id: notification.status.id,
 						type: 'single-post',
 					} }"

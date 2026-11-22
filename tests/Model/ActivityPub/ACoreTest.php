@@ -246,6 +246,9 @@ class ACoreTest extends TestCase {
 			'a local file' => ['file:///etc/passwd'],
 			'data' => ['data:text/html,<script>alert(1)</script>'],
 			'relative, so not an id at all' => ['/users/alice'],
+			// a browser reads these as relative to this server
+			'https without a host' => ['https:/users/alice'],
+			'https without slashes' => ['https:evil'],
 			'not a URI at all' => ['Public'],
 			'nothing' => [''],
 		];
@@ -733,6 +736,17 @@ class ACoreTest extends TestCase {
 				'url' => ['type' => 'Link', 'href' => 'javascript:alert(1)'],
 			])
 		);
+	}
+
+	/**
+	 * `https:/@bob/1` has the scheme but no host, and a browser resolves it
+	 * against this server.
+	 */
+	public function testAUrlWithoutAHostIsRefused(): void {
+		$item = new ACore();
+
+		$this->assertSame('', $item->validate(ACore::AS_URL, 'url', ['url' => 'https:/index.php/logout']));
+		$this->assertSame('', $item->validate(ACore::AS_URL, 'url', ['url' => 'https:evil']));
 	}
 
 	/**

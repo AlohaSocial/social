@@ -27,6 +27,8 @@ class HtmlSanitizerVersionTest extends TestCase {
 	 */
 	private const FINGERPRINTS = [
 		1 => '9c7e43ccd861e4337c8decd8fedf0d24',
+		// http(s) links need a host
+		2 => '9c7e43ccd861e4337c8decd8fedf0d24',
 	];
 
 	public function testTheAllowlistsAreTheOnesTheVersionWasGivenFor(): void {

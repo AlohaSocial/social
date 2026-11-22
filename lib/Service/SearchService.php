@@ -44,6 +44,7 @@ class SearchService {
 		private StreamRequest $streamRequest,
 		private LoggerInterface $logger,
 		private CurlService $curlService,
+		private SignatureService $signatureService,
 		private ?BlueskySearch $bluesky = null,
 		private ?RemoteFetchQueue $remoteFetchQueue = null,
 	) {
@@ -83,8 +84,9 @@ class SearchService {
 	 *
 	 * Guards against an open proxy: the route is rate-limited, `CurlService`
 	 * enforces the access list and pins the resolved address, and the
-	 * document must claim the id it was fetched from (as
-	 * `StreamQueueService::cacheItem()` checks).
+	 * document must be served as ActivityPub and claim the id it was fetched
+	 * from (as `StreamQueueService::cacheItem()` checks). A post with an id on this
+	 * instance is never taken from another server's answer.
 	 *
 	 * A post already held is returned without fetching. `$asViewer` is `true`
 	 * for the search route, so only posts the reader may see are returned;
@@ -104,17 +106,24 @@ class SearchService {
 		}
 
 		try {
-			$data = $this->curlService->retrieveObject($uri);
+			$data = CurlService::servedAsActivityPub($this->curlService->retrieveObject($uri), $uri);
 			$object = AP::instance()->getItemFromData($data);
 
 			if ($object->getId() !== $uri) {
 				// A document is only evidence about itself, with one exception:
 				// a PeerTube watch page (`/w/{shortUUID}`) is not the object's
 				// id, so the document is trusted when it lists the fetched
-				// address among its own `url` links.
-				if (!$this->claimsUrl($data, $uri)) {
+				// address among its own `url` links and its id is on the server
+				// that served it.
+				if (strtolower(ConfigService::authorityOf($object->getId())) !== strtolower(ConfigService::authorityOf($uri))
+					|| !$this->claimsUrl($data, $uri)) {
 					throw new InvalidOriginException('the document does not claim the address it came from');
 				}
+			}
+
+			// this instance's own posts are in its database, never fetched
+			if ($this->signatureService->isLocalActor($object->getId())) {
+				throw new InvalidOriginException('a fetched document claims a local id');
 			}
 
 			// every type another server `Create`s into a timeline, as the inbox

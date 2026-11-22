@@ -78,7 +78,7 @@ trait ClientApiCallers {
 		$this->accountService = $accounts;
 
 		$this->clientService = $this->createMock(ClientService::class);
-		$this->clientService->method('getFromToken')->willReturnCallback(function (string $token): SocialClient {
+		$this->clientService->method('getFromTokenOfRequest')->willReturnCallback(function (string $token): SocialClient {
 			if ($token !== 'granted' || $this->token === null) {
 				throw new ClientNotFoundException();
 			}

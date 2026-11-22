@@ -3449,6 +3449,8 @@ OC.L10N.register(
     "Filtered activities" : "Gefilterte Aktivitäten",
     "Also learn from likes, saves and the videos I watch" : "Auch aus Likes, Gespeichertem und angesehenen Videos lernen",
     "Learn from my reading" : "Aus meinem Lesen lernen",
-    "Clear what was learned" : "Gelerntes löschen"
+    "Clear what was learned" : "Gelerntes löschen",
+    "New photo" : "Neues Foto",
+    "New video" : "Neues Video"
 },
 "nplurals=2; plural=(n != 1);");

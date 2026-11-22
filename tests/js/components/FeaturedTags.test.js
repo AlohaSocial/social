@@ -8,6 +8,9 @@ import axios from '@nextcloud/axios'
 import FeaturedTags from '../../../src/components/FeaturedTags.vue'
 
 vi.mock('@nextcloud/axios', () => ({ default: { get: vi.fn() } }))
+// the stub below still lets Vue Test Utils run the lazy import, which could
+// finish loading @nextcloud/vue after vitest tore the environment down
+vi.mock('../../../src/components/FeaturedTagsSettings.vue', () => ({ default: { name: 'FeaturedTagsSettings', template: '<div />' } }))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))

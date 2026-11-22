@@ -47,6 +47,8 @@ class RepositoryService {
 	public const MAX_WRITES = 200;
 	/** how much of a CAR is handed out at once when a repository is streamed */
 	private const PIECE = 65536;
+	/** how far ahead of this server's clock an imported revision may be, in seconds */
+	private const REV_AHEAD = 300;
 	private ?string $batchDid = null;
 	private ?PrivateKey $batchSigningKey = null;
 	private ?string $batchSwapCommit = null;
@@ -392,7 +394,9 @@ class RepositoryService {
 	 * nothing goes on the firehose until the account is activated.
 	 *
 	 * @param array<string, string> $records path => record bytes (DAG-CBOR)
-	 * @param string $afterRev the old repository's revision, which this one follows
+	 * @param string $afterRev the old repository's revision, which this one
+	 *                         follows unless it is more than REV_AHEAD seconds
+	 *                         ahead of this server's clock
 	 * @throws AtprotoException when the repository is not empty or a path is not one
 	 */
 	public function import(string $did, PrivateKey $signingKey, array $records, string $afterRev = ''): Cid {
@@ -412,7 +416,8 @@ class RepositoryService {
 				$leaves[(string)$path] = $cid;
 			}
 			$tree = (new Mst($leaves))->build();
-			$rev = Tid::after($afterRev);
+			$follows = Tid::isValid($afterRev) && Tid::decode($afterRev)[0] <= (time() + self::REV_AHEAD) * 1000000;
+			$rev = Tid::after($follows ? $afterRev : '');
 			$commit = Commit::sign($did, $tree->root, $rev, $signingKey);
 			$this->repoRequest->putBlocks($did, AtprotoRepoRequest::BLOCK_MST, $tree->blocks);
 			$this->repoRequest->putBlocks($did, AtprotoRepoRequest::BLOCK_COMMIT, [$commit->cid()->toString() => $commit->toBytes()]);

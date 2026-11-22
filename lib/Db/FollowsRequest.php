@@ -867,8 +867,8 @@ class FollowsRequest extends FollowsRequestBuilder {
 		$qb = $this->getFollowsUpdateSql();
 		$qb->set('object_id', $qb->createNamedParameter($new->getId()))
 			->set('object_id_prim', $qb->createNamedParameter($qb->prim($new->getId())))
-			->set('follow_id', $qb->createNamedParameter($new->getFollowers()))
-			->set('follow_id_prim', $qb->createNamedParameter($qb->prim($new->getFollowers())));
+			->set('follow_id', $qb->createNamedParameter($new->getOwnFollowers()))
+			->set('follow_id_prim', $qb->createNamedParameter($qb->prim($new->getOwnFollowers())));
 
 		$this->limitToPrim($qb, 'object_id_prim', $actorId);
 

@@ -83,6 +83,7 @@ use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
+use OCA\Social\Security\HtmlSanitizer;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\ReactionService;
@@ -328,7 +329,7 @@ class AP {
 
 			$href = is_string($attachment['href'] ?? null) ? $attachment['href'] : '';
 			$scheme = strtolower((string)parse_url($href, PHP_URL_SCHEME));
-			if ($scheme !== 'https' && $scheme !== 'http') {
+			if (($scheme !== 'https' && $scheme !== 'http') || !HtmlSanitizer::isAllowedUrl($href)) {
 				continue;
 			}
 

@@ -127,7 +127,7 @@ class StoryControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->with('t')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('t')->willReturn($client);
 	}
 
 	private function controller(string $authorization = ''): StoryController {

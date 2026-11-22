@@ -325,7 +325,7 @@ class AtprotoAccountController extends Controller {
 	#[PasswordConfirmationRequired]
 	#[UserRateLimit(limit: 3, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move')]
-	public function moveAway(string $pds, string $handle, string $email, string $password, string $inviteCode = '', bool $without_recovery = false, string $announce = 'none'): DataResponse {
+	public function moveAway(string $pds, string $handle, string $email, #[\SensitiveParameter] string $password, string $inviteCode = '', bool $without_recovery = false, string $announce = 'none'): DataResponse {
 		$identity = $this->ownIdentity();
 		if ($identity === null) {
 			return $this->noIdentity();
@@ -418,7 +418,7 @@ class AtprotoAccountController extends Controller {
 	#[PasswordConfirmationRequired]
 	#[UserRateLimit(limit: 5, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move-in')]
-	public function moveIn(string $handle, string $password, string $authFactorToken = ''): DataResponse {
+	public function moveIn(string $handle, #[\SensitiveParameter] string $password, #[\SensitiveParameter] string $authFactorToken = ''): DataResponse {
 		if (!$this->config->isEnabled()) {
 			return $this->blueskyOff();
 		}
@@ -502,7 +502,7 @@ class AtprotoAccountController extends Controller {
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move/code')]
-	public function moveCode(string $code): DataResponse {
+	public function moveCode(#[\SensitiveParameter] string $code): DataResponse {
 		try {
 			return new DataResponse(['move' => $this->moveIn->code($this->userId(), $code)->export()]);
 		} catch (Throwable $e) {

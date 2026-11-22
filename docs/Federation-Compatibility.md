@@ -15,6 +15,14 @@ supports Person, Group, Service, Organization and Application actors. This cover
 people, community/channel accounts and automated accounts without treating every
 profile as a Mastodon user.
 
+An actor's `followers` and `following` collections are only accepted on the
+actor's own server, host and port. Following an actor subscribes to its
+followers collection, so one naming another account's collection would show its
+followers that account's followers-only posts. Mastodon, Misskey, Pixelfed,
+PeerTube, GoToSocial, Lemmy, Guppe and Bridgy Fed all serve these beside the
+actor; a collection elsewhere is logged and ignored, and a follow of that actor
+then reaches nothing in the home timeline.
+
 Opening a remote profile while signed in queues a bounded outbox import. The API
 returns cached posts immediately and reports a pending import through
 `X-Social-Remote-Profile-Filling`. The web timeline polls for up to five minutes;

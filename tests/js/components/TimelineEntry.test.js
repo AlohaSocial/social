@@ -372,8 +372,9 @@ describe('TimelineEntry', () => {
 			expect(wrapper.findComponent(UserEntryStub).exists()).toBe(false)
 
 			const link = wrapper.find('.notification__details').findComponent(RouterLinkStub)
-			// the profile part of the link is the actor handle, not their display name
-			expect(link.props('to')).toMatchObject({ name: 'single-post', params: { account: 'bob@remote.example', id: 'p1', type: 'single-post' } })
+			// the profile part of the link is the post's author's handle, not the
+			// display name nor whoever liked it: the page answers under that name only
+			expect(link.props('to')).toMatchObject({ name: 'single-post', params: { account: 'alice', id: 'p1', type: 'single-post' } })
 			expect(link.attributes('data-timestamp')).toBe('2026-09-03T10:00:00Z')
 		})
 

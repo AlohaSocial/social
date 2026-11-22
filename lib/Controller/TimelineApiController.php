@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Reader\ActiveHomeFeedRefresh;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\UnknownProbeException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Filter;
@@ -34,7 +35,6 @@ use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Service\WatchService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -91,7 +91,7 @@ class TimelineApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/timelines/{timeline}/')]
 	public function timelines(

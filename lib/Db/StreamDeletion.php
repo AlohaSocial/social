@@ -16,6 +16,7 @@ use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Tools\Nid;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use Throwable;
 
@@ -120,6 +121,36 @@ trait StreamDeletion {
 		$cursor->closeCursor();
 
 		return $authors;
+	}
+
+	/**
+	 * The id and nid of an author's public and unlisted posts, the ones a link
+	 * preview may show, a page at a time above a nid.
+	 *
+	 * @return list<array{id: string, nid: int|string}>
+	 */
+	public function getOpenPostAddressesByAuthor(string $actorId, int $limit, int|string $afterNid = 0): array {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('s.id', 's.nid')
+			->from(self::TABLE_STREAM, 's')
+			->where($expr->eq('s.attributed_to_prim', $qb->createNamedParameter($qb->prim($actorId))))
+			->andWhere($expr->in(
+				's.visibility',
+				$qb->createNamedParameter([Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], IQueryBuilder::PARAM_STR_ARRAY)
+			))
+			->andWhere($expr->gt('s.nid', $qb->createNamedParameter((string)$afterNid)))
+			->orderBy('s.nid', 'asc')
+			->setMaxResults($limit);
+
+		$cursor = $qb->executeQuery();
+		$posts = array_map(
+			static fn (array $row): array => ['id' => (string)$row['id'], 'nid' => Nid::fromStorage($row['nid'])],
+			$cursor->fetchAll()
+		);
+		$cursor->closeCursor();
+
+		return $posts;
 	}
 
 	/**

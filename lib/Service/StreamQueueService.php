@@ -332,8 +332,8 @@ class StreamQueueService {
 	}
 
 	/**
-	 * Takes in a post as the server that holds it serves it. Its id must be
-	 * the URL asked for and its author on the URL's host (`NoteInterface`
+	 * Takes in a post as the server that holds it serves it, as ActivityPub.
+	 * Its id must be the URL asked for and its author on the URL's host (`NoteInterface`
 	 * checks against the origin set here). It then goes through the inbox's
 	 * path as a `Create`, or as an `Update` when a stored copy is older.
 	 *
@@ -349,6 +349,7 @@ class StreamQueueService {
 			? $this->curlService->retrieveObject($url)
 			: $this->curlService->retrieveObject($url, true, $timeout);
 		$this->breaker->close(self::hostOf($url));
+		CurlService::servedAsActivityPub($data, $url);
 		$object = AP::instance()->getItemFromData($data);
 		if ($object->getId() !== $url) {
 			throw new InvalidOriginException('the document does not claim the address it came from: ' . $url);
@@ -511,6 +512,7 @@ class StreamQueueService {
 
 			$data = $this->curlService->retrieveObject($item->getUrl());
 			$this->breaker->close($host);
+			CurlService::servedAsActivityPub($data, $item->getUrl());
 			$object = AP::instance()->getItemFromData($data);
 
 			$object->setOrigin(ConfigService::authorityOf($item->getUrl()), SignatureService::ORIGIN_REQUEST, time());

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use DateTime;
+use LogicException;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -573,15 +574,64 @@ class SignatureServiceTest extends TestCase {
 	}
 
 	public function testARequestIsReplayedOnlyOnceItWasRemembered(): void {
-		$headers = $this->signedHeaders('{"type":"Follow"}', self::$privateKey);
-		$request = $this->incomingRequest($headers);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+		$request = $this->incomingRequest($this->signedHeaders('{"type":"Follow"}', self::$privateKey));
 		$other = $this->incomingRequest($this->signedHeaders('{"type":"Undo"}', self::$privateKey));
+		$this->service->checkRequest($request, '{"type":"Follow"}');
+		$this->service->checkRequest($other, '{"type":"Undo"}');
 
 		$this->assertFalse($this->service->isReplayed($request));
 		$this->service->rememberRequest($request);
 
 		$this->assertTrue($this->service->isReplayed($request));
 		$this->assertFalse($this->service->isReplayed($other), 'another signature is another request');
+	}
+
+	/**
+	 * What the signature does not cover can be changed in a captured request
+	 * without it failing to verify: an unknown parameter, or a keyId naming
+	 * another key of the same actor. Neither makes it a new request.
+	 */
+	public function testACapturedRequestWithItsSignatureHeaderRewrittenIsStillAReplay(): void {
+		$body = '{"type":"Follow"}';
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+		$headers = $this->signedHeaders($body, self::$privateKey);
+		$request = $this->incomingRequest($headers);
+		$this->service->checkRequest($request, $body);
+		$this->service->rememberRequest($request);
+
+		$rewritten = [
+			'an appended parameter' => $headers['signature'] . ',x="1"',
+			'another key of the actor' => str_replace(self::REMOTE_KEY_ID, self::REMOTE_ACTOR . '#other-key', $headers['signature']),
+		];
+		foreach ($rewritten as $what => $signature) {
+			$replay = $this->incomingRequest(['signature' => $signature] + $headers);
+			$this->assertSame('remote.example', $this->service->checkRequest($replay, $body), $what . ' still verifies');
+			$this->assertTrue($this->service->isReplayed($replay), $what . ' is a replay');
+		}
+	}
+
+	/** An unused label added beside the one that verifies does not make an RFC 9421 request new. */
+	public function testACapturedRfc9421RequestWithAnAddedLabelIsStillAReplay(): void {
+		$body = '{"type":"Follow"}';
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+		$headers = $this->messageSignedHeaders($body, self::$privateKey);
+		$request = $this->incomingRequest($headers);
+		$this->service->checkRequest($request, $body);
+		$this->service->rememberRequest($request);
+
+		$replay = $this->incomingRequest([
+			'signature-input' => $headers['signature-input'] . ', junk=("@method");keyid="' . self::REMOTE_KEY_ID . '"',
+			'signature' => $headers['signature'] . ', junk=:AAAA:',
+		] + $headers);
+
+		$this->assertSame('remote.example', $this->service->checkRequest($replay, $body));
+		$this->assertTrue($this->service->isReplayed($replay));
+	}
+
+	public function testARequestWhoseSignatureWasNotVerifiedIsNotRemembered(): void {
+		$this->expectException(LogicException::class);
+		$this->service->rememberRequest($this->incomingRequest($this->signedHeaders('{"type":"Follow"}', self::$privateKey)));
 	}
 
 	public function testCheckRequestRejectsAMissingDate(): void {

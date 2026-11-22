@@ -1181,7 +1181,7 @@ export default {
 
 		async sendMessage() {
 			const newRecipient = this.newMessageOpen ? this.newRecipient : null
-			const recipient = newRecipient || this.activeConversation?.accounts?.find((account) => account.acct !== this.ownUsername && account.username !== this.ownUsername)
+			const recipient = newRecipient || this.activeConversation?.accounts?.find((account) => !this.isOwnAccount(account))
 			const text = this.messageText.trim()
 			if (!recipient?.acct || !text || this.sendingMessage) {
 				return
@@ -1294,7 +1294,7 @@ export default {
 		},
 
 		conversationPeer(conversation) {
-			return (conversation?.accounts ?? []).find((account) => account.acct !== this.ownUsername && account.username !== this.ownUsername) ?? conversation?.accounts?.[0] ?? null
+			return (conversation?.accounts ?? []).find((account) => !this.isOwnAccount(account)) ?? conversation?.accounts?.[0] ?? null
 		},
 
 		selectConversation(id, event) {

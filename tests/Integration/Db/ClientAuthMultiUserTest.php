@@ -229,6 +229,32 @@ class ClientAuthMultiUserTest extends TestCase {
 	}
 
 	/**
+	 * An app token keeps its app while it lives and does not count as an
+	 * authorization: a registration only ever used through the
+	 * `client_credentials` grant is swept once its token is gone, rather than
+	 * kept for ever.
+	 */
+	public function testAnAppTokenKeepsItsAppOnlyWhileItLives(): void {
+		$appOnly = new SocialClient();
+		$appOnly->setAppName(self::APP)
+			->setAppRedirectUris(['urn:ietf:wg:oauth:2.0:oob'])
+			->setAppScopes(['read'])
+			->setAppClientId(self::APP . '-unused-id')
+			->setAppClientSecret(self::APP . '-unused-secret');
+		$this->clientRequest->saveApp($appOnly);
+		$this->clientAuthRequest->issueAppToken($appOnly->getId(), ['read'], 'app-token-only');
+
+		$this->clientRequest->deleteNeverAuthorized(time() + 60);
+		$this->assertSame('', $this->clientAuthRequest->getByToken('app-token-only')->getAuthUserId(), 'a live app token keeps its app');
+
+		$this->clientAuthRequest->revoke($this->clientAuthRequest->getByToken('app-token-only')->getAuthId());
+		$this->clientRequest->deleteNeverAuthorized(time() + 60);
+
+		$this->expectException(ClientNotFoundException::class);
+		$this->clientRequest->getFromClientId(self::APP . '-unused-id');
+	}
+
+	/**
 	 * A request whose own writes go to the real database, with `$other` run
 	 * once between its delete and its insert: the second of two requests
 	 * that both deleted before either inserted.

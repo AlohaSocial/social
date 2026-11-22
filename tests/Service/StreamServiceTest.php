@@ -1021,6 +1021,32 @@ class StreamServiceTest extends TestCase {
 		$this->service->getStreamByNid(42);
 	}
 
+	/**
+	 * `/@{username}/{nid}` used to serve any post by its nid, whatever name
+	 * stood in front of it, so a page could show alice's post as bob's.
+	 */
+	public function testAPostByNidHasToBeUnderItsAuthorsName(): void {
+		$local = $this->note('https://social.example/@alice/1');
+		$local->setAttributedTo(self::ACTOR_ID);
+		$remote = $this->note('https://remote.example/users/bob/statuses/1');
+		$remote->setAttributedTo('https://remote.example/users/bob');
+		$remote->setActor((new Person())->setAccount('bob@remote.example'));
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnCallback(fn (int|string $nid): Stream => ($nid === 1) ? $local : $remote);
+
+		$this->assertSame($local, $this->service->getStreamByNidUnder('alice', 1));
+		$this->assertSame($local, $this->service->getStreamByNidUnder('Alice', 1));
+		$this->assertSame($remote, $this->service->getStreamByNidUnder('bob@remote.example', 2));
+
+		foreach ([['bob', 1], ['alice@remote.example', 1], ['bob', 2], ['alice', 2]] as [$username, $nid]) {
+			try {
+				$this->service->getStreamByNidUnder($username, $nid);
+				$this->fail($username . '/' . $nid . ' should not name the post');
+			} catch (StreamNotFoundException) {
+			}
+		}
+	}
+
 	public function testUpdateStreamDelegates(): void {
 		$note = $this->note('https://social.example/@alice/1');
 		$this->streamRequest->expects($this->once())->method('update')->with($this->identicalTo($note), false);
@@ -1261,7 +1287,9 @@ class StreamServiceTest extends TestCase {
 			return $stream->getId() === 'https://remote.example/notes/1';
 		});
 
-		$context = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue)->getContextByNid(2);
+		$service = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue);
+		$service->setViewer((new Person())->setId(self::ACTOR_ID));
+		$context = $service->getContextByNid(2);
 
 		$this->assertSame(['https://remote.example/notes/1', 'https://remote.example/notes/2'], $asked);
 		$this->assertTrue($context['filling']);
@@ -1292,12 +1320,15 @@ class StreamServiceTest extends TestCase {
 		$this->streamRequest->method('getStreamByNid')->willReturn($post);
 		$this->streamRequest->method('getDescendants')->willReturn([]);
 		$threads = $this->createMock(ThreadService::class);
-		$threads->expects($this->once())->method('fillBluesky')->with($post, null)->willReturn(true);
+		$viewer = (new Person())->setId(self::ACTOR_ID);
+		$threads->expects($this->once())->method('fillBluesky')->with($post, $viewer)->willReturn(true);
 		$threads->expects($this->once())->method('hasPendingBlueskyReplies')->willReturn(false);
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$queue->expects($this->never())->method('fillThread');
 
-		$context = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue, $threads)->getContextByNid(2);
+		$service = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue, $threads);
+		$service->setViewer($viewer);
+		$context = $service->getContextByNid(2);
 
 		$this->assertFalse($context['filling']);
 	}
@@ -1307,13 +1338,16 @@ class StreamServiceTest extends TestCase {
 		$this->streamRequest->method('getStreamByNid')->willReturn($post);
 		$this->streamRequest->method('getDescendants')->willReturn([]);
 		$threads = $this->createMock(ThreadService::class);
-		$threads->expects($this->once())->method('fillBluesky')->with($post, null)->willReturn(true);
+		$viewer = (new Person())->setId(self::ACTOR_ID);
+		$threads->expects($this->once())->method('fillBluesky')->with($post, $viewer)->willReturn(true);
 		$threads->expects($this->never())->method('hasPendingBlueskyReplies');
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$queue->expects($this->once())->method('isThreadFillPending')->with($post->getId())->willReturn(true);
 		$queue->expects($this->never())->method('fillThread');
 
-		$context = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue, $threads)->getContextByNid(2);
+		$service = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue, $threads);
+		$service->setViewer($viewer);
+		$context = $service->getContextByNid(2);
 
 		$this->assertTrue($context['filling'], 'the context poll stays active until the queued deep-reply fill finishes');
 	}
@@ -1323,13 +1357,39 @@ class StreamServiceTest extends TestCase {
 		$this->streamRequest->method('getStreamByNid')->willReturn($post);
 		$this->streamRequest->method('getDescendants')->willReturn([]);
 		$threads = $this->createMock(ThreadService::class);
-		$threads->expects($this->once())->method('fillBluesky')->with($post, null)->willReturn(null);
+		$viewer = (new Person())->setId(self::ACTOR_ID);
+		$threads->expects($this->once())->method('fillBluesky')->with($post, $viewer)->willReturn(null);
+		$queue = $this->createMock(RemoteFetchQueue::class);
+		$queue->expects($this->never())->method('fillThread');
+
+		$service = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue, $threads);
+		$service->setViewer($viewer);
+		$context = $service->getContextByNid(2);
+
+		$this->assertTrue($context['filling']);
+	}
+
+	/**
+	 * Somebody who is not signed in is answered from what is stored: opening
+	 * a thread must not make this server fetch from other servers on an
+	 * anonymous caller's behalf.
+	 */
+	public function testAnAnonymousReaderDoesNotMakeTheServerFetchTheThread(): void {
+		$post = $this->note('https://remote.example/notes/2', self::ACTOR_ID, 'https://remote.example/notes/1');
+		$root = $this->note('https://remote.example/notes/1');
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->willReturn($root);
+		$this->streamRequest->method('getDescendants')->willReturn([]);
+		$threads = $this->createMock(ThreadService::class);
+		$threads->expects($this->never())->method('fillActivityPub');
+		$threads->expects($this->never())->method('fillBluesky');
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$queue->expects($this->never())->method('fillThread');
 
 		$context = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue, $threads)->getContextByNid(2);
 
-		$this->assertTrue($context['filling']);
+		$this->assertSame([$root], $context['ancestors']);
+		$this->assertFalse($context['filling']);
 	}
 
 	/** The replies the thread's author hid are left out, or marked when asked for. */
@@ -1456,7 +1516,8 @@ class StreamServiceTest extends TestCase {
 		$this->curlService->expects(self::exactly(7))->method('retrieveObject')
 			->willReturnCallback(static fn (string $url): array => $url === $bob->getOutbox()
 				? ['orderedItems' => $ids]
-				: ['type' => 'Note', 'id' => $url, 'attributedTo' => $bob->getId(), 'to' => [ACore::CONTEXT_PUBLIC], 'content' => 'A remote post']);
+				: ['type' => 'Note', 'id' => $url, 'attributedTo' => $bob->getId(), 'to' => [ACore::CONTEXT_PUBLIC], 'content' => 'A remote post',
+					'_contentType' => 'application/activity+json']);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->streamRequest->expects(self::exactly(6))->method('save')->willReturn(true);
 

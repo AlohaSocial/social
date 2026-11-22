@@ -95,7 +95,7 @@
 					class="settings__section"
 					:style="{ '--entry-index': index }"
 					:class="{ 'settings__section--danger': section.danger }">
-					<header class="settings__section-head">
+					<header v-if="searching || section.title !== activeGroup.title" class="settings__section-head">
 						<span class="settings__section-icon">
 							<component :is="section.icon" :size="20" />
 						</span>
@@ -274,7 +274,7 @@ export default {
 				},
 				{
 					id: 'blocked',
-					group: 'profile',
+					group: 'blocked',
 					icon: 'IconBlocked',
 					component: 'BlockedAccounts',
 					props: { embedded: true },
@@ -283,7 +283,7 @@ export default {
 				},
 				{
 					id: 'migration',
-					group: 'profile',
+					group: 'migration',
 					icon: 'IconMigration',
 					component: 'MigrationSettings',
 					title: t('social', 'Moving your account'),
@@ -402,8 +402,10 @@ export default {
 					id: 'profile',
 					icon: 'IconAccount',
 					title: t('social', 'Account and privacy'),
-					description: t('social', 'Who can find and contact you, what you blocked, and moving or deleting the account.'),
+					description: t('social', 'Who can find and contact you, and deleting the account.'),
 				},
+				// a group of one section, named and described by it
+				...this.ownGroups(['blocked'], 'IconBlocked'),
 				{
 					id: 'reading',
 					icon: 'IconReading',
@@ -428,6 +430,7 @@ export default {
 					title: t('social', 'Bluesky'),
 					description: t('social', 'Your Bluesky account and the Bluesky feeds you read.'),
 				},
+				...this.ownGroups(['migration'], 'IconMigration'),
 			]
 				.map((group) => ({ ...group, sections: this.sections.filter((section) => section.group === group.id) }))
 				.filter((group) => group.sections.length > 0)
@@ -486,6 +489,20 @@ export default {
 	methods: {
 		n,
 		t,
+
+		/**
+		 * Groups that are one section each, named and described by it, so the
+		 * page does not repeat the section's heading under the group's.
+		 *
+		 * @param {string[]} ids the sections, each in a group of its id
+		 * @param {string} icon the groups' icon
+		 * @return {object[]}
+		 */
+		ownGroups(ids, icon) {
+			return this.sections
+				.filter((section) => ids.includes(section.id))
+				.map((section) => ({ id: section.group, icon, title: section.title, description: section.lede }))
+		},
 
 		/**
 		 * @param {string} id a section

@@ -614,7 +614,10 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 				// `javascript:` and `data:`, and ids end up in `href`s. http(s)
 				// is fetched; `tag:` and `urn:` (Mastodon names conversations
 				// with `tag:`) are never dereferenced and harmless in a browser.
-				if (in_array(strtolower((string)parse_url($value, PHP_URL_SCHEME)), self::ID_SCHEMES, true)) {
+				// An http(s) id needs a host, as an AS_URL does.
+				$scheme = strtolower((string)parse_url($value, PHP_URL_SCHEME));
+				if (in_array($scheme, self::ID_SCHEMES, true)
+					&& (!in_array($scheme, ['http', 'https'], true) || HtmlSanitizer::isAllowedUrl($value))) {
 					return $value;
 				}
 				break;
@@ -623,9 +626,11 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 				return $value;
 			case self::AS_URL:
 				// `parse_url()` accepts `javascript:alert(1)`, and every URL here
-				// is either fetched or rendered as a link, so the scheme is checked.
+				// is either fetched or rendered as a link, so the scheme is checked,
+				// and a host required: a browser resolves `https:/path` against
+				// this server.
 				$scheme = strtolower((string)parse_url($value, PHP_URL_SCHEME));
-				if (in_array($scheme, ['http', 'https'], true)) {
+				if (in_array($scheme, ['http', 'https'], true) && HtmlSanitizer::isAllowedUrl($value)) {
 					return $value;
 				}
 				break;

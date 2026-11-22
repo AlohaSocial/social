@@ -1813,7 +1813,7 @@ describe('Composer', () => {
 			expect(store.createMedia).not.toHaveBeenCalled()
 		})
 
-		/** "Upload a video" on the Videos page: the file was picked before the composer opened */
+		/** "New video" on the Videos page: the file was picked before the composer opened */
 		it('uploads the files it was handed, open and without a click', async () => {
 			const file = new File(['x'], 'harbour.png', { type: 'image/png' })
 			const { wrapper, store } = mountComposer({ initialFiles: [file] })

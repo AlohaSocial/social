@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Post;
@@ -21,7 +22,6 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\PostDecorationService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -156,7 +156,7 @@ class AnnualReportApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/annual_reports/{year}/generate')]
 	public function annualReportGenerate(int $year): DataResponse {

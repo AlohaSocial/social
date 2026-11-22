@@ -221,6 +221,48 @@ class PersonTest extends TestCase {
 		$person->import($actor);
 	}
 
+	/**
+	 * A follow subscribes to the followed actor's followers collection: an
+	 * actor naming another server's collection would show its followers
+	 * whatever is addressed to that collection.
+	 */
+	public function testImportIgnoresCollectionsOnAnotherServer(): void {
+		$person = new Person();
+		$actor = $this->mastodonActor();
+		$actor['followers'] = 'https://victim.example/users/v/followers';
+		$actor['following'] = 'https://mastodon.social:8443/users/alice/following';
+
+		$person->import($actor);
+
+		$this->assertSame('', $person->getFollowers());
+		$this->assertSame('', $person->getFollowing(), 'another port is another server');
+		$this->assertSame('', $person->getOwnFollowers());
+	}
+
+	public function testACachedCollectionOnAnotherServerIsIgnoredToo(): void {
+		$person = new Person();
+
+		$person->importFromDatabase([
+			'id' => 'https://mastodon.social/users/alice',
+			'followers' => 'https://victim.example/users/v/followers',
+			'following' => 'https://MASTODON.social/users/alice/following',
+		]);
+
+		$this->assertSame('', $person->getFollowers());
+		$this->assertSame('https://MASTODON.social/users/alice/following', $person->getFollowing(), 'the host is compared without case');
+	}
+
+	public function testTheOwnFollowersAreTheOnesOnTheActorsServer(): void {
+		$person = new Person();
+		$person->setId('https://mastodon.social/users/alice');
+
+		$person->setFollowers('https://mastodon.social/users/alice/followers');
+		$this->assertSame('https://mastodon.social/users/alice/followers', $person->getOwnFollowers());
+
+		$person->setFollowers('https://victim.example/users/v/followers');
+		$this->assertSame('', $person->getOwnFollowers());
+	}
+
 	public function testImportAcceptsADocumentThatNamesNoKeyOwner(): void {
 		$person = new Person();
 		$actor = $this->mastodonActor();

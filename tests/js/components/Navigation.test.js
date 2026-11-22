@@ -1522,6 +1522,22 @@ describe('Navigation', () => {
 			expect(wrapper.findComponent({ name: 'Composer' }).props('initialFiles')).toEqual([file])
 		})
 
+		/** Drafts are picked from the dialog that writes them, never while editing a post. */
+		it('offers the drafts in the New post dialog', async () => {
+			const wrapper = mountNavigation()
+			eventBus.emit('composer-open', {})
+			await flushPromises()
+			await vi.waitFor(() => expect(wrapper.find('.modal-composer__header').findComponent({ name: 'DraftsButton' }).exists()).toBe(true))
+		})
+
+		it('leaves the drafts out of an edit', async () => {
+			const wrapper = mountNavigation()
+			eventBus.emit('composer-edit', { edit: { id: '123', content: '<p>Before</p>', media_attachments: [] } })
+			await flushPromises()
+			await vi.waitFor(() => expect(wrapper.findComponent({ name: 'PostEditForm' }).exists()).toBe(true))
+			expect(wrapper.find('.modal-composer__header').findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
+		})
+
 		it('retains a failed edit, prevents duplicate saves and closes only on success', async () => {
 			const wrapper = mountNavigation()
 			const post = { id: '123', content: '<p>Before</p>', media_attachments: [] }

@@ -1223,6 +1223,7 @@ class ActivityPubControllerTest extends TestCase {
 		$this->accountService->method('getCurrentViewer')->willReturn($viewer);
 		$this->streamService->expects($this->once())->method('setViewer')->with($viewer);
 		$stream = $this->createMock(Stream::class);
+		$stream->method('isLocal')->willReturn(true);
 		$this->streamService->method('getStreamById')->with(self::SOCIAL_URL . '@alice/abc123', true)->willReturn($stream);
 		$stream->expects($this->once())->method('setCompleteDetails')->with(false);
 
@@ -1234,9 +1235,28 @@ class ActivityPubControllerTest extends TestCase {
 		$this->accountService->method('getCurrentViewer')->willThrowException(new AccountDoesNotExistException());
 		$this->streamService->expects($this->never())->method('setViewer');
 		$stream = $this->createStub(Stream::class);
+		$stream->method('isLocal')->willReturn(true);
 		$this->streamService->method('getStreamById')->willReturn($stream);
 
 		$this->assertActivityPubResponse($this->controller->displayPost('alice', 'abc123'), $stream);
+	}
+
+	/**
+	 * A row under one of this instance's post ids that was not written here
+	 * was taken from another server's answer, and serving it would vouch for
+	 * it as the local author's own.
+	 */
+	public function testDisplayPostOfARowNotWrittenHereIs404(): void {
+		$this->acceptHeader('application/activity+json');
+		$this->accountService->method('getCurrentViewer')->willThrowException(new AccountDoesNotExistException());
+		$stream = $this->createMock(Stream::class);
+		$stream->method('isLocal')->willReturn(false);
+		$stream->expects($this->never())->method('setCompleteDetails');
+		$this->streamService->method('getStreamById')->willReturn($stream);
+
+		$response = $this->controller->displayPost('alice', 'abc123');
+
+		$this->assertFailure($response, StreamNotFoundException::class, Http::STATUS_NOT_FOUND);
 	}
 
 	public function testDisplayPostOfUnknownStreamIs404WithTheLookedUpId(): void {
@@ -1672,6 +1692,7 @@ class ActivityPubControllerTest extends TestCase {
 		$this->signedReader = $this->createStub(Person::class);
 		$this->streamService->expects($this->once())->method('setViewer')->with($this->signedReader);
 		$stream = $this->createStub(Stream::class);
+		$stream->method('isLocal')->willReturn(true);
 		$this->streamService->method('getStreamById')->willReturn($stream);
 
 		$this->assertActivityPubResponse($this->controller->displayPost('alice', 'abc123'), $stream);

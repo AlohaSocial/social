@@ -11,11 +11,11 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\ExternalUserException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\SignupChallengeService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -84,7 +84,7 @@ class SignupController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/signup/challenge')]
 	public function challenge(): DataResponse {
 		if ($this->userSession->isLoggedIn()) {
@@ -103,7 +103,7 @@ class SignupController extends Controller {
 	 */
 	#[PublicPage]
 	#[UseSession]
-	#[AnonRateLimit(limit: 10, period: 3600)]
+	#[AnonymousRateLimit(limit: 10, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/signup')]
 	public function submit(
 		string $handle = '',
@@ -164,7 +164,7 @@ class SignupController extends Controller {
 	 */
 	#[PublicPage]
 	#[UseSession]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/signup/confirm')]
 	public function confirm(string $code = ''): DataResponse {
 		if ($this->userSession->isLoggedIn()) {
@@ -208,7 +208,7 @@ class SignupController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[UseSession]
-	#[AnonRateLimit(limit: 20, period: 3600)]
+	#[AnonymousRateLimit(limit: 20, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/signup/verify/{token}')]
 	public function verify(string $token): Response {
 		$state = $this->signupService->pageState();

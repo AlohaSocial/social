@@ -11,12 +11,12 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InsufficientScopeException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\MemoriesService;
 use OCA\Social\Service\PostDecorationService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -53,7 +53,7 @@ class MemoriesController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[UserRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/memories/on_this_day')]
 	public function onThisDay(): DataResponse {
@@ -84,7 +84,7 @@ class MemoriesController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[UserRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/memories/recap')]
 	public function recap(): DataResponse {

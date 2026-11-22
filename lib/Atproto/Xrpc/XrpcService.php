@@ -18,8 +18,10 @@ use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Car;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\Commit;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Mst;
+use OCA\Social\Atproto\Protocol\MstReader;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
@@ -355,9 +357,9 @@ class XrpcService {
 	}
 
 	/**
-	 * The record with its proof: the commit, the tree and the record, as a
-	 * CAR with the commit as root. The whole tree rather than the one path,
-	 * which is a superset of the proof a verifier walks.
+	 * The record with its proof: the commit, the tree's nodes on the path
+	 * from its root to the record, and the record, as a CAR with the commit
+	 * as root.
 	 */
 	private function getSyncRecord(string $did, string $collection, string $rkey): XrpcBytes {
 		$identity = $this->repoIdentity($did);
@@ -367,12 +369,8 @@ class XrpcService {
 		if ($head === null || $commit === null) {
 			throw new XrpcException(404, 'RepoNotFound', 'Repository has no commits yet');
 		}
-		$blocks = [$head->commitCid => $commit];
-		$this->repoRequest->eachBlock($identity->did, static function (Cid $cid, string $kind, string $bytes) use (&$blocks): void {
-			if ($kind === AtprotoRepoRequest::BLOCK_MST) {
-				$blocks[$cid->toString()] = $bytes;
-			}
-		});
+		$path = MstReader::path(Commit::fromBytes($commit)->data, $record->path(), fn (Cid $cid): ?string => $this->repoRequest->getBlock($identity->did, $cid->toString()));
+		$blocks = [$head->commitCid => $commit] + $path;
 		$blocks[$record->cid->toString()] = $record->bytes;
 
 		return new XrpcBytes(Car::encode([Cid::parse($head->commitCid)], $blocks), 'application/vnd.ipld.car');

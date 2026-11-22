@@ -17,11 +17,11 @@ use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Atproto\Xrpc\XrpcService;
 use OCA\Social\Exceptions\AtprotoKeysSealedException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Response\StreamedPiecesResponse;
 use OCA\Social\Response\StreamedRemoteResponse;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -56,7 +56,7 @@ class AtprotoXrpcController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/xrpc/{method}', requirements: ['method' => '[a-zA-Z0-9._-]+'])]
 	public function query(string $method): Response {
 		try {
@@ -80,7 +80,7 @@ class AtprotoXrpcController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/xrpc/{method}', requirements: ['method' => '[a-zA-Z0-9._-]+'], postfix: 'procedure')]
 	public function procedure(string $method): Response {
 		try {

@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Identity\DnsLookup;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Move\PdsClient;
 use OCA\Social\Atproto\OAuth\PermissionSets;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -27,11 +28,15 @@ class PermissionSetsTest extends TestCase {
 	private array $lookedUp = [];
 	private array $cached = [];
 	private int $fetched = 0;
+	private int $now = 1000;
+	/** how long each DNS lookup takes */
+	private int $lookupTakes = 0;
 
 	private function sets(): PermissionSets {
 		$dns = $this->createMock(DnsLookup::class);
 		$dns->method('txt')->willReturnCallback(function (string $name): array {
 			$this->lookedUp[] = $name;
+			$this->now += $this->lookupTakes;
 
 			return $name === '_lexicon.feed.example.app' ? ['did=' . self::AUTHORITY] : [];
 		});
@@ -66,7 +71,10 @@ class PermissionSetsTest extends TestCase {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
 
-		return new PermissionSets($dns, $plc, $pds, $factory, new NullLogger());
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
+
+		return new PermissionSets($dns, $plc, $pds, $factory, new NullLogger(), $time);
 	}
 
 	public function testASetIsResolvedFromItsAuthoritysRepositoryAndKeptToItsNamespace(): void {
@@ -88,5 +96,18 @@ class PermissionSetsTest extends TestCase {
 		$this->assertCount(1, $sets->expand(self::SET, ''), 'an rpc permission without an audience goes');
 		$this->assertSame(1, $this->fetched, 'resolved once, then kept');
 		$this->assertNull($sets->resolve('app.unknown.feed.set'));
+	}
+
+	public function testARequestStopsFetchingSetsOnceItsTimeIsSpent(): void {
+		$sets = $this->sets();
+		$this->lookupTakes = 6;
+
+		$this->assertNull($sets->resolve('app.slow.one.set'));
+		$this->assertNull($sets->resolve('app.slow.two.set'));
+		$this->assertNull($sets->resolve('app.slow.three.set'));
+		$this->assertSame(['_lexicon.one.slow.app', '_lexicon.two.slow.app'], $this->lookedUp, 'the third is not looked up');
+		$this->assertArrayNotHasKey(md5('app.slow.three.set'), $this->cached, 'a set not looked for is not a failure to remember');
+
+		$this->assertNotNull($this->sets()->resolve(self::SET), 'the next request has its own time');
 	}
 }

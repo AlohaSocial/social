@@ -237,7 +237,7 @@ class NotificationControllerTest extends TestCase {
 		$client = $this->createStub(SocialClient::class);
 		$client->method('getAuthUserId')->willReturn('alice');
 		$client->method('getAuthScopes')->willReturn($scopes);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 	}
 
 	private function withoutCredentials(): void {
@@ -363,7 +363,7 @@ class NotificationControllerTest extends TestCase {
 
 	public function testARevokedTokenIsAnUnauthorizedAnswer(): void {
 		$this->headers['Authorization'] = 'Bearer token-1';
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willThrowException(new ClientNotFoundException());
 
 		$response = $this->controller()->get(7);
@@ -469,7 +469,7 @@ class NotificationControllerTest extends TestCase {
 		$client = $this->createStub(SocialClient::class);
 		$client->method('getAuthUserId')->willReturn('');
 		$client->method('getAuthScopes')->willReturn(['read']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$response = $this->controller()->indexV2();
 

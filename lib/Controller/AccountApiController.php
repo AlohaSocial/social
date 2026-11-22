@@ -16,6 +16,7 @@ use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\UploadFailedException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -54,7 +55,6 @@ use OCA\Social\Tools\Nid;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -527,7 +527,7 @@ class AccountApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	public function accountGet(string $id): DataResponse {
 		try {
@@ -547,7 +547,7 @@ class AccountApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/lookup')]
 	public function accountLookup(string $acct = ''): DataResponse {
@@ -575,7 +575,7 @@ class AccountApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/search')]
 	public function accountsSearch(
@@ -695,7 +695,7 @@ class AccountApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/{account}/statuses', requirements: ['account' => '.+'])]
 	public function accountStatuses(
@@ -831,7 +831,7 @@ class AccountApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/{account}/following', requirements: ['account' => '.+'])]
 	public function accountFollowing(
@@ -854,7 +854,7 @@ class AccountApiController extends MastodonApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/{account}/followers', requirements: ['account' => '.+'])]
 	public function accountFollowers(

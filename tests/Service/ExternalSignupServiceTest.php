@@ -84,6 +84,7 @@ class ExternalSignupServiceTest extends TestCase {
 	private FrozenClock $mailClock;
 	/** the challenges of the service service() made last */
 	private SignupChallengeService $challenges;
+	private ?\OCA\Social\Service\ModerationService $moderation = null;
 
 	protected function setUp(): void {
 		$this->mailTable = new InMemoryDurableCacheRequest();
@@ -215,6 +216,7 @@ class ExternalSignupServiceTest extends TestCase {
 			$mailLimiter,
 			$this->challenges,
 			new SignupReturn($url, $config),
+			$this->moderation,
 		);
 	}
 
@@ -688,6 +690,37 @@ class ExternalSignupServiceTest extends TestCase {
 	/** An invitation an external user made before the rule counts for nothing. */
 	public function testAnExternalUsersInvitationNeitherSkipsApprovalNorOpensInviteOnly(): void {
 		$this->users->method('isExternalUid')->willReturnCallback(static fn (string $uid): bool => $uid === 'admin');
+		$this->invites->expects($this->never())->method('consume');
+
+		$this->mode = ExternalUserService::MODE_INVITE;
+		$this->assertFalse($this->service()->pageState('good')['open']);
+
+		$this->verify = false;
+		$this->mode = ExternalUserService::MODE_APPROVAL;
+		$this->users->expects($this->never())->method('createAccount');
+		$this->assertSame('approval', $this->submit('good')['state']);
+	}
+
+	/**
+	 * An invited registration skips approval, so a suspended account's
+	 * invitation would be a way back in past the approval queue.
+	 */
+	public function testASuspendedAccountCannotInvite(): void {
+		$this->users->method('usersMayInvite')->willReturn(true);
+		$this->moderation = $this->createStub(\OCA\Social\Service\ModerationService::class);
+		$this->moderation->method('isSuspendedUser')->willReturnCallback(static fn (string $uid): bool => $uid === 'mallory');
+		$this->invites->expects($this->never())->method('create');
+
+		$this->assertFalse($this->service()->mayInvite('mallory'));
+		$this->assertTrue($this->service()->mayInvite('carol'));
+		$this->expectException(ExternalUserException::class);
+		$this->service()->createInvite('mallory', '', 1, 7, false);
+	}
+
+	/** An invitation made before its maker was suspended counts for nothing. */
+	public function testASuspendedAccountsInvitationNeitherSkipsApprovalNorOpensInviteOnly(): void {
+		$this->moderation = $this->createStub(\OCA\Social\Service\ModerationService::class);
+		$this->moderation->method('isSuspendedUser')->willReturnCallback(static fn (string $uid): bool => $uid === 'admin');
 		$this->invites->expects($this->never())->method('consume');
 
 		$this->mode = ExternalUserService::MODE_INVITE;

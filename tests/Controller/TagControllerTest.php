@@ -290,7 +290,7 @@ class TagControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read', 'write']);
-		$this->clientService->method('getFromToken')->with('sometoken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('sometoken')->willReturn($client);
 
 		$response = $this->controller('Bearer sometoken')->follow('nextcloud');
 
@@ -299,7 +299,7 @@ class TagControllerTest extends TestCase {
 
 	public function testARevokedTokenIsA401(): void {
 		$this->csrf = false;
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willThrowException(new ClientNotFoundException('the access_token was revoked'));
 
 		$response = $this->controller('Bearer stale')->get('nextcloud');
@@ -312,7 +312,7 @@ class TagControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(
 			Http::STATUS_FORBIDDEN,
@@ -331,7 +331,7 @@ class TagControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:statuses', 'write:statuses']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(
 			Http::STATUS_FORBIDDEN,
@@ -345,7 +345,7 @@ class TagControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:follows', 'write:follows']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer follows')->follow('nextcloud')->getStatus());
 		$this->page([]);

@@ -245,14 +245,36 @@ class PixelfedAdminServiceTest extends TestCase {
 		$author->setId('https://cloud.example/@alice');
 		$this->accountService->method('getFromId')->willReturn($author);
 
+		$this->adminApiService->expects($this->exactly(2))->method('assertMayActOn')
+			->with('https://cloud.example/@alice', 'admin');
+
 		$this->postReviewService->expects($this->once())->method('approve')->with(7, $author);
-		$this->assertSame(['success' => true], $this->service->handleAutospam(7, 'approve'));
+		$this->assertSame(['success' => true], $this->service->handleAutospam(7, 'approve', 'admin'));
 
 		$this->postReviewService->expects($this->once())->method('reject')->with(7);
-		$this->assertSame(['success' => true], $this->service->handleAutospam(7, 'delete'));
+		$this->assertSame(['success' => true], $this->service->handleAutospam(7, 'delete', 'admin'));
 
 		$this->expectException(InvalidArgumentException::class);
-		$this->service->handleAutospam(7, 'cw');
+		$this->service->handleAutospam(7, 'cw', 'admin');
+	}
+
+	/** The same rule as the account actions: not their own post, not an administrator's unless they are one. */
+	public function testAHeldPostTheModeratorMayNotActOnIsLeftWaiting(): void {
+		$held = (new HeldPost())->setId(7)->setActorId('https://cloud.example/@alice');
+		$this->postReviewService->method('heldPost')->with(7)->willReturn($held);
+		$this->adminApiService->method('assertMayActOn')
+			->willThrowException(new ModerationNotAllowedException('a moderator cannot act on their own account'));
+		$this->postReviewService->expects($this->never())->method('approve');
+		$this->postReviewService->expects($this->never())->method('reject');
+
+		foreach (['approve', 'delete'] as $action) {
+			try {
+				$this->service->handleAutospam(7, $action, 'alice');
+				$this->fail($action . ' was applied');
+			} catch (ModerationNotAllowedException $e) {
+				$this->addToAssertionCount(1);
+			}
+		}
 	}
 
 	/** Pixelfed's `unlisted` is this app's silence, its `banned` the deny list. */

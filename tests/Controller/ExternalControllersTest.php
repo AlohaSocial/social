@@ -208,14 +208,14 @@ class ExternalControllersTest extends TestCase {
 		}
 		// the code is typed into the page, with its CSRF token, in the session that made the registration
 		$this->assertNotContains(NoCSRFRequired::class, self::attributes(SignupController::class, 'confirm'));
-		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'confirm'));
+		$this->assertContains(\OCA\Social\Middleware\AnonymousRateLimit::class, self::attributes(SignupController::class, 'confirm'));
 		foreach (['submit', 'confirm'] as $method) {
 			$this->assertContains(\OCP\AppFramework\Http\Attribute\UseSession::class, self::attributes(SignupController::class, $method), $method);
 		}
-		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'challenge'));
+		$this->assertContains(\OCA\Social\Middleware\AnonymousRateLimit::class, self::attributes(SignupController::class, 'challenge'));
 		// the form is posted with the guest page's CSRF token
 		$this->assertNotContains(NoCSRFRequired::class, self::attributes(SignupController::class, 'submit'));
-		$this->assertContains(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class, self::attributes(SignupController::class, 'submit'));
+		$this->assertContains(\OCA\Social\Middleware\AnonymousRateLimit::class, self::attributes(SignupController::class, 'submit'));
 	}
 
 	/**

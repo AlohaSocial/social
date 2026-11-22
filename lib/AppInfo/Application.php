@@ -40,6 +40,7 @@ use OCA\Social\Listeners\FileCommentsListener;
 use OCA\Social\Listeners\FilesScriptsListener;
 use OCA\Social\Listeners\GroupListListener;
 use OCA\Social\Listeners\PasswordUpdatedListener;
+use OCA\Social\Listeners\PostReferenceListener;
 use OCA\Social\Listeners\ProfileSectionListener;
 use OCA\Social\Listeners\UserAccountListener;
 use OCA\Social\Listeners\UserDeletedListener;
@@ -158,6 +159,9 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(PostPublishedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(PostEditedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(PostDeletedEvent::class, FileCommentsListener::class);
+		// a link preview of an edited or deleted post is not served from the cache
+		$context->registerEventListener(PostEditedEvent::class, PostReferenceListener::class);
+		$context->registerEventListener(PostDeletedEvent::class, PostReferenceListener::class);
 		$context->registerEventListener(CommentAddedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(CommentUpdatedEvent::class, FileCommentsListener::class);
 		$context->registerEventListener(CommentDeletedEvent::class, FileCommentsListener::class);

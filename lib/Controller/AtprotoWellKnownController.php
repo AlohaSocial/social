@@ -14,9 +14,9 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -48,7 +48,7 @@ class AtprotoWellKnownController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/.well-known/atproto-did')]
 	public function atprotoDid(string $handle = ''): Response {
 		if (!$this->config->isEnabled()) {
@@ -75,7 +75,7 @@ class AtprotoWellKnownController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/.well-known/did.json')]
 	public function didJson(): Response {
 		if (!$this->config->isEnabled()) {

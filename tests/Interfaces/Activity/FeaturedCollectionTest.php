@@ -102,7 +102,7 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 		$this->actionsRequest->method('getAction')->willThrowException(new ActionDoesNotExistException());
 		$this->pinned([]);
 		$this->curlService->method('retrieveObject')->with(self::FEATURED)
-			->willReturn(['type' => 'OrderedCollection', 'orderedItems' => [self::POST]]);
+			->willReturn(['_contentType' => 'application/activity+json', 'type' => 'OrderedCollection', 'orderedItems' => [self::POST]]);
 		/** @var ACore|null $saved */
 		$saved = null;
 		$this->capture($this->actionsRequest, 'save', $saved, true);
@@ -118,7 +118,7 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 		$this->pinned([self::POST, self::REMOTE_URL . '/users/bob/statuses/old']);
 		$this->actionsRequest->method('getAction')->willReturn(new Like());
 		$this->curlService->method('retrieveObject')
-			->willReturn(['type' => 'OrderedCollection', 'orderedItems' => [self::POST]]);
+			->willReturn(['_contentType' => 'application/activity+json', 'type' => 'OrderedCollection', 'orderedItems' => [self::POST]]);
 		$this->actionsRequest->expects($this->once())->method('deleteAction')
 			->with(self::ACTOR, self::REMOTE_URL . '/users/bob/statuses/old', PinService::TYPE);
 
@@ -130,8 +130,8 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 		$this->actionsRequest->method('getAction')->willThrowException(new ActionDoesNotExistException());
 		$this->pinned([]);
 		$this->curlService->method('retrieveObject')->willReturnMap([
-			[self::FEATURED, true, ['type' => 'OrderedCollection', 'first' => self::FEATURED . '?page=1']],
-			[self::FEATURED . '?page=1', true, ['type' => 'OrderedCollectionPage', 'orderedItems' => [['id' => self::POST, 'type' => 'Note']]]],
+			[self::FEATURED, true, ['_contentType' => 'application/activity+json', 'type' => 'OrderedCollection', 'first' => self::FEATURED . '?page=1']],
+			[self::FEATURED . '?page=1', true, ['_contentType' => 'application/activity+json', 'type' => 'OrderedCollectionPage', 'orderedItems' => [['id' => self::POST, 'type' => 'Note']]]],
 		]);
 
 		$this->assertSame(1, $this->featured->refresh($this->bob()));
@@ -141,6 +141,16 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 		$this->curlService->method('retrieveObject')->willThrowException(new \RuntimeException('down'));
 		$this->actionsRequest->expects($this->never())->method('deleteAction');
 		$this->actionsRequest->expects($this->never())->method('save');
+
+		$this->assertSame(-1, $this->featured->refresh($this->bob()));
+	}
+
+	/** A collection not served as ActivityPub is not the actor's, so the pins stay as they are. */
+	public function testRefreshIgnoresACollectionNotServedAsActivityPub(): void {
+		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/json', 'type' => 'OrderedCollection', 'orderedItems' => [],
+		]);
+		$this->actionsRequest->expects($this->never())->method('deleteAction');
 
 		$this->assertSame(-1, $this->featured->refresh($this->bob()));
 	}
@@ -155,7 +165,7 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->pinned([]);
 		$this->curlService->method('retrieveObject')
-			->willReturn(['type' => 'OrderedCollection', 'orderedItems' => [self::POST]]);
+			->willReturn(['_contentType' => 'application/activity+json', 'type' => 'OrderedCollection', 'orderedItems' => [self::POST]]);
 		$this->actionsRequest->expects($this->never())->method('save');
 
 		$this->assertSame(0, $this->featured->refresh($this->bob()));
@@ -164,7 +174,7 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 	public function testRefreshRefusesAnEmbeddedPostBySomebodyElse(): void {
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->pinned([]);
-		$this->curlService->method('retrieveObject')->willReturn(['type' => 'OrderedCollection', 'orderedItems' => [
+		$this->curlService->method('retrieveObject')->willReturn(['_contentType' => 'application/activity+json', 'type' => 'OrderedCollection', 'orderedItems' => [
 			['id' => self::POST, 'type' => 'Note', 'attributedTo' => self::REMOTE_URL . '/users/carol'],
 		]]);
 		$this->actionsRequest->expects($this->never())->method('save');

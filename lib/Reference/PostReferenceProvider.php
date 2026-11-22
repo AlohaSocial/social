@@ -112,7 +112,7 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 */
 	private function parse(string $referenceText): ?array {
 		$referenceText = trim($referenceText);
-		foreach ($this->prefixes() as $prefix) {
+		foreach (self::prefixesOf($this->urlGenerator) as $prefix) {
 			if (!str_starts_with($referenceText, $prefix)) {
 				continue;
 			}
@@ -134,8 +134,8 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 *
 	 * @return string[]
 	 */
-	private function prefixes(): array {
-		$base = rtrim($this->urlGenerator->linkToRouteAbsolute('social.Navigation.navigate'), '/') . '/';
+	public static function prefixesOf(IURLGenerator $urlGenerator): array {
+		$base = rtrim($urlGenerator->linkToRouteAbsolute('social.Navigation.navigate'), '/') . '/';
 		$other = str_contains($base, '/index.php/')
 			? str_replace('/index.php/', '/', $base)
 			: (string)preg_replace('#/apps/social/$#', '/index.php/apps/social/', $base);
@@ -150,7 +150,7 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 		$post = null;
 		if (strlen($token) < self::ID_TAIL_LENGTH && (string)(int)$token === $token) {
 			try {
-				$post = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($token));
+				$post = $this->streamService->getStreamByNidUnder($username, \OCA\Social\Tools\Nid::fromStorage($token));
 			} catch (StreamNotFoundException $e) {
 				// not a nid this server knows; an id tail of that length is rare but not impossible
 			}
@@ -212,8 +212,9 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 * The card's text: behind a content warning, the warning and nothing else.
 	 */
 	private function textOf(Stream $post): string {
-		if ($post->getSummary() !== '' && ($post->isSensitive() || $post->getContent() === '')) {
-			return $this->l10n->t('Content warning: %s', [self::excerpt($post->getSummary())]);
+		$warning = self::warningOf($post, $this->l10n);
+		if ($warning !== null) {
+			return $warning;
 		}
 
 		$text = self::excerpt($post->getContent());
@@ -244,6 +245,24 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 		}
 
 		return ($author->getAvatar() !== '') ? $author->getAvatar() : null;
+	}
+
+	/**
+	 * What to show instead of a post's text when it is behind a content
+	 * warning, or null when it is not.
+	 */
+	public static function warningOf(Stream $post, IL10N $l10n, int $length = self::EXCERPT_LENGTH): ?string {
+		return self::isBehindWarning($post) ? self::warning($l10n, self::excerpt($post->getSummary(), $length)) : null;
+	}
+
+	/** Whether only a post's content warning may be shown in place of its text. */
+	public static function isBehindWarning(Stream $post): bool {
+		return $post->getSummary() !== '' && ($post->isSensitive() || $post->getContent() === '');
+	}
+
+	/** A content warning, already plain text, worded as one. */
+	public static function warning(IL10N $l10n, string $summary): string {
+		return $l10n->t('Content warning: %s', [$summary]);
 	}
 
 	/**

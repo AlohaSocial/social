@@ -1139,6 +1139,10 @@ class ActivityPubController extends Controller {
 			$postId = $this->configService->getSocialUrl() . '@' . $username . '/' . $token;
 			try {
 				$stream = $this->streamService->getStreamById($postId, true);
+				// a row under a local id that was not written here is not ours to serve
+				if (!$stream->isLocal()) {
+					throw new StreamNotFoundException();
+				}
 			} catch (StreamNotFoundException $e) {
 				return $this->fail($e, ['stream' => $postId], Http::STATUS_NOT_FOUND);
 			}

@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoChatMessageRequest;
 use OCA\Social\Db\ReactionsRequest;
+use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -52,6 +53,8 @@ class ChatStoreTest extends TestCase {
 	private array $savedReactions = [];
 	/** @var list<array{string, string, string}> */
 	private array $deletedReactions = [];
+	/** @var list<string> the stream and account of each recipient added to a stored message */
+	private array $recipientsAdded = [];
 	/** @var array<string, array{did: string, noteId: string, convoId: string, messageId: string}> `social_atp_chat_message`, by note and account */
 	private array $rows = [];
 
@@ -61,6 +64,9 @@ class ChatStoreTest extends TestCase {
 	private function store(bool $failActorResolution = false, array $unknown = []): ChatStore {
 		$posts = $this->createMock(PostStore::class);
 		$posts->method('storeMessage')->willReturnCallback(function (array $create): bool {
+			if (isset($this->streams[(string)$create['object']['id']])) {
+				return false;
+			}
 			$this->stored[] = $create;
 			$note = new Note();
 			$note->setId((string)$create['object']['id']);
@@ -121,7 +127,14 @@ class ChatStoreTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 
-		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions, $this->messages());
+		$streamDest = $this->createMock(StreamDestRequest::class);
+		$streamDest->method('addDirectRecipient')->willReturnCallback(function (Stream $stream, string $actorId): bool {
+			$this->recipientsAdded[] = $stream->getId() . ' ' . $actorId;
+
+			return true;
+		});
+
+		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions, $this->messages(), $streamDest);
 	}
 
 	/** `social_atp_chat_message` held in `$rows`. */
@@ -168,6 +181,28 @@ class ChatStoreTest extends TestCase {
 		$this->assertSame([['type' => 'Mention', 'href' => 'https://social.test/users/alice', 'name' => '@alice.social.test']], $note['tag']);
 		$this->assertStringContainsString('href="https://example.com"', $note['content']);
 		$this->assertSame('', $note['inReplyTo'], 'the first message starts the conversation');
+	}
+
+	public function testASecondAccountHereInTheConversationIsAddedToTheMessage(): void {
+		$store = $this->store();
+		$store->received($this->alice(), 'convo1', self::message('m1', 'to both of you'));
+		$dave = new Identity(2, 'https://social.test/users/dave', 'did:plc:dave2222222222222222222222', 'dave.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0);
+
+		$this->assertFalse($store->received($dave, 'convo1', self::message('m1', 'to both of you')), 'stored once');
+
+		$this->assertCount(1, $this->stored);
+		$this->assertSame(['https://bsky.app/profile/' . self::BOB . '/convo/convo1/m1 https://social.test/users/dave'], $this->recipientsAdded);
+	}
+
+	public function testAnOwnMessageAnotherAccountHereStoredFirstReachesTheAccountToo(): void {
+		$store = $this->store();
+		$dave = new Identity(2, 'https://social.test/users/dave', 'did:plc:dave2222222222222222222222', 'dave.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0);
+		$store->received($dave, 'convo1', self::message('m1', 'alice wrote this in a Bluesky app', self::ALICE));
+
+		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m1', 'alice wrote this in a Bluesky app', self::ALICE), [self::ALICE, 'did:plc:dave2222222222222222222222']));
+
+		$this->assertCount(1, $this->stored);
+		$this->assertSame(['https://bsky.app/profile/' . self::ALICE . '/convo/convo1/m1 https://social.test/users/alice'], $this->recipientsAdded);
 	}
 
 	public function testEachMessageAnswersTheOneBeforeItSentHereOrReceived(): void {

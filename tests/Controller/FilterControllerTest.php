@@ -804,7 +804,7 @@ class FilterControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:filters', 'write:filters']);
-		$this->clientService->method('getFromToken')->with('sometoken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('sometoken')->willReturn($client);
 
 		$response = $this->controller('Bearer sometoken')->create('spoilers', ['home']);
 
@@ -813,7 +813,7 @@ class FilterControllerTest extends TestCase {
 
 	public function testARevokedTokenIsA401(): void {
 		$this->csrf = false;
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willThrowException(new ClientNotFoundException('the access_token was revoked'));
 
 		$response = $this->controller('Bearer stale')->index();
@@ -826,7 +826,7 @@ class FilterControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:filters']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(
 			Http::STATUS_FORBIDDEN,
@@ -846,7 +846,7 @@ class FilterControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:statuses', 'write:statuses']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(
 			Http::STATUS_FORBIDDEN,
@@ -1056,7 +1056,7 @@ class FilterControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:filters']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer readonly')->aiContent()->getStatus());
 		$this->assertSame(
@@ -1070,7 +1070,7 @@ class FilterControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:filters', 'write:filters']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(['hide' => true], $this->controller('Bearer sometoken')->aiContentUpdate('1')->getData());
 	}
@@ -1079,7 +1079,7 @@ class FilterControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:statuses', 'write:statuses']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller('Bearer statuses')->aiContent()->getStatus());
 		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller('Bearer statuses')->aiContentUpdate('1')->getStatus());

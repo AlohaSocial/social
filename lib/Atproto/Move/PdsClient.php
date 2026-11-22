@@ -70,7 +70,7 @@ class PdsClient {
 	 * @return array{status: int, body: array}
 	 * @throws MoveFailure when the PDS cannot be reached, or this server sent it too many sign-ins of late
 	 */
-	public function call(string $pds, string $method, string $verb = 'GET', array $query = [], ?array $json = null, $bytes = null, string $type = '', string $token = ''): array {
+	public function call(string $pds, string $method, string $verb = 'GET', array $query = [], #[\SensitiveParameter] ?array $json = null, $bytes = null, string $type = '', #[\SensitiveParameter] string $token = ''): array {
 		if ($method === self::SIGN_IN) {
 			$this->countSignIn($pds);
 		}
@@ -112,7 +112,7 @@ class PdsClient {
 	 * @return array{status: int, path: string, size: int, type: string}
 	 * @throws MoveFailure when the PDS cannot be reached, or the answer is larger than $max (`repo-too-large`, `blob-too-large`)
 	 */
-	public function bytes(string $pds, string $method, array $query, int $max, string $token = ''): array {
+	public function bytes(string $pds, string $method, array $query, int $max, #[\SensitiveParameter] string $token = ''): array {
 		$headers = $token === '' ? [] : ['Authorization' => 'Bearer ' . $token];
 		try {
 			// a stream rather than a document: a repository is not held to the
@@ -203,7 +203,7 @@ class PdsClient {
 	 * @return array the answer
 	 * @throws MoveFailure with the PDS's own error
 	 */
-	public function expect(string $pds, string $method, string $verb = 'GET', array $query = [], ?array $json = null, $bytes = null, string $type = '', string $token = ''): array {
+	public function expect(string $pds, string $method, string $verb = 'GET', array $query = [], #[\SensitiveParameter] ?array $json = null, $bytes = null, string $type = '', #[\SensitiveParameter] string $token = ''): array {
 		$answer = $this->call($pds, $method, $verb, $query, $json, $bytes, $type, $token);
 		if ($answer['status'] !== 200) {
 			throw self::refused($method, $answer);

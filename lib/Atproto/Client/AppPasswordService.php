@@ -78,7 +78,7 @@ class AppPasswordService {
 	 *
 	 * @return int|null its id
 	 */
-	public function verify(string $userId, string $password): ?int {
+	public function verify(string $userId, #[\SensitiveParameter] string $password): ?int {
 		$password = strtolower(trim($password));
 		if (preg_match('/^[a-z2-7]{4}(-[a-z2-7]{4}){3}$/D', $password) !== 1) {
 			return null;

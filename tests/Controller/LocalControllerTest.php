@@ -23,6 +23,7 @@ use OCA\Social\Exceptions\FollowSameAccountException;
 use OCA\Social\Exceptions\InvalidHandleException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -46,7 +47,6 @@ use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
@@ -158,6 +158,7 @@ class LocalControllerTest extends TestCase {
 
 	private ?\OCP\IUserManager $userManager = null;
 	private ?\OCP\IUserSession $userSession = null;
+	private ?\OCA\Social\Service\ClientService $clientService = null;
 
 	private function controller(?string $userId = 'alice'): LocalController {
 		return new LocalController(
@@ -182,6 +183,10 @@ class LocalControllerTest extends TestCase {
 
 				return $identities;
 			})(),
+			null,
+			null,
+			null,
+			$this->clientService,
 		);
 	}
 
@@ -724,9 +729,10 @@ class LocalControllerTest extends TestCase {
 		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$this->cacheActorService->expects($this->once())->method('addRemoteActorDetailCount')->with($actor);
-		$this->accountService->expects($this->never())->method('getActorFromUserId');
+		// the viewer, and nobody else
+		$this->accountService->expects($this->once())->method('getActorFromUserId')->with('alice');
 
-		$this->assertSame($actor, $this->controller(null)->globalAccountInfo('bob@remote.example')->getData());
+		$this->assertSame($actor, $this->controller('alice')->globalAccountInfo('bob@remote.example')->getData());
 	}
 
 	/**
@@ -746,19 +752,44 @@ class LocalControllerTest extends TestCase {
 		$this->assertSame($actor, $this->controller('alice')->globalAccountInfo('bob@remote.example')->getData());
 	}
 
-	/** The web app's own request, and a client's with a bearer token, may have them asked. */
-	public function testGlobalAccountInfoAsksTheAccountsServerForTheAppOrABearerToken(): void {
+	/** A client's request with a bearer token that is still valid may have them asked. */
+	public function testGlobalAccountInfoAsksTheAccountsServerForAValidBearerToken(): void {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 		$this->request->method('passesCSRFCheck')->willReturn(false);
 		$this->request->method('getHeader')->willReturnCallback(
 			static fn (string $name): string => ($name === 'Authorization') ? 'Bearer abc' : ''
 		);
+		$this->clientService = $this->createMock(\OCA\Social\Service\ClientService::class);
+		$this->clientService->expects($this->once())->method('getFromToken')->with('abc')
+			->willReturn($this->createStub(\OCA\Social\Model\Client\SocialClient::class));
 		$actor = $this->createStub(Person::class);
 		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->expects($this->once())->method('getFromAccount')->with('bob@remote.example', true)->willReturn($actor);
 		$this->cacheActorService->expects($this->once())->method('addRemoteActorDetailCount');
 
 		$this->controller(null)->globalAccountInfo('bob@remote.example');
+	}
+
+	/**
+	 * Any script can send a made-up bearer token, and an anonymous one can
+	 * fetch a request token with a page: neither is a reason to ask another
+	 * server on its behalf.
+	 */
+	public function testGlobalAccountInfoAsksNoOtherServerForAnInvalidBearerOrAnAnonymousRequestToken(): void {
+		$this->configService->method('getCloudHost')->willReturn('cloud.example');
+		$this->request->method('passesCSRFCheck')->willReturn(true);
+		$this->request->method('getHeader')->willReturnCallback(
+			static fn (string $name): string => ($name === 'Authorization') ? 'Bearer made-up' : ''
+		);
+		$this->clientService = $this->createStub(\OCA\Social\Service\ClientService::class);
+		$this->clientService->method('getFromToken')
+			->willThrowException(new \OCA\Social\Exceptions\ClientNotFoundException());
+		$actor = $this->createStub(Person::class);
+		$actor->method('isLocal')->willReturn(false);
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')->with('bob@remote.example', false)->willReturn($actor);
+		$this->cacheActorService->expects($this->never())->method('addRemoteActorDetailCount');
+
+		$this->assertSame($actor, $this->controller(null)->globalAccountInfo('bob@remote.example')->getData());
 	}
 
 	public function testGlobalAccountInfoToleratesCounterFailures(): void {
@@ -1161,7 +1192,7 @@ class LocalControllerTest extends TestCase {
 
 		foreach ($this->publicRoutes() as $route) {
 			$attributes = $this->attributesOf($route);
-			if (!in_array(AnonRateLimit::class, $attributes, true)
+			if (!in_array(AnonymousRateLimit::class, $attributes, true)
 				|| !in_array(UserRateLimit::class, $attributes, true)) {
 				$bare[] = $route;
 			}
@@ -1218,8 +1249,8 @@ class LocalControllerTest extends TestCase {
 	/** How many anonymous requests a minute a route allows. */
 	private function anonRequestsPerMinute(string $route): float {
 		$attributes = (new \ReflectionClass(LocalController::class))
-			->getMethod($route)->getAttributes(AnonRateLimit::class);
-		$this->assertNotEmpty($attributes, $route . ' carries no AnonRateLimit');
+			->getMethod($route)->getAttributes(AnonymousRateLimit::class);
+		$this->assertNotEmpty($attributes, $route . ' carries no AnonymousRateLimit');
 
 		$arguments = $attributes[0]->getArguments();
 		$limit = (int)($arguments['limit'] ?? $arguments[0] ?? 0);

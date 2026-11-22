@@ -57,7 +57,7 @@ class PixelfedAdminControllerTest extends TestCase {
 			->willReturnCallback(fn (): ?IUser => $this->signedIn ? $user : null);
 
 		$this->clientService = $this->createStub(ClientService::class);
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willReturnCallback(function (string $token): SocialClient {
 				if ($token !== 'token') {
 					throw new ClientNotFoundException('unknown token');
@@ -146,6 +146,15 @@ class PixelfedAdminControllerTest extends TestCase {
 			->willReturn(['success' => true]);
 
 		$this->assertSame(['success' => true], $this->controller()->modReportHandle(4, 'ignore')->getData());
+	}
+
+	public function testTheModeratorHandlingAHeldPostIsTheOneSignedIn(): void {
+		$this->pixelfedAdminService->expects($this->once())
+			->method('handleAutospam')
+			->with(7, 'approve', self::ADMIN)
+			->willReturn(['success' => true]);
+
+		$this->assertSame(['success' => true], $this->controller()->autospamHandle(7, 'approve')->getData());
 	}
 
 	/** What this instance does not have is a 422 that says so, never a 200 that did nothing. */

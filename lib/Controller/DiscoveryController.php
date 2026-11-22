@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\Db\DiscoveryRequest;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountRelationService;
@@ -29,7 +30,6 @@ use OCA\Social\Service\SuggestionService;
 use OCA\Social\Service\TrendService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -130,7 +130,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/directories/search')]
 	public function searchDirectories(
@@ -160,7 +160,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 300)]
+	#[AnonymousRateLimit(limit: 10, period: 300)]
 	#[UserRateLimit(limit: 30, period: 300)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/directories/hashtags')]
 	public function searchHashtagDirectories(
@@ -206,7 +206,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 300)]
+	#[AnonymousRateLimit(limit: 10, period: 300)]
 	#[UserRateLimit(limit: 10, period: 300)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/follow_graph')]
 	public function followGraph(int $limit = 20): DataResponse {
@@ -382,7 +382,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 60)]
+	#[AnonymousRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 10, period: 60)]
 	#[FrontpageRoute(
 		verb: 'POST',
@@ -547,7 +547,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/accounts/{account}/highlights', requirements: ['account' => '.+'])]
 	public function accountHighlights(string $account): DataResponse {
 		try {

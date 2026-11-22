@@ -23,6 +23,7 @@ use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
 use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Exceptions\InvalidScopeException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
@@ -35,7 +36,6 @@ use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -171,7 +171,7 @@ class OAuthController extends Controller {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 15, period: 300)]
+	#[AnonymousRateLimit(limit: 15, period: 300)]
 	#[UserRateLimit(limit: 15, period: 300)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/apps')]
 	public function apps(
@@ -201,7 +201,9 @@ class OAuthController extends Controller {
 		$client = new SocialClient();
 		$client->setAppWebsite($website);
 		$client->setAppRedirectUris($redirect_uris);
-		$client->setAppScopes($client->getScopesFromString($scopes));
+		// separated by any whitespace; none at all is `read`, as on Mastodon
+		$scopes = array_values(array_unique(preg_split('/\s+/', trim($scopes), -1, PREG_SPLIT_NO_EMPTY) ?: ['read']));
+		$client->setAppScopes($scopes);
 		$client->setAppName($client_name);
 
 		try {
@@ -236,13 +238,13 @@ class OAuthController extends Controller {
 	/** Starts the RFC 8628 flow for a registered OAuth application. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 20, period: 300)]
+	#[AnonymousRateLimit(limit: 20, period: 300)]
 	#[UserRateLimit(limit: 20, period: 300)]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/device_authorization')]
 	public function deviceAuthorization(
 		string $client_id = '',
 		string $scope = 'read',
-		string $client_secret = '',
+		#[\SensitiveParameter] string $client_secret = '',
 	): DataResponse {
 		try {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
@@ -281,7 +283,7 @@ class OAuthController extends Controller {
 
 	/** Shows the registered client and scopes before a device code is approved. */
 	#[NoAdminRequired]
-	#[AnonRateLimit(limit: 30, period: 300)]
+	#[AnonymousRateLimit(limit: 30, period: 300)]
 	#[UserRateLimit(limit: 30, period: 300)]
 	#[BruteForceProtection(action: 'socialOauthDeviceCode')]
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/device')]
@@ -804,17 +806,19 @@ class OAuthController extends Controller {
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[PublicPage]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
+	#[UserRateLimit(limit: 60, period: 60)]
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/token')]
 	public function token(
 		string $redirect_uri = '',
 		string $grant_type = '',
 		string $client_id = '',
-		string $client_secret = '',
-		string $code = '',
-		string $code_verifier = '',
-		string $device_code = '',
-		string $refresh_token = '',
+		#[\SensitiveParameter] string $client_secret = '',
+		#[\SensitiveParameter] string $code = '',
+		#[\SensitiveParameter] string $code_verifier = '',
+		#[\SensitiveParameter] string $device_code = '',
+		#[\SensitiveParameter] string $refresh_token = '',
 		string $scope = '',
 	): DataResponse {
 		if ($this->isAtprotoClient($client_id)) {
@@ -967,7 +971,7 @@ class OAuthController extends Controller {
 	#[PublicPage]
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/revoke')]
-	public function revoke(string $token, string $client_id = '', string $client_secret = ''): DataResponse {
+	public function revoke(#[\SensitiveParameter] string $token, string $client_id = '', #[\SensitiveParameter] string $client_secret = ''): DataResponse {
 		if ($this->isAtprotoClient($client_id)) {
 			$this->atprotoOAuth->revoke($token);
 			$response = new DataResponse([], Http::STATUS_OK);
@@ -1185,7 +1189,7 @@ class OAuthController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/userinfo')]
 	public function userinfo(): DataResponse {
 		try {
-			$client = $this->clientService->getFromToken($this->bearerToken());
+			$client = $this->clientService->getFromTokenOfRequest($this->bearerToken());
 			// read-only: a token cannot exist without the account it was
 			// granted for, since /oauth/authorize looks one up without creating
 			$actor = $this->accountService->getActorFromUserId($client->getAuthUserId());
@@ -1212,7 +1216,7 @@ class OAuthController extends Controller {
 	 *
 	 * @return array{0: string, 1: string}
 	 */
-	private function clientCredentials(string $clientId, string $clientSecret): array {
+	private function clientCredentials(string $clientId, #[\SensitiveParameter] string $clientSecret): array {
 		if ($clientId !== '') {
 			return [$clientId, $clientSecret];
 		}

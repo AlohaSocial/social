@@ -29,6 +29,7 @@ use OCA\Social\Exceptions\InvalidHandleException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\RefusalException;
 use OCA\Social\External\ExternalUserBackend;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
@@ -39,6 +40,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheDocumentService;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
@@ -49,7 +51,6 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TNCDataResponse;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -75,6 +76,7 @@ class LocalController extends Controller {
 
 	private ?string $userId = null;
 	private ?Person $viewer = null;
+	private ?bool $mayAskOtherServers = null;
 
 	public function __construct(
 		IRequest $request,
@@ -96,6 +98,7 @@ class LocalController extends Controller {
 		private ?BlueskySearch $blueskySearch = null,
 		private ?\OCA\Social\Atproto\Profile\ProfileLinks $profileLinks = null,
 		private ?\OCA\Social\Service\HiddenCollectionsService $hiddenCollections = null,
+		private ?ClientService $clientService = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -526,7 +529,7 @@ class LocalController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/account/{username}/info')]
 	public function accountInfo(string $username): DataResponse {
@@ -556,7 +559,7 @@ class LocalController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 10, period: 300)]
+	#[AnonymousRateLimit(limit: 10, period: 300)]
 	#[UserRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/global/account/info')]
 	public function globalAccountInfo(string $account): DataResponse {
@@ -683,7 +686,7 @@ class LocalController extends Controller {
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[UserRateLimit(limit: 3000, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/global/actor/avatar')]
 	public function globalActorAvatar(string $id): Response {
@@ -783,13 +786,32 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * Whether this request may have other servers asked on its behalf: one
-	 * the web app sent with its request token, or one with a bearer token.
-	 * Neither can be forged by a link or a page on another site.
+	 * Whether this request may have other servers asked on its behalf: one a
+	 * signed-in reader's web app sent with its request token, or one with a
+	 * client's bearer token that is still valid. A link or a page on another
+	 * site can forge neither, and an anonymous script holds neither.
 	 */
 	private function mayAskOtherServers(): bool {
-		return $this->request->passesCSRFCheck()
-			|| str_starts_with($this->request->getHeader('Authorization'), 'Bearer ');
+		if ($this->mayAskOtherServers !== null) {
+			return $this->mayAskOtherServers;
+		}
+
+		if ($this->userId !== null && $this->request->passesCSRFCheck()) {
+			return $this->mayAskOtherServers = true;
+		}
+
+		$header = trim($this->request->getHeader('Authorization'));
+		if ($this->clientService === null || stripos($header, 'bearer ') !== 0) {
+			return $this->mayAskOtherServers = false;
+		}
+
+		try {
+			$this->clientService->getFromToken(trim(substr($header, 7)));
+
+			return $this->mayAskOtherServers = true;
+		} catch (Exception $e) {
+			return $this->mayAskOtherServers = false;
+		}
 	}
 
 	/**

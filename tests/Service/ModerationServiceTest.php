@@ -25,6 +25,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActorCascadeService;
 use OCA\Social\Service\AuditService;
 use OCA\Social\Service\ModerationService;
+use OCA\Social\Service\PostReferenceCache;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\StrikeService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -55,6 +56,7 @@ class ModerationServiceTest extends TestCase {
 	private ActorCascadeService|MockObject $actorCascadeService;
 	private StrikeService|Stub $strikeService;
 	private AuditService|MockObject $auditService;
+	private PostReferenceCache|MockObject $postReferenceCache;
 
 	/** @var array<int, array<string, mixed>> the strikes that were recorded */
 	private array $strikes = [];
@@ -71,6 +73,7 @@ class ModerationServiceTest extends TestCase {
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->strikeService = $this->createStub(StrikeService::class);
 		$this->auditService = $this->createMock(AuditService::class);
+		$this->postReferenceCache = $this->createMock(PostReferenceCache::class);
 		$this->strikeService->method('record')->willReturnCallback(
 			function (string $actorId, string $action, string $text = '', int $reportId = 0): Strike {
 				$this->strikes[] = compact('actorId', 'action', 'text', 'reportId');
@@ -89,7 +92,8 @@ class ModerationServiceTest extends TestCase {
 			new NullLogger(),
 			$this->strikeService,
 			$this->actorCascadeService,
-			$this->auditService
+			$this->auditService,
+			$this->postReferenceCache
 		);
 	}
 
@@ -135,6 +139,30 @@ class ModerationServiceTest extends TestCase {
 		$this->actorCascadeService->expects($this->once())->method('purge')->with(self::SPAMMER, true);
 
 		$this->service->decide(self::SPAMMER, Moderation::SUSPEND);
+	}
+
+	/** The link previews of its posts go too, while the posts still say which. */
+	public function testSuspendingDropsTheCachedLinkPreviewsBeforeThePosts(): void {
+		$order = [];
+		$this->postReferenceCache->expects($this->once())->method('forgetAuthor')->with(self::LOCAL_ACTOR)
+			->willReturnCallback(function () use (&$order): void {
+				$order[] = 'forget';
+			});
+		$this->streamRequest->method('deleteByAuthor')
+			->willReturnCallback(function () use (&$order): void {
+				$order[] = 'delete';
+			});
+
+		$this->service->decide(self::LOCAL_ACTOR, Moderation::SUSPEND);
+
+		$this->assertSame(['forget', 'delete'], $order);
+	}
+
+	public function testTheSuspensionStandsIfThePreviewsCannotBeDropped(): void {
+		$this->postReferenceCache->method('forgetAuthor')->willThrowException(new \RuntimeException('cache down'));
+		$this->streamRequest->expects($this->once())->method('deleteByAuthor');
+
+		$this->service->decide(self::LOCAL_ACTOR, Moderation::SUSPEND);
 	}
 
 	/**
@@ -199,7 +227,8 @@ class ModerationServiceTest extends TestCase {
 			$logger,
 			$this->strikeService,
 			$this->actorCascadeService,
-			$this->auditService
+			$this->auditService,
+			$this->postReferenceCache
 		);
 
 		$this->actorsRequest->method('getFromId')
@@ -382,7 +411,8 @@ class ModerationServiceTest extends TestCase {
 		$service = new ModerationService(
 			$this->moderationRequest, $this->streamRequest, $this->streamDestRequest,
 			$this->createStub(StreamService::class), $this->actorsRequest, $this->accountService,
-			$logger, $this->strikeService, $this->actorCascadeService, $this->auditService
+			$logger, $this->strikeService, $this->actorCascadeService, $this->auditService,
+			$this->postReferenceCache
 		);
 
 		$service->decide(self::SPAMMER, Moderation::SILENCE);
@@ -438,6 +468,8 @@ class ModerationServiceTest extends TestCase {
 		// the post goes either way; the Delete is what is lost
 		$this->streamRequest->expects($this->once())
 			->method('deleteById')->with('https://cloud.example/@bob/1');
+		// and its link preview, which the deletion's event would have dropped
+		$this->postReferenceCache->expects($this->once())->method('forgetPost');
 
 		$this->service->removeStream('https://cloud.example/@bob/1');
 	}

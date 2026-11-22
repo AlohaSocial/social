@@ -329,7 +329,7 @@ class PixelfedControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 	}
 
 	/** Storing the app's switches is a write: a read-only token may look, not change. */

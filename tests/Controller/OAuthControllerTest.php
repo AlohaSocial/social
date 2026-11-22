@@ -336,6 +336,26 @@ class OAuthControllerTest extends TestCase {
 		$this->assertSame(['read'], $this->controller->apps('App', 'https://a/cb')->getData()['scopes']);
 	}
 
+	/** Any whitespace separates scopes, and none at all is `read`, as on Mastodon. */
+	public function testAppsReadsTheScopesAsMastodonDoes(): void {
+		$this->clientService->method('createApp');
+
+		$this->assertSame(['read', 'write'], $this->controller->apps('App', 'https://a/cb', '', "  read \t write  read ")->getData()['scopes']);
+		$this->assertSame(['read'], $this->controller->apps('App', 'https://a/cb', '', '   ')->getData()['scopes']);
+	}
+
+	/** An over-long name is a 422 rather than the 500 the database's refusal was. */
+	public function testAppsRefusesAnOverlongNameWith422(): void {
+		$clientRequest = $this->createMock(ClientRequest::class);
+		$clientRequest->expects($this->never())->method('saveApp');
+
+		$response = $this->controllerWith($this->realClientService($clientRequest))
+			->apps(str_repeat('x', 200), 'https://a/cb');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringStartsWith('Validation failed: Name is too long', $response->getData()['error']);
+	}
+
 	/**
 	 * Mastodon 4.3's Application: `scopes` and `redirect_uris` are lists. A
 	 * client decoding them into `[String]` failed on the one space-separated
@@ -1796,7 +1816,14 @@ class OAuthControllerTest extends TestCase {
 	public function testRegistrationIsRateLimitedForEveryCaller(): void {
 		$method = new \ReflectionMethod(OAuthController::class, 'apps');
 
-		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(\OCA\Social\Middleware\AnonymousRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
+	}
+
+	public function testTheTokenEndpointIsRateLimitedForEveryCaller(): void {
+		$method = new \ReflectionMethod(OAuthController::class, 'token');
+
+		$this->assertNotSame([], $method->getAttributes(\OCA\Social\Middleware\AnonymousRateLimit::class), 'a Bluesky app\'s client_id is fetched on every call');
 		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
 	}
 
@@ -1853,13 +1880,17 @@ class OAuthControllerTest extends TestCase {
 		}
 	}
 
-	/** What a Mastodon client registers keeps registering, unknown scopes and all. */
+	/**
+	 * What a Mastodon client registers keeps registering, unknown scopes and
+	 * all; the unknown ones are neither stored nor answered.
+	 */
 	public function testExtraAndUnknownScopesStillRegister(): void {
 		$clientRequest = $this->createMock(ClientRequest::class);
-		$clientRequest->expects($this->once())->method('saveApp');
+		$clientRequest->expects($this->once())->method('saveApp')
+			->with($this->callback(static fn (SocialClient $saved): bool => !in_array('write:something-new', $saved->getAppScopes(), true)));
 
 		$response = $this->controllerWith($this->realClientService($clientRequest))
-			->apps('Ivory', 'https://ivory.app/cb', '', 'read write follow push admin:read profile');
+			->apps('Ivory', 'https://ivory.app/cb', '', 'read write follow push admin:read profile write:something-new');
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame(['read', 'write', 'follow', 'push', 'admin:read', 'profile'], $response->getData()['scopes']);

@@ -95,7 +95,7 @@ class MoveInService {
 	 * @throws MoveErrorException with what to tell the person
 	 * @throws AtprotoException
 	 */
-	public function start(string $userId, string $typed, string $password, string $authFactorToken = ''): Move {
+	public function start(string $userId, string $typed, #[\SensitiveParameter] string $password, #[\SensitiveParameter] string $authFactorToken = ''): Move {
 		if ($this->moves->latestOfUser($userId)?->isUnderWay() === true) {
 			throw new MoveErrorException('A move is already under way', 'move-in-progress');
 		}
@@ -139,7 +139,7 @@ class MoveInService {
 	 *
 	 * @throws MoveErrorException
 	 */
-	public function code(string $userId, string $code): Move {
+	public function code(string $userId, #[\SensitiveParameter] string $code): Move {
 		$move = $this->moves->latestOfUser($userId);
 		if ($move === null || $move->direction !== Move::IN || $move->state !== Move::WAITING) {
 			throw new MoveErrorException('No move is waiting for a code', 'no-move-waiting');
@@ -786,7 +786,7 @@ class MoveInService {
 	 *
 	 * @throws AtprotoException
 	 */
-	private function authed(Move $move, string $method, string $verb = 'GET', array $query = [], ?array $json = null): array {
+	private function authed(Move $move, string $method, string $verb = 'GET', array $query = [], #[\SensitiveParameter] ?array $json = null): array {
 		$session = $this->unseal($move->session);
 		$answer = $this->pds->call($move->pds, $method, $verb, $query, $json, null, '', (string)($session['accessJwt'] ?? ''));
 		if (in_array($answer['status'], [400, 401], true) && in_array($answer['body']['error'] ?? '', ['ExpiredToken', 'InvalidToken'], true) && ($session['refreshJwt'] ?? '') !== '') {
@@ -908,7 +908,7 @@ class MoveInService {
 		return new PrivateKey(Curve::K256, (string)hex2bin($secret));
 	}
 
-	private function seal(array $session): string {
+	private function seal(#[\SensitiveParameter] array $session): string {
 		return $this->crypto->encrypt((string)json_encode($session));
 	}
 

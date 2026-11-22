@@ -79,6 +79,9 @@ the push provider. Nextcloud's own notification channel is a separate feature.
   `totalItems`, and the counts stay visible. It is reported on a local
   account's entity where the account is fetched on its own (by id, by
   lookup, and the credentials), not on accounts embedded in other entities.
+- `POST /api/v1/apps` drops a scope this server does not define and keeps
+  the rest (`read` when none is left); Mastodon refuses such a registration
+  with a 422. A client written for a newer Mastodon thus still registers.
 - Consent to an `admin:*` scope (or `write:migration`) takes the account's
   password, through Nextcloud's password confirmation; Mastodon asks for no
   password there. The device flow does not grant these scopes at all.
