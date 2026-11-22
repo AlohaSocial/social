@@ -141,11 +141,15 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	 * A public or unlisted post reaches its author's followers whatever it
 	 * names, as on Mastodon: PeerTube addresses a channel's video to the
 	 * followers of the account behind the channel, not of the channel.
+	 *
+	 * A followers collection the post names reaches whoever follows it, so
+	 * only the author's own are kept; see `withoutForeignCollections()`.
 	 */
 	private function generateStreamHome(Stream $stream, ?Person $author): void {
 		$cc = array_merge($stream->getCcArray(), $stream->getBccArray());
 		$addressed = array_merge($stream->getToAll(), $cc);
-		if ($author !== null && $author->getFollowers() !== ''
+		$own = ($author === null) ? [] : self::ownCollections($author);
+		if ($author !== null && in_array($author->getFollowers(), $own, true)
 			&& in_array(Stream::CONTEXT_PUBLIC, $addressed, true)) {
 			$cc[] = $author->getFollowers();
 		}
@@ -156,6 +160,7 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 				'cc' => $cc,
 			]
 		);
+		$recipients = $this->withoutForeignCollections($recipients, $stream, $author, $own);
 
 		$this->createRecipients(
 			$stream->getId(),
@@ -165,17 +170,131 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
+	 * The author's followers and following collections, where they are on the
+	 * author's own server: an actor document can name any URL there, and
+	 * another account's collection would put the post in its followers' home
+	 * timelines.
+	 *
+	 * @return list<string>
+	 */
+	private static function ownCollections(Person $author): array {
+		$authority = ConfigService::authorityOf($author->getId());
+
+		return array_values(array_filter(
+			[$author->getFollowers(), $author->getFollowing()],
+			static fn (string $collection): bool => $collection !== ''
+				&& ConfigService::authorityOf($collection) === $authority
+		));
+	}
+
+	/**
+	 * The recipients without the collections of other accounts that a home
+	 * timeline here would read the post through. A home timeline reads every
+	 * post naming a collection its account follows (`social_follow.follow_id`),
+	 * and its account's own followers collection, so a post naming another
+	 * account's followers would reach all of them. Dropped is a recipient that
+	 * a follow of another account targets, or that is the followers collection
+	 * of another local account; kept is everything else: the public
+	 * collection, accounts by id, the author's own collections, those of the
+	 * account behind a channel (`Person::isRunBy()`), and URLs no follow here
+	 * targets.
+	 *
+	 * @param array<string, string> $recipients account => subtype
+	 * @param list<string> $own the author's own collections
+	 *
+	 * @return array<string, string>
+	 */
+	private function withoutForeignCollections(
+		array $recipients, Stream $stream, ?Person $author, array $own,
+	): array {
+		$authorId = self::withoutFragment($stream->getAttributedTo());
+
+		// prim => recipient, for a follow of it; prim of a local account =>
+		// recipient, for that account's followers collection
+		$followed = [];
+		$localFollowers = [];
+		foreach (array_keys($recipients) as $id) {
+			$id = (string)$id;
+			if ($id === Stream::CONTEXT_PUBLIC || $id === $stream->getAttributedTo() || in_array($id, $own, true)) {
+				continue;
+			}
+
+			$prim = FileCommentsRequest::primOf($id);
+			if ($prim !== '') {
+				$followed[$prim] = $id;
+			}
+			if (str_ends_with($id, '/followers')) {
+				$account = FileCommentsRequest::primOf(substr($id, 0, -strlen('/followers')));
+				if ($account !== '') {
+					$localFollowers[$account] = $id;
+				}
+			}
+		}
+
+		if ($followed === [] && $localFollowers === []) {
+			return $recipients;
+		}
+
+		$allowed = [FileCommentsRequest::primOf($authorId)];
+		foreach (($author === null) ? [] : $author->getAttributedToActors() as $owner) {
+			if ($author->isRunBy($owner['id'])) {
+				$allowed[] = FileCommentsRequest::primOf($owner['id']);
+			}
+		}
+
+		$follows = $this->followsOf(array_values(array_unique(array_merge(
+			array_keys($followed), array_keys($localFollowers)
+		))));
+		foreach ($follows as [$collection, $account]) {
+			// a Loopback row is the one follow whose collection is its own account
+			if ($account === $collection) {
+				$id = $localFollowers[$collection] ?? '';
+			} else {
+				$id = $followed[$collection] ?? '';
+			}
+
+			if ($id !== '' && !in_array($account, $allowed, true)) {
+				unset($recipients[$id]);
+			}
+		}
+
+		return $recipients;
+	}
+
+	/**
+	 * Which accounts the follows of these collections follow, read off the
+	 * (follow_id_prim, object_id_prim, actor_id_prim) index.
+	 *
+	 * @param list<string> $prims
+	 *
+	 * @return list<array{string, string}> follow_id_prim, object_id_prim
+	 */
+	protected function followsOf(array $prims): array {
+		$qb = $this->getQueryBuilder();
+		$qb->selectDistinct(['follow_id_prim', 'object_id_prim'])
+			->from(self::TABLE_FOLLOWS)
+			->where($qb->expr()->in(
+				'follow_id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
+			));
+
+		$follows = [];
+		$cursor = $qb->executeQuery();
+		while ($row = $cursor->fetch()) {
+			$follows[] = [(string)$row['follow_id_prim'], (string)$row['object_id_prim']];
+		}
+		$cursor->closeCursor();
+
+		return $follows;
+	}
+
+	/**
 	 * The author is read from the cache and never fetched, as an HTTP request
 	 * inside the post's transaction would hold its row locks. An uncached
 	 * author (every save path caches it first) leaves the post addressed as a
 	 * home-timeline post.
 	 */
 	private function cachedAuthor(Stream $stream): ?Person {
-		$authorId = $stream->getAttributedTo();
-		$anchor = strpos($authorId, '#');
-		if ($anchor !== false) {
-			$authorId = substr($authorId, 0, $anchor);
-		}
+		$authorId = self::withoutFragment($stream->getAttributedTo());
 
 		try {
 			return $this->cacheActorsRequest->getFromId($authorId);
@@ -186,6 +305,12 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 
 			return null;
 		}
+	}
+
+	private static function withoutFragment(string $id): string {
+		$anchor = strpos($id, '#');
+
+		return ($anchor === false) ? $id : substr($id, 0, $anchor);
 	}
 
 	private function generateStreamDirect(Stream $stream, ?Person $author): bool {
