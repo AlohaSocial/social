@@ -140,20 +140,25 @@ export default {
 }
 
 /* not a chip, so it does not read as one of the featured tags */
+/* an outlined chip beside the tags, so it reads as something to press and
+   not as a caption */
 .featured-tags__edit {
 	margin: 0;
-	border: none;
+	border: 1px dashed var(--color-border-dark);
+	border-radius: var(--border-radius-pill, 100px);
 	background: none;
 	cursor: pointer;
 	display: inline-flex;
 	align-items: center;
-	padding: 1px 4px;
-	color: var(--color-text-maxcontrast);
+	min-height: 0;
+	padding: 2px 12px;
+	color: var(--color-main-text);
 	font-size: 13px;
 
 	&:hover,
 	&:focus-visible {
-		color: var(--color-main-text);
+		border-style: solid;
+		background: var(--color-background-hover);
 	}
 }
 

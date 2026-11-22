@@ -138,18 +138,26 @@ export default {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 4px 10px;
+	gap: 4px 20px;
 	margin: 8px 0 0;
 	padding: 0 4px;
+	/* clips the dot of whichever item starts a line, see below */
+	overflow: hidden;
 	color: var(--color-text-maxcontrast);
 	font-size: 13px;
 }
 
-/* a middle dot between items, drawn by the gap rather than typed into the
-   markup, so no separator is left hanging when an item is not there */
-.post-details__item + .post-details__item::before {
-	content: '·';
-	margin-inline-end: 10px;
+/* A middle dot in the gap before every item, drawn rather than typed into the
+   markup so no separator is left hanging when an item is not there. The first
+   item of each line puts its dot outside the box, where it is clipped. */
+.post-details__item {
+	position: relative;
+
+	&::before {
+		content: '·';
+		position: absolute;
+		inset-inline-start: -12px;
+	}
 }
 
 .post-details__original {

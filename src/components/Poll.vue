@@ -27,9 +27,12 @@
 					:name="groupName">
 				{{ option.title }}
 			</label>
+			<!-- secondary until there is a choice: a disabled primary button is
+			     unreadable in the dark theme -->
 			<NcButton
+				class="poll__vote"
 				:disabled="selectedIndices.length === 0 || voting"
-				variant="primary"
+				:variant="selectedIndices.length === 0 ? 'secondary' : 'primary'"
 				@click="vote">
 				{{ t('social', 'Vote') }}
 			</NcButton>
@@ -159,9 +162,26 @@ export default {
 	margin-top: 8px;
 
 	&__option {
-		display: block;
+		display: flex;
+		align-items: center;
+		gap: 8px;
 		padding: 4px 0;
 		cursor: pointer;
+
+		/* Nextcloud's input rules give it a field's height and margins */
+		input {
+			flex: 0 0 auto;
+			width: 16px;
+			height: 16px;
+			min-height: 0;
+			margin: 0;
+			accent-color: var(--color-primary-element);
+			cursor: pointer;
+		}
+	}
+
+	&__vote {
+		margin-top: 8px;
 	}
 
 	&__result {

@@ -208,8 +208,10 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+/* read from the start, as its title is, not centred like the profile around it */
 .profile-highlights {
 	margin-block: 8px;
+	text-align: start;
 
 	:deep(.info-card__body) {
 		display: flex;

@@ -144,9 +144,17 @@ export default {
 
 <style scoped lang="scss">
 .about {
-	max-width: 720px;
+	max-width: var(--social-reading-page);
 	margin: 0 auto;
 	padding: calc(var(--default-grid-baseline) * 4);
+
+	/* the sections sit under the page's title, so they read smaller than it */
+	h2 {
+		margin: 0 0 calc(var(--default-grid-baseline) * 2);
+		font-size: 1.15rem;
+		font-weight: 700;
+		line-height: 1.3;
+	}
 
 	&__name {
 		font-weight: bold;

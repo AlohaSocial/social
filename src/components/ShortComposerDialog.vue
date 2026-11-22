@@ -6,10 +6,15 @@
 	<NcModal
 		v-if="open && !editing"
 		size="large"
+		class="short-modal"
 		:name="t('social', 'New short')"
 		:closeOnClickOutside="false"
 		@close="requestClose">
-		<div class="short" @dragover.prevent @drop.prevent="onDrop">
+		<div
+			class="short"
+			:class="{ 'short--choosing': phase === 'choose' }"
+			@dragover.prevent
+			@drop.prevent="onDrop">
 			<!-- 1. where the video comes from -->
 			<div v-if="phase === 'choose'" class="short__choose">
 				<h2 class="short__title">
@@ -1124,6 +1129,16 @@ export default {
 }
 </script>
 
+<style lang="scss">
+@use '../styles/layout.scss' as layout;
+
+/* the modal's own name floats over the page header and repeats the heading
+   inside; it stays as the dialog's accessible name */
+.short-modal .modal-header__name {
+	@include layout.visually-hidden;
+}
+</style>
+
 <style scoped lang="scss">
 .short {
 	position: relative;
@@ -1131,6 +1146,12 @@ export default {
 	min-height: min(84vh, 820px);
 	display: flex;
 	flex-direction: column;
+}
+
+/* the first step is three buttons: the dialog fits them rather than keeping
+   the editor's height around them */
+.short--choosing {
+	min-height: 0;
 }
 
 .short__title {

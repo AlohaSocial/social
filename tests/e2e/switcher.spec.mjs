@@ -10,10 +10,10 @@ import { PASSWORD, USER, apiAs, ensureAccount, login, openApp } from './helpers.
  * The notification filter in the reading column.
  *
  * Seven translated labels do not fit the 616px column, and a wide window does
- * not give the column more room. The control keeps every option at its natural
- * width and scrolls, rather than shrinking the options until their words run
- * into one another. German is where the labels are longest, which is where the
- * defect was seen.
+ * not give the column more room. The control gives up the icons, then the
+ * words, and scrolls only if even the icons do not fit, rather than shrinking
+ * the options until their words run into one another. German is where the
+ * labels are longest, which is where the defect was seen.
  */
 test.describe('the notification filter in the reading column', () => {
 	/** @type {import('@playwright/test').APIRequestContext} */
@@ -54,32 +54,33 @@ test.describe('the notification filter in the reading column', () => {
 		await expect(options).toHaveCount(7)
 		await expect(switcher.getByText('Weiterverbreitete Beiträge')).toBeVisible()
 
-		// every icon and label stays inside the button it belongs to, and each
+		// whatever is drawn of an option stays inside its button, and each
 		// button starts after the one before it ends
 		const boxes = await options.evaluateAll((elements) => elements.map((option) => {
 			const button = option.getBoundingClientRect()
-			const icon = option.querySelector('.switcher__icon').getBoundingClientRect()
-			const label = option.querySelector('.switcher__label').getBoundingClientRect()
-			return { left: button.left, right: button.right, icon: { left: icon.left, right: icon.right }, label: { left: label.left, right: label.right } }
+			const drawn = [...option.children]
+				.map((child) => child.getBoundingClientRect())
+				.filter((box) => box.width > 1 && box.height > 1)
+				.map((box) => ({ left: box.left, right: box.right }))
+			return { left: button.left, right: button.right, drawn }
 		}))
 		boxes.forEach((box, index) => {
-			expect(box.icon.left, 'the icon is inside its option').toBeGreaterThanOrEqual(box.left - 0.5)
-			expect(box.icon.right, 'the icon is inside its option').toBeLessThanOrEqual(box.right + 0.5)
-			expect(box.label.left, 'the label is inside its option').toBeGreaterThanOrEqual(box.left - 0.5)
-			expect(box.label.right, 'the label is inside its option').toBeLessThanOrEqual(box.right + 0.5)
+			expect(box.drawn.length, 'every option shows something').toBeGreaterThan(0)
+			for (const part of box.drawn) {
+				expect(part.left, 'what it shows is inside its option').toBeGreaterThanOrEqual(box.left - 0.5)
+				expect(part.right, 'what it shows is inside its option').toBeLessThanOrEqual(box.right + 0.5)
+			}
 			if (index > 0) {
 				expect(box.left, 'options do not overlap').toBeGreaterThanOrEqual(boxes[index - 1].right - 0.5)
 			}
 		})
 
-		// the page itself does not scroll sideways; the control does
+		// the page itself does not scroll sideways
 		expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
-		const scroll = await switcher.evaluate((element) => ({ client: element.clientWidth, content: element.scrollWidth }))
-		expect(scroll.content, 'the labels need more room than the column').toBeGreaterThan(scroll.client)
 
-		// every option is reachable: the last one can be brought into view
-		await options.last().evaluate((element) => element.scrollIntoView({ block: 'nearest', inline: 'nearest' }))
-		await expect(options.last()).toBeInViewport()
-		await expect(switcher).toHaveClass(/switcher--more-left/)
+		// every option is reachable: choosing the last one brings it into view
+		await options.last().click()
+		await expect(options.last()).toBeInViewport({ ratio: 1 })
+		await expect(options.last()).toHaveAttribute('aria-checked', 'true')
 	})
 })

@@ -46,3 +46,17 @@ $wide: 1100px;
 	clip-path: inset(50%);
 	white-space: nowrap;
 }
+
+/// While the sidebar is folded away its toggle covers the top-left corner of
+/// the content, so a page's first row starts below it. Include it in the
+/// page's wrapper. The distance is a property so that a page sized to the
+/// viewport (DirectMessages.vue) can subtract it.
+@mixin toggle-clearance {
+	@include below($folded) {
+		--social-toggle-clearance: calc(var(--default-clickable-area, 44px) + var(--default-grid-baseline, 4px) * 2);
+
+		> :first-child {
+			margin-top: var(--social-toggle-clearance);
+		}
+	}
+}

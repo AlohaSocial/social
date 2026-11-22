@@ -607,9 +607,10 @@ export default {
 </script>
 
 <style scoped lang="scss">
+/* as wide as a profile, the other page of people and pictures */
 .discover {
 	padding: calc(var(--default-grid-baseline) * 4);
-	max-width: 1000px;
+	max-width: 800px;
 	margin-inline: auto;
 
 	&__error {

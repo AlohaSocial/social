@@ -146,7 +146,7 @@
 				</NcButton>
 				<NcButton
 					v-if="isOwnProfile"
-					variant="tertiary"
+					variant="secondary"
 					:disabled="openingProfile"
 					@click="openProfileModal">
 					<template #icon>
