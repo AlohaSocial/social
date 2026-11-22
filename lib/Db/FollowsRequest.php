@@ -499,8 +499,10 @@ class FollowsRequest extends FollowsRequestBuilder {
 	/**
 	 * Where a post has to be delivered for the followers of an actor to see
 	 * it: one row per distinct inbox, the shared one where there is one,
-	 * resolved and grouped in the database, so a hundred thousand followers on
-	 * a few hundred servers are a few hundred rows.
+	 * resolved and made distinct in the database, so a hundred thousand
+	 * followers on a few hundred servers are a few hundred rows. `DISTINCT`
+	 * rather than `GROUP BY` the expression: MySQL and MariaDB with
+	 * ONLY_FULL_GROUP_BY refuse a column inside a grouped expression.
 	 *
 	 * @return string[] the shared inbox where there is one, the personal inbox otherwise
 	 */
@@ -508,17 +510,14 @@ class FollowsRequest extends FollowsRequestBuilder {
 		$qb = $this->getQueryBuilder();
 		$expr = $qb->expr();
 
-		$inbox = $qb->createFunction(
-			'COALESCE(NULLIF(' . $qb->getColumnName('shared_inbox', 'ca') . ", ''), "
-			. $qb->getColumnName('inbox', 'ca') . ')'
-		);
-		$qb->selectAlias($inbox, 'delivery_inbox')
-			->from(self::TABLE_FOLLOWS, 'f')
+		$inbox = 'COALESCE(NULLIF(' . $qb->getColumnName('shared_inbox', 'ca') . ", ''), "
+			. $qb->getColumnName('inbox', 'ca') . ')';
+		$qb->selectDistinct($qb->createFunction($inbox . ' AS delivery_inbox'));
+		$qb->from(self::TABLE_FOLLOWS, 'f')
 			->innerJoin('f', self::TABLE_CACHE_ACTORS, 'ca', $expr->eq('ca.id_prim', 'f.actor_id_prim'))
 			->where($expr->eq('f.object_id_prim', $qb->createNamedParameter($qb->prim($actorId))))
 			->andWhere($expr->eq('f.type', $qb->createNamedParameter(Follow::TYPE)))
-			->andWhere($expr->eq('f.accepted', $qb->createNamedParameter('1')))
-			->groupBy($inbox);
+			->andWhere($expr->eq('f.accepted', $qb->createNamedParameter('1')));
 
 		$inboxes = [];
 		$cursor = $qb->executeQuery();

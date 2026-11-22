@@ -73,6 +73,9 @@ class UpgradeFromOldReleasesTest extends TestCase {
 		$target = $step->changeSchema($output, fn (): SchemaWrapper => $this->schema(), []);
 		if ($target instanceof SchemaWrapper) {
 			$this->connection->migrateToSchema($target->getWrappedSchema());
+			// a dropped table is only queued on the wrapper; the server's
+			// MigrationService drops it here, after migrating
+			$target->performDropTableCalls();
 		}
 		$step->postSchemaChange($output, fn (): SchemaWrapper => $this->schema(), []);
 	}

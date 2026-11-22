@@ -17,6 +17,7 @@ use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Tests\Integration\Helper\RowSeeder;
+use OCA\Social\Tools\Nid;
 use OCA\Social\Tools\SearchTerms;
 use OCP\IDBConnection;
 use OCP\Server;
@@ -224,11 +225,14 @@ class SearchTermsRequestTest extends TestCase {
 		$this->assertSame(['one' => $this->nids['zebra-1'], 'zebras' => $this->nids['zebra-1']], $this->terms('zebra-1'));
 		$this->assertSame([], $this->terms('zebra-3'), 'not reached yet');
 
-		$this->assertSame(['last' => $this->nids['zebra-3'], 'read' => 1], $this->searchTermsRequest->backfill($this->nids['zebra-2'], 2));
+		// read one at a time from here: what follows zebra-3 is any post stored
+		// since, as on an upgraded server, not this test's
+		$this->assertSame(['last' => $this->nids['zebra-3'], 'read' => 1], $this->searchTermsRequest->backfill($this->nids['zebra-2'], 1));
 		$this->assertSame(['three' => $this->nids['zebra-3'], 'zebras' => $this->nids['zebra-3']], $this->terms('zebra-3'));
 
-		$this->assertSame(['last' => $this->nids['zebra-3'], 'read' => 0], $this->searchTermsRequest->backfill($this->nids['zebra-3'], 2));
-		$this->searchTermsRequest->backfill($before, 10);
+		$next = $this->searchTermsRequest->backfill($this->nids['zebra-3'], 1);
+		$this->assertTrue($next['read'] === 0 || Nid::compare($next['last'], $this->nids['zebra-3']) > 0, 'it goes on past where it stopped');
+		$this->searchTermsRequest->backfill($before, 3);
 		$this->assertSame(['one' => $this->nids['zebra-1'], 'zebras' => $this->nids['zebra-1']], $this->terms('zebra-1'), 'running it again is harmless');
 	}
 
