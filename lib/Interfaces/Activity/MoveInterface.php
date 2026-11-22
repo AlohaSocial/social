@@ -157,7 +157,7 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 			$follow->setId($known->getId());
 			$follow->setActorId($known->getActorId());
 			$follow->setObjectId($target->getId());
-			$follow->setFollowId($target->getFollowers());
+			$follow->setFollowId($target->getOwnFollowers());
 			$follow->addInstancePath(
 				new InstancePath(
 					$target->getInbox(), InstancePath::TYPE_INBOX, InstancePath::PRIORITY_TOP

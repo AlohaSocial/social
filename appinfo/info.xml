@@ -92,6 +92,7 @@ Aloha Social implements ActivityPub, a large part of the Mastodon client API and
 			<step>OCA\Social\Migration\ClearAvatarHeaders</step>
 			<step>OCA\Social\Migration\RepublishBlueskyProfiles</step>
 			<step>OCA\Social\Migration\RepublishAvatarAddresses</step>
+			<step>OCA\Social\Migration\ClearForeignFollowCollections</step>
 		</post-migration>
 		<install>
 			<step>OCA\Social\Migration\InstallBackfills</step>

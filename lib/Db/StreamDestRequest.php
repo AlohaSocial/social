@@ -178,12 +178,9 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	 * @return list<string>
 	 */
 	private static function ownCollections(Person $author): array {
-		$authority = ConfigService::authorityOf($author->getId());
-
 		return array_values(array_filter(
 			[$author->getFollowers(), $author->getFollowing()],
-			static fn (string $collection): bool => $collection !== ''
-				&& ConfigService::authorityOf($collection) === $authority
+			static fn (string $collection): bool => Person::isOnHostOf($collection, $author->getId())
 		));
 	}
 

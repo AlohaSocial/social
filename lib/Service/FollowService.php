@@ -292,7 +292,7 @@ class FollowService {
 		$follow->generateUniqueId();
 		$follow->setActorId($actor->getId());
 		$follow->setObjectId($remoteActor->getId());
-		$follow->setFollowId($remoteActor->getFollowers());
+		$follow->setFollowId($remoteActor->getOwnFollowers());
 
 		try {
 			$this->followsRequest->getByPersons($actor->getId(), $remoteActor->getId());
@@ -381,7 +381,7 @@ class FollowService {
 		$follow->generateUniqueId();
 		$follow->setActorId($actor->getId());
 		$follow->setObjectId($remoteActor->getId());
-		$follow->setFollowId($remoteActor->getFollowers());
+		$follow->setFollowId($remoteActor->getOwnFollowers());
 		$follow->setAccepted(true);
 		$this->followsRequest->save($follow);
 		$this->followsRequest->accepted($follow);

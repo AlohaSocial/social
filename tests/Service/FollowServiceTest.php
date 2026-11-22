@@ -210,6 +210,31 @@ class FollowServiceTest extends TestCase {
 	}
 
 	/**
+	 * The followers collection a follow subscribes to has to be the followed
+	 * actor's own: one on another server would show its followers-only posts
+	 * to whoever follows this actor.
+	 */
+	public function testAFollowDoesNotSubscribeToACollectionOnAnotherServer(): void {
+		$bob = $this->person(self::BOB_ID, 'bob');
+		$bob->setFollowers('https://victim.example/users/v/followers');
+		$this->cacheActorService->method('getFromAccount')->willReturn($bob);
+		$this->followsRequest->method('getByPersons')->willThrowException(new FollowNotFoundException());
+		$saved = null;
+		$this->followsRequest->expects($this->once())->method('save')
+			->with($this->callback(function (Follow $follow) use (&$saved): bool {
+				$saved = $follow;
+
+				return true;
+			}));
+		$this->activityService->method('request')->willReturn('token');
+
+		$this->service->followAccount($this->alice(), 'bob@remote.example');
+
+		$this->assertInstanceOf(Follow::class, $saved);
+		$this->assertSame('', $saved->getFollowId());
+	}
+
+	/**
 	 * A compromised account, or one running a script, can fan out follows to
 	 * thousands of servers from this instance's address in a few minutes —
 	 * every one of them a signed request this instance is answerable for, and
