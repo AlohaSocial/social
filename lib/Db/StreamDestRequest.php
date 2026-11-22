@@ -99,6 +99,32 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		return $recipients;
 	}
 
+	/**
+	 * Adds an account to the recipients of a direct message stored already,
+	 * as when a Bluesky message reaches a second account here.
+	 *
+	 * @return bool whether the account was not a recipient before
+	 */
+	public function addDirectRecipient(Stream $stream, string $actorId): bool {
+		$qb = $this->getQueryBuilder();
+		$qb->select('actor_id')
+			->from(self::TABLE_STREAM_DEST)
+			->where($qb->expr()->eq('stream_id', $qb->createNamedParameter($qb->prim($stream->getId()))))
+			->andWhere($qb->expr()->eq('actor_id', $qb->createNamedParameter($qb->prim($actorId))))
+			->andWhere($qb->expr()->eq('type', $qb->createNamedParameter('dm')))
+			->setMaxResults(1);
+		$cursor = $qb->executeQuery();
+		$known = $cursor->fetch() !== false;
+		$cursor->closeCursor();
+		if ($known) {
+			return false;
+		}
+		$this->createRecipients($stream->getId(), [$actorId => ['dm', '']], $stream->getNid());
+		$this->moved([$actorId], TimelineRevisionService::CONVERSATIONS);
+
+		return true;
+	}
+
 	public function generateStreamDest(Stream $stream): void {
 		if ($this->generateStreamNotification($stream)) {
 			return;
