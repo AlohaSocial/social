@@ -1523,13 +1523,15 @@ describe('Navigation', () => {
 		})
 
 		/** Drafts are picked from the dialog that writes them, never while editing a post. */
-		it('offers the drafts in the New post dialog but not in an edit', async () => {
+		it('offers the drafts in the New post dialog', async () => {
 			const wrapper = mountNavigation()
 			eventBus.emit('composer-open', {})
 			await flushPromises()
-			await vi.waitFor(() => expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(true))
 			await vi.waitFor(() => expect(wrapper.find('.modal-composer__header').findComponent({ name: 'DraftsButton' }).exists()).toBe(true))
+		})
 
+		it('leaves the drafts out of an edit', async () => {
+			const wrapper = mountNavigation()
 			eventBus.emit('composer-edit', { edit: { id: '123', content: '<p>Before</p>', media_attachments: [] } })
 			await flushPromises()
 			await vi.waitFor(() => expect(wrapper.findComponent({ name: 'PostEditForm' }).exists()).toBe(true))
