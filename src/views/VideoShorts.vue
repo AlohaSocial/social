@@ -36,6 +36,7 @@
 					:class="{ 'shorts__scope--current': option.value === watching }"
 					:aria-current="option.value === watching ? 'page' : undefined"
 					:to="{ name: 'shorts', query: { scope: option.value } }">
+					<component :is="option.icon" :size="18" />
 					{{ option.label }}
 				</router-link>
 			</nav>
@@ -390,15 +391,19 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import IconChevronUp from 'vue-material-design-icons/ChevronUp.vue'
 import IconChevronDown from 'vue-material-design-icons/ChevronDown.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
+import IconEarth from 'vue-material-design-icons/Earth.vue'
+import IconHome from 'vue-material-design-icons/Home.vue'
 import IconPlay from 'vue-material-design-icons/Play.vue'
 import IconPause from 'vue-material-design-icons/Pause.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
+import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
@@ -596,17 +601,18 @@ export default {
 		 * The feeds a reader can watch; a reader without a session follows
 		 * nobody and is not offered My Feed.
 		 *
-		 * @return {Array<{ value: string, label: string }>}
+		 * @return {Array<{ value: string, label: string, icon: object }>}
 		 */
 		scopes() {
+			// the icons of the timeline's switcher, so a feed looks the same everywhere
 			const all = [
-				{ value: 'home', label: t('social', 'My Feed') },
-				{ value: 'timeline', label: t('social', 'Local') },
-				{ value: 'federated', label: t('social', 'Global') },
+				{ value: 'home', label: t('social', 'My Feed'), icon: IconHome },
+				{ value: 'timeline', label: t('social', 'Local'), icon: IconAccountMultiple },
+				{ value: 'federated', label: t('social', 'Global'), icon: IconEarth },
 			]
 			// For you sits beside My Feed, as above the timeline
 			if (this.hasForYou) {
-				all.splice(1, 0, { value: 'interests', label: t('social', 'For you') })
+				all.splice(1, 0, { value: 'interests', label: t('social', 'For you'), icon: IconTagHeart })
 			}
 
 			return this.settingsStore.getServerData?.public ? all.slice(1) : all
