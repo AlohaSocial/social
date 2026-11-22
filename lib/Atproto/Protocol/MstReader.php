@@ -34,6 +34,55 @@ final class MstReader {
 	}
 
 	/**
+	 * The nodes from the root down to the one that holds $key, or to where
+	 * it would be: what proves a record is in the tree, without reading the
+	 * rest of it.
+	 *
+	 * @param callable(Cid): ?string $block a node's bytes, null when it is missing
+	 * @return array<string, string> CID => bytes, root first
+	 * @throws InvalidArgumentException when a node is missing or malformed
+	 */
+	public static function path(Cid $root, string $key, callable $block): array {
+		$nodes = [];
+		$cid = $root;
+		while ($cid !== null) {
+			if (count($nodes) > self::MAX_DEPTH) {
+				throw new InvalidArgumentException('The tree is deeper than a repository can be');
+			}
+			$bytes = $block($cid);
+			if ($bytes === null) {
+				throw new InvalidArgumentException('Tree node ' . $cid->toString() . ' is missing');
+			}
+			$nodes[$cid->toString()] = $bytes;
+			$node = DagCbor::decode($bytes);
+			if (!is_array($node) || !array_key_exists('e', $node) || !is_array($node['e'])) {
+				throw new InvalidArgumentException('Not a tree node: ' . $cid->toString());
+			}
+			$next = ($node['l'] ?? null) instanceof Cid ? $node['l'] : null;
+			$previous = '';
+			foreach ($node['e'] as $entry) {
+				$prefix = is_array($entry) ? ($entry['p'] ?? null) : null;
+				$suffix = is_array($entry) ? ($entry['k'] ?? null) : null;
+				if (!is_int($prefix) || $prefix < 0 || $prefix > strlen($previous) || !$suffix instanceof Bytes) {
+					throw new InvalidArgumentException('Not a tree entry in ' . $cid->toString());
+				}
+				$previous = substr($previous, 0, $prefix) . $suffix->value;
+				$order = strcmp($key, $previous);
+				if ($order === 0) {
+					return $nodes;
+				}
+				if ($order < 0) {
+					break;
+				}
+				$next = ($entry['t'] ?? null) instanceof Cid ? $entry['t'] : null;
+			}
+			$cid = $next;
+		}
+
+		return $nodes;
+	}
+
+	/**
 	 * @param array<string, string> $blocks
 	 * @param array<string, Cid> $leaves
 	 * @param string|null $last the key read before, null before the first
