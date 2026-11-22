@@ -232,7 +232,52 @@ class CurlService {
 			);
 		}
 
+		$account = $this->confirmedAccount($account, $actor);
+
 		return $actor;
+	}
+
+	/**
+	 * The handle to keep for an actor a WebFinger answer named. The `self`
+	 * link may name any actor on any host, so the handle asked for stands
+	 * only when it is the actor's own (`Person::canonicalAccount()`), or when
+	 * the actor's own server, asked about that one, answers with the handle
+	 * asked for as its subject and the same actor: a handle on another domain
+	 * than the actor's, as Mastodon's `WEB_DOMAIN` gives. Otherwise the
+	 * actor's own handle is kept, as Mastodon does.
+	 *
+	 * @throws InvalidOriginException the actor states no handle of its own
+	 */
+	private function confirmedAccount(string $account, Person $actor): string {
+		$canonical = $actor->canonicalAccount();
+		if ($canonical === '') {
+			throw new InvalidOriginException(
+				'CurlService::retrieveAccount - account: ' . $account . ' - actor without a handle: ' . $actor->getId()
+			);
+		}
+		if (strtolower($account) === strtolower($canonical)) {
+			return $account;
+		}
+
+		try {
+			$asked = $canonical;
+			$result = $this->webfingerAccount($asked);
+			$self = $this->get('href', $this->extractArray('rel', 'self', $this->getArray('links', $result)), '');
+			if (strtolower($self) === strtolower($actor->getId())
+				&& strtolower($this->get('subject', $result, '')) === 'acct:' . strtolower($account)) {
+				return $account;
+			}
+		} catch (Exception $e) {
+			$this->logger->info('the server of an actor could not confirm a handle', [
+				'account' => $account, 'actor' => $actor->getId(), 'exception' => $e,
+			]);
+		}
+
+		$this->logger->notice('a webfinger answer names an actor that does not claim the handle', [
+			'account' => $account, 'actor' => $actor->getId(),
+		]);
+
+		return $canonical;
 	}
 
 	/**

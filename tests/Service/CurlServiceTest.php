@@ -443,10 +443,12 @@ class CurlServiceTest extends TestCase {
 		$service = $this->webfingerThenActor(['id' => self::BOB, 'type' => 'Person']);
 		$bob = new Person();
 		$bob->setId(self::BOB);
+		$bob->setPreferredUsername('bob');
 		$this->useActivityPubReturning($bob);
 		$account = 'bob@mastodon.example';
 
 		$this->assertSame($bob, $service->retrieveAccount($account));
+		$this->assertSame('bob@mastodon.example', $account);
 		$this->assertSame(self::BOB, end($this->requests)['url']);
 	}
 
@@ -454,6 +456,7 @@ class CurlServiceTest extends TestCase {
 		$service = $this->webfingerThenActor(['id' => strtoupper(self::BOB)]);
 		$bob = new Person();
 		$bob->setId(strtoupper(self::BOB));
+		$bob->setPreferredUsername('bob');
 		$this->useActivityPubReturning($bob);
 		$account = 'bob@mastodon.example';
 
@@ -480,6 +483,7 @@ class CurlServiceTest extends TestCase {
 		$service = $this->webfingerThenActor(['id' => self::BOB, 'type' => 'Person'], 'application/json');
 		$bob = new Person();
 		$bob->setId(self::BOB);
+		$bob->setPreferredUsername('bob');
 		$this->useActivityPubReturning($bob);
 		$account = 'bob@mastodon.example';
 
@@ -506,6 +510,120 @@ class CurlServiceTest extends TestCase {
 		}
 
 		$this->assertSame($document, CurlService::servedAsActivityPub($document, self::BOB));
+	}
+
+	/**
+	 * A server answering WebFinger by URL: each request is answered with the
+	 * body of the first URL prefix it starts with, and nothing has a
+	 * host-meta, so the default WebFinger path is asked.
+	 *
+	 * @param array<string, string> $answers
+	 */
+	private function answeringByUrl(array $answers): CurlService {
+		return $this->serviceAnsweringWith(function (string $method, array $urls) use ($answers) {
+			foreach ($answers as $prefix => $body) {
+				if (str_starts_with($urls[0], $prefix)) {
+					return $body;
+				}
+			}
+
+			throw new RequestNetworkException('unreachable: ' . $urls[0]);
+		}, 'doRequestOverUrls', 'application/activity+json');
+	}
+
+	private function actorWithHandle(string $id, string $username): Person {
+		$actor = new Person();
+		$actor->setId($id);
+		$actor->setPreferredUsername($username);
+		$this->useActivityPubReturning($actor);
+
+		return $actor;
+	}
+
+	/**
+	 * The `self` link of a WebFinger answer may name an actor on any server:
+	 * `scammer@evil.example` pointing at an account on mastodon.example does
+	 * not make that account `scammer@evil.example`. Its own server says what
+	 * it is called.
+	 */
+	public function testRetrieveAccountKeepsTheActorsOwnHandleForAHandleOnAnotherServer(): void {
+		$victim = 'https://mastodon.example/users/victim';
+		$service = $this->answeringByUrl([
+			'https://evil.example/.well-known/webfinger' => $this->jrd('acct:scammer@evil.example', $victim),
+			'https://mastodon.example/.well-known/webfinger' => $this->jrd('acct:victim@mastodon.example', $victim),
+			$victim => json_encode(['id' => $victim, 'type' => 'Person']),
+		]);
+		$actor = $this->actorWithHandle($victim, 'victim');
+		$account = 'scammer@evil.example';
+
+		$this->assertSame($actor, $service->retrieveAccount($account));
+		$this->assertSame('victim@mastodon.example', $account);
+	}
+
+	/**
+	 * Mastodon's `WEB_DOMAIN`: handles on example.com, actors on
+	 * social.example.com. The actor's own server confirms the handle when
+	 * asked about `preferredUsername@` its own host.
+	 */
+	public function testRetrieveAccountKeepsAHandleTheActorsServerConfirms(): void {
+		$alice = 'https://social.example.com/users/alice';
+		$service = $this->answeringByUrl([
+			'https://example.com/.well-known/webfinger' => $this->jrd('acct:alice@example.com', $alice),
+			'https://social.example.com/.well-known/webfinger' => $this->jrd('acct:alice@example.com', $alice),
+			$alice => json_encode(['id' => $alice, 'type' => 'Person']),
+		]);
+		$this->actorWithHandle($alice, 'alice');
+		$account = 'alice@example.com';
+
+		$service->retrieveAccount($account);
+
+		$this->assertSame('alice@example.com', $account);
+		$this->assertStringContainsString(
+			'resource=acct%3Aalice%40social.example.com',
+			end($this->requests)['url']
+		);
+	}
+
+	/** The actor's server naming the handle but not this actor confirms nothing. */
+	public function testRetrieveAccountDoesNotTakeAConfirmationOfAnotherActor(): void {
+		$alice = 'https://social.example.com/users/alice';
+		$service = $this->answeringByUrl([
+			'https://example.com/.well-known/webfinger' => $this->jrd('acct:alice@example.com', $alice),
+			'https://social.example.com/.well-known/webfinger' => $this->jrd('acct:alice@example.com', 'https://social.example.com/users/other'),
+			$alice => json_encode(['id' => $alice, 'type' => 'Person']),
+		]);
+		$this->actorWithHandle($alice, 'alice');
+		$account = 'alice@example.com';
+
+		$service->retrieveAccount($account);
+
+		$this->assertSame('alice@social.example.com', $account);
+	}
+
+	public function testRetrieveAccountKeepsTheActorsOwnHandleWhenItsServerCannotBeAsked(): void {
+		$victim = 'https://mastodon.example/users/victim';
+		$service = $this->answeringByUrl([
+			'https://evil.example/.well-known/webfinger' => $this->jrd('acct:scammer@evil.example', $victim),
+			$victim => json_encode(['id' => $victim, 'type' => 'Person']),
+		]);
+		$this->actorWithHandle($victim, 'victim');
+		$account = 'scammer@evil.example';
+
+		$service->retrieveAccount($account);
+
+		$this->assertSame('victim@mastodon.example', $account);
+	}
+
+	/** Without a `preferredUsername` the actor has no handle to check one against. */
+	public function testRetrieveAccountRefusesAnActorWithoutAHandle(): void {
+		$service = $this->webfingerThenActor(['id' => self::BOB, 'type' => 'Person']);
+		$bob = new Person();
+		$bob->setId(self::BOB);
+		$this->useActivityPubReturning($bob);
+		$account = 'bob@mastodon.example';
+
+		$this->expectException(InvalidOriginException::class);
+		$service->retrieveAccount($account);
 	}
 
 	public function testRetrieveAccountRejectsANonActorDocument(): void {
