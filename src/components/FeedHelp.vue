@@ -6,6 +6,7 @@
 	<NcPopover v-if="description !== ''" class="feed-help" @show="onShow">
 		<template #trigger>
 			<NcButton
+				class="feed-help__trigger"
 				variant="tertiary"
 				:aria-label="t('social', 'About this feed')"
 				:title="t('social', 'About this feed')">
@@ -94,6 +95,17 @@ export default {
 </script>
 
 <style scoped lang="scss">
+/* a quiet hint beside the switcher, not a control that competes with it;
+   nested to outweigh NcButton's own tertiary colour */
+.feed-help .feed-help__trigger {
+	color: var(--color-text-maxcontrast);
+
+	&:hover,
+	&:focus-visible {
+		color: var(--color-main-text);
+	}
+}
+
 .feed-help__body {
 	max-width: 320px;
 	padding: 12px 14px;
