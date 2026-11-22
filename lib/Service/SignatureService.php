@@ -13,6 +13,7 @@ use DateTime;
 use DateTimeZone;
 use Exception;
 use JsonLdException;
+use LogicException;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -44,6 +45,7 @@ use OCP\ICacheFactory;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 use stdClass;
+use WeakMap;
 
 class SignatureService {
 	use TArrayTools;
@@ -150,6 +152,8 @@ class SignatureService {
 	private HttpMessageSignatureParser $messageSignatures;
 	private ICache $keyAttempts;
 	private LoggerInterface $logger;
+	/** @var WeakMap<IRequest, string> the signature bytes each request was verified with */
+	private WeakMap $verifiedSignatures;
 
 	public function __construct(
 		CacheActorService $cacheActorService,
@@ -169,6 +173,7 @@ class SignatureService {
 		$this->messageSignatures = new HttpMessageSignatureParser();
 		$this->keyAttempts = $cacheFactory->createDistributed('social.keys');
 		$this->logger = $logger;
+		$this->verifiedSignatures = new WeakMap();
 	}
 
 	/**
@@ -274,7 +279,7 @@ class SignatureService {
 	}
 
 	/**
-	 * Whether this exact signed request was already taken in: the window
+	 * Whether a request with this signature was already taken in: the window
 	 * above is twelve hours wide, and a captured delivery (a Follow after its
 	 * Undo) must not be replayed. A peer's retry signs a new `Date`. The
 	 * request is remembered only once taken in (`rememberRequest()`), so bytes
@@ -296,8 +301,21 @@ class SignatureService {
 		);
 	}
 
+	/**
+	 * The bytes of the signature `checkRequest()` verified, and nothing else
+	 * of the headers: a parameter added to Signature, an unused label added
+	 * to Signature-Input, or a rewritten keyId (draft-cavage does not sign
+	 * it) still verifies, and must not make a captured request new again.
+	 *
+	 * @throws LogicException for a request whose signature was not verified
+	 */
 	private function requestKey(IRequest $request): string {
-		return md5($request->getHeader('Signature') . "\n" . $request->getHeader('Signature-Input'));
+		$signature = $this->verifiedSignatures[$request] ?? null;
+		if ($signature === null) {
+			throw new LogicException('a request is only remembered once its signature is verified');
+		}
+
+		return hash('sha256', $signature);
 	}
 
 	/**
@@ -553,6 +571,7 @@ class SignatureService {
 				);
 			}
 		});
+		$this->verifiedSignatures[$request] = $signature['signature'];
 		$signer = $this->keyOwner($keyId);
 
 		return $origin;
@@ -939,6 +958,7 @@ class SignatureService {
 		$this->verifyWithKey($keyId, function (string $publicKey) use ($sign, $estimated, $signed): void {
 			$this->checkRequestSignatureUsingPublicKey($publicKey, $sign, $estimated, $signed);
 		});
+		$this->verifiedSignatures[$request] = $signed;
 		$signer = $this->keyOwner($keyId);
 
 		return $origin;
