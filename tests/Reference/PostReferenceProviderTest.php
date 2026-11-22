@@ -50,8 +50,11 @@ class PostReferenceProviderTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->streamService = $this->createStub(StreamService::class);
-		$this->streamService->method('getStreamByNid')->willReturnCallback(function (int $nid): Stream {
-			return $this->posts[$nid] ?? throw new StreamNotFoundException('no post ' . $nid);
+		// the name check itself is StreamService's, and tested there
+		$this->streamService->method('getStreamByNidUnder')->willReturnCallback(function (string $username, int $nid): Stream {
+			$post = $this->posts[$nid] ?? throw new StreamNotFoundException('no post ' . $nid);
+
+			return ($post->getActor()->getPreferredUsername() === $username) ? $post : throw new StreamNotFoundException('not by ' . $username);
 		});
 		$this->streamService->method('getStreamById')->willReturnCallback(function (string $id): Stream {
 			return $this->byId[$id] ?? throw new StreamNotFoundException('no post ' . $id);
@@ -169,6 +172,11 @@ class PostReferenceProviderTest extends TestCase {
 		$this->assertNotNull($reference);
 		$this->assertSame('By nid', $reference->getDescription());
 		$this->assertSame(self::APP . '@alice/1789347296405416473', $reference->getUrl());
+	}
+
+	public function testANidUnderSomebodyElsesNameStaysALink(): void {
+		$this->assertNotNull($this->provider->resolveReference(self::APP . '@alice/42'));
+		$this->assertNull($this->provider->resolveReference(self::APP . '@mallory/42'));
 	}
 
 	public function testAFollowersOnlyPostStaysALink(): void {

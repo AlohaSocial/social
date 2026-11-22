@@ -3605,8 +3605,11 @@ client API uses — while the address a post is published under ends in a
 different token, and the post used to be looked up by that address alone. So a
 link opened in a new tab, a reload, or a link somebody sent found nothing,
 provided no `item`, and the page said the post did not exist.
-`SocialPubController::resolvePost()` falls back to `getStreamByNid()` for a
-numeric token, on the browser branch only: an ActivityPub request asks for a
+`SocialPubController::resolvePost()` falls back to `getStreamByNidUnder()` for
+a numeric token, which also requires the name in the address to be the author's
+(the username of a local author, `user@host` of a remote one), or any post could
+be shown under any name; `PostReferenceProvider` resolves a link by nid the same
+way. That is on the browser branch only: an ActivityPub request asks for a
 post by its address, and answering a second identifier there would invent a
 second canonical id for every post. The fallback goes through the same viewer
 filter every other read does, so it shows what the reader may see and nothing

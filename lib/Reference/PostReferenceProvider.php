@@ -150,7 +150,7 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 		$post = null;
 		if (strlen($token) < self::ID_TAIL_LENGTH && (string)(int)$token === $token) {
 			try {
-				$post = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($token));
+				$post = $this->streamService->getStreamByNidUnder($username, \OCA\Social\Tools\Nid::fromStorage($token));
 			} catch (StreamNotFoundException $e) {
 				// not a nid this server knows; an id tail of that length is rare but not impossible
 			}
