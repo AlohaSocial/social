@@ -81,6 +81,7 @@ async function openGroup(wrapper, title) {
 }
 
 const headings = (wrapper) => wrapper.findAll('.settings__section-heading').map((h) => h.text())
+const sectionIds = (wrapper) => wrapper.findAll('.settings__section').map((section) => section.attributes('id'))
 const groupTitles = (wrapper) => wrapper.findAll('.settings__group-title').map((title) => title.text())
 
 describe('Settings', () => {
@@ -97,9 +98,9 @@ describe('Settings', () => {
 
 		// the page's one h1, which is what a screen reader jumps to
 		expect(wrapper.find('h1').text()).toBe('Settings')
-		expect(groupTitles(wrapper)).toEqual(['Account and privacy', 'Reading', 'Activities', 'Apps'])
+		expect(groupTitles(wrapper)).toEqual(['Account and privacy', 'Blocked and muted', 'Reading', 'Activities', 'Apps', 'Moving your account'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Account and privacy')
-		expect(headings(wrapper)).toEqual(['Who can find you', 'Who can contact you', 'Blocked and muted', 'Moving your account', 'Delete your Aloha Social account'])
+		expect(headings(wrapper)).toEqual(['Who can find you', 'Who can contact you', 'Delete your Aloha Social account'])
 	})
 
 	it('has every section in exactly one group, in the order they are read', async () => {
@@ -108,21 +109,45 @@ describe('Settings', () => {
 		for (const title of groupTitles(wrapper)) {
 			await openGroup(wrapper, title)
 			expect(wrapper.find('.settings__group-heading').text()).toBe(title)
-			seen.push(...headings(wrapper))
+			seen.push(...sectionIds(wrapper))
 		}
 
 		expect(seen).toEqual([
-			'Who can find you',
-			'Who can contact you',
-			'Blocked and muted',
-			'Moving your account',
-			'Delete your Aloha Social account',
-			'Sensitive media',
-			'Likes and followers',
-			'When to tell you',
-			'Authorized apps',
-			'Replies in Files',
+			'account',
+			'contact',
+			'delete',
+			'blocked',
+			'sensitive',
+			'counts',
+			'notifications',
+			'apps',
+			'files-comments',
+			'migration',
 		])
+	})
+
+	/**
+	 * Blocked and muted, and Moving your account, are groups of their own: the
+	 * group's heading is the section's, so the section does not repeat it.
+	 */
+	it.each([
+		['Blocked and muted', 'blocked'],
+		['Moving your account', 'migration'],
+	])('gives %s a group of its own, headed once', async (title, id) => {
+		const wrapper = await mountSettings()
+		await openGroup(wrapper, title)
+
+		expect(wrapper.find('.settings__group-heading').text()).toBe(title)
+		expect(sectionIds(wrapper)).toEqual([id])
+		expect(headings(wrapper)).toEqual([])
+		expect(wrapper.findAll('.settings__toc-link')).toHaveLength(0)
+	})
+
+	it('still names those sections in a search', async () => {
+		const wrapper = await mountSettings()
+		await wrapper.find('.settings__search input').setValue('blocked')
+
+		expect(headings(wrapper)).toContain('Blocked and muted')
 	})
 
 	/** The deletion cannot be undone, so it comes last in its group, marked. */
@@ -146,8 +171,8 @@ describe('Settings', () => {
 			// the parts of a section open the section
 			['#notification-policy', 'Account and privacy', '#contact'],
 			['#direct-messages', 'Account and privacy', '#contact'],
-			['#filters', 'Account and privacy', '#blocked'],
-			['#bring', 'Account and privacy', '#migration'],
+			['#filters', 'Blocked and muted', '#blocked'],
+			['#bring', 'Moving your account', '#migration'],
 		])('%s opens %s', async (hash, group, section) => {
 			const wrapper = await mountSettings({ hash })
 
@@ -156,10 +181,11 @@ describe('Settings', () => {
 		})
 
 		it('holds Blocking and moving the account, which were pages of their own', async () => {
-			const wrapper = await mountSettings({ hash: '#blocked' })
+			const blocked = await mountSettings({ hash: '#blocked' })
+			expect(blocked.findComponent({ name: 'BlockedAccounts' }).props('embedded')).toBe(true)
 
-			expect(wrapper.findComponent({ name: 'BlockedAccounts' }).props('embedded')).toBe(true)
-			expect(wrapper.find('section.settings__section#migration .migration-settings-stub').exists()).toBe(true)
+			const migration = await mountSettings({ hash: '#migration' })
+			expect(migration.find('section.settings__section#migration .migration-settings-stub').exists()).toBe(true)
 		})
 	})
 
@@ -178,7 +204,7 @@ describe('Settings', () => {
 			const wrapper = await mountSettings()
 
 			expect(wrapper.findAll('.settings__group-link').map((link) => link.attributes('href')))
-				.toEqual(['#account', '#sensitive', '#notifications', '#apps'])
+				.toEqual(['#account', '#blocked', '#sensitive', '#notifications', '#apps', '#migration'])
 		})
 
 		it('puts the group opened into the address', async () => {
