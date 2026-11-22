@@ -1198,7 +1198,13 @@ a post is. It now accepts every `AP::NOTE_LIKE_TYPES`. A PeerTube watch page is
 `/w/{shortUUID}`, which is the address a person copies out of their browser and
 *not* the object's id, so the "a document is only evidence about itself" rule
 is satisfied one level in: the document is trusted when it names the address it
-was fetched from among its own `url` links.
+was fetched from among its own `url` links **and** its id is on the server that
+served it (`host[:port]` alike) — a watch page and its video are on the same
+server, and without the second half any server could serve somebody else's post
+under its own link. A fetched document whose id is on this instance is refused
+outright: this instance's own posts are in its database, never fetched. For the
+same reason an outbox page and a post fetched by its id only serve rows written
+here (`local`), never a row that merely carries a local id.
 
 **Where somebody stopped watching** is `social_watch` — PeerTube's
 `WatchAction`, and the thing that makes a long video usable at all: a two-hour

@@ -838,7 +838,8 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The public posts of one author, newest first by nid. Numbered pages are
+	 * The public posts a local author wrote here, newest first by nid: a row
+	 * fetched from elsewhere is never served as theirs. Numbered pages are
 	 * still answered by offset, as peers hold those addresses; every `next`
 	 * link is a cursor (`$before`) the `attributed_to_prim` index answers
 	 * without reading earlier pages.
@@ -855,6 +856,7 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb = $this->getStreamSelectSql();
 		$qb->limitToStatusTypes();
 		$qb->limitToAttributedTo($actorId, true);
+		$qb->limitToLocal(true);
 
 		$qb->selectDestFollowing('sd', '');
 		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');

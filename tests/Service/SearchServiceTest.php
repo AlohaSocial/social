@@ -22,6 +22,7 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Service\SearchService;
+use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -41,6 +42,7 @@ class SearchServiceTest extends TestCase {
 	private HashtagService|MockObject $hashtagService;
 	private StreamRequest|Stub $streamRequest;
 	private CurlService|MockObject $curlService;
+	private SignatureService|Stub $signatureService;
 	private SearchService $service;
 
 	// resolveStatus()
@@ -117,6 +119,58 @@ class SearchServiceTest extends TestCase {
 		$this->assertNull($this->service->resolveStatus('https://remote.example/notes/1'));
 	}
 
+	/**
+	 * A PeerTube watch page is not the video's id, and is still a link people
+	 * paste: the video it serves names the page among its `url` links, on the
+	 * same server.
+	 */
+	public function testAPeerTubeWatchPageResolvesToItsVideo(): void {
+		$stored = $this->note('https://peertube.example/videos/watch/9c9de5e8');
+		$this->readBackIsASavedPost($stored);
+		$this->curlService->method('retrieveObject')->willReturn([
+			'id' => 'https://peertube.example/videos/watch/9c9de5e8',
+			'type' => 'Video',
+			'attributedTo' => 'https://peertube.example/accounts/bob',
+			'url' => [
+				['type' => 'Link', 'mediaType' => 'text/html', 'href' => 'https://peertube.example/w/6f4c1e1a'],
+			],
+		]);
+
+		$this->assertSame($stored, $this->service->resolveStatus('https://peertube.example/w/6f4c1e1a'));
+	}
+
+	/**
+	 * Listing the fetched address among its `url` links is all a document
+	 * says about itself, so the id it claims has to be on the server that
+	 * served it: otherwise any server could serve somebody else's post.
+	 */
+	public function testADocumentNamingTheAddressButClaimingAnotherServersIdIsRefused(): void {
+		$this->readBackIsASavedPost($this->note('https://victim.example/users/bob/statuses/999'));
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->curlService->method('retrieveObject')->willReturn([
+			'id' => 'https://victim.example/users/bob/statuses/999',
+			'type' => 'Note',
+			'attributedTo' => 'https://victim.example/users/bob',
+			'url' => 'https://evil.example/w/x',
+		]);
+
+		$this->assertNull($this->service->resolveStatus('https://evil.example/w/x'));
+	}
+
+	/** This instance's own posts are held here; a fetched one under a local id is a forgery. */
+	public function testAFetchedDocumentWithALocalIdIsRefused(): void {
+		$this->readBackIsASavedPost($this->note('https://cloud.example/apps/social/@alice/1'));
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->curlService->method('retrieveObject')->willReturn([
+			'id' => 'https://cloud.example/apps/social/@alice/1',
+			'type' => 'Note',
+			'attributedTo' => 'https://cloud.example/apps/social/users/alice',
+			'url' => 'https://cloud.example/s/share/download',
+		]);
+
+		$this->assertNull($this->service->resolveStatus('https://cloud.example/s/share/download'));
+	}
+
 	public function testSomethingThatIsNotAPostIsRefused(): void {
 		$this->readBackIsASavedPost($this->note('https://remote.example/users/bob'));
 		$this->curlService->method('retrieveObject')->willReturn([
@@ -141,6 +195,9 @@ class SearchServiceTest extends TestCase {
 		// importing a Note reaches the container for the hashtag links it builds
 		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 		$this->curlService = $this->createMock(CurlService::class);
+		$this->signatureService = $this->createStub(SignatureService::class);
+		$this->signatureService->method('isLocalActor')
+			->willReturnCallback(static fn (string $id): bool => str_starts_with($id, 'https://cloud.example/'));
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->hashtagService = $this->createMock(HashtagService::class);
 		$this->streamRequest = $this->createStub(StreamRequest::class);
@@ -149,7 +206,8 @@ class SearchServiceTest extends TestCase {
 			$this->hashtagService,
 			$this->streamRequest,
 			new NullLogger(),
-			$this->curlService
+			$this->curlService,
+			$this->signatureService
 		);
 	}
 
@@ -178,7 +236,7 @@ class SearchServiceTest extends TestCase {
 	public function testACacheOnlySearchNeverFetchesAndQueuesWhatItDoesNotKnow(): void {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			null, $queue
 		);
 		$this->cacheActorService->expects($this->never())->method('getFromId');
@@ -195,7 +253,7 @@ class SearchServiceTest extends TestCase {
 	public function testASearchThatMayNotQueueAsksNoOtherServer(): void {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			null, $queue
 		);
 		$this->cacheActorService->expects($this->never())->method('getFromId');
@@ -212,7 +270,7 @@ class SearchServiceTest extends TestCase {
 	public function testACacheOnlySearchAnswersACachedActorWithoutQueueing(): void {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			null, $queue
 		);
 		$bob = new Person();
@@ -226,7 +284,7 @@ class SearchServiceTest extends TestCase {
 
 	public function testACacheOnlySearchDoesNotOfferALimitedBlueskyAccount(): void {
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			null, $this->createMock(RemoteFetchQueue::class)
 		);
 		$limited = new Person();
@@ -291,7 +349,7 @@ class SearchServiceTest extends TestCase {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$bluesky = $this->createMock(BlueskySearch::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			$bluesky, $queue
 		);
 		$this->cacheActorService->expects($this->never())->method('getFromAccount');
@@ -319,7 +377,7 @@ class SearchServiceTest extends TestCase {
 	public function testWithoutResolveTheStartOfAHandleIsNotQueued(string $search): void {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			null, $queue
 		);
 		$this->cacheActorService->method('searchCachedAccounts')->willReturn([]);
@@ -331,7 +389,7 @@ class SearchServiceTest extends TestCase {
 	public function testWithoutResolveAHandleHeldHereIsNotQueued(): void {
 		$queue = $this->createMock(RemoteFetchQueue::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			null, $queue
 		);
 		$bob = new Person();
@@ -349,7 +407,7 @@ class SearchServiceTest extends TestCase {
 	public function testWithResolveTheTypeaheadsAccountsAreKept(): void {
 		$bluesky = $this->createMock(BlueskySearch::class);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService,
+			$this->cacheActorService, $this->hashtagService, $this->streamRequest, new NullLogger(), $this->curlService, $this->signatureService,
 			$bluesky
 		);
 		$found = (new Person())->setId('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz');
@@ -414,7 +472,7 @@ class SearchServiceTest extends TestCase {
 			->with('fox', 10, 20, 'https://cloud.example/users/alice', '1791284215592836068', 5)
 			->willReturn([]);
 		$service = new SearchService(
-			$this->cacheActorService, $this->hashtagService, $streamRequest, new NullLogger(), $this->curlService
+			$this->cacheActorService, $this->hashtagService, $streamRequest, new NullLogger(), $this->curlService, $this->signatureService
 		);
 
 		$service->searchStreamContent('fox', 10, 20, 'https://cloud.example/users/alice', '1791284215592836068', 5);
