@@ -94,6 +94,7 @@ class SearchServiceTest extends TestCase {
 		$stored = $this->note('https://remote.example/notes/1');
 		$this->readBackIsASavedPost($stored);
 		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/activity+json',
 			'id' => 'https://remote.example/notes/1',
 			'type' => 'Note',
 			'attributedTo' => 'https://remote.example/users/bob',
@@ -111,6 +112,7 @@ class SearchServiceTest extends TestCase {
 	public function testADocumentThatClaimsAnotherAddressIsRefused(): void {
 		$this->readBackIsASavedPost($this->note('https://remote.example/notes/1'));
 		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/activity+json',
 			'id' => 'https://remote.example/notes/SOMEBODY-ELSE',
 			'type' => 'Note',
 			'attributedTo' => 'https://remote.example/users/bob',
@@ -128,6 +130,7 @@ class SearchServiceTest extends TestCase {
 		$stored = $this->note('https://peertube.example/videos/watch/9c9de5e8');
 		$this->readBackIsASavedPost($stored);
 		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/activity+json',
 			'id' => 'https://peertube.example/videos/watch/9c9de5e8',
 			'type' => 'Video',
 			'attributedTo' => 'https://peertube.example/accounts/bob',
@@ -148,6 +151,7 @@ class SearchServiceTest extends TestCase {
 		$this->readBackIsASavedPost($this->note('https://victim.example/users/bob/statuses/999'));
 		$this->cacheActorService->expects($this->never())->method('getFromId');
 		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/activity+json',
 			'id' => 'https://victim.example/users/bob/statuses/999',
 			'type' => 'Note',
 			'attributedTo' => 'https://victim.example/users/bob',
@@ -162,6 +166,7 @@ class SearchServiceTest extends TestCase {
 		$this->readBackIsASavedPost($this->note('https://cloud.example/apps/social/@alice/1'));
 		$this->cacheActorService->expects($this->never())->method('getFromId');
 		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/activity+json',
 			'id' => 'https://cloud.example/apps/social/@alice/1',
 			'type' => 'Note',
 			'attributedTo' => 'https://cloud.example/apps/social/users/alice',
@@ -171,9 +176,27 @@ class SearchServiceTest extends TestCase {
 		$this->assertNull($this->service->resolveStatus('https://cloud.example/s/share/download'));
 	}
 
+	/**
+	 * A JSON file anybody can put on a host (a public share, a paste) is not
+	 * the post of somebody on it, whatever it claims.
+	 */
+	public function testADocumentNotServedAsActivityPubIsRefused(): void {
+		$this->readBackIsASavedPost($this->note('https://remote.example/notes/1'));
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/json',
+			'id' => 'https://remote.example/notes/1',
+			'type' => 'Note',
+			'attributedTo' => 'https://remote.example/users/bob',
+		]);
+
+		$this->assertNull($this->service->resolveStatus('https://remote.example/notes/1'));
+	}
+
 	public function testSomethingThatIsNotAPostIsRefused(): void {
 		$this->readBackIsASavedPost($this->note('https://remote.example/users/bob'));
 		$this->curlService->method('retrieveObject')->willReturn([
+			'_contentType' => 'application/activity+json',
 			'id' => 'https://remote.example/users/bob',
 			'type' => 'Person',
 		]);

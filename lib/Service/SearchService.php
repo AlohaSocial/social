@@ -84,8 +84,8 @@ class SearchService {
 	 *
 	 * Guards against an open proxy: the route is rate-limited, `CurlService`
 	 * enforces the access list and pins the resolved address, and the
-	 * document must claim the id it was fetched from (as
-	 * `StreamQueueService::cacheItem()` checks). A post with an id on this
+	 * document must be served as ActivityPub and claim the id it was fetched
+	 * from (as `StreamQueueService::cacheItem()` checks). A post with an id on this
 	 * instance is never taken from another server's answer.
 	 *
 	 * A post already held is returned without fetching. `$asViewer` is `true`
@@ -106,7 +106,7 @@ class SearchService {
 		}
 
 		try {
-			$data = $this->curlService->retrieveObject($uri);
+			$data = CurlService::servedAsActivityPub($this->curlService->retrieveObject($uri), $uri);
 			$object = AP::instance()->getItemFromData($data);
 
 			if ($object->getId() !== $uri) {

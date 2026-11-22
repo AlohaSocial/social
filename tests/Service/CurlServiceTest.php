@@ -96,9 +96,10 @@ class CurlServiceTest extends TestCase {
 
 	/**
 	 * CurlService with the network layer replaced: $mocked is answered by
-	 * $responder(string $method, array $urls, array $options): string.
+	 * $responder(string $method, array $urls, array $options): string, and
+	 * every answer carries $contentType.
 	 */
-	private function serviceAnsweringWith(callable $responder, string $mocked = 'doRequestOverUrls'): CurlService {
+	private function serviceAnsweringWith(callable $responder, string $mocked = 'doRequestOverUrls', string $contentType = ''): CurlService {
 		$this->service = $this->getMockBuilder(CurlService::class)
 			->setConstructorArgs([
 				$this->configService, $this->fediverseService, $this->clientService,
@@ -107,7 +108,10 @@ class CurlServiceTest extends TestCase {
 			->onlyMethods([$mocked])
 			->getMock();
 		$this->service->method($mocked)->willReturnCallback(
-			function (string $method, $urls, array $options = []) use ($responder) {
+			function (string $method, $urls, array $options = [], &$answeredType = null) use ($responder, $contentType) {
+				if ($contentType !== '') {
+					$answeredType = $contentType;
+				}
 				$urls = is_array($urls) ? $urls : [$urls];
 				$this->requests[] = ['method' => $method, 'url' => $urls[0], 'urls' => $urls, 'options' => $options];
 
@@ -422,7 +426,7 @@ class CurlServiceTest extends TestCase {
 		AP::set($ap);
 	}
 
-	private function webfingerThenActor(array $actorData): CurlService {
+	private function webfingerThenActor(array $actorData, string $contentType = 'application/activity+json; charset=utf-8'): CurlService {
 		return $this->serviceAnsweringWith(function (string $method, array $urls) use ($actorData) {
 			if (str_contains($urls[0], 'host-meta')) {
 				return $this->hostMetaJson();
@@ -432,7 +436,7 @@ class CurlServiceTest extends TestCase {
 			}
 
 			return json_encode($actorData);
-		});
+		}, 'doRequestOverUrls', $contentType);
 	}
 
 	public function testRetrieveAccountResolvesTheSelfLinkToAnActor(): void {
@@ -465,6 +469,43 @@ class CurlServiceTest extends TestCase {
 
 		$this->expectException(InvalidOriginException::class);
 		$service->retrieveAccount($account);
+	}
+
+	/**
+	 * The self link of a WebFinger answer names any URL, and only a document
+	 * served as ActivityPub is an actor's: a JSON file on a share link of the
+	 * same host is not.
+	 */
+	public function testRetrieveAccountRejectsAnActorNotServedAsActivityPub(): void {
+		$service = $this->webfingerThenActor(['id' => self::BOB, 'type' => 'Person'], 'application/json');
+		$bob = new Person();
+		$bob->setId(self::BOB);
+		$this->useActivityPubReturning($bob);
+		$account = 'bob@mastodon.example';
+
+		$this->expectException(InvalidOriginException::class);
+		$service->retrieveAccount($account);
+	}
+
+	/** @return iterable<string, array{string, bool}> */
+	public static function servedTypes(): iterable {
+		yield 'Mastodon, Misskey, PeerTube' => ['application/activity+json; charset=utf-8', true];
+		yield 'Pixelfed, GoToSocial' => ['application/activity+json', true];
+		yield 'JSON-LD with the ActivityStreams profile' => ['application/ld+json; profile="https://www.w3.org/ns/activitystreams"', true];
+		yield 'JSON-LD without it' => ['application/ld+json', false];
+		yield 'plain JSON' => ['application/json', false];
+		yield 'a file download' => ['application/octet-stream', false];
+		yield 'nothing' => ['', false];
+	}
+
+	#[DataProvider('servedTypes')]
+	public function testOnlyADocumentServedAsActivityPubIsTakenAsOne(string $contentType, bool $taken): void {
+		$document = ['id' => self::BOB, '_contentType' => $contentType];
+		if (!$taken) {
+			$this->expectException(InvalidOriginException::class);
+		}
+
+		$this->assertSame($document, CurlService::servedAsActivityPub($document, self::BOB));
 	}
 
 	public function testRetrieveAccountRejectsANonActorDocument(): void {

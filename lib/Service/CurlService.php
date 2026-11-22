@@ -214,7 +214,7 @@ class CurlService {
 		}
 
 		$id = $this->get('href', $link, '');
-		$data = $this->retrieveObject($id);
+		$data = self::servedAsActivityPub($this->retrieveObject($id), $id);
 
 		$this->logger->debug(
 			'retrieveAccount, details', ['link' => $link, 'data' => $data, 'account' => $account]
@@ -307,6 +307,25 @@ class CurlService {
 
 		return $type === 'application/ld+json'
 			&& str_contains(strtolower($contentType), 'https://www.w3.org/ns/activitystreams');
+	}
+
+	/**
+	 * A document `retrieveObject()` fetched, refused unless it was served as
+	 * ActivityPub (`isActivityPubMediaType()`), as Mastodon refuses it: whoever
+	 * can put a JSON file at an address on a host would otherwise speak for
+	 * every actor there. Static, so a mocked CurlService still applies it.
+	 *
+	 * @param array<string, mixed> $document
+	 * @return array<string, mixed>
+	 * @throws InvalidOriginException
+	 */
+	public static function servedAsActivityPub(array $document, string $id): array {
+		$contentType = is_string($document['_contentType'] ?? null) ? $document['_contentType'] : '';
+		if (!self::isActivityPubMediaType($contentType)) {
+			throw new InvalidOriginException('not served as ActivityPub: ' . $id . ' - contentType: ' . $contentType);
+		}
+
+		return $document;
 	}
 
 	/**

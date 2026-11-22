@@ -1456,7 +1456,8 @@ class StreamServiceTest extends TestCase {
 		$this->curlService->expects(self::exactly(7))->method('retrieveObject')
 			->willReturnCallback(static fn (string $url): array => $url === $bob->getOutbox()
 				? ['orderedItems' => $ids]
-				: ['type' => 'Note', 'id' => $url, 'attributedTo' => $bob->getId(), 'to' => [ACore::CONTEXT_PUBLIC], 'content' => 'A remote post']);
+				: ['type' => 'Note', 'id' => $url, 'attributedTo' => $bob->getId(), 'to' => [ACore::CONTEXT_PUBLIC], 'content' => 'A remote post',
+					'_contentType' => 'application/activity+json']);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->streamRequest->expects(self::exactly(6))->method('save')->willReturn(true);
 
