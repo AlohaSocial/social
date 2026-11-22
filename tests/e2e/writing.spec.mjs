@@ -47,6 +47,8 @@ test.describe('writing, in a browser', () => {
 		// the page flips the button before the server answers, and a reload
 		// before the answer would cancel the request it is checking
 		const saved = page.waitForResponse((response) => /\/(un)?favourite$/.test(response.url()))
+		// the controls come up with the pointer on the post, as for a reader
+		await post.hover()
 		await like.click()
 		await expect(like).toHaveAttribute('aria-pressed', before === 'true' ? 'false' : 'true')
 		expect((await saved).ok()).toBe(true)
@@ -58,6 +60,7 @@ test.describe('writing, in a browser', () => {
 			.toHaveAttribute('aria-pressed', before === 'true' ? 'false' : 'true')
 
 		// and back, so the run leaves the instance as it found it
+		await page.locator('.social__timeline article').first().hover()
 		await after.click()
 		await expect(after).toHaveAttribute('aria-pressed', before ?? 'false')
 	})

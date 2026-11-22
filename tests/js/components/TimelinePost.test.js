@@ -1198,9 +1198,33 @@ describe('TimelinePost', () => {
 
 		it('keeps the reply action at the outside edge without overhanging nested entries', () => {
 			const source = timelinePostStyles()
+			const { wrapper } = mountPost()
+			const groups = wrapper.findAll('.post-action-group')
 
-			expect(source).toMatch(/\.post-action-group--reply\s*\{\s*margin-inline-start: auto;/)
+			// the last control of a row packed against its end, with no gap
+			// opened before it
+			expect(groups.at(-1).classes()).toContain('post-action-group--reply')
+			expect(source).toMatch(/\.post-actions__groups \{[^}]*justify-content: flex-end;/)
+			expect(source).not.toMatch(/\.post-action-group--reply\s*\{\s*margin-inline-start: auto;/)
 			expect(source).not.toContain('margin-inline-end: calc(var(--thread-depth')
+		})
+
+		/**
+		 * With a pointer, whatever is shown at rest -- a count, a like or boost
+		 * given -- ends at the card's end, whether the reader shows counts or
+		 * not: the controls with nothing to show take no room until the card
+		 * is pointed at, rather than holding an empty place to its right.
+		 */
+		it('lets the controls with nothing to show take no room until the card is pointed at', () => {
+			const source = timelinePostStyles()
+			const rule = source.match(/@media \(hover: hover\) and \(pointer: fine\) \{([\s\S]*?)\n\}/)
+
+			expect(rule).not.toBeNull()
+			// hidden visually, never with `display: none`, which would take
+			// them from the keyboard and from a screen reader
+			expect(rule[1]).toMatch(/\.post-actions > :first-child,\s*\.post-action-group:not\(:has\(\.post-action-count, \.button-vue\[aria-pressed='true'\]\)\) \{\s*@include layout\.visually-hidden;/)
+			expect(rule[1]).toMatch(/\.post-content:is\(:hover, :focus-within\),\s*\.post-content:has\(\.post-actions-reveal--held\) \{\s*\.post-actions > :first-child,\s*\.post-action-group \{\s*@include layout\.visually-shown;/)
+			expect(rule[1]).not.toContain('display: none')
 		})
 
 		/** The page counts on its own when the reader likes, so the server's zero is not enough. */

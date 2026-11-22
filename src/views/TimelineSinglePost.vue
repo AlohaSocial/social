@@ -493,7 +493,8 @@ export default {
 		position: absolute;
 		top: 12px;
 		bottom: 12px;
-		inset-inline-start: 18px;
+		// through the middle of the faces: 8px of card padding and half of 40px, less half the line
+		inset-inline-start: 27px;
 		width: 2px;
 		border-radius: 1px;
 		background: var(--color-border);
@@ -515,9 +516,12 @@ export default {
 }
 
 /* the fine print, the faces and the reply box share the post's edge, as the
-   Back button above it does */
+   Back button above it does; the spine passes behind them */
 .main-post__under {
+	position: relative;
+	z-index: 1;
 	margin-bottom: 16px;
+	background: var(--color-main-background);
 }
 
 .thread__hidden {

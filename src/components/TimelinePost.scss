@@ -326,9 +326,28 @@
 	}
 }
 
-	.post-action-group--reply {
-		margin-inline-start: auto;
+/*
+ * With a pointer, the menu and every control with nothing to show at rest --
+ * no count, not given -- take no room until the card is pointed at or
+ * focused. What is shown therefore always ends at the card's end, and the
+ * rest join it from the start side. They are hidden visually only, so the
+ * keyboard can still reach them (focus brings the row back) and a screen
+ * reader still has them. Touch screens keep the whole row.
+ */
+@media (hover: hover) and (pointer: fine) {
+	.post-actions > :first-child,
+	.post-action-group:not(:has(.post-action-count, .button-vue[aria-pressed='true'])) {
+		@include layout.visually-hidden;
 	}
+
+	.post-content:is(:hover, :focus-within),
+	.post-content:has(.post-actions-reveal--held) {
+		.post-actions > :first-child,
+		.post-action-group {
+			@include layout.visually-shown;
+		}
+	}
+}
 
 .post-action--popped :deep(.material-design-icon) {
 	animation: post-pop .45s cubic-bezier(.34, 1.56, .64, 1);
