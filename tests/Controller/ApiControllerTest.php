@@ -870,6 +870,43 @@ class ApiControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The timeline route also serves the favourites, which Mastodon puts behind
+	 * `read:favourites`: a token for statuses alone does not read them.
+	 */
+	public function testTheFavouritesTimelineNeedsTheFavouritesScope(): void {
+		$this->route = 'social.TimelineApi.timelines';
+		$this->request->urlParams['timeline'] = 'favourites';
+		$this->bearerFor(['read:statuses']);
+		$this->streamService->expects($this->never())->method('getTimeline');
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->timelines('favourites'),
+			'token scope does not allow this request (needs read:favourites)'
+		);
+	}
+
+	public function testTheFavouritesTimelineIsReadWithTheFavouritesScope(): void {
+		$this->route = 'social.TimelineApi.timelines';
+		$this->request->urlParams['timeline'] = 'Favourites';
+		$this->bearerFor(['read:favourites']);
+		$this->captureTimelineOptions([]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer s3cret')->timelines('Favourites')->getStatus());
+	}
+
+	/** The other timelines stay behind `read:statuses`, as on Mastodon. */
+	public function testTheHomeTimelineStillNeedsTheStatusesScope(): void {
+		$this->route = 'social.TimelineApi.timelines';
+		$this->request->urlParams['timeline'] = 'home';
+		$this->bearerFor(['read:favourites']);
+
+		$this->assertInsufficientScope(
+			$this->controller('Bearer s3cret')->timelines('home'),
+			'token scope does not allow this request (needs read:statuses)'
+		);
+	}
+
 	public function testARouteNamedInTheBodyDoesNotChangeTheScopeChecked(): void {
 		$this->route = 'social.StatusApi.statusNew';
 		$this->body = ['_route' => 'social.StatusApi.statusGet'];
