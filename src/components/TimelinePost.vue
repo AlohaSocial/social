@@ -168,8 +168,9 @@
 				:canReact="!serverData.public"
 				:offerAdd="false"
 				@update:modelValue="onReactionsChanged" />
-			<!-- the counts are always shown; the controls arrive with the
-			     pointer, without anything moving (see the stylesheet) -->
+			<!-- the counts are always shown, at the end of the row; the other
+			     controls join them from the start side with the pointer (see
+			     the stylesheet) -->
 			<div
 				v-if="!serverData.public"
 				class="post-actions-reveal"
