@@ -14,6 +14,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Reference\PostReferenceProvider;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\FollowService;
@@ -166,11 +167,9 @@ class UnifiedSearchProvider implements IProvider {
 	private function convertStreams(array $streams): array {
 		$result = [];
 		foreach ($streams as $stream) {
-			$excerpt = html_entity_decode(strip_tags($stream->getContent()), ENT_QUOTES | ENT_HTML5);
-			$excerpt = trim((string)preg_replace('/\s+/', ' ', $excerpt));
-			if (mb_strlen($excerpt) > 120) {
-				$excerpt = mb_substr($excerpt, 0, 119) . '…';
-			}
+			// behind a content warning, the warning stands in for the text
+			$excerpt = PostReferenceProvider::warningOf($stream, $this->l10n, 120)
+				?? PostReferenceProvider::excerpt($stream->getContent(), 120);
 
 			$author = '';
 			$link = $stream->getId();

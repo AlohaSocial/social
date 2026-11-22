@@ -212,8 +212,9 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 * The card's text: behind a content warning, the warning and nothing else.
 	 */
 	private function textOf(Stream $post): string {
-		if ($post->getSummary() !== '' && ($post->isSensitive() || $post->getContent() === '')) {
-			return $this->l10n->t('Content warning: %s', [self::excerpt($post->getSummary())]);
+		$warning = self::warningOf($post, $this->l10n);
+		if ($warning !== null) {
+			return $warning;
 		}
 
 		$text = self::excerpt($post->getContent());
@@ -244,6 +245,18 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 		}
 
 		return ($author->getAvatar() !== '') ? $author->getAvatar() : null;
+	}
+
+	/**
+	 * What to show instead of a post's text when it is behind a content
+	 * warning, or null when it is not.
+	 */
+	public static function warningOf(Stream $post, IL10N $l10n, int $length = self::EXCERPT_LENGTH): ?string {
+		if ($post->getSummary() === '' || (!$post->isSensitive() && $post->getContent() !== '')) {
+			return null;
+		}
+
+		return $l10n->t('Content warning: %s', [self::excerpt($post->getSummary(), $length)]);
 	}
 
 	/**
