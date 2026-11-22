@@ -4694,7 +4694,10 @@ refused, `GET /invites` answers `allowed: false` and the page's
 invitation whose creator is an external user (one made before this rule) is not
 valid, so it neither skips approval nor opens an invitation-only server.
 Otherwise one approved external user could invite five people, each of them
-five more, and nobody would ever be approved. Approval is also decided again
+five more, and nobody would ever be approved. A suspended account is held to
+the same rule (`ModerationService::isSuspendedUser()`), and its invitations
+stop being valid when it is suspended, so a suspension cannot be walked around
+with a fresh account that skips approval. Approval is also decided again
 when the address is confirmed: a registration without an invitation that is
 confirmed while the mode is `approval` joins the queue
 (`ExternalSignupsRequest::markVerified(…, true)`), even if it was sent before
