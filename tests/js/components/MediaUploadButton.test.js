@@ -29,7 +29,7 @@ async function pick(wrapper, files) {
 	await input.trigger('change')
 }
 
-describe('Upload a video', () => {
+describe('New video', () => {
 	it('opens the picker for videos from the press itself', async () => {
 		const wrapper = mountButton()
 		const input = wrapper.find('input[type="file"]')
@@ -58,7 +58,7 @@ describe('Upload a video', () => {
 
 	it('supports the Photos multi-file picker and hands all media to the same composer', async () => {
 		const wrapper = mountButton()
-		await wrapper.setProps({ accept: 'image/*,video/*', multiple: true, label: 'Share photos or a video' })
+		await wrapper.setProps({ accept: 'image/*,video/*', multiple: true, label: 'New photo' })
 		const files = [new File(['x'], 'photo.png', { type: 'image/png' }), new File(['v'], 'clip.mp4', { type: 'video/mp4' })]
 		const opened = vi.fn()
 		eventBus.on('composer-open', opened)
@@ -66,8 +66,16 @@ describe('Upload a video', () => {
 		expect(wrapper.find('input').attributes('accept')).toBe('image/*,video/*')
 		expect(wrapper.find('input').attributes('multiple')).toBeDefined()
 		expect(opened).toHaveBeenCalledWith({ files })
-		expect(wrapper.find('button').text()).toBe('Share photos or a video')
+		expect(wrapper.find('button').text()).toBe('New photo')
 		eventBus.off('composer-open', opened)
+	})
+
+	/** drawn as "New short" is on Shorts, so the three pages start their posts alike */
+	it('is a primary button called New video', () => {
+		const wrapper = mountButton()
+
+		expect(wrapper.find('button').text()).toBe('New video')
+		expect(wrapper.findComponent({ name: 'NcButton' }).props('variant')).toBe('primary')
 	})
 
 	it('opens nothing when the picker was dismissed', async () => {

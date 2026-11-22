@@ -820,7 +820,7 @@ export default {
 
 		/**
 		 * Files to attach on mount, from a picker opened before the composer
-		 * ("Upload a video" on the Videos page); attached like a drop.
+		 * ("New video" on the Videos page); attached like a drop.
 		 */
 		initialFiles: {
 			type: /** @type {import('vue').PropType<File[]>} */ (Array),

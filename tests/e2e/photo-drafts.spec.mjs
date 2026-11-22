@@ -12,7 +12,7 @@ test('the New post dialog lists browser drafts and resumes their original writin
 	try {
 		await login(page)
 		await openApp(page, '/timeline/photos?scope=home')
-		await expect(page.getByRole('button', { name: 'Share photos or a video', exact: true })).toBeVisible()
+		await expect(page.getByRole('button', { name: 'New photo', exact: true })).toBeVisible()
 		await page.evaluate(({ user, targetId }) => {
 			const draft = { text: 'Photo draft to continue', savedAt: Date.now(), visibility: 'public' }
 			localStorage.setItem(`social.composer.draft::${user}`, JSON.stringify(draft))

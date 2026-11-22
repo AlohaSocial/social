@@ -15,12 +15,12 @@
 			tabindex="-1"
 			aria-hidden="true"
 			@change="onPicked">
-		<NcButton variant="secondary" @click="pick">
+		<!-- drawn as "New short" is on Shorts, so every page starts its kind of post alike -->
+		<NcButton variant="primary" @click="pick">
 			<template #icon>
-				<IconImagePlus v-if="multiple" :size="20" />
-				<IconVideoPlusOutline v-else :size="20" />
+				<IconPlus :size="20" />
 			</template>
-			{{ label || t('social', 'Upload a video') }}
+			{{ label || t('social', 'New video') }}
 		</NcButton>
 	</div>
 </template>
@@ -28,8 +28,7 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import IconImagePlus from 'vue-material-design-icons/ImagePlus.vue'
-import IconVideoPlusOutline from 'vue-material-design-icons/VideoPlusOutline.vue'
+import IconPlus from 'vue-material-design-icons/Plus.vue'
 
 import eventBus from '../services/eventBus.js'
 
@@ -41,8 +40,7 @@ export default {
 	name: 'MediaUploadButton',
 
 	components: {
-		IconVideoPlusOutline,
-		IconImagePlus,
+		IconPlus,
 		NcButton,
 	},
 

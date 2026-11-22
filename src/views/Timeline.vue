@@ -48,7 +48,7 @@
 							v-if="!timelineStore.composerDisplayStatus"
 							accept="image/*,video/*"
 							multiple
-							:label="t('social', 'Share photos or a video')" />
+							:label="t('social', 'New photo')" />
 					</div>
 				</div>
 				<HashtagFollowButton

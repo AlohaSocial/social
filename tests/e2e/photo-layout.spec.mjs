@@ -21,7 +21,7 @@ test('Photos excludes text-only posts and preserves the chosen presentation', as
 		await login(page)
 		await openApp(page, '/timeline/photos?scope=home')
 		await expect(page.locator('.new-post--one-line')).toHaveCount(0)
-		await expect(page.getByRole('button', { name: 'Share photos or a video' })).toBeVisible()
+		await expect(page.getByRole('button', { name: 'New photo' })).toBeVisible()
 		const layout = page.getByRole('radiogroup', { name: 'Photo feed layout', exact: true })
 		await layout.getByRole('radio', { name: 'Media feed', exact: true }).click()
 		await expect(page.locator(`.timeline-entry[data-status-id="${photo.id}"]`)).toBeVisible()
@@ -32,7 +32,7 @@ test('Photos excludes text-only posts and preserves the chosen presentation', as
 		await page.reload()
 		await expect(layout.getByRole('radio', { name: 'Tiles', exact: true })).toHaveAttribute('aria-checked', 'true')
 		const picking = page.waitForEvent('filechooser')
-		await page.getByRole('button', { name: 'Share photos or a video', exact: true }).click()
+		await page.getByRole('button', { name: 'New photo', exact: true }).click()
 		const picker = await picking
 		await picker.setFiles(['first.png', 'second.png'].map((name) => ({ name, mimeType: 'image/png', buffer: Buffer.from(PICTURE, 'base64') })))
 		const modal = page.locator('.modal-composer')

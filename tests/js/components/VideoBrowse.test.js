@@ -286,7 +286,7 @@ describe('the Videos page', () => {
 		})
 	})
 
-	it('offers Upload a video to somebody signed in, and only to them', () => {
+	it('offers New video to somebody signed in, and only to them', () => {
 		wrapper = mountBrowse()
 		expect(wrapper.find('.upload-stub').exists()).toBe(true)
 		wrapper.unmount()
