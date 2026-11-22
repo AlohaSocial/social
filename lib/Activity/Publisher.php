@@ -38,6 +38,7 @@ class Publisher {
 	 * @param string $link where the entry leads
 	 * @param string $excerpt the post concerned, as plain text; '' when there is none
 	 * @param int|string $objectId the notification row's nid, so the entry is its own
+	 * @param bool $warned whether `$excerpt` is the post's content warning rather than its text
 	 */
 	public function publish(
 		string $userId,
@@ -47,7 +48,21 @@ class Publisher {
 		string $link,
 		string $excerpt,
 		int|string $objectId,
+		bool $warned = false,
 	): void {
+		$parameters = [
+			'account' => ($actor === null) ? $actorId : self::labelOf($actor),
+			'acct' => ($actor === null) ? '' : $actor->getAccount(),
+			'user' => ($actor === null) ? '' : $actor->getUserId(),
+			'actor' => $actorId,
+			'link' => $link,
+			'avatar' => ($actor === null) ? '' : $actor->getAvatar(),
+			'excerpt' => $excerpt,
+		];
+		if ($warned) {
+			$parameters['warned'] = true;
+		}
+
 		try {
 			$event = $this->activityManager->generateEvent();
 			$event->setApp(Application::APP_ID)
@@ -56,15 +71,7 @@ class Publisher {
 				->setTimestamp(time())
 				->setObject(self::OBJECT, (int)$objectId)
 				->setLink($link)
-				->setSubject($subject, [
-					'account' => ($actor === null) ? $actorId : self::labelOf($actor),
-					'acct' => ($actor === null) ? '' : $actor->getAccount(),
-					'user' => ($actor === null) ? '' : $actor->getUserId(),
-					'actor' => $actorId,
-					'link' => $link,
-					'avatar' => ($actor === null) ? '' : $actor->getAvatar(),
-					'excerpt' => $excerpt,
-				]);
+				->setSubject($subject, $parameters);
 			if ($actor !== null && $actor->getUserId() !== '') {
 				$event->setAuthor($actor->getUserId());
 			}

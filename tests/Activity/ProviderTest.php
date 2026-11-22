@@ -85,6 +85,14 @@ class ProviderTest extends TestCase {
 		$this->assertSame('https://cloud.example/apps/social/img/add_user.svg', $this->told['icon']);
 	}
 
+	public function testAContentWarningIsWordedAsOneInTheReadersLanguage(): void {
+		$event = $this->event('mention', ['account' => 'Carol', 'user' => 'carol', 'acct' => 'carol@cloud.example', 'excerpt' => 'Spoilers', 'warned' => true]);
+
+		$this->provider->parse('de', $event);
+
+		$this->assertSame('[de] Content warning: %s', $this->told['parsedMessage'], 'the warning, not the post');
+	}
+
 	public function testASubjectWithoutAnActorHasNoParameter(): void {
 		$event = $this->event('poll', ['account' => 'Alice', 'user' => 'alice', 'excerpt' => 'Tea or coffee?']);
 

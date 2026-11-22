@@ -252,11 +252,17 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 * warning, or null when it is not.
 	 */
 	public static function warningOf(Stream $post, IL10N $l10n, int $length = self::EXCERPT_LENGTH): ?string {
-		if ($post->getSummary() === '' || (!$post->isSensitive() && $post->getContent() !== '')) {
-			return null;
-		}
+		return self::isBehindWarning($post) ? self::warning($l10n, self::excerpt($post->getSummary(), $length)) : null;
+	}
 
-		return $l10n->t('Content warning: %s', [self::excerpt($post->getSummary(), $length)]);
+	/** Whether only a post's content warning may be shown in place of its text. */
+	public static function isBehindWarning(Stream $post): bool {
+		return $post->getSummary() !== '' && ($post->isSensitive() || $post->getContent() === '');
+	}
+
+	/** A content warning, already plain text, worded as one. */
+	public static function warning(IL10N $l10n, string $summary): string {
+		return $l10n->t('Content warning: %s', [$summary]);
 	}
 
 	/**

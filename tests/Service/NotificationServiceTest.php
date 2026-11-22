@@ -258,11 +258,11 @@ class NotificationServiceTest extends TestCase {
 
 		$this->activityPublisher = $this->createStub(ActivityPublisher::class);
 		$this->activityPublisher->method('publish')->willReturnCallback(
-			function (string $userId, string $subject, ?Person $actor, string $actorId, string $link, string $excerpt, int $objectId): void {
+			function (string $userId, string $subject, ?Person $actor, string $actorId, string $link, string $excerpt, int $objectId, bool $warned = false): void {
 				$this->activities[] = [
 					'user' => $userId, 'subject' => $subject, 'actor' => $actor?->getName() ?? $actorId,
 					'actorUser' => $actor?->getUserId() ?? '',
-					'link' => $link, 'excerpt' => $excerpt, 'object' => $objectId,
+					'link' => $link, 'excerpt' => $excerpt, 'object' => $objectId, 'warned' => $warned,
 				];
 			}
 		);
@@ -619,7 +619,20 @@ class NotificationServiceTest extends TestCase {
 		$this->assertSame('Bob', $this->activities[0]['actor']);
 		$this->assertSame($this->raised[0]['parameters']['link'], $this->activities[0]['link'], 'the same link as the bell');
 		$this->assertSame('Hello @alice, look at this', $this->activities[0]['excerpt'], 'the post, as plain text');
+		$this->assertFalse($this->activities[0]['warned']);
 		$this->assertSame(5, $this->activities[0]['object'], 'its own entry, keyed by the row it mirrors');
+	}
+
+	public function testBehindAContentWarningTheActivityAppIsToldOnlyTheWarning(): void {
+		$post = $this->post();
+		$post->setContent('<p>Hello <b>@alice</b>, the butler did it</p>');
+		$post->setSummary('Spoilers');
+		$post->setSensitive(true);
+		$this->service->onNotification($this->mention(self::ALICE, $post));
+
+		$this->assertCount(1, $this->activities);
+		$this->assertSame('Spoilers', $this->activities[0]['excerpt']);
+		$this->assertTrue($this->activities[0]['warned'], 'worded as a warning in the reader\'s language');
 	}
 
 	public function testALocalActorReachesTheActivityAppAsTheNextcloudUserTheyAre(): void {

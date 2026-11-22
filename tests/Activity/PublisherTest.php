@@ -61,6 +61,13 @@ class PublisherTest extends TestCase {
 		$this->assertEqualsWithDelta(time(), $this->event['timestamp'], 5);
 	}
 
+	public function testAContentWarningIsMarkedForTheProviderToWord(): void {
+		$this->publisher->publish('alice', 'mention', null, 'https://remote.example/users/x', 'link', 'Spoilers', 504, true);
+
+		$this->assertSame('Spoilers', $this->event['parameters']['excerpt']);
+		$this->assertTrue($this->event['parameters']['warned']);
+	}
+
 	public function testALocalActorIsTheAuthor(): void {
 		$carol = (new Person())->setDisplayName('Carol')->setAccount('carol@cloud.example')->setUserId('carol');
 

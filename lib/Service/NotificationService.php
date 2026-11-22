@@ -603,9 +603,13 @@ class NotificationService {
 			$activityActor ??= $local;
 			$activityActor->setUserId($local->getUserId());
 		}
+		// behind a content warning, the entry shows the warning; the Activity
+		// app words it in the reader's language
+		$post = $this->postOf($notification);
+		$warned = $post !== null && PostReferenceProvider::isBehindWarning($post);
 		$this->activityPublisher->publish(
 			$recipient->getUserId(), $subject, $activityActor, $actorId, $parameters['link'],
-			$this->excerptOf($notification), $notification->getNid()
+			$this->excerptOf($post, $warned), $notification->getNid(), $warned
 		);
 
 		return true;
@@ -686,11 +690,16 @@ class NotificationService {
 		}
 	}
 
-	/** The post an entry is about, as plain text; nothing when there is no post. */
-	private function excerptOf(SocialAppNotification $notification): string {
-		$post = $this->postOf($notification);
+	/**
+	 * The post an entry is about, as plain text, or only its content warning;
+	 * nothing when there is no post.
+	 */
+	private function excerptOf(?Stream $post, bool $warned): string {
+		if ($post === null) {
+			return '';
+		}
 
-		return ($post === null) ? '' : PostReferenceProvider::excerpt($post->getContent(), 200);
+		return PostReferenceProvider::excerpt($warned ? $post->getSummary() : $post->getContent(), 200);
 	}
 
 	/**
