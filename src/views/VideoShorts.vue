@@ -28,18 +28,12 @@
 					</template>
 				</NcButton>
 			</div>
-			<nav class="shorts__scopes" :aria-label="t('social', 'Whose videos')">
-				<router-link
-					v-for="option in scopes"
-					:key="option.value"
-					class="shorts__scope"
-					:class="{ 'shorts__scope--current': option.value === watching }"
-					:aria-current="option.value === watching ? 'page' : undefined"
-					:to="{ name: 'shorts', query: { scope: option.value } }">
-					<component :is="option.icon" :size="18" />
-					{{ option.label }}
-				</router-link>
-			</nav>
+			<!-- the switcher every feed has, so Shorts looks like the rest -->
+			<TimelineSwitcher
+				class="shorts__scopes"
+				:options="scopes"
+				:value="watching"
+				:label="t('social', 'Whose videos')" />
 		</header>
 		<div
 			ref="track"
@@ -392,6 +386,7 @@ import NcActions from '@nextcloud/vue/components/NcActions'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
+import TimelineSwitcher from '../components/TimelineSwitcher.vue'
 import IconChevronUp from 'vue-material-design-icons/ChevronUp.vue'
 import IconChevronDown from 'vue-material-design-icons/ChevronDown.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
@@ -453,10 +448,17 @@ const HEART_PATH = 'M12,21.35L10.55,20.03C5.4,15.36 2,12.28 2,8.5C2,5.42 4.42,3 
 
 let heartSerial = 0
 
+/**
+ * @param {string} scope a feed
+ * @return {object} this page at that feed
+ */
+const scopeRoute = (scope) => ({ name: 'shorts', query: { scope } })
+
 export default {
 	name: 'VideoShorts',
 	components: {
 		DayShortPanel,
+		TimelineSwitcher,
 		IconChevronUp,
 		IconChevronDown,
 		IconClose,
@@ -601,18 +603,18 @@ export default {
 		 * The feeds a reader can watch; a reader without a session follows
 		 * nobody and is not offered My Feed.
 		 *
-		 * @return {Array<{ value: string, label: string, icon: object }>}
+		 * @return {Array<{ value: string, label: string, icon: object, to: object }>}
 		 */
 		scopes() {
 			// the icons of the timeline's switcher, so a feed looks the same everywhere
 			const all = [
-				{ value: 'home', label: t('social', 'My Feed'), icon: IconHome },
-				{ value: 'timeline', label: t('social', 'Local'), icon: IconAccountMultiple },
-				{ value: 'federated', label: t('social', 'Global'), icon: IconEarth },
+				{ value: 'home', label: t('social', 'My Feed'), icon: IconHome, to: scopeRoute('home') },
+				{ value: 'timeline', label: t('social', 'Local'), icon: IconAccountMultiple, to: scopeRoute('timeline') },
+				{ value: 'federated', label: t('social', 'Global'), icon: IconEarth, to: scopeRoute('federated') },
 			]
 			// For you sits beside My Feed, as above the timeline
 			if (this.hasForYou) {
-				all.splice(1, 0, { value: 'interests', label: t('social', 'For you'), icon: IconTagHeart })
+				all.splice(1, 0, { value: 'interests', label: t('social', 'For you'), icon: IconTagHeart, to: scopeRoute('interests') })
 			}
 
 			return this.settingsStore.getServerData?.public ? all.slice(1) : all

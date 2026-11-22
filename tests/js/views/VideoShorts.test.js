@@ -806,17 +806,14 @@ describe('VideoShorts', () => {
 	 * videos these are is chosen here rather than carried over from the grid.
 	 */
 	describe('whose videos', () => {
-		const scopeLinks = (wrapper) => wrapper.findAllComponents(RouterLinkStub)
-			.filter((link) => link.classes().includes('shorts__scope'))
+		const switcher = (wrapper) => wrapper.find('.shorts__header').findComponent({ name: 'TimelineSwitcher' })
 
 		it('offers the three circles, and marks the one on screen', async () => {
 			const { wrapper } = await mountShorts()
 			await wrapper.setProps({ scope: 'federated' })
 
-			const links = wrapper.findAll('.shorts__scope')
-			expect(links.map((link) => link.text())).toEqual(['My Feed', 'Local', 'Global'])
-			expect(links[2].classes()).toContain('shorts__scope--current')
-			expect(links[2].attributes('aria-current')).toBe('page')
+			expect(switcher(wrapper).props('options').map((option) => option.label)).toEqual(['My Feed', 'Local', 'Global'])
+			expect(switcher(wrapper).props('value')).toBe('federated')
 		})
 
 		it('offers a reader without a session only the two they can read', async () => {
@@ -824,13 +821,13 @@ describe('VideoShorts', () => {
 			useSettingsStore().setServerData({ public: true })
 			await wrapper.vm.$nextTick()
 
-			expect(wrapper.findAll('.shorts__scope').map((link) => link.text())).toEqual(['Local', 'Global'])
+			expect(switcher(wrapper).props('options').map((option) => option.label)).toEqual(['Local', 'Global'])
 		})
 
 		it('links each circle to this page at that scope', async () => {
 			const { wrapper } = await mountShorts()
 
-			expect(scopeLinks(wrapper).map((link) => link.props('to'))).toEqual([
+			expect(switcher(wrapper).props('options').map((option) => option.to)).toEqual([
 				{ name: 'shorts', query: { scope: 'home' } },
 				{ name: 'shorts', query: { scope: 'timeline' } },
 				{ name: 'shorts', query: { scope: 'federated' } },
@@ -845,14 +842,14 @@ describe('VideoShorts', () => {
 	 */
 	describe('For you', () => {
 		const ON = { enabled: true, learning: true, paused: false, noticeAcknowledged: true }
-		const labels = (wrapper) => wrapper.findAll('.shorts__scope').map((link) => link.text())
+		const options = (wrapper) => wrapper.find('.shorts__header').findComponent({ name: 'TimelineSwitcher' }).props('options')
+		const labels = (wrapper) => options(wrapper).map((option) => option.label)
 
 		it('is offered beside My Feed while the reader has it', async () => {
 			const { wrapper } = await mountShorts(undefined, { props: { scope: 'home' }, serverData: { public: false, interests: ON } })
 
 			expect(labels(wrapper)).toEqual(['My Feed', 'For you', 'Local', 'Global'])
-			expect(wrapper.findAllComponents(RouterLinkStub).filter((link) => link.classes().includes('shorts__scope'))[1].props('to'))
-				.toEqual({ name: 'shorts', query: { scope: 'interests' } })
+			expect(options(wrapper)[1].to).toEqual({ name: 'shorts', query: { scope: 'interests' } })
 		})
 
 		it.each([
@@ -1272,7 +1269,8 @@ describe('VideoShorts', () => {
 		it('keeps the scopes in the page, over the player', async () => {
 			const { wrapper } = await mountShorts()
 
-			expect(wrapper.find('.shorts__header nav.shorts__scopes').attributes('aria-label')).toBe('Whose videos')
+			// the same switcher as above every other feed
+			expect(wrapper.find('.shorts__header').findComponent({ name: 'TimelineSwitcher' }).props('label')).toBe('Whose videos')
 			expect(wrapper.find('.shorts__heading').text()).toBe('Shorts')
 			// named for screen readers, not drawn: the scopes head the page
 			expect(wrapper.find('.shorts__heading').classes()).toContain('hidden-visually')
