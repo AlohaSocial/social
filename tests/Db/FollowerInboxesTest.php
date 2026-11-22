@@ -37,6 +37,8 @@ class FollowerInboxesTest extends TestCase {
 	private array $selected = [];
 	/** @var list<string> */
 	private array $grouped = [];
+	/** @var list<string> */
+	private array $distinct = [];
 
 	/**
 	 * The rows the statement hands back for these followers, ungrouped: each
@@ -150,6 +152,11 @@ class FollowerInboxesTest extends TestCase {
 
 			return $qb;
 		});
+		$qb->method('selectDistinct')->willReturnCallback(function ($select) use ($qb) {
+			$this->distinct[] = (string)$select;
+
+			return $qb;
+		});
 		$qb->method('groupBy')->willReturnCallback(function (...$by) use ($qb) {
 			foreach ($by as $column) {
 				$this->grouped[] = (string)$column;
@@ -173,14 +180,16 @@ class FollowerInboxesTest extends TestCase {
 
 	/**
 	 * A hundred thousand followers on a few hundred servers are a few hundred
-	 * rows: the delivery inbox is worked out and grouped in the query.
+	 * rows: the delivery inbox is worked out and made distinct in the query.
+	 * DISTINCT, not GROUP BY the expression, which MariaDB refuses under
+	 * ONLY_FULL_GROUP_BY.
 	 */
-	public function testTheDatabaseGroupsTheFollowersByTheirDeliveryInbox(): void {
+	public function testTheDatabaseGivesEachDeliveryInboxOnce(): void {
 		$this->inboxesFrom([]);
 
-		$inbox = "COALESCE(NULLIF(ca.shared_inbox, ''), ca.inbox)";
-		$this->assertSame([$inbox . ' AS delivery_inbox'], $this->selected);
-		$this->assertSame([$inbox], $this->grouped);
+		$this->assertSame(["COALESCE(NULLIF(ca.shared_inbox, ''), ca.inbox) AS delivery_inbox"], $this->distinct);
+		$this->assertSame([], $this->grouped);
+		$this->assertSame([], $this->selected);
 	}
 
 	public function testASharedInboxIsDeliveredToOnceAndAPersonalOneWhereThereIsNone(): void {
