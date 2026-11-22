@@ -76,8 +76,13 @@ bobs = [f for f in followers if f.get('username') == 'bob']
 check(len(bobs) == 1, f'bob is among alice\'s followers {len(bobs)} times')
 
 home = get_json(API + '/timelines/home?limit=40', 'bob')
-for key in ('public', 'followers', 'reply', 'media'):
+# replies are read in their conversations, not as cards of the home feed:
+# the reply is looked for under the public post and on bob's profile below
+for key in ('public', 'followers', 'media'):
     check(find(home, seed[key]) is not None, f'the {key} post is missing from bob\'s home timeline')
+bob = get_json(API + '/accounts/lookup?acct=bob', 'bob')
+bobs_posts = get_json(API + '/accounts/' + str(bob['id']) + '/statuses?limit=40', 'bob')
+check(find(bobs_posts, seed['reply']) is not None, 'the reply is missing from bob\'s profile')
 
 public = find(home, seed['public'])
 if public is not None:
