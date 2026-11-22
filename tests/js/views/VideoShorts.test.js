@@ -928,8 +928,8 @@ describe('VideoShorts', () => {
 			const menu = wrapper.findComponent({ name: 'NcActions' })
 			expect(menu.exists()).toBe(true)
 			expect(menu.props('menuName')).toBeNull()
-			expect(menu.props('ariaLabel')).toBe('For You recommendations')
-			expect(menu.find('.action-item__menutoggle').text()).not.toContain('For You recommendations')
+			expect(menu.props('ariaLabel')).toBe('For you recommendations')
+			expect(menu.find('.action-item__menutoggle').text()).not.toContain('For you recommendations')
 		})
 
 		it('reports what the reader watched when they move on, under shorts', async () => {

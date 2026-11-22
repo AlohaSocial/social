@@ -73,10 +73,10 @@ describe('the For you card', () => {
 	it('describes automatic ranking, separate learning consent and bounded discovery accurately', () => {
 		const wrapper = mountCard()
 
-		expect(wrapper.text()).toContain('For You recommendations')
+		expect(wrapper.text()).toContain('For you recommendations')
 		expect(wrapper.text()).not.toContain('4.0')
 		expect(wrapper.text()).toContain('Readers do not choose topics')
-		expect(wrapper.text()).toContain('This enables automatic ranking in the existing For You feed')
+		expect(wrapper.text()).toContain('This enables automatic ranking in the existing For you feed')
 		expect(wrapper.text()).toContain('Activity learning stays off until each reader separately enables it')
 		expect(wrapper.text()).toContain('Discovery uses bounded background jobs and eligible public posts')
 		expect(wrapper.text()).not.toContain('recommendations and behavioral learning remain unavailable')

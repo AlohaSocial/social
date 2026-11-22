@@ -3451,6 +3451,10 @@ OC.L10N.register(
     "Learn from my reading" : "Aus meinem Lesen lernen",
     "Clear what was learned" : "Gelerntes löschen",
     "New photo" : "Neues Foto",
-    "New video" : "Neues Video"
+    "New video" : "Neues Video",
+    "Post hidden from For you" : "Beitrag aus ‚Für dich‘ ausgeblendet",
+    "For you recommendations" : "Empfehlungen „Für dich“",
+    "Enable For you recommendations" : "Empfehlungen „Für dich“ aktivieren",
+    "Hide this post from For you" : "Diesen Beitrag aus ‚Für dich‘ ausblenden"
 },
 "nplurals=2; plural=(n != 1);");

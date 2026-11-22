@@ -3470,6 +3470,12 @@ OC.L10N.register(
     "Learn from my reading" : "Aus meinem Lesen lernen",
     "Clear what was learned" : "Gelerntes löschen",
     "New photo" : "Neues Foto",
-    "New video" : "Neues Video"
+    "New video" : "Neues Video",
+    "Post hidden from For you" : "Beitrag aus ‚Für dich‘ ausgeblendet",
+    "For you recommendations" : "Empfehlungen „Für dich“",
+    "Enable For you recommendations" : "Empfehlungen „Für dich“ aktivieren",
+    "This enables automatic ranking in the existing For you feed; it does not add a second feed. The ranker combines learned hashtag interests, post content, freshness, follows and discovery. Readers do not choose topics. Activity learning stays off until each reader separately enables it. Discovery uses bounded background jobs and eligible public posts; the chronological Following feed is unchanged." : "Diese Option aktiviert die automatische Rangfolge im bestehenden Feed „Für dich“; sie fügt keinen zweiten Feed hinzu. Die Rangfolge berücksichtigt gelernte Hashtag-Interessen, Beitragsinhalte, Aktualität, gefolgte Konten und Entdeckungen. Nutzer wählen keine Themen aus. Das Lernen aus Aktivitäten bleibt ausgeschaltet, bis Nutzer es gesondert aktivieren. Die Suche läuft über begrenzte Hintergrundaufgaben und berücksichtigt nur zulässige öffentliche Beiträge; der chronologische Feed „Folge ich“ bleibt unverändert.",
+    "Keeps automatically learned hashtag interests available in For you and as its compatibility fallback. Readers do not choose topics; this is the same feed route, not a separate timeline." : "Erhält automatisch gelernte Hashtag-Interessen in „Für dich“ und als Kompatibilitäts-Fallback. Nutzer wählen keine Themen aus; es bleibt derselbe Feed und wird keine zusätzliche Zeitleiste.",
+    "Hide this post from For you" : "Diesen Beitrag aus ‚Für dich‘ ausblenden"
 },
 "nplurals=2; plural=(n != 1);");

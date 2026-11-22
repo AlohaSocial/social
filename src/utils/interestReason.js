@@ -105,8 +105,8 @@ export function interestReason(interest) {
 		return {
 			tag: null,
 			reason: 'discovery',
-			text: t('social', 'Selected by your For You feed'),
-			label: t('social', "Why you're seeing this: selected by your For You feed from current posts and local discovery"),
+			text: t('social', 'Selected by your For you feed'),
+			label: t('social', "Why you're seeing this: selected by your For you feed from current posts and local discovery"),
 		}
 	}
 
