@@ -330,22 +330,21 @@
  * With a pointer, the menu and every control with nothing to show at rest --
  * no count, not given -- take no room until the card is pointed at or
  * focused. What is shown therefore always ends at the card's end, and the
- * rest join it from the start side. Touch screens keep the whole row.
+ * rest join it from the start side. They are hidden visually only, so the
+ * keyboard can still reach them (focus brings the row back) and a screen
+ * reader still has them. Touch screens keep the whole row.
  */
 @media (hover: hover) and (pointer: fine) {
 	.post-actions > :first-child,
 	.post-action-group:not(:has(.post-action-count, .button-vue[aria-pressed='true'])) {
-		display: none;
+		@include layout.visually-hidden;
 	}
 
 	.post-content:is(:hover, :focus-within),
 	.post-content:has(.post-actions-reveal--held) {
-		.post-actions > :first-child {
-			display: block;
-		}
-
+		.post-actions > :first-child,
 		.post-action-group {
-			display: flex;
+			@include layout.visually-shown;
 		}
 	}
 }

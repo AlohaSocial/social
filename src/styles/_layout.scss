@@ -47,6 +47,16 @@ $wide: 1100px;
 	white-space: nowrap;
 }
 
+/// Undoes `visually-hidden` for something it hid until a state such as hover
+/// or focus, back in the flow and positioned for what it holds.
+@mixin visually-shown {
+	position: relative;
+	width: auto;
+	height: auto;
+	overflow: visible;
+	clip-path: none;
+}
+
 /// While the sidebar is folded away its toggle covers the top-left corner of
 /// the content, so a page's first row starts below it. Include it in the
 /// page's wrapper. The distance is a property so that a page sized to the

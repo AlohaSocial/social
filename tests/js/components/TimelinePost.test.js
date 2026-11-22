@@ -1220,8 +1220,11 @@ describe('TimelinePost', () => {
 			const rule = source.match(/@media \(hover: hover\) and \(pointer: fine\) \{([\s\S]*?)\n\}/)
 
 			expect(rule).not.toBeNull()
-			expect(rule[1]).toMatch(/\.post-actions > :first-child,\s*\.post-action-group:not\(:has\(\.post-action-count, \.button-vue\[aria-pressed='true'\]\)\) \{\s*display: none;/)
-			expect(rule[1]).toMatch(/\.post-content:is\(:hover, :focus-within\),\s*\.post-content:has\(\.post-actions-reveal--held\) \{[\s\S]*\.post-action-group \{\s*display: flex;/)
+			// hidden visually, never with `display: none`, which would take
+			// them from the keyboard and from a screen reader
+			expect(rule[1]).toMatch(/\.post-actions > :first-child,\s*\.post-action-group:not\(:has\(\.post-action-count, \.button-vue\[aria-pressed='true'\]\)\) \{\s*@include layout\.visually-hidden;/)
+			expect(rule[1]).toMatch(/\.post-content:is\(:hover, :focus-within\),\s*\.post-content:has\(\.post-actions-reveal--held\) \{\s*\.post-actions > :first-child,\s*\.post-action-group \{\s*@include layout\.visually-shown;/)
+			expect(rule[1]).not.toContain('display: none')
 		})
 
 		/** The page counts on its own when the reader likes, so the server's zero is not enough. */

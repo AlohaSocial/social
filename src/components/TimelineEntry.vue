@@ -1255,12 +1255,9 @@ export default {
 
 		// the whole row is pointed at, the face's column too, so the controls
 		// that take no room at rest (TimelinePost.scss) come back with it
-		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > :first-child) {
-			display: block;
-		}
-
+		&:is(:hover, :focus-within) .wrapper :deep(.post-actions > :first-child),
 		&:is(:hover, :focus-within) .wrapper :deep(.post-action-group) {
-			display: flex;
+			@include layout.visually-shown;
 		}
 
 		// the controls without a count arrive from the end of the row

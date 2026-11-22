@@ -27,6 +27,8 @@ test('recommendation explanations survive an ordinary status response and stay o
 		await expect(reason).toContainText('Based on your interests')
 		const before = await reason.textContent()
 		const refreshed = page.waitForResponse((response) => response.url().endsWith(`/statuses/${status.id}/bookmark`) && response.request().method() === 'POST')
+		// the controls come up with the pointer on the post, as for a reader
+		await entry.hover()
 		await entry.getByRole('button', { name: 'Bookmark', exact: true }).click()
 		const response = await refreshed
 		expect(response.ok()).toBe(true)

@@ -118,6 +118,8 @@ test.describe('posting, and acting on a post', () => {
 		const answer = `I am, from the browser ${Date.now()}`
 
 		await openApp(page, `/@${OTHER_USER}/${parent.id}`)
+		// the controls come up with the pointer on the post, as for a reader
+		await postWith(page, question).hover()
 		await postWith(page, question).getByRole('button', { name: 'Reply', exact: true }).click()
 		// The common modal receives the reply context before its lazy editor loads.
 		const composer = page.locator('.modal-composer .new-post').filter({ hasText: `@${OTHER_USER}` })
