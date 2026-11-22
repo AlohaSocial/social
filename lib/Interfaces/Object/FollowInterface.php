@@ -213,7 +213,7 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 				return;
 			}
 
-			$follow->setFollowId($actor->getFollowers());
+			$follow->setFollowId($actor->getOwnFollowers());
 			if ($this->followsRequest->save($follow)) {
 				if ($this->isLockedLocalActor($actor)) {
 					// wait for the owner: no Accept, a follow_request notification instead

@@ -26,12 +26,14 @@ use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\ProfileLayout;
 use OCA\Social\Security\HtmlSanitizer;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\VerificationService;
 use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Traits\TDetails;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
 use OCP\Server;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
@@ -415,6 +417,43 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		$this->followers = $followers;
 
 		return $this;
+	}
+
+	/**
+	 * The followers collection a follow of this actor subscribes to, or ''
+	 * when it is not on the actor's own server.
+	 */
+	public function getOwnFollowers(): string {
+		return self::isOnHostOf($this->getFollowers(), $this->getId()) ? $this->getFollowers() : '';
+	}
+
+	/** Whether `$url` is on the server, host and port, of the actor `$actorId`. */
+	public static function isOnHostOf(string $url, string $actorId): bool {
+		$authority = strtolower(ConfigService::authorityOf($url));
+
+		return $authority !== '' && $authority === strtolower(ConfigService::authorityOf($actorId));
+	}
+
+	/**
+	 * Clears a followers or following collection that is not on the actor's
+	 * own server. A follow subscribes to the followed actor's followers
+	 * collection, so an actor naming another account's would show whoever
+	 * follows it that account's followers-only posts. Every server this app
+	 * federates with keeps these collections beside the actor.
+	 */
+	private function dropForeignCollections(bool $log): void {
+		foreach (['followers' => $this->getFollowers(), 'following' => $this->getFollowing()] as $field => $collection) {
+			if ($collection === '' || self::isOnHostOf($collection, $this->getId())) {
+				continue;
+			}
+
+			if ($log) {
+				Server::get(LoggerInterface::class)->info('an actor names a collection on another server, which is ignored', [
+					'actor' => $this->getId(), $field => $collection,
+				]);
+			}
+			($field === 'followers') ? $this->setFollowers('') : $this->setFollowing('');
+		}
 	}
 
 	/**
@@ -1134,6 +1173,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			->setFeatured($this->validate(ACore::AS_URL, 'featured', $data, ''))
 			->setAlsoKnownAs(self::listOf('alsoKnownAs', $data))
 			->setMovedTo($this->validate(ACore::AS_URL, 'movedTo', $data, ''));
+		$this->dropForeignCollections(true);
 		// A key that names an owner must name this actor; anything else would
 		// be a key takeover.
 		$keyOwner = $this->get('publicKey.owner', $data, '');
@@ -1396,6 +1436,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			->setSharedInbox($this->validate(self::AS_URL, 'shared_inbox', $data, ''))
 			->setFeatured($this->validate(self::AS_URL, 'featured', $data, ''))
 			->setDetailsAll($this->getArray('details', $data, []));
+		// a row cached before import() refused such a collection
+		$this->dropForeignCollections(false);
 
 		$this->overlayStoredCounts($data);
 
