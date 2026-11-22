@@ -28,6 +28,7 @@ use OCA\Social\Service\ActorCascadeService;
 use OCA\Social\Service\ActorService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\BackgroundJob\IJobList;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class PersonService
@@ -47,6 +48,15 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	/** rows per query while walking them */
 	private const DETACH_PAGE = 100;
 
+	/**
+	 * How much older than our copy an actor's own Update may be and still
+	 * apply. Our copy is stamped when we fetched it, but the server may have
+	 * answered from a cache: Mastodon lets its actor document be cached for
+	 * minutes, so a copy fetched just after a profile change, as verifying
+	 * the Update's own signature can do, may still show the old profile.
+	 */
+	private const FETCHED_COPY_STALENESS = 600;
+
 	public function __construct(
 		private CacheActorsRequest $cacheActorsRequest,
 		private StreamRequest $streamRequest,
@@ -54,6 +64,7 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 		private ActorService $actorService,
 		private ActorCascadeService $actorCascadeService,
 		private IJobList $jobList,
+		private ?LoggerInterface $logger = null,
 	) {
 	}
 
@@ -249,8 +260,15 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 		// before the profile points at it
 		try {
 			$current = $this->cacheActorsRequest->getFromId($actor->getId());
-			if ($current->getCreation() < $activity->getOriginCreationTime()) {
+			if ($current->getCreation() < $activity->getOriginCreationTime() + self::FETCHED_COPY_STALENESS) {
 				$this->actorService->update($actor);
+			} else {
+				$this->logger?->info('an actor Update older than our copy was not applied', [
+					'actor' => $actor->getId(),
+					'ourCopy' => $current->getCreation(),
+					'update' => $activity->getOriginCreationTime(),
+					'source' => $activity->getOriginSource(),
+				]);
 			}
 		} catch (CacheActorDoesNotExistException $e) {
 			$this->actorService->save($actor);

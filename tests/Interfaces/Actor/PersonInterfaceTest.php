@@ -118,6 +118,20 @@ class PersonInterfaceTest extends ActorInterfaceTestCase {
 		$this->handler->activity($this->update($bob, 2000), $bob);
 	}
 
+	/**
+	 * A copy fetched a little after the profile changed may have been served
+	 * from the server's cache while the Update was on its way: the actor's
+	 * own Update is the fresher word.
+	 */
+	public function testUpdateSignedShortlyBeforeAFetchedCopyStillApplies(): void {
+		$bob = $this->bob();
+		$this->cacheActorsRequest->method('getFromId')->willReturn($this->cachedBob(2030));
+
+		$this->actorService->expects($this->once())->method('update')->with($this->identicalTo($bob));
+
+		$this->handler->activity($this->update($bob, 2000), $bob);
+	}
+
 	public function testUpdateOfAnActorNotCachedYetCachesIt(): void {
 		$this->nothingCached();
 		$bob = $this->bob();
