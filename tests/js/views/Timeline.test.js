@@ -1204,7 +1204,10 @@ describe('one column above the feed', () => {
 	it('sizes notices, the band and the posts from the one reading column', () => {
 		const css = styles()
 
-		expect(block(css, '.social__wrapper > :deep(.feed-notice)')).toMatch(/width: min\(calc\(100% - 2 \* var\(--social-column-gutter\)\), calc\(var\(--social-reading-column\) - 2 \* var\(--social-column-gutter\)\)\);/)
+		expect(css).toMatch(/--social-card-width: min\(calc\(100% - 2 \* var\(--social-column-gutter\)\), calc\(var\(--social-reading-column\) - 2 \* var\(--social-column-gutter\)\)\);/)
+		expect(block(css, '.social__wrapper > :deep(.feed-notice)')).toMatch(/width: var\(--social-card-width\);/)
+		// the activity filters line up with the notices and posts around them
+		expect(block(css, '.notifications-filter')).toMatch(/width: var\(--social-card-width\);/)
 		expect(block(css, '.social__wrapper--reading')).toMatch(/--social-column: var\(--social-reading-column\);/)
 		expect(block(css, '.feed-scopes')).toMatch(/max-width: var\(--social-column\);/)
 		expect(css).not.toMatch(/760px|616px/)

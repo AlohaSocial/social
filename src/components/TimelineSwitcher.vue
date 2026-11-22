@@ -5,7 +5,7 @@
 <template>
 	<div
 		class="switcher"
-		:class="{ 'switcher--more-left': overflowLeft, 'switcher--more-right': overflowRight, 'switcher--compact': compact, 'switcher--beside-toggle': besideToggle }"
+		:class="[`switcher--${fit}`, { 'switcher--more-left': overflowLeft, 'switcher--more-right': overflowRight, 'switcher--compact': compact, 'switcher--beside-toggle': besideToggle }]"
 		role="radiogroup"
 		:aria-label="label"
 		@keydown="onKeydown"
@@ -27,7 +27,7 @@
 				type="button"
 				:aria-checked="option.value === value"
 				:tabindex="option.value === value ? 0 : -1"
-				:title="compact ? option.label : undefined"
+				:title="compact || fit === 'icons' ? option.label : undefined"
 				@click="show(index)"
 				@pointerenter="$emit('intent', option.value)"
 				@focus="$emit('intent', option.value)"
@@ -55,6 +55,15 @@
  * roving tabindex. An option with a route pushes it; one without emits
  * `update:value` for the page to act on.
  */
+
+/** an option's inline padding with room to spare, and with less; see the styles */
+const ROOMY_PADDING = 18
+const TIGHT_PADDING = 12
+/** the icon and the gap after it, which an option gives up before its label */
+const ICON_ROOM = 18 + 8
+/** how far the fade at either end reaches; see the styles */
+const FADE = 28
+
 export default {
 	name: 'TimelineSwitcher',
 
@@ -118,6 +127,15 @@ export default {
 			/** whether the track runs past the control on either side */
 			overflowLeft: false,
 			overflowRight: false,
+			/**
+			 * How much of each option there is room for: its icon and label,
+			 * its label alone, or its icon alone.
+			 *
+			 * @type {'roomy'|'tight'|'icons'}
+			 */
+			fit: 'roomy',
+			/** how wide the track is with every label and the full padding */
+			roomyWidth: 0,
 		}
 	},
 
@@ -159,8 +177,19 @@ export default {
 			})
 		},
 
-		options() {
+		// the options change width with the fit, and the pill sits on one
+		fit() {
 			this.$nextTick(() => {
+				this.measure()
+				this.updateOverflow()
+			})
+		},
+
+		options() {
+			// new labels are measured in full before the fit is chosen again
+			this.fit = 'roomy'
+			this.$nextTick(() => {
+				this.updateFit()
 				this.measure()
 				this.updateOverflow()
 			})
@@ -168,6 +197,7 @@ export default {
 	},
 
 	mounted() {
+		this.updateFit()
 		this.measure()
 		this.updateOverflow()
 		this.$nextTick(() => this.bringIntoView(this.activeIndex))
@@ -178,6 +208,7 @@ export default {
 			this.observer = new ResizeObserver(() => {
 				// measuring inside the observer's callback would re-enter it
 				window.requestAnimationFrame(() => {
+					this.updateFit()
 					this.measure()
 					this.updateOverflow()
 				})
@@ -248,9 +279,39 @@ export default {
 
 			const control = this.$el.getBoundingClientRect()
 			const content = track.getBoundingClientRect()
-			const edge = 1
+			// the track's own padding may stay beyond the edge: scrolled to the
+			// end, the last option is whole and needs no fade
+			const edge = 4
 			this.overflowLeft = content.left < control.left - edge
 			this.overflowRight = content.right > control.right + edge
+		},
+
+		/**
+		 * Chooses how much of each option there is room for. The track's
+		 * width is read while every option is drawn in full, so
+		 * it is known while the control shows less of them; the page's own
+		 * folding (`compact`) is not a width to remember.
+		 */
+		updateFit() {
+			const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
+			const room = this.$el?.clientWidth ?? 0
+			if (!track || room === 0) {
+				return
+			}
+
+			if (this.fit === 'roomy' && !this.compact) {
+				this.roomyWidth = track.offsetWidth
+			}
+			if (this.roomyWidth === 0) {
+				return
+			}
+
+			const tightWidth = this.roomyWidth - this.options.length * (2 * (ROOMY_PADDING - TIGHT_PADDING) + ICON_ROOM)
+			if (room >= this.roomyWidth) {
+				this.fit = 'roomy'
+			} else {
+				this.fit = room >= tightWidth ? 'tight' : 'icons'
+			}
 		},
 
 		/**
@@ -259,8 +320,21 @@ export default {
 		 * @param {number} index the option to bring into view
 		 */
 		bringIntoView(index) {
+			// the control is scrolled by hand: `scrollIntoView` would scroll the
+			// page as well whenever the control is below the fold
 			const option = this.optionElements()[index]
-			option?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+			const control = /** @type {HTMLElement|undefined} */ (this.$el)
+			if (!option || typeof control?.scrollBy !== 'function') {
+				return
+			}
+
+			const box = control.getBoundingClientRect()
+			const target = option.getBoundingClientRect()
+			if (target.left < box.left + FADE) {
+				control.scrollBy({ left: target.left - box.left - FADE })
+			} else if (target.right > box.right - FADE) {
+				control.scrollBy({ left: target.right - box.right + FADE })
+			}
 		},
 
 		/** @return {HTMLElement[]} the option buttons, in order */
@@ -329,9 +403,6 @@ export default {
  * its words; a fade on the edge says there is more.
  */
 .switcher {
-	// the labels give way by the width of the column, not the window
-	container-type: inline-size;
-	container-name: timeline-switcher;
 	width: 100%;
 	max-width: 100%;
 	margin: 0 auto 14px;
@@ -422,7 +493,8 @@ export default {
 	/* 30px plus the track's 3px of padding either side is a 36px control */
 	min-height: 30px;
 	/* the only separation between options is this padding doubled, sized
-	   for the crowded case */
+	   for the crowded case; Nextcloud's buttons bring a margin besides */
+	margin: 0;
 	padding: 0 18px;
 	border: none;
 	border-radius: var(--border-radius-pill, 100px);
@@ -494,22 +566,35 @@ export default {
 	100% { transform: rotate(0) scale(1); }
 }
 
-/* a phone's stand-in for the label; see the block below */
+/* the stand-in for the label when only icons fit; see the block below */
 .switcher__short {
 	display: none;
 }
 
-/*
- * On a phone-wide control the labels give way to the icons. The query is the
- * control's own width, not the window's. The labels stay in the accessibility
- * tree as the options' names.
- */
-@container timeline-switcher (max-width: #{layout.$phone}) {
-	.switcher .switcher__option {
-		padding: 0 14px;
+/* with less room the options keep their words, which tell them apart
+   better than icons do, and give up the icons and some padding */
+.switcher--tight {
+	.switcher__option {
+		padding: 0 12px;
 	}
 
-	// the icon says the same thing, and there is no room for both
+	.switcher__icon {
+		display: none;
+	}
+}
+
+/*
+ * With less still the labels give way to the icons, as they do while the
+ * page folds the control as it scrolls; there a pointer over the row or focus
+ * in it brings the words back. The labels stay in the accessibility tree as
+ * the options' names.
+ */
+.switcher--icons,
+.switcher--compact:not(:hover, :focus-within) {
+	.switcher__option {
+		padding: 0 12px;
+	}
+
 	.switcher__label {
 		@include layout.visually-hidden;
 	}
@@ -524,28 +609,8 @@ export default {
 	}
 
 	// a word is wider than its icon, so these get less padding
-	.switcher .switcher__option--short {
+	.switcher__option--short {
 		padding: 0 10px;
-	}
-}
-
-/* the same giving way as on a phone, asked for by the page while it scrolls;
-   a pointer over the row or focus in it brings the words back */
-.switcher--compact:not(:hover, :focus-within) {
-	.switcher__option {
-		padding: 0 14px;
-	}
-
-	.switcher__label {
-		@include layout.visually-hidden;
-	}
-
-	.switcher__option--short .switcher__icon {
-		display: none;
-	}
-
-	.switcher__short {
-		display: inline;
 	}
 }
 

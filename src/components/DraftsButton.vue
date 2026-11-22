@@ -245,6 +245,12 @@ export default {
 </script>
 
 <style scoped lang="scss">
+/* with no drafts and the list closed there is nothing to draw, and an empty
+   box would still take a gap in the row it sits in */
+.drafts-entry:empty {
+	display: none;
+}
+
 .drafts-list {
 	padding: 20px;
 

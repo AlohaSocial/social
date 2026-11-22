@@ -290,7 +290,6 @@ export default {
 	display: block;
 	width: 100%;
 	height: auto;
-	max-width: 760px;
 }
 
 .islands__sea {

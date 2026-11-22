@@ -455,6 +455,8 @@ export default {
 @use '../styles/layout.scss' as layout;
 
 .social__wrapper {
+	/* as wide as the posts in the feed the post was opened from */
+	--social-page-width: var(--social-reading-page);
 	padding-bottom: 25%;
 }
 
@@ -462,12 +464,21 @@ export default {
 	margin-bottom: 8px;
 }
 
+/* beside the sidebar's floating toggle rather than under it */
+@include layout.below(layout.$folded) {
+	.thread__back {
+		margin-inline-start: var(--default-clickable-area, 44px);
+	}
+}
+
 /*
- * Scoped under `.thread` because `.social__timeline` is another component's
- * root, where an equally specific rule would win by bundle order.
+ * The lists keep a gutter inside them; pulled out by it, their posts share
+ * the main post's edge. Scoped under `.thread` because `.social__timeline` is
+ * another component's root, where an equally specific rule would win by
+ * bundle order.
  */
 .thread .social__timeline {
-	margin-inline-start: 16px;
+	margin-inline: calc(-1 * var(--social-column-gutter));
 }
 
 /**
@@ -482,7 +493,7 @@ export default {
 		position: absolute;
 		top: 12px;
 		bottom: 12px;
-		inset-inline-start: 42px;
+		inset-inline-start: 18px;
 		width: 2px;
 		border-radius: 1px;
 		background: var(--color-border);
@@ -501,44 +512,33 @@ export default {
 	position: relative;
 	z-index: 1;
 	margin: 16px 0;
-	/* 24px puts its avatar on the same line as the lists' (16px out, 8px
-	   padding), which is the line the spine runs down */
-	margin-inline-start: 24px;
 }
 
-/* the fine print, the faces and the reply box align with the post above them */
+/* the fine print, the faces and the reply box share the post's edge, as the
+   Back button above it does */
 .main-post__under {
-	margin-inline-start: 24px;
-	/* level with the card, which starts where the avatar column ends */
-	padding-inline-start: 64px;
 	margin-bottom: 16px;
 }
 
 .thread__hidden {
-	margin: 8px 0 0 24px;
-	padding-inline-start: 64px;
+	margin: 8px 0 0;
 	color: var(--color-text-maxcontrast);
 	font-size: 13px;
 }
 
-/* a phone: no avatar column to be level with, so nothing is set in 64px
-   from it, and the spine runs down the middle of the face inside the card */
+/* a phone: the lists keep their gutter, the fine print is set in to the
+   card's padding, and the spine runs down the middle of the face inside it */
 @include layout.below(layout.$phone) {
 	.thread .social__timeline {
-		margin-inline-start: 0;
+		margin-inline: 0;
 	}
 
 	.thread--connected::before {
 		inset-inline-start: 29px;
 	}
 
-	.main-post {
-		margin-inline-start: 0;
-	}
-
 	.main-post__under,
 	.thread__hidden {
-		margin-inline-start: 0;
 		padding-inline-start: 12px;
 	}
 }

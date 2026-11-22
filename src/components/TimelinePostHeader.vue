@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="post-header">
+	<div class="post-header" :class="{ 'post-header--compact': compactAuthor }">
 		<!-- in a run of posts by one author the name is said once, at the
 		     head of the run; the others keep it for a screen reader only -->
 		<div
@@ -188,6 +188,14 @@ export default {
 	gap: 8px;
 	align-items: baseline;
 	margin-bottom: 10px;
+
+	/* with the name hidden, something has to take its room, or the time
+	   moves to the start of the row instead of staying at the end where
+	   the controls come up on hover */
+	&--compact::before {
+		content: '';
+		flex-grow: 1;
+	}
 
 	.post-given {
 		display: none;

@@ -425,10 +425,9 @@ export default {
 </script>
 
 <style scoped lang="scss">
+	/* results are as wide as the posts in a feed */
 	.social__search {
-		max-width: var(--social-column);
-		margin: 0 auto;
-		padding: calc(var(--default-grid-baseline) * 2);
+		--social-page-width: var(--social-reading-page);
 	}
 
 	.social__search-section {

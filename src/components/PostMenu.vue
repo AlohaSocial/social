@@ -3,7 +3,9 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcActions @update:open="onOpen">
+	<!-- opens from the button towards the other controls, over the row's
+	     end rather than centred over the post's text -->
+	<NcActions placement="bottom-start" @update:open="onOpen">
 		<!-- one level down: For you feedback, or the details of a post of your own -->
 		<template v-if="submenu !== ''">
 			<NcActionButton @click="submenu = ''">

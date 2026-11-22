@@ -476,9 +476,11 @@ export default {
 	font-size: 0.9em;
 }
 
+/* a page narrower than this sets `--social-page-width` on its wrapper, since
+   this rule outranks the page's own */
 #app-content-vue .social__wrapper {
 	padding: calc(var(--default-grid-baseline) * 4);
-	max-width: 800px;
+	max-width: var(--social-page-width, 800px);
 	/*
 	 * Inline only: auto block margins would centre the page vertically in its
 	 * grid row, which during a page change is as tall as the outgoing page.
@@ -785,6 +787,12 @@ a.external_link {
 	 * page of tiles or videos they still line up with each other.
 	 */
 	--social-reading-column: 616px;
+	/*
+	 * A page of text with no list around it -- search results, a post's own
+	 * page, About -- whose content is as wide as the posts in the reading
+	 * column, plus the page's padding.
+	 */
+	--social-reading-page: calc(var(--social-reading-column) - 2 * var(--social-column-gutter) + 8 * var(--default-grid-baseline, 4px));
 }
 
 img.emoji {

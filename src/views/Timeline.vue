@@ -92,6 +92,7 @@
 					:aria-expanded="showRequests ? 'true' : 'false'"
 					@click="showRequests = !showRequests">
 					{{ n('social', '{count} person is waiting — Review', '{count} people are waiting — Review', pendingRequests, { count: pendingRequests }) }}
+					<IconChevronDown :size="20" class="held-requests__chevron" />
 				</button>
 				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }" class="held-requests__settings">
 					{{ t('social', 'Who may reach you') }}
@@ -160,6 +161,7 @@ import IconAt from 'vue-material-design-icons/At.vue'
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconBellCogOutline from 'vue-material-design-icons/BellCogOutline.vue'
 import IconCheckAll from 'vue-material-design-icons/CheckAll.vue'
+import IconChevronDown from 'vue-material-design-icons/ChevronDown.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconViewGridOutline from 'vue-material-design-icons/ViewGridOutline.vue'
@@ -238,6 +240,7 @@ export default {
 		IconBellCogOutline,
 		IconClose,
 		IconInboxOutline,
+		IconChevronDown,
 		NotificationRequests,
 	},
 
@@ -880,7 +883,7 @@ export default {
 .social__wrapper > :deep(.feed-notice) {
 	position: relative;
 	box-sizing: border-box;
-	width: min(calc(100% - 2 * var(--social-column-gutter)), calc(var(--social-reading-column) - 2 * var(--social-column-gutter)));
+	width: var(--social-card-width);
 	margin: 8px auto 12px;
 	padding: 12px 16px;
 	border: 1px solid var(--color-border);
@@ -1075,9 +1078,8 @@ export default {
 	width: 100%;
 	max-width: var(--social-column);
 	margin: 0 auto 8px;
-	/* no inline padding: the switcher drops its labels at 600px of its own
-	   width, and the reading column minus gutters is exactly that */
-	padding: 6px 0;
+	/* the band is as wide as the column; what is on it, as wide as a post */
+	padding: 6px var(--social-column-gutter);
 	background: color-mix(in srgb, var(--color-main-background) 78%, transparent);
 	backdrop-filter: blur(12px) saturate(1.2);
 	-webkit-backdrop-filter: blur(12px) saturate(1.2);
@@ -1186,15 +1188,20 @@ export default {
 		flex-wrap: wrap;
 	}
 
+	/* an action, not a caption: it opens the list of those waiting */
 	&__toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
 		flex: 1 1 200px;
 		min-height: var(--default-clickable-area);
 		margin: 0;
 		padding: 0 4px;
 		border: 0;
 		background: none;
-		color: var(--color-main-text);
+		color: var(--color-primary-element);
 		font: inherit;
+		font-weight: 600;
 		text-align: start;
 		cursor: pointer;
 
@@ -1206,6 +1213,14 @@ export default {
 			outline: 2px solid var(--color-main-text);
 			outline-offset: 2px;
 		}
+	}
+
+	&__chevron {
+		transition: transform var(--social-motion-base) var(--social-ease);
+	}
+
+	&__toggle[aria-expanded='true'] &__chevron {
+		transform: rotate(180deg);
 	}
 
 	&__settings {
@@ -1241,16 +1256,24 @@ export default {
 	position: relative;
 }
 
-/* while the sidebar is collapsed its toggle covers the top-left corner of the
-   content, so the page starts below it. The distance is a property so that a
-   page sized to the viewport (DirectMessages.vue) can subtract it */
-@include layout.below(layout.$folded) {
-	.social__wrapper {
-		--social-toggle-clearance: calc(var(--default-clickable-area, 44px) + var(--default-grid-baseline, 4px) * 2);
-	}
+.social__wrapper {
+	/* a post's own box, which what stands above the posts lines up with */
+	--social-card-width: min(calc(100% - 2 * var(--social-column-gutter)), calc(var(--social-reading-column) - 2 * var(--social-column-gutter)));
+	@include layout.toggle-clearance;
+}
 
-	.social__wrapper > :first-child {
-		margin-top: var(--social-toggle-clearance);
+/* the filters are as wide as the cards and posts around them */
+.notifications-filter {
+	box-sizing: border-box;
+	width: var(--social-card-width);
+}
+
+/* the scopes are a short centred row, so rather than a row of their own
+   below the toggle they sit beside it, kept clear of it on both sides */
+@include layout.below(layout.$folded) {
+	.social__wrapper > .feed-scopes:first-child {
+		margin-top: 0;
+		padding-inline: var(--default-clickable-area, 44px);
 	}
 }
 

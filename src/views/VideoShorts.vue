@@ -832,8 +832,10 @@ export default {
 			this.resizeHandler = this.measureTrackBounds
 			window.addEventListener('resize', this.resizeHandler)
 		}
+		// the stage takes the focus for its arrow keys; opened straight from an
+		// address nobody came to it by keyboard, so it draws no ring
 		const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
-		track?.focus?.()
+		track?.focus?.(window.history.state?.back ? undefined : /** @type {FocusOptions} */ ({ focusVisible: false }))
 	},
 
 	beforeUnmount() {

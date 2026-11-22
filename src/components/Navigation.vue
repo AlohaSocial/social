@@ -112,8 +112,9 @@
 							<IconTrendingUp v-else-if="entry.kind === 'trend'" :size="20" />
 							<IconPound v-else :size="20" />
 						</template>
-						<!-- a trending tag shows how busy it is -->
-						<template v-if="entry.kind === 'trend'" #extra>
+						<!-- a trending tag shows how busy it is, where the other
+						     entries show their unread count -->
+						<template v-if="entry.kind === 'trend'" #counter>
 							<span class="navigation__subname">
 								{{ n('social', '%n post', '%n posts', usesOf(entry.tag)) }}
 							</span>
@@ -206,6 +207,7 @@
 	     draws into the page header over Nextcloud's search box. -->
 	<NcModal
 		v-if="showComposer"
+		class="composer-modal"
 		closeOnClickOutside
 		labelId="social-new-post-title"
 		:show="showComposer"
@@ -1583,7 +1585,8 @@ export default {
 
 .navigation__subname {
 	font-size: 12px;
-	color: var(--color-text-lighter);
+	color: var(--color-text-maxcontrast);
+	white-space: nowrap;
 }
 
 /*
@@ -1696,6 +1699,12 @@ export default {
 	border: 0;
 	border-radius: 0;
 	box-shadow: none;
+}
+
+/* wide enough for the row of controls and the Post button on one line;
+   NcModal's normal size is 600px */
+.composer-modal :deep(.modal-wrapper--normal > .modal-container) {
+	width: 640px;
 }
 
 /* the dialog supplies the inset the composer's card padding gave; less at the

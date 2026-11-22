@@ -282,9 +282,11 @@
 				font-weight: 600;
 				border-radius: 8px;
 
+				/* the list on show, marked as the sidebar marks the page on
+				   show: tinted, so it does not read as the profile's action */
 				&.router-link-exact-active {
-					background: var(--color-primary-element);
-					color: var(--color-primary-element-text);
+					background: var(--color-primary-element-light);
+					color: var(--color-primary-element-light-text);
 				}
 
 				/* focus does not borrow the banner's colour, whose contrast

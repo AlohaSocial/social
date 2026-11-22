@@ -1653,6 +1653,11 @@ export default {
 	justify-content: space-between;
 }
 
+/* the person's name sits over the messages, in the thread's column */
+.direct-messages__thread-heading {
+	padding-inline: max(1.25rem, calc((100% - var(--direct-messages-column)) / 2));
+}
+
 /*
  * Room for Nextcloud's app-navigation toggle, which otherwise covers the start
  * of this heading. Below `$folded` the page already starts beneath the toggle

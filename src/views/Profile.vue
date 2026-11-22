@@ -203,10 +203,13 @@ export default {
 </script>
 
 <style scoped lang="scss">
+@use '../styles/layout.scss' as layout;
+
 .social__wrapper {
 	max-width: var(--social-column);
 	margin: 0 auto;
 	padding: calc(var(--default-grid-baseline) * 4);
+	@include layout.toggle-clearance;
 
 	&.icon-loading {
 		margin-top: 50vh;

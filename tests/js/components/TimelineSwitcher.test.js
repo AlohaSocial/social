@@ -238,13 +238,45 @@ describe('TimelineSwitcher', () => {
 	 */
 	it('brings the option it shows into view', async () => {
 		const { wrapper } = mountSwitcher('first')
+		const scrollBy = vi.fn()
+		wrapper.element.scrollBy = scrollBy
+		wrapper.element.getBoundingClientRect = () => ({ left: 0, right: 400, top: 0, bottom: 36, width: 400, height: 36 })
+		options(wrapper)[1].element.getBoundingClientRect = () => ({ left: 380, right: 460, top: 0, bottom: 36, width: 80, height: 36 })
+
+		await wrapper.setProps({ value: 'second' })
+		await wrapper.vm.$nextTick()
+
+		// clear of the 28px fade at the end
+		expect(scrollBy).toHaveBeenCalledWith({ left: 88 })
+	})
+
+	/**
+	 * `scrollIntoView` scrolls every scrolling ancestor, so a control below
+	 * the fold (under a long notice) would pull the page down to it.
+	 */
+	it('scrolls only itself, never the page', async () => {
+		const { wrapper } = mountSwitcher('first')
 		const scrollIntoView = vi.fn()
+		wrapper.element.scrollBy = vi.fn()
 		options(wrapper)[1].element.scrollIntoView = scrollIntoView
 
 		await wrapper.setProps({ value: 'second' })
 		await wrapper.vm.$nextTick()
 
-		expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
+		expect(scrollIntoView).not.toHaveBeenCalled()
+	})
+
+	it('leaves an option alone that is already in view', async () => {
+		const { wrapper } = mountSwitcher('first')
+		const scrollBy = vi.fn()
+		wrapper.element.scrollBy = scrollBy
+		wrapper.element.getBoundingClientRect = () => ({ left: 0, right: 400, top: 0, bottom: 36, width: 400, height: 36 })
+		options(wrapper)[1].element.getBoundingClientRect = () => ({ left: 100, right: 180, top: 0, bottom: 36, width: 80, height: 36 })
+
+		await wrapper.setProps({ value: 'second' })
+		await wrapper.vm.$nextTick()
+
+		expect(scrollBy).not.toHaveBeenCalled()
 	})
 
 	// routing
@@ -471,13 +503,16 @@ describe('TimelineSwitcher', () => {
 
 		/**
 		 * A feed's switcher is told nothing: it is the first child of the
-		 * timeline's wrapper, which Timeline.vue pushes below the toggle. The
-		 * rule here outranks that one only while it stays this shape.
+		 * timeline's wrapper, which the `toggle-clearance` mixin Timeline.vue
+		 * includes pushes below the toggle. The rule here outranks that one
+		 * only while it stays this shape.
 		 */
 		it('outranks the room Timeline.vue makes under the toggle', () => {
+			const layout = readFileSync(resolve('src/styles/_layout.scss'), 'utf8')
 			const timeline = readFileSync(resolve('src/views/Timeline.vue'), 'utf8')
 
-			expect(timeline).toMatch(/\.social__wrapper > :first-child \{\s*margin-top: var\(--social-toggle-clearance\);/)
+			expect(layout).toMatch(/@mixin toggle-clearance \{[\s\S]*?> :first-child \{\s*margin-top: var\(--social-toggle-clearance\);/)
+			expect(timeline).toMatch(/\.social__wrapper \{[^}]*@include layout\.toggle-clearance;/)
 		})
 	})
 })

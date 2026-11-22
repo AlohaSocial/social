@@ -41,6 +41,11 @@ const asyncStubs = {
 	SensitiveMediaSettings: { name: 'SensitiveMediaSettings', template: '<section class="sensitive-media-settings-stub" />' },
 	// reads the Bluesky identity on mount
 	BlueskySettings: { name: 'BlueskySettings', template: '<section class="bluesky-settings-stub" />' },
+	// reads the saved Bluesky feeds on mount
+	BlueskyFeedsSettings: { name: 'BlueskyFeedsSettings', template: '<section class="bluesky-feeds-settings-stub" />' },
+	// read nothing on mount, but travel in the same chunk as the rest
+	CountsSettings: { name: 'CountsSettings', template: '<section class="counts-settings-stub" />' },
+	ExternalStorage: { name: 'ExternalStorage', template: '<section class="external-storage-stub" />' },
 	// read the account, the blocks and the moves on mount
 	ContactSettings: { name: 'ContactSettings', template: '<section class="contact-settings-stub" />' },
 	BlockedAccounts: { name: 'BlockedAccounts', props: ['embedded'], template: '<section class="blocked-accounts-stub" />' },

@@ -628,6 +628,13 @@ $gutter: calc(var(--default-grid-baseline) * 4);
 		min-width: min(220px, 100%);
 	}
 
+	/* a switch is set in by its own padding, which keeps the hover's shape;
+	   pulled back by it, the switch starts where the section's text and
+	   fields do */
+	&__section :deep(.checkbox-radio-switch-switch) {
+		margin-inline-start: calc((var(--default-clickable-area) - 16px) / -2);
+	}
+
 	&__body {
 		display: grid;
 		gap: calc(var(--default-grid-baseline) * 4);
@@ -818,6 +825,21 @@ $gutter: calc(var(--default-grid-baseline) * 4);
 .settings__group-description,
 .settings__toc-list {
 	display: none;
+}
+
+/* once the search wraps under the title it takes the whole row */
+@include layout.below(layout.$phone) {
+	.settings__search {
+		flex-basis: 100%;
+	}
+}
+
+/* the page is wide enough to reach the corner where the sidebar's toggle
+   floats, so it starts beside it */
+@include layout.from(layout.$folded) {
+	.settings {
+		padding-inline-start: calc(var(--default-clickable-area, 44px) + $gutter);
+	}
 }
 
 @include layout.from(layout.$wide) {
