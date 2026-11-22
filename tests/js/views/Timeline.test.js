@@ -1083,7 +1083,9 @@ describe('Timeline', () => {
 			const bar = wrapper.find('.timeline-heading-row .photo-header-bar')
 			expect(bar.find('.photo-compose-actions').exists()).toBe(true)
 			expect(bar.findComponent({ name: 'TimelineSwitcher' }).exists()).toBe(true)
-			expect(wrapper.find('.photo-compose-actions').findComponent({ name: 'DraftsButton' }).exists()).toBe(true)
+			expect(upload.props('label')).toBe('Share photos or a video')
+			// drafts are reached from the New post dialog
+			expect(wrapper.findComponent({ name: 'DraftsButton' }).exists()).toBe(false)
 		})
 
 		it.each(['', 'timeline', 'federated', 'notifications'])('draws %s as a list', (type) => {

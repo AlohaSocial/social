@@ -5,7 +5,7 @@
 import { expect, test } from '@playwright/test'
 import { APP, PASSWORD, USER, apiAs, ensureAccount, login, openApp, postStatus } from './helpers.mjs'
 
-test('Photos lists browser drafts and resumes their original writing context', async ({ page }) => {
+test('the New post dialog lists browser drafts and resumes their original writing context', async ({ page }) => {
 	const api = await apiAs(USER, PASSWORD)
 	await ensureAccount(api, USER)
 	const target = await postStatus(api, { status: `Original for draft ${Date.now()}` })
@@ -19,15 +19,18 @@ test('Photos lists browser drafts and resumes their original writing context', a
 			localStorage.setItem(`social.composer.draft.reply.${targetId}::${user}`, JSON.stringify({ ...draft, text: 'Saved reply' }))
 			window.dispatchEvent(new Event('storage'))
 		}, { user: USER, targetId: target.id })
-		const drafts = page.getByRole('button', { name: 'Drafts (2)', exact: true })
+		const composer = page.locator('.modal-composer')
+		const newPost = page.locator('.app-navigation').getByRole('button', { name: 'New post' })
+		const drafts = composer.getByRole('button', { name: 'Drafts (2)', exact: true })
+		await newPost.click()
 		await drafts.click()
 		await expect(page.locator('.drafts-list__item')).toHaveCount(2)
 		await page.locator('.drafts-list__item').filter({ hasText: 'Photo draft to continue' }).click()
-		const composer = page.locator('.modal-composer')
 		await expect(composer.locator('.message')).toHaveText('Photo draft to continue')
 		await composer.locator('.message').fill('Continued draft')
 		await page.keyboard.press('Escape')
 		await expect(composer).toHaveCount(0)
+		await newPost.click()
 		await drafts.click()
 		await page.locator('.drafts-list__item').filter({ hasText: 'Saved reply' }).click()
 		await expect(composer.locator('.message')).toHaveText('Saved reply')

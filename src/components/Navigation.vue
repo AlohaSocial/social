@@ -235,6 +235,8 @@
 					</template>
 					{{ t('social', 'New short') }}
 				</NcButton>
+				<!-- opening one asks before it replaces what is being written -->
+				<DraftsButton v-if="!composerEdit" class="modal-composer__drafts" />
 			</div>
 			<PostEditForm
 				v-if="composerEdit"
@@ -364,6 +366,7 @@ import { ownAvatarUrl } from '../services/avatar.js'
 // the composer pulls the emoji picker and the attachment stack with it:
 // its own chunk keeps all of that out of the entry bundle
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./Composer/Composer.vue'))
+const DraftsButton = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./DraftsButton.vue'))
 const PostEditForm = defineAsyncComponent(() => import(/* webpackChunkName: "composer-edit" */'./PostEditForm.vue'))
 const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'./ListsSettings.vue'))
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
@@ -397,6 +400,7 @@ export default {
 		NcButton,
 		NcCounterBubble,
 		Composer,
+		DraftsButton,
 		PostEditForm,
 		ConfirmDialog,
 		ShortComposerDialog,
@@ -1733,6 +1737,13 @@ export default {
 	&__story {
 		flex: 0 0 auto;
 		margin-inline-start: 0;
+	}
+
+	&__drafts {
+		flex: 0 0 auto;
+		margin-inline-start: auto;
+		/* clear of the dialog's close button in the corner */
+		margin-inline-end: var(--default-clickable-area);
 	}
 }
 

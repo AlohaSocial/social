@@ -49,7 +49,6 @@
 							accept="image/*,video/*"
 							multiple
 							:label="t('social', 'Share photos or a video')" />
-						<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
 					</div>
 				</div>
 				<HashtagFollowButton
@@ -174,7 +173,6 @@ import IconMessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline
 import IconPoll from 'vue-material-design-icons/Poll.vue'
 import IconRepeat from 'vue-material-design-icons/Repeat.vue'
 import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
-import DraftsButton from '../components/DraftsButton.vue'
 import MediaUploadButton from '../components/MediaUploadButton.vue'
 import TimelineList from './../components/TimelineList.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
@@ -234,7 +232,6 @@ export default {
 		ShortsBar,
 		TimelineList,
 		MediaUploadButton,
-		DraftsButton,
 		DirectMessages,
 		TimelineSwitcher,
 		IconBellCogOutline,
@@ -371,7 +368,7 @@ export default {
 
 		/** @return {string} shared list, media grid or video browse presentation */
 		display() {
-			// the Videos page has its own "Upload a video" in place of the composer
+			// the Videos page has its own "New video" in place of the composer
 			if (this.type === 'videos') {
 				return 'videos'
 			}
