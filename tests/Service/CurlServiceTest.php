@@ -561,6 +561,24 @@ class CurlServiceTest extends TestCase {
 	}
 
 	/**
+	 * A server on a port of its own, as PeerTube in the interop setup: its
+	 * handles carry the port, and the actor's own handle is the one asked for.
+	 */
+	public function testRetrieveAccountKeepsTheHandleOfAServerOnItsOwnPort(): void {
+		$channel = 'http://localhost:9000/video-channels/interop_channel';
+		$service = $this->answeringByUrl([
+			'https://localhost:9000/.well-known/webfinger' => $this->jrd('acct:interop_channel@localhost:9000', $channel),
+			$channel => json_encode(['id' => $channel, 'type' => 'Group']),
+		]);
+		$this->actorWithHandle($channel, 'interop_channel');
+		$account = 'interop_channel@localhost:9000';
+
+		$service->retrieveAccount($account);
+
+		$this->assertSame('interop_channel@localhost:9000', $account);
+	}
+
+	/**
 	 * Mastodon's `WEB_DOMAIN`: handles on example.com, actors on
 	 * social.example.com. The actor's own server confirms the handle when
 	 * asked about `preferredUsername@` its own host.

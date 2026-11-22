@@ -249,12 +249,14 @@ class CurlService {
 	 * @throws InvalidOriginException the actor states no handle of its own
 	 */
 	private function confirmedAccount(string $account, Person $actor): string {
-		$canonical = $actor->canonicalAccount();
-		if ($canonical === '') {
+		if ($actor->canonicalAccount() === '') {
 			throw new InvalidOriginException(
 				'CurlService::retrieveAccount - account: ' . $account . ' - actor without a handle: ' . $actor->getId()
 			);
 		}
+		// with the port of a server that is not on the default one, as its
+		// WebFinger handles are (`channel@localhost:9000`)
+		$canonical = $actor->getPreferredUsername() . '@' . ConfigService::authorityOf($actor->getId());
 		if (strtolower($account) === strtolower($canonical)) {
 			return $account;
 		}
