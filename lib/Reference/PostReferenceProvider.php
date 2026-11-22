@@ -112,7 +112,7 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 */
 	private function parse(string $referenceText): ?array {
 		$referenceText = trim($referenceText);
-		foreach ($this->prefixes() as $prefix) {
+		foreach (self::prefixesOf($this->urlGenerator) as $prefix) {
 			if (!str_starts_with($referenceText, $prefix)) {
 				continue;
 			}
@@ -134,8 +134,8 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 	 *
 	 * @return string[]
 	 */
-	private function prefixes(): array {
-		$base = rtrim($this->urlGenerator->linkToRouteAbsolute('social.Navigation.navigate'), '/') . '/';
+	public static function prefixesOf(IURLGenerator $urlGenerator): array {
+		$base = rtrim($urlGenerator->linkToRouteAbsolute('social.Navigation.navigate'), '/') . '/';
 		$other = str_contains($base, '/index.php/')
 			? str_replace('/index.php/', '/', $base)
 			: (string)preg_replace('#/apps/social/$#', '/index.php/apps/social/', $base);

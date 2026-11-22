@@ -42,6 +42,7 @@ class ModerationService {
 		private StrikeService $strikeService,
 		private ActorCascadeService $actorCascadeService,
 		private AuditService $auditService,
+		private PostReferenceCache $postReferenceCache,
 	) {
 	}
 
@@ -176,6 +177,8 @@ class ModerationService {
 		$this->strikeService->record($actorId, $level, $comment, $reportId);
 
 		if ($level === Moderation::SUSPEND) {
+			// while the posts are still there to say which cards to drop
+			$this->forgetReferences(fn () => $this->postReferenceCache->forgetAuthor($actorId));
 			$this->purgeActor($actorId);
 			$this->federateSuspension($actorId);
 		}
@@ -310,6 +313,8 @@ class ModerationService {
 					'stream' => $streamId, 'exception' => $e,
 				]);
 				$this->streamRequest->deleteById($streamId);
+				// what deleteLocalItem() would have had dropped
+				$this->forgetReferences(fn () => $this->postReferenceCache->forgetPost($stream));
 			}
 		} else {
 			$this->streamRequest->deleteById($streamId);
@@ -323,6 +328,20 @@ class ModerationService {
 
 		$this->logger->info('post removed by a moderator', ['stream' => $streamId]);
 		$this->auditService->postTakenDown($streamId);
+	}
+
+	/**
+	 * Drops cached link previews; a failure is only logged, as the cache
+	 * expires on its own and the decision stands.
+	 *
+	 * @param callable(): void $forget
+	 */
+	private function forgetReferences(callable $forget): void {
+		try {
+			$forget();
+		} catch (\Exception $e) {
+			$this->logger->error('could not drop cached link previews', ['exception' => $e]);
+		}
 	}
 
 	/**
