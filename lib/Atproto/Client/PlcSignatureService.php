@@ -70,7 +70,7 @@ class PlcSignatureService {
 	/**
 	 * @throws XrpcException
 	 */
-	public function procedure(ClientSession $session, string $method, array $body): array {
+	public function procedure(ClientSession $session, string $method, #[\SensitiveParameter] array $body): array {
 		if (!$session->permissions()->mayManageIdentity()) {
 			throw new XrpcException(403, 'InsufficientScope', 'Changing the identity needs a session granted identity:*; an app password is not enough');
 		}
@@ -117,7 +117,7 @@ class PlcSignatureService {
 	 *
 	 * @throws XrpcException
 	 */
-	private function sign(ClientSession $session, IUser $user, array $body): array {
+	private function sign(ClientSession $session, IUser $user, #[\SensitiveParameter] array $body): array {
 		$this->limit($user, 'sign', 10);
 		try {
 			$this->lexicon->validateInput($body === [] ? new \stdClass() : $body, self::SIGN);
@@ -182,7 +182,7 @@ class PlcSignatureService {
 	 *
 	 * @throws XrpcException
 	 */
-	private function useToken(IUser $user, string $did, string $token): void {
+	private function useToken(IUser $user, string $did, #[\SensitiveParameter] string $token): void {
 		if (trim($token) === '') {
 			throw XrpcException::invalidRequest('An e-mailed code is required: ask for one with ' . self::REQUEST);
 		}
@@ -196,7 +196,7 @@ class PlcSignatureService {
 		}
 	}
 
-	private static function hash(string $token): string {
+	private static function hash(#[\SensitiveParameter] string $token): string {
 		return hash('sha256', strtoupper(trim($token)));
 	}
 
@@ -211,7 +211,7 @@ class PlcSignatureService {
 		}
 	}
 
-	private function send(IUser $user, string $email, string $token): bool {
+	private function send(IUser $user, string $email, #[\SensitiveParameter] string $token): bool {
 		$l10n = $this->l10nFactory->get(Application::APP_ID, $this->l10nFactory->getUserLanguage($user));
 		$template = $this->mailer->createEMailTemplate('social.PlcOperationCode', ['token' => $token]);
 		$template->setSubject($l10n->t('Your code to move your Bluesky account'));

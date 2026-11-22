@@ -190,7 +190,7 @@ class InboundMoveService {
 	/**
 	 * Whether a bearer token is one of a move here, which only this answers.
 	 */
-	public function owns(string $authorization): bool {
+	public function owns(#[\SensitiveParameter] string $authorization): bool {
 		if (preg_match('/^Bearer\s+[A-Za-z0-9_-]+\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+$/', trim($authorization), $m) !== 1) {
 			return false;
 		}
@@ -206,7 +206,7 @@ class InboundMoveService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function createAccount(string $authorization, array $body, string $ip): array {
+	public function createAccount(#[\SensitiveParameter] string $authorization, #[\SensitiveParameter] array $body, string $ip): array {
 		try {
 			$this->throttler->sleepDelayOrThrowOnMax($ip, self::THROTTLE);
 		} catch (MaxDelayReached) {
@@ -257,7 +257,7 @@ class InboundMoveService {
 	 * @param array<string, mixed> $params
 	 * @throws XrpcException
 	 */
-	public function query(string $method, array $params, string $authorization): array {
+	public function query(string $method, array $params, #[\SensitiveParameter] string $authorization): array {
 		$move = $this->authenticate($authorization);
 
 		return match ($method) {
@@ -275,7 +275,7 @@ class InboundMoveService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function procedure(string $method, array $body, string $authorization): array {
+	public function procedure(string $method, #[\SensitiveParameter] array $body, #[\SensitiveParameter] string $authorization): array {
 		if ($method === 'com.atproto.server.refreshSession') {
 			return $this->refresh($authorization);
 		}
@@ -297,7 +297,7 @@ class InboundMoveService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function importRepo(string $path, string $authorization): array {
+	public function importRepo(string $path, #[\SensitiveParameter] string $authorization): array {
 		$move = $this->authenticate($authorization);
 		if ($this->isActivated($move)) {
 			throw XrpcException::invalidRequest('The account is active here; its repository is not replaced');
@@ -324,7 +324,7 @@ class InboundMoveService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function upload(string $path, string $authorization): array {
+	public function upload(string $path, #[\SensitiveParameter] string $authorization): array {
 		$move = $this->authenticate($authorization);
 		$size = (int)filesize($path);
 		$cid = Cid::forRawDigest((string)hash_file('sha256', $path, true));
@@ -637,7 +637,7 @@ class InboundMoveService {
 	/**
 	 * @throws XrpcException
 	 */
-	private function refresh(string $authorization): array {
+	private function refresh(#[\SensitiveParameter] string $authorization): array {
 		$claims = $this->sessions->claims($authorization, SessionService::REFRESH_SCOPE);
 		$move = $this->moves->get((int)($claims['mv'] ?? 0));
 		$sealed = $move === null ? [] : $this->unseal($move->session);
@@ -661,11 +661,11 @@ class InboundMoveService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function assertSession(string $authorization): void {
+	public function assertSession(#[\SensitiveParameter] string $authorization): void {
 		$this->authenticate($authorization);
 	}
 
-	private function authenticate(string $authorization): Move {
+	private function authenticate(#[\SensitiveParameter] string $authorization): Move {
 		$claims = $this->sessions->claims($authorization, SessionService::ACCESS_SCOPE);
 		$move = $this->moves->get((int)($claims['mv'] ?? 0));
 		if ($move === null || !$this->isCurrent($move, $this->unseal($move->session), (string)($claims['sub'] ?? ''), (string)($claims['sid'] ?? ''))) {
@@ -744,7 +744,7 @@ class InboundMoveService {
 		return new XrpcException(403, 'InsufficientScope', 'This session only moves the account here; sign in with an app password for anything else');
 	}
 
-	private function seal(array $session): string {
+	private function seal(#[\SensitiveParameter] array $session): string {
 		return $this->crypto->encrypt((string)json_encode($session));
 	}
 

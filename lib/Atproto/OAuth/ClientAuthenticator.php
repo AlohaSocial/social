@@ -39,7 +39,7 @@ class ClientAuthenticator {
 	 * @return array{method: string, kid?: string, alg?: string, jkt?: string}
 	 * @throws OAuthException `invalid_client`
 	 */
-	public function authenticate(array $metadata, array $params, string $issuer): array {
+	public function authenticate(array $metadata, #[\SensitiveParameter] array $params, string $issuer): array {
 		$assertion = (string)($params['client_assertion'] ?? '');
 		if (!ClientMetadataService::isConfidential($metadata)) {
 			if ($assertion !== '' || isset($params['client_secret'])) {

@@ -92,7 +92,7 @@ class MoveAwayService {
 	 *                         (MoveAnnouncement::KINDS)
 	 * @throws MoveErrorException with what to tell the person
 	 */
-	public function start(string $userId, Identity $identity, string $pds, string $handle, string $email, string $password, string $inviteCode = '', bool $withoutRecovery = false, string $announce = MoveAnnouncement::NONE): Move {
+	public function start(string $userId, Identity $identity, string $pds, string $handle, string $email, #[\SensitiveParameter] string $password, string $inviteCode = '', bool $withoutRecovery = false, string $announce = MoveAnnouncement::NONE): Move {
 		MoveAnnouncement::assertKind($announce);
 		if (!$identity->isActive()) {
 			throw new MoveErrorException('The Bluesky account is not active here', 'identity-inactive');
@@ -662,7 +662,7 @@ class MoveAwayService {
 	 * @param string|(Closure(): resource)|null $bytes
 	 * @throws AtprotoException
 	 */
-	private function authed(Move $move, string $method, string $verb = 'GET', array $query = [], ?array $json = null, $bytes = null, string $type = ''): array {
+	private function authed(Move $move, string $method, string $verb = 'GET', array $query = [], #[\SensitiveParameter] ?array $json = null, $bytes = null, string $type = ''): array {
 		$session = $this->unseal($move->session);
 		$answer = $this->callPds($move, $method, $verb, $query, $json, $bytes, $type, (string)($session['accessJwt'] ?? ''));
 		if (in_array($answer['status'], [400, 401], true) && in_array($answer['body']['error'] ?? '', ['ExpiredToken', 'InvalidToken'], true) && is_string($session['refreshJwt'] ?? null)) {
@@ -683,7 +683,7 @@ class MoveAwayService {
 	 * @param string|(Closure(): resource)|null $bytes
 	 * @return array{status: int, body: array}
 	 */
-	private function callPds(Move $move, string $method, string $verb, array $query, ?array $json, $bytes, string $type, string $token): array {
+	private function callPds(Move $move, string $method, string $verb, array $query, #[\SensitiveParameter] ?array $json, $bytes, string $type, #[\SensitiveParameter] string $token): array {
 		$body = $bytes instanceof Closure ? $bytes() : $bytes;
 		try {
 			return $this->pds->call($move->pds, $method, $verb, $query, $json, $body, $type, $token);
@@ -695,7 +695,7 @@ class MoveAwayService {
 		}
 	}
 
-	private function seal(array $session): string {
+	private function seal(#[\SensitiveParameter] array $session): string {
 		return $this->crypto->encrypt((string)json_encode(['accessJwt' => $session['accessJwt'] ?? '', 'refreshJwt' => $session['refreshJwt'] ?? '']));
 	}
 

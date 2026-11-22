@@ -112,7 +112,7 @@ class AuthorizationServer {
 	 * @return array{request_uri: string, expires_in: int}
 	 * @throws OAuthException
 	 */
-	public function par(array $params, string $dpopProof): array {
+	public function par(#[\SensitiveParameter] array $params, #[\SensitiveParameter] string $dpopProof): array {
 		$clientId = self::field($params, 'client_id');
 		$metadata = $this->clients->get($clientId);
 		$clientAuth = $this->authenticator->authenticate($metadata, $params, $this->issuer());
@@ -251,7 +251,7 @@ class AuthorizationServer {
 	 * @param array<string, mixed> $params the form fields
 	 * @throws OAuthException
 	 */
-	public function token(array $params, string $dpopProof): array {
+	public function token(#[\SensitiveParameter] array $params, #[\SensitiveParameter] string $dpopProof): array {
 		$clientId = self::field($params, 'client_id');
 		$grant = self::field($params, 'grant_type');
 		$metadata = $this->clients->get($clientId);
@@ -273,7 +273,7 @@ class AuthorizationServer {
 	 * Ends the session a token belongs to (RFC 7009). Unknown tokens are not
 	 * an error.
 	 */
-	public function revoke(string $token): void {
+	public function revoke(#[\SensitiveParameter] string $token): void {
 		$session = $this->request->getSessionByRefresh(hash('sha256', $token));
 		if ($session === null && str_contains($token, '.')) {
 			try {
@@ -293,7 +293,7 @@ class AuthorizationServer {
 	 * @param string $url the address the client used, without query
 	 * @throws OAuthException 401 with the challenge the client acts on
 	 */
-	public function authenticate(string $authorization, string $dpopProof, string $method, string $url): ClientSession {
+	public function authenticate(#[\SensitiveParameter] string $authorization, #[\SensitiveParameter] string $dpopProof, string $method, string $url): ClientSession {
 		$token = trim(substr($authorization, 5));
 		try {
 			$claims = $this->accessClaims($token);
@@ -472,7 +472,7 @@ class AuthorizationServer {
 		return $this->tokens($session->sessionId, $identity->did, $session->clientId, $session->scope, $jkt, $refresh);
 	}
 
-	private function tokens(string $sessionId, string $did, string $clientId, string $scope, string $jkt, string $refresh): array {
+	private function tokens(string $sessionId, string $did, string $clientId, string $scope, string $jkt, #[\SensitiveParameter] string $refresh): array {
 		$now = $this->time->getTime();
 		$key = $this->instanceKeys->serviceKey();
 		$header = Encoding::base64UrlEncode((string)json_encode(['typ' => 'at+jwt', 'alg' => $key->publicKey()->curve->jwtAlgorithm()]));
@@ -506,7 +506,7 @@ class AuthorizationServer {
 	 *
 	 * @throws OAuthException
 	 */
-	private function accessClaims(string $token): array {
+	private function accessClaims(#[\SensitiveParameter] string $token): array {
 		try {
 			$jws = Jose::decode($token);
 		} catch (InvalidArgumentException) {

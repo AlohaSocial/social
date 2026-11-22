@@ -41,7 +41,7 @@ class DpopVerifier {
 	 * @return string the thumbprint of the key that signed it
 	 * @throws OAuthException `use_dpop_nonce` with a fresh nonce, or `invalid_dpop_proof`
 	 */
-	public function verify(string $proof, string $method, string $url, string $accessToken = ''): string {
+	public function verify(#[\SensitiveParameter] string $proof, string $method, string $url, #[\SensitiveParameter] string $accessToken = ''): string {
 		if ($proof === '') {
 			throw OAuthException::invalidDpop('A DPoP proof is required');
 		}
