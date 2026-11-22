@@ -959,7 +959,7 @@ moderates themselves: every write about an account or one of its posts —
 `ModerationController`'s decide/lift, forced-sensitive, the takedown of a post
 and the approval or refusal of a held one, the Mastodon admin API's `action`, `unsilence`,
 `unsuspend`, `unsensitive` and `DELETE`, and the Pixelfed admin app's user
-actions — first asks `AdminApiService::assertMayActOn()`, which refuses (403) an
+actions and its approval or refusal of a held post — first asks `AdminApiService::assertMayActOn()`, which refuses (403) an
 action on the caller's own account, and an action on a Nextcloud administrator's
 account unless the caller is one too. A remote account has no Nextcloud user
 behind it and is never refused there.
@@ -4707,7 +4707,10 @@ refused, `GET /invites` answers `allowed: false` and the page's
 invitation whose creator is an external user (one made before this rule) is not
 valid, so it neither skips approval nor opens an invitation-only server.
 Otherwise one approved external user could invite five people, each of them
-five more, and nobody would ever be approved. Approval is also decided again
+five more, and nobody would ever be approved. A suspended account is held to
+the same rule (`ModerationService::isSuspendedUser()`), and its invitations
+stop being valid when it is suspended, so a suspension cannot be walked around
+with a fresh account that skips approval. Approval is also decided again
 when the address is confirmed: a registration without an invitation that is
 confirmed while the mode is `approval` joins the queue
 (`ExternalSignupsRequest::markVerified(…, true)`), even if it was sent before

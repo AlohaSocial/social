@@ -98,6 +98,7 @@ class ExternalSignupService {
 		private SignupMailLimiter $mailLimiter,
 		private SignupChallengeService $challengeService,
 		private SignupReturn $signupReturn,
+		private ?ModerationService $moderationService = null,
 	) {
 	}
 
@@ -584,25 +585,28 @@ class ExternalSignupService {
 
 	/**
 	 * Whether this person may send invitations: users may when the
-	 * administrator lets them, and an external user never does, since an
-	 * invited registration skips approval and invitations from invitees
-	 * would chain past it.
+	 * administrator lets them, and an external user or a suspended account
+	 * never does, since an invited registration skips approval: invitations
+	 * from invitees would chain past it, and a suspended account's would be
+	 * a way back in.
 	 */
 	public function mayInvite(string $uid): bool {
 		return $this->externalUserService->isEnabled()
 			&& $this->externalUserService->usersMayInvite()
-			&& !$this->externalUserService->isExternalUid($uid);
+			&& !$this->externalUserService->isExternalUid($uid)
+			&& !$this->isSuspendedCreator($uid);
 	}
 
 	/**
-	 * An invitation that may still be used. One an external user made is not:
-	 * see mayInvite().
+	 * An invitation that may still be used. One an external user made is not,
+	 * nor one whose maker has been suspended since: see mayInvite().
 	 *
 	 * @return array{id: int, token: string, creator: string, note: string, maxUses: int, uses: int, expires: int, creation: int}|null
 	 */
 	private function validInvite(string $token): ?array {
 		$invite = $this->invitesRequest->getByToken(trim($token));
-		if ($invite === null || $this->externalUserService->isExternalUid($invite['creator'])) {
+		if ($invite === null || $this->externalUserService->isExternalUid($invite['creator'])
+			|| $this->isSuspendedCreator($invite['creator'])) {
 			return null;
 		}
 		if ($invite['expires'] > 0 && $invite['expires'] < $this->timeFactory->getTime()) {
@@ -613,6 +617,10 @@ class ExternalSignupService {
 		}
 
 		return $invite;
+	}
+
+	private function isSuspendedCreator(string $uid): bool {
+		return $this->moderationService?->isSuspendedUser($uid) ?? false;
 	}
 
 	/**

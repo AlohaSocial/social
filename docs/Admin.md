@@ -1130,7 +1130,8 @@ ever). *Let everybody here send invitation links* also gives every user an
 for a week, at most ten open at a time. External users are never offered it and
 cannot send invitations: an invited registration skips approval, so their
 invitations would let each invitee bring in more without anybody approving
-them. A registration confirmed after you switched to approval waits for it
+them. A suspended account cannot send invitations either, and the links it
+sent before it was suspended stop working. A registration confirmed after you switched to approval waits for it
 too, even if it was sent before.
 
 **External accounts.** Every external account with its email and verification

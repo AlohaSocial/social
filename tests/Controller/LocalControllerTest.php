@@ -158,6 +158,7 @@ class LocalControllerTest extends TestCase {
 
 	private ?\OCP\IUserManager $userManager = null;
 	private ?\OCP\IUserSession $userSession = null;
+	private ?\OCA\Social\Service\ClientService $clientService = null;
 
 	private function controller(?string $userId = 'alice'): LocalController {
 		return new LocalController(
@@ -182,6 +183,10 @@ class LocalControllerTest extends TestCase {
 
 				return $identities;
 			})(),
+			null,
+			null,
+			null,
+			$this->clientService,
 		);
 	}
 
@@ -724,9 +729,10 @@ class LocalControllerTest extends TestCase {
 		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$this->cacheActorService->expects($this->once())->method('addRemoteActorDetailCount')->with($actor);
-		$this->accountService->expects($this->never())->method('getActorFromUserId');
+		// the viewer, and nobody else
+		$this->accountService->expects($this->once())->method('getActorFromUserId')->with('alice');
 
-		$this->assertSame($actor, $this->controller(null)->globalAccountInfo('bob@remote.example')->getData());
+		$this->assertSame($actor, $this->controller('alice')->globalAccountInfo('bob@remote.example')->getData());
 	}
 
 	/**
@@ -746,19 +752,44 @@ class LocalControllerTest extends TestCase {
 		$this->assertSame($actor, $this->controller('alice')->globalAccountInfo('bob@remote.example')->getData());
 	}
 
-	/** The web app's own request, and a client's with a bearer token, may have them asked. */
-	public function testGlobalAccountInfoAsksTheAccountsServerForTheAppOrABearerToken(): void {
+	/** A client's request with a bearer token that is still valid may have them asked. */
+	public function testGlobalAccountInfoAsksTheAccountsServerForAValidBearerToken(): void {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 		$this->request->method('passesCSRFCheck')->willReturn(false);
 		$this->request->method('getHeader')->willReturnCallback(
 			static fn (string $name): string => ($name === 'Authorization') ? 'Bearer abc' : ''
 		);
+		$this->clientService = $this->createMock(\OCA\Social\Service\ClientService::class);
+		$this->clientService->expects($this->once())->method('getFromToken')->with('abc')
+			->willReturn($this->createStub(\OCA\Social\Model\Client\SocialClient::class));
 		$actor = $this->createStub(Person::class);
 		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->expects($this->once())->method('getFromAccount')->with('bob@remote.example', true)->willReturn($actor);
 		$this->cacheActorService->expects($this->once())->method('addRemoteActorDetailCount');
 
 		$this->controller(null)->globalAccountInfo('bob@remote.example');
+	}
+
+	/**
+	 * Any script can send a made-up bearer token, and an anonymous one can
+	 * fetch a request token with a page: neither is a reason to ask another
+	 * server on its behalf.
+	 */
+	public function testGlobalAccountInfoAsksNoOtherServerForAnInvalidBearerOrAnAnonymousRequestToken(): void {
+		$this->configService->method('getCloudHost')->willReturn('cloud.example');
+		$this->request->method('passesCSRFCheck')->willReturn(true);
+		$this->request->method('getHeader')->willReturnCallback(
+			static fn (string $name): string => ($name === 'Authorization') ? 'Bearer made-up' : ''
+		);
+		$this->clientService = $this->createStub(\OCA\Social\Service\ClientService::class);
+		$this->clientService->method('getFromToken')
+			->willThrowException(new \OCA\Social\Exceptions\ClientNotFoundException());
+		$actor = $this->createStub(Person::class);
+		$actor->method('isLocal')->willReturn(false);
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')->with('bob@remote.example', false)->willReturn($actor);
+		$this->cacheActorService->expects($this->never())->method('addRemoteActorDetailCount');
+
+		$this->assertSame($actor, $this->controller(null)->globalAccountInfo('bob@remote.example')->getData());
 	}
 
 	public function testGlobalAccountInfoToleratesCounterFailures(): void {

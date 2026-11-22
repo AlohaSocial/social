@@ -300,29 +300,31 @@ class PixelfedAdminService {
 	/**
 	 * The two buttons on that screen: `approve` ("not spam") publishes the
 	 * post, `delete` refuses it, telling its author and recording it against
-	 * them.
+	 * them. `$callerId` is held to `AdminApiService::assertMayActOn()` for
+	 * the post's author first.
 	 *
 	 * @return array{success: true}
 	 * @throws InvalidArgumentException
 	 * @throws ItemNotFoundException
+	 * @throws ModerationNotAllowedException
 	 */
-	public function handleAutospam(int $id, string $action): array {
+	public function handleAutospam(int $id, string $action, string $callerId): array {
 		$action = strtolower(trim($action));
+		$approve = in_array($action, ['approve', 'not_spam', 'notspam'], true);
+		if (!$approve && !in_array($action, ['delete', 'spam'], true)) {
+			throw new InvalidArgumentException('unknown action: ' . $action);
+		}
 
-		if (in_array($action, ['approve', 'not_spam', 'notspam'], true)) {
-			$held = $this->postReviewService->heldPost($id);
+		$held = $this->postReviewService->heldPost($id);
+		$this->adminApiService->assertMayActOn($held->getActorId(), $callerId);
+
+		if ($approve) {
 			$this->postReviewService->approve($id, $this->accountService->getFromId($held->getActorId()));
-
-			return ['success' => true];
-		}
-
-		if (in_array($action, ['delete', 'spam'], true)) {
+		} else {
 			$this->postReviewService->reject($id);
-
-			return ['success' => true];
 		}
 
-		throw new InvalidArgumentException('unknown action: ' . $action);
+		return ['success' => true];
 	}
 
 	/**
