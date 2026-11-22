@@ -149,13 +149,6 @@ class StatusAssemblyService {
 			]);
 		}
 
-		$mediaIds = $params->paramMediaIds();
-		if ($mediaIds !== []) {
-			$post->setMedias($this->documentService->mediaAttachmentsForEdit(
-				$mediaIds, $actor->getPreferredUsername(), $post->getType()
-			));
-		}
-
 		$replyTo = (int)$params->paramString('in_reply_to_id');
 		if ($replyTo > 0) {
 			// Read as the author, since the cron and a moderator see a different
@@ -164,12 +157,23 @@ class StatusAssemblyService {
 			// default audience.
 			$this->streamService->setViewer($actor);
 			try {
-				$post->setReplyTo($this->streamService->getStreamByNid($replyTo)->getId());
+				$parent = $this->streamService->getStreamByNid($replyTo);
 			} catch (Throwable $e) {
 				$this->logger->debug('[StatusAssemblyService] the post ' . $replyTo . ' replied to is gone');
 
 				throw new StreamNotFoundException(PostService::REPLY_PARENT_NOT_FOUND);
 			}
+			$post->setReplyTo($parent->getId());
+			// before the media is scoped, as `statusNew()` does: a reply to a
+			// direct message is direct, and so are its attachments
+			$post->setType(PostService::visibilityOfReply($post->getType(), $parent));
+		}
+
+		$mediaIds = $params->paramMediaIds();
+		if ($mediaIds !== []) {
+			$post->setMedias($this->documentService->mediaAttachmentsForEdit(
+				$mediaIds, $actor->getPreferredUsername(), $post->getType()
+			));
 		}
 
 		return $post;
