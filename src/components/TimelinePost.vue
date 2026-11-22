@@ -1205,7 +1205,7 @@ export default {
 					}
 				}
 				const message = kind === 'HIDE_POST'
-					? t('social', 'Post hidden from For You')
+					? t('social', 'Post hidden from For you')
 					: t('social', 'Your feedback was saved for future recommendations')
 				showUndo(message, async () => {
 					try {

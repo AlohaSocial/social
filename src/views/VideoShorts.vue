@@ -108,8 +108,8 @@
 				<NcActions
 					v-if="canOfferRecommendationFeedback(entry)"
 					class="short__recommendation-menu"
-					:aria-label="t('social', 'For You recommendations')"
-					:title="t('social', 'For You recommendations')"
+					:aria-label="t('social', 'For you recommendations')"
+					:title="t('social', 'For you recommendations')"
 					variant="tertiary-no-background"
 					@update:open="onRecommendationMenuToggle(entry.status, $event)">
 					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_SIMILAR')">
@@ -128,7 +128,7 @@
 						<template #icon>
 							<EyeOffOutline :size="20" />
 						</template>
-						{{ t('social', 'Hide this post from For You') }}
+						{{ t('social', 'Hide this post from For you') }}
 					</NcActionButton>
 					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_AUTHOR')">
 						<template #icon>
@@ -984,7 +984,7 @@ export default {
 					store.forgetRemoval(status)
 				}
 				showUndo(kind === 'HIDE_POST'
-					? t('social', 'Post hidden from For You')
+					? t('social', 'Post hidden from For you')
 					: t('social', 'Your feedback was saved for future recommendations'), async () => {
 					try {
 						await undoRecommendationFeedback(result.feedback_id)

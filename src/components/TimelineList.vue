@@ -525,7 +525,7 @@ export default {
 				interests: {
 					illustration: 'quiet-timeline',
 					title: t('social', 'Nothing here for you yet'),
-					description: t('social', 'For You ranks posts from the hashtags and people you follow and from local discovery. Turn on learning in its settings and it also learns from posts you open, like, boost or save, and from videos you watch most of; simply leaving a post on screen does not count.'),
+					description: t('social', 'For you ranks posts from the hashtags and people you follow and from local discovery. Turn on learning in its settings and it also learns from posts you open, like, boost or save, and from videos you watch most of; simply leaving a post on screen does not count.'),
 					action: {
 						label: t('social', 'Manage interests'),
 						to: { name: 'settings', hash: '#interests' },

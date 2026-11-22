@@ -198,7 +198,7 @@ export default {
 				this.applyPreferences(preferences)
 			} catch (error) {
 				logger.error('Could not load the For you settings', { error })
-				showError(t('social', 'Could not load your For You settings'))
+				showError(t('social', 'Could not load your For you settings'))
 			} finally {
 				this.loading = false
 			}

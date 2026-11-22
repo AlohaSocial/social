@@ -6,16 +6,16 @@
 	<div>
 		<div class="interests-admin">
 			<section class="interests-admin__v4">
-				<h4>{{ t('social', 'For You recommendations') }}</h4>
+				<h4>{{ t('social', 'For you recommendations') }}</h4>
 				<NcCheckboxRadioSwitch
 					v-model="form.recommendationsEnabled"
 					type="switch"
 					:disabled="v4Saving"
 					@update:modelValue="saveRecommendations">
-					{{ t('social', 'Enable For You recommendations') }}
+					{{ t('social', 'Enable For you recommendations') }}
 				</NcCheckboxRadioSwitch>
 				<p class="interests-admin__hint">
-					{{ t('social', 'This enables automatic ranking in the existing For You feed; it does not add a second feed. The ranker combines learned hashtag interests, post content, freshness, follows and discovery. Readers do not choose topics. Activity learning stays off until each reader separately enables it. Discovery uses bounded background jobs and eligible public posts; the chronological Following feed is unchanged.') }}
+					{{ t('social', 'This enables automatic ranking in the existing For you feed; it does not add a second feed. The ranker combines learned hashtag interests, post content, freshness, follows and discovery. Readers do not choose topics. Activity learning stays off until each reader separately enables it. Discovery uses bounded background jobs and eligible public posts; the chronological Following feed is unchanged.') }}
 				</p>
 				<div class="interests-admin__operations">
 					<div v-for="control in operationalControls" :key="control.key">
@@ -37,14 +37,14 @@
 				{{ t('social', 'Enable hashtag starting point') }}
 			</NcCheckboxRadioSwitch>
 			<p class="interests-admin__hint">
-				{{ t('social', 'Keeps automatically learned hashtag interests available in For You and as its compatibility fallback. Readers do not choose topics; this is the same feed route, not a separate timeline.') }}
+				{{ t('social', 'Keeps automatically learned hashtag interests available in For you and as its compatibility fallback. Readers do not choose topics; this is the same feed route, not a separate timeline.') }}
 			</p>
 
 			<NcCheckboxRadioSwitch v-model="form.learningDefault" type="switch" :disabled="!form.enabled">
 				{{ t('social', 'Learn hashtag interests for users who have not chosen') }}
 			</NcCheckboxRadioSwitch>
 			<p class="interests-admin__hint">
-				{{ t('social', 'Off by default: hashtag learning is opt-in, and each user turns it on in their own For You settings. Turned on here, it also learns for every user who has not made a choice. Users can change their own choice at any time, and turning learning off keeps what was already learned.') }}
+				{{ t('social', 'Off by default: hashtag learning is opt-in, and each user turns it on in their own For you settings. Turned on here, it also learns for every user who has not made a choice. Users can change their own choice at any time, and turning learning off keeps what was already learned.') }}
 			</p>
 
 			<div class="interests-admin__numbers">
@@ -145,7 +145,7 @@ const OPERATIONAL_CONTROLS = [
 	{
 		key: 'forceLegacyFeed',
 		label: () => t('social', 'Use the hashtag compatibility feed'),
-		hint: () => t('social', 'Temporarily serves the familiar hashtag feed on the existing For You route after readers reload it.'),
+		hint: () => t('social', 'Temporarily serves the familiar hashtag feed on the existing For you route after readers reload it.'),
 	},
 ]
 
