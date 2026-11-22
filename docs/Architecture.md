@@ -2100,7 +2100,9 @@ predate the FEP. `quoteAuthorization` carries the approval once there is one.
 
 A reader opening a post sees its whole conversation, wherever the replies
 were written: not only the ones this server received because somebody here
-follows their author. `StreamService::getContextByNid()` asks
+follows their author. For a signed-in reader (an anonymous caller gets what
+is stored, so it cannot make this server fetch from others),
+`StreamService::getContextByNid()` asks
 `RemoteFetchQueue::fillThread()` for the conversation's first post and for
 the one opened, at most every ten minutes per post, for a post from another
 server or a public one of this server's (which other networks read too), and
