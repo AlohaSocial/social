@@ -305,6 +305,23 @@ class HtmlSanitizerTest extends TestCase {
 	}
 
 	/**
+	 * A browser reads an http(s) URL without `//` and a host as relative to
+	 * the page, so `https:/index.php/logout` in a remote post pointed here.
+	 */
+	public function testRejectsAnHttpUrlWithoutAHost(): void {
+		$this->assertFalse(HtmlSanitizer::isAllowedUrl('https:/index.php/logout'));
+		$this->assertFalse(HtmlSanitizer::isAllowedUrl('https:evil'));
+		$this->assertFalse(HtmlSanitizer::isAllowedUrl('http:evil.example'));
+		$this->assertFalse(HtmlSanitizer::isAllowedUrl('https:///'));
+		$this->assertFalse(HtmlSanitizer::isAllowedUrl('https://'));
+		$this->assertTrue(HtmlSanitizer::isAllowedUrl('https:/\\example.org/x'));
+		$this->assertTrue(HtmlSanitizer::isAllowedUrl('https://alice@example.org/x'));
+
+		$this->assertSame('<a>x</a>', $this->sanitize('<a href="https:/index.php/logout">x</a>', 'https://remote.example/users/bob'));
+		$this->assertSame('<a>x</a>', $this->sanitize('<a href="https:evil">x</a>', 'https://remote.example/users/bob'));
+	}
+
+	/**
 	 * The walk recurses once per level of nesting, and the HTML5 parser builds
 	 * a tree of any depth: twenty thousand nested spans used to crash the
 	 * process rather than come back as an error.

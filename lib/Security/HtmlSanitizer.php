@@ -32,7 +32,7 @@ final class HtmlSanitizer {
 	 * stamped with an older `version()` is sanitized again on every read
 	 * until `Cron\Resanitize` has rewritten it.
 	 */
-	public const VERSION = 1;
+	public const VERSION = 2;
 
 	/**
 	 * What a stored text is stamped with once it went through `sanitize()`:
@@ -425,6 +425,8 @@ final class HtmlSanitizer {
 	 *
 	 * Control characters and whitespace are stripped before looking at the
 	 * scheme, because browsers ignore them — `java\tscript:` is still executed.
+	 * An http(s) URL needs `//` and a host: a browser reads `https:/logout` or
+	 * `https:logout` as relative to the page, which would be this server.
 	 */
 	public static function isAllowedUrl(string $url): bool {
 		$normalized = preg_replace('/[\x00-\x20\x7f]+/', '', $url) ?? '';
@@ -437,7 +439,12 @@ final class HtmlSanitizer {
 			return true;
 		}
 
-		return in_array(strtolower($match[1]), self::ALLOWED_SCHEMES, true);
+		$scheme = strtolower($match[1]);
+		if ($scheme === 'http' || $scheme === 'https') {
+			return preg_match('~^https?://(?:[^/?#]*@)?[^/?#@:]~i', str_replace('\\', '/', $normalized)) === 1;
+		}
+
+		return in_array($scheme, self::ALLOWED_SCHEMES, true);
 	}
 
 	/**

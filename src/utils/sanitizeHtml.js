@@ -65,7 +65,9 @@ const ALLOWED_ATTR = ['href', 'rel', 'class', 'translate', 'cite', 'start', 'rev
  *
  * Browsers ignore control characters and whitespace inside a scheme, so those
  * are removed before looking at it — a tab inside "javascript:" still executes.
- * A URL without a scheme (relative, protocol-relative, fragment) is fine.
+ * A URL without a scheme (relative, protocol-relative, fragment) is fine. An
+ * http(s) URL needs `//` and a host: `https:/logout` and `https:logout` are
+ * relative to the page, so they would point at this server.
  *
  * @param {string} url - The raw attribute value
  * @return {boolean}
@@ -84,7 +86,11 @@ export function isAllowedUrl(url) {
 	if (match === null) {
 		return true
 	}
-	return ALLOWED_SCHEMES.includes(match[1].toLowerCase())
+	const scheme = match[1].toLowerCase()
+	if (scheme === 'http' || scheme === 'https') {
+		return /^https?:\/\/(?:[^/?#]*@)?[^/?#@:]/i.test(normalized.replaceAll('\\', '/'))
+	}
+	return ALLOWED_SCHEMES.includes(scheme)
 }
 
 // The default export is already bound to the page's window
