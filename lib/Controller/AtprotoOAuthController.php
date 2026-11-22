@@ -14,9 +14,9 @@ use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\DpopNonce;
 use OCA\Social\Atproto\OAuth\OAuthException;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -67,7 +67,7 @@ class AtprotoOAuthController extends Controller {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/par')]
 	public function par(): Response {
 		if (!$this->config->isEnabled()) {

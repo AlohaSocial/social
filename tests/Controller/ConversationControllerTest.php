@@ -164,7 +164,7 @@ class ConversationControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		return $client;
 	}
@@ -280,7 +280,7 @@ class ConversationControllerTest extends TestCase {
 
 	public function testAStaleTokenIsAnsweredAndNotLoggedAsAFault(): void {
 		$this->csrf = false;
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willThrowException(new ClientNotFoundException('the access_token was revoked'));
 
 		$response = $this->controller('Bearer stale')->index();

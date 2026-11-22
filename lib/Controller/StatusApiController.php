@@ -15,6 +15,7 @@ use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\PostHeldException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -54,7 +55,6 @@ use OCA\Social\Service\ViewCountService;
 use OCA\Social\Service\WatchService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -131,7 +131,7 @@ class StatusApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses')]
 	public function statusNew(): DataResponse {
@@ -885,7 +885,7 @@ class StatusApiController extends MastodonApiController {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	// a player reports as it goes, so this is asked for often and is cheap
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[UserRateLimit(limit: 600, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses/{nid}/watched')]
 	public function statusWatched(int|string $nid, int $position = 0, int $duration = 0): DataResponse {
@@ -907,7 +907,7 @@ class StatusApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[UserRateLimit(limit: 600, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses/{nid}/view')]
 	public function statusView(int|string $nid): DataResponse {
@@ -924,7 +924,7 @@ class StatusApiController extends MastodonApiController {
 	/** Takes a video off the reader's own "continue watching" list. */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[UserRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/statuses/{nid}/watched')]
 	public function statusUnwatched(int|string $nid): DataResponse {
@@ -1048,7 +1048,7 @@ class StatusApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[UserRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/statuses/{nid}/interaction_policy')]
 	public function statusInteractionPolicy(int|string $nid): DataResponse {
@@ -1089,7 +1089,7 @@ class StatusApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[AnonymousRateLimit(limit: 60, period: 3600)]
 	#[UserRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses/{nid}/quotes/{quoting}/revoke')]
 	public function statusQuoteRevoke(int|string $nid, int|string $quoting): DataResponse {

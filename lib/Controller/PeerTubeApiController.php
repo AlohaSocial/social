@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Channel;
@@ -20,7 +21,6 @@ use OCA\Social\Service\PeerTubeApiService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -65,7 +65,7 @@ class PeerTubeApiController extends ClientApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/config')]
 	public function config(): DataResponse {
 		return new DataResponse($this->peerTubeApiService->config(), Http::STATUS_OK);
@@ -78,7 +78,7 @@ class PeerTubeApiController extends ClientApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 3600)]
+	#[AnonymousRateLimit(limit: 10, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/oauth-clients/local')]
 	public function oauthClient(): DataResponse {
 		try {
@@ -103,7 +103,7 @@ class PeerTubeApiController extends ClientApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/videos')]
 	public function videos(int $start = 0, int $count = self::LIMIT): DataResponse {
@@ -127,7 +127,7 @@ class PeerTubeApiController extends ClientApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 120, period: 60)]
+	#[AnonymousRateLimit(limit: 120, period: 60)]
 	#[UserRateLimit(limit: 600, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/videos/{id}', requirements: ['id' => '\d+'])]
 	public function video(string $id): DataResponse {
@@ -153,7 +153,7 @@ class PeerTubeApiController extends ClientApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/videos/{id}/comment-threads', requirements: ['id' => '\d+'])]
 	public function comments(string $id, int $count = self::LIMIT): DataResponse {
@@ -182,7 +182,7 @@ class PeerTubeApiController extends ClientApiController {
 	/** The channels of this instance. */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/video-channels')]
 	public function channels(int $count = self::LIMIT): DataResponse {
 		try {
@@ -198,7 +198,7 @@ class PeerTubeApiController extends ClientApiController {
 	/** One channel, by its handle. */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/video-channels/{handle}')]
 	public function channelByHandle(string $handle): DataResponse {
 		try {
@@ -218,7 +218,7 @@ class PeerTubeApiController extends ClientApiController {
 	/** The signed-in account, as PeerTube's `User`. */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 300, period: 60)]
+	#[AnonymousRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/users/me')]
 	public function me(): DataResponse {
@@ -243,7 +243,7 @@ class PeerTubeApiController extends ClientApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/search/videos')]
 	public function searchVideos(string $search = '', int $count = self::LIMIT): DataResponse {

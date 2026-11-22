@@ -23,6 +23,7 @@ use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
 use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Exceptions\InvalidScopeException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
@@ -35,7 +36,6 @@ use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -171,7 +171,7 @@ class OAuthController extends Controller {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 15, period: 300)]
+	#[AnonymousRateLimit(limit: 15, period: 300)]
 	#[UserRateLimit(limit: 15, period: 300)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/apps')]
 	public function apps(
@@ -236,7 +236,7 @@ class OAuthController extends Controller {
 	/** Starts the RFC 8628 flow for a registered OAuth application. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 20, period: 300)]
+	#[AnonymousRateLimit(limit: 20, period: 300)]
 	#[UserRateLimit(limit: 20, period: 300)]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/device_authorization')]
 	public function deviceAuthorization(
@@ -281,7 +281,7 @@ class OAuthController extends Controller {
 
 	/** Shows the registered client and scopes before a device code is approved. */
 	#[NoAdminRequired]
-	#[AnonRateLimit(limit: 30, period: 300)]
+	#[AnonymousRateLimit(limit: 30, period: 300)]
 	#[UserRateLimit(limit: 30, period: 300)]
 	#[BruteForceProtection(action: 'socialOauthDeviceCode')]
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/device')]
@@ -1185,7 +1185,7 @@ class OAuthController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/userinfo')]
 	public function userinfo(): DataResponse {
 		try {
-			$client = $this->clientService->getFromToken($this->bearerToken());
+			$client = $this->clientService->getFromTokenOfRequest($this->bearerToken());
 			// read-only: a token cannot exist without the account it was
 			// granted for, since /oauth/authorize looks one up without creating
 			$actor = $this->accountService->getActorFromUserId($client->getAuthUserId());

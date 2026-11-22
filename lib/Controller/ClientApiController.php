@@ -162,7 +162,7 @@ abstract class ClientApiController extends Controller {
 	 */
 	private function currentSession(array $scopes): string {
 		if ($this->bearer !== '') {
-			$this->client = $this->clientService->getFromToken($this->bearer);
+			$this->client = $this->clientService->getFromTokenOfRequest($this->bearer);
 			$this->checkTokenScope($scopes);
 
 			if ($this->client->getAuthUserId() === '') {

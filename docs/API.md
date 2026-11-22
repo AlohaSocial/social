@@ -7,7 +7,9 @@ also carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
 `X-RateLimit-Reset` (seconds since the epoch, at the end of the window this
 request fell in), so a client can pace itself rather than hammer until it is
 refused. The refusal itself is Nextcloud's and is a **429**; the count in the
-header is this app's own and is advisory. A route with no limit carries no
+header is this app's own and is advisory. A bearer token is counted as its
+account, not its address: it is held to the route's per-account limit, which
+the app enforces for it, and never to the anonymous per-address one. A route with no limit carries no
 headers, and an instance with **no memcache configured** carries `Limit`
 without `Remaining` or `Reset` — there is nowhere to keep a counter, and a
 number that was never measured is worse than no number.
@@ -1626,7 +1628,7 @@ Every handler catches `Throwable`, not `Exception`. A `TypeError` — an empty o
 | 403 | A Nextcloud session or app password whose user has not set up their account here (`AccountNotSetUpException`): `{"error", "code": "account-not-set-up", "setup_url"}`, see [Authentication](#authentication). An account that moved away, writing or following from here (`AccountMovedException`): its followers were sent to the new account, so the post or the follow would reach nobody, and Mastodon locks a moved account the same way. Undoing the move lifts it. A valid token whose grant does not cover the route (`InsufficientScopeException`, tested ahead of the list because it extends `ClientException`). Sent **without** `WWW-Authenticate`: PHP rewrites the status of any response carrying that header to 401, so `Bearer error="insufficient_scope"` made every scope refusal arrive as a 401, which a client reads as a dead token and answers by signing the user out. Also a fediverse access rule (`UnauthorizedFediverseException`). |
 | 404 | The thing asked for is not here: `StreamNotFoundException`, `CacheActorDoesNotExistException`, `ActorDoesNotExistException`, `ItemNotFoundException`, `CacheDocumentDoesNotExistException`, `HashtagDoesNotExistException`, `ReportNotFoundException`, `FollowNotFoundException`, `InstanceDoesNotExistException`, `OCP\Files\NotFoundException`, and a remote that answered with nothing (`RequestContentException`). |
 | 422 | The request was understood and refused, and retrying it unchanged cannot help: `InvalidActionException` (which now also covers a body that claims to be JSON and is not, and a `visibility` this app does not know), `UnknownProbeException`, `InvalidResourceException`, `InvalidResourceEntryException`, `InvalidHandleException`, `ItemUnknownException`, `CacheContentMimeTypeException`, `ClientException`. |
-| 429 | `TooManyRequestsException`, and the `#[AnonRateLimit]` / `#[UserRateLimit]` limits on the write, search, account and timeline routes. |
+| 429 | `TooManyRequestsException`, and the `#[AnonymousRateLimit]` / `#[UserRateLimit]` limits on the write, search, account and timeline routes. |
 | 502 | Another server let us down: `RequestNetworkException`, `RequestServerException`, `RequestResultNotJsonException`, `RequestResultSizeException`. |
 | 500 | Anything unrecognised. The body is always `{"error": "internal server error"}` and the real message is logged with its stack trace — these routes are all `#[PublicPage]`, and echoing `getMessage()` published whatever the failure happened to name. |
 

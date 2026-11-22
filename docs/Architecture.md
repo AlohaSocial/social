@@ -106,11 +106,21 @@ server serves OCS routes under `/ocsapp`, which is not where these paths are
 published.
 
 A `#[PublicPage]` route that carries `#[UserRateLimit]` carries a matching
-`#[AnonRateLimit]` as well. A client holding one of this app's OAuth tokens has
-no Nextcloud session, so Nextcloud counts it as anonymous and applies only the
-anonymous limit, and `RateLimitService` leaves the app's default budget off a
-route that declares a limit of its own: with `UserRateLimit` alone, a token
-client would have no limit at all. A route without `#[PublicPage]` is refused
+`#[AnonymousRateLimit]` (`OCA\Social\Middleware`) as well, for callers who
+are nobody; no route uses Nextcloud's `#[AnonRateLimit]`. A client holding one
+of this app's OAuth tokens has no Nextcloud session, and Nextcloud's limiter,
+which decides by the session alone, would hold it to the anonymous limit per
+address, so people posting through one address would use up each other's.
+`ApiRateLimitMiddleware` applies `AnonymousRateLimit` instead, through
+Nextcloud's `ILimiter` under the name Nextcloud's middleware gives the route
+(same counters, same 429, an administrator's `ratelimit_overwrite` honoured),
+to callers who are neither signed in nor carry a valid token, and, as
+Nextcloud does, to everybody on a route without a `UserRateLimit`. For a
+token it counts the route's `UserRateLimit` for the token's account, and the
+app's default budget for routes without a limit of their own is the account's
+too (`RateLimitService` resolves the token once per request, through
+`ClientService::getFromTokenOfRequest()`, which the controller then reuses).
+A route without `#[PublicPage]` is refused
 to a caller who is not signed in before any limit is read, so `UserRateLimit`
 alone is enough there. `RateLimitAttributesTest` holds every controller to it.
 

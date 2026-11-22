@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\Client\Collection;
 use OCA\Social\Service\AccountService;
@@ -17,7 +18,6 @@ use OCA\Social\Service\ClientService;
 use OCA\Social\Service\CollectionService;
 use OCA\Social\Service\PostDecorationService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -76,7 +76,7 @@ class CollectionController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/collections')]
 	public function create(
@@ -177,7 +177,7 @@ class CollectionController extends ClientApiController {
 	/** Adds one of the viewer's own posts, by its numeric id. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/collections/{id}/items', requirements: ['id' => '\\d+'])]
 	public function addItem(int $id, int|string $status_id = 0): DataResponse {

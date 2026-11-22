@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use InvalidArgumentException;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\Client\Filter;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ClientService;
@@ -20,7 +21,6 @@ use OCA\Social\Service\RecommendationFeedbackService;
 use OCA\Social\Service\RecommendationPreferenceService;
 use OCA\Social\Service\RecommendationTimelineService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -74,7 +74,7 @@ class RecommendationsController extends ClientApiController {
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/recommendations/signals')]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	public function signals(array|string $events = []): DataResponse {
 		return $this->answer(['write:statuses'], function () use ($events): array {
@@ -118,7 +118,7 @@ class RecommendationsController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 120, period: 60)]
+	#[AnonymousRateLimit(limit: 120, period: 60)]
 	#[UserRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/recommendations/context/{postId}')]
 	public function feedbackContext(string $postId): DataResponse {
@@ -129,7 +129,7 @@ class RecommendationsController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/recommendations/feedback')]
 	public function feedback(string $event_id = '', string $post_id = '', string $kind = ''): DataResponse {
@@ -140,7 +140,7 @@ class RecommendationsController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/recommendations/feedback/{feedbackId}')]
 	public function undoFeedback(string $feedbackId): DataResponse {
@@ -152,7 +152,7 @@ class RecommendationsController extends ClientApiController {
 	/** The web For You feed, with an envelope for its versioned session cursor. */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 120, period: 60)]
+	#[AnonymousRateLimit(limit: 120, period: 60)]
 	#[UserRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/recommendations/timeline')]
 	public function timeline(int $limit = 20, string $cursor = '', string $media = ''): DataResponse {

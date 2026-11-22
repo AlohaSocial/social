@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InsufficientScopeException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\NetworkGrowthService;
@@ -18,7 +19,6 @@ use OCA\Social\Service\NetworkStatsService;
 use OCA\Social\Service\StatisticsService;
 use OCA\Social\Tools\Csv;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -57,7 +57,7 @@ class StatisticsController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 90, period: 3600)]
+	#[AnonymousRateLimit(limit: 90, period: 3600)]
 	#[UserRateLimit(limit: 90, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/statistics')]
 	public function statistics(int $days = 0, bool $fresh = false): DataResponse {
@@ -97,7 +97,7 @@ class StatisticsController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[AnonymousRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/statistics/export')]
 	public function export(int $days = 0, string $format = 'csv'): Response {

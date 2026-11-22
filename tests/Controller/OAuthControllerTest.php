@@ -1796,7 +1796,7 @@ class OAuthControllerTest extends TestCase {
 	public function testRegistrationIsRateLimitedForEveryCaller(): void {
 		$method = new \ReflectionMethod(OAuthController::class, 'apps');
 
-		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(\OCA\Social\Middleware\AnonymousRateLimit::class));
 		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
 	}
 

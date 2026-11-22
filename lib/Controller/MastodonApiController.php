@@ -243,7 +243,7 @@ abstract class MastodonApiController extends Controller {
 	 */
 	protected function currentSession(): string {
 		if ($this->bearer !== '') {
-			$this->client = $this->clientService->getFromToken($this->bearer);
+			$this->client = $this->clientService->getFromTokenOfRequest($this->bearer);
 			$this->checkTokenScope();
 
 			if ($this->client->getAuthUserId() === '') {

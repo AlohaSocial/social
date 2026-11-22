@@ -269,7 +269,7 @@ class RelationControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId($this->uid);
 		$client->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		return $client;
 	}
@@ -428,7 +428,7 @@ class RelationControllerTest extends TestCase {
 
 	public function testARevokedTokenIsA401(): void {
 		$this->csrf = false;
-		$this->clientService->method('getFromToken')
+		$this->clientService->method('getFromTokenOfRequest')
 			->willThrowException(new ClientNotFoundException('the access_token was revoked'));
 
 		$response = $this->controller('Bearer stale')->domainBlocks();

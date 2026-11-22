@@ -9,11 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Middleware;
 
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Middleware\RateLimitHeadersMiddleware;
+use OCA\Social\Model\Client\SocialClient;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RateLimitService;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\ICache;
@@ -36,7 +38,7 @@ class RateLimitedController extends Controller {
 	}
 
 	#[UserRateLimit(limit: 10, period: 60)]
-	#[AnonRateLimit(limit: 3, period: 60)]
+	#[AnonymousRateLimit(limit: 3, period: 60)]
 	public function both(): DataResponse {
 		return new DataResponse([]);
 	}
@@ -55,6 +57,8 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 	private ICacheFactory|Stub $cacheFactory;
 	private IRequest|MockObject $request;
 	private array $store = [];
+	/** the Authorization header the request carries */
+	private string $authorization = '';
 	private RateLimitHeadersMiddleware $middleware;
 	private RateLimitedController $controller;
 	/** @var array<string, string> the app's own rate-limit values */
@@ -75,6 +79,9 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getRemoteAddress')->willReturn('203.0.113.7');
 		$request->method('getId')->willReturn('test-request');
+		$request->method('getHeader')->willReturnCallback(
+			fn (string $name): string => ($name === 'Authorization') ? $this->authorization : ''
+		);
 		// Response::getHeaders() resolves IRequest out of the container for
 		// the X-Request-Id it merges in
 		\OC::$server->register(IRequest::class, $request);
@@ -99,7 +106,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 
 		$this->request = $request;
 		$this->middleware = new RateLimitHeadersMiddleware(
-			$this->userSession, $this->service($this->cacheFactory)
+			$this->service($this->cacheFactory)
 		);
 	}
 
@@ -108,8 +115,13 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 		$configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
 
+		$clients = $this->createStub(ClientService::class);
+		$clients->method('getFromTokenOfRequest')->willReturnCallback(
+			static fn (string $token): SocialClient => (new SocialClient())->setAuthUserId(substr($token, 2))
+		);
+
 		return new RateLimitService(
-			$this->request, $this->userSession, $cacheFactory, $configService
+			$this->request, $this->userSession, $cacheFactory, $configService, null, $clients
 		);
 	}
 
@@ -237,6 +249,22 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 		$this->assertSame('900', $headers['X-RateLimit-Remaining'], 'the headers spent the budget');
 	}
 
+	/**
+	 * A bearer token is an account: it is told the account's limit, which
+	 * `ApiRateLimitMiddleware` counts for it, so the header reads that count
+	 * rather than spending it again.
+	 */
+	public function testABearerTokenIsToldTheAccountLimitAndItIsNotSpentTwice(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->authorization = 'Bearer t-alice';
+		$this->store[implode('/', ['u:alice', RateLimitService::routeBucket($this->controller, 'both'), (string)intdiv(time(), 60)])] = 4;
+
+		$headers = $this->call('both')->getHeaders();
+
+		$this->assertSame('10', $headers['X-RateLimit-Limit']);
+		$this->assertSame('6', $headers['X-RateLimit-Remaining']);
+	}
+
 	/** The reset is when the window ends, in seconds since the epoch. */
 	public function testTheResetIsTheEndOfTheWindowThisRequestFellIn(): void {
 		$this->signedInAs('alice');
@@ -276,7 +304,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 		$cacheFactory->expects($this->never())->method('createDistributed');
 
 		$middleware = new RateLimitHeadersMiddleware(
-			$this->userSession, $this->service($cacheFactory)
+			$this->service($cacheFactory)
 		);
 		$this->signedInAs('alice');
 
@@ -302,7 +330,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 			->willReturn($this->createStub(ICache::class));
 
 		$middleware = new RateLimitHeadersMiddleware(
-			$this->userSession, $this->service($cacheFactory)
+			$this->service($cacheFactory)
 		);
 		$this->signedInAs('alice');
 

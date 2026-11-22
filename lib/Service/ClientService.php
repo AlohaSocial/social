@@ -81,6 +81,9 @@ class ClientService {
 
 	private SecretHasher $secretHasher;
 
+	/** @var array<string, SocialClient|ClientNotFoundException> what `getFromTokenOfRequest()` found */
+	private array $ofRequest = [];
+
 	public function __construct(
 		ClientRequest $clientRequest,
 		SecretHasher $secretHasher,
@@ -567,6 +570,31 @@ class ClientService {
 		}
 
 		return $client;
+	}
+
+	/**
+	 * `getFromToken()` once per token and request: the rate limiter, the
+	 * controller and the response middleware each ask whom the bearer token
+	 * belongs to, and one lookup answers them all. Not for the streaming
+	 * daemon, which asks again to notice a revoked token.
+	 *
+	 * @throws ClientNotFoundException
+	 */
+	public function getFromTokenOfRequest(string $token): SocialClient {
+		if (!array_key_exists($token, $this->ofRequest)) {
+			try {
+				$this->ofRequest[$token] = $this->getFromToken($token);
+			} catch (ClientNotFoundException $e) {
+				$this->ofRequest[$token] = $e;
+			}
+		}
+
+		$found = $this->ofRequest[$token];
+		if ($found instanceof ClientNotFoundException) {
+			throw $found;
+		}
+
+		return $found;
 	}
 
 	/**

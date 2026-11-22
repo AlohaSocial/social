@@ -78,7 +78,7 @@ class PeerTubeApiControllerTest extends TestCase {
 
 	/** A made-up token is the anonymous answer, not an error and not a viewer. */
 	public function testAnUnusableTokenIsAnsweredAsNobody(): void {
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException('no'));
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException('no'));
 		$this->streamService->expects($this->never())->method('setViewer');
 		$this->streamService->method('getTimeline')->willReturn([]);
 

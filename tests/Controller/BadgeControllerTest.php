@@ -161,7 +161,7 @@ class BadgeControllerTest extends TestCase {
 		$client = new SocialClient();
 		$client->setAuthUserId('alice');
 		$client->setAuthScopes(['read:notifications']);
-		$this->clientService->method('getFromToken')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->willReturn($client);
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller('Bearer t')->index()->getStatus());
 

@@ -23,6 +23,7 @@ use OCA\Social\Exceptions\FollowSameAccountException;
 use OCA\Social\Exceptions\InvalidHandleException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -46,7 +47,6 @@ use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
@@ -1161,7 +1161,7 @@ class LocalControllerTest extends TestCase {
 
 		foreach ($this->publicRoutes() as $route) {
 			$attributes = $this->attributesOf($route);
-			if (!in_array(AnonRateLimit::class, $attributes, true)
+			if (!in_array(AnonymousRateLimit::class, $attributes, true)
 				|| !in_array(UserRateLimit::class, $attributes, true)) {
 				$bare[] = $route;
 			}
@@ -1218,8 +1218,8 @@ class LocalControllerTest extends TestCase {
 	/** How many anonymous requests a minute a route allows. */
 	private function anonRequestsPerMinute(string $route): float {
 		$attributes = (new \ReflectionClass(LocalController::class))
-			->getMethod($route)->getAttributes(AnonRateLimit::class);
-		$this->assertNotEmpty($attributes, $route . ' carries no AnonRateLimit');
+			->getMethod($route)->getAttributes(AnonymousRateLimit::class);
+		$this->assertNotEmpty($attributes, $route . ' carries no AnonymousRateLimit');
 
 		$arguments = $attributes[0]->getArguments();
 		$limit = (int)($arguments['limit'] ?? $arguments[0] ?? 0);

@@ -26,6 +26,7 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\TranslationUnavailableException;
 use OCA\Social\Interfaces\IActivityPubInterface;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -100,7 +101,6 @@ use OCA\Social\Tests\Helper\RoutedRequest;
 use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
@@ -737,7 +737,7 @@ class ApiControllerTest extends TestCase {
 		$client->setAppName('Tusky')->setAppWebsite('https://tusky.app')->setAuthUserId('alice')
 			->setAppScopes(['read', 'write'])->setAppRedirectUris(['tusky://oauth']);
 		$client->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->userSession->method('getUser')->willReturn(null);
 
 		$account = $this->createStub(Person::class);
@@ -763,7 +763,7 @@ class ApiControllerTest extends TestCase {
 	private function bearerFor(array $scopes, string $uid = 'alice'): void {
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId($uid)->setAuthScopes($scopes);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 
 		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
@@ -1241,7 +1241,7 @@ class ApiControllerTest extends TestCase {
 	 * filled the admin's nextcloud.log for every scanner that found the API.
 	 */
 	public function testAnInvalidTokenIsNotLoggedAsAServerError(): void {
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException());
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException());
 		$logger = $this->createMock(LoggerInterface::class);
 		$logger->expects($this->never())->method('error');
 		$logger->expects($this->never())->method('warning');
@@ -1266,7 +1266,7 @@ class ApiControllerTest extends TestCase {
 		$this->route = 'social.Api.verifyCredentials';
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('alice')->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->clientService->method('isSuspendedAccount')->willReturn(true);
 		$logger = $this->createMock(LoggerInterface::class);
 		$logger->expects($this->never())->method('error');
@@ -1279,13 +1279,13 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testNonBearerAuthorizationIsIgnored(): void {
-		$this->clientService->expects($this->never())->method('getFromToken');
+		$this->clientService->expects($this->never())->method('getFromTokenOfRequest');
 
 		$this->assertUnauthorized($this->controller('Basic abc')->appsCredentials());
 	}
 
 	public function testRevokedBearerTokenIsUnauthorized(): void {
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException());
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException());
 
 		$this->assertUnauthorized($this->controller('Bearer gone')->verifyCredentials());
 	}
@@ -1451,7 +1451,7 @@ class ApiControllerTest extends TestCase {
 		$this->route = 'social.Api.verifyCredentials';
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('gone')->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->accountService->method('getActorFromUserId')
 			->willThrowException(new ActorDoesNotExistException('no account for gone'));
 
@@ -4498,7 +4498,7 @@ class ApiControllerTest extends TestCase {
 	private function appToken(): void {
 		$client = new SocialClient();
 		$client->setAppName('Tusky')->setAuthUserId('')->setAuthScopes(['read']);
-		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
+		$this->clientService->method('getFromTokenOfRequest')->with('s3cret')->willReturn($client);
 		$this->accountService->expects($this->never())->method('getActorFromUserId');
 	}
 
@@ -5209,7 +5209,7 @@ class ApiControllerTest extends TestCase {
 	public function testARevokedTokenOnThePublicTimelineStillSaysSo(): void {
 		// silently serving the anonymous view would leave the client believing
 		// its token is fine
-		$this->clientService->method('getFromToken')->willThrowException(new ClientNotFoundException());
+		$this->clientService->method('getFromTokenOfRequest')->willThrowException(new ClientNotFoundException());
 		$this->streamService->expects($this->never())->method('getTimeline');
 
 		$this->assertUnauthorized($this->controller('Bearer gone')->timelines('public'));
@@ -6598,7 +6598,7 @@ class ApiControllerTest extends TestCase {
 	public function testFilingAReportIsRateLimited(): void {
 		$method = new ReflectionMethod(ApiController::class, 'reportNew');
 
-		$this->assertNotSame([], $method->getAttributes(AnonRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(AnonymousRateLimit::class));
 		$this->assertNotSame([], $method->getAttributes(UserRateLimit::class));
 	}
 

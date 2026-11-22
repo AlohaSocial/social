@@ -73,7 +73,7 @@ class HideCountsMiddleware extends Middleware {
 		$header = trim($this->request->getHeader('Authorization'));
 		if (stripos($header, 'bearer ') === 0) {
 			try {
-				return $this->clientService->getFromToken(trim(substr($header, 7)))->getAuthUserId();
+				return $this->clientService->getFromTokenOfRequest(trim(substr($header, 7)))->getAuthUserId();
 			} catch (Throwable $e) {
 				return '';
 			}

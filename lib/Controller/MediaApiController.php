@@ -13,6 +13,7 @@ use Exception;
 use OCA\Social\AP;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Middleware\AnonymousRateLimit;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\Client\MediaAttachment;
@@ -34,7 +35,6 @@ use OCA\Social\Service\StreamService;
 use OCA\Social\Service\VideoLadderService;
 use OCA\Social\Service\VideoThumbnailService;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -96,7 +96,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/media')]
 	public function mediaNew(): DataResponse {
@@ -172,7 +172,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/media/from-file')]
 	public function mediaFromFile(): DataResponse {
@@ -296,7 +296,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v2/media')]
 	public function mediaNewV2(): DataResponse {
@@ -326,7 +326,7 @@ class MediaApiController extends MastodonApiController {
 	#[NoCSRFRequired]
 	// Both limits, like its POST sibling: Nextcloud applies `UserRateLimit` only
 	// to a session, and OAuth clients have none.
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/media/{nid}')]
 	public function mediaUpdate(int|string $nid): Response {
@@ -392,7 +392,7 @@ class MediaApiController extends MastodonApiController {
 	// other fediverse servers fetch media through it unsigned, so a busy peer
 	// arrives as one anonymous address. This caps abuse; it is not a bandwidth
 	// control, which belongs in front of the server.
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[UserRateLimit(limit: 3000, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/{uuid}')]
 	public function mediaOpen(string $uuid): Response {
@@ -447,7 +447,7 @@ class MediaApiController extends MastodonApiController {
 	#[NoCSRFRequired]
 	// generous: a player asks for the first megabyte, the moov atom at the end
 	// and a range per seek, and a tight limit stops playback midway
-	#[AnonRateLimit(limit: 120, period: 60)]
+	#[AnonymousRateLimit(limit: 120, period: 60)]
 	#[UserRateLimit(limit: 600, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/stream/{nid}')]
 	public function mediaStream(int|string $nid): Response {
@@ -513,7 +513,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/playlist/{nid}')]
 	public function mediaPlaylist(int|string $nid): Response {
@@ -549,7 +549,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/captions/{nid}/{index}.vtt')]
 	public function mediaCaption(int|string $nid, int $index): Response {
@@ -587,7 +587,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 60)]
+	#[AnonymousRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/hls/{uuid}/master.m3u8')]
 	public function mediaLadder(string $uuid): Response {
@@ -624,7 +624,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 120, period: 60)]
+	#[AnonymousRateLimit(limit: 120, period: 60)]
 	#[UserRateLimit(limit: 600, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/hls/{uuid}/{height}/index.m3u8')]
 	public function mediaLadderRung(string $uuid, int $height): Response {
@@ -662,7 +662,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[UserRateLimit(limit: 3000, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/hls/{uuid}/{height}/video.mp4')]
 	public function mediaLadderFile(string $uuid, int $height): Response {
@@ -701,7 +701,7 @@ class MediaApiController extends MastodonApiController {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	// a segment is a few seconds of video, so a film is hundreds of them
-	#[AnonRateLimit(limit: 600, period: 60)]
+	#[AnonymousRateLimit(limit: 600, period: 60)]
 	#[UserRateLimit(limit: 3000, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/media/playlist/{nid}/file')]
 	public function mediaPlaylistFile(int|string $nid, string $u = ''): Response {
@@ -810,7 +810,7 @@ class MediaApiController extends MastodonApiController {
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
+	#[AnonymousRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/media/from-gif')]
 	public function mediaFromGif(): DataResponse {
