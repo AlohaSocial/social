@@ -72,6 +72,8 @@ class InboundMoveServiceTest extends TestCase {
 	private const CODE = 'abcdef-ghijkl-mnopqr-stuvwx';
 
 	private int $now = 1760000000;
+	/** the code the next invitation gets */
+	private string $nextCode = self::CODE;
 	/** @var array<int, Move> */
 	private array $rows = [];
 	private array $queued = [];
@@ -187,7 +189,15 @@ class InboundMoveServiceTest extends TestCase {
 			$this->rows[$move->id] = clone $move;
 		});
 		$request->method('get')->willReturnCallback(fn (int $id): ?Move => isset($this->rows[$id]) ? clone $this->rows[$id] : null);
-		$request->method('latestOfUser')->willReturnCallback(fn (): ?Move => $this->rows === [] ? null : clone end($this->rows));
+		$request->method('latestOfUser')->willReturnCallback(function (string $userId): ?Move {
+			$of = array_filter($this->rows, static fn (Move $m): bool => $m->userId === $userId);
+
+			return $of === [] ? null : clone end($of);
+		});
+		$request->method('invitedOfDid')->willReturnCallback(fn (string $did): array => array_values(array_map(
+			static fn (Move $m): Move => clone $m,
+			array_reverse(array_filter($this->rows, static fn (Move $m): bool => $m->did === $did && $m->direction === Move::INBOUND && $m->step === Move::STEP_INVITED && $m->state === Move::WAITING)),
+		)));
 		$request->method('latestOfDid')->willReturnCallback(function (string $did, string $direction): ?Move {
 			$of = array_filter($this->rows, static fn (Move $m): bool => $m->did === $did && $m->direction === $direction);
 
@@ -197,7 +207,7 @@ class InboundMoveServiceTest extends TestCase {
 		$crypto->method('encrypt')->willReturnCallback(static fn (string $plain): string => 'sealed:' . base64_encode($plain));
 		$crypto->method('decrypt')->willReturnCallback(static fn (string $sealed): string => (string)base64_decode(substr($sealed, 7)));
 		$random = $this->createMock(ISecureRandom::class);
-		$random->method('generate')->willReturn(str_replace('-', '', self::CODE));
+		$random->method('generate')->willReturnCallback(fn (): string => str_replace('-', '', $this->nextCode));
 		$jobs = $this->createMock(IJobList::class);
 		$jobs->method('add')->willReturnCallback(function (string $job, mixed $argument): void {
 			$this->queued[] = [$job, $argument];
@@ -300,6 +310,19 @@ class InboundMoveServiceTest extends TestCase {
 		$this->assertSame(Move::STEP_REPO, $this->rows[1]->step);
 		$this->assertTrue($this->moves->owns('Bearer ' . $made['accessJwt']));
 		$this->assertSame('InvalidInviteCode', $this->refused(fn () => $this->moves->createAccount('Bearer ' . $good, $body + ['password' => self::CODE], 'ip'))->error, 'the code works once');
+	}
+
+	public function testAnotherPersonInvitingTheSameDidDoesNotTakeTheMove(): void {
+		$this->moves->invite('alice', 'alice.bsky.social');
+		$this->nextCode = 'zzzzzz-yyyyyy-xxxxxx-wwwwww';
+		$this->moves->invite('bob', 'alice.bsky.social');
+		$good = $this->serviceAuth->token($this->oldKey, self::DID, self::SERVICE, 'com.atproto.server.createAccount');
+
+		$made = $this->moves->createAccount('Bearer ' . $good, ['did' => self::DID, 'handle' => 'x.test', 'email' => 'a@b.c', 'password' => self::CODE], 'ip');
+
+		$this->assertSame(self::DID, $made['did']);
+		$this->assertSame(['alice', Move::STEP_REPO], [$this->rows[1]->userId, $this->rows[1]->step], 'the code given to alice makes alice\'s move');
+		$this->assertSame(['bob', Move::STEP_INVITED], [$this->rows[2]->userId, $this->rows[2]->step], 'the later invitation is left as it was');
 	}
 
 	public function testAnInvitationRunsOut(): void {

@@ -213,12 +213,20 @@ class InboundMoveService {
 			throw new XrpcException(429, 'RateLimitExceeded', 'Too many attempts; try again later');
 		}
 		$did = is_string($body['did'] ?? null) ? $body['did'] : '';
-		$move = str_starts_with($did, 'did:plc:') ? $this->moves->latestOfDid($did, Move::INBOUND) : null;
-		$sealed = $move === null ? [] : $this->unseal($move->session);
 		$offered = array_map(static fn ($value): string => hash('sha256', is_string($value) ? $value : ''), [$body['password'] ?? '', $body['inviteCode'] ?? '']);
-		if ($move === null || $move->step !== Move::STEP_INVITED || $move->state !== Move::WAITING
-			|| (int)($sealed['until'] ?? 0) < $this->time->getTime()
-			|| !(hash_equals((string)($sealed['code'] ?? ''), $offered[0]) || hash_equals((string)($sealed['code'] ?? ''), $offered[1]))) {
+		// more than one person here may have invited the DID: the code says whose move it is
+		$move = null;
+		$sealed = [];
+		foreach (str_starts_with($did, 'did:plc:') ? $this->moves->invitedOfDid($did) : [] as $invited) {
+			$open = $this->unseal($invited->session);
+			$code = (string)($open['code'] ?? '');
+			if ((int)($open['until'] ?? 0) >= $this->time->getTime() && (hash_equals($code, $offered[0]) || hash_equals($code, $offered[1]))) {
+				$move = $invited;
+				$sealed = $open;
+				break;
+			}
+		}
+		if ($move === null) {
 			$this->throttler->registerAttempt(self::THROTTLE, $ip, ['did' => substr($did, 0, 64)]);
 
 			throw new XrpcException(400, 'InvalidInviteCode', 'Accounts are made here only by moving one in, with the code its owner was given');
