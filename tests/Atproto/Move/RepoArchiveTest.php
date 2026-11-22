@@ -37,8 +37,8 @@ class RepoArchiveTest extends TestCase {
 	 *
 	 * @return array{car: string, records: array<string, string>, rev: string}
 	 */
-	private function repository(int $posts, string $did = self::DID, ?PrivateKey $key = null, bool $dropARecord = false): array {
-		$records = [];
+	private function repository(int $posts, string $did = self::DID, ?PrivateKey $key = null, bool $dropARecord = false, array $extra = []): array {
+		$records = $extra;
 		for ($i = 0; $i < $posts; $i++) {
 			$records['app.bsky.feed.post/' . Tid::next()] = DagCbor::encode(['$type' => 'app.bsky.feed.post', 'text' => 'post ' . $i, 'createdAt' => '2026-01-01T00:00:00.000Z']);
 		}
@@ -98,5 +98,21 @@ class RepoArchiveTest extends TestCase {
 
 		$this->expectException(AtprotoException::class);
 		RepoArchive::read('not a car', self::DID, $this->key->publicKey());
+	}
+
+	public function testAnArchiveWithSomethingThatIsNotARecordIsRefused(): void {
+		foreach ([
+			'not DAG-CBOR' => "\xff\x00 not cbor",
+			'not a map' => DagCbor::encode(['a', 'list']),
+			'without a type' => DagCbor::encode(['text' => 'untyped']),
+		] as $what => $bytes) {
+			$repository = $this->repository(2, extra: ['com.example.thing/3kbad' => $bytes]);
+			try {
+				RepoArchive::read($repository['car'], self::DID, $this->key->publicKey());
+				$this->fail('read: ' . $what);
+			} catch (AtprotoException $e) {
+				$this->assertStringContainsString('com.example.thing/3kbad', $e->getMessage(), $what);
+			}
+		}
 	}
 }

@@ -62,7 +62,7 @@ class AppViewProxy {
 	 * @param array<string, string> $headers the caller's proxy, labeler, device/session, Bsky topics, content type and language headers
 	 * @throws XrpcException
 	 */
-	public function forward(ClientSession $session, string $method, string $verb, string $query, string $body, array $headers): XrpcBytes {
+	public function forward(ClientSession $session, string $method, string $verb, string $query, string $body, #[\SensitiveParameter] array $headers): XrpcBytes {
 		[$audience, $endpoint] = $this->target($method, (string)($headers['atproto-proxy'] ?? ''));
 		if (strlen($body) > self::MAX_BODY) {
 			throw new XrpcException(413, 'PayloadTooLarge', 'Request body too large');

@@ -2545,7 +2545,11 @@ cursor in `social_atproto_chat_cursor`), and `ChatStore` stores each message
 somebody else sent as a direct `Note` from them to the account, naming it,
 through `PostStore::storeMessage()` — the import path every post takes, so
 the dest rows, the notification, push and the unread count follow as for
-a Fediverse message. Each message answers the newest one of its Bluesky
+a Fediverse message. A message is stored once, under its sender's id, so
+when a second account here is in the same Bluesky conversation its read
+finds the message stored and adds the account to its recipients
+(`StreamDestRequest::addDirectRecipient()`); it gets no notification of
+its own. Each message answers the newest one of its Bluesky
 conversation, received or sent from here (kept with
 `DurableCache::setShared()`), so `ConversationService`, which groups direct
 messages by the thread they are in, shows one conversation. A direct

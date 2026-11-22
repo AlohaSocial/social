@@ -95,6 +95,17 @@ class RepositoryImportTest extends TestCase {
 		$this->assertSame(0, $this->frames, 'nothing on the firehose until the account is activated');
 	}
 
+	public function testARevisionFromTheFutureIsNotFollowed(): void {
+		$future = Tid::encode((time() + 365 * 86400) * 1000000, 0);
+		$this->service->import(self::DID, $this->key, self::foreignRecords(), $future);
+		$this->assertLessThan(0, strcmp((string)$this->service->getHead(self::DID)?->rev, $future), 'a year ahead would hold every later commit there');
+
+		$this->setUp();
+		$drifted = Tid::encode((time() + 60) * 1000000, 0);
+		$this->service->import(self::DID, $this->key, self::foreignRecords(), $drifted);
+		$this->assertGreaterThan(0, strcmp((string)$this->service->getHead(self::DID)?->rev, $drifted), 'a clock a minute fast is followed');
+	}
+
 	public function testALaterWriteBuildsOnTheImport(): void {
 		$this->service->import(self::DID, $this->key, self::foreignRecords(), '3kzzzzzzzzz22');
 		$imported = $this->service->getHead(self::DID);

@@ -242,7 +242,7 @@ class OAuthController extends Controller {
 	public function deviceAuthorization(
 		string $client_id = '',
 		string $scope = 'read',
-		string $client_secret = '',
+		#[\SensitiveParameter] string $client_secret = '',
 	): DataResponse {
 		try {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
@@ -804,17 +804,19 @@ class OAuthController extends Controller {
 	#[NoCSRFRequired]
 	#[NoAdminRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
+	#[UserRateLimit(limit: 60, period: 60)]
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/token')]
 	public function token(
 		string $redirect_uri = '',
 		string $grant_type = '',
 		string $client_id = '',
-		string $client_secret = '',
-		string $code = '',
-		string $code_verifier = '',
-		string $device_code = '',
-		string $refresh_token = '',
+		#[\SensitiveParameter] string $client_secret = '',
+		#[\SensitiveParameter] string $code = '',
+		#[\SensitiveParameter] string $code_verifier = '',
+		#[\SensitiveParameter] string $device_code = '',
+		#[\SensitiveParameter] string $refresh_token = '',
 		string $scope = '',
 	): DataResponse {
 		if ($this->isAtprotoClient($client_id)) {
@@ -967,7 +969,7 @@ class OAuthController extends Controller {
 	#[PublicPage]
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/revoke')]
-	public function revoke(string $token, string $client_id = '', string $client_secret = ''): DataResponse {
+	public function revoke(#[\SensitiveParameter] string $token, string $client_id = '', #[\SensitiveParameter] string $client_secret = ''): DataResponse {
 		if ($this->isAtprotoClient($client_id)) {
 			$this->atprotoOAuth->revoke($token);
 			$response = new DataResponse([], Http::STATUS_OK);
@@ -1212,7 +1214,7 @@ class OAuthController extends Controller {
 	 *
 	 * @return array{0: string, 1: string}
 	 */
-	private function clientCredentials(string $clientId, string $clientSecret): array {
+	private function clientCredentials(string $clientId, #[\SensitiveParameter] string $clientSecret): array {
 		if ($clientId !== '') {
 			return [$clientId, $clientSecret];
 		}

@@ -79,7 +79,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers lower-cased names
 	 * @throws XrpcException
 	 */
-	public function query(string $method, string $rawQuery, array $headers): array|XrpcBytes|null {
+	public function query(string $method, string $rawQuery, #[\SensitiveParameter] array $headers): array|XrpcBytes|null {
 		if (!$this->config->isEnabled()) {
 			return null;
 		}
@@ -125,7 +125,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers lower-cased names
 	 * @throws XrpcException
 	 */
-	public function procedure(string $method, string $rawBody, array $headers, string $ip): array|XrpcBytes|null {
+	public function procedure(string $method, #[\SensitiveParameter] string $rawBody, #[\SensitiveParameter] array $headers, string $ip): array|XrpcBytes|null {
 		if (!$this->config->isEnabled()) {
 			return null;
 		}
@@ -199,7 +199,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers
 	 * @throws XrpcException
 	 */
-	private function muteThread(ClientSession $session, string $method, string $rawBody, array $headers): XrpcBytes {
+	private function muteThread(ClientSession $session, string $method, string $rawBody, #[\SensitiveParameter] array $headers): XrpcBytes {
 		$answer = $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers);
 		if ($answer->status === 200) {
 			$this->threadMutes->fromApp($session, $method, self::json($rawBody));
@@ -215,7 +215,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers
 	 * @throws XrpcException
 	 */
-	private function bookmark(ClientSession $session, string $method, string $rawBody, array $headers): XrpcBytes {
+	private function bookmark(ClientSession $session, string $method, string $rawBody, #[\SensitiveParameter] array $headers): XrpcBytes {
 		$answer = $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers);
 		if ($answer->status === 200) {
 			$this->bookmarks->fromApp($session, $method, self::json($rawBody));
@@ -231,7 +231,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers
 	 * @throws XrpcException
 	 */
-	private function mute(ClientSession $session, string $method, string $rawBody, array $headers): XrpcBytes {
+	private function mute(ClientSession $session, string $method, string $rawBody, #[\SensitiveParameter] array $headers): XrpcBytes {
 		$answer = $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers);
 		if ($answer->status === 200) {
 			$this->mutes->fromApp($session, $method, self::json($rawBody));
@@ -292,7 +292,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers lower-cased names
 	 * @throws XrpcException
 	 */
-	public function upload(string $path, array $headers): array {
+	public function upload(string $path, #[\SensitiveParameter] array $headers): array {
 		return $this->uploader($headers)($path);
 	}
 
@@ -305,7 +305,7 @@ class ClientXrpc {
 	 * @return Closure(string): array
 	 * @throws XrpcException
 	 */
-	public function uploader(array $headers): Closure {
+	public function uploader(#[\SensitiveParameter] array $headers): Closure {
 		if (!$this->config->isEnabled()) {
 			throw XrpcException::notImplemented(self::UPLOAD);
 		}
@@ -347,7 +347,7 @@ class ClientXrpc {
 	 * @param array<string, string> $headers lower-cased names
 	 * @throws XrpcException
 	 */
-	public function importRepo(string $path, array $headers): array {
+	public function importRepo(string $path, #[\SensitiveParameter] array $headers): array {
 		return $this->importer($headers)($path);
 	}
 
@@ -359,7 +359,7 @@ class ClientXrpc {
 	 * @return Closure(string): array
 	 * @throws XrpcException
 	 */
-	public function importer(array $headers): Closure {
+	public function importer(#[\SensitiveParameter] array $headers): Closure {
 		if (!$this->config->isEnabled()) {
 			throw XrpcException::notImplemented(self::IMPORT);
 		}
@@ -384,7 +384,7 @@ class ClientXrpc {
 	 *
 	 * @throws XrpcException
 	 */
-	private function signedIn(array $headers, string $method, string $verb): ClientSession {
+	private function signedIn(#[\SensitiveParameter] array $headers, string $method, string $verb): ClientSession {
 		$authorization = (string)($headers['authorization'] ?? '');
 		if (str_starts_with($authorization, 'DPoP ')) {
 			try {
@@ -407,7 +407,7 @@ class ClientXrpc {
 	 * The service a call is for: what `atproto-proxy` names, else the
 	 * AppView's.
 	 */
-	private function audience(array $headers): string {
+	private function audience(#[\SensitiveParameter] array $headers): string {
 		$proxy = trim((string)($headers['atproto-proxy'] ?? ''));
 
 		return $proxy !== '' ? $proxy : $this->config->appViewDid() . '#bsky_appview';

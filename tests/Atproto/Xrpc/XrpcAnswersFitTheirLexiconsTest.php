@@ -250,6 +250,28 @@ class XrpcAnswersFitTheirLexiconsTest extends TestCase {
 	}
 
 	/**
+	 * In a tree of many nodes the proof is the path to the record, not the
+	 * whole tree, and a verifier walks it from the commit to the record.
+	 */
+	public function testSyncGetRecordCarriesOnlyThePathToTheRecord(): void {
+		$key = PrivateKey::generate(Curve::K256);
+		for ($batch = 0; $batch < 3; $batch++) {
+			$this->repositories->write(self::ALICE, $key, array_map(static fn (int $i): RepoWrite => RepoWrite::create('app.bsky.feed.post', self::post('post ' . $i)), range(1, 200)));
+		}
+
+		$car = Car::decode($this->xrpc->query('com.atproto.sync.getRecord', ['did' => self::ALICE, 'collection' => 'app.bsky.feed.post', 'rkey' => '3kznmn7xqxl23'])->bytes);
+
+		$commit = Commit::fromBytes($car['blocks'][$car['roots'][0]->toString()]);
+		$path = MstReader::path($commit->data, 'app.bsky.feed.post/3kznmn7xqxl23', static fn (Cid $cid): ?string => $car['blocks'][$cid->toString()] ?? null);
+		$this->assertGreaterThan(1, count($path), 'a tree of more than one node');
+		$this->assertLessThan(count($this->store->getBlockCids(self::ALICE, AtprotoRepoRequest::BLOCK_MST)), count($path));
+		$record = $this->repositories->getRecord(self::ALICE, 'app.bsky.feed.post', '3kznmn7xqxl23');
+		$this->assertSame([$car['roots'][0]->toString(), ...array_keys($path), $record?->cid->toString()], array_keys($car['blocks']), 'the commit, the path and the record, nothing else');
+		$leaf = DagCbor::decode((string)end($path));
+		$this->assertContains($record?->cid->toString(), array_map(static fn (array $entry): string => $entry['v']->toString(), $leaf['e']), 'the last node names the record');
+	}
+
+	/**
 	 * `getBlocks` is the blocks asked for and nothing else — a tree node, the
 	 * commit, a record — as a CAR with no roots.
 	 */

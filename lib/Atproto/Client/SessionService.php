@@ -64,7 +64,7 @@ class SessionService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function create(string $identifier, string $password, string $ip): array {
+	public function create(string $identifier, #[\SensitiveParameter] string $password, string $ip): array {
 		try {
 			$this->throttler->sleepDelayOrThrowOnMax($ip, self::THROTTLE);
 		} catch (MaxDelayReached) {
@@ -91,7 +91,7 @@ class SessionService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function refresh(string $authorization): array {
+	public function refresh(#[\SensitiveParameter] string $authorization): array {
 		$claims = $this->claims($authorization, self::REFRESH_SCOPE);
 		$session = $this->request->getSession((string)$claims['jti']);
 		if ($session === null || $session['expires'] < $this->time->getTime()) {
@@ -115,7 +115,7 @@ class SessionService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function delete(string $authorization): void {
+	public function delete(#[\SensitiveParameter] string $authorization): void {
 		$claims = $this->claims($authorization, self::REFRESH_SCOPE);
 		$this->request->removeSession((string)$claims['jti']);
 	}
@@ -126,7 +126,7 @@ class SessionService {
 	 *
 	 * @throws XrpcException for a token that is not good
 	 */
-	public function authenticate(string $authorization): ?ClientSession {
+	public function authenticate(#[\SensitiveParameter] string $authorization): ?ClientSession {
 		if (trim($authorization) === '') {
 			return null;
 		}
@@ -259,7 +259,7 @@ class SessionService {
 	 *
 	 * @throws XrpcException
 	 */
-	public function claims(string $authorization, string $scope): array {
+	public function claims(#[\SensitiveParameter] string $authorization, string $scope): array {
 		if (preg_match('/^Bearer\s+([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/', trim($authorization), $m) !== 1) {
 			throw new XrpcException(401, 'AuthenticationRequired', 'A bearer token is required');
 		}
@@ -290,7 +290,7 @@ class SessionService {
 	 *
 	 * @return array{Identity, string, int}|null
 	 */
-	private function credentialsOf(string $identifier, string $password): ?array {
+	private function credentialsOf(string $identifier, #[\SensitiveParameter] string $password): ?array {
 		$identifier = strtolower(trim(ltrim(trim($identifier), '@')));
 		$identities = [];
 		try {

@@ -158,7 +158,7 @@ class BridgyTwin {
 	 * handle for the account here, and the one-time code as both the
 	 * password and the invite code.
 	 */
-	public static function command(string $pdsHost, string $email, string $handle, string $code): string {
+	public static function command(string $pdsHost, string $email, string $handle, #[\SensitiveParameter] string $code): string {
 		return 'migrate-to ' . implode(' ', [$pdsHost, $email, $handle, $code, $code]);
 	}
 
@@ -167,7 +167,7 @@ class BridgyTwin {
 	 *
 	 * @throws Throwable when the message cannot be sent
 	 */
-	public function ask(Person $actor, string $command): void {
+	public function ask(Person $actor, #[\SensitiveParameter] string $command): void {
 		$post = new Post($actor);
 		$post->setContent('@' . self::BOT . ' ' . $command);
 		$post->setType(Stream::TYPE_DIRECT);

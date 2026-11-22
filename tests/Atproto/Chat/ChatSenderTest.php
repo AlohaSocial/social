@@ -22,6 +22,7 @@ use OCA\Social\Atproto\Publisher\TextMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\ReactionsRequest;
+use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -136,6 +137,7 @@ class ChatSenderTest extends TestCase {
 		return $this->store = new ChatStore(
 			$this->createMock(PostStore::class), $this->createMock(BlueskyActorService::class), $this->createMock(Blocklist::class),
 			$cache, new NullLogger(), $this->createMock(StreamRequest::class), $this->createMock(CacheActorService::class), $this->createMock(ConversationService::class), $this->createMock(ReactionsRequest::class), $messages,
+			$this->createMock(StreamDestRequest::class),
 		);
 	}
 

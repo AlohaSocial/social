@@ -108,7 +108,7 @@ class AppViewClient {
 	 * @throws AppViewNotFoundException
 	 * @throws AtprotoException
 	 */
-	private function get(string $base, string $method, array $params, array $headers, ?array $input = null, ?callable $legacyToken = null, ?int $timeout = null): array {
+	private function get(string $base, string $method, array $params, #[\SensitiveParameter] array $headers, ?array $input = null, ?callable $legacyToken = null, ?int $timeout = null): array {
 		$url = $base . '/xrpc/' . $method;
 		$query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 		if ($query !== '') {

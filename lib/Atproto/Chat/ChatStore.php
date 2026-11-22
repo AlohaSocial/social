@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoChatMessageRequest;
 use OCA\Social\Db\ReactionsRequest;
+use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -70,6 +71,7 @@ class ChatStore {
 		private ConversationService $conversations,
 		private ReactionsRequest $reactions,
 		private AtprotoChatMessageRequest $messages,
+		private StreamDestRequest $streamDest,
 	) {
 	}
 
@@ -127,9 +129,14 @@ class ChatStore {
 			'cc' => [],
 			'object' => $note,
 		]);
-		$known = $stored || $this->posts->isKnown($noteId);
-		if (!$known) {
-			throw new \RuntimeException('Bluesky direct message was not durably stored');
+		if (!$stored) {
+			// stored for another account here in the same conversation: this
+			// one is a recipient too
+			try {
+				$this->streamDest->addDirectRecipient($this->streams->getStreamById($noteId), $identity->actorId);
+			} catch (StreamNotFoundException) {
+				throw new \RuntimeException('Bluesky direct message was not durably stored');
+			}
 		}
 		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 		$this->storeMessageReactions($identity, $convoId, $message);
@@ -153,6 +160,8 @@ class ChatStore {
 		}
 		$noteId = self::messageId($identity->did, $convoId, $id);
 		if ($this->posts->isKnown($noteId)) {
+			// stored already, perhaps for another account here in the conversation
+			$this->streamDest->addDirectRecipient($this->streams->getStreamById($noteId), $identity->actorId);
 			$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 			$this->remember($identity->did, $convoId, $noteId);
 

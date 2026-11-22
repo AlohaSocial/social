@@ -115,6 +115,22 @@ class AtprotoMoveRequest extends CoreRequestBuilder {
 	}
 
 	/**
+	 * @return list<Move> the invitations of a DID to move here that are not
+	 *                    taken up, each person's own, newest first
+	 */
+	public function invitedOfDid(string $did): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select('*')->from(self::TABLE_ATPROTO_MOVE)
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('direction', $qb->createNamedParameter(Move::INBOUND)))
+			->andWhere($qb->expr()->eq('step', $qb->createNamedParameter(Move::STEP_INVITED)))
+			->andWhere($qb->expr()->eq('state', $qb->createNamedParameter(Move::WAITING)))
+			->orderBy('id', 'desc');
+
+		return $this->all($qb);
+	}
+
+	/**
 	 * @return list<Move> the running moves not written to since a time, the longest silent first
 	 */
 	public function getStale(int $before, int $limit): array {
@@ -124,14 +140,8 @@ class AtprotoMoveRequest extends CoreRequestBuilder {
 			->andWhere($qb->expr()->lt('updated', $qb->createNamedParameter(new DateTime('@' . $before), IQueryBuilder::PARAM_DATE)))
 			->orderBy('updated', 'asc')
 			->setMaxResults($limit);
-		$moves = [];
-		$result = $qb->executeQuery();
-		while (is_array($row = $result->fetch())) {
-			$moves[] = $this->move($row);
-		}
-		$result->closeCursor();
 
-		return $moves;
+		return $this->all($qb);
 	}
 
 	public function deleteByUser(string $userId): void {
@@ -150,6 +160,18 @@ class AtprotoMoveRequest extends CoreRequestBuilder {
 		}
 
 		return $this->move($row);
+	}
+
+	/** @return list<Move> */
+	private function all(IQueryBuilder $qb): array {
+		$moves = [];
+		$result = $qb->executeQuery();
+		while (is_array($row = $result->fetch())) {
+			$moves[] = $this->move($row);
+		}
+		$result->closeCursor();
+
+		return $moves;
 	}
 
 	private function move(array $row): Move {

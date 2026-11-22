@@ -77,7 +77,7 @@ class ServiceAuthGrant {
 	 *
 	 * @throws XrpcException for a service-auth token that is not good
 	 */
-	public function uploader(string $authorization): ?ClientSession {
+	public function uploader(#[\SensitiveParameter] string $authorization): ?ClientSession {
 		if (preg_match('/^Bearer\s+([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/', trim($authorization), $m) !== 1) {
 			return null;
 		}
