@@ -342,7 +342,7 @@ export default {
 		border-radius: 8px !important;
 		font-weight: 600 !important;
 		/* the colours cross-fade as the state changes under the pointer */
-		transition: background-color var(--social-motion-fast) var(--social-ease), border-color var(--social-motion-fast) var(--social-ease), color var(--social-motion-fast) var(--social-ease), box-shadow var(--social-motion-fast) var(--social-ease);
+		transition: background-color var(--social-motion-fast) var(--social-ease), border-color var(--social-motion-fast) var(--social-ease), color var(--social-motion-fast) var(--social-ease);
 	}
 
 	.follow-button__label {

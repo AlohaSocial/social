@@ -171,7 +171,7 @@ export default {
 	}
 
 	&--remote :deep(.avatardiv) {
-		box-shadow: 0 0 0 2px var(--color-main-background), 0 0 0 4px var(--instance-colour);
+		box-shadow: none;
 	}
 }
 </style>

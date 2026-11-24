@@ -1315,7 +1315,7 @@ export default {
 	color: var(--social-on-dark-text);
 	font-size: 96px;
 	font-weight: 800;
-	text-shadow: 0 2px 16px var(--social-on-dark-shadow);
+	text-shadow: none;
 	animation: short-count 1s ease-out infinite;
 }
 
@@ -1389,7 +1389,7 @@ export default {
 	border: 5px solid var(--social-on-dark-text);
 	border-radius: 50%;
 	background: var(--social-on-dark-accent);
-	box-shadow: var(--social-elevation-raised);
+	box-shadow: none;
 	cursor: pointer;
 	transition: border-radius var(--social-motion-base) var(--social-ease), transform var(--social-motion-base) var(--social-ease);
 
@@ -1544,7 +1544,7 @@ export default {
 	inline-size: 2px;
 	margin-inline-start: -1px;
 	background: var(--social-on-dark-text);
-	box-shadow: var(--social-elevation-resting);
+	box-shadow: none;
 	pointer-events: none;
 }
 
@@ -1631,7 +1631,7 @@ export default {
 	border-radius: 10px;
 	object-fit: cover;
 	background: var(--color-background-dark);
-	box-shadow: var(--social-elevation-resting);
+	box-shadow: none;
 }
 
 .short__cover-pick {

@@ -259,36 +259,26 @@ describe('the frontend is Vue 3, not Vue 2 with a Vue 3 runtime', () => {
 	})
 })
 
-describe('cards agree on how far off the page they sit', () => {
+describe('flat surfaces and keyboard focus', () => {
 	const app = files.find(({ name }) => name === 'App.vue').content
 
-	it('defines the two elevations once', () => {
-		expect(app).toContain('--social-elevation-resting:')
-		expect(app).toContain('--social-elevation-raised:')
-	})
+	it('removes box and text shadows throughout the mounted app', () => {
+		expect(app).toContain('#content-vue *::after')
+		expect(app).toContain('box-shadow: none !important')
+		expect(app).toContain('text-shadow: none !important')
 
-	it('thins Nextcloud\'s shadow colour instead of using it raw', () => {
-		// --color-box-shadow is built for modals: half-opaque grey in the light
-		// theme and solid black in the dark one. Straight under a timeline it
-		// puts a slab beneath every post.
-		const raw = app.match(/--social-elevation-[\w-]+:[^;]+;/g) ?? []
-		expect(raw.length).toBe(2)
-		for (const declaration of raw) {
-			expect(declaration).toContain('color-mix(in srgb, var(--color-box-shadow)')
+		for (const { name, content } of files) {
+			const source = stylesOf(name, content)
+			for (const [, property, value] of source.matchAll(/(box-shadow|text-shadow)\s*:\s*([^;]+);/g)) {
+				expect(value.trim(), `${name}: ${property}`).toMatch(/^none(?:\s*!important)?$/)
+			}
+			expect(source, name).not.toMatch(/drop-shadow\s*\(/)
 		}
 	})
 
-	it('gives every card the shared elevation rather than a shadow of its own', () => {
-		// one hand-rolled rgba here and the timeline stops looking like one surface
-		const offenders = files
-			.filter(({ name }) => name !== 'App.vue')
-			.flatMap(({ name, content }) => content.split('\n')
-				.map((line, index) => (
-					/box-shadow:\s*[^;]*\b\d+px[^;]*\b(rgba?|hsla?)\(/.test(line) ? `${name}:${index + 1}` : null
-				))
-				.filter(Boolean))
-
-		expect(offenders).toEqual([])
+	it('keeps keyboard focus visible with an outline', () => {
+		expect(app).toMatch(/#content-vue :focus-visible\s*\{\s*outline: 2px solid var\(--color-primary-element\)/)
+		expect(app).not.toMatch(/outline:\s*none/)
 	})
 
 	/**
@@ -305,10 +295,12 @@ describe('cards agree on how far off the page they sit', () => {
 		expect(offenders).toEqual([])
 	})
 
-	it('raises a card on hover rather than only bordering it', () => {
+	it('keeps hover changes flat instead of raising the card', () => {
 		const post = files.find(({ name }) => name === 'components/TimelinePost.scss').content
+		const hover = post.slice(post.indexOf('&:hover {'), post.indexOf('&:focus-within {'))
 
-		expect(post).toContain('box-shadow: var(--social-elevation-resting)')
-		expect(post).toContain('box-shadow: var(--social-elevation-raised)')
+		expect(post).toContain('&:hover {')
+		expect(post).toContain('border-color: var(--color-primary-element)')
+		expect(hover).not.toMatch(/transform:/)
 	})
 })

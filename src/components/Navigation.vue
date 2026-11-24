@@ -1600,14 +1600,14 @@ export default {
  * class names are content-hashed.
  */
 .navigation__more {
-	/* the shadow falls on the entries above, so the panel has to be over them */
+	/* the panel sits above the entries behind it */
 	position: relative;
 	z-index: 2;
-	transition: background-color .2s ease, box-shadow .2s ease;
+	transition: background-color .2s ease;
 }
 
 /*
- * The open panel is a lightly frosted glass pane with a lit rim and a shadow.
+ * The open panel is a lightly frosted glass pane with a quiet border.
  * It is a pseudo-element so the account row does not shift when it opens.
  * The rim light is fainter in the dark theme.
  */
@@ -1642,11 +1642,7 @@ export default {
 	background-color: color-mix(in srgb, var(--color-main-background) 28%, transparent);
 	backdrop-filter: blur(10px) saturate(1.9) contrast(1.05);
 	-webkit-backdrop-filter: blur(10px) saturate(1.9) contrast(1.05);
-	box-shadow:
-		inset 0 1px 0 color-mix(in srgb, var(--social-glass-light) 80%, transparent),
-		inset 0 -1px 0 color-mix(in srgb, var(--color-main-text) 10%, transparent),
-		inset 0 0 24px color-mix(in srgb, var(--social-glass-light) 28%, transparent),
-		0 12px 30px -10px rgba(0, 20, 50, .45);
+	box-shadow: none;
 	transform-origin: 50% 100%;
 	animation: social-glass-pop .42s cubic-bezier(.3, 1.5, .5, 1) backwards;
 	pointer-events: none;
@@ -1833,9 +1829,8 @@ export default {
 }
 
 /*
- * The rings, painted once on their own layer. Only `opacity` and `transform`
- * animate, so the compositor runs the hover while the main thread is busy
- * loading the page; animating `box-shadow` would repaint every frame.
+ * The focus indicator is painted on its own layer; only opacity and transform
+ * animate while the main thread is busy loading the page.
  */
 .navigation__compose::after {
 	content: '';
@@ -1843,9 +1838,7 @@ export default {
 	z-index: -1;
 	inset: 0;
 	border-radius: inherit;
-	box-shadow:
-		0 0 0 3px color-mix(in srgb, var(--color-primary-element) 34%, transparent),
-		0 0 0 9px color-mix(in srgb, var(--color-primary-element) 14%, transparent);
+	box-shadow: none;
 	opacity: 0;
 	transform: scale(.94);
 	transition:
