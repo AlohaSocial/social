@@ -388,7 +388,7 @@ export default {
 
 .profile__header:has(> .social-profile__header-banner) .profile__header__container__displayname {
 	color: #fff;
-	text-shadow: none;
+	text-shadow: 0 1px 4px rgb(0 0 0 / 70%);
 }
 
 .social-profile__header-banner {

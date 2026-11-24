@@ -290,11 +290,11 @@ export default {
 	padding-block-end: env(safe-area-inset-bottom, 0px);
 	border-block-start: 1px solid var(--color-border);
 	background: var(--color-main-background);
-	box-shadow: none;
+	box-shadow: var(--social-elevation-resting);
 	transition: transform .2s ease;
 
 	&--away {
-		/* the safe area goes with it */
+		/* the shadow and the safe area go with it */
 		transform: translateY(calc(100% + 8px));
 	}
 }

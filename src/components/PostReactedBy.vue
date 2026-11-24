@@ -269,7 +269,7 @@ export default {
 	margin-inline-start: -4px;
 	border-radius: 50%;
 	/* the ring is what keeps two overlapping faces apart */
-	box-shadow: none;
+	box-shadow: 0 0 0 2px var(--color-background-hover);
 	transition: transform var(--social-motion-fast) var(--social-ease);
 
 	&:hover {

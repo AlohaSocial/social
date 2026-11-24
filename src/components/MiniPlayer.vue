@@ -106,7 +106,7 @@ export default {
 	width: min(360px, calc(100vw - 32px));
 	border-radius: var(--border-radius-large, 12px);
 	background: var(--color-main-background);
-	box-shadow: none;
+	box-shadow: var(--social-elevation-raised);
 	overflow: hidden;
 	animation: mini-player-in var(--social-motion-base) var(--social-ease);
 }

@@ -55,17 +55,18 @@
 	border: 1px solid var(--color-border);
 	position: relative;
 	z-index: 1;
-	box-shadow: none;
-	transition: border-color .15s ease;
+	box-shadow: var(--social-elevation-resting);
+	transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 
 	&:hover {
 		border-color: var(--color-primary-element);
-		box-shadow: none;
+		box-shadow: var(--social-elevation-raised);
+		transform: translateY(-1px);
 	}
 
 	&:focus-within {
 		border-color: var(--color-primary-element);
-		box-shadow: none;
+		box-shadow: 0 0 0 2px var(--color-primary-element-light);
 	}
 
 	/* above the next card, which comes later in the document, while the pill is shown */
@@ -203,7 +204,7 @@
 		border-radius: 999px;
 		background: var(--color-main-background);
 		border: 1px solid var(--color-primary-element);
-		box-shadow: none;
+		box-shadow: var(--social-elevation-raised);
 		opacity: 0;
 		/* fades out fast, so a pointer crossing cards leaves no trail of pills */
 		transition: opacity .1s linear;
@@ -508,18 +509,37 @@
 	}
 }
 
-/* A newly published post fades into the feed without a bounce or glow. */
+/* a post the reader just published drops in and glows once in their colour;
+   the glow is a ring, not an animated shadow, to keep to the elevation tokens */
 @keyframes post-arrive {
-	from { opacity: 0; }
-	to { opacity: 1; }
+	0% { opacity: 0; transform: translateY(-18px) scale(.97); }
+	60% { opacity: 1; transform: translateY(3px) scale(1.005); }
+	100% { opacity: 1; transform: none; }
+}
+
+@keyframes post-arrive-glow {
+	0% { opacity: 0; }
+	25% { opacity: .9; }
+	100% { opacity: 0; }
 }
 
 .post-content--arrived {
-	animation: post-arrive .24s ease-out both;
+	animation: post-arrive .56s cubic-bezier(.2, .9, .3, 1.15) both;
+
+	&::after {
+		content: '';
+		position: absolute;
+		inset: -3px;
+		border-radius: inherit;
+		border: 2px solid hsl(var(--account-hue, 210) 70% 55%);
+		pointer-events: none;
+		animation: post-arrive-glow 1.8s ease-out both;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.post-content--arrived {
+	.post-content--arrived,
+	.post-content--arrived::after {
 		animation: none;
 	}
 

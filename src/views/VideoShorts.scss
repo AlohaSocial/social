@@ -308,7 +308,7 @@
 		inline-size: var(--size);
 		block-size: var(--size);
 		color: var(--social-on-dark-accent);
-		filter: none;
+		filter: drop-shadow(0 2px 6px var(--social-on-dark-shadow));
 
 		/* where a double tap landed: it swells, holds, and lifts away */
 		&--burst {
@@ -663,7 +663,7 @@
 		border-start-end-radius: var(--border-radius-container-large, 16px);
 		background: var(--color-main-background);
 		color: var(--color-main-text);
-		box-shadow: none;
+		box-shadow: var(--social-elevation-raised);
 		animation: shorts-sheet-in var(--social-motion-base) var(--social-ease) both;
 
 		&:focus-visible {

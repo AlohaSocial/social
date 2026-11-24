@@ -458,12 +458,12 @@ describe('TimelineEntry', () => {
 			expect(faces.map((face) => face.props('link'))).toEqual([false, false, false])
 		})
 
-		it('spaces grouped faces without shadow rings', () => {
+		it('rings each grouped face and overlaps them only a little', () => {
 			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
 			const faces = source.slice(source.indexOf('&__faces {'), source.indexOf('// the reader\'s own post'))
 
-			expect(faces).toContain('box-shadow: none')
-			expect(faces).toContain('margin-inline-start: 2px')
+			expect(faces).toContain('box-shadow: 0 0 0 2px var(--notification-ring)')
+			expect(faces).toContain('margin-inline-start: -4px')
 		})
 	})
 
@@ -788,7 +788,8 @@ describe('a notification in the list', () => {
 
 	/**
 	 * With a pointer, a row at rest is only the post and its counts; pointed
-	 * at, it gets a faint tint and its controls wake, with no pill or lift.
+	 * at, it takes a hairline frame and a faint tint, and its controls wake
+	 * and arrive, with no pill.
 	 */
 	describe('pointed at', () => {
 		const pointed = () => {
@@ -796,17 +797,19 @@ describe('a notification in the list', () => {
 			return source.slice(source.indexOf('@media (hover: hover) {\n\t.timeline-entry:not(.timeline-entry--direct) {'))
 		}
 
-		it('uses a flat tint without a frame or lift', () => {
+		it('rises off the page onto a soft shadow, with no tint and no frame', () => {
 			const css = pointed()
 
 			expect(css).toMatch(/\.timeline-entry:not\(\.timeline-entry--direct\) \{\s*\/\/[^\n]*\n\s*border-radius: 12px;/)
-			expect(css).toMatch(/box-shadow: none;\s*transition: translate \.1s linear, background-color \.1s linear;/)
-			expect(css).toMatch(/&:hover,\s*&:focus-within \{\s*background-color: var\(--color-main-background\);\s*box-shadow: none;/)
-			expect(css).not.toMatch(/translate: 0 -3px/)
+			expect(css).toMatch(/box-shadow: 0 1px 2px transparent, 0 2px 6px -6px transparent;\s*transition: box-shadow \.1s linear, translate \.1s linear, background-color \.1s linear;/)
+			expect(css).toMatch(/&:hover,\s*&:focus-within \{\s*background-color: var\(--color-main-background\);\s*box-shadow: 0 1px 3px [^;]*, 0 12px 24px -10px [^;]*;\s*translate: 0 -3px;/)
+			// a lift, not a highlight
+			expect(css).not.toMatch(/inset 0 0 0 1px color-mix/)
+			expect(css).not.toMatch(/var\(--color-primary-element\) [36]%, transparent/)
 		})
 
-		it('does not raise the row on hover', () => {
-			expect(pointed()).not.toMatch(/translate: 0 -3px/)
+		it('lifts with `translate`, which the row\'s scroll-driven rise on `transform` cannot override', () => {
+			expect(pointed()).toMatch(/translate: 0 -3px;\s*transition: box-shadow \.25s ease, translate \.25s cubic-bezier\(\.2, \.8, \.2, 1\), background-color \.2s ease;/)
 		})
 
 		it('drops the pill, wakes the controls and brings the ones without a count in from the end', () => {
@@ -825,8 +828,7 @@ describe('a notification in the list', () => {
 			const css = pointed()
 
 			expect(css).toMatch(/&:dir\(rtl\) \.wrapper :deep\(\.post-actions > :first-child\),/)
-			expect(css).toMatch(/@media \(hover: hover\) and \(prefers-reduced-motion: reduce\) \{[^}]*\{\s*transition: none;/)
-			expect(css).not.toMatch(/translate: 0 -3px/)
+			expect(css).toMatch(/@media \(hover: hover\) and \(prefers-reduced-motion: reduce\) \{[^}]*\{\s*translate: none;/)
 			expect(css).toMatch(/@media \(forced-colors: active\) \{\s*\.timeline-entry:not\(\.timeline-entry--direct\):is\(:hover, :focus-within\) \{\s*outline: 1px solid CanvasText;/)
 		})
 	})

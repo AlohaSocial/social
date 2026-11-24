@@ -766,7 +766,7 @@ export default {
 		border-radius: 50%;
 		background: var(--notification-tone);
 		color: var(--notification-tone-text);
-		box-shadow: none;
+		box-shadow: 0 0 0 2px var(--notification-ring);
 		--notification-tone: var(--color-primary-element);
 		--notification-tone-text: var(--color-primary-element-text);
 
@@ -847,11 +847,11 @@ export default {
 
 		> * {
 			border-radius: 50%;
-			box-shadow: none;
+			box-shadow: 0 0 0 2px var(--notification-ring);
 		}
 
 		> * + * {
-			margin-inline-start: 2px;
+			margin-inline-start: -4px;
 		}
 	}
 
@@ -1216,27 +1216,31 @@ export default {
 }
 
 /*
- * Pointed at or focused, the row gets a quiet background and its controls
- * come to full strength. Controls without a count slide in from the end.
+ * Pointed at or focused, the row lifts 3px onto a soft shadow, and its
+ * controls come to full strength, those without a count sliding in from the
+ * end. The lift is `translate`, as `transform` is taken by the rise animation.
  */
 @media (hover: hover) {
 	.timeline-entry:not(.timeline-entry--direct) {
 		// a softer corner than a card's, for an edge that comes and goes
 		border-radius: 12px;
-		box-shadow: none;
-		transition: translate .1s linear, background-color .1s linear;
+		// a transparent shadow at rest, so it grows rather than appears
+		box-shadow: 0 1px 2px transparent, 0 2px 6px -6px transparent;
+		transition: box-shadow .1s linear, translate .1s linear, background-color .1s linear;
 
 		&:hover,
 		&:focus-within {
 			background-color: var(--color-main-background);
-			box-shadow: none;
-			transition: background-color .2s ease;
+			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow) 70%, transparent);
+			translate: 0 -3px;
+			transition: box-shadow .25s ease, translate .25s cubic-bezier(.2, .8, .2, 1), background-color .2s ease;
 		}
 
 		// a separate rule so a browser without `:has()` keeps the hover case
 		&:has(.post-actions-reveal--held) {
 			background-color: var(--color-main-background);
-			box-shadow: none;
+			box-shadow: 0 1px 3px color-mix(in srgb, var(--color-box-shadow) 35%, transparent), 0 12px 24px -10px color-mix(in srgb, var(--color-box-shadow) 70%, transparent);
+			translate: 0 -3px;
 		}
 
 		.wrapper :deep(.post-actions-reveal::before) {
@@ -1301,6 +1305,7 @@ export default {
 @media (hover: hover) and (prefers-reduced-motion: reduce) {
 	.timeline-entry:not(.timeline-entry--direct),
 	.timeline-entry:not(.timeline-entry--direct):is(:hover, :focus-within) {
+		translate: none;
 		transition: none;
 
 		.wrapper :deep(.post-actions > :first-child),
