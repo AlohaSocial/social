@@ -574,7 +574,7 @@ export default {
 	background-color: var(--color-main-background);
 	padding: 24px;
 	border-radius: var(--border-radius-container, var(--border-radius-large));
-	box-shadow: 0 0 10px var(--color-box-shadow);
+	box-shadow: none;
 	inline-size: 100%;
 	max-width: 480px;
 	// the guest layout centres everything; the body is set back to reading

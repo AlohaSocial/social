@@ -2576,17 +2576,11 @@ $composer-duration: var(--social-motion-base);
 	position: sticky;
 	top: 0;
 	z-index: 100;
-	box-shadow: var(--social-elevation-resting);
+	box-shadow: none;
 	transition:
 		padding $composer-duration $composer-ease,
 		border-color $composer-duration $composer-ease,
-		background-color $composer-duration $composer-ease,
-		box-shadow $composer-duration $composer-ease;
-
-	// lifted, not outlined: the box with the caret draws the ring already
-	&:focus-within {
-		box-shadow: var(--social-elevation-raised);
-	}
+		background-color $composer-duration $composer-ease;
 
 	&-form {
 		margin-top: 12px;
@@ -2710,7 +2704,7 @@ $composer-duration: var(--social-motion-base);
 		color: var(--color-primary-element-text, var(--color-primary-text));
 		font-size: 13px;
 		font-weight: 600;
-		box-shadow: var(--social-elevation-raised);
+		box-shadow: none;
 		animation: composer-drop-hint $composer-duration $composer-ease;
 	}
 }

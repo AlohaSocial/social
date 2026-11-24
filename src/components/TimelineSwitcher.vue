@@ -457,7 +457,7 @@ export default {
 	margin-inline: auto;
 	padding: 3px;
 	border-radius: var(--border-radius-pill, 100px);
-	// a well rather than a surface, so only the pill casts a shadow
+	// a well rather than a surface, so only the pill carries the accent
 	background: var(--color-background-dark);
 }
 
@@ -472,8 +472,7 @@ export default {
 	width: calc((100% - 6px) / var(--switcher-count, 3));
 	border-radius: var(--border-radius-pill, 100px);
 	background: var(--color-primary-element);
-	// the app's shared shadow, as the other raised things in the timeline use
-	box-shadow: var(--social-elevation-resting);
+	box-shadow: none;
 	// overshoots and settles, so it reads as something that moved
 	transition: transform var(--social-motion-slow) var(--social-ease-spring);
 }

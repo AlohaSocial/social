@@ -296,7 +296,7 @@ export default {
 
 	&__row--failing &__dot {
 		background: var(--color-warning);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning) 30%, transparent);
+		box-shadow: none;
 	}
 
 	&__row--abandoned &__dot {

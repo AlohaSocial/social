@@ -151,7 +151,7 @@ export default {
 	padding: 6px;
 	border-radius: var(--border-radius-large, 12px);
 	background: var(--color-main-background);
-	box-shadow: var(--social-elevation-raised);
+	box-shadow: none;
 }
 
 /* the trigger the picker positions against, pressed for the reader on open */
