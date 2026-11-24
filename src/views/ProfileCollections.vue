@@ -347,7 +347,7 @@ export default {
 	top: 6px;
 	inset-inline-end: 6px;
 	color: #fff;
-	filter: none;
+	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
 .collections__title {

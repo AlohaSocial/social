@@ -92,7 +92,7 @@
 	color: var(--color-primary-element-text);
 	font-weight: bold;
 	cursor: pointer;
-	box-shadow: none;
+	box-shadow: var(--social-elevation-raised);
 
 	&:hover,
 	&:focus-visible {
@@ -235,7 +235,7 @@
 .timeline-entry--focused :deep(.post-content),
 .timeline-entry--focused :deep(.main-post) {
 	border-color: var(--color-primary-element);
-	box-shadow: none;
+	box-shadow: 0 0 0 2px var(--color-primary-element-light);
 }
 
 /*

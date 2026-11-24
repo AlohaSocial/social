@@ -2088,7 +2088,7 @@ export default {
 	padding: 16px;
 	border-radius: var(--border-radius-large, 12px);
 	background: var(--color-main-background);
-	box-shadow: none;
+	box-shadow: var(--social-elevation-resting);
 
 	h3 {
 		display: flex;

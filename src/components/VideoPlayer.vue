@@ -1434,7 +1434,7 @@ export default {
 	&:focus-visible {
 		outline: 2px solid #fff;
 		outline-offset: 1px;
-		box-shadow: none;
+		box-shadow: 0 0 0 4px var(--color-primary-element);
 	}
 }
 

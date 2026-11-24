@@ -351,7 +351,7 @@ export default {
 		inset-inline-end: 6px;
 		color: #fff;
 		// the icon carries its own contrast over arbitrary photos
-		filter: none;
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 		pointer-events: none;
 	}
 

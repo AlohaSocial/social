@@ -259,7 +259,7 @@ export default {
 	border-radius: var(--border-radius-pill, 20px);
 	background: var(--color-main-background);
 	border: 1px solid var(--color-border);
-	box-shadow: none;
+	box-shadow: var(--social-elevation-raised);
 	color: var(--color-main-text);
 	font-weight: 600;
 	text-align: center;

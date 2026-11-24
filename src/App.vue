@@ -759,7 +759,19 @@ a.external_link {
 	}
 }
 
+/**
+ * Two levels of elevation shared by every card. Nextcloud's --color-box-shadow
+ * is made for modals and too heavy under a timeline, so it is thinned with
+ * color-mix and split into a tight contact shadow and a wider ambient one. A
+ * browser without color-mix drops the declaration and gets the borders.
+ */
 :root {
+	--social-elevation-resting:
+		0 1px 2px color-mix(in srgb, var(--color-box-shadow) 14%, transparent),
+		0 2px 6px color-mix(in srgb, var(--color-box-shadow) 9%, transparent);
+	--social-elevation-raised:
+		0 2px 4px color-mix(in srgb, var(--color-box-shadow) 20%, transparent),
+		0 6px 16px color-mix(in srgb, var(--color-box-shadow) 12%, transparent);
 
 	/*
 	 * The content column. The list keeps a gutter inside it, so a post is
@@ -781,20 +793,6 @@ a.external_link {
 	 * column, plus the page's padding.
 	 */
 	--social-reading-page: calc(var(--social-reading-column) - 2 * var(--social-column-gutter) + 8 * var(--default-grid-baseline, 4px));
-}
-
-/* Keep the whole app flat, including nested Nextcloud controls and pseudo-elements. */
-#content-vue,
-#content-vue *,
-#content-vue *::before,
-#content-vue *::after {
-	box-shadow: none !important;
-	text-shadow: none !important;
-}
-
-#content-vue :focus-visible {
-	outline: 2px solid var(--color-primary-element);
-	outline-offset: 2px;
 }
 
 img.emoji {
@@ -937,6 +935,7 @@ img.emoji {
 	--social-on-dark-scrim: rgba(0, 0, 0, 0.55);
 	--social-on-dark-scrim-light: rgba(0, 0, 0, 0.4);
 	--social-on-dark-scrim-heavy: rgba(0, 0, 0, 0.75);
+	--social-on-dark-shadow: rgba(0, 0, 0, 0.5);
 	--social-on-dark-accent: #fe2c55;
 	--social-on-dark-accent-cool: #25f4ee;
 	--social-on-dark-accent-blue: #0082c9;

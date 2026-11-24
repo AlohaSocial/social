@@ -354,6 +354,19 @@ export default {
 </script>
 
 <style scoped lang="scss">
+/* drawn as a pseudo-element, not a box-shadow: a shadow is this app's elevation */
+@keyframes shorts-breathe {
+	0% { transform: scale(1); opacity: .45; }
+	70%, 100% { transform: scale(1.22); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shorts-bar__tile--unseen .shorts-bar__ring::after {
+		animation: none;
+		opacity: 0;
+	}
+}
+
 .shorts-bar {
 	max-width: var(--social-column);
 	margin: 8px auto 12px;
@@ -409,9 +422,20 @@ export default {
 	// seen: a quiet grey ring
 	border: 2px solid var(--color-border-dark);
 
-	// unseen: the account's own colour, shown with a quiet static ring
+	// unseen: the account's own colour, breathing too slowly to distract
 	.shorts-bar__tile--unseen & {
 		border-color: hsl(var(--account-hue, 210) 65% 50%);
+		position: relative;
+
+		&::after {
+			content: '';
+			position: absolute;
+			inset: -3px;
+			border-radius: 50%;
+			border: 2px solid hsl(var(--account-hue, 210) 65% 50%);
+			animation: shorts-breathe 2.4s ease-out infinite;
+			pointer-events: none;
+		}
 	}
 
 	.shorts-bar__tile--empty & {
