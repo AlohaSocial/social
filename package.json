@@ -40,7 +40,7 @@
 		"@noble/hashes": "2.4.0",
 		"@noble/secp256k1": "3.2.0",
 		"blurhash": "^2.0.5",
-		"debounce": "^3.0.0",
+		"debounce": "^4.0.0",
 		"dompurify": "^3.4.17",
 		"hls.js": "^1.7.4",
 		"mitt": "^3.0.1",
