@@ -78,7 +78,7 @@
 		"babel-loader": "^10.1.1",
 		"copy-webpack-plugin": "^14.0.0",
 		"css-loader": "^7.1.5",
-		"eslint": "^10.14.0",
+		"eslint": "^10.15.0",
 		"jsdom": "^31.0.1",
 		"node-polyfill-webpack-plugin": "file:packages/node-polyfill-webpack-plugin",
 		"sass": "^1.108.2",
